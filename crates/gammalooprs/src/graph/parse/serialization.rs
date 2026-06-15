@@ -1,4 +1,6 @@
-use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
+use idenso::{
+    color::ColorSimplifier, dirac::GammaSimplifier, shorthands::metric::MetricSimplifier,
+};
 use linnet::{
     half_edge::{
         HedgeGraph,
@@ -13,7 +15,7 @@ use symbolica::atom::AtomCore;
 use crate::{
     graph::Graph,
     processes::DotExportSettings,
-    utils::{GS, W_},
+    utils::{GS, W_, symbolica_ext::LogPrint},
     uv::UltravioletGraph,
 };
 
@@ -43,6 +45,15 @@ impl Graph {
 
             if settings.do_gamma_algebra {
                 num = num.simplify_gamma();
+                let after_gamma_simplification = num.to_plain_string();
+                let after_gamma_simplification_log_print = num.log_print(Some(120)).to_string();
+                crate::debug_tags!(#generation, #graph, #inspect, #dump;
+                    stage = "graph_serialization_after_simplify_gamma",
+                    after_gamma = %after_gamma_simplification_log_print,
+                    file.after_gamma_simplification = %after_gamma_simplification,
+                    file.after_gamma_simplification_log_print = %after_gamma_simplification_log_print,
+                    "Graph serialization after gamma simplification"
+                );
             }
 
             dotgraph.global_data.statements.insert(

@@ -23,14 +23,17 @@ use bincode::{Decode, Encode};
 
 #[cfg(feature = "shadowing")]
 use crate::{
-    network::{library::symbolic::ETS, parsing::SPENSO_TAG},
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
+    self_dual_symbol,
     structure::{abstract_index::AIND_SYMBOLS, slot::SlotError},
 };
 
 #[cfg(feature = "shadowing")]
 use symbolica::{
     atom::{Atom, AtomOrView, AtomView, FunctionBuilder, Symbol},
-    function, get_symbol, symbol,
+    function, get_symbol,
+    printer::PrintUserData,
+    symbol,
 };
 
 use thiserror::Error;
@@ -512,13 +515,27 @@ impl<T: RepName> Representation<T> {
     /// a is dualized, b is not.
     ///
     pub fn inner_product<'a, It: Into<AtomOrView<'a>>>(&self, a: It, b: It) -> Atom {
+        fn with_rep(value: AtomView<'_>, rep: &Atom) -> Atom {
+            match value {
+                AtomView::Fun(fun) => {
+                    let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
+                    for arg in fun.iter() {
+                        rebuilt = rebuilt.add_arg(arg);
+                    }
+                    rebuilt.add_arg(rep).finish()
+                }
+                AtomView::Var(var) => FunctionBuilder::new(var.get_symbol()).add_arg(rep).finish(),
+                _ => value.to_owned(),
+            }
+        }
+
         let a: AtomOrView<'a> = a.into();
         let b: AtomOrView<'a> = b.into();
+        let rep = self.to_symbolic([]);
         function!(
             SPENSO_TAG.dot,
-            self.to_symbolic([]),
-            a.as_view(),
-            b.as_view()
+            with_rep(a.as_view(), &rep),
+            with_rep(b.as_view(), &rep)
         )
     }
 
@@ -722,96 +739,127 @@ impl LibraryRep {
                 name
             );
 
-            let rep_name = match self {
-                LibraryRep::SelfDual(a) => encode_base(*a as usize, &LATIN),
-                LibraryRep::Dualizable(a) => encode_base(a.unsigned_abs() as usize, &CYRILLIC),
-                LibraryRep::InlineMetric(a) => encode_base(*a as usize, &GREEK),
-                LibraryRep::Dummy => String::new(),
+            let (rep_name, tags) = match self {
+                LibraryRep::SelfDual(a) => (
+                    encode_base(*a as usize, &LATIN),
+                    &[
+                        // &SPENSO_TAG.upper,
+                        &SPENSO_TAG.representation,
+                        &SPENSO_TAG.self_dual,
+                    ],
+                ),
+                LibraryRep::Dualizable(a) => (
+                    encode_base(a.unsigned_abs() as usize, &CYRILLIC),
+                    &[
+                        // &SPENSO_TAG.upper,
+                        &SPENSO_TAG.representation,
+                        &SPENSO_TAG.dualizable,
+                    ],
+                ),
+                LibraryRep::InlineMetric(a) => (
+                    encode_base(*a as usize, &GREEK),
+                    &[
+                        // &SPENSO_TAG.upper,
+                        &SPENSO_TAG.representation,
+                        &SPENSO_TAG.self_dual,
+                    ],
+                ),
+                LibraryRep::Dummy => (
+                    String::new(),
+                    &[
+                        // &SPENSO_TAG.upper,
+                        &SPENSO_TAG.representation,
+                        &SPENSO_TAG.self_dual,
+                    ],
+                ),
             };
+
             let name = name.to_string();
 
             symbol!(
                 &name,
-                tag = SPENSO_TAG.upper,
-                print = move |a, opt| {
-                    match opt.custom_print_mode {
-                        Some(("typst", 1)) => Some(body.clone()),
-
-                        Some(("spenso", i)) => {
-                            let SpensoPrintSettings {
-                                with_dim,
-                                commas,
-                                parens,
-                                index_subscripts,
-                                ..
-                            } = SpensoPrintSettings::from(i);
-                            let AtomView::Fun(f) = a else {
-                                return None;
-                            };
-
-                            let mut out = if opt.color_builtin_symbols {
-                                nu_ansi_term::Color::DarkGray.paint(&rep_name).to_string()
-                            } else {
-                                rep_name.clone()
-                            };
-
-                            if index_subscripts {
-                                out.push('_');
-                            }
-                            if parens && index_subscripts {
-                                out.push('(');
-                            }
-
-                            if f.get_nargs() == 2 {
-                                let mut arg_iter = f.iter();
-                                let dim = arg_iter.next()?;
-
-                                if with_dim {
-                                    dim.format(&mut out, opt, PrintState::new()).unwrap();
-                                    if commas {
-                                        out.push(',');
-                                    } else {
-                                        out.push(' ');
-                                    }
-                                }
-                                let ind = arg_iter.next()?;
-
-                                ind.format(&mut out, opt, PrintState::new()).unwrap();
-                                if parens && index_subscripts {
-                                    out.push(')');
-                                }
-
-                                return Some(out);
-                            }
-
-                            None
-                        }
-                        _ => {
-                            let AtomView::Fun(f) = a else {
-                                return None;
-                            };
-
-                            let mut out = if opt.color_builtin_symbols {
-                                nu_ansi_term::Color::DarkGray.paint(&name).to_string()
-                            } else {
-                                return None;
-                            };
-
-                            out.push('(');
-                            let mut first = true;
-                            for arg in f.iter() {
-                                if !first {
-                                    out.push_str(", ");
-                                } else {
-                                    first = false;
-                                }
-                                out.push_str(&arg.to_string());
-                            }
-                            out.push(')');
-                            Some(out)
-                        }
+                print = move |a, opt, _state| {
+                    if matches!(
+                        opt.custom_print_mode.get("typst"),
+                        Some(PrintUserData::Integer(1))
+                    ) {
+                        return Some(body.clone());
                     }
-                }
+
+                    if let Some(PrintUserData::Integer(i)) = opt.custom_print_mode.get("spenso") {
+                        let SpensoPrintSettings {
+                            with_dim,
+                            commas,
+                            parens,
+                            index_subscripts,
+                            ..
+                        } = SpensoPrintSettings::from(*i as usize);
+                        let AtomView::Fun(f) = a else {
+                            return None;
+                        };
+
+                        let mut out = if opt.color_builtin_symbols {
+                            nu_ansi_term::Color::DarkGray.paint(&rep_name).to_string()
+                        } else {
+                            rep_name.clone()
+                        };
+
+                        if index_subscripts {
+                            out.push('_');
+                        }
+                        if parens && index_subscripts {
+                            out.push('(');
+                        }
+
+                        if f.get_nargs() == 2 {
+                            let mut arg_iter = f.iter();
+                            let dim = arg_iter.next()?;
+
+                            if with_dim {
+                                dim.format(&mut out, opt, PrintState::new()).unwrap();
+                                if commas {
+                                    out.push(',');
+                                } else {
+                                    out.push(' ');
+                                }
+                            }
+                            let ind = arg_iter.next()?;
+
+                            ind.format(&mut out, opt, PrintState::new()).unwrap();
+                            if parens && index_subscripts {
+                                out.push(')');
+                            }
+
+                            return Some(out);
+                        }
+
+                        return None;
+                    }
+
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+
+                    let mut out = if opt.color_builtin_symbols {
+                        nu_ansi_term::Color::DarkGray.paint(&name).to_string()
+                    } else {
+                        return None;
+                    };
+
+                    out.push('(');
+                    let mut first = true;
+                    for arg in f.iter() {
+                        if !first {
+                            out.push_str(", ");
+                        } else {
+                            first = false;
+                        }
+                        out.push_str(&arg.to_string());
+                    }
+                    out.push(')');
+                    Some(out)
+                },
+                tags = tags
             )
         }
     }
@@ -867,7 +915,7 @@ pub struct RepData {
 static DUMMY_REP_DATA: LazyLock<RepData> = LazyLock::new(|| RepData {
     name: "Dummy".to_string(),
     #[cfg(feature = "shadowing")]
-    symbol: symbol!("Dummy"),
+    symbol: self_dual_symbol!("Dummy"),
 });
 
 pub struct ExtendibleReps {
@@ -1208,7 +1256,7 @@ impl RepName for LibraryRep {
     }
 
     #[cfg(feature = "shadowing")]
-    /// yields a function builder for the representation, adding a first variable: the dimension.
+    /// yields a function builder for the representation
     fn to_symbolic<'a, It: Into<AtomOrView<'a>>>(
         &self,
         args: impl IntoIterator<Item = It>,
@@ -1461,19 +1509,4 @@ mod test {
 
 #[cfg(test)]
 #[cfg(feature = "shadowing")]
-mod shadowing_tests {
-    // use symbolica::symbol;
-
-    // use crate::structure::representation::BaseRepName;
-
-    // use super::Lorentz;
-
-    // #[test]
-    // fn rep_pattern() {
-    //     println!("{}", Dual::<Lorentz>::pattern(symbol!("d_")));
-    //     println!(
-    //         "{}",
-    //         Dual::<Lorentz>::rep(3).to_pattern_wrapped(symbol!("d_"))
-    //     );
-    // }
-}
+mod shadowing_tests {}

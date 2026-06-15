@@ -44,11 +44,7 @@ use spenso::{
 };
 use structure::{ConvertibleToStructure, SpensoIndices};
 use symbolica::{
-    api::python::SymbolicaCommunityModule,
-    atom::Atom,
-    domains::{float::Complex as SymComplex, rational::Rational},
-    evaluate::{CompileOptions, ExportSettings, FunctionMap, InlineASM, OptimizationSettings},
-    poly::PolyVariable,
+    api::python::SymbolicaCommunityModule, domains::float::Complex as SymComplex, prelude::*,
 };
 
 use symbolica::api::python::PythonExpression;
@@ -534,8 +530,12 @@ impl Spensor {
         let mut fn_map = FunctionMap::new();
 
         for (k, v) in &constants {
-            if let Ok(r) = v.expr.clone().try_into() {
-                fn_map.add_constant(k.expr.clone(), r);
+            if let Ok(r) = SymComplex::<Rational>::try_from(v.expr.clone()) {
+                fn_map
+                    .add_aliases([(k.expr.clone(), Atom::num(r))])
+                    .map_err(|e| {
+                        exceptions::PyValueError::new_err(format!("Could not add constant: {}", e))
+                    })?;
             } else {
                 Err(exceptions::PyValueError::new_err(
                     "Constants must be rationals. If this is not possible, pass the value as a parameter",
@@ -543,7 +543,7 @@ impl Spensor {
             }
         }
 
-        for ((symbol, rename, args), body) in &funs {
+        for ((symbol, _rename, args), body) in &funs {
             let symbol = symbol
                 .get_id()
                 .ok_or(exceptions::PyValueError::new_err(format!(
@@ -561,18 +561,16 @@ impl Spensor {
                 .collect::<Result<_, _>>()?;
 
             fn_map
-                .add_function(symbol, rename.clone(), args, body.expr.clone())
+                .add_function(symbol, args, body.expr.clone())
                 .map_err(|e| {
                     exceptions::PyValueError::new_err(format!("Could not add function: {}", e))
                 })?;
         }
 
-        let settings = OptimizationSettings {
-            horner_iterations: iterations,
-            n_cores,
-            verbose,
-            ..OptimizationSettings::default()
-        };
+        let settings = OptimizationSettings::new()
+            .horner_iterations(iterations)
+            .cores(n_cores)
+            .verbose(verbose);
 
         let params: Vec<_> = params.iter().map(|x| x.expr.clone()).collect();
 
@@ -783,13 +781,10 @@ impl SpensoExpressionEvaluator {
         // cuda_block_size: usize,
         // py: Python<'_>,
     ) -> PyResult<SpensoCompiledExpressionEvaluator> {
-        let mut options = CompileOptions {
-            optimization_level: optimization_level as usize,
-            ..Default::default()
-        };
+        let mut options = CompileOptions::new().optimization_level(optimization_level as usize);
 
         if let Some(compiler_path) = compiler_path {
-            options.compiler = compiler_path.to_string();
+            options = options.compiler(compiler_path.to_string());
         }
         let inline_asm = match inline_asm.to_lowercase().as_str() {
             "default" => InlineASM::default(),
@@ -809,12 +804,10 @@ impl SpensoExpressionEvaluator {
                 .export_cpp::<Complex<f64>>(
                     filename,
                     function_name,
-                    ExportSettings {
-                        include_header: true,
-                        inline_asm,
-                        custom_header,
-                        // ..Default::default()
-                    },
+                    ExportSettings::new()
+                        .include_header(true)
+                        .inline_asm(inline_asm)
+                        .custom_header(custom_header),
                 )
                 .map_err(|e| exceptions::PyValueError::new_err(format!("Export error: {}", e)))?
                 .compile(library_name, options)

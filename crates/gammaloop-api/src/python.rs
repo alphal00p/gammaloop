@@ -1,3 +1,4 @@
+use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
     cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
     feyngen::diagram_generator::evaluate_overall_factor,
@@ -11,7 +12,7 @@ use gammalooprs::{
     },
     processes::{DotExportSettings, ProcessCollection},
     settings::{global::OrientationPattern, RuntimeSettings},
-    utils::tracing::{LogFormat, LogLevel},
+    utils::tracing::LogLevel,
 };
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
@@ -1178,6 +1179,10 @@ fn additional_weight_key_to_string(key: AdditionalWeightKey) -> String {
         AdditionalWeightKey::ThresholdCounterterm { subset_index } => {
             format!("threshold_counterterm:{subset_index}")
         }
+        AdditionalWeightKey::AmplitudeThresholdCounterterm {
+            esurface_id,
+            overlap_group,
+        } => format!("threshold_counterterm:{esurface_id}:{overlap_group}"),
     }
 }
 
@@ -1261,9 +1266,23 @@ fn event_from_py_event(event: &PyEvent) -> Event {
                 "original" => AdditionalWeightKey::Original,
                 "full_multiplicative_factor" => AdditionalWeightKey::FullMultiplicativeFactor,
                 _ => match weight.key.strip_prefix("threshold_counterterm:") {
-                    Some(subset_index) => AdditionalWeightKey::ThresholdCounterterm {
-                        subset_index: subset_index.parse().unwrap_or_default(),
-                    },
+                    Some(indices) => {
+                        let mut indices = indices.split(':');
+                        let first = indices
+                            .next()
+                            .unwrap_or_default()
+                            .parse()
+                            .unwrap_or_default();
+                        match indices.next() {
+                            Some(second) => AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                                esurface_id: first,
+                                overlap_group: second.parse().unwrap_or_default(),
+                            },
+                            None => AdditionalWeightKey::ThresholdCounterterm {
+                                subset_index: first,
+                            },
+                        }
+                    }
                     None => AdditionalWeightKey::Original,
                 },
             };

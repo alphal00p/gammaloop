@@ -93,6 +93,7 @@
 
       snapshotSources = lib.fileset.unions [
         ./crates/gammalooprs
+        ./crates/idenso
         ./crates/linnet
         ./crates/spenso
       ];
@@ -260,7 +261,7 @@
         DYLD_LIBRARY_PATH = runtimeLibPath;
       };
 
-      ciCargoProfile = "dev-optim";
+      ciCargoProfile = "ci-optim";
 
       ciArgs =
         commonArgs
@@ -533,36 +534,87 @@
         ) "nextest split package coverage mismatch: missing [${lib.concatStringsSep ", " missingNextestPackages}], extra [${lib.concatStringsSep ", " extraNextestPackages}]";
           nextestPackageGroups;
 
-      nextestBaseExtraArgs = "--profile ${nextestProfile} --no-fail-fast --final-status-level fail --no-tests=pass --run-ignored all";
+      nextestBaseExtraArgs = "--profile ${nextestProfile} --no-fail-fast --final-status-level fail --no-tests=pass";
+      nextestArchiveExtraArgs = "--profile ${nextestProfile}";
+      nextestArchiveFileName = "archive.tar.zst";
 
-      nextestPackageArgs = packages:
-        lib.concatMapStringsSep " " (package: "-p ${package}") packages;
+      nextestPackageFilter = packages:
+        "-E ${lib.escapeShellArg (lib.concatMapStringsSep " | " (package: "package(${package})") packages)}";
+
+      # NixCI dependency shape:
+      # Build the nextest archive once, then make each split package-group check
+      # run from that archive. This keeps the current shard-level reporting while
+      # avoiding repeated `cargo test --no-run` builds in each shard derivation.
+      nextestArchive = craneLib.mkCargoDerivation (ciArgs
+        // {
+          inherit cargoArtifacts;
+          src = workspaceTestSrc;
+          pname = "gammaloop-nextest-archive";
+          nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.cargo-nextest pkgs.form];
+          doCheck = true;
+          doInstallCargoArtifacts = false;
+          buildPhaseCargoCommand = ''
+            cargo nextest --version
+          '';
+          checkPhaseCargoCommand = ''
+            export CARGO_TARGET_DIR="$PWD/target"
+            cat > nextest-nix.toml <<EOF
+            [store]
+            dir = "$PWD/target/nextest"
+
+            EOF
+            cat ${workspaceTestSrc}/.config/nextest.toml >> nextest-nix.toml
+            cargo nextest archive \
+              ''${CARGO_PROFILE:+--cargo-profile $CARGO_PROFILE} \
+              --target-dir "$CARGO_TARGET_DIR" \
+              --config-file "$PWD/nextest-nix.toml" \
+              --locked --manifest-path ${workspaceTestSrc}/Cargo.toml --workspace ${nextestArchiveExtraArgs} \
+              --archive-format tar-zst \
+              --archive-file ${nextestArchiveFileName}
+          '';
+          installPhaseCommand = ''
+            mkdir -p "$out"
+            cp ${nextestArchiveFileName} "$out/${nextestArchiveFileName}"
+          '';
+          SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+        });
 
       nextestCheckFor = target:
-        craneLib.cargoNextest (ciArgs
+        craneLib.mkCargoDerivation (ciArgs
           // {
-            inherit cargoArtifacts;
+            cargoArtifacts = null;
+            cargoVendorDir = null;
             src = workspaceTestSrc;
             pname = "gammaloop-nextest-${target.name}";
-            nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.form];
-            cargoExtraArgs = "--locked ${nextestPackageArgs target.packages}";
-            cargoNextestExtraArgs = nextestBaseExtraArgs;
+            nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.cargo-nextest pkgs.form];
+            doCheck = true;
             checkPhase = ''
               runHook preCheck
 
               set +e
               cargo nextest run \
-                ''${CARGO_PROFILE:+--cargo-profile $CARGO_PROFILE} \
-                --locked ${nextestPackageArgs target.packages} ${nextestBaseExtraArgs}
+                --archive-file ${nextestArchive}/${nextestArchiveFileName} \
+                --archive-format tar-zst \
+                --workspace-remap . \
+                ${nextestPackageFilter target.packages} ${nextestBaseExtraArgs}
               nextest_status=$?
               set -e
 
               ${nextestFailureSummary}/bin/nextest-failure-summary ${lib.escapeShellArg nextestJunitPath} || true
 
               runHook postCheck
-              exit "$nextest_status"
+              if [ "$nextest_status" -ne 0 ]; then
+                exit "$nextest_status"
+              fi
+            '';
+            buildPhaseCargoCommand = ''
+              cargo nextest --version
+            '';
+            installPhaseCommand = ''
+              mkdir -p "$out"
             '';
             doInstallCargoArtifacts = false;
+            CARGO_PROFILE = "";
             RUST_BACKTRACE = "1";
             RUST_LIB_BACKTRACE = "1";
           }
@@ -574,11 +626,15 @@
             SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
           });
 
-      nextestChecks = lib.listToAttrs (map (target: {
-          name = "gammaloop-nextest-${target.name}";
-          value = nextestCheckFor target;
-        })
-        checkedNextestPackageGroups);
+      nextestChecks =
+        {
+          gammaloop-nextest-archive = nextestArchive;
+        }
+        // lib.listToAttrs (map (target: {
+            name = "gammaloop-nextest-${target.name}";
+            value = nextestCheckFor target;
+          })
+          checkedNextestPackageGroups);
 
       nextestAggregate = pkgs.runCommand "gammaloop-nextest" {} ''
         ${lib.concatMapStringsSep "\n" (check: "test -d ${check}") (builtins.attrValues nextestChecks)}
@@ -593,6 +649,10 @@
         {
           runnerAttr = "nix-ci-check-gammaloop-nextest";
           checkAttr = "gammaloop-nextest";
+        }
+        {
+          runnerAttr = "nix-ci-check-gammaloop-nextest-archive";
+          checkAttr = "gammaloop-nextest-archive";
         }
       ]
       ++ map (target: {
@@ -626,6 +686,17 @@
         text = ''
           echo "All NixCI build and test jobs passed."
         '';
+      };
+
+      gungraunRunner = pkgs.rustPlatform.buildRustPackage rec {
+        pname = "gungraun-runner";
+        version = "0.18.2";
+        src = pkgs.fetchCrate {
+          inherit pname version;
+          hash = "sha256-DiJq9TZCZdWKSstIyMjkLuxaYXua0WKD2AVbEIxM590=";
+        };
+        cargoHash = "sha256-eb9U1MgCg7MpwzS2RnFXMWdPitweKMMty0n3SC0F6+I=";
+        doCheck = false;
       };
     in {
       checks =
@@ -685,6 +756,7 @@
         }
         // impureCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
+          inherit gungraunRunner;
           gammaloop-llvm-coverage = craneLib.cargoLlvmCov (commonArgs
             // {
               src = workspaceTestSrc;
@@ -702,7 +774,7 @@
         };
       };
 
-      devShells.default = craneLib.devShell {
+      devShells.default = craneLib.devShell ({
         # checks = self.checks.${system};
 
         RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
@@ -759,6 +831,12 @@
           rust-analyzer
           maturin
           virtualenv
+        ]
+        ++ lib.optionals (!pkgs.stdenv.isDarwin) [
+          gungraunRunner
+          valgrind
+        ]
+        ++ [
           (pkgs.rustPlatform.buildRustPackage rec {
             pname = "clinnet";
             version = "0.1.8";
@@ -778,6 +856,8 @@
             cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
           })
         ];
-      };
+      } // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
+        GUNGRAUN_RUNNER = "${gungraunRunner}/bin/gungraun-runner";
+      });
     });
 }

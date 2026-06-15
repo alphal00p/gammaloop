@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display};
 use crate::{
     iterators::IteratorEnum,
     structure::{
-        IndexLess, PermutedStructure,
+        IndexLess, PermutedStructure, SlotIndex,
         concrete_index::ConcreteIndex,
         permuted::PermuteTensor,
         representation::RepName,
@@ -340,17 +340,17 @@ impl<T: Default + Clone + PartialEq, S: TensorStructure + Clone> SparseOrDense
 }
 
 #[cfg(feature = "shadowing")]
-impl<T: Clone + RefZero, S: TensorStructure, R> ShadowMapping<R> for RealOrComplexTensor<T, S>
+impl<T: Clone + RefZero, S: TensorStructure> ShadowMapping for RealOrComplexTensor<T, S>
 where
     S: HasName + Clone,
     S::Name: IntoSymbol,
     S::Args: IntoArgs,
-    R: From<T>,
+    Atom: From<T>,
     <<Self::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
     fn append_map<C>(
         &self,
-        fn_map: &mut FunctionMap<R>,
+        fn_map: &mut FunctionMap,
         index_to_atom: impl Fn(&Self::Structure, FlatIndex) -> C,
     ) where
         C: TensorCoefficient,
@@ -364,8 +364,12 @@ where
                             index_to_atom(self.structure(), i).to_atom_re().unwrap();
                         let labeled_coef_im =
                             index_to_atom(self.structure(), i).to_atom_im().unwrap();
-                        fn_map.add_constant(labeled_coef_re.clone(), c.re.clone().into());
-                        fn_map.add_constant(labeled_coef_im.clone(), c.re.clone().into());
+                        fn_map
+                            .add_aliases([(labeled_coef_re.clone(), Atom::from(c.re.clone()))])
+                            .unwrap();
+                        fn_map
+                            .add_aliases([(labeled_coef_im.clone(), Atom::from(c.im.clone()))])
+                            .unwrap();
                     }
                 }
                 DataTensor::Sparse(d) => {
@@ -374,8 +378,12 @@ where
                             index_to_atom(self.structure(), i).to_atom_re().unwrap();
                         let labeled_coef_im =
                             index_to_atom(self.structure(), i).to_atom_im().unwrap();
-                        fn_map.add_constant(labeled_coef_re.clone(), c.re.clone().into());
-                        fn_map.add_constant(labeled_coef_im.clone(), c.re.clone().into());
+                        fn_map
+                            .add_aliases([(labeled_coef_re.clone(), Atom::from(c.re.clone()))])
+                            .unwrap();
+                        fn_map
+                            .add_aliases([(labeled_coef_im.clone(), Atom::from(c.im.clone()))])
+                            .unwrap();
                     }
                 }
             }, // p.append_map(fn_map, index_to_atom),
@@ -458,10 +466,10 @@ where
             fn external_indices_iter(&self)-> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
             fn external_dims_iter(&self)-> impl Iterator<Item = Dimension>;
             fn external_structure_iter(&self)-> impl Iterator<Item = Self::Slot>;
-            fn get_slot(&self, i: usize)-> Option<Self::Slot>;
-            fn get_rep(&self, i: usize)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_dim(&self, i: usize)-> Option<Dimension>;
-            fn get_aind(&self, i: usize)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+            fn get_slot(&self, i: impl Into<SlotIndex>)-> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<SlotIndex>)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_dim(&self, i: impl Into<SlotIndex>)-> Option<Dimension>;
+            fn get_aind(&self, i: impl Into<SlotIndex>)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
             fn order(&self)-> usize;
         }
     }

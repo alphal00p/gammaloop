@@ -1,5 +1,5 @@
 use ahash::HashMap;
-use idenso::gamma::AGS;
+use idenso::dirac::AGS;
 use idenso::representations::Bispinor;
 use linnet::half_edge::involution::EdgeIndex;
 use spenso::{
@@ -15,9 +15,11 @@ use spenso::{
         representation::{Euclidean, LibraryRep, Minkowski, RepName},
     },
     tensors::{
-        data::{DataTensor, DenseTensor, SparseOrDense},
-        parametric::MixedTensor,
+        complex::RealOrComplexTensor,
+        data::{DataTensor, DenseTensor, SparseOrDense, StorageTensor},
+        parametric::{MixedTensor, ParamOrConcrete, atomcore::TensorAtomMaps},
     },
+    vector, vector_symbol,
 };
 use spenso_hep_lib::hep_lib_atom;
 use std::sync::OnceLock;
@@ -39,6 +41,7 @@ use super::{ParameterName, Particle, UFOSymbol};
 
 type ComplexF64 = Complex<F<f64>>;
 type SymComplexF64 = symbolica::domains::float::Complex<F<f64>>;
+type SymComplexPlainF64 = symbolica::domains::float::Complex<f64>;
 type TestTensorLibrary = TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>;
 
 static TEST_INITIALIZED: OnceLock<()> = OnceLock::new();
@@ -142,10 +145,10 @@ fn fermion_sum_test_library(
             Complex::new_re(momentum.spatial.pz),
         ],
     );
-    insert_spinor_tensor(&mut lib, symbol!("spin_plus"), positive.clone());
-    insert_spinor_tensor(&mut lib, symbol!("spin_plus_bar"), positive.bar());
-    insert_spinor_tensor(&mut lib, symbol!("spin_minus"), negative.clone());
-    insert_spinor_tensor(&mut lib, symbol!("spin_minus_bar"), negative.bar());
+    insert_spinor_tensor(&mut lib, vector_symbol!(spin_plus), positive.clone());
+    insert_spinor_tensor(&mut lib, vector_symbol!(spin_plus_bar), positive.bar());
+    insert_spinor_tensor(&mut lib, vector_symbol!(spin_minus), negative.clone());
+    insert_spinor_tensor(&mut lib, vector_symbol!(spin_minus_bar), negative.bar());
     insert_identity_tensor(&mut lib, ETS.metric, LibraryRep::from(Bispinor {}));
 
     lib
@@ -161,15 +164,15 @@ fn vector_sum_test_library(
     let plus = momentum.eps_pol(SignOrZero::Plus);
     let minus = momentum.eps_pol(SignOrZero::Minus);
 
-    insert_vector_tensor(&mut lib, symbol!("eps_plus"), plus.clone());
-    insert_vector_tensor(&mut lib, symbol!("eps_plus_bar"), plus.bar());
-    insert_vector_tensor(&mut lib, symbol!("eps_minus"), minus.clone());
-    insert_vector_tensor(&mut lib, symbol!("eps_minus_bar"), minus.bar());
+    insert_vector_tensor(&mut lib, vector_symbol!(eps_plus), plus.clone());
+    insert_vector_tensor(&mut lib, vector_symbol!(eps_plus_bar), plus.bar());
+    insert_vector_tensor(&mut lib, vector_symbol!(eps_minus), minus.clone());
+    insert_vector_tensor(&mut lib, vector_symbol!(eps_minus_bar), minus.bar());
 
     if include_longitudinal {
         let zero = momentum.eps_pol(SignOrZero::Zero);
-        insert_vector_tensor(&mut lib, symbol!("eps_zero"), zero.clone());
-        insert_vector_tensor(&mut lib, symbol!("eps_zero_bar"), zero.bar());
+        insert_vector_tensor(&mut lib, vector_symbol!(eps_zero), zero.clone());
+        insert_vector_tensor(&mut lib, vector_symbol!(eps_zero_bar), zero.bar());
     }
 
     // `GS.emr_mom(eid, mu)` is the full contravariant external momentum. We register p^mu directly
@@ -235,20 +238,18 @@ fn fermion_sum_lhs_expr() -> Atom {
     let row = bispinor_slot(1);
     let col = bispinor_slot(2);
 
-    function!(symbol!("spin_plus"), row.clone()) * function!(symbol!("spin_plus_bar"), col.clone())
-        + function!(symbol!("spin_minus"), row) * function!(symbol!("spin_minus_bar"), col)
+    vector!(spin_plus, row.clone()) * vector!(spin_plus_bar, col.clone())
+        + vector!(spin_minus, row) * vector!(spin_minus_bar, col)
 }
 
 fn vector_sum_lhs_expr(include_longitudinal: bool) -> Atom {
     let row = minkowski_slot(1);
     let col = minkowski_slot(2);
-    let transverse = function!(symbol!("eps_plus"), row.clone())
-        * function!(symbol!("eps_plus_bar"), col.clone())
-        + function!(symbol!("eps_minus"), row.clone())
-            * function!(symbol!("eps_minus_bar"), col.clone());
+    let transverse = vector!(eps_plus, row.clone()) * vector!(eps_plus_bar, col.clone())
+        + vector!(eps_minus, row.clone()) * vector!(eps_minus_bar, col.clone());
 
     if include_longitudinal {
-        transverse + function!(symbol!("eps_zero"), row) * function!(symbol!("eps_zero_bar"), col)
+        transverse + vector!(eps_zero, row) * vector!(eps_zero_bar, col)
     } else {
         transverse
     }
@@ -294,12 +295,25 @@ fn evaluate_tensor_network_with_constants(
         panic!("polarization-sum test network did not evaluate to a tensor");
     };
 
-    let mut result = result.into_owned();
-    let empty_functions: HashMap<
-        symbolica::atom::Symbol,
-        symbolica::evaluate::EvaluationFn<Atom, SymComplexF64>,
-    > = HashMap::default();
-    result.evaluate_complex(|r| r.into(), constants, &empty_functions);
+    let constants_f64: HashMap<Atom, SymComplexPlainF64> = constants
+        .iter()
+        .map(|(atom, value)| {
+            (
+                atom.clone(),
+                SymComplexPlainF64::new(value.re.0, value.im.0),
+            )
+        })
+        .collect();
+    let result = match result.into_owned() {
+        ParamOrConcrete::Param(tensor) => {
+            let evaluated = tensor
+                .evaluate(&constants_f64)
+                .unwrap()
+                .map_data(|c| Complex::new(F(c.re), F(c.im)));
+            ParamOrConcrete::Concrete(RealOrComplexTensor::Complex(evaluated))
+        }
+        ParamOrConcrete::Concrete(tensor) => ParamOrConcrete::Concrete(tensor),
+    };
 
     let dense = result
         .try_into_concrete()

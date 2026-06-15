@@ -53,7 +53,7 @@ smartstring = "1.0.1"
 spenso = { path = "crates/spenso/" }
 spenso-hep-lib = { path = "crates/spenso-hep-lib/" }
 spenso-macros = { path = "crates/spenso-macros/" }
-symbolica = { version = "1.5.1", default-features = false }
+symbolica = { version = "2.0.0", default-features = false }
 sysinfo = "0.33.1"
 tabled = "0.20.0"
 thiserror = "2.0"
@@ -72,9 +72,9 @@ which = "8.0.0"
 # graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 # numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-# graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
-# numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
-# symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d74554ce882c5511876e4b77cbc63670675db6d3" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
 # graphica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 # numerica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
@@ -98,6 +98,21 @@ opt-level = 3
 opt-level = 2
 
 [profile.dev-optim.package.gammalooprs]
+opt-level = 2
+
+# Keep CI archives small enough for cache upload while preserving dev-optim
+# debuginfo for local diagnostics.
+[profile.ci-optim]
+inherits = "dev-optim"
+debug = false
+
+[profile.ci-optim.package."*"]
+opt-level = 3
+
+[profile.ci-optim.package.gammaloop-api]
+opt-level = 2
+
+[profile.ci-optim.package.gammalooprs]
 opt-level = 2
 
 [profile.profiling]

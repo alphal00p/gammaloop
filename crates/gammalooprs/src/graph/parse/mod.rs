@@ -28,7 +28,7 @@ use crate::{
     uv::UltravioletGraph,
 };
 use ahash::{AHashMap, AHashSet};
-use idenso::color::ColorSimplifier;
+use idenso::{color::ColorSimplifier, tensor::SymbolicNetParse};
 
 use color_eyre::{Report, Result, Section};
 
@@ -50,10 +50,7 @@ use linnet::{
 };
 use spenso::{
     contraction::Contract,
-    network::{
-        library::TensorLibraryData,
-        parsing::{NetworkParse, ParseSettings},
-    },
+    network::parsing::ParseSettings,
     structure::{HasStructure, OrderedStructure, representation::Euclidean, slot::IsAbstractSlot},
     tensors::{data::StorageTensor, parametric::ParamTensor},
 };

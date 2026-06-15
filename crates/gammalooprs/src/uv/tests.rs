@@ -41,7 +41,6 @@ use crate::{
     settings::global::GenerationSettings,
     utils::load_generic_model,
 };
-use spenso::network::library::TensorLibraryData;
 use symbolica::{
     atom::{Atom, AtomCore},
     function, parse,

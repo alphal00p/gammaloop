@@ -1,6 +1,12 @@
 extern crate derive_more;
 
-use crate::structure::{IndexLess, slot::IsAbstractSlot};
+use std::{
+    fmt::{Debug, Display},
+    io::Cursor,
+    path::Path,
+};
+
+use crate::structure::{IndexLess, SlotIndex, slot::IsAbstractSlot};
 use crate::structure::{StructureError, slot::AbsInd};
 use crate::structure::{
     permuted::PermuteTensor, representation::Representation, slot::ParseableAind,
@@ -15,25 +21,22 @@ use crate::{
 };
 use ahash::HashMap;
 use delegate::delegate;
-use std::{
-    fmt::{Debug, Display},
-    io::Cursor,
-    path::Path,
-};
+use linnet::half_edge::subgraph::SubSetLike;
 
 use eyre::Result;
 use eyre::eyre;
 
 use atomcore::{ReplaceBuilderGeneric, TensorAtomMaps};
-// use anyhow::Ok;
+
 use enum_try_as_inner::EnumTryAsInner;
 use log::trace;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use to_param::ToAtom;
 
 use crate::{
     algebra::algebraic_traits::{IsZero, RefZero},
-    algebra::complex::{Complex, RealOrComplex},
+    algebra::complex::Complex,
     algebra::upgrading_arithmetic::{
         FallibleAddAssign, FallibleMul, FallibleSubAssign, TrySmallestUpgrade,
     },
@@ -42,8 +45,8 @@ use crate::{
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     shadowing::{ShadowMapping, Shadowable},
     structure::{
-        CastStructure, HasName, HasStructure, NamedStructure, OrderedStructure, ScalarStructure,
-        ScalarTensor, StructureContract, TensorStructure, TracksCount,
+        CastStructure, HasName, HasStructure, MergeInfo, NamedStructure, OrderedStructure,
+        ScalarStructure, ScalarTensor, StructureContract, TensorStructure, TracksCount,
         concrete_index::{ConcreteIndex, DualConciousExpandedIndex, ExpandedIndex, FlatIndex},
         slot::Slot,
     },
@@ -56,23 +59,75 @@ use crate::{
 use bincode::{Decode, Encode};
 
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, KeyLookup, Symbol},
-    coefficient::Coefficient,
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Indeterminate, KeyLookup, Symbol},
     domains::{
         InternalOrdering,
-        float::{FloatLike, Real, SingleFloat},
+        float::{FixedPrecision, FloatLike, Real, SingleFloat},
         rational::Rational,
     },
     evaluate::{
         CompileOptions, CompiledCode, CompiledComplexEvaluator, CompiledNumber, EvalTree,
-        EvaluationFn, ExportNumber, ExportSettings, ExportedCode, Expression, ExpressionEvaluator,
-        FunctionMap, OptimizationSettings,
+        EvaluationDomain, EvaluationError, ExportNumber, ExportSettings, ExportedCode, Expression,
+        ExpressionEvaluator, FunctionMap, OptimizationSettings,
     },
     id::Pattern,
     state::State,
     symbol,
     utils::BorrowedOrOwned,
 };
+
+#[cfg(feature = "shadowing")]
+fn horner_contract_atom<CStrat: crate::network::AtomComponentOptimizer>(atom: Atom) -> Atom {
+    let Some(min_byte_size) = CStrat::HORNER_MIN_BYTES else {
+        return atom;
+    };
+    if atom.as_view().get_byte_size() < min_byte_size && !matches!(atom.as_view(), AtomView::Add(_))
+    {
+        return atom;
+    }
+
+    atom.collect_horner::<Indeterminate>(None)
+}
+
+#[cfg(feature = "shadowing")]
+fn horner_contract_tensor<CStrat, I>(tensor: DataTensor<Atom, I>) -> DataTensor<Atom, I>
+where
+    CStrat: crate::network::AtomComponentOptimizer,
+    I: TensorStructure,
+{
+    if CStrat::HORNER_MIN_BYTES.is_none() {
+        return tensor;
+    }
+
+    match tensor {
+        DataTensor::Dense(mut dense) => {
+            dense.data = dense
+                .data
+                .into_iter()
+                .map(horner_contract_atom::<CStrat>)
+                .collect();
+            DataTensor::Dense(dense)
+        }
+        DataTensor::Sparse(mut sparse) => {
+            sparse.zero = horner_contract_atom::<CStrat>(sparse.zero);
+            sparse.elements = sparse
+                .elements
+                .into_iter()
+                .map(|(index, atom)| (index, horner_contract_atom::<CStrat>(atom)))
+                .collect();
+            DataTensor::Sparse(sparse)
+        }
+    }
+}
+
+#[cfg(feature = "shadowing")]
+fn horner_contract_composite<CStrat, I>(tensor: DataTensor<Atom, I>) -> ParamTensor<I>
+where
+    CStrat: crate::network::AtomComponentOptimizer,
+    I: TensorStructure,
+{
+    ParamTensor::composite(horner_contract_tensor::<CStrat, _>(tensor))
+}
 
 use std::hash::Hash;
 
@@ -91,17 +146,19 @@ pub trait TensorCoefficient: Display {
     fn to_atom(&self) -> Option<Atom>;
     fn to_atom_re(&self) -> Option<Atom>;
     fn to_atom_im(&self) -> Option<Atom>;
-    fn add_tagged_function<T>(
+    fn add_tagged_function(
         &self,
-        fn_map: &mut FunctionMap<T>,
+        fn_map: &mut FunctionMap,
         body: Atom,
-    ) -> Result<(), String> {
-        let (name, cooked_name) = self
-            .name()
-            .zip(self.cooked_name())
-            .ok_or(format!("unnamed {}", self))?;
+    ) -> Result<(), EvaluationError> {
+        let name =
+            self.name()
+                .ok_or_else(|| EvaluationError::EvaluationTreeConstructionFailed {
+                    expression: body.clone(),
+                    reason: format!("unnamed {self}"),
+                })?;
 
-        fn_map.add_tagged_function::<Symbol>(name, self.tags(), cooked_name, vec![], body)
+        fn_map.add_tagged_function::<Symbol>(name, self.tags(), vec![], body)
     }
 }
 
@@ -372,10 +429,10 @@ where
             fn external_indices_iter(&self)-> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
             fn external_dims_iter(&self)-> impl Iterator<Item = Dimension>;
             fn external_structure_iter(&self)-> impl Iterator<Item = Self::Slot>;
-            fn get_slot(&self, i: usize)-> Option<Self::Slot>;
-            fn get_rep(&self, i: usize)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_dim(&self, i: usize)-> Option<Dimension>;
-            fn get_aind(&self, i: usize)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+            fn get_slot(&self, i: impl Into<SlotIndex>)-> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<SlotIndex>)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_dim(&self, i: impl Into<SlotIndex>)-> Option<Dimension>;
+            fn get_aind(&self, i: impl Into<SlotIndex>)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
             fn order(&self)-> usize;
         }
     }
@@ -692,7 +749,7 @@ where
 {
 }
 
-impl<S: TensorStructure, Const> ShadowMapping<Const> for ParamTensor<S>
+impl<S: TensorStructure> ShadowMapping for ParamTensor<S>
 where
     S: HasName + Clone,
     S::Name: IntoSymbol,
@@ -701,7 +758,7 @@ where
 {
     fn append_map<T>(
         &self,
-        fn_map: &mut FunctionMap<Const>,
+        fn_map: &mut FunctionMap,
         index_to_atom: impl Fn(&Self::Structure, FlatIndex) -> T,
     ) where
         T: TensorCoefficient,
@@ -926,10 +983,9 @@ where
 }
 
 impl<
-    U,
-    C: HasStructure<Structure = S> + Clone + ShadowMapping<U>,
+    C: HasStructure<Structure = S> + Clone + ShadowMapping,
     S: TensorStructure + Clone + HasName<Args: IntoArgs, Name: IntoSymbol>,
-> ShadowMapping<U> for ParamOrConcrete<C, S>
+> ShadowMapping for ParamOrConcrete<C, S>
 where
     <<Self::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
@@ -949,7 +1005,7 @@ where
 
     fn append_map<T>(
         &self,
-        fn_map: &mut FunctionMap<U>,
+        fn_map: &mut FunctionMap,
         index_to_atom: impl Fn(&Self::Structure, FlatIndex) -> T,
     ) where
         T: TensorCoefficient,
@@ -1283,10 +1339,10 @@ where
             fn external_indices_iter(&self)-> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
             fn external_dims_iter(&self)-> impl Iterator<Item = Dimension>;
             fn external_structure_iter(&self)-> impl Iterator<Item = Self::Slot>;
-            fn get_slot(&self, i: usize)-> Option<Self::Slot>;
-            fn get_rep(&self, i: usize)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_dim(&self, i: usize)-> Option<Dimension>;
-            fn get_aind(&self, i: usize)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+            fn get_slot(&self, i: impl Into<SlotIndex>)-> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<SlotIndex>)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_dim(&self, i: impl Into<SlotIndex>)-> Option<Dimension>;
+            fn get_aind(&self, i: impl Into<SlotIndex>)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
             fn order(&self)-> usize;
         }
     }
@@ -1482,19 +1538,6 @@ impl<T: Into<Atom>> From<ConcreteOrParam<T>> for Atom {
     }
 }
 
-impl<T: Into<Coefficient>> From<RealOrComplex<T>> for Atom {
-    fn from(value: RealOrComplex<T>) -> Self {
-        match value {
-            RealOrComplex::Real(x) => Atom::num(x),
-            RealOrComplex::Complex(x) => {
-                let (re, im) = (Atom::num(x.re), Atom::num(x.im));
-                let i = Atom::i();
-                re + im * i
-            }
-        }
-    }
-}
-
 impl<C, S> ScalarTensor for ParamOrConcrete<C, S>
 where
     C: HasStructure<Structure = S> + Clone + ScalarTensor + TensorStructure,
@@ -1595,13 +1638,9 @@ pub type MixedTensor<T = f64, S = NamedStructure<Symbol, Vec<Atom>>> =
     ParamOrConcrete<RealOrComplexTensor<T, S>, S>;
 
 impl<I: TensorStructure + Clone, T: Clone> MixedTensor<T, I> {
-    pub fn evaluate_real<A: AtomCore + KeyLookup, F: Fn(&Rational) -> T + Copy>(
-        &mut self,
-        coeff_map: F,
-        const_map: &HashMap<A, T>,
-        function_map: &HashMap<Symbol, EvaluationFn<A, T>>,
-    ) where
-        T: Real + for<'c> From<&'c Rational>,
+    pub fn evaluate_real<A: AtomCore + KeyLookup>(&mut self, const_map: &HashMap<A, T>)
+    where
+        T: Real + EvaluationDomain + FixedPrecision + for<'c> From<&'c Rational>,
     {
         let content = match self {
             MixedTensor::Param(x) => Some(x),
@@ -1609,20 +1648,17 @@ impl<I: TensorStructure + Clone, T: Clone> MixedTensor<T, I> {
         };
 
         if let Some(x) = content {
-            *self = MixedTensor::Concrete(RealOrComplexTensor::Real(
-                x.evaluate(coeff_map, const_map, function_map).unwrap(),
-            ));
+            *self =
+                MixedTensor::Concrete(RealOrComplexTensor::Real(x.evaluate(const_map).unwrap()));
         }
     }
 
-    pub fn evaluate_complex<A: AtomCore + KeyLookup, F: Fn(&Rational) -> SymComplex<T> + Copy>(
+    pub fn evaluate_complex<A: AtomCore + KeyLookup>(
         &mut self,
-        coeff_map: F,
         const_map: &HashMap<A, SymComplex<T>>,
-        function_map: &HashMap<Symbol, EvaluationFn<A, SymComplex<T>>>,
     ) where
-        T: Real + for<'c> From<&'c Rational>,
-        SymComplex<T>: Real + for<'c> From<&'c Rational>,
+        T: Real + EvaluationDomain + FixedPrecision + for<'c> From<&'c Rational>,
+        SymComplex<T>: Real + EvaluationDomain + FixedPrecision + for<'c> From<&'c Rational>,
     {
         let content = match self {
             MixedTensor::Param(x) => Some(x),
@@ -1631,9 +1667,7 @@ impl<I: TensorStructure + Clone, T: Clone> MixedTensor<T, I> {
 
         if let Some(x) = content {
             *self = MixedTensor::Concrete(RealOrComplexTensor::Complex(
-                x.evaluate(coeff_map, const_map, function_map)
-                    .unwrap()
-                    .map_data(|c| c.into()),
+                x.evaluate(const_map).unwrap().map_data(|c| c.into()),
             ));
         }
     }
@@ -1867,13 +1901,366 @@ where
     }
 }
 
-impl<I> Contract<ParamTensor<I>> for ParamTensor<I>
+impl<I> ParamTensor<I>
 where
     I: TensorStructure + Clone + StructureContract,
 {
-    type LCM = ParamTensor<I>;
-    fn contract(&self, other: &ParamTensor<I>) -> Result<Self::LCM, ContractionError> {
-        let s = self.tensor.contract(&other.tensor)?;
+    fn one_hot_selector_contract(
+        &self,
+        other: &ParamTensor<I>,
+    ) -> Result<Option<DataTensor<Atom, I>>, ContractionError> {
+        let (resulting_structure, pos_self, pos_other, _) =
+            self.tensor.structure().merge(other.tensor.structure())?;
+
+        if pos_self.n_included() != 1 || pos_other.n_included() != 1 {
+            return Ok(None);
+        }
+
+        let self_axis = pos_self
+            .included_iter()
+            .next()
+            .expect("one included self slot")
+            .0;
+        let other_axis = pos_other
+            .included_iter()
+            .next()
+            .expect("one included other slot")
+            .0;
+
+        if let Some(result) = contract_one_hot_selector_data(
+            &self.tensor,
+            &other.tensor,
+            resulting_structure.clone(),
+            other_axis,
+        )? {
+            return Ok(Some(result));
+        }
+
+        contract_one_hot_selector_data(&other.tensor, &self.tensor, resulting_structure, self_axis)
+    }
+}
+
+fn one_hot_component<I>(tensor: &DataTensor<Atom, I>) -> Option<(ConcreteIndex, Atom)>
+where
+    I: TensorStructure,
+{
+    if tensor.order() != 1 {
+        return None;
+    }
+
+    let mut nonzero = tensor.iter_expanded().filter(|(_, value)| !value.is_zero());
+    let (index, value) = nonzero.next()?;
+    if nonzero.next().is_some() {
+        return None;
+    }
+
+    Some((index.indices[0], value.clone()))
+}
+
+fn contract_one_hot_selector_data<I>(
+    selector: &DataTensor<Atom, I>,
+    target: &DataTensor<Atom, I>,
+    resulting_structure: I,
+    target_axis: usize,
+) -> Result<Option<DataTensor<Atom, I>>, ContractionError>
+where
+    I: TensorStructure + Clone,
+{
+    let Some((selected_component, selector_value)) = one_hot_component(selector) else {
+        return Ok(None);
+    };
+
+    let target_slot = target
+        .structure()
+        .external_structure()
+        .get(target_axis)
+        .copied()
+        .ok_or_else(|| eyre!("matched selector target axis out of bounds"))?;
+    let negative_metric_component = target_slot
+        .rep()
+        .negative()?
+        .get(selected_component)
+        .copied()
+        .ok_or_else(|| eyre!("selector component out of target representation bounds"))?;
+
+    let mut result = SparseTensor::empty(resulting_structure, Atom::Zero);
+    for (mut index, value) in target.iter_expanded() {
+        if value.is_zero() || index.indices[target_axis] != selected_component {
+            continue;
+        }
+
+        index.indices.remove(target_axis);
+        let mut value = value.clone();
+        if selector_value != Atom::num(1) {
+            value *= selector_value.clone();
+        }
+        if negative_metric_component {
+            value = -value;
+        }
+        result.smart_set(&index.indices, value)?;
+    }
+
+    Ok(Some(DataTensor::Sparse(result)))
+}
+
+fn grouped_atom_sum(terms: Vec<Atom>) -> Atom {
+    match terms.len() {
+        0 => Atom::Zero,
+        1 => terms
+            .into_iter()
+            .next()
+            .expect("single grouped atom exists"),
+        _ => Atom::add_many(&terms),
+    }
+}
+
+fn grouped_sparse_atom_contract<I>(
+    left: &DataTensor<Atom, I>,
+    right: &DataTensor<Atom, I>,
+) -> Result<Option<DataTensor<Atom, I>>, ContractionError>
+where
+    I: TensorStructure + Clone + StructureContract,
+{
+    let (DataTensor::Sparse(left), DataTensor::Sparse(right)) = (left, right) else {
+        return Ok(None);
+    };
+    if !left.zero.as_view().is_zero() || !right.zero.as_view().is_zero() {
+        return Ok(None);
+    }
+
+    let (resulting_structure, pos_left, pos_right, merge_info) =
+        left.structure().merge(right.structure())?;
+    let common_count = pos_left.n_included();
+
+    match (common_count, merge_info) {
+        (0, _) | (_, MergeInfo::Interleaved(_)) => Ok(None),
+        (1, MergeInfo::FirstBeforeSecond) => {
+            let left_axis = pos_left
+                .included_iter()
+                .next()
+                .expect("single left contraction axis");
+            let right_axis = pos_right
+                .included_iter()
+                .next()
+                .expect("single right contraction axis");
+            grouped_sparse_atom_single_contract(
+                left,
+                right,
+                resulting_structure,
+                left_axis,
+                right_axis,
+            )
+            .map(|tensor| Some(DataTensor::Sparse(tensor)))
+        }
+        (1, MergeInfo::SecondBeforeFirst) => {
+            let left_axis = pos_left
+                .included_iter()
+                .next()
+                .expect("single left contraction axis");
+            let right_axis = pos_right
+                .included_iter()
+                .next()
+                .expect("single right contraction axis");
+            grouped_sparse_atom_single_contract(
+                right,
+                left,
+                resulting_structure,
+                right_axis,
+                left_axis,
+            )
+            .map(|tensor| Some(DataTensor::Sparse(tensor)))
+        }
+        (_, MergeInfo::FirstBeforeSecond) => {
+            grouped_sparse_atom_multi_contract(left, right, resulting_structure)
+                .map(|tensor| Some(DataTensor::Sparse(tensor)))
+        }
+        (_, MergeInfo::SecondBeforeFirst) => {
+            grouped_sparse_atom_multi_contract(right, left, resulting_structure)
+                .map(|tensor| Some(DataTensor::Sparse(tensor)))
+        }
+    }
+}
+
+fn grouped_sparse_atom_single_contract<I>(
+    left: &SparseTensor<Atom, I>,
+    right: &SparseTensor<Atom, I>,
+    final_structure: I,
+    left_axis: SlotIndex,
+    right_axis: SlotIndex,
+) -> Result<SparseTensor<Atom, I>, ContractionError>
+where
+    I: TensorStructure + Clone + StructureContract,
+{
+    let metric = left.external_structure()[left_axis.0].rep().negative()?;
+    let mut grouped = Vec::<(FlatIndex, Vec<Atom>)>::new();
+    let mut result_index = 0usize;
+
+    let self_iter = left.fiber_class(left_axis.into()).iter();
+    let mut other_iter = right.fiber_class(right_axis.into()).iter();
+
+    for mut fiber_a in self_iter {
+        for mut fiber_b in other_iter.by_ref() {
+            let mut items = fiber_a
+                .next()
+                .map(|(a, skip, _)| (a, skip))
+                .zip(fiber_b.next().map(|(b, skip, _)| (b, skip)));
+            let mut terms = Vec::new();
+
+            while let Some(((a, skip_a), (b, skip_b))) = items {
+                if skip_a > skip_b {
+                    let b = fiber_b
+                        .by_ref()
+                        .next()
+                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
+                    items = Some((a, skip_a)).zip(b);
+                } else if skip_b > skip_a {
+                    let a = fiber_a
+                        .by_ref()
+                        .next()
+                        .map(|(a, skip, _)| (a, skip + skip_a + 1));
+                    items = a.zip(Some((b, skip_b)));
+                } else {
+                    let mut product = a.mul_fallible(b).unwrap();
+                    if metric[skip_a] {
+                        product = -product;
+                    }
+                    terms.push(product);
+                    let b = fiber_b
+                        .by_ref()
+                        .next()
+                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
+                    let a = fiber_a
+                        .by_ref()
+                        .next()
+                        .map(|(a, skip, _)| (a, skip + skip_a + 1));
+                    items = a.zip(b);
+                }
+            }
+
+            if !terms.is_empty() {
+                grouped.push((result_index.into(), terms));
+            }
+            result_index += 1;
+            fiber_a.reset();
+        }
+        other_iter.reset();
+    }
+
+    let elements = grouped
+        .into_par_iter()
+        .filter_map(|(index, terms)| {
+            let value = grouped_atom_sum(terms);
+            (!value.as_view().is_zero()).then_some((index, value))
+        })
+        .collect();
+
+    Ok(SparseTensor {
+        zero: Atom::Zero,
+        elements,
+        structure: final_structure,
+    })
+}
+
+fn grouped_sparse_atom_multi_contract<I>(
+    left: &SparseTensor<Atom, I>,
+    right: &SparseTensor<Atom, I>,
+    final_structure: I,
+) -> Result<SparseTensor<Atom, I>, ContractionError>
+where
+    I: TensorStructure + Clone + StructureContract,
+{
+    let (permutation, self_matches, other_matches) =
+        left.structure().match_indices(right.structure()).unwrap();
+    let mut grouped = Vec::<(FlatIndex, Vec<Atom>)>::new();
+    let mut result_index = 0usize;
+
+    let self_iter = left
+        .fiber_class(self_matches.as_slice().into())
+        .iter_perm_metric(permutation);
+    let mut other_iter = right.fiber_class(other_matches.as_slice().into()).iter();
+
+    for mut fiber_a in self_iter {
+        for mut fiber_b in other_iter.by_ref() {
+            let mut items = fiber_a
+                .next()
+                .map(|(a, skip, (neg, _))| (a, skip, neg))
+                .zip(fiber_b.next().map(|(b, skip, _)| (b, skip)));
+            let mut terms = Vec::new();
+
+            while let Some(((a, skip_a, neg), (b, skip_b))) = items {
+                if skip_a > skip_b {
+                    let b = fiber_b
+                        .by_ref()
+                        .next()
+                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
+                    items = Some((a, skip_a, neg)).zip(b);
+                } else if skip_b > skip_a {
+                    let a = fiber_a
+                        .by_ref()
+                        .next()
+                        .map(|(a, skip, (neg, _))| (a, skip + skip_a + 1, neg));
+                    items = a.zip(Some((b, skip_b)));
+                } else {
+                    let mut product = a.mul_fallible(b).unwrap();
+                    if neg {
+                        product = -product;
+                    }
+                    terms.push(product);
+                    let b = fiber_b
+                        .by_ref()
+                        .next()
+                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
+                    let a = fiber_a
+                        .by_ref()
+                        .next()
+                        .map(|(a, skip, (neg, _))| (a, skip + skip_a + 1, neg));
+                    items = a.zip(b);
+                }
+            }
+
+            if !terms.is_empty() {
+                grouped.push((result_index.into(), terms));
+            }
+            result_index += 1;
+            fiber_a.reset();
+        }
+        other_iter.reset();
+    }
+
+    let elements = grouped
+        .into_par_iter()
+        .filter_map(|(index, terms)| {
+            let value = grouped_atom_sum(terms);
+            (!value.as_view().is_zero()).then_some((index, value))
+        })
+        .collect();
+
+    Ok(SparseTensor {
+        zero: Atom::Zero,
+        elements,
+        structure: final_structure,
+    })
+}
+
+impl<I> ParamTensor<I>
+where
+    I: TensorStructure + Clone + StructureContract,
+{
+    fn contract_with_component_optimizer<CStrat>(
+        &self,
+        other: &ParamTensor<I>,
+    ) -> Result<Self, ContractionError>
+    where
+        CStrat: crate::network::AtomComponentOptimizer,
+    {
+        let s = if let Some(s) = self.one_hot_selector_contract(other)? {
+            s
+        } else if let Some(s) = grouped_sparse_atom_contract(&self.tensor, &other.tensor)? {
+            s
+        } else {
+            self.tensor.contract(&other.tensor)?
+        };
+        let s = horner_contract_tensor::<CStrat, _>(s);
 
         match (self.param_type, other.param_type) {
             (ParamOrComposite::Param, ParamOrComposite::Param) => Ok(ParamTensor::param(s)),
@@ -1882,6 +2269,55 @@ where
             }
             (ParamOrComposite::Param, ParamOrComposite::Composite) => Ok(ParamTensor::composite(s)),
             (ParamOrComposite::Composite, ParamOrComposite::Param) => Ok(ParamTensor::composite(s)),
+        }
+    }
+}
+
+impl<I> Contract<ParamTensor<I>> for ParamTensor<I>
+where
+    I: TensorStructure + Clone + StructureContract,
+{
+    type LCM = ParamTensor<I>;
+
+    fn contract(&self, other: &ParamTensor<I>) -> Result<Self::LCM, ContractionError> {
+        self.contract_with_component_optimizer::<()>(other)
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<I, const MIN_BYTE_SIZE: usize>
+    crate::network::AtomComponentOptimizable<crate::network::HornerAtomComponents<MIN_BYTE_SIZE>>
+    for ParamTensor<I>
+where
+    I: TensorStructure,
+{
+    fn optimize_atom_components(self) -> Self {
+        ParamTensor {
+            tensor: horner_contract_tensor::<crate::network::HornerAtomComponents<MIN_BYTE_SIZE>, _>(
+                self.tensor,
+            ),
+            param_type: self.param_type,
+        }
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<C, I, const MIN_BYTE_SIZE: usize>
+    crate::network::AtomComponentOptimizable<crate::network::HornerAtomComponents<MIN_BYTE_SIZE>>
+    for ParamOrConcrete<C, I>
+where
+    I: TensorStructure,
+{
+    fn optimize_atom_components(self) -> Self {
+        match self {
+            ParamOrConcrete::Concrete(concrete) => ParamOrConcrete::Concrete(concrete),
+            ParamOrConcrete::Param(param) => ParamOrConcrete::Param(ParamTensor {
+                tensor: horner_contract_tensor::<
+                    crate::network::HornerAtomComponents<MIN_BYTE_SIZE>,
+                    _,
+                >(param.tensor),
+                param_type: param.param_type,
+            }),
         }
     }
 }
@@ -1906,7 +2342,7 @@ where
     }
 }
 
-impl<I, T> Contract<ParamOrConcrete<DataTensor<T, I>, I>> for ParamOrConcrete<DataTensor<T, I>, I>
+impl<I, T> ParamOrConcrete<DataTensor<T, I>, I>
 where
     I: TensorStructure + Clone + StructureContract,
     T: ContractableWith<Atom, Out = Atom>
@@ -1919,37 +2355,57 @@ where
         + IsZero,
     Atom: TrySmallestUpgrade<T, LCM = Atom>, // Atom: ContractableWith<T, Out = Atom> + ContractableWith<Atom, Out = Atom>,
 {
-    type LCM = ParamOrConcrete<DataTensor<T, I>, I>;
-    fn contract(
+    fn contract_with_component_optimizer<CStrat>(
         &self,
         other: &ParamOrConcrete<DataTensor<T, I>, I>,
-    ) -> Result<Self::LCM, ContractionError> {
+    ) -> Result<Self, ContractionError>
+    where
+        CStrat: crate::network::AtomComponentOptimizer,
+    {
         match (self, other) {
-            (ParamOrConcrete::Param(s), ParamOrConcrete::Param(o)) => {
-                Ok(ParamOrConcrete::Param(s.contract(o)?))
+            (ParamOrConcrete::Param(s), ParamOrConcrete::Param(o)) => Ok(ParamOrConcrete::Param(
+                s.contract_with_component_optimizer::<CStrat>(o)?,
+            )),
+            (ParamOrConcrete::Param(s), ParamOrConcrete::Concrete(o)) => {
+                Ok(ParamOrConcrete::Param(
+                    horner_contract_composite::<CStrat, _>(s.tensor.contract(o)?),
+                ))
             }
-            (ParamOrConcrete::Param(s), ParamOrConcrete::Concrete(o)) => match s.param_type {
-                ParamOrComposite::Composite => Ok(ParamOrConcrete::Param(ParamTensor::composite(
-                    s.tensor.contract(o)?,
-                ))),
-                ParamOrComposite::Param => Ok(ParamOrConcrete::Param(ParamTensor::composite(
-                    s.tensor.contract(o)?,
-                ))),
-            },
-            (ParamOrConcrete::Concrete(s), ParamOrConcrete::Param(o)) => match o.param_type {
-                ParamOrComposite::Composite => Ok(ParamOrConcrete::Param(ParamTensor::composite(
-                    s.contract(&o.tensor)?,
-                ))),
-                ParamOrComposite::Param => Ok(ParamOrConcrete::Param(ParamTensor::composite(
-                    s.contract(&o.tensor)?,
-                ))),
-            },
+            (ParamOrConcrete::Concrete(s), ParamOrConcrete::Param(o)) => {
+                Ok(ParamOrConcrete::Param(
+                    horner_contract_composite::<CStrat, _>(s.contract(&o.tensor)?),
+                ))
+            }
             (ParamOrConcrete::Concrete(s), ParamOrConcrete::Concrete(o)) => {
                 Ok(ParamOrConcrete::Concrete(s.contract(o)?))
             }
         }
     }
 }
+
+impl<I, T> Contract<ParamOrConcrete<DataTensor<T, I>, I>> for ParamOrConcrete<DataTensor<T, I>, I>
+where
+    I: TensorStructure + Clone + StructureContract,
+    T: ContractableWith<Atom, Out = Atom>
+        + ContractableWith<T, Out = T>
+        + Clone
+        + FallibleMul<Output = T>
+        + FallibleAddAssign<T>
+        + FallibleSubAssign<T>
+        + RefZero
+        + IsZero,
+    Atom: TrySmallestUpgrade<T, LCM = Atom>,
+{
+    type LCM = ParamOrConcrete<DataTensor<T, I>, I>;
+
+    fn contract(
+        &self,
+        other: &ParamOrConcrete<DataTensor<T, I>, I>,
+    ) -> Result<Self::LCM, ContractionError> {
+        self.contract_with_component_optimizer::<()>(other)
+    }
+}
+
 impl<I, T> Trace for ParamOrConcrete<RealOrComplexTensor<T, I>, I>
 where
     I: TensorStructure + Clone + StructureContract,
@@ -1981,6 +2437,63 @@ where
     }
 }
 
+impl<I, T> ParamOrConcrete<RealOrComplexTensor<T, I>, I>
+where
+    I: TensorStructure + Clone + StructureContract,
+    T: ContractableWith<Atom, Out = Atom>
+        + ContractableWith<T, Out = T>
+        + ContractableWith<Complex<T>, Out = Complex<T>>
+        + Clone
+        + FallibleMul<Output = T>
+        + FallibleAddAssign<T>
+        + FallibleSubAssign<T>
+        + RefZero
+        + IsZero,
+    Complex<T>: ContractableWith<Atom, Out = Atom>
+        + ContractableWith<T, Out = Complex<T>>
+        + ContractableWith<Complex<T>, Out = Complex<T>>
+        + Clone
+        + FallibleMul<Output = Complex<T>>
+        + FallibleAddAssign<Complex<T>>
+        + FallibleSubAssign<Complex<T>>
+        + RefZero
+        + IsZero,
+    Atom: TrySmallestUpgrade<T, LCM = Atom> + TrySmallestUpgrade<Complex<T>, LCM = Atom>,
+{
+    fn contract_with_component_optimizer<CStrat>(
+        &self,
+        other: &ParamOrConcrete<RealOrComplexTensor<T, I>, I>,
+    ) -> Result<Self, ContractionError>
+    where
+        CStrat: crate::network::AtomComponentOptimizer,
+    {
+        match (self, other) {
+            (ParamOrConcrete::Param(s), ParamOrConcrete::Param(o)) => Ok(ParamOrConcrete::Param(
+                s.contract_with_component_optimizer::<CStrat>(o)?,
+            )),
+            (ParamOrConcrete::Param(s), ParamOrConcrete::Concrete(o)) => match o {
+                RealOrComplexTensor::Real(o) => Ok(ParamOrConcrete::Param(
+                    horner_contract_composite::<CStrat, _>(s.tensor.contract(o)?),
+                )),
+                RealOrComplexTensor::Complex(o) => Ok(ParamOrConcrete::Param(
+                    horner_contract_composite::<CStrat, _>(s.tensor.contract(o)?),
+                )),
+            },
+            (ParamOrConcrete::Concrete(s), ParamOrConcrete::Param(o)) => match s {
+                RealOrComplexTensor::Real(s) => Ok(ParamOrConcrete::Param(
+                    horner_contract_composite::<CStrat, _>(o.tensor.contract(s)?),
+                )),
+                RealOrComplexTensor::Complex(s) => Ok(ParamOrConcrete::Param(
+                    horner_contract_composite::<CStrat, _>(o.tensor.contract(s)?),
+                )),
+            },
+            (ParamOrConcrete::Concrete(s), ParamOrConcrete::Concrete(o)) => {
+                Ok(ParamOrConcrete::Concrete(s.contract(o)?))
+            }
+        }
+    }
+}
+
 impl<I, T> Contract<ParamOrConcrete<RealOrComplexTensor<T, I>, I>>
     for ParamOrConcrete<RealOrComplexTensor<T, I>, I>
 where
@@ -2006,46 +2519,12 @@ where
     Atom: TrySmallestUpgrade<T, LCM = Atom> + TrySmallestUpgrade<Complex<T>, LCM = Atom>,
 {
     type LCM = ParamOrConcrete<RealOrComplexTensor<T, I>, I>;
+
     fn contract(
         &self,
         other: &ParamOrConcrete<RealOrComplexTensor<T, I>, I>,
     ) -> Result<Self::LCM, ContractionError> {
-        match (self, other) {
-            (ParamOrConcrete::Param(s), ParamOrConcrete::Param(o)) => {
-                Ok(ParamOrConcrete::Param(s.contract(o)?))
-            }
-            (ParamOrConcrete::Param(s), ParamOrConcrete::Concrete(o)) => match (s.param_type, o) {
-                (ParamOrComposite::Composite, RealOrComplexTensor::Real(o)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(s.tensor.contract(o)?)),
-                ),
-                (ParamOrComposite::Composite, RealOrComplexTensor::Complex(o)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(s.tensor.contract(o)?)),
-                ),
-                (ParamOrComposite::Param, RealOrComplexTensor::Real(o)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(s.tensor.contract(o)?)),
-                ),
-                (ParamOrComposite::Param, RealOrComplexTensor::Complex(o)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(s.tensor.contract(o)?)),
-                ),
-            },
-            (ParamOrConcrete::Concrete(s), ParamOrConcrete::Param(o)) => match (o.param_type, s) {
-                (ParamOrComposite::Composite, RealOrComplexTensor::Real(s)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(o.tensor.contract(s)?)),
-                ),
-                (ParamOrComposite::Composite, RealOrComplexTensor::Complex(s)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(o.tensor.contract(s)?)),
-                ),
-                (ParamOrComposite::Param, RealOrComplexTensor::Real(s)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(o.tensor.contract(s)?)),
-                ),
-                (ParamOrComposite::Param, RealOrComplexTensor::Complex(s)) => Ok(
-                    ParamOrConcrete::Param(ParamTensor::composite(o.tensor.contract(s)?)),
-                ),
-            },
-            (ParamOrConcrete::Concrete(s), ParamOrConcrete::Concrete(o)) => {
-                Ok(ParamOrConcrete::Concrete(s.contract(o)?))
-            }
-        }
+        self.contract_with_component_optimizer::<()>(other)
     }
 }
 
@@ -2084,7 +2563,10 @@ impl<S: TensorStructure> EvalTreeTensorSet<SymComplex<Rational>, S> {
 }
 
 impl<T, S: TensorStructure> EvalTreeTensorSet<T, S> {
-    pub fn map_coeff<T2, F: Fn(&T) -> T2>(&self, f: &F) -> EvalTreeTensorSet<T2, S>
+    pub fn map_coeff<T2: EvaluationDomain, F: Fn(&T) -> T2>(
+        &self,
+        f: &F,
+    ) -> EvalTreeTensorSet<T2, S>
     where
         T: Clone + PartialEq,
         S: Clone,
@@ -2154,7 +2636,7 @@ impl<S: Clone> EvalTreeTensor<SymComplex<Rational>, S> {
         dense: &DenseTensor<Atom, S>,
         fn_map: &FunctionMap,
         params: &[Atom],
-    ) -> Result<Self, String> {
+    ) -> Result<Self, EvaluationError> {
         let atomviews: Vec<AtomView> = dense.data.iter().map(|a| a.as_view()).collect();
         let eval = AtomView::to_eval_tree_multiple(&atomviews, fn_map, params)?;
 
@@ -2169,7 +2651,7 @@ impl<S: Clone> EvalTreeTensor<SymComplex<Rational>, S> {
         dense: &SparseTensor<Atom, S>,
         fn_map: &FunctionMap,
         params: &[Atom],
-    ) -> Result<Self, String> {
+    ) -> Result<Self, EvaluationError> {
         let atomviews: (Vec<FlatIndex>, Vec<AtomView>) = dense
             .elements
             .iter()
@@ -2188,7 +2670,7 @@ impl<S: Clone> EvalTreeTensor<SymComplex<Rational>, S> {
         data: &DataTensor<Atom, S>,
         fn_map: &FunctionMap,
         params: &[Atom],
-    ) -> Result<Self, String>
+    ) -> Result<Self, EvaluationError>
     where
         S: TensorStructure,
     {
@@ -2213,7 +2695,7 @@ impl<S: Clone> EvalTreeTensor<SymComplex<Rational>, S> {
 }
 
 impl<S: Clone, T> EvalTreeTensor<T, S> {
-    pub fn map_coeff<T2, F: Fn(&T) -> T2>(&self, f: &F) -> EvalTreeTensor<T2, S>
+    pub fn map_coeff<T2: EvaluationDomain, F: Fn(&T) -> T2>(&self, f: &F) -> EvalTreeTensor<T2, S>
     where
         T: Clone + PartialEq,
     {
@@ -2373,10 +2855,10 @@ where
             fn external_indices_iter(&self)-> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
             fn external_dims_iter(&self)-> impl Iterator<Item = Dimension>;
             fn external_structure_iter(&self)-> impl Iterator<Item = Self::Slot>;
-            fn get_slot(&self, i: usize)-> Option<Self::Slot>;
-            fn get_rep(&self, i: usize)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_dim(&self, i: usize)-> Option<Dimension>;
-            fn get_aind(&self, i: usize)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+            fn get_slot(&self, i: impl Into<SlotIndex>)-> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<SlotIndex>)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_dim(&self, i: impl Into<SlotIndex>)-> Option<Dimension>;
+            fn get_aind(&self, i: impl Into<SlotIndex>)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
             fn order(&self)-> usize;
         }
     }
@@ -2477,7 +2959,10 @@ impl<S: TensorStructure + Clone>
 pub type LinearizedEvalTensor<T, S> = EvalTensor<ExpressionEvaluator<T>, S>;
 
 impl<T, S> EvalTensor<ExpressionEvaluator<T>, S> {
-    pub fn map_coeff<T2, F: Fn(&T) -> T2>(self, f: &F) -> LinearizedEvalTensor<T2, S>
+    pub fn map_coeff<T2: EvaluationDomain, F: Fn(&T) -> T2>(
+        self,
+        f: &F,
+    ) -> LinearizedEvalTensor<T2, S>
     where
         T: Clone + PartialEq + Default,
         S: Clone,
@@ -2563,7 +3048,10 @@ pub type LinearizedEvalTensorSet<T, S> =
     EvalTensorSet<(ExpressionEvaluator<T>, Option<Vec<Expression<T>>>), S>;
 
 impl<T, S: TensorStructure> LinearizedEvalTensorSet<T, S> {
-    pub fn map_coeff<T2, F: Fn(&T) -> T2>(self, f: &F) -> LinearizedEvalTensorSet<T2, S>
+    pub fn map_coeff<T2: EvaluationDomain, F: Fn(&T) -> T2>(
+        self,
+        f: &F,
+    ) -> LinearizedEvalTensorSet<T2, S>
     where
         T: Clone + PartialEq + Default,
         S: Clone,

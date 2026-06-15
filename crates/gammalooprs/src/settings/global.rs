@@ -4,11 +4,7 @@ use bincode_trait_derive::{Decode, Encode};
 use eyre::{Result as EyreResult, eyre};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView},
-    evaluate::{CompileOptions, ExportSettings, InlineASM},
-    function, try_parse,
-};
+use symbolica::prelude::*;
 
 use crate::{
     GammaLoopContext,
@@ -259,27 +255,24 @@ impl FrozenCompilationMode {
     }
 
     pub(crate) fn export_settings(&self) -> ExportSettings {
-        ExportSettings {
-            inline_asm: match self {
-                FrozenCompilationMode::Assembly(_) => InlineASM::default(),
-                FrozenCompilationMode::Cpp(_)
-                | FrozenCompilationMode::Symjit
-                | FrozenCompilationMode::Eager => InlineASM::None,
-            },
-            ..Default::default()
-        }
+        ExportSettings::new().inline_asm(match self {
+            FrozenCompilationMode::Assembly(_) => InlineASM::default(),
+            FrozenCompilationMode::Cpp(_)
+            | FrozenCompilationMode::Symjit
+            | FrozenCompilationMode::Eager => InlineASM::None,
+        })
     }
 
     pub fn to_symbolica_compile_options(&self) -> Option<CompileOptions> {
         let options = self.external_options()?;
-        Some(CompileOptions {
-            optimization_level: options.optimization_level.into(),
-            fast_math: options.fast_math,
-            unsafe_math: options.unsafe_math,
-            compiler: options.compiler.clone(),
-            args: options.custom.clone(),
-            ..CompileOptions::default()
-        })
+        Some(
+            CompileOptions::new()
+                .optimization_level(options.optimization_level.into())
+                .fast_math(options.fast_math)
+                .unsafe_math(options.unsafe_math)
+                .compiler(options.compiler.clone())
+                .args(options.custom.clone()),
+        )
     }
 }
 
@@ -365,14 +358,12 @@ impl GammaloopCompileOptions {
     }
 
     pub fn to_symbolica_compile_options(&self) -> CompileOptions {
-        CompileOptions {
-            optimization_level: self.optimization_level.into(),
-            fast_math: self.fast_math,
-            unsafe_math: self.unsafe_math,
-            compiler: self.compiler.clone(),
-            args: self.custom.clone(),
-            ..CompileOptions::default()
-        }
+        CompileOptions::new()
+            .optimization_level(self.optimization_level.into())
+            .fast_math(self.fast_math)
+            .unsafe_math(self.unsafe_math)
+            .compiler(self.compiler.clone())
+            .args(self.custom.clone())
     }
 }
 

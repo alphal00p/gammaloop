@@ -1,15 +1,18 @@
+use std::sync::LazyLock;
+
 use super::*;
 use ahash::AHashMap;
 use eyre::eyre;
 use linnet::permutation::Permutation;
-use std::sync::LazyLock;
 
-use symbolica::printer::PrintState;
+use symbolica::atom::{AtomOrView, FunctionBuilder};
+use symbolica::printer::{PrintState, PrintUserData};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     symbol,
 };
 
+use crate::network::tags::SPENSO_TAG;
 use crate::shadowing::symbolica_utils::SpensoPrintSettings;
 use crate::{
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
@@ -219,15 +222,28 @@ pub struct ExplicitTensorSymbols {
     pub metric: Symbol,
 }
 
-pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTensorSymbols {
-    flat: symbol!("♭";Symmetric;print = |a, opt| {
+impl ExplicitTensorSymbols {
+    pub fn metric<'a, 'b, A: Into<AtomOrView<'a>>, B: Into<AtomOrView<'b>>>(
+        &self,
+        a: A,
+        b: B,
+    ) -> Atom {
+        FunctionBuilder::new(self.metric)
+            .add_arg(a)
+            .add_arg(b)
+            .finish()
+    }
+}
 
-        match opt.custom_print_mode {
-            Some(("spenso",i))=>{
+pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTensorSymbols {
+    flat: symbol!("♭";Symmetric;print = |a, opt, _state| {
+
+        match opt.custom_print_mode.get("spenso") {
+            Some(PrintUserData::Integer(i))=>{
                 let SpensoPrintSettings{
                     parens,
                     commas,..
-                } = SpensoPrintSettings::from(i);
+                } = SpensoPrintSettings::from(*i as usize);
 
 
                 let AtomView::Fun(f)=a else {
@@ -265,12 +281,15 @@ pub static ETS: LazyLock<ExplicitTensorSymbols> = LazyLock::new(|| ExplicitTenso
 
     }),
     // sharp: symbol!("♯";Symmetric),
-    metric: symbol!(METRIC_NAME;Symmetric,Real;print = |a, opt| {
+    metric: symbol!(METRIC_NAME;Symmetric,Real,Linear;print = |a, opt, _state| {
 
-        match opt.custom_print_mode {
-             Some(("typst", 1)) =>{
-                 if let AtomView::Fun(_)=a {
-                     let body = r#"(a,b) = {
+
+        if matches!(
+            opt.custom_print_mode.get("typst"),
+            Some(PrintUserData::Integer(1))
+        ) && let AtomView::Fun(_) = a
+        {
+            let body = r#"(a,b) = {
 if a.at("lower",default:false) and b.at("lower",default:false){
 $eta_(#to-eq(a) #to-eq(b))$
 } else if a.at("lower",default:false) and b.at("upper",default:false){
@@ -283,14 +302,15 @@ $eta^(#to-eq(a)^#to-eq(b))$
 $g(#to-eq(a),#to-eq(b))$
 }
 }"#;
-                     return Some(body.into())
-                 }
-             }
-             Some(("spenso",i))=>{
+            return Some(body.into());
+        }
+
+        if let Some(PrintUserData::Integer(i)) = opt.custom_print_mode.get("spenso") {
                  let SpensoPrintSettings{
                      parens,
-                     commas,..
-                 } = SpensoPrintSettings::from(i);
+                     commas,
+                     with_dim,..
+                 } = SpensoPrintSettings::from(*i as usize);
                 let AtomView::Fun(f)=a else {
                     return None;
                 };
@@ -310,6 +330,23 @@ $g(#to-eq(a),#to-eq(b))$
 
                     let mut a_sym = f_a.get_symbol();
                     let mut b_sym = f_b.get_symbol();
+
+                    if a_sym.has_tag(&SPENSO_TAG.rank1) &&b_sym.has_tag(&SPENSO_TAG.rank1) {
+                            let mut out = String::new();
+                            if parens {
+                                out.push('(');
+                            }
+                            f_a.as_view().format(&mut out, opt,PrintState::new()).unwrap();
+                            out.push('.');
+                            if with_dim {a.format(&mut out, opt, PrintState::new()).unwrap();
+                                out.push('.');
+                            }
+                            f_b.as_view().format(&mut out, opt,PrintState::new()).unwrap();
+                            if parens {
+                                out.push(')');
+                            }
+                            return Some(out);
+                    }
 
                     let a_is_dind = a_sym == AIND_SYMBOLS.dind;
                     if a_is_dind {
@@ -444,10 +481,21 @@ $g(#to-eq(a),#to-eq(b))$
                         }
                     }
                 }
-            },
-            _=>{}
         }
         None
+    },norm = |f,_|{
+
+        let AtomView::Fun(f)=f else{
+            return;
+        };
+
+        match f.get_nargs(){
+            3=>{},
+            2=>{},
+            1=>{},
+            _=>{},
+        }
+
     }),
 });
 
@@ -728,10 +776,12 @@ mod test {
         network::{
             ExecutionResult, Network, Sequential, SmallestDegree, TensorOrScalarOrKey,
             library::panicing::ErroringLibrary,
-            parsing::{ParseSettings, ShadowedStructure},
+            parsing::{ParseSettings, ShadowedStructure, StrictTensorFilter},
             store::NetworkStore,
         },
+        p, q,
         shadowing::Concretize,
+        slot,
         structure::{
             ToSymbolic,
             abstract_index::AbstractIndex,
@@ -741,6 +791,9 @@ mod test {
     };
 
     use super::*;
+
+    const LOCAL_GAMMA: &str = "symbolic_lib_test_gamma";
+    const LOCAL_P: &str = "symbolic_lib_test_p";
 
     #[test]
     fn add_to_lib() {
@@ -752,7 +805,7 @@ mod test {
                 Euclidean {}.new_rep(4).cast(),
                 LibraryRep::from(Minkowski {}).new_rep(4),
             ],
-            symbol!("gamma"),
+            symbol!(LOCAL_GAMMA),
             None,
         );
 
@@ -813,7 +866,7 @@ mod test {
                 Euclidean {}.new_rep(2).cast(),
                 LibraryRep::from(Minkowski {}).new_rep(2),
             ],
-            symbol!("gamma"),
+            symbol!(LOCAL_GAMMA),
             None,
         );
 
@@ -854,8 +907,10 @@ mod test {
             _,
             Symbol,
         >::try_from_view(
-            parse!("gamma(euc(2,1),euc(2,2),mink(2,0))-gamma(mink(2,0),euc(2,2),euc(2,1))")
-                .as_view(),
+            parse!(
+                "symbolic_lib_test_gamma(euc(2,1),euc(2,2),mink(2,0))-symbolic_lib_test_gamma(mink(2,0),euc(2,2),euc(2,1))"
+            )
+            .as_view(),
             &lib,
             &ParseSettings::default(),
         )
@@ -874,7 +929,7 @@ mod test {
             _,
             Symbol,
         >::try_from_view(
-            parse!("gamma(mink(2,0),euc(2,2),euc(2,1))").as_view(),
+            parse!("symbolic_lib_test_gamma(mink(2,0),euc(2,2),euc(2,1))").as_view(),
             &lib,
             &ParseSettings::default(),
         )
@@ -897,12 +952,16 @@ mod test {
                 LibraryRep::from(Minkowski {}).new_rep(4),
                 Euclidean {}.new_rep(4).cast(),
             ],
-            symbol!("gamma"),
+            symbol!(LOCAL_GAMMA),
             None,
         );
 
         let indexed = key.reindex([0, 1, 2]).unwrap().structure;
         let expr = indexed.to_symbolic(None).unwrap();
+        let settings = ParseSettings {
+            strict_tensor_filter: StrictTensorFilter::ContainsReps,
+            ..Default::default()
+        };
         let mut net = Network::<
             NetworkStore<
                 MixedTensor<f64, ShadowedStructure<AbstractIndex>>,
@@ -910,7 +969,7 @@ mod test {
             >,
             _,
             Symbol,
-        >::try_from_view(expr.as_view(), &lib, &ParseSettings::default())
+        >::try_from_view(expr.as_view(), &lib, &settings)
         .unwrap();
 
         println!(
@@ -956,7 +1015,7 @@ mod test {
             let m_atom: AbstractIndex = m.into();
             let m_atom: Atom = m_atom.into();
             let mink = Minkowski {}.new_rep(4);
-            function!(symbol!("spenso::p"), mink.to_symbolic([m_atom]))
+            function!(symbol!(LOCAL_P), mink.to_symbolic([m_atom]))
         }
 
         let mink = Minkowski {}.new_rep(4);
@@ -998,7 +1057,8 @@ mod test {
         let lib =
             TensorLibrary::<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>::new();
 
-        let expr = parse!("p(1,mink(4,2))*q(2,mink(4,2))");
+        let mink = Minkowski {}.new_rep(4);
+        let expr = p!(1, slot!(mink, 2)) * q!(2, slot!(mink, 2));
         let mut net = Network::<
             NetworkStore<
                 MixedTensor<f64, ShadowedStructure<AbstractIndex>>,
@@ -1055,8 +1115,12 @@ mod test {
         lib.update_ids();
 
         let expr = parse!(
-            " -G^2*(-g(mink(4,5),mink(4,6))*Q(2,mink(4,7))+g(mink(4,5),mink(4,6))*Q(3,mink(4,7))+g(mink(4,5),mink(4,7))*Q(2,mink(4,6))+g(mink(4,5),mink(4,7))*Q(4,mink(4,6))-g(mink(4,6),mink(4,7))*Q(3,mink(4,5))-g(mink(4,6),mink(4,7))*Q(4,mink(4,5)))*g(mink(4,2),mink(4,5))*g(mink(4,3),mink(4,6))*g(euc(4,0),euc(4,5))*g(euc(4,1),euc(4,4))*g(mink(4,4),mink(4,7))*vbar(1,euc(4,1))*u(0,euc(4,0))*ϵbar(2,mink(4,2))*ϵbar(3,mink(4,3))*gamma(euc(4,5),euc(4,4),mink(4,4))"
+            " -G^2*(-g(mink(4,5),mink(4,6))*Q(2,mink(4,7))+g(mink(4,5),mink(4,6))*Q(3,mink(4,7))+g(mink(4,5),mink(4,7))*Q(2,mink(4,6))+g(mink(4,5),mink(4,7))*Q(4,mink(4,6))-g(mink(4,6),mink(4,7))*Q(3,mink(4,5))-g(mink(4,6),mink(4,7))*Q(4,mink(4,5)))*g(mink(4,2),mink(4,5))*g(mink(4,3),mink(4,6))*g(euc(4,0),euc(4,5))*g(euc(4,1),euc(4,4))*g(mink(4,4),mink(4,7))*symbolic_lib_test_vbar(1,euc(4,1))*symbolic_lib_test_u(0,euc(4,0))*symbolic_lib_test_epsbar(2,mink(4,2))*symbolic_lib_test_epsbar(3,mink(4,3))*symbolic_lib_test_gamma(euc(4,5),euc(4,4),mink(4,4))"
         );
+        let settings = ParseSettings {
+            strict_tensor_filter: StrictTensorFilter::ContainsReps,
+            ..Default::default()
+        };
         let mut net = Network::<
             NetworkStore<
                 MixedTensor<f64, ShadowedStructure<AbstractIndex>>,
@@ -1064,7 +1128,7 @@ mod test {
             >,
             _,
             Symbol,
-        >::try_from_view(expr.as_view(), &lib, &ParseSettings::default())
+        >::try_from_view(expr.as_view(), &lib, &settings)
         .map_err(|a| a.to_string())
         .unwrap();
 

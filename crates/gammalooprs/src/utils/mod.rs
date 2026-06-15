@@ -43,14 +43,13 @@ use spenso::tensors::data::StorageTensor;
 use spenso::tensors::parametric::to_param::ToAtom;
 use spenso::tensors::parametric::{MixedTensor, ParamTensor};
 use spenso_hep_lib::hep_lib_atom;
-use symbolica::coefficient::Coefficient;
-use symbolica::domains::dual::HyperDual;
-use symbolica::domains::float::{
-    Constructible, DoubleFloat, Float as SymbolicaFloat, FloatLike as SymFloatLike, RealLike,
-    SingleFloat,
+use symbolica::{
+    domains::{
+        dual::HyperDual,
+        float::{FixedPrecision, Float as SymbolicaFloat, FloatLike as SymFloatLike},
+    },
+    prelude::*,
 };
-use symbolica::domains::integer::Integer;
-use symbolica::{function, parse};
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
@@ -59,8 +58,6 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, Su
 use std::str::FromStr;
 use std::sync::{LazyLock, OnceLock, RwLock};
 use std::time::Duration;
-use symbolica::domains::float::Real;
-use symbolica::domains::rational::Rational;
 
 use vakint::Vakint;
 // use symbolica_community::physics::tensors::library::{
@@ -71,7 +68,6 @@ use vakint::Vakint;
 // use symbolica::domains::Field;
 use crate::MAX_LOOP;
 use ::tracing::debug;
-use symbolica::atom::{Atom, AtomCore};
 use typed_index_collections::TiVec;
 
 pub const GIT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -1682,7 +1678,78 @@ impl<T: FloatLike> ToCoefficient for F<T> {
     }
 }
 
-use symbolica::evaluate::ExportNumber;
+use symbolica::evaluate::{EvaluationDomain, ExportNumber};
+
+impl ExportNumber for QuadFloat {
+    fn export(&self) -> String {
+        self.to_string()
+    }
+
+    fn is_real(&self) -> bool {
+        true
+    }
+
+    fn to_complex_double(&self) -> symbolica::domains::float::Complex<f64> {
+        symbolica::domains::float::Complex::new(self.0.to_f64(), 0.0)
+    }
+}
+
+impl<const N: u32> ExportNumber for VarFloat<N> {
+    fn export(&self) -> String {
+        self.to_string()
+    }
+
+    fn is_real(&self) -> bool {
+        true
+    }
+
+    fn to_complex_double(&self) -> symbolica::domains::float::Complex<f64> {
+        symbolica::domains::float::Complex::new(self.to_f64(), 0.0)
+    }
+}
+
+impl FixedPrecision for QuadFloat {
+    const BINARY_PRECISION: usize = <DoubleFloat as FixedPrecision>::BINARY_PRECISION;
+}
+
+impl<const N: u32> FixedPrecision for VarFloat<N> {
+    const BINARY_PRECISION: usize = N as usize;
+}
+
+impl EvaluationDomain for QuadFloat {
+    const FIXED_PRECISION: Option<u32> = <DoubleFloat as EvaluationDomain>::FIXED_PRECISION;
+
+    fn try_from_complex_float(
+        f: symbolica::domains::float::Complex<symbolica::domains::float::Float>,
+    ) -> Result<Self, String> {
+        if f.is_real() {
+            Ok(Self(f.re.to_double_float()))
+        } else {
+            Err(format!(
+                "Cannot convert from Complex<Float> to {} because the result is not real",
+                std::any::type_name::<Self>()
+            ))
+        }
+    }
+}
+
+impl<const N: u32> EvaluationDomain for VarFloat<N> {
+    const FIXED_PRECISION: Option<u32> = Some(N);
+
+    fn try_from_complex_float(
+        f: symbolica::domains::float::Complex<symbolica::domains::float::Float>,
+    ) -> Result<Self, String> {
+        if f.is_real() {
+            Ok(Self::from(f.re))
+        } else {
+            Err(format!(
+                "Cannot convert from Complex<Float> to {} because the result is not real",
+                std::any::type_name::<Self>()
+            ))
+        }
+    }
+}
+
 impl<T: FloatLike + ExportNumber> ExportNumber for F<T> {
     fn export(&self) -> String {
         self.0.to_string()
@@ -1690,6 +1757,31 @@ impl<T: FloatLike + ExportNumber> ExportNumber for F<T> {
 
     fn is_real(&self) -> bool {
         self.0.is_real()
+    }
+
+    fn to_complex_double(&self) -> symbolica::domains::float::Complex<f64> {
+        self.0.to_complex_double()
+    }
+}
+
+impl<T: FloatLike + FixedPrecision> FixedPrecision for F<T> {
+    const BINARY_PRECISION: usize = T::BINARY_PRECISION;
+}
+
+impl<T: FloatLike + EvaluationDomain> EvaluationDomain for F<T> {
+    const FIXED_PRECISION: Option<u32> = T::FIXED_PRECISION;
+
+    fn try_from_complex_float(
+        f: symbolica::domains::float::Complex<symbolica::domains::float::Float>,
+    ) -> Result<Self, String> {
+        if f.is_real() {
+            T::try_from_complex_float(f).map(F)
+        } else {
+            Err(format!(
+                "Cannot convert from Complex<Float> to {} because the result is not real",
+                std::any::type_name::<Self>()
+            ))
+        }
     }
 }
 

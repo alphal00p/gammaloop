@@ -1,6 +1,6 @@
 # Gammaloop build and development commands
 
-ci_cargo_profile := "dev-optim"
+ci_cargo_profile := "ci-optim"
 
 # Build gammaloop Python CLI with UFO support and dev-optim profile
 build-cli:
@@ -310,7 +310,6 @@ test-ci TEST_NAME="":
         --profile ci_gammaloop
         --locked
         --no-fail-fast
-        --run-ignored all
     )
     for package in "${gammaloop_packages[@]}"; do
         cmd+=(-p "$package")

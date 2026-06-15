@@ -28,20 +28,7 @@ use eyre::{Context, Result, eyre};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Indeterminate},
-    domains::{
-        float::Complex,
-        integer::IntegerRing,
-        rational::{Fraction, Rational},
-    },
-    evaluate::{
-        CompileOptions, CompiledComplexEvaluator, ExportSettings, ExpressionEvaluator, FunctionMap,
-        InlineASM, JITCompiledEvaluator, OptimizationSettings,
-    },
-    id::{MatchSettings, Replacement},
-    parse_lit,
-    state::{State, StateMap},
-    symbol, try_parse,
+    domains::rational::Fraction, evaluate::JITCompiledEvaluator, prelude::*, state::StateMap,
 };
 
 use crate::processes::StandaloneNumericTarget;
@@ -469,7 +456,7 @@ impl Default for StandaloneCliOptions {
 enum StandaloneRuntimeEvaluator<'a> {
     Eager(&'a mut ExpressionEvaluator<Complex<f64>>),
     Compiled(CompiledComplexEvaluator),
-    Symjit(JITCompiledEvaluator<Complex<f64>>),
+    Symjit(Box<JITCompiledEvaluator<Complex<f64>>>),
 }
 
 impl<'a> StandaloneRuntimeEvaluator<'a> {
@@ -494,11 +481,10 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
                     .export_cpp::<Complex<f64>>(
                         &source_path,
                         &function_name,
-                        ExportSettings {
-                            include_header: true,
-                            inline_asm: backend.inline_asm(),
-                            custom_header: None,
-                        },
+                        ExportSettings::new()
+                            .include_header(true)
+                            .inline_asm(backend.inline_asm())
+                            .custom_header(None),
                     )
                     .map_err(|err| eyre!(err))?
                     .compile(&library_path, CompileOptions::default())
@@ -507,9 +493,11 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
                     .map_err(|err| eyre!(err))?;
                 Ok(Self::Compiled(compiled))
             }
-            StandaloneBackend::Symjit => Ok(Self::Symjit(
-                evaluator.jit_compile().map_err(|err| eyre!(err))?,
-            )),
+            StandaloneBackend::Symjit => Ok(Self::Symjit(Box::new(
+                evaluator
+                    .jit_compile(JITCompilationSettings::default())
+                    .map_err(|err| eyre!(err))?,
+            ))),
         }
     }
 
@@ -579,14 +567,15 @@ fn apply_fn_map_entries(
     let mut all_replacements: Vec<Replacement> = vec![];
     let mut fn_map: FunctionMap = FunctionMap::new();
     let mut replacements: Vec<Replacement> = vec![];
-    fn_map.add_constant(
-        parse_lit!(gammalooprs::x),
-        Complex::<Rational>::try_from(Atom::Zero.as_view()).unwrap(),
-    );
+    fn_map
+        .add_aliases([(parse_lit!(gammalooprs::x), Atom::Zero)])
+        .map_err(|e| eyre!(e))?;
     for (lhs, rhs, tags, args) in parsed_entries {
         if let AtomView::Var(_) = lhs.as_view() {
             if let Ok(t) = Complex::<Rational>::try_from(rhs.as_view()) {
-                fn_map.add_constant(lhs.clone(), t);
+                fn_map
+                    .add_aliases([(lhs.clone(), Atom::num(t))])
+                    .map_err(|e| eyre!(e))?;
 
                 all_replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
             } else {
@@ -599,20 +588,12 @@ fn apply_fn_map_entries(
                     let atom: Atom = a.clone().into();
                     wildcards.push(
                         Replacement::new(atom.to_pattern(), Atom::var(symbol!(format!("x{i}_"))))
-                            .with_settings(MatchSettings {
-                                allow_new_wildcards_on_rhs: true,
-                                ..Default::default()
-                            }),
+                            .allow_new_wildcards_on_rhs(true),
                     )
                 }
 
                 fn_map
-                    .add_function(
-                        f.get_symbol(),
-                        f.get_symbol().get_name().into(),
-                        args,
-                        rhs.clone(),
-                    )
+                    .add_function(f.get_symbol(), args, rhs.clone())
                     .map_err(|e| eyre!(e))?;
 
                 all_replacements.push(Replacement::new(
@@ -621,13 +602,7 @@ fn apply_fn_map_entries(
                 ));
             } else {
                 fn_map
-                    .add_tagged_function(
-                        f.get_symbol(),
-                        tags,
-                        f.get_symbol().get_name().into(),
-                        args,
-                        rhs.clone(),
-                    )
+                    .add_tagged_function(f.get_symbol(), tags, args, rhs.clone())
                     .map_err(|e| eyre!(e))?;
                 all_replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
             }
@@ -648,12 +623,13 @@ fn build_evaluator<A: ImportWithMap>(
     state_map: &StateMap,
     iterate: bool,
 ) -> Result<LoadedGenericEvaluator> {
-    let optimization_settings = OptimizationSettings {
-        horner_iterations: 10,
-        n_cores: 10,
-        abort_check: Some(Box::new(crate::is_interrupt_requested as fn() -> bool)),
-        ..Default::default()
-    };
+    let optimization_settings = OptimizationSettings::new()
+        .horner_iterations(10)
+        .cores(10)
+        .abort_check(Some(Box::new(
+            crate::is_interrupt_requested as fn() -> bool,
+        )));
+    let cpe_iterations = None;
     let exprs = payload
         .exprs
         .iter()
@@ -683,12 +659,14 @@ fn build_evaluator<A: ImportWithMap>(
         for expr in &exprs {
             let eval = expr
                 .replace_multiple(&replacements)
-                .evaluator(&fn_map, params, optimization_settings.clone())
+                .evaluator(params)
+                .function_map(fn_map.clone())
+                .optimization_settings(optimization_settings.clone())
+                .build()
                 .map_err(|e| eyre!("{e} for {expr}:{}", expr.replace_multiple(&replacements)))?;
 
             tree = Some(if let Some((e, mut t)) = tree {
-                t.merge(eval, optimization_settings.cpe_iterations)
-                    .map_err(|e| eyre!(e))?;
+                t.merge(eval, cpe_iterations).map_err(|e| eyre!(e))?;
                 (e, t)
             } else {
                 (exprs.clone(), eval)
@@ -712,24 +690,22 @@ fn build_evaluator<A: ImportWithMap>(
             replaced_exprs.push(expr.replace_multiple(&replacements))
         }
 
-        Atom::evaluator_multiple(
-            &replaced_exprs,
-            &fn_map,
-            params,
-            optimization_settings.clone(),
-        )
-        .map(|eval| {
-            (
-                exprs,
-                all_replacements,
-                eval.map_coeff(&|r| Complex {
-                    re: r.re.to_f64(),
-                    im: r.im.to_f64(),
-                }),
-                result,
-            )
-        })
-        .map_err(|e| eyre!("{e}"))
+        Atom::evaluator_multiple(&replaced_exprs, params)
+            .function_map(fn_map)
+            .optimization_settings(optimization_settings)
+            .build()
+            .map(|eval| {
+                (
+                    exprs,
+                    all_replacements,
+                    eval.map_coeff(&|r| Complex {
+                        re: r.re.to_f64(),
+                        im: r.im.to_f64(),
+                    }),
+                    result,
+                )
+            })
+            .map_err(|e| eyre!("{e}"))
     }
 }
 
@@ -1126,19 +1102,13 @@ impl LoadedStandaloneEvaluatorStack {
                 .export_cpp::<Complex<f64>>(
                     "bench_summed.cpp",
                     "bench_summed",
-                    ExportSettings {
-                        include_header: true,
-                        inline_asm: symbolica::evaluate::InlineASM::AArch64,
-                        custom_header: None,
-                    },
+                    ExportSettings::new()
+                        .include_header(true)
+                        .inline_asm(symbolica::evaluate::InlineASM::AArch64)
+                        .custom_header(None),
                 )
                 .unwrap()
-                .compile(
-                    "bench_summed.so",
-                    CompileOptions {
-                        ..Default::default()
-                    },
-                )
+                .compile("bench_summed.so", CompileOptions::default())
                 .unwrap();
             println!(
                 "[timing] benchmark_summed compile took {:?}",
@@ -1190,19 +1160,13 @@ impl LoadedStandaloneEvaluatorStack {
                 .export_cpp::<Complex<f64>>(
                     "bench_summed.cpp",
                     "bench_summed",
-                    ExportSettings {
-                        include_header: true,
-                        inline_asm: symbolica::evaluate::InlineASM::AArch64,
-                        custom_header: None,
-                    },
+                    ExportSettings::new()
+                        .include_header(true)
+                        .inline_asm(symbolica::evaluate::InlineASM::AArch64)
+                        .custom_header(None),
                 )
                 .unwrap()
-                .compile(
-                    "bench_summed.so",
-                    CompileOptions {
-                        ..Default::default()
-                    },
-                )
+                .compile("bench_summed.so", CompileOptions::default())
                 .unwrap();
             println!(
                 "[timing] benchmark_iterative compile took {:?}",

@@ -13,12 +13,12 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use momtrop::SampleGenerator;
 
-use idenso::gamma::GammaSimplifier;
+use idenso::dirac::GammaSimplifier;
 use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
 };
-use spenso::{algebra::complex::Complex, network::library::TensorLibraryData};
+use spenso::algebra::complex::Complex;
 use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
@@ -67,12 +67,7 @@ use linnet::{
     num_traits::SignOrZero,
     parser::DotGraph,
 };
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol, Var},
-    domains::rational::Rational,
-    evaluate::FunctionMap,
-    function,
-};
+use symbolica::{atom::Var, prelude::*};
 use tracing::{debug, info};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -311,6 +306,13 @@ impl Amplitude {
         runtime_default: LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "amplitude_build_integrand_start",
+            integrand = %self.name,
+            graph_count = self.graphs.len(),
+            "Generation timing milestone"
+        );
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
@@ -331,6 +333,14 @@ impl Amplitude {
                         .find_position(graph_id)
                         .unwrap();
 
+                    crate::debug_tags!(#generation, #profile, #graph, #summary;
+                        stage = "amplitude_generate_term_for_graph_start",
+                        integrand = %integrand_name,
+                        graph = %graph.graph.name,
+                        graph_id,
+                        group_id = %group_id.0,
+                        "Generation timing milestone"
+                    );
                     let (term, mut stats) = graph.generate_term_for_graph(
                         model,
                         group_pos,
@@ -342,6 +352,15 @@ impl Amplitude {
                     }
                     stats.evaluator_count = term.generic_evaluator_count();
                     stats.total_time += graph_started.elapsed();
+                    crate::debug_tags!(#generation, #profile, #graph, #summary;
+                        stage = "amplitude_generate_term_for_graph_done",
+                        integrand = %integrand_name,
+                        graph = %graph.graph.name,
+                        graph_id,
+                        group_id = %group_id.0,
+                        elapsed_ms = graph_started.elapsed().as_secs_f64() * 1000.0,
+                        "Generation timing milestone"
+                    );
                     Ok((
                         term,
                         NamedGraphGenerationReport {
@@ -383,6 +402,15 @@ impl Amplitude {
             }
         }
 
+        let backend_started = std::time::Instant::now();
+        let graph_count = terms.len();
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+            stage = "amplitude_prepare_runtime_backends_start",
+            integrand = %self.name,
+            graph_count,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
         let mut amplitude_integrand = AmplitudeIntegrand {
             settings: runtime_default.into_with_modified_kinematics(
                 &self.external_signature,
@@ -411,11 +439,26 @@ impl Amplitude {
         };
         let compile_times =
             amplitude_integrand.prepare_runtime_backends_after_generation_with_compile_times()?;
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+            stage = "amplitude_prepare_runtime_backends_done",
+            integrand = %self.name,
+            graph_count,
+            elapsed_ms = backend_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
         for (report, compile_time) in graph_reports.iter_mut().zip(compile_times) {
             report.stats.evaluator_compile_time += compile_time;
             report.stats.total_time += compile_time;
         }
         self.integrand = Some(ProcessIntegrand::Amplitude(amplitude_integrand));
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "amplitude_build_integrand_done",
+            integrand = %self.name,
+            graph_count = self.graphs.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
         Ok(graph_reports)
     }
 
@@ -882,11 +925,35 @@ impl AmplitudeGraph {
             num.state.expr *= &self.graph.global_prefactor.num;
         }
 
-        let mut four_dimensional_integrand = num
-            .to_d_dim(GS.dim)
-            .get_single_atom()
-            .unwrap()
-            .simplify_gamma()
+        let four_dimensional_numerator = num.to_d_dim(GS.dim).get_single_atom().unwrap();
+        let before_gamma_simplification = four_dimensional_numerator.to_plain_string();
+        let before_gamma_simplification_log_print =
+            four_dimensional_numerator.log_print(Some(120)).to_string();
+        let gamma_simplification_started = std::time::Instant::now();
+        let four_dimensional_numerator = four_dimensional_numerator.simplify_gamma();
+        let after_gamma_simplification = four_dimensional_numerator.to_plain_string();
+        let after_gamma_simplification_log_print =
+            four_dimensional_numerator.log_print(Some(120)).to_string();
+        crate::debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
+            stage = "amplitude_to_vakint_after_simplify_gamma",
+            gamma_simplification_ms = %gamma_simplification_started.elapsed().as_millis(),
+            changed = before_gamma_simplification != after_gamma_simplification,
+            before_bytes = %before_gamma_simplification.len(),
+            after_bytes = %after_gamma_simplification.len(),
+            before_gamma_count = %before_gamma_simplification.matches("spenso::gamma").count(),
+            after_gamma_count = %after_gamma_simplification.matches("spenso::gamma").count(),
+            before_chain_count = %before_gamma_simplification.matches("spenso::chain").count(),
+            after_chain_count = %after_gamma_simplification.matches("spenso::chain").count(),
+            before_gamma = %before_gamma_simplification_log_print,
+            after_gamma = %after_gamma_simplification_log_print,
+            file.before_gamma_simplification = %before_gamma_simplification,
+            file.after_gamma_simplification = %after_gamma_simplification,
+            file.before_gamma_simplification_log_print = %before_gamma_simplification_log_print,
+            file.after_gamma_simplification_log_print = %after_gamma_simplification_log_print,
+            "Gamma simplification before Vakint"
+        );
+
+        let mut four_dimensional_integrand = four_dimensional_numerator
             / self
                 .graph
                 .denominator(component, |e| e.extra_data.vakint_edge_power.unwrap_or(1));
@@ -974,6 +1041,15 @@ impl AmplitudeGraph {
         settings: &GenerationSettings,
         vakint: &Vakint,
     ) -> Result<()> {
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "amplitude_graph_build_integrands_start",
+            graph = %self.graph.name,
+            subtract_uv = settings.uv.subtract_uv,
+            generate_integrated = settings.uv.generate_integrated,
+            only_integrated = settings.uv.only_integrated,
+            "Generation timing milestone"
+        );
         let valid_orientations: Vec<_> = self
             .derived_data
             .cff_expression
@@ -983,9 +1059,35 @@ impl AmplitudeGraph {
             .iter()
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
+        crate::debug_tags!(#generation, #profile, #graph, #orientation, #summary;
+            stage = "amplitude_graph_valid_orientations_done",
+            graph = %self.graph.name,
+            orientation_count = valid_orientations.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
         let cutstructure = CutStructure::empty(&self.graph);
+        let woods_started = std::time::Instant::now();
         let woods = CutWoods::new(cutstructure, &self.graph, &settings.uv);
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "amplitude_graph_cut_woods_done",
+            graph = %self.graph.name,
+            wood_count = woods.woods.len(),
+            elapsed_ms = woods_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+        let unfold_started = std::time::Instant::now();
         let mut forests = woods.unfold(&self.graph);
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "amplitude_graph_cut_forests_unfold_done",
+            graph = %self.graph.name,
+            forest_count = forests.forests.len(),
+            elapsed_ms = unfold_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+        let forests_started = std::time::Instant::now();
         forests.compute(
             &mut self.graph,
             vakint,
@@ -993,12 +1095,40 @@ impl AmplitudeGraph {
             &settings.uv,
             &settings.orientation_pattern,
         )?;
-        let exprs: Vec<_> = forests
-            .orientation_parametric_exprs(&self.graph, &settings.uv)?
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "amplitude_graph_cut_forests_compute_done",
+            graph = %self.graph.name,
+            elapsed_ms = forests_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+
+        let orientation_started = std::time::Instant::now();
+        let parametric_exprs = forests.orientation_parametric_exprs(&self.graph, &settings.uv)?;
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "amplitude_graph_orientation_parametric_exprs_done",
+            graph = %self.graph.name,
+            parametric_integrand_count = parametric_exprs.len(),
+            elapsed_ms = orientation_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+
+        let add_factors_started = std::time::Instant::now();
+        let exprs: Vec<_> = parametric_exprs
             .into_iter()
             .map(|e| e.map(|a| self.add_additional_factors_to_cff_atom(&a)))
             .collect();
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "amplitude_graph_additional_factors_done",
+            graph = %self.graph.name,
+            expr_count = exprs.len(),
+            elapsed_ms = add_factors_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
 
+        let assign_started = std::time::Instant::now();
         self.derived_data.all_mighty_integrand = exprs
             .into_iter()
             .next()
@@ -1008,6 +1138,13 @@ impl AmplitudeGraph {
             .next()
             .unwrap()
             .1; // should be exactly one expression
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "amplitude_graph_build_integrands_done",
+            graph = %self.graph.name,
+            assign_elapsed_ms = assign_started.elapsed().as_secs_f64() * 1000.0,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
 
         Ok(())
     }
@@ -1469,10 +1606,12 @@ pub(crate) fn threshold_counterterm_helper(
 ) -> GenericEvaluator {
     let atom = threshold_counterterm_helper_atom(order, loop_number);
     let mut fn_map = FunctionMap::default();
-    fn_map.add_constant(
-        GS.pi.into(),
-        Rational::try_from(std::f64::consts::PI).unwrap().into(),
-    );
+    fn_map
+        .add_aliases([(
+            GS.pi.into(),
+            Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
+        )])
+        .unwrap();
 
     let mut params = params_for_derivative_order(order)
         .into_iter()

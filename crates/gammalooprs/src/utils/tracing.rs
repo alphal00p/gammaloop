@@ -1,12 +1,12 @@
 use bincode_trait_derive::{Decode, Encode};
 use clap::ValueEnum;
+use gammaloop_tracing_filter::{GammaDisplayFormat, GammaLogFilter};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::sync::OnceLock;
+use std::{path::PathBuf, sync::OnceLock};
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
-use tracing_subscriber::filter::filter_fn;
-use tracing_subscriber::{EnvFilter, fmt, prelude::*, registry::Registry, reload};
+use tracing_subscriber::{fmt, prelude::*};
 #[cfg_attr(
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
@@ -53,6 +53,41 @@ pub struct LogStyle {
     pub full_line_source: bool,
     #[serde(skip_serializing_if = "crate::utils::serde_utils::is_false")]
     pub include_fields: bool,
+}
+
+impl From<LogFormat> for gammaloop_tracing_filter::LogFormat {
+    fn from(value: LogFormat) -> Self {
+        match value {
+            LogFormat::Long => Self::Long,
+            LogFormat::Full => Self::Full,
+            LogFormat::Short => Self::Short,
+            LogFormat::Min => Self::Min,
+            LogFormat::None => Self::None,
+        }
+    }
+}
+
+impl LogStyle {
+    pub fn to_runtime(&self) -> gammaloop_tracing_filter::LogStyle {
+        gammaloop_tracing_filter::LogStyle {
+            log_format: self.log_format.into(),
+            short_timestamp: self.short_timestamp,
+            full_line_source: self.full_line_source,
+            include_fields: self.include_fields,
+        }
+    }
+}
+
+impl From<&LogStyle> for gammaloop_tracing_filter::LogStyle {
+    fn from(value: &LogStyle) -> Self {
+        value.to_runtime()
+    }
+}
+
+impl From<LogStyle> for gammaloop_tracing_filter::LogStyle {
+    fn from(value: LogStyle) -> Self {
+        value.to_runtime()
+    }
 }
 
 #[repr(usize)]
@@ -131,71 +166,111 @@ impl LogLevel {
     }
 }
 
-// Global one-time slots
-pub static FILTER_HANDLE: OnceLock<reload::Handle<EnvFilter, Registry>> = OnceLock::new();
+// Global one-time slots.
+static TEST_TRACING_INITIALISED: OnceLock<()> = OnceLock::new();
 pub static LOG_GUARD: OnceLock<WorkerGuard> = OnceLock::new();
 
-pub fn init_test_tracing() -> reload::Handle<EnvFilter, Registry> {
-    FILTER_HANDLE
-        .get_or_init(|| {
-            // 2) reloadable filter - only allow gammaloop crate logs
-            let _spec = std::env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_string());
+const ENV_FILE_LOG_FILTER: &str = "GL_LOGFILE_FILTER";
+const ENV_DISPLAY_LOG_FILTER: &str = "GL_DISPLAY_FILTER";
+const ENV_ALL_LOG_FILTER: &str = "GL_ALL_LOG_FILTER";
+const ENV_TEST_LOG_DIR: &str = "GL_TEST_LOG_DIR";
 
-            // Use EnvFilter for reload compatibility
-            let env_filter = EnvFilter::new("gammalooprs=debug,status=trace,status_data=trace");
-            let (filter_layer, handle) = reload::Layer::new(env_filter);
-
-            // 4) pretty status to stderr, opt-in via `target="status"`
-            // Add strict filtering to status layer
-            let test_status_filter = filter_fn(|metadata| {
-                let target = metadata.target();
-                target.starts_with("gammalooprs") || target == "status" || target == "status_data"
-            });
-
-            let status_layer = fmt::layer()
-                .with_target(false)
-                .pretty()
-                .with_writer(std::io::stderr)
-                .with_filter(test_status_filter);
-
-            _ = tracing_subscriber::registry()
-                .with(filter_layer)
-                .with(status_layer)
-                .try_init();
-
-            handle
-        })
-        .clone()
+pub fn init_test_tracing() {
+    TEST_TRACING_INITIALISED.get_or_init(|| {
+        init_test_tracing_with_defaults("info", "off");
+    });
 }
 
-pub fn init_bench_tracing() -> reload::Handle<EnvFilter, Registry> {
-    FILTER_HANDLE
-        .get_or_init(|| {
-            // Use EnvFilter for reload compatibility
-            let env_filter = EnvFilter::new("gammaloop_api=warn,status=trace,status_data=trace");
-            let (filter_layer, handle) = reload::Layer::new(env_filter);
+pub fn init_bench_tracing() {
+    TEST_TRACING_INITIALISED.get_or_init(|| {
+        init_test_tracing_with_defaults("warn", "off");
+    });
+}
 
-            // 4) pretty status to stderr, opt-in via `target="status"`
-            // Add strict filtering to status layer
-            let bench_status_filter = filter_fn(|metadata| {
-                let target = metadata.target();
-                target.starts_with("gammaloop_api") || target == "status" || target == "status_data"
-            });
+fn init_test_tracing_with_defaults(display_default: &str, file_default: &str) {
+    let display_spec = log_filter_env_override(ENV_DISPLAY_LOG_FILTER)
+        .unwrap_or_else(|| display_default.to_string());
+    let file_spec =
+        log_filter_env_override(ENV_FILE_LOG_FILTER).unwrap_or_else(|| file_default.to_string());
 
-            let status_layer = fmt::layer()
-                .with_target(false)
-                .pretty()
-                .with_writer(std::io::stderr)
-                .with_filter(bench_status_filter);
+    let (_display_spec, display_filter) =
+        parse_log_filter_or_default(&display_spec, display_default, "display");
+    let (file_spec, file_filter) = parse_log_filter_or_default(&file_spec, file_default, "file");
 
-            _ = tracing_subscriber::registry()
-                .with(filter_layer)
-                .with(status_layer)
-                .try_init();
+    let display_layer = fmt::layer()
+        .event_format(GammaDisplayFormat::new(
+            LogStyle {
+                log_format: LogFormat::Full,
+                short_timestamp: true,
+                full_line_source: true,
+                include_fields: true,
+            }
+            .to_runtime(),
+        ))
+        .with_writer(std::io::stderr)
+        .with_filter(display_filter);
 
-            handle
+    let subscriber = tracing_subscriber::registry().with(display_layer);
+    if GammaLogFilter::is_effectively_off(&file_spec) {
+        _ = subscriber.try_init();
+    } else {
+        let file_appender = tracing_appender::rolling::never(
+            test_log_dir(),
+            format!("gammaloop-test-{}.jsonl", std::process::id()),
+        );
+        let (file_writer, file_guard) = tracing_appender::non_blocking(file_appender);
+        let _ = LOG_GUARD.set(file_guard);
+
+        let file_layer = fmt::layer()
+            .json()
+            .with_writer(file_writer)
+            .with_filter(file_filter);
+
+        _ = subscriber.with(file_layer).try_init();
+    }
+}
+
+fn log_filter_env_override(specific_env: &str) -> Option<String> {
+    if let Ok(all) = std::env::var(ENV_ALL_LOG_FILTER) {
+        Some(all)
+    } else {
+        std::env::var(specific_env).ok()
+    }
+}
+
+fn parse_log_filter_or_default(
+    spec: &str,
+    default_spec: &str,
+    sink: &str,
+) -> (String, GammaLogFilter) {
+    let spec = if spec.trim().is_empty() {
+        default_spec
+    } else {
+        spec
+    };
+
+    match GammaLogFilter::parse(spec) {
+        Ok(filter) => (spec.to_string(), filter),
+        Err(err) => {
+            eprintln!(
+                "Invalid test {sink} log filter '{spec}': {err}. Falling back to {default_spec}."
+            );
+            (
+                default_spec.to_string(),
+                GammaLogFilter::parse(default_spec).expect("test log default filter must parse"),
+            )
+        }
+    }
+}
+
+fn test_log_dir() -> PathBuf {
+    std::env::var(ENV_TEST_LOG_DIR)
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join("target/test-logs")
         })
-        .clone()
 }
 
 use serde_json::Value;

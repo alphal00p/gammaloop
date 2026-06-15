@@ -1,7 +1,7 @@
 use std::{collections::BTreeSet, ops::Deref};
 
 use ahash::AHashSet;
-use idenso::metric::MetricSimplifier;
+use idenso::shorthands::schoonschip::Schoonschip;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
     involution::{Flow, Hedge, HedgePair},
@@ -10,7 +10,6 @@ use linnet::half_edge::{
         SubGraphOps, SubSetLike, SubSetOps, subset::SubSet,
     },
 };
-use spenso::network::library::TensorLibraryData;
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     domains::atom::AtomField,
@@ -221,7 +220,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
                 expr /= Atom::var(expansion).pow(3);
             }
 
-            let series = expr.series(expansion, Atom::Zero, 0.into(), true).unwrap();
+            let series = expr.series(expansion, Atom::Zero, 0).unwrap();
 
             // expr = series.to_atom().expand();
 

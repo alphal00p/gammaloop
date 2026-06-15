@@ -1071,6 +1071,7 @@ mod tests_cff {
             let function_map = FunctionMap::new();
 
             let mut tree = expression_atom
+                .as_view()
                 .to_evaluation_tree(&function_map, &params)
                 .unwrap();
 
@@ -1214,7 +1215,6 @@ mod tests_cff {
     }
 
     #[test]
-    #[ignore]
     fn fishnet2b2() {
         let edges = vec![
             (0, 1),
@@ -1265,7 +1265,6 @@ mod tests_cff {
     }
 
     #[test]
-    #[ignore]
     fn cube() {
         let edges = vec![
             (0, 1),

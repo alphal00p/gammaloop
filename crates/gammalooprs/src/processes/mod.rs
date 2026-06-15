@@ -25,6 +25,34 @@ pub use generation_report::{
 };
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TensorNetworkContractionOrder {
+    #[default]
+    SparseAtomAware,
+    AtomAware,
+    ResultRankOnly,
+    EntryAware,
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+pub enum ExecutionMode {
+    Sequential,
+    Parallel,
+    SequentialRef,
+    SequentialExtract,
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+pub enum ContractionMode {
+    SmallestDegree,
+    MinResultRank,
+}
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub struct EvaluatorSettings {
     #[serde(default, skip_serializing_if = "is_false")]
@@ -76,8 +104,16 @@ pub struct EvaluatorSettings {
         skip_serializing_if = "is_usize::<1000>"
     )]
     pub max_common_pair_distance: usize,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    pub tensor_network_contraction_order: TensorNetworkContractionOrder,
     #[serde(default, skip_serializing_if = "is_false")]
     pub verbose: bool,
+
+    #[serde(
+        default = "evaluator_default_spenso_execution_mode",
+        skip_serializing_if = "is_default_spenso_execution_mode"
+    )]
+    pub spenso_execution_mode: (ExecutionMode, ContractionMode),
 }
 
 const fn evaluator_default_iterative_orientation_optimization() -> bool {
@@ -104,6 +140,14 @@ const fn evaluator_default_max_common_pair_distance() -> usize {
     1000
 }
 
+const fn evaluator_default_spenso_execution_mode() -> (ExecutionMode, ContractionMode) {
+    (ExecutionMode::Sequential, ContractionMode::MinResultRank)
+}
+
+fn is_default_spenso_execution_mode(mode: &(ExecutionMode, ContractionMode)) -> bool {
+    mode == &evaluator_default_spenso_execution_mode()
+}
+
 impl Default for EvaluatorSettings {
     fn default() -> Self {
         Self {
@@ -122,26 +166,28 @@ impl Default for EvaluatorSettings {
             max_horner_scheme_variables: evaluator_default_max_horner_scheme_variables(),
             max_common_pair_cache_entries: evaluator_default_max_common_pair_cache_entries(),
             max_common_pair_distance: evaluator_default_max_common_pair_distance(),
+            tensor_network_contraction_order: TensorNetworkContractionOrder::default(),
             verbose: false,
+            spenso_execution_mode: evaluator_default_spenso_execution_mode(),
         }
     }
 }
 
 impl EvaluatorSettings {
     pub fn optimization_settings(&self) -> OptimizationSettings {
-        OptimizationSettings {
-            horner_iterations: self.horner_iterations,
-            n_cores: self.n_cores,
-            cpe_iterations: self.cpe_iterations,
-            hot_start: None,
-            abort_check: Some(Box::new(crate::is_interrupt_requested as fn() -> bool)),
-            abort_level: self.abort_level,
-            max_horner_scheme_variables: self.max_horner_scheme_variables,
-            max_common_pair_cache_entries: self.max_common_pair_cache_entries,
-            max_common_pair_distance: self.max_common_pair_distance,
-            verbose: self.verbose,
-            ..OptimizationSettings::default()
-        }
+        OptimizationSettings::new()
+            .horner_iterations(self.horner_iterations)
+            .cores(self.n_cores)
+            .cpe_iterations(self.cpe_iterations)
+            .abort_check(Some(Box::new(
+                crate::is_interrupt_requested as fn() -> bool,
+            )))
+            .abort_level(self.abort_level)
+            .max_horner_scheme_variables(self.max_horner_scheme_variables)
+            .max_common_pair_cache_entries(self.max_common_pair_cache_entries)
+            .max_common_pair_distance(self.max_common_pair_distance)
+            .verbose(self.verbose)
+            .direct_translation(false)
     }
 }
 

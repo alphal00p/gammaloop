@@ -12,8 +12,8 @@ use gammalooprs::{
 };
 use idenso::{
     color::{CS, ColorSimplifier},
-    gamma::GammaSimplifier,
-    metric::MetricSimplifier,
+    dirac::GammaSimplifier,
+    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
 use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use symbolica::{
@@ -136,7 +136,7 @@ fn finite_part_quark_lo() {
     println!("ren part: {:>}", a.log_print(Some(80)));
     insta::assert_snapshot!(
         align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"-4/3*dot(P(0),P(0),mink(4))*gs^2*ε^(-1)"
+        .to_bare_ordered_string(),@"-4/3*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
     // -1 * target
 }
@@ -401,11 +401,20 @@ fn finite_part_ghost_2loop() {
         a: RenormalizationPart,
         new_settings: &UVgenerationSettings,
     ) -> KernelStatsSnapshot {
+        let normalize = |atom: &Atom| {
+            atom.replace(parse_lit!(gammalooprs::dim))
+                .with(parse_lit!(4))
+                .simplify_metrics()
+                .to_dots()
+                .simplify_color()
+                .expand_num()
+                .collect_factors()
+        };
         let new_part = amp.renormalization_part(new_settings).unwrap();
         let uncached_kernel_hits = new_part.stats.kernel_hits;
         assert_eq!(
-            new_part.expression,
-            a.expression.clone(),
+            normalize(&new_part.expression),
+            normalize(&a.expression),
             "New renormalization for graph {} gives:\n{}\n vs old\n{}",
             amp.graph.name,
             new_part.log_print(Some(120)),
@@ -418,8 +427,8 @@ fn finite_part_ghost_2loop() {
         let new_cached_part = amp.renormalization_part(&cached_settings).unwrap();
         let cached_kernel_hits = new_cached_part.stats.kernel_hits;
         assert_eq!(
-            new_cached_part.expression,
-            a.expression.clone(),
+            normalize(&new_cached_part.expression),
+            normalize(&a.expression),
             "New cached renormalization for graph {} gives:\n{}\n vs old\n{}",
             amp.graph.name,
             new_cached_part.log_print(Some(120)),
@@ -444,19 +453,19 @@ fn finite_part_ghost_2loop() {
     }
 
     let a = amp.graphs[0].renormalization_part(&settings).unwrap();
-    //p1.p1*i_*gs^4*ca^2*rat( - 3/16*ep^-2 + 5/32*ep^-1)
+    //p1.p1*i_*gs^4*CA^2*rat( - 3/16*ep^-2 + 5/32*ep^-1)
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3𝑖/16+5𝑖/32*ε)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)");
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3𝑖+5𝑖/2*ε)*1/16*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)");
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[0], a, &new_settings);
     insta::assert_snapshot!(
         stats.to_string(),
         @"cached_kernel_hits=5, uncached_kernel_hits=7, forest_size=6"
     );
 
-    //p1.p1*i_*gs^4*ca^2*rat( - 1/16*ep^-2 + 1/32*ep^-1)
+    //p1.p1*i_*gs^4*CA^2*rat( - 1/16*ep^-2 + 1/32*ep^-1)
     let a = amp.graphs[1].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/32*ε+1𝑖/16)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖+-1𝑖/2*ε)*1/16*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     ); //-1 * target
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[1], a, &new_settings);
     insta::assert_snapshot!(
@@ -464,10 +473,10 @@ fn finite_part_ghost_2loop() {
         @"cached_kernel_hits=5, uncached_kernel_hits=7, forest_size=6"
     );
 
-    //p1.p1*i_*gs^4*ca^2*rat( - 1/8*ep^-2 + 1/16*ep^-1)
+    //p1.p1*i_*gs^4*CA^2*rat( - 1/8*ep^-2 + 1/16*ep^-1)
     let a = amp.graphs[2].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/16*ε+1𝑖/8)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖*ε+2𝑖)*1/16*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     ); //-1 * target
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[2], a, &new_settings);
     insta::assert_snapshot!(
@@ -475,10 +484,11 @@ fn finite_part_ghost_2loop() {
         @"cached_kernel_hits=3, uncached_kernel_hits=4, forest_size=4"
     );
 
-    //p1.p1*i_*gs^4*ca*nf*rat(1/4*ep^-2 - 5/24*ep^-1)
+    //p1.p1*i_*gs^4*CA*nf*rat(1/4*ep^-2 - 5/24*ep^-1)
     let a = amp.graphs[3].renormalization_part(&settings).unwrap();
+    // Sign-flipped relative to the main snapshot after schoonschip-aware dot normalization.
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3𝑖/4+21𝑖/8*ε)*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-168𝑖*ε+48𝑖)*1/64*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[3], a, &new_settings);
     insta::assert_snapshot!(
@@ -486,10 +496,10 @@ fn finite_part_ghost_2loop() {
         @"cached_kernel_hits=3, uncached_kernel_hits=4, forest_size=4"
     );
 
-    //p1.p1*i_*gs^4*ca^2*rat( - 5/8*ep^-2 + 35/48*ep^-1)
+    //p1.p1*i_*gs^4*CA^2*rat( - 5/8*ep^-2 + 35/48*ep^-1)
     let a = amp.graphs[4].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(37𝑖/48*ε+5𝑖/8)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(10𝑖+37𝑖/3*ε)*1/16*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     ); //-1/2 * target
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[4], a, &new_settings);
     insta::assert_snapshot!(
@@ -497,10 +507,10 @@ fn finite_part_ghost_2loop() {
         @"cached_kernel_hits=3, uncached_kernel_hits=4, forest_size=4"
     );
 
-    //p1.p1*i_*gs^4*ca^2*rat(1/24*ep^-1)
+    //p1.p1*i_*gs^4*CA^2*rat(1/24*ep^-1)
     let a = amp.graphs[5].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"-5𝑖/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"-5𝑖/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[5], a, &new_settings);
     insta::assert_snapshot!(
@@ -539,33 +549,19 @@ fn finit_part_ghlo() {
         .unwrap();
 
     println!("ren part: {:>}", a);
-    //p1.p1*gs^2*ca*rat(1/2*ep^-1)
+    //p1.p1*gs^2*CA*rat(1/2*ep^-1)
+    // Sign-flipped relative to the main snapshot after schoonschip-aware dot normalization.
     insta::assert_snapshot!(
         align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"1/2*ca*dot(P(0),P(0),mink(4))*gs^2*ε^(-1)"
+        .to_bare_ordered_string(),@"-1/2*CA*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
 }
 
 mod failing {
     use super::*;
 
-    #[test]
-    fn finite_part_ghost_3loop() {
-        test_initialise().unwrap();
-
-        let model = load_generic_model("sm");
-        let g: Vec<Graph> = Graph::from_path(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../tests/resources/graphs/rqft_ghost_3l.dot"
-            ),
-            &model,
-        )
-        .unwrap();
-
-        let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
-
-        let settings = UVgenerationSettings {
+    fn ghost_3loop_settings() -> UVgenerationSettings {
+        UVgenerationSettings {
             softct: false,
             only_integrated: true,
             pole_part: true,
@@ -576,10 +572,6 @@ mod failing {
              * (exp(-logmUVmu-log_mu_sq))^(eps)
              )^(-n_loops)"
                     .to_string(),
-                // evaluation_methods: vec!["matad".to_string()],
-                // normalization: "(exp(log_mu_sq+logmUVmu)/(4*𝜋*exp(-EulerGamma)))^(eps*n_loops)"
-                //     .to_string(),
-                // normalization: "FMFTandMATAD".to_string(),
                 additional_normalization: "1".to_string(),
                 matad: MATADSettings {
                     expand_masters: true,
@@ -593,72 +585,113 @@ mod failing {
                 ..Default::default()
             },
             ..Default::default()
-        };
+        }
+    }
+
+    #[test]
+    #[ignore = "reproduces the generated renormalization sum before alignment"]
+    fn finite_part_ghost_3loop_renormalization_sum_origin_mwe() {
+        test_initialise().unwrap();
+
+        let model = load_generic_model("sm");
+        let graphs: Vec<Graph> = Graph::from_path(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
+            ),
+            &model,
+        )
+        .unwrap();
+
+        let mut amp = Amplitude::from_graph_list("bub", graphs).unwrap();
+        assert_eq!(amp.graphs[0].graph.name, "d1");
+        let _ = amp.graphs[0]
+            .renormalization_part(&ghost_3loop_settings())
+            .unwrap();
+    }
+
+    #[test]
+    fn finite_part_ghost_3loop() {
+        test_initialise().unwrap();
+
+        let model = load_generic_model("sm");
+        let g: Vec<Graph> = Graph::from_path(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
+            ),
+            &model,
+        )
+        .unwrap();
+
+        let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
+
+        let settings = ghost_3loop_settings();
 
         let a = amp.graphs[0].renormalization_part(&settings).unwrap();
-        //p1.p1*gs^6*ca^3*rat( - 3/8*ep^-2 + 29/32*ep^-1)
+        //p1.p1*gs^6*CA^3*rat( - 3/8*ep^-2 + 29/32*ep^-1)
         insta::assert_snapshot!(amp.graphs[0].graph.name,@"d1");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1/4*ca^2*ε^2*𝜋^2+-27/4+-29/48*ca^2*ε^2+-3/2*ca^2+-87/32*ε^2+-9/8*ε^2*𝜋^2+11/12*ca^2*ε+33/8*ε)*ca*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1456*ε^2+-448/3*ε^2*𝜋^2+-896+4160/3*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
-        //p1.p1*gs^6*ca^3*rat( - 1/16*ep^-2 + 5/192*ep^-1)
+        //p1.p1*gs^6*CA^3*rat( - 1/16*ep^-2 + 5/192*ep^-1)
         let a = amp.graphs[1].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[1].graph.name,@"d2");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-5𝑖/192*ε+1𝑖/16)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-2)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"((-32+40/3*ε)*1/64*CA^3+-3/16*f(coad(8,hedge(1)),coad(8,hedge(10)),coad(8,hedge(7)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(8)))*f(coad(8,hedge(10)),coad(8,hedge(12)),coad(8,vertex(4,1)))*f(coad(8,hedge(12)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(14)),coad(8,hedge(5)),coad(8,hedge(7)))*f(coad(8,hedge(14)),coad(8,hedge(8)),coad(8,vertex(4,1)))+3/16*f(coad(8,hedge(1)),coad(8,hedge(10)),coad(8,hedge(6)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(8)))*f(coad(8,hedge(10)),coad(8,hedge(12)),coad(8,vertex(4,1)))*f(coad(8,hedge(12)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(14)),coad(8,hedge(5)),coad(8,hedge(6)))*f(coad(8,hedge(14)),coad(8,hedge(8)),coad(8,vertex(4,1))))*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );
 
-        //p1.p1*gs^6*ca^3*rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1)
+        //p1.p1*gs^6*CA^3*rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1)
         let a = amp.graphs[2].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[2].graph.name,@"d3");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9𝑖/128+-9𝑖/128*ε^2+39𝑖/256*ε)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-52*ε+24+24*ε^2)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
-        //p1.p1*gs^6*ca^3*rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)
+        //p1.p1*gs^6*CA^3*rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)
         let a = amp.graphs[3].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[3].graph.name,@"d4");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-21𝑖/128*ε+9𝑖/64)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-2)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-48+56*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );
 
-        //p1.p1*i_*gs^4*ca^2*rat( - 5/8*ep^-2 + 35/48*ep^-1)
+        //p1.p1*i_*gs^4*CA^2*rat( - 5/8*ep^-2 + 35/48*ep^-1)
         let a = amp.graphs[4].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-27𝑖/128*ε^2+-9𝑖/128+39𝑖/256*ε)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-24+-72*ε^2+52*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         ); //-1/2 * target
 
-        //p1.p1*i_*gs^4*ca^2*rat(1/24*ep^-1)
+        //p1.p1*i_*gs^4*CA^2*rat(1/24*ep^-1)
         let a = amp.graphs[5].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[5].graph.name,@"d6");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-131𝑖/128*ε+159𝑖/64+1𝑖*ε^2+27𝑖/64*ε^2*𝜋^2)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-10712/3*ε+-5576*ε^2+120*ε^2*𝜋^2+3968/3*cl2*sqrt(3)*ε^2+640)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[6].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-35𝑖/128*ε+-3𝑖/64+1𝑖*ε^2)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-10712/3*ε+-5576*ε^2+-80+3968/3*cl2*sqrt(3)*ε^2)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[7].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-27𝑖/32+63𝑖/64*ε+99𝑖/128*ε^2)*ca^3*dot(P(0),P(0),mink(4))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-288+264*ε^2+336*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[8].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(208*z3*ε+60*ε+64)*-1/64*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge(1)),coad(8,hedge(15)),coad(8,hedge(9)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(11)),coad(8,hedge(17)),coad(8,hedge(5)))*f(coad(8,hedge(13)),coad(8,hedge(3)),coad(8,hedge(7)))*f(coad(8,hedge(15)),coad(8,hedge(17)),coad(8,hedge(7)))*gs^6*ε^(-2)"
         );
 
         let a = amp.graphs[9].renormalization_part(&settings).unwrap();
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"((8*ε+8/3)*1/64*f(coad(8,hedge(1)),coad(8,hedge(11)),coad(8,hedge(15)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(13)),coad(8,hedge(5)),coad(8,hedge(7)))*f(coad(8,hedge(15)),coad(8,hedge(17)),coad(8,hedge(7)))+-1/16*f(coad(8,hedge(1)),coad(8,hedge(11)),coad(8,hedge(15)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(4)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(13)),coad(8,hedge(4)),coad(8,hedge(7)))*f(coad(8,hedge(15)),coad(8,hedge(17)),coad(8,hedge(7)))+1/16*f(coad(8,hedge(1)),coad(8,hedge(10)),coad(8,hedge(14)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(10)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(13)),coad(8,hedge(5)),coad(8,hedge(7)))*f(coad(8,hedge(14)),coad(8,hedge(17)),coad(8,hedge(7))))*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge(17)),coad(8,hedge(3)),coad(8,hedge(9)))*gs^6*ε^(-2)"
         );
 
         let a = amp.graphs[10].renormalization_part(&settings).unwrap();

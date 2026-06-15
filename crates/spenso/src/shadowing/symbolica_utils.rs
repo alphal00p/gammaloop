@@ -1,4 +1,5 @@
-use crate::{network::parsing::SPENSO_TAG, structure::concrete_index::ConcreteIndex};
+use crate::{network::tags::SPENSO_TAG, structure::concrete_index::ConcreteIndex};
+use ahash::HashMap;
 use derive_more::Display;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -11,7 +12,8 @@ use symbolica::{
     domains::{float::Complex, rational::Rational},
     evaluate::{FunctionMap, Instruction, OptimizationSettings, Slot},
     function,
-    printer::{CanonicalOrderingSettings, PrintOptions, PrintState},
+    id::ReplaceBuilder,
+    printer::{CanonicalOrderingSettings, PrintOptions, PrintState, PrintUserData},
     symbol,
 };
 
@@ -24,6 +26,22 @@ use std::{
 
 use eyre::Result;
 
+pub trait ReplaceBuilderExt {
+    fn has_matches(&self) -> bool;
+    // Returns true if the pattern matches entirely the given atom
+    fn matches(self) -> bool;
+}
+
+impl<'a, 'b> ReplaceBuilderExt for ReplaceBuilder<'a, 'b> {
+    fn has_matches(&self) -> bool {
+        self.match_iter().next().is_some()
+    }
+
+    fn matches(self) -> bool {
+        self.partial(false).has_matches()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SpensoPrintSettings {
     pub with_dim: bool,
@@ -33,15 +51,18 @@ pub struct SpensoPrintSettings {
     pub symbol_scripts: bool,
 }
 
-impl From<SpensoPrintSettings> for (&'static str, usize) {
+impl From<SpensoPrintSettings> for HashMap<String, PrintUserData> {
     fn from(settings: SpensoPrintSettings) -> Self {
-        ("spenso", settings.to_usize())
+        HashMap::from_iter([(
+            "spenso".to_string(),
+            PrintUserData::Integer(settings.to_usize() as i64),
+        )])
     }
 }
 
-impl From<&SpensoPrintSettings> for (&'static str, usize) {
+impl From<&SpensoPrintSettings> for HashMap<String, PrintUserData> {
     fn from(settings: &SpensoPrintSettings) -> Self {
-        ("spenso", settings.to_usize())
+        (*settings).into()
     }
 }
 
@@ -88,7 +109,7 @@ impl SpensoPrintSettings {
     // x^-1*a^-1*b^-1 -> ((1/x)/a)/b
     pub fn compact() -> Self {
         Self {
-            parens: false,
+            parens: true,
             commas: false,
             with_dim: false,
             symbol_scripts: false,
@@ -98,7 +119,7 @@ impl SpensoPrintSettings {
 
     pub fn nice_symbolica(&self) -> PrintOptions {
         PrintOptions {
-            custom_print_mode: Some(self.into()),
+            custom_print_mode: self.into(),
             color_builtin_symbols: true,
             terms_on_new_line: true,
             color_namespace: false,
@@ -112,7 +133,7 @@ impl SpensoPrintSettings {
 
     pub fn typst_symbolica(&self) -> PrintOptions {
         PrintOptions {
-            custom_print_mode: Some(self.into()),
+            custom_print_mode: self.into(),
             color_builtin_symbols: false,
             terms_on_new_line: false,
             color_namespace: false,
@@ -207,11 +228,11 @@ impl Default for TypstSettings {
 
 impl<A: AtomCore> AtomCoreExt for A {
     fn to_bare_ordered_string(&self) -> String {
-        self.to_canonically_ordered_string(CanonicalOrderingSettings {
-            include_namespace: false,
-            include_attributes: false,
-            hide_namespace: None,
-        })
+        self.to_canonically_ordered_string(
+            CanonicalOrderingSettings::new()
+                .include_namespace(false)
+                .include_attributes(false),
+        )
     }
 
     fn typst_fmt<W: std::fmt::Write>(
@@ -220,39 +241,34 @@ impl<A: AtomCore> AtomCoreExt for A {
         settings: &TypstSettings,
     ) -> Result<(), Error> {
         let mut params = BTreeMap::new();
-        let mut fn_map = FunctionMap::new();
+        let fn_map = FunctionMap::new();
         let mut externals = BTreeSet::new();
 
         self.visitor(&mut |a| {
             if let AtomView::Var(a) = a {
-                params.insert(a.get_symbol(), a.as_view().to_owned());
+                let atom = a.as_view().to_owned();
+                params.insert(atom.to_canonical_string(), (a.get_symbol(), atom));
                 false
             } else if let AtomView::Fun(a) = a {
+                if a.get_symbol().get_evaluation_info().is_none() {
+                    let atom = a.as_view().to_owned();
+                    params.insert(atom.to_canonical_string(), (a.get_symbol(), atom));
+                    return false;
+                }
                 externals.insert(a.get_symbol());
 
-                let dashed_name = format!(
-                    "{}-{}",
-                    a.get_symbol().get_namespace(),
-                    a.get_symbol().get_stripped_name(),
-                );
-                let _ = fn_map.add_external_function(a.get_symbol(), dashed_name);
                 true
             } else {
                 true
             }
         });
 
-        let (params, symbols): (Vec<Atom>, Vec<Symbol>) =
-            params.into_iter().map(|(s, a)| (a, s)).collect();
+        let (symbols, params): (Vec<Symbol>, Vec<Atom>) = params.into_values().unzip();
         let eval_tree = self
-            .evaluator(
-                &fn_map,
-                &params,
-                OptimizationSettings {
-                    horner_iterations: 10,
-                    ..Default::default()
-                },
-            )
+            .evaluator(&params)
+            .function_map(fn_map)
+            .optimization_settings(OptimizationSettings::new().horner_iterations(10))
+            .build()
             .unwrap();
 
         writeln!(f, "#{{")?;
@@ -283,7 +299,9 @@ impl<A: AtomCore> AtomCoreExt for A {
             }
         }
 
-        let (instr, _, consts) = eval_tree.export_instructions();
+        let exported = eval_tree.export_instructions();
+        let instr = exported.instructions;
+        let consts = exported.constants;
 
         writeln!(
             f,
@@ -303,9 +321,13 @@ impl<A: AtomCore> AtomCoreExt for A {
                 && let Some(a) = p(
                     a.as_view(),
                     &PrintOptions {
-                        custom_print_mode: Some(("typst", 1)),
+                        custom_print_mode: HashMap::from_iter([(
+                            "typst".to_string(),
+                            PrintUserData::Integer(1),
+                        )]),
                         ..Default::default()
                     },
+                    &PrintState::new(),
                 )
             {
                 writeln!(f, "{a}")?;
@@ -328,9 +350,13 @@ impl<A: AtomCore> AtomCoreExt for A {
                 && let Some(a) = p(
                     atom.as_view(),
                     &PrintOptions {
-                        custom_print_mode: Some(("typst", 1)),
+                        custom_print_mode: HashMap::from_iter([(
+                            "typst".to_string(),
+                            PrintUserData::Integer(1),
+                        )]),
                         ..Default::default()
                     },
+                    &PrintState::new(),
                 )
             {
                 writeln!(f, "{a}")?;
@@ -364,45 +390,41 @@ impl<A: AtomCore> AtomCoreExt for A {
                             .join(" dot ")
                     )?;
                 }
-                Instruction::ExternalFun(o, name, args) => {
-                    writeln!(
-                        f,
-                        "let {} = {name}({})",
-                        typst_slot(o, &consts),
-                        args.into_iter().map(|a| typst_slot(a, &consts)).join(",")
-                    )?;
-                }
-                Instruction::Fun(o, builtin, s, _is_real) => {
-                    let b = builtin.get_symbol();
+                Instruction::Fun(o, fun, _is_real) => {
+                    let (b, _tags, args) = *fun;
 
-                    if b == Symbol::COS {
+                    if b == Symbol::COS && args.len() == 1 {
                         writeln!(
                             f,
                             "let {} = $ cos({})$",
                             typst_slot(o, &consts),
-                            typst_slot(s, &consts)
+                            typst_slot(args[0], &consts)
                         )?;
-                    } else if b == Symbol::SIN {
+                    } else if b == Symbol::SIN && args.len() == 1 {
                         writeln!(
                             f,
                             "let {} = $ sin({})$",
                             typst_slot(o, &consts),
-                            typst_slot(s, &consts)
+                            typst_slot(args[0], &consts)
                         )?;
-                    } else if b == Symbol::SQRT {
+                    } else if b == Symbol::SQRT && args.len() == 1 {
                         writeln!(
                             f,
                             "let {} = $ sqrt({})$",
                             typst_slot(o, &consts),
-                            typst_slot(s, &consts)
+                            typst_slot(args[0], &consts)
                         )?;
                     } else {
-                        let name = b.get_stripped_name().to_string();
+                        let name = if b.is_builtin() {
+                            format!("op(\"{}\")", b.get_stripped_name())
+                        } else {
+                            format!("{}-{}", b.get_namespace(), b.get_stripped_name())
+                        };
                         writeln!(
                             f,
-                            "let {} = $op(\"{name}\")({})$",
+                            "let {} = {name}({})",
                             typst_slot(o, &consts),
-                            typst_slot(s, &consts)
+                            args.into_iter().map(|a| typst_slot(a, &consts)).join(",")
                         )?;
                     }
                 }
@@ -439,7 +461,10 @@ impl<A: AtomCore> AtomCoreExt for A {
             .fmt_output(
                 &mut out,
                 &PrintOptions {
-                    custom_print_mode: Some(("typst", 2)),
+                    custom_print_mode: HashMap::from_iter([(
+                        "typst".to_string(),
+                        PrintUserData::Integer(2),
+                    )]),
                     ..Default::default()
                 },
                 PrintState::new(),
@@ -535,7 +560,7 @@ impl FormatWithState for FunView<'_> {
 
         if uppers.is_empty() {
             f.write_str("op(\"")?;
-            self.get_symbol().format(opts, f)?;
+            self.get_symbol().format(opts, PrintState::new(), f)?;
             f.write_str("\")")?;
             let n_args = self.get_nargs();
 
@@ -555,7 +580,7 @@ impl FormatWithState for FunView<'_> {
             f.write_str("scripts(attach(")?;
             f.write_str("op(\"")?;
 
-            self.get_symbol().format(opts, f)?;
+            self.get_symbol().format(opts, PrintState::new(), f)?;
             f.write_str("\")")?;
             f.write_str(", tr: ")?;
             f.write_str(&uppers.join(" "))?;
@@ -997,18 +1022,21 @@ impl IntoSymbol for std::string::String {
 #[cfg(test)]
 mod test {
     use crate::{
-        network::parsing::SPENSO_TAG,
+        network::tags::SPENSO_TAG,
         shadowing::symbolica_utils::{AtomCoreExt, TypstSettings},
     };
 
-    use symbolica::{parse, symbol, tag};
+    use symbolica::{parse, printer::PrintUserData, symbol, tag};
     #[test]
     fn print() {
         let _lower = symbol!(
             "lower",
             tag = SPENSO_TAG.lower,
-            print = |_, opt| {
-                if let Some(("typst", 1)) = opt.custom_print_mode {
+            print = |_, opt, _state| {
+                if matches!(
+                    opt.custom_print_mode.get("typst"),
+                    Some(PrintUserData::Integer(1))
+                ) {
                     let body = r#"{
 let args = arg.pos().map(to-eq).join("")
 (content: args,lower:true)
@@ -1023,8 +1051,11 @@ let args = arg.pos().map(to-eq).join("")
         let _upper = symbol!(
             "upper",
             tags = [SPENSO_TAG.upper.clone(), tag!("Real")],
-            print = |_, opt| {
-                if let Some(("typst", 1)) = opt.custom_print_mode {
+            print = |_, opt, _state| {
+                if matches!(
+                    opt.custom_print_mode.get("typst"),
+                    Some(PrintUserData::Integer(1))
+                ) {
                     let body = r#"{
 let args = arg.pos().map(to-eq).join("")
 (content: args,upper:true)

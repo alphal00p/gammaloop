@@ -6,24 +6,24 @@ use pyo3::{
 };
 
 use spenso::{
+    iterators::IteratableTensor,
     network::{
         ContractScalars, ExecutionResult, Network, Sequential, SingleSmallestDegree,
         SmallestDegree, Steps,
         library::symbolic::ExplicitKey,
-        parsing::{ParseSettings, SPENSO_TAG, ShadowedStructure},
+        parsing::{ParseSettings, ShadowedStructure},
         store::{NetworkStore, TensorScalarStoreMapping},
+        tags::SPENSO_TAG,
     },
     structure::abstract_index::AbstractIndex,
-    tensors::parametric::{MixedTensor, ParamOrConcrete, atomcore::TensorAtomMaps},
+    tensors::parametric::{
+        AtomViewOrConcrete, MixedTensor, ParamOrConcrete, atomcore::TensorAtomMaps,
+    },
 };
 use spenso_hep_lib::{FUN_LIB, HEP_LIB};
 use symbolica::{
     api::python::{ConvertibleToPatternRestriction, ConvertibleToReplaceWith, PythonExpression},
-    atom::{Atom, AtomCore, AtomView, Symbol},
-    evaluate::EvaluationFn,
-    id::{MatchSettings, ReplaceWith},
-    poly::PolyVariable,
-    symbol,
+    prelude::*,
 };
 
 use symbolica::api::python::ConvertibleToExpression;
@@ -71,6 +71,54 @@ pub struct SpensoNet {
         ExplicitKey<AbstractIndex>,
         Symbol,
     >,
+}
+
+fn insert_function_values<'a>(
+    expression: AtomView<'a>,
+    constants: &mut ahash::AHashMap<Atom, f64>,
+    functions: &HashMap<Symbol, Py<PyAny>>,
+) -> PyResult<()> {
+    match expression {
+        AtomView::Fun(fun) => {
+            for arg in fun.iter() {
+                insert_function_values(arg, constants, functions)?;
+            }
+
+            if let Some(function) = functions.get(&fun.get_symbol()) {
+                let args = fun
+                    .iter()
+                    .map(|arg| {
+                        arg.evaluate(constants).map_err(|err| {
+                            exceptions::PyValueError::new_err(format!(
+                                "Could not evaluate function argument in `{expression}`: {err}"
+                            ))
+                        })
+                    })
+                    .collect::<PyResult<Vec<_>>>()?;
+                let value =
+                    Python::attach(|py| function.call(py, (args,), None)?.extract::<f64>(py))?;
+                constants.insert(expression.to_owned(), value);
+            }
+        }
+        AtomView::Add(add) => {
+            for arg in add.iter() {
+                insert_function_values(arg, constants, functions)?;
+            }
+        }
+        AtomView::Mul(mul) => {
+            for arg in mul.iter() {
+                insert_function_values(arg, constants, functions)?;
+            }
+        }
+        AtomView::Pow(pow) => {
+            let (base, exponent) = pow.get_base_exp();
+            insert_function_values(base, constants, functions)?;
+            insert_function_values(exponent, constants, functions)?;
+        }
+        _ => {}
+    }
+
+    Ok(())
 }
 
 /// Execution modes for tensor network evaluation.
@@ -224,7 +272,7 @@ impl SpensoNet {
     #[staticmethod]
     pub fn broadcast(str: &str) -> PythonExpression {
         PythonExpression {
-            expr: Atom::var(symbol!(str, tag = SPENSO_TAG.tag)),
+            expr: Atom::var(symbol!(str, tag = SPENSO_TAG.broadcast)),
         }
     }
     #[staticmethod]
@@ -295,10 +343,14 @@ impl SpensoNet {
             ));
         };
 
-        let mut settings = MatchSettings::cached();
+        let mut setting_non_greedy_wildcards = Vec::new();
+        let mut setting_level_range = (0, None);
+        let mut setting_level_is_tree_depth = false;
+        let mut setting_allow_new_wildcards_on_rhs = false;
+        let mut setting_rhs_cache_size = 100;
 
         if let Some(ngw) = non_greedy_wildcards {
-            settings.non_greedy_wildcards = ngw
+            setting_non_greedy_wildcards = ngw
                 .iter()
                 .map(|x| match x.expr.as_view() {
                     AtomView::Var(v) => {
@@ -317,16 +369,16 @@ impl SpensoNet {
                 .collect::<Result<_, _>>()?;
         }
         if let Some(level_range) = level_range {
-            settings.level_range = level_range;
+            setting_level_range = level_range;
         }
         if let Some(level_is_tree_depth) = level_is_tree_depth {
-            settings.level_is_tree_depth = level_is_tree_depth;
+            setting_level_is_tree_depth = level_is_tree_depth;
         }
         if let Some(allow_new_wildcards_on_rhs) = allow_new_wildcards_on_rhs {
-            settings.allow_new_wildcards_on_rhs = allow_new_wildcards_on_rhs;
+            setting_allow_new_wildcards_on_rhs = allow_new_wildcards_on_rhs;
         }
         if let Some(rhs_cache_size) = rhs_cache_size {
-            settings.rhs_cache_size = rhs_cache_size;
+            setting_rhs_cache_size = rhs_cache_size;
         }
 
         let cond = None;
@@ -340,13 +392,13 @@ impl SpensoNet {
                     } else {
                         r
                     }
-                    .non_greedy_wildcards(settings.non_greedy_wildcards.clone())
-                    .level_range(settings.level_range)
-                    .level_is_tree_depth(settings.level_is_tree_depth)
-                    .allow_new_wildcards_on_rhs(settings.allow_new_wildcards_on_rhs)
-                    .rhs_cache_size(settings.rhs_cache_size);
+                    .non_greedy_wildcards(setting_non_greedy_wildcards.clone())
+                    .level_range(setting_level_range)
+                    .level_is_tree_depth(setting_level_is_tree_depth)
+                    .allow_new_wildcards_on_rhs(setting_allow_new_wildcards_on_rhs)
+                    .rhs_cache_size(setting_rhs_cache_size);
 
-                    let r = if let Some(true) = repeat {
+                    let mut r = if let Some(true) = repeat {
                         r.repeat()
                     } else {
                         r
@@ -362,11 +414,11 @@ impl SpensoNet {
                         } else {
                             r
                         }
-                        .non_greedy_wildcards(settings.non_greedy_wildcards.clone())
-                        .level_range(settings.level_range)
-                        .level_is_tree_depth(settings.level_is_tree_depth)
-                        .allow_new_wildcards_on_rhs(settings.allow_new_wildcards_on_rhs)
-                        .rhs_cache_size(settings.rhs_cache_size);
+                        .non_greedy_wildcards(setting_non_greedy_wildcards.clone())
+                        .level_range(setting_level_range)
+                        .level_is_tree_depth(setting_level_is_tree_depth)
+                        .allow_new_wildcards_on_rhs(setting_allow_new_wildcards_on_rhs)
+                        .rhs_cache_size(setting_rhs_cache_size);
 
                         let r = if let Some(true) = repeat {
                             r.repeat()
@@ -403,9 +455,9 @@ impl SpensoNet {
         constants: HashMap<PythonExpression, f64>,
         functions: HashMap<PolyVariable, Py<PyAny>>,
     ) -> PyResult<Self> {
-        let constants = constants
+        let mut constants: ahash::AHashMap<Atom, f64> = constants
             .iter()
-            .map(|(k, v)| (k.expr.as_view(), *v))
+            .map(|(k, v)| (k.expr.clone(), *v))
             .collect();
 
         let functions = functions
@@ -420,22 +472,19 @@ impl SpensoNet {
                     )))?
                 };
 
-                Ok((
-                    id,
-                    EvaluationFn::new(Box::new(move |args, _, _, _| {
-                        Python::attach(|py| {
-                            v.call(py, (args.to_vec(),), None)
-                                .expect("Bad callback function")
-                                .extract::<f64>(py)
-                                .expect("Function does not return a float")
-                        })
-                    })),
-                ))
+                Ok((id, v))
             })
             .collect::<PyResult<_>>()?;
 
         let mut network = self.network.clone();
-        network.evaluate_real(|x| x.into(), &constants, &functions);
+        for tensor in network.iter_tensors() {
+            for (_, value) in tensor.iter_flat() {
+                if let AtomViewOrConcrete::Atom(atom) = value {
+                    insert_function_values(atom, &mut constants, &functions)?;
+                }
+            }
+        }
+        network.evaluate_real(&constants);
         Ok(SpensoNet { network })
     }
 

@@ -1303,7 +1303,7 @@ impl LoopMomentumBasis {
     //         .collect()
     // }
 
-    pub(crate) fn loop_atom<'a, I>(
+    pub fn loop_atom<'a, I>(
         &self,
         edge_id: EdgeIndex,
         mom_symbol: Symbol,
@@ -1322,7 +1322,7 @@ impl LoopMomentumBasis {
         })
     }
 
-    pub(crate) fn ext_atom<'a, I>(
+    pub fn ext_atom<'a, I>(
         &self,
         edge_id: EdgeIndex,
         mom_symbol: Symbol,

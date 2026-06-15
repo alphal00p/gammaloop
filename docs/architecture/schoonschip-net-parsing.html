@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Schoonschip Network Parsing</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f8fa;
+      --panel: #fff;
+      --text: #1c2430;
+      --muted: #5e6a78;
+      --line: #d8dee8;
+      --code: #eef2f7;
+      --accent: #0f766e;
+      --accent-soft: #d9f4ef;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111418;
+        --panel: #181c22;
+        --text: #e8edf3;
+        --muted: #a8b3c1;
+        --line: #303843;
+        --code: #242a33;
+        --accent: #5eead4;
+        --accent-soft: #113732;
+      }
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 40px 22px 72px;
+    }
+
+    h1,
+    h2,
+    h3 {
+      line-height: 1.2;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 34px;
+      margin-bottom: 10px;
+    }
+
+    h2 {
+      border-top: 1px solid var(--line);
+      font-size: 23px;
+      margin-top: 34px;
+      padding-top: 26px;
+    }
+
+    h3 {
+      font-size: 17px;
+      margin-top: 22px;
+    }
+
+    p {
+      margin: 10px 0;
+    }
+
+    code {
+      background: var(--code);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      background: var(--code);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow-x: auto;
+      padding: 14px 16px;
+    }
+
+    pre code {
+      background: transparent;
+      padding: 0;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: 17px;
+      max-width: 840px;
+    }
+
+    .box {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      margin: 16px 0;
+      padding: 15px 17px;
+    }
+
+    .diagram {
+      align-items: stretch;
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(5, minmax(130px, 1fr));
+      margin: 18px 0;
+    }
+
+    .node {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      min-height: 92px;
+      padding: 12px;
+      position: relative;
+    }
+
+    .node::after {
+      color: var(--accent);
+      content: "->";
+      font-weight: 700;
+      position: absolute;
+      right: -14px;
+      top: 38px;
+    }
+
+    .node:last-child::after {
+      content: "";
+    }
+
+    .node strong {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    .node.primary {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
+
+    .grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+
+    .source {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    table {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-collapse: collapse;
+      margin: 14px 0 22px;
+      width: 100%;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 9px 11px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 650;
+      width: 27%;
+    }
+
+    tr:last-child th,
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    @media (max-width: 820px) {
+      .diagram {
+        grid-template-columns: 1fr;
+      }
+
+      .node::after {
+        bottom: -19px;
+        content: "v";
+        right: 50%;
+        top: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Schoonschip Network Parsing</h1>
+    <p class="lead">
+      The network-backed Schoonschip path always parses tensorial shorthand
+      expressions as opaque tensor leaves. Parser shorthand expansion is
+      deliberately not part of this path.
+    </p>
+
+    <h2>Entry Points</h2>
+    <p>
+      There are two Schoonschip paths in
+      <a href="../../crates/idenso/src/schoonschip/api.rs">crates/idenso/src/schoonschip/api.rs</a>.
+      <code>schoonschip_with_settings</code> calls the older pattern-based
+      implementation in
+      <a href="../../crates/idenso/src/schoonschip/with_settings.rs">with_settings.rs</a>.
+      <code>schoonschip_with_net</code> calls the symbolic-network
+      implementation. <code>schoonschip_net</code> is a convenience wrapper: it
+      runs the default network pass and then runs the pattern pass as a final
+      local cleanup.
+    </p>
+
+    <div class="box">
+      <pre><code>fn schoonschip_net&lt;Aind: AbsInd + DummyAind + ParseableAind + 'static&gt;(&amp;self) -&gt; Atom {
+    self.schoonschip_with_net::&lt;false, Aind&gt;(&amp;SchoonschipSettings::default_network())
+        .schoonschip()
+}</code></pre>
+    </div>
+
+    <h2>Network Algorithm</h2>
+    <div class="diagram" aria-label="Schoonschip network algorithm">
+      <div class="node">
+        <strong>Fixed Point</strong>
+        <code>NetworkSchoonschip::run</code> repeats until unchanged unless the
+        mode is <code>SinglePass</code>.
+      </div>
+      <div class="node">
+        <strong>Term Split</strong>
+        <code>Add</code> nodes are processed term-by-term, then rebuilt as a
+        sum.
+      </div>
+      <div class="node primary">
+        <strong>Opaque Network</strong>
+        Each term is dot-normalized and parsed into a symbolic tensor network
+        with opaque tensorial shorthand.
+      </div>
+      <div class="node">
+        <strong>Contract</strong>
+        The selected contraction order chooses graph-adjacent tensors and
+        contracts them through <code>Schoonschipify</code>.
+      </div>
+      <div class="node">
+        <strong>Normalize</strong>
+        The result expression is extracted, dot-normalized, and fed back into
+        the fixed point loop.
+      </div>
+    </div>
+
+    <p>
+      The parser settings are built in
+      <a href="../../crates/idenso/src/schoonschip/api.rs">NetworkSchoonschip::run_once</a>.
+      The important convention is that tensorial shorthand is never expanded by
+      the parser in this path:
+    </p>
+    <pre><code>shorthand_parsing: ShorthandParsing::Opaque {
+    inference: StructureInferenceMode::Fast,
+},</code></pre>
+
+    <div class="box">
+      <h3>Driver outline</h3>
+      <pre><code>current = input
+loop:
+    next = apply(current)
+    if settings.mode == SinglePass || next == current:
+        return next
+    current = next
+
+apply(expr):
+    if expr is a sum:
+        return sum(apply(term) for term in expr)
+
+    normalized = normalize_dots(expr)
+    net = parse_to_symbolic_net(normalized, opaque_shorthand, depth_limit)
+    execute net with selected Schoonschip contraction strategy
+    return net.result_expression().normalize_dots()</code></pre>
+    </div>
+
+    <p>
+      Pure scalar atoms still use the parser's scalar override. Tensorial
+      shorthand such as dot products, traces, chains, and Schoonschip vector
+      slots becomes a symbolic tensor leaf with inferred structure. That keeps
+      graph construction structural; algebraic meaning is assigned later by the
+      contraction code in
+      <a href="../../crates/idenso/src/schoonschip/contraction.rs">contraction.rs</a>.
+    </p>
+
+    <h2>Settings</h2>
+    <table>
+      <tr>
+        <th><code>mode</code></th>
+        <td>
+          Selects <code>SinglePass</code> or a recursive fixed point. Recursive
+          mode is either depth-first or breadth-first; the const parameters
+          <code>RECURSE</code> and <code>DEPTH_FIRST</code> are chosen from this.
+        </td>
+      </tr>
+      <tr>
+        <th><code>depth_limit</code></th>
+        <td>
+          Passed to parsing. It limits how deeply composite expressions are
+          turned into network structure.
+        </td>
+      </tr>
+      <tr>
+        <th><code>contraction_order</code></th>
+        <td>
+          Chooses the graph edge selection strategy used during execution.
+        </td>
+      </tr>
+      <tr>
+        <th><code>expand_contracted_sums</code></th>
+        <td>
+          Enables sum-by-sum contraction expansion inside
+          <code>Schoonschipify</code>. It does not change parser shorthand mode.
+        </td>
+      </tr>
+      <tr>
+        <th><code>simplify_chain_like_functions</code></th>
+        <td>
+          Controls the optional chain-like metric simplifier in the pattern
+          cleanup path.
+        </td>
+      </tr>
+    </table>
+
+    <h2>Contraction Step</h2>
+    <table>
+      <tr>
+        <th>Scalar pre-pass</th>
+        <td>
+          <code>ContractScalars&lt;Schoonschipify&gt;</code> contracts scalar
+          leaves before tensor contractions. If recursive mode is enabled,
+          composite scalar tensors are recursively passed through the same
+          network algorithm.
+        </td>
+      </tr>
+      <tr>
+        <th>Edge choice</th>
+        <td>
+          The strategy is selected by <code>SchoonschipContractionOrder</code>:
+          smallest degree, largest degree, or expression-size heuristics such as
+          minimum largest operand bytes, product terms, or product bytes.
+        </td>
+      </tr>
+      <tr>
+        <th>Structure merge</th>
+        <td>
+          The two tensor structures are merged first. The merge reports which
+          slots were contracted on each side, so the algebra uses graph edge
+          information rather than guessing from function argument shapes.
+        </td>
+      </tr>
+      <tr>
+        <th>Special contractions</th>
+        <td>
+          Metrics rewrite the target slot with the metric's free slot. Rank-one
+          tensors strip their consumed representation slot and are inserted into
+          the contracted target slot.
+        </td>
+      </tr>
+      <tr>
+        <th>General product</th>
+        <td>
+          If no shortcut applies, the expressions are multiplied and wrapped as
+          a composite tensor. Optional contracted-sum expansion is handled here,
+          not by the parser.
+        </td>
+      </tr>
+      <tr>
+        <th>Finish</th>
+        <td>
+          <code>finish_contract</code> can recurse on the result in breadth-first
+          mode, then dot-normalizes the expression before returning the new
+          symbolic tensor.
+        </td>
+      </tr>
+    </table>
+
+    <h2>Pattern Path</h2>
+    <p>
+      The pattern implementation in
+      <a href="../../crates/idenso/src/schoonschip/with_settings.rs">with_settings.rs</a>
+      is a fixed point over global Symbolica replacements. One pass applies:
+      metric-function contractions, dot-product contractions, self-dual powers,
+      rank-one products, bare rank-one into tensor products, optional
+      chain-like simplification, and <code>normalize_dots</code>.
+    </p>
+
+    <div class="box">
+      <pre><code>metric_simplified
+    .replace_multiple(&amp;*DOT_PRODUCT)
+    .replace_multiple(&amp;*SELF_DUAL_POWER)
+    .replace_multiple(&amp;*RANK_ONE_PRODUCT_REPLACEMENTS)
+    .replace_multiple_repeat(&amp;*BARE_PRODUCT_CONTRACTIONS)</code></pre>
+    </div>
+
+    <p>
+      That path is still useful for local cleanup and for simple expressions.
+      It is not a good main engine for contraction-heavy tensor expressions,
+      because it repeatedly scans the whole atom and must encode structural
+      facts as wildcard patterns and conditions.
+    </p>
+
+    <h2>Why The Network Path Should Be Better</h2>
+    <div class="grid">
+      <div class="box">
+        <h3>Structure before syntax</h3>
+        <p>
+          The network path knows which tensor slots are connected. A contraction
+          such as <code>g(mu, nu) * F(..., nu, ...)</code> is driven by the
+          merged edge positions, not by matching a function with a slot-looking
+          second argument.
+        </p>
+      </div>
+      <div class="box">
+        <h3>Controlled order</h3>
+        <p>
+          Pattern replacement has no global contraction-order model. The network
+          path can choose the next edge by degree or expression-size estimates,
+          which is expected to reduce intermediate expression growth.
+        </p>
+      </div>
+      <div class="box">
+        <h3>Generic indices</h3>
+        <p>
+          Slots carry <code>Aind</code> through the graph. This is less brittle
+          than relying on concrete Symbolica patterns when GammaLoop-owned
+          abstract index types are valid indices.
+        </p>
+      </div>
+      <div class="box">
+        <h3>Less double meaning</h3>
+        <p>
+          Opaque parsing prevents parser materialization from creating dummy
+          indices or expanded subgraphs before Schoonschip chooses contractions.
+          Shorthand is represented once, then simplified by the network rules.
+        </p>
+      </div>
+    </div>
+
+    <h2>Examples</h2>
+    <table>
+      <tr>
+        <th>Metric into tensor</th>
+        <td>
+          <code>g(mu, nu) * F(a, nu, b)</code> contracts through the graph edge
+          on <code>nu</code>. The metric's remaining slot <code>mu</code> is
+          substituted into the tensor expression, yielding
+          <code>F(a, mu, b)</code>. The pattern path needs explicit wildcard
+          forms for the same idea.
+        </td>
+      </tr>
+      <tr>
+        <th>Rank-one into tensor</th>
+        <td>
+          <code>p(rep(d, i)) * F(a, rep(d, i), b)</code> becomes
+          <code>F(a, p(rep(d)), b)</code>. The consumed vector slot is known from
+          the structure merge, so the rule does not have to inspect unrelated
+          arguments.
+        </td>
+      </tr>
+      <tr>
+        <th>Dot product</th>
+        <td>
+          <code>p(mu) * q(mu)</code> first goes through
+          <code>normalize_dots</code>, so the compact scalar form
+          <code>g(p(rep), q(rep))</code> is available before network parsing and
+          again after each pass.
+        </td>
+      </tr>
+      <tr>
+        <th>Chain or trace shorthand</th>
+        <td>
+          <code>chain(...)</code> and <code>trace(...)</code> are tensorial
+          shorthand. In the network path they parse as opaque leaves with
+          inferred external structure. If chain-like simplification is enabled,
+          it is a Schoonschip rule, not parser expansion.
+        </td>
+      </tr>
+      <tr>
+        <th>Composite scalar recursion</th>
+        <td>
+          A tensor product can contract to a scalar while still carrying a
+          composite expression. Recursive modes pass that scalar expression back
+          through <code>schoonschip_with_net</code>, using the same opaque
+          parser, until the configured traversal reaches a fixed point.
+        </td>
+      </tr>
+      <tr>
+        <th>Contracted sums</th>
+        <td>
+          With contracted-sum expansion enabled, genuine sum-by-sum contractions
+          such as <code>(A(mu)+B(mu)) * (C(mu)+D(mu))</code> are expanded inside
+          the contraction step. One-sided sums such as
+          <code>g(mu, nu) * (A(nu)+B(nu))</code> are left to the metric shortcut
+          instead of being blindly distributed.
+        </td>
+      </tr>
+    </table>
+
+    <h2>Expected Outcome</h2>
+    <p>
+      The network path should be the default for expressions where contraction
+      topology matters: many tensors, mixed metrics, rank-one substitutions,
+      composite scalar products, and sums where expansion order can dominate the
+      cost. The pattern path remains valuable as a simple local rewrite pass and
+      as the final cleanup used by <code>schoonschip_net</code>.
+    </p>
+  </main>
+</body>
+</html>

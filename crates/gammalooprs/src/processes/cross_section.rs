@@ -15,7 +15,7 @@ use rayon::{
     ThreadPool,
     iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
-use spenso::{algebra::algebraic_traits::IsZero, network::library::TensorLibraryData};
+use spenso::algebra::algebraic_traits::IsZero;
 use tracing::info;
 use vakint::Vakint;
 
@@ -59,15 +59,7 @@ use linnet::half_edge::{
     },
 };
 use serde::{Deserialize, Serialize};
-use symbolica::{
-    atom::{Atom, AtomCore, Symbol},
-    domains::dual::HyperDual,
-    domains::rational::Rational,
-    evaluate::{FunctionMap, OptimizationSettings},
-    function,
-    id::Replacement,
-    parse, symbol,
-};
+use symbolica::{domains::dual::HyperDual, prelude::*};
 use tracing::{debug, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -325,6 +317,13 @@ impl CrossSection {
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "cross_section_build_integrand_start",
+            integrand = %self.name,
+            graph_count = self.supergraphs.len(),
+            "Generation timing milestone"
+        );
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
@@ -338,11 +337,24 @@ impl CrossSection {
                         return Err(eyre!("Generation interrupted by user"));
                     }
                     let graph_started = std::time::Instant::now();
+                    crate::debug_tags!(#generation, #profile, #graph, #summary;
+                        stage = "generate_term_for_graph_start",
+                        integrand = %integrand_name,
+                        graph = %sg.graph.name,
+                        "Generation timing milestone"
+                    );
                     let (term, mut stats) = sg.generate_term_for_graph(model, global_settings)?;
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
                     stats.total_time += graph_started.elapsed();
+                    crate::debug_tags!(#generation, #profile, #graph, #summary;
+                        stage = "generate_term_for_graph_done",
+                        integrand = %integrand_name,
+                        graph = %sg.graph.name,
+                        elapsed_ms = graph_started.elapsed().as_secs_f64() * 1000.0,
+                        "Generation timing milestone"
+                    );
                     Ok((
                         term,
                         NamedGraphGenerationReport {
@@ -375,6 +387,15 @@ impl CrossSection {
             }
         }
 
+        let backend_started = std::time::Instant::now();
+        let graph_count = terms.len();
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+            stage = "prepare_runtime_backends_start",
+            integrand = %self.name,
+            graph_count,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
         let mut cross_section_integrand = CrossSectionIntegrand {
             settings: runtime_default.into(),
             data: CrossSectionIntegrandData {
@@ -401,12 +422,27 @@ impl CrossSection {
         };
         let compile_times = cross_section_integrand
             .prepare_runtime_backends_after_generation_with_compile_times()?;
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+            stage = "prepare_runtime_backends_done",
+            integrand = %self.name,
+            graph_count,
+            elapsed_ms = backend_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
         for (report, compile_time) in graph_reports.iter_mut().zip(compile_times) {
             report.stats.evaluator_compile_time += compile_time;
             report.stats.total_time += compile_time;
         }
 
         self.integrand = Some(ProcessIntegrand::CrossSection(cross_section_integrand));
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "cross_section_build_integrand_done",
+            integrand = %self.name,
+            graph_count = self.supergraphs.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
         Ok(graph_reports)
     }
 
@@ -940,6 +976,15 @@ impl CrossSectionGraph {
         settings: &GenerationSettings,
         vakint: &Vakint,
     ) -> Result<TiVec<RaisedCutId, ParametricIntegrands>> {
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "supergraph_build_integrand_start",
+            graph = %self.graph.name,
+            subtract_uv = settings.uv.subtract_uv,
+            generate_integrated = settings.uv.generate_integrated,
+            only_integrated = settings.uv.only_integrated,
+            "Generation timing milestone"
+        );
         let max_order = self
             .derived_data
             .raised_data
@@ -950,6 +995,13 @@ impl CrossSectionGraph {
             .unwrap();
 
         self.graph.param_builder.initialize_duals(max_order);
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "supergraph_initialize_duals_done",
+            graph = %self.graph.name,
+            max_order,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
 
         let cuts = self
             .derived_data
@@ -972,8 +1024,25 @@ impl CrossSectionGraph {
             .collect();
 
         let cut_structure = CutStructure { cuts };
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "supergraph_cutsets_done",
+            graph = %self.graph.name,
+            cut_count = cut_structure.cuts.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
 
+        let cut_woods_started = std::time::Instant::now();
         let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "supergraph_cut_woods_done",
+            graph = %self.graph.name,
+            cut_count = cut_woods.cuts.cuts.len(),
+            wood_count = cut_woods.woods.len(),
+            elapsed_ms = cut_woods_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
         let valid_orientations: Vec<_> = self
             .derived_data
             .global_cff_expression
@@ -986,7 +1055,17 @@ impl CrossSectionGraph {
 
         let lu_prefactor = self.lu_prefactor_helper();
 
+        let unfold_started = std::time::Instant::now();
         let mut cut_forests = cut_woods.unfold(&self.graph);
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "supergraph_cut_forests_unfold_done",
+            graph = %self.graph.name,
+            forest_count = cut_forests.forests.len(),
+            elapsed_ms = unfold_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+        let forests_started = std::time::Instant::now();
         cut_forests.compute(
             &mut self.graph,
             vakint,
@@ -994,14 +1073,39 @@ impl CrossSectionGraph {
             &settings.uv,
             &settings.orientation_pattern,
         )?;
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "supergraph_cut_forests_compute_done",
+            graph = %self.graph.name,
+            elapsed_ms = forests_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
 
+        let orientation_started = std::time::Instant::now();
         let parametric_integrands =
             cut_forests.orientation_parametric_exprs(&self.graph, &settings.uv)?;
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "supergraph_orientation_parametric_exprs_done",
+            graph = %self.graph.name,
+            parametric_integrand_count = parametric_integrands.len(),
+            elapsed_ms = orientation_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
 
-        Ok(parametric_integrands
+        let finalize_started = std::time::Instant::now();
+        let result = parametric_integrands
             .into_iter()
             .map(|integrand| integrand.map(|a| a * &lu_prefactor))
-            .collect())
+            .collect();
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "supergraph_build_integrand_done",
+            graph = %self.graph.name,
+            elapsed_ms = finalize_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+        Ok(result)
     }
 
     fn lu_prefactor_helper(&self) -> Atom {
@@ -1121,7 +1225,7 @@ impl CrossSectionGraph {
 
         let mut product = left_prefactor * right_prefactor;
 
-        product = product.replace_multiple(&Self::fuse_left_right_replacement());
+        product = product.replace_multiple(Self::fuse_left_right_replacement());
         product
     }
 
@@ -1219,10 +1323,12 @@ impl CrossSectionGraph {
             self.single_th_prefactor_helper_params(order, subspace_loop_count, is_on_right);
 
         let mut fn_map = FunctionMap::new();
-        fn_map.add_constant(
-            GS.pi.into(),
-            Rational::try_from(std::f64::consts::PI).unwrap().into(),
-        );
+        fn_map
+            .add_aliases([(
+                GS.pi.into(),
+                Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
+            )])
+            .unwrap();
 
         let evaluator = GenericEvaluator::new_from_raw_params(
             [atom],
@@ -1261,10 +1367,12 @@ impl CrossSectionGraph {
         let params = self.iterated_th_prefactor_helper_params(left_order, right_order);
 
         let mut fn_map = FunctionMap::new();
-        fn_map.add_constant(
-            GS.pi.into(),
-            Rational::try_from(std::f64::consts::PI).unwrap().into(),
-        );
+        fn_map
+            .add_aliases([(
+                GS.pi.into(),
+                Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
+            )])
+            .unwrap();
 
         let evaluator = GenericEvaluator::new_from_raw_params(
             [atom],
@@ -1291,49 +1399,41 @@ impl CrossSectionGraph {
             ),
             Replacement::new(
                 (function!(f, GS.radius_star_left)
-                    * function!(
-                        symbolica::atom::Symbol::DERIVATIVE,
-                        W_.x_,
-                        function!(f, GS.radius_star_right)
-                    ))
+                    * function!(Symbol::DERIVATIVE, W_.x_, f, GS.radius_star_right))
                 .to_pattern(),
                 function!(
-                    symbolica::atom::Symbol::DERIVATIVE,
+                    Symbol::DERIVATIVE,
                     0,
                     W_.x_,
-                    function!(f, GS.radius_star_left, GS.radius_star_right)
+                    f,
+                    GS.radius_star_left,
+                    GS.radius_star_right
                 ),
             ),
             Replacement::new(
-                (function!(
-                    symbolica::atom::Symbol::DERIVATIVE,
-                    W_.x_,
-                    function!(f, GS.radius_star_left)
-                ) * function!(f, GS.radius_star_right))
+                (function!(Symbol::DERIVATIVE, W_.x_, f, GS.radius_star_left)
+                    * function!(f, GS.radius_star_right))
                 .to_pattern(),
                 function!(
-                    symbolica::atom::Symbol::DERIVATIVE,
+                    Symbol::DERIVATIVE,
                     W_.x_,
                     0,
-                    function!(f, GS.radius_star_left, GS.radius_star_right)
+                    f,
+                    GS.radius_star_left,
+                    GS.radius_star_right
                 ),
             ),
             Replacement::new(
-                (function!(
-                    symbolica::atom::Symbol::DERIVATIVE,
-                    W_.x_,
-                    function!(f, GS.radius_star_left)
-                ) * function!(
-                    symbolica::atom::Symbol::DERIVATIVE,
-                    W_.y_,
-                    function!(f, GS.radius_star_right)
-                ))
+                (function!(Symbol::DERIVATIVE, W_.x_, f, GS.radius_star_left)
+                    * function!(Symbol::DERIVATIVE, W_.y_, f, GS.radius_star_right))
                 .to_pattern(),
                 function!(
-                    symbolica::atom::Symbol::DERIVATIVE,
+                    Symbol::DERIVATIVE,
                     W_.x_,
                     W_.y_,
-                    function!(f, GS.radius_star_left, GS.radius_star_right)
+                    f,
+                    GS.radius_star_left,
+                    GS.radius_star_right
                 ),
             ),
         ]
@@ -2172,12 +2272,7 @@ pub(crate) fn build_derivative_structure_atom(
     let f = symbol!("f");
 
     let expansion = parse!("η(t)")
-        .series(
-            GS.rescale,
-            Atom::var(GS.rescale_star),
-            (order, 1).into(),
-            true,
-        )
+        .series(GS.rescale, Atom::var(GS.rescale_star), (order, 1))
         .unwrap()
         .to_atom()
         .replace(function!(symbol!("η"), GS.rescale_star))
@@ -2197,7 +2292,7 @@ pub(crate) fn build_derivative_structure_atom(
         .with(parse!("delta_t"));
 
     let polynomial_in_delta_t = expression_to_derive
-        .series(symbol!("delta_t"), Atom::num(0), (0, 1).into(), true)
+        .series(symbol!("delta_t"), Atom::num(0), (0, 1))
         .unwrap();
 
     let factorial_prefactor = (2..=(order + laurent_coefficient)).product::<i32>();

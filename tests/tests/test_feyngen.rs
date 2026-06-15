@@ -86,18 +86,14 @@ fn feyngen_str(
         "{} | {} = {}",
         n_graphs,
         evaluate_sign_origin(overall_factor_sum.as_view()).to_canonically_ordered_string(
-            CanonicalOrderingSettings {
-                include_namespace: false,
-                include_attributes: false,
-                ..Default::default()
-            }
+            CanonicalOrderingSettings::new()
+                .include_namespace(false)
+                .include_attributes(false),
         ),
         evaluate_overall_factor(overall_factor_sum.as_view()).to_canonically_ordered_string(
-            CanonicalOrderingSettings {
-                include_namespace: false,
-                include_attributes: false,
-                ..Default::default()
-            }
+            CanonicalOrderingSettings::new()
+                .include_namespace(false)
+                .include_attributes(false),
         )
     ))
 }

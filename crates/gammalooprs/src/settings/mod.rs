@@ -286,11 +286,10 @@ mod tests {
         };
         let symbolica = options.to_symbolica_compile_options();
 
-        assert_eq!(symbolica.optimization_level, 1);
-        assert!(!symbolica.fast_math);
-        assert!(!symbolica.unsafe_math);
-        assert_eq!(symbolica.compiler, "clang++");
-        assert_eq!(symbolica.args, vec!["-g", "-Winvalid"]);
+        assert_eq!(
+            symbolica.to_string(),
+            "clang++ -shared -O1 -fPIC -march=native -g -Winvalid"
+        );
     }
 
     #[test]

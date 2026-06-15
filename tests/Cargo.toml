@@ -4,41 +4,44 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
-[features]
-default = []
-python-api-tests = []
-
 [lib]
 path = "src/lib.rs"
-
-[dependencies]
-color-eyre = { workspace = true }
-colored = { workspace = true }
-eyre = {workspace = true}
-gammaloop-api = { workspace = true }
-gammalooprs = { workspace = true }
-insta = { workspace = true, features = ["json", "ron", "serde", "toml"] }
-itertools = { workspace = true }
-momtrop = { workspace = true }
-spenso = { workspace = true, features = ["shadowing"] }
-symbolica = { workspace = true, default-features = false, features = [
-  "bincode",
-  "serde"
-] }
-tabled = { workspace = true, features = ["ansi"] }
-toml = { workspace = true }
-tracing = { workspace = true, features = ["release_max_level_info"] }
-vakint = {workspace=true}
-which = { workspace = true }
-serial_test = "3.2.0"
-rand = { workspace = true, features = ["small_rng"] }
-ndarray = { workspace = true }
-serde_json = { workspace = true }
-
-[build-dependencies]
-cc = "1.1"
 
 [[test]]
 name = "test_python_api"
 path = "tests/test_python_api.rs"
 required-features = ["python-api-tests"]
+
+[dependencies]
+color-eyre = { workspace = true }
+colored = { workspace = true }
+eyre = { workspace = true }
+gammaloop-api = { workspace = true }
+gammalooprs = { workspace = true }
+insta = { workspace = true, features = ["json", "ron", "serde", "toml"] }
+itertools = { workspace = true }
+momtrop = { workspace = true }
+ndarray = { workspace = true }
+rand = { workspace = true, features = ["small_rng"] }
+rayon.workspace = true
+serde_json = { workspace = true }
+serial_test = "3.2.0"
+spenso = { workspace = true, features = ["shadowing"] }
+
+tabled = { workspace = true, features = ["ansi"] }
+toml = { workspace = true }
+tracing = { workspace = true, features = ["release_max_level_info"] }
+vakint = { workspace = true }
+which = { workspace = true }
+
+[dependencies.symbolica]
+workspace = true
+default-features = false
+features = ["bincode", "serde"]
+
+[build-dependencies]
+cc = "1.1"
+
+[features]
+default = []
+python-api-tests = []
