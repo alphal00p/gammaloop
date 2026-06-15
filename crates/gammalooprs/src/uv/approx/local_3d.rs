@@ -28,7 +28,24 @@ use crate::{
 };
 use color_eyre::Result;
 
-pub struct Local3DApproximation;
+#[derive(Clone, Copy, Debug)]
+pub struct Local3DApproximation {
+    rescaling: Local3DLoopRescaling,
+}
+
+impl Local3DApproximation {
+    pub fn full() -> Self {
+        Self {
+            rescaling: Local3DLoopRescaling::FullSubgraph,
+        }
+    }
+
+    pub fn reduced() -> Self {
+        Self {
+            rescaling: Local3DLoopRescaling::ReducedSubgraph,
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Local3DLoopRescaling {
@@ -216,6 +233,22 @@ impl Local3DApproximation {
         Ok(a)
     }
 
+    fn measure_scaling<S: super::ForestNodeLike>(
+        &self,
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+    ) -> Atom {
+        let n_rescaled_loops = match self.rescaling {
+            Local3DLoopRescaling::FullSubgraph => ctx.graph.n_loops(current.subgraph()),
+            Local3DLoopRescaling::ReducedSubgraph => {
+                ctx.graph.n_loops(current.subgraph()) - ctx.graph.n_loops(given.subgraph())
+            }
+        };
+
+        Atom::var(GS.rescale).pow(3 * n_rescaled_loops as i64)
+    }
+
     #[debug_instrument(
         current = %current.log_display(),
         given = %given.log_display(),
@@ -227,16 +260,9 @@ impl Local3DApproximation {
         current: &S,
         given: &S,
         integrand: &Atom,
-        loop_rescaling: Local3DLoopRescaling,
     ) -> Result<Atom> {
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
-        let n_rescaled_loops = match loop_rescaling {
-            Local3DLoopRescaling::FullSubgraph => graph.n_loops(current.subgraph()),
-            Local3DLoopRescaling::ReducedSubgraph => {
-                graph.n_loops(current.subgraph()) - graph.n_loops(given.subgraph())
-            }
-        };
 
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_spatial_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]);
@@ -292,13 +318,11 @@ impl Local3DApproximation {
             "Local 3D T size checkpoint"
         );
 
-        atomarg = (atomarg * Atom::var(GS.rescale).pow(3 * n_rescaled_loops as i64))
+        atomarg = (atomarg * self.measure_scaling(ctx, current, given))
             .replace(GS.rescale)
             .with(Atom::num(1) / GS.rescale);
         debug_tags!(#generation, #profile, #uv, #local, #summary;
             stage = "local_3d_t_before_series",
-            n_rescaled_loops,
-            loop_rescaling = ?loop_rescaling,
             loop_edges = ?current.lmb().loop_edges,
             byte_size = atomarg.as_view().get_byte_size(),
             "Local 3D T size checkpoint"
@@ -397,47 +421,6 @@ impl Local3DApproximation {
         );
         Ok(atomarg)
     }
-
-    pub(crate) fn kernel_with_loop_rescaling<S: super::ForestNodeLike>(
-        &self,
-        ctx: &UVCtx<'_>,
-        current: &S,
-        given: &S,
-        integrand: &Atom,
-        loop_rescaling: Local3DLoopRescaling,
-    ) -> Result<Atom> {
-        match current.renormalization_scheme() {
-            ApproximationType::MUV => {
-                let started = self.start(ctx, current, given, integrand)?;
-                crate::debug_tags!(#generation, #profile, #uv, #local, #summary;
-                    stage = "local_3d_kernel_after_start",
-                    input_byte_size = integrand.as_view().get_byte_size(),
-                    output_byte_size = started.as_view().get_byte_size(),
-                    "Local 3D kernel size checkpoint"
-                );
-                self.t(ctx, current, given, &started, loop_rescaling)
-            }
-            ApproximationType::IR => Ok(self.t(
-                ctx,
-                current,
-                given,
-                &self.start(ctx, current, given, integrand)?,
-                loop_rescaling,
-            )? + self.t_tilde(ctx, current, given, integrand)?
-                - self.t(
-                    ctx,
-                    current,
-                    given,
-                    &self.t_tilde(ctx, current, given, integrand)?,
-                    loop_rescaling,
-                )?),
-            ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
-            ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
-            ApproximationType::Unsubtracted => {
-                panic!("should have been kept out of the wood");
-            }
-        }
-    }
 }
 
 impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
@@ -449,12 +432,34 @@ impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
         given: &S,
         integrand: &Atom,
     ) -> Result<Atom> {
-        self.kernel_with_loop_rescaling(
-            ctx,
-            current,
-            given,
-            integrand,
-            Local3DLoopRescaling::FullSubgraph,
-        )
+        match current.renormalization_scheme() {
+            ApproximationType::MUV => {
+                let started = self.start(ctx, current, given, integrand)?;
+                crate::debug_tags!(#generation, #profile, #uv, #local, #summary;
+                    stage = "local_3d_kernel_after_start",
+                    input_byte_size = integrand.as_view().get_byte_size(),
+                    output_byte_size = started.as_view().get_byte_size(),
+                    "Local 3D kernel size checkpoint"
+                );
+                self.t(ctx, current, given, &started)
+            }
+            ApproximationType::IR => Ok(self.t(
+                ctx,
+                current,
+                given,
+                &self.start(ctx, current, given, integrand)?,
+            )? + self.t_tilde(ctx, current, given, integrand)?
+                - self.t(
+                    ctx,
+                    current,
+                    given,
+                    &self.t_tilde(ctx, current, given, integrand)?,
+                )?),
+            ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
+            ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
+            ApproximationType::Unsubtracted => {
+                panic!("should have been kept out of the wood");
+            }
+        }
     }
 }

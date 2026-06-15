@@ -43,6 +43,31 @@ pub(crate) struct LocalizedIntegratedCt {
     pub frozen_integrands: BTreeMap<CutCFFIndex, Atom>,
 }
 
+impl TryFrom<LocalizedIntegratedCt> for IntegrandExpr {
+    type Error = eyre::Report;
+
+    fn try_from(value: LocalizedIntegratedCt) -> Result<Self, Self::Error> {
+        let integrands = value
+            .active
+            .integrands
+            .into_iter()
+            .zip(value.frozen_integrands)
+            .map(|((active_index, active), (frozen_index, frozen))| {
+                if active_index != frozen_index {
+                    return Err(eyre!(
+                        "Mismatched indices for localized integrated CT active and frozen factors: {:?} vs {:?}",
+                        active_index,
+                        frozen_index
+                    ));
+                }
+                Ok((active_index, active * frozen))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
+
+        Ok(IntegrandExpr { integrands })
+    }
+}
+
 impl<'a> FinalIntegrand<'a> {
     pub(crate) fn new(
         valid_orientations: &'a [EdgeVec<Orientation>],
@@ -291,7 +316,11 @@ impl<'a> FinalIntegrand<'a> {
         })
     }
 
-    pub(crate) fn localized_integrated_ct_for_local_3d<S: ForestNodeLike>(
+    #[debug_instrument(
+        graph = %graph.log_display(),
+        current = %integrated_node.log_display(),
+    )]
+    pub(crate) fn localized_integrated_ct<S: ForestNodeLike>(
         &self,
         graph: &mut Graph,
         integrated_node: &S,
@@ -306,39 +335,6 @@ impl<'a> FinalIntegrand<'a> {
         );
 
         self.localize_integrated_ct(graph, integrated_node, &finite, cuts)
-    }
-
-    #[debug_instrument(
-        graph = %graph.log_display(),
-        current = %integrated_node.log_display(),
-    )]
-    pub(crate) fn localized_integrated_ct<S: ForestNodeLike>(
-        &self,
-        graph: &mut Graph,
-        integrated_node: &S,
-        integrated_4d: &ApproxOp,
-        cuts: &CutSet,
-    ) -> Result<IntegrandExpr> {
-        let localized =
-            self.localized_integrated_ct_for_local_3d(graph, integrated_node, integrated_4d, cuts)?;
-        let integrands = localized
-            .active
-            .integrands
-            .into_iter()
-            .zip(localized.frozen_integrands)
-            .map(|((active_index, active), (frozen_index, frozen))| {
-                if active_index != frozen_index {
-                    return Err(eyre!(
-                        "Mismatched indices for localized integrated CT active and frozen factors: {:?} vs {:?}",
-                        active_index,
-                        frozen_index
-                    ));
-                }
-                Ok((active_index, active * frozen))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()?;
-
-        Ok(IntegrandExpr { integrands })
     }
 
     #[debug_instrument(
@@ -361,7 +357,9 @@ impl<'a> FinalIntegrand<'a> {
             "Computed global numerator"
         );
 
-        let integrated_t = self.localized_integrated_ct(graph, current, integrated_4d, cutset)?;
+        let integrated_t: IntegrandExpr = self
+            .localized_integrated_ct(graph, current, integrated_4d, cutset)?
+            .try_into()?;
 
         let reduced = graph
             .full_filter()

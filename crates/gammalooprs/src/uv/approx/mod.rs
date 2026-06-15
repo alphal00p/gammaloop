@@ -8,9 +8,7 @@ use crate::{
     uv::{
         ApproximationType, Spinney, UVgenerationSettings,
         approx::{
-            final_integrand::FinalIntegrand,
-            integrated::Integrated,
-            local_3d::{Local3DApproximation, Local3DLoopRescaling},
+            final_integrand::FinalIntegrand, integrated::Integrated, local_3d::Local3DApproximation,
         },
     },
 };
@@ -444,7 +442,7 @@ impl Approximation {
         let final_integrand = FinalIntegrand::new(valid_orientations, orientation_pattern);
 
         let localize_started = std::time::Instant::now();
-        let integrated_t = final_integrand.localized_integrated_ct_for_local_3d(
+        let integrated_t = final_integrand.localized_integrated_ct(
             graph,
             dependent,
             &dependent.integrated_4d,
@@ -486,17 +484,12 @@ impl Approximation {
             debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                 "adding localT(expr)"
             );
-            sum_3d += Local3DApproximation {}.kernel(&ctx, &*self, dependent, &local)?;
+            sum_3d += Local3DApproximation::full().kernel(&ctx, &*self, dependent, &local)?;
             debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                 "subtracting localT(integrated(expr))"
             );
-            sum_3d -= Local3DApproximation {}.kernel_with_loop_rescaling(
-                &ctx,
-                &*self,
-                dependent,
-                &integ,
-                Local3DLoopRescaling::ReducedSubgraph,
-            )? * frozen;
+            sum_3d -=
+                Local3DApproximation::reduced().kernel(&ctx, &*self, dependent, &integ)? * frozen;
             integrands.insert(index_local, sum_3d);
             debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                 stage = "compute_local_3d_term_done",

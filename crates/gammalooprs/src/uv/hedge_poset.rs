@@ -504,7 +504,7 @@ impl OperationNode {
         settings: &UVgenerationSettings,
     ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let mut acc = None;
-        let _local = Local3DApproximation {};
+        let _local = Local3DApproximation::full();
         let _uvctx = UVCtx { graph, settings };
 
         let mut order = 0;

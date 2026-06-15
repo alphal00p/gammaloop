@@ -89,6 +89,21 @@ These rules are intentionally broad and should shape most code changes.
 - Run clippy before finishing a change and address warnings where practical.
 - Naming: `snake_case` for functions/modules, `CamelCase` for types/traits.
 - Prefer methods on types to bare functions.
+- Prefer explicit function composition over function nesting: when a value
+  crosses a semantic boundary, bind it or use `From`/`TryFrom` so the
+  conversion is visible at the call site.
+- Name methods for the semantic result they compute, not for the current caller.
+  Avoid `*_for_<caller>` methods unless the result has a genuinely
+  caller-specific invariant.
+- For strategy/configuration variants, prefer a small builder-style API on the
+  owning type over extra method parameters or `*_with_*` methods. Named
+  constructors are enough when there are only a few modes; use a fuller builder
+  only when options become independent or numerous.
+- Keep shared behavior behind the primary trait method when a type implements a
+  trait. Put mode selection in the implementing type's configuration rather
+  than exposing parallel helper methods that bypass the trait.
+- Keep mode and strategy enums private unless callers need to inspect or match
+  on them.
 - Follow clippy suggestions closely.
 - Prefer `pub(crate)` unless fully public exposure is necessary; this keeps
   unused components visible to clippy.
