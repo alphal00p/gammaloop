@@ -147,6 +147,9 @@ variables $\dd^3q=\abs{q}^2\dd\abs{q}\dd\Omega_q$, a $1/\abs{q}$ factor gives
 so the local integral is finite.  Monte Carlo variance can nevertheless be
 large, especially when the sampling variables are the hard momenta $u$ and $v$
 rather than the common momentum and the relative momentum $q$.
+Figure~\ref{fig:toy-radial} shows the corresponding radial scaling, and
+Figure~\ref{fig:toy-ridge} shows how the enhancement localizes near equal
+radius and small opening angle.
 
 \begin{figure}[H]
   \centering
@@ -240,6 +243,7 @@ same relative-edge structure.  Importantly, the locked-ray growth is still
 present in the 4D-first proxy.  This means the non-uniform double-UV region is
 not purely an artifact of differentiating the already-3D on-shell energy
 $E(v-u+Q)$.
+The radial proxy scan is shown in Figure~\ref{fig:mock-proxy-radial}.
 
 \begin{figure}[H]
   \centering
@@ -266,6 +270,7 @@ small-relative-momentum pole introduced by a direct 3D on-shell-energy
 expansion.  It does not, however, remove the radial non-uniformity of the
 double-UV Taylor expansion on the subspace where the relative four-momentum is
 not hard.
+Figure~\ref{fig:mock-proxy-ridge} shows this fixed-radius relative scan.
 
 \begin{figure}[H]
   \centering
@@ -341,6 +346,8 @@ by a factor $884$.  The conservative multichannel mixture still reduces the
 variance by a factor $138$.  The same conclusion holds with the integrated-CT
 proxy enabled, although the smooth numerator changes the relative coefficient
 and therefore the exact reduction factor.
+The variance and max-weight reduction are shown in
+Figure~\ref{fig:mock-proxy-mc-variance}.
 
 \begin{figure}[H]
   \centering
@@ -399,6 +406,8 @@ The coefficient changes strongly when LMB multichanneling is enabled, but the
 large-radius power does not.  This is the important observation: the current
 multichanneling can reduce the normalization of the problematic ray, but it
 does not alter the radial power seen by the integrator.
+Figures~\ref{fig:gl00-ray} and~\ref{fig:gl00-ray-fit} show the full and compact
+views of this radial scan.
 
 \begin{figure}[H]
   \centering
@@ -416,6 +425,9 @@ does not alter the radial power seen by the integrator.
   slopes.  The fit is not intended to model the low-radius region.}
   \label{fig:gl00-ray-fit}
 \end{figure}
+
+The angular dependence around the same point is shown in
+Figure~\ref{fig:gl00-angle}.
 
 \begin{figure}[H]
   \centering
@@ -783,6 +795,8 @@ smaller in the deep UV because $J_3(r)$ grows exponentially with $r/E_{\rm cm}$
 in that map; it underflows below double precision already in the large-$R$
 part of this scan.  The OSE denominator has no way to know about that
 map-dependent density.
+Figure~\ref{fig:mock-channel-partitions} compares these partition factors in
+the standalone proxy.
 
 \begin{figure}[H]
   \centering
@@ -1230,6 +1244,7 @@ The detailed fixed-ray summary is archived as
 \path{aa_aa_2l_all_graphs_10min_lmbmc/max_weight_uv_diagnostic_summary.json}.
 
 \subsection{Full-amplitude run with explicit summed LMB channels}
+\label{subsec:full-amplitude-summed-lmb}
 
 I then generated all eleven two-loop graphs together with feyngen symmetry
 factors and integrated the full \(\gamma\gamma\to\gamma\gamma\) amplitude at
@@ -1273,28 +1288,38 @@ generation times in that state are \(66.0\,\mathrm{s}\) for \texttt{GL00},
 \texttt{GL03}, \(62.9\,\mathrm{s}\) for \texttt{GL05}, and between
 \(11.7\,\mathrm{s}\) and \(17.3\,\mathrm{s}\) for the remaining seven graphs.
 
-The graph grid at \(80\,\mathrm{M}\) samples was:
-\begin{center}
+The higher-stat graph grid at \(80\,\mathrm{M}\) samples is given in
+Table~\ref{tab:full-amplitude-80m-graph-grid}.  This table is regenerated from
+\path{data/aa_aa_2l_all_graphs_inverse_jacobian_sumlmb_80M/}
+\path{integration_result_80M.json}; the entries are the top-level graph
+dimension of the monitored integration.
+\begin{table}[H]
+\centering
 \scriptsize
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{lrrr}
+\begin{tabular}{lrrrrr}
 \toprule
-graph & processed samples [$10^6$] & Re $[10^{-6}]$ & Im $[10^{-6}]$\\
+graph & processed samples [$10^6$] & graph prob. [\%] &
+Re $[10^{-6}]$ & Im $[10^{-6}]$ & Im rel. error\\
 \midrule
-\texttt{GL00} & 6.56 & $-0.036\pm0.040$ & $-0.728\pm0.040$\\
-\texttt{GL01} & 9.93 & $-0.002\pm0.051$ & $-3.994\pm0.050$\\
-\texttt{GL03} & 14.25 & $-0.016\pm0.058$ & $+3.937\pm0.060$\\
-\texttt{GL05} & 5.89 & $+0.020\pm0.039$ & $-0.701\pm0.038$\\
-\texttt{GL06} & 8.97 & $-0.000\pm0.049$ & $-2.284\pm0.047$\\
-\texttt{GL08} & 3.21 & $-0.035\pm0.027$ & $-1.301\pm0.028$\\
-\texttt{GL12} & 2.93 & $+0.037\pm0.027$ & $+1.272\pm0.027$\\
-\texttt{GL14} & 6.26 & $-0.009\pm0.040$ & $+4.184\pm0.039$\\
-\texttt{GL16} & 2.97 & $+0.004\pm0.027$ & $-3.598\pm0.027$\\
-\texttt{GL17} & 6.04 & $-0.002\pm0.038$ & $+4.095\pm0.037$\\
-\texttt{GL18} & 12.99 & $-0.108\pm0.061$ & $-2.282\pm0.059$\\
+\texttt{GL00} & 6.56 & 8.08 & $-0.036\pm0.040$ & $-0.728\pm0.040$ & 5.49\%\\
+\texttt{GL01} & 9.93 & 12.39 & $-0.002\pm0.051$ & $-3.994\pm0.050$ & 1.25\%\\
+\texttt{GL03} & 14.25 & 17.95 & $-0.016\pm0.058$ & $+3.937\pm0.060$ & 1.53\%\\
+\texttt{GL05} & 5.89 & 7.31 & $+0.026\pm0.038$ & $-0.701\pm0.038$ & 5.44\%\\
+\texttt{GL06} & 8.97 & 11.22 & $-0.082\pm0.048$ & $-2.284\pm0.047$ & 2.07\%\\
+\texttt{GL08} & 3.21 & 3.96 & $+0.077\pm0.028$ & $-1.301\pm0.028$ & 2.15\%\\
+\texttt{GL12} & 2.93 & 3.62 & $+0.002\pm0.026$ & $+1.272\pm0.027$ & 2.10\%\\
+\texttt{GL14} & 6.26 & 7.71 & $-0.052\pm0.040$ & $+4.184\pm0.039$ & 0.93\%\\
+\texttt{GL16} & 2.97 & 3.64 & $+0.016\pm0.026$ & $-3.598\pm0.027$ & 0.74\%\\
+\texttt{GL17} & 6.04 & 7.18 & $+0.024\pm0.037$ & $+4.095\pm0.037$ & 0.90\%\\
+\texttt{GL18} & 12.99 & 16.94 & $-0.093\pm0.060$ & $-2.282\pm0.059$ & 2.61\%\\
 \bottomrule
 \end{tabular}}
-\end{center}
+\caption{Per-graph contributions from the \(80\,\mathrm{M}\)-sample all-graph
+run with graph Monte Carlo, summed orientations, summed LMB channels, and
+inverse-Jacobian LMB weights.}
+\label{tab:full-amplitude-80m-graph-grid}
+\end{table}
 The average total runtime was \(1.40\,\mathrm{ms}\) per sample per core, with
 about \(0.71\,\mathrm{ms}\) in the integrand and \(0.66\,\mathrm{ms}\) in the
 evaluator.  The combined run stayed numerically stable: \(f64\) was used for
@@ -1339,6 +1364,9 @@ The corresponding displayed ``sum'' entry is
 \(\mathrm{Im}=(-1.37\pm0.25)\times10^{-6}\).  The real part is again
 compatible with zero, while the imaginary part agrees with the previous
 \(80\,\mathrm{M}\)-sample central value within the quoted Monte-Carlo error.
+The higher-stat per-graph values are the \(80\,\mathrm{M}\) entries in
+Table~\ref{tab:full-amplitude-80m-graph-grid}; the table below is kept only as
+the direct check of the final committed-card run.
 The 30-minute run therefore confirms the central value but does not reach a
 1\% total-amplitude error; the total remains dominated by cancellations between
 graph contributions.
@@ -1475,6 +1503,8 @@ unchanged, and leaves \texttt{GL17} essentially unchanged.  A logarithmic map
 combined with inverse-Jacobian LMB weighting was also tested on the same
 points and made the locked scans worse, with slopes between 1.65 and 1.77 and
 much larger absolute weights.
+Two representative radial rescans from the \(80\,\mathrm{M}\) max-weight
+points are shown in Figure~\ref{fig:maxweight-80m-radial-scan}.
 
 \begin{figure}[H]
   \centering
