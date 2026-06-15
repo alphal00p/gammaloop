@@ -545,6 +545,7 @@ pub struct BareMomentumSample<T: FloatLike> {
     pub external_mom_base_cache_id: usize,
     pub jacobian: F<T>,
     pub orientation: Option<usize>,
+    pub parameterization_branch: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -610,6 +611,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_moms,
             jacobian,
             orientation,
+            parameterization_branch: None,
         })
     }
 
@@ -652,6 +654,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_moms: self.external_moms.iter().map(FourMomentum::cast).collect(),
             jacobian: self.jacobian.clone().into(),
             orientation: self.orientation,
+            parameterization_branch: self.parameterization_branch,
         }
     }
 
@@ -676,6 +679,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_mom_base_cache_id: self.external_mom_base_cache_id,
             jacobian: self.jacobian.higher(),
             orientation: self.orientation,
+            parameterization_branch: self.parameterization_branch,
         }
     }
 
@@ -696,6 +700,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             loop_mom_base_cache_id: self.loop_mom_base_cache_id,
             external_mom_cache_id: self.external_mom_cache_id,
             external_mom_base_cache_id: self.external_mom_base_cache_id,
+            parameterization_branch: self.parameterization_branch,
         }
     }
 
@@ -723,6 +728,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_mom_base_cache_id: self.external_mom_base_cache_id, // Preserve base cache ID
             jacobian: self.jacobian.clone(),
             orientation: self.orientation,
+            parameterization_branch: self.parameterization_branch,
         }
     }
 
@@ -742,6 +748,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_mom_base_cache_id: self.external_mom_base_cache_id, // Preserve base cache ID
             jacobian: self.jacobian.clone(),
             orientation: self.orientation,
+            parameterization_branch: self.parameterization_branch,
         }
     }
 
@@ -774,6 +781,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_mom_base_cache_id: self.external_mom_base_cache_id, // Preserve base cache ID
             jacobian: self.jacobian.clone(),
             orientation: self.orientation,
+            parameterization_branch: self.parameterization_branch,
         }
     }
 }

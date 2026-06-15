@@ -1,0 +1,622 @@
+[
+  {
+    "label": "GL06 short-run real-minus max",
+    "graph": "GL06",
+    "graph_id": 4,
+    "basis_norms": [
+      626689.0201993494,
+      4283751.558183751
+    ],
+    "basis_cosine": -0.2601548329875082,
+    "closest_pairs": [
+      {
+        "edges": [
+          6,
+          9
+        ],
+        "difference_over_max_norm": 0.0,
+        "sum_over_max_norm": 2.0,
+        "cosine": 1.0,
+        "norm_ratio": 1.0,
+        "first_norm": 4283751.558183751,
+        "second_norm": 4283751.558183751,
+        "first_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)",
+        "second_rep": "K(1,a___)"
+      },
+      {
+        "edges": [
+          5,
+          8
+        ],
+        "difference_over_max_norm": 1.9274606354740593e-05,
+        "sum_over_max_norm": 1.9999985716036845,
+        "cosine": 0.9999999998152643,
+        "norm_ratio": 0.9999985716960523,
+        "first_norm": 4487769.991667057,
+        "second_norm": 4487763.581767462,
+        "first_rep": "-1*K(0,a___)+-1*P(0,a___)+-1*P(1,a___)+K(1,a___)",
+        "second_rep": "-1*K(0,a___)+-1*P(1,a___)+K(1,a___)"
+      },
+      {
+        "edges": [
+          6,
+          10
+        ],
+        "difference_over_max_norm": 2.0192336079823658e-05,
+        "sum_over_max_norm": 1.9999878744475856,
+        "cosine": 0.9999999998696468,
+        "norm_ratio": 0.9999878745127618,
+        "first_norm": 4283751.558183751,
+        "second_norm": 4283803.501388438,
+        "first_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          9,
+          10
+        ],
+        "difference_over_max_norm": 2.0192336079823658e-05,
+        "sum_over_max_norm": 1.9999878744475856,
+        "cosine": 0.9999999998696468,
+        "norm_ratio": 0.9999878745127618,
+        "first_norm": 4283751.558183751,
+        "second_norm": 4283803.501388438,
+        "first_rep": "K(1,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          6,
+          7
+        ],
+        "difference_over_max_norm": 2.0192580924715148e-05,
+        "sum_over_max_norm": 1.9999967815712891,
+        "cosine": 0.9999999998013078,
+        "norm_ratio": 0.9999967816706349,
+        "first_norm": 4283751.558183751,
+        "second_norm": 4283737.771660319,
+        "first_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)",
+        "second_rep": "-1*P(1,a___)+K(1,a___)"
+      },
+      {
+        "edges": [
+          7,
+          9
+        ],
+        "difference_over_max_norm": 2.0192580924715148e-05,
+        "sum_over_max_norm": 1.9999967815712891,
+        "cosine": 0.9999999998013078,
+        "norm_ratio": 0.9999967816706349,
+        "first_norm": 4283737.771660319,
+        "second_norm": 4283751.558183751,
+        "first_rep": "-1*P(1,a___)+K(1,a___)",
+        "second_rep": "K(1,a___)"
+      },
+      {
+        "edges": [
+          7,
+          10
+        ],
+        "difference_over_max_norm": 3.378824088066709e-05,
+        "sum_over_max_norm": 1.9999846559958652,
+        "cosine": 0.9999999995468859,
+        "norm_ratio": 0.9999846562224205,
+        "first_norm": 4283737.771660319,
+        "second_norm": 4283803.501388438,
+        "first_rep": "-1*P(1,a___)+K(1,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          5,
+          7
+        ],
+        "difference_over_max_norm": 0.139632977892273,
+        "sum_over_max_norm": 1.9500718893271285,
+        "cosine": 0.9908697056736293,
+        "norm_ratio": 0.9545359453836565,
+        "first_norm": 4487769.991667057,
+        "second_norm": 4283737.771660319,
+        "first_rep": "-1*K(0,a___)+-1*P(0,a___)+-1*P(1,a___)+K(1,a___)",
+        "second_rep": "-1*P(1,a___)+K(1,a___)"
+      }
+    ]
+  },
+  {
+    "label": "GL06 short-run prob1000 real/imag-plus max",
+    "graph": "GL06",
+    "graph_id": 4,
+    "basis_norms": [
+      2606600.1241162233,
+      6792250.799624465
+    ],
+    "basis_cosine": 0.5202790363565162,
+    "closest_pairs": [
+      {
+        "edges": [
+          6,
+          9
+        ],
+        "difference_over_max_norm": 0.0,
+        "sum_over_max_norm": 2.0,
+        "cosine": 1.0000000000000002,
+        "norm_ratio": 1.0,
+        "first_norm": 6792250.799624465,
+        "second_norm": 6792250.799624465,
+        "first_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)",
+        "second_rep": "K(1,a___)"
+      },
+      {
+        "edges": [
+          6,
+          10
+        ],
+        "difference_over_max_norm": 1.2735101007254246e-05,
+        "sum_over_max_norm": 1.9999984683722032,
+        "cosine": 0.9999999999200815,
+        "norm_ratio": 0.9999984684121626,
+        "first_norm": 6792250.799624465,
+        "second_norm": 6792240.396695752,
+        "first_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          9,
+          10
+        ],
+        "difference_over_max_norm": 1.2735101007254246e-05,
+        "sum_over_max_norm": 1.9999984683722032,
+        "cosine": 0.9999999999200815,
+        "norm_ratio": 0.9999984684121626,
+        "first_norm": 6792250.799624465,
+        "second_norm": 6792240.396695752,
+        "first_rep": "K(1,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          6,
+          7
+        ],
+        "difference_over_max_norm": 1.2735101007280601e-05,
+        "sum_over_max_norm": 1.9999890255094783,
+        "cosine": 0.9999999999791281,
+        "norm_ratio": 0.9999890255199143,
+        "first_norm": 6792250.799624465,
+        "second_norm": 6792176.258203328,
+        "first_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)",
+        "second_rep": "-1*P(1,a___)+K(1,a___)"
+      },
+      {
+        "edges": [
+          7,
+          9
+        ],
+        "difference_over_max_norm": 1.2735101007280601e-05,
+        "sum_over_max_norm": 1.9999890255094783,
+        "cosine": 0.9999999999791281,
+        "norm_ratio": 0.9999890255199143,
+        "first_norm": 6792176.258203328,
+        "second_norm": 6792250.799624465,
+        "first_rep": "-1*P(1,a___)+K(1,a___)",
+        "second_rep": "K(1,a___)"
+      },
+      {
+        "edges": [
+          5,
+          8
+        ],
+        "difference_over_max_norm": 1.4725396627061627e-05,
+        "sum_over_max_norm": 1.9999880163759476,
+        "cosine": 0.9999999999633843,
+        "norm_ratio": 0.9999880163942553,
+        "first_norm": 5874205.102294797,
+        "second_norm": 5874134.708136788,
+        "first_rep": "-1*K(0,a___)+-1*P(0,a___)+-1*P(1,a___)+K(1,a___)",
+        "second_rep": "-1*K(0,a___)+-1*P(1,a___)+K(1,a___)"
+      },
+      {
+        "edges": [
+          7,
+          10
+        ],
+        "difference_over_max_norm": 2.1309932531315994e-05,
+        "sum_over_max_norm": 1.9999905570020526,
+        "cosine": 0.999999999817526,
+        "norm_ratio": 0.9999905570932891,
+        "first_norm": 6792176.258203328,
+        "second_norm": 6792240.396695752,
+        "first_rep": "-1*P(1,a___)+K(1,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          5,
+          10
+        ],
+        "difference_over_max_norm": 0.38375978644202596,
+        "sum_over_max_norm": 1.8299253735587686,
+        "cosine": 0.9254177547467982,
+        "norm_ratio": 0.8648405767782372,
+        "first_norm": 5874205.102294797,
+        "second_norm": 6792240.396695752,
+        "first_rep": "-1*K(0,a___)+-1*P(0,a___)+-1*P(1,a___)+K(1,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      }
+    ]
+  },
+  {
+    "label": "GL14 short-run bins128 imag-minus max",
+    "graph": "GL14",
+    "graph_id": 7,
+    "basis_norms": [
+      419637.4325819816,
+      2053864.022127148
+    ],
+    "basis_cosine": 0.030008528819432913,
+    "closest_pairs": [
+      {
+        "edges": [
+          6,
+          8
+        ],
+        "difference_over_max_norm": 4.1509676466598935e-05,
+        "sum_over_max_norm": 1.9999956828137815,
+        "cosine": 0.999999999147787,
+        "norm_ratio": 0.9999956832398872,
+        "first_norm": 2083842.4667043611,
+        "second_norm": 2083851.462191234,
+        "first_rep": "-1*K(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)",
+        "second_rep": "-1*K(0,a___)+-1*P(1,a___)+K(1,a___)"
+      },
+      {
+        "edges": [
+          5,
+          10
+        ],
+        "difference_over_max_norm": 4.211558300529985e-05,
+        "sum_over_max_norm": 1.9999621084346397,
+        "cosine": 0.9999999998310145,
+        "norm_ratio": 0.9999621085191309,
+        "first_norm": 2053793.7792769014,
+        "second_norm": 2053871.6035134734,
+        "first_rep": "-1*P(1,a___)+K(1,a___)+P(2,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          9,
+          10
+        ],
+        "difference_over_max_norm": 4.211558300530338e-05,
+        "sum_over_max_norm": 1.9999963082940202,
+        "cosine": 0.9999999991199483,
+        "norm_ratio": 0.9999963087340453,
+        "first_norm": 2053864.022127148,
+        "second_norm": 2053871.6035134734,
+        "first_rep": "K(1,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          7,
+          9
+        ],
+        "difference_over_max_norm": 4.211573846569141e-05,
+        "sum_over_max_norm": 1.9999621088644075,
+        "cosine": 0.9999999998309916,
+        "norm_ratio": 0.99996210894891,
+        "first_norm": 2053786.1990605537,
+        "second_norm": 2053864.022127148,
+        "first_rep": "-1*P(1,a___)+K(1,a___)",
+        "second_rep": "K(1,a___)"
+      },
+      {
+        "edges": [
+          5,
+          7
+        ],
+        "difference_over_max_norm": 4.211717888758146e-05,
+        "sum_over_max_norm": 1.9999963087237795,
+        "cosine": 0.9999999991198796,
+        "norm_ratio": 0.9999963091638391,
+        "first_norm": 2053793.7792769014,
+        "second_norm": 2053786.1990605537,
+        "first_rep": "-1*P(1,a___)+K(1,a___)+P(2,a___)",
+        "second_rep": "-1*P(1,a___)+K(1,a___)"
+      },
+      {
+        "edges": [
+          5,
+          9
+        ],
+        "difference_over_max_norm": 4.6135479967256225e-05,
+        "sum_over_max_norm": 1.9999657994191342,
+        "cosine": 0.999999999520574,
+        "norm_ratio": 0.9999657996588431,
+        "first_norm": 2053793.7792769014,
+        "second_norm": 2053864.022127148,
+        "first_rep": "-1*P(1,a___)+K(1,a___)+P(2,a___)",
+        "second_rep": "K(1,a___)"
+      },
+      {
+        "edges": [
+          7,
+          10
+        ],
+        "difference_over_max_norm": 7.047284958945368e-05,
+        "sum_over_max_norm": 1.9999584170134683,
+        "cosine": 0.9999999983812601,
+        "norm_ratio": 0.9999584178228212,
+        "first_norm": 2053786.1990605537,
+        "second_norm": 2053871.6035134734,
+        "first_rep": "-1*P(1,a___)+K(1,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          6,
+          7
+        ],
+        "difference_over_max_norm": 0.20133751523828303,
+        "sum_over_max_norm": 1.9753949843804404,
+        "cosine": 0.9795405240018926,
+        "norm_ratio": 0.9855765163998496,
+        "first_norm": 2083842.4667043611,
+        "second_norm": 2053786.1990605537,
+        "first_rep": "-1*K(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)",
+        "second_rep": "-1*P(1,a___)+K(1,a___)"
+      }
+    ]
+  },
+  {
+    "label": "GL18 short-run bins128 real-minus/imag-plus max",
+    "graph": "GL18",
+    "graph_id": 10,
+    "basis_norms": [
+      1094810.8098582483,
+      422486.9764634302
+    ],
+    "basis_cosine": -0.8672787723121765,
+    "closest_pairs": [
+      {
+        "edges": [
+          7,
+          10
+        ],
+        "difference_over_max_norm": 0.0,
+        "sum_over_max_norm": 2.0,
+        "cosine": 1.0,
+        "norm_ratio": 1.0,
+        "first_norm": 422463.86663303303,
+        "second_norm": 422463.86663303303,
+        "first_rep": "K(1,a___)+P(2,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          6,
+          8
+        ],
+        "difference_over_max_norm": 0.00011408450040742024,
+        "sum_over_max_norm": 1.9999266628378694,
+        "cosine": 0.9999999961811131,
+        "norm_ratio": 0.9999266647472426,
+        "first_norm": 758154.3171222771,
+        "second_norm": 758209.9206384503,
+        "first_rep": "K(0,a___)+K(1,a___)",
+        "second_rep": "K(0,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          5,
+          7
+        ],
+        "difference_over_max_norm": 0.0002047400389097627,
+        "sum_over_max_norm": 1.9999452907585877,
+        "cosine": 0.9999999805357117,
+        "norm_ratio": 0.9999453004904657,
+        "first_norm": 422486.9764634302,
+        "second_norm": 422463.86663303303,
+        "first_rep": "K(1,a___)",
+        "second_rep": "K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          5,
+          10
+        ],
+        "difference_over_max_norm": 0.0002047400389097627,
+        "sum_over_max_norm": 1.9999452907585877,
+        "cosine": 0.9999999805357117,
+        "norm_ratio": 0.9999453004904657,
+        "first_norm": 422486.9764634302,
+        "second_norm": 422463.86663303303,
+        "first_rep": "K(1,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          7,
+          9
+        ],
+        "difference_over_max_norm": 0.00020475123870211827,
+        "sum_over_max_norm": 1.9998516881099724,
+        "cosine": 0.9999999900344565,
+        "norm_ratio": 0.9998516930923746,
+        "first_norm": 422463.86663303303,
+        "second_norm": 422401.21232338925,
+        "first_rep": "K(1,a___)+P(2,a___)",
+        "second_rep": "-1*P(0,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          9,
+          10
+        ],
+        "difference_over_max_norm": 0.00020475123870211827,
+        "sum_over_max_norm": 1.9998516881099724,
+        "cosine": 0.9999999900344565,
+        "norm_ratio": 0.9998516930923746,
+        "first_norm": 422401.21232338925,
+        "second_norm": 422463.86663303303,
+        "first_rep": "-1*P(0,a___)+K(1,a___)+P(2,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          5,
+          9
+        ],
+        "difference_over_max_norm": 0.00034259561277365014,
+        "sum_over_max_norm": 1.9997969826523623,
+        "cosine": 0.999999961910547,
+        "norm_ratio": 0.9997970016951555,
+        "first_norm": 422486.9764634302,
+        "second_norm": 422401.21232338925,
+        "first_rep": "K(1,a___)",
+        "second_rep": "-1*P(0,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          4,
+          8
+        ],
+        "difference_over_max_norm": 0.3858784210284989,
+        "sum_over_max_norm": 1.676408525778059,
+        "cosine": 0.9607421748654432,
+        "norm_ratio": 0.6925488073474725,
+        "first_norm": 1094810.8098582483,
+        "second_norm": 758209.9206384503,
+        "first_rep": "K(0,a___)",
+        "second_rep": "K(0,a___)+K(1,a___)+P(2,a___)"
+      }
+    ]
+  },
+  {
+    "label": "GL18 80M real-plus max",
+    "graph": "GL18",
+    "graph_id": 10,
+    "basis_norms": [
+      11460533.278374616,
+      8287993.341341809
+    ],
+    "basis_cosine": -0.3660041813518088,
+    "closest_pairs": [
+      {
+        "edges": [
+          7,
+          10
+        ],
+        "difference_over_max_norm": 0.0,
+        "sum_over_max_norm": 2.0,
+        "cosine": 0.9999999999999999,
+        "norm_ratio": 1.0,
+        "first_norm": 8287960.869192083,
+        "second_norm": 8287960.869192083,
+        "first_rep": "K(1,a___)+P(2,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          6,
+          8
+        ],
+        "difference_over_max_norm": 7.5718276182301525e-06,
+        "sum_over_max_norm": 1.9999957144517198,
+        "cosine": 0.9999999999805166,
+        "norm_ratio": 0.9999957144614614,
+        "first_norm": 11423877.254215134,
+        "second_norm": 11423926.211891178,
+        "first_rep": "K(0,a___)+K(1,a___)",
+        "second_rep": "K(0,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          5,
+          7
+        ],
+        "difference_over_max_norm": 1.0436784446766557e-05,
+        "sum_over_max_norm": 1.9999960820017249,
+        "cosine": 0.9999999999532119,
+        "norm_ratio": 0.9999960820251189,
+        "first_norm": 8287993.341341809,
+        "second_norm": 8287960.869192083,
+        "first_rep": "K(1,a___)",
+        "second_rep": "K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          5,
+          10
+        ],
+        "difference_over_max_norm": 1.0436784446766557e-05,
+        "sum_over_max_norm": 1.9999960820017249,
+        "cosine": 0.9999999999532119,
+        "norm_ratio": 0.9999960820251189,
+        "first_norm": 8287993.341341809,
+        "second_norm": 8287960.869192083,
+        "first_rep": "K(1,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          7,
+          9
+        ],
+        "difference_over_max_norm": 1.0436825338007669e-05,
+        "sum_over_max_norm": 1.9999917858747427,
+        "cosine": 0.9999999999792719,
+        "norm_ratio": 0.9999917858851067,
+        "first_norm": 8287960.869192083,
+        "second_norm": 8287892.790929273,
+        "first_rep": "K(1,a___)+P(2,a___)",
+        "second_rep": "-1*P(0,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          9,
+          10
+        ],
+        "difference_over_max_norm": 1.0436825338007669e-05,
+        "sum_over_max_norm": 1.9999917858747427,
+        "cosine": 0.9999999999792719,
+        "norm_ratio": 0.9999917858851067,
+        "first_norm": 8287892.790929273,
+        "second_norm": 8287960.869192083,
+        "first_rep": "-1*P(0,a___)+K(1,a___)+P(2,a___)",
+        "second_rep": "-1*P(0,a___)+-1*P(1,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          5,
+          9
+        ],
+        "difference_over_max_norm": 1.746408070432064e-05,
+        "sum_over_max_norm": 1.9999878679029564,
+        "cosine": 0.9999999999210955,
+        "norm_ratio": 0.9999878679424083,
+        "first_norm": 8287993.341341809,
+        "second_norm": 8287892.790929273,
+        "first_rep": "K(1,a___)",
+        "second_rep": "-1*P(0,a___)+K(1,a___)+P(2,a___)"
+      },
+      {
+        "edges": [
+          4,
+          8
+        ],
+        "difference_over_max_norm": 0.7231741026249626,
+        "sum_over_max_norm": 1.8612530407998504,
+        "cosine": 0.7376768011606243,
+        "norm_ratio": 0.9968058147387859,
+        "first_norm": 11460533.278374616,
+        "second_norm": 11423926.211891178,
+        "first_rep": "K(0,a___)",
+        "second_rep": "K(0,a___)+K(1,a___)+P(2,a___)"
+      }
+    ]
+  }
+]

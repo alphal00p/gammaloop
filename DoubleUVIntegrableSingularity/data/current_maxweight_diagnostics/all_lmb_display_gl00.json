@@ -1,0 +1,97 @@
+{
+  "GL00": {
+    "graph_id": 0,
+    "group": 0,
+    "channel_count": 11,
+    "channels": [
+      {
+        "channel_id": 0,
+        "basis_id": 0,
+        "edges": [
+          5,
+          10
+        ]
+      },
+      {
+        "channel_id": 1,
+        "basis_id": 1,
+        "edges": [
+          4,
+          10
+        ]
+      },
+      {
+        "channel_id": 2,
+        "basis_id": 2,
+        "edges": [
+          5,
+          9
+        ]
+      },
+      {
+        "channel_id": 3,
+        "basis_id": 3,
+        "edges": [
+          4,
+          9
+        ]
+      },
+      {
+        "channel_id": 4,
+        "basis_id": 4,
+        "edges": [
+          5,
+          8
+        ]
+      },
+      {
+        "channel_id": 5,
+        "basis_id": 5,
+        "edges": [
+          4,
+          8
+        ]
+      },
+      {
+        "channel_id": 6,
+        "basis_id": 6,
+        "edges": [
+          5,
+          7
+        ]
+      },
+      {
+        "channel_id": 7,
+        "basis_id": 7,
+        "edges": [
+          4,
+          7
+        ]
+      },
+      {
+        "channel_id": 8,
+        "basis_id": 8,
+        "edges": [
+          5,
+          6
+        ]
+      },
+      {
+        "channel_id": 9,
+        "basis_id": 9,
+        "edges": [
+          4,
+          6
+        ]
+      },
+      {
+        "channel_id": 10,
+        "basis_id": 10,
+        "edges": [
+          4,
+          5
+        ]
+      }
+    ]
+  }
+}

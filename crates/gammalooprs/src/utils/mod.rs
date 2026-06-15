@@ -3690,6 +3690,9 @@ pub(crate) fn get_n_dim_for_n_loop_momenta(
             ParameterizationMode::HyperSpherical
             | ParameterizationMode::Cartesian
             | ParameterizationMode::Spherical
+            | ParameterizationMode::RelativeSpherical
+            | ParameterizationMode::SphericalCommonRadial
+            | ParameterizationMode::SphericalProductCommonRadial
             | ParameterizationMode::MomentumSpace => 3 * n_loop_momenta,
         }
     } else {
@@ -3721,6 +3724,17 @@ pub(crate) fn global_parameterize<T: FloatLike>(
                     let b = F::<T>::from_f64(settings.b);
                     let radius = &e_cm * (&one + &b * &x[0] / (&one - &x[0])).log();
                     jac *= &e_cm * &b / (&one - &x[0]) / (&one + &x[0] * (&b - &one));
+                    radius
+                }
+                ParameterizationMapping::Power => {
+                    // r = e_cm * b * (x/(1-x))^p; p=1 reproduces the linear map.
+                    let b = F::<T>::from_f64(settings.b);
+                    let power = F::<T>::from_f64(settings.power);
+                    let odds = &x[0] / (&one - &x[0]);
+                    let power_minus_one = &power - &one;
+                    let radius = &e_cm * &b * odds.powf(&power);
+                    jac *=
+                        &e_cm * &b * &power * odds.powf(&power_minus_one) / (&one - &x[0]).square();
                     radius
                 }
                 ParameterizationMapping::Linear => {
@@ -3820,6 +3834,128 @@ pub(crate) fn global_parameterize<T: FloatLike>(
             }
             (vecs, jac)
         }
+        ParameterizationMode::RelativeSpherical => {
+            if x.len() != 6 {
+                panic!(
+                    "relative_spherical parameterization currently requires exactly two loop three-momenta"
+                );
+            }
+            let spherical_settings = ParameterizationSettings {
+                mode: ParameterizationMode::Spherical,
+                mapping: settings.mapping.clone(),
+                b: settings.b,
+                power: settings.power,
+            };
+            let (common, common_jac) = parameterize3d(&x[0..3], e_cm.clone(), &spherical_settings);
+            let (relative, relative_jac) =
+                parameterize3d(&x[3..6], e_cm.clone(), &spherical_settings);
+            let half = &one / one.from_i64(2);
+            let first = [
+                &common[0] + &half * &relative[0],
+                &common[1] + &half * &relative[1],
+                &common[2] + &half * &relative[2],
+            ];
+            let second = [
+                &common[0] - &half * &relative[0],
+                &common[1] - &half * &relative[1],
+                &common[2] - &half * &relative[2],
+            ];
+            (vec![first, second], common_jac * relative_jac)
+        }
+        ParameterizationMode::SphericalCommonRadial => {
+            if x.len() != 6 {
+                panic!(
+                    "spherical_common_radial parameterization currently requires exactly two loop three-momenta"
+                );
+            }
+
+            let mut jac = one.clone();
+            let radius = match settings.mapping {
+                ParameterizationMapping::Log => {
+                    let b = F::<T>::from_f64(settings.b);
+                    let radius = &e_cm * (&one + &b * &x[0] / (&one - &x[0])).log();
+                    jac *= &e_cm * &b / (&one - &x[0]) / (&one + &x[0] * (&b - &one));
+                    radius
+                }
+                ParameterizationMapping::Power => {
+                    let b = F::<T>::from_f64(settings.b);
+                    let power = F::<T>::from_f64(settings.power);
+                    let odds = &x[0] / (&one - &x[0]);
+                    let power_minus_one = &power - &one;
+                    let radius = &e_cm * &b * odds.powf(&power);
+                    jac *=
+                        &e_cm * &b * &power * odds.powf(&power_minus_one) / (&one - &x[0]).square();
+                    radius
+                }
+                ParameterizationMapping::Linear => {
+                    let b = F::<T>::from_f64(settings.b);
+                    let radius = &e_cm * &b * &x[0] / (&one - &x[0]);
+                    jac *= (&e_cm * &b + &radius).powi(2) / &e_cm / &b;
+                    radius
+                }
+            };
+
+            let fraction = x[1].clone();
+            let complement = &one - &fraction;
+            let first_radius = &radius * &fraction;
+            let second_radius = &radius * &complement;
+            jac *= &radius * first_radius.square() * second_radius.square();
+
+            let phi0 = F::<T>::from_f64(2.) * zero.PI() * &x[2];
+            jac *= F::<T>::from_f64(2.) * zero.PI();
+            let cos_theta0 = -&one + F::<T>::from_f64(2.) * &x[3];
+            jac *= F::<T>::from_f64(2.);
+            let sin_theta0 = (&one - cos_theta0.square()).sqrt();
+
+            let phi1 = F::<T>::from_f64(2.) * zero.PI() * &x[4];
+            jac *= F::<T>::from_f64(2.) * zero.PI();
+            let cos_theta1 = -&one + F::<T>::from_f64(2.) * &x[5];
+            jac *= F::<T>::from_f64(2.);
+            let sin_theta1 = (&one - cos_theta1.square()).sqrt();
+
+            (
+                vec![
+                    [
+                        &first_radius * &sin_theta0 * phi0.cos(),
+                        &first_radius * &sin_theta0 * phi0.sin(),
+                        &first_radius * &cos_theta0,
+                    ],
+                    [
+                        &second_radius * &sin_theta1 * phi1.cos(),
+                        &second_radius * &sin_theta1 * phi1.sin(),
+                        &second_radius * &cos_theta1,
+                    ],
+                ],
+                jac,
+            )
+        }
+        ParameterizationMode::SphericalProductCommonRadial => {
+            if x.len() != 6 {
+                panic!(
+                    "spherical_product_common_radial parameterization currently requires exactly two loop three-momenta"
+                );
+            }
+            let mut branch_x = x.to_vec();
+            let branch_settings = if x[0] < F::<T>::from_f64(0.5) {
+                branch_x[0] = &x[0] * F::<T>::from_f64(2.0);
+                ParameterizationSettings {
+                    mode: ParameterizationMode::Spherical,
+                    mapping: settings.mapping.clone(),
+                    b: settings.b,
+                    power: settings.power,
+                }
+            } else {
+                branch_x[0] = (&x[0] - F::<T>::from_f64(0.5)) * F::<T>::from_f64(2.0);
+                ParameterizationSettings {
+                    mode: ParameterizationMode::SphericalCommonRadial,
+                    mapping: settings.mapping.clone(),
+                    b: settings.b,
+                    power: settings.power,
+                }
+            };
+            let (momenta, jac) = global_parameterize(&branch_x, e_cm, &branch_settings);
+            (momenta, jac * F::<T>::from_f64(2.0))
+        }
         ParameterizationMode::MomentumSpace => (x.as_chunks::<3>().0.to_vec(), one),
     }
 }
@@ -3858,6 +3994,17 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
                     let b = F::<T>::from_f64(settings.b);
                     let x1 = &one - &b / (-&one + &b + (&k_r / &e_cm).exp());
                     inv_jac /= e_cm * &b / (&one - &x1) / (&one + &x1 * (&b - &one));
+                    xs.push(x1);
+                }
+                ParameterizationMapping::Power => {
+                    let b = F::<T>::from_f64(settings.b);
+                    let power = F::<T>::from_f64(settings.power);
+                    let inv_power = &one / &power;
+                    let odds = (&k_r / (&e_cm * &b)).powf(&inv_power);
+                    let x1 = &odds / (&one + &odds);
+                    let power_minus_one = &power - &one;
+                    inv_jac /=
+                        &e_cm * &b * &power * odds.powf(&power_minus_one) / (&one - &x1).square();
                     xs.push(x1);
                 }
                 ParameterizationMapping::Linear => {
@@ -3906,6 +4053,146 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
             }
             (xs, inv_jac)
         }
+        ParameterizationMode::RelativeSpherical => {
+            if moms.len() != 2 {
+                panic!(
+                    "relative_spherical inverse parameterization currently requires exactly two loop three-momenta"
+                );
+            }
+            let half = &one / one.from_i64(2);
+            let common = ThreeMomentum::new(
+                (&moms[0].px + &moms[1].px) * &half,
+                (&moms[0].py + &moms[1].py) * &half,
+                (&moms[0].pz + &moms[1].pz) * &half,
+            );
+            let relative = ThreeMomentum::new(
+                &moms[0].px - &moms[1].px,
+                &moms[0].py - &moms[1].py,
+                &moms[0].pz - &moms[1].pz,
+            );
+            let spherical_settings = ParameterizationSettings {
+                mode: ParameterizationMode::Spherical,
+                mapping: settings.mapping.clone(),
+                b: settings.b,
+                power: settings.power,
+            };
+            let (common_xs, common_inv_jac) =
+                inv_parametrize3d(&common, e_cm.clone(), &spherical_settings);
+            let (relative_xs, relative_inv_jac) =
+                inv_parametrize3d(&relative, e_cm.clone(), &spherical_settings);
+            (
+                common_xs.into_iter().chain(relative_xs).collect(),
+                common_inv_jac * relative_inv_jac,
+            )
+        }
+        ParameterizationMode::SphericalCommonRadial => {
+            if moms.len() != 2 {
+                panic!(
+                    "spherical_common_radial inverse parameterization currently requires exactly two loop three-momenta"
+                );
+            }
+
+            let r0_sq = moms[0].px.square() + moms[0].py.square() + moms[0].pz.square();
+            let r1_sq = moms[1].px.square() + moms[1].py.square() + moms[1].pz.square();
+            let r0 = r0_sq.sqrt();
+            let r1 = r1_sq.sqrt();
+            let radius = &r0 + &r1;
+
+            let phi_x = |x: &F<T>, y: &F<T>| {
+                if y < &zero {
+                    &one + F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * y.atan2(x)
+                } else {
+                    F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * y.atan2(x)
+                }
+            };
+
+            let phi0 = phi_x(&moms[0].px, &moms[0].py);
+            let phi1 = phi_x(&moms[1].px, &moms[1].py);
+
+            if radius.is_zero() || r0.is_zero() || r1.is_zero() {
+                return (
+                    vec![
+                        zero.clone(),
+                        zero.clone(),
+                        phi0,
+                        zero.clone(),
+                        phi1,
+                        zero.clone(),
+                    ],
+                    zero,
+                );
+            }
+
+            let mut inv_jac = one.clone();
+            let radial_x = match settings.mapping {
+                ParameterizationMapping::Log => {
+                    let b = F::<T>::from_f64(settings.b);
+                    let x1 = &one - &b / (-&one + &b + (&radius / &e_cm).exp());
+                    inv_jac /= &e_cm * &b / (&one - &x1) / (&one + &x1 * (&b - &one));
+                    x1
+                }
+                ParameterizationMapping::Power => {
+                    let b = F::<T>::from_f64(settings.b);
+                    let power = F::<T>::from_f64(settings.power);
+                    let inv_power = &one / &power;
+                    let odds = (&radius / (&e_cm * &b)).powf(&inv_power);
+                    let x1 = &odds / (&one + &odds);
+                    let power_minus_one = &power - &one;
+                    inv_jac /=
+                        &e_cm * &b * &power * odds.powf(&power_minus_one) / (&one - &x1).square();
+                    x1
+                }
+                ParameterizationMapping::Linear => {
+                    let b = F::<T>::from_f64(settings.b);
+                    inv_jac /= (&e_cm * &b + &radius).powi(2) / &e_cm / &b;
+                    &radius / (&e_cm * &b + &radius)
+                }
+            };
+
+            inv_jac /= &radius * r0_sq * r1_sq;
+            inv_jac /= F::<T>::from_f64(2.) * zero.PI();
+            inv_jac /= F::<T>::from_f64(2.);
+            inv_jac /= F::<T>::from_f64(2.) * zero.PI();
+            inv_jac /= F::<T>::from_f64(2.);
+
+            (
+                vec![
+                    radial_x,
+                    &r0 / &radius,
+                    phi0,
+                    F::<T>::from_f64(0.5) * (&one + &moms[0].pz / &r0),
+                    phi1,
+                    F::<T>::from_f64(0.5) * (&one + &moms[1].pz / &r1),
+                ],
+                inv_jac,
+            )
+        }
+        ParameterizationMode::SphericalProductCommonRadial => {
+            if moms.len() != 2 {
+                panic!(
+                    "spherical_product_common_radial inverse parameterization currently requires exactly two loop three-momenta"
+                );
+            }
+            let spherical_settings = ParameterizationSettings {
+                mode: ParameterizationMode::Spherical,
+                mapping: settings.mapping.clone(),
+                b: settings.b,
+                power: settings.power,
+            };
+            let common_radial_settings = ParameterizationSettings {
+                mode: ParameterizationMode::SphericalCommonRadial,
+                mapping: settings.mapping.clone(),
+                b: settings.b,
+                power: settings.power,
+            };
+            let (mut xs, product_inv_jac) =
+                global_inv_parameterize(moms, e_cm.clone(), &spherical_settings);
+            let (_, common_inv_jac) = global_inv_parameterize(moms, e_cm, &common_radial_settings);
+            if let Some(first_x) = xs.first_mut() {
+                *first_x = &*first_x / F::<T>::from_f64(2.0);
+            }
+            (xs, product_inv_jac + common_inv_jac)
+        }
         ParameterizationMode::MomentumSpace => (
             moms.iter()
                 .flat_map(|mom| [mom.px.clone(), mom.py.clone(), mom.pz.clone()])
@@ -3943,6 +4230,9 @@ pub(crate) fn parameterize3d<T: FloatLike>(
                     jac *= &e_cm * (&one / (&x * &x) + &one / ((&one - &x) * (&one - &x)));
                 }
             }
+            ParameterizationMapping::Power => {
+                panic!("Power radial mapping is only supported for spherical coordinates");
+            }
         },
         ParameterizationMode::Spherical => {
             let radius = match settings.mapping {
@@ -3952,6 +4242,18 @@ pub(crate) fn parameterize3d<T: FloatLike>(
                     let b = F::<T>::from_f64(settings.b);
                     let radius = &e_cm * (&one + &b * &x / (&one - &x)).log();
                     jac *= &e_cm * &b / (&one - &x) / (&one + &x * (&b - &one));
+
+                    radius
+                }
+                ParameterizationMapping::Power => {
+                    // r = e_cm * b * (x/(1-x))^p; p=1 reproduces the linear map.
+                    let x = x[0].clone();
+                    let b = F::<T>::from_f64(settings.b);
+                    let power = F::<T>::from_f64(settings.power);
+                    let odds = &x / (&one - &x);
+                    let power_minus_one = &power - &one;
+                    let radius = &e_cm * &b * odds.powf(&power);
+                    jac *= &e_cm * &b * &power * odds.powf(&power_minus_one) / (&one - &x).square();
 
                     radius
                 }
@@ -4023,6 +4325,16 @@ pub(crate) fn inv_parametrize3d<T: FloatLike>(
             let b = F::<T>::from_f64(settings.b);
             let x1 = &one - &b / (-&one + &b + (&k_r / &e_cm).exp());
             jac /= &e_cm * &b / (&one - &x1) / (&one + &x1 * (&b - &one));
+            x1
+        }
+        ParameterizationMapping::Power => {
+            let b = F::<T>::from_f64(settings.b);
+            let power = F::<T>::from_f64(settings.power);
+            let inv_power = &one / &power;
+            let odds = (&k_r / (&e_cm * &b)).powf(&inv_power);
+            let x1 = &odds / (&one + &odds);
+            let power_minus_one = &power - &one;
+            jac /= &e_cm * &b * &power * odds.powf(&power_minus_one) / (&one - &x1).square();
             x1
         }
         ParameterizationMapping::Linear => {

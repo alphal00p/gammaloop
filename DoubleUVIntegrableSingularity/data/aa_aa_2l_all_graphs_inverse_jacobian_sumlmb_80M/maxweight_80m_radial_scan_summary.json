@@ -1,0 +1,114 @@
+[
+  {
+    "label": "GL01_re_minus_80M",
+    "mode": "no_lmb",
+    "slope_last4": 1.0006290710095207,
+    "abs_at_recorded_point": 0.020367097179824302,
+    "abs_at_deepest_point": 0.3268673716278264
+  },
+  {
+    "label": "GL01_re_minus_80M",
+    "mode": "ose",
+    "slope_last4": 1.0002884188523071,
+    "abs_at_recorded_point": 0.02656272608343715,
+    "abs_at_deepest_point": 0.42564300880861106
+  },
+  {
+    "label": "GL01_re_minus_80M",
+    "mode": "inverse_jacobian",
+    "slope_last4": 1.0002000405831653,
+    "abs_at_recorded_point": 0.02032211081751585,
+    "abs_at_deepest_point": 0.3255128250607189
+  },
+  {
+    "label": "GL01_re_minus_80M",
+    "mode": "inverse_jacobian_log",
+    "slope_last4": 1.7467808576422181,
+    "abs_at_recorded_point": 0.03193828163373262,
+    "abs_at_deepest_point": 3.9647673060943394
+  },
+  {
+    "label": "GL03_im_plus_80M",
+    "mode": "no_lmb",
+    "slope_last4": 0.9999541484389305,
+    "abs_at_recorded_point": 0.37576710240524963,
+    "abs_at_deepest_point": 6.011310278367876
+  },
+  {
+    "label": "GL03_im_plus_80M",
+    "mode": "ose",
+    "slope_last4": 0.9999525388373511,
+    "abs_at_recorded_point": 0.305160811676524,
+    "abs_at_deepest_point": 4.881755120485514
+  },
+  {
+    "label": "GL03_im_plus_80M",
+    "mode": "inverse_jacobian",
+    "slope_last4": 0.9999522178043061,
+    "abs_at_recorded_point": 0.30268518306617387,
+    "abs_at_deepest_point": 4.842144670210836
+  },
+  {
+    "label": "GL03_im_plus_80M",
+    "mode": "inverse_jacobian_log",
+    "slope_last4": 1.6553007831040598,
+    "abs_at_recorded_point": 0.8772395435328842,
+    "abs_at_deepest_point": 82.10314889304027
+  },
+  {
+    "label": "GL17_im_minus_80M",
+    "mode": "no_lmb",
+    "slope_last4": 1.0965638338153965,
+    "abs_at_recorded_point": 0.06811902182894772,
+    "abs_at_deepest_point": 1.3621770635195576
+  },
+  {
+    "label": "GL17_im_minus_80M",
+    "mode": "ose",
+    "slope_last4": 1.0945389873441058,
+    "abs_at_recorded_point": 0.0628379120747339,
+    "abs_at_deepest_point": 1.250699852930039
+  },
+  {
+    "label": "GL17_im_minus_80M",
+    "mode": "inverse_jacobian",
+    "slope_last4": 1.0979944246849207,
+    "abs_at_recorded_point": 0.06283853281242431,
+    "abs_at_deepest_point": 1.2607375715286402
+  },
+  {
+    "label": "GL17_im_minus_80M",
+    "mode": "inverse_jacobian_log",
+    "slope_last4": 1.731272889408603,
+    "abs_at_recorded_point": 0.701046489219598,
+    "abs_at_deepest_point": 80.84590085395493
+  },
+  {
+    "label": "GL18_re_plus_80M",
+    "mode": "no_lmb",
+    "slope_last4": 0.999975200481213,
+    "abs_at_recorded_point": 0.6383061879847374,
+    "abs_at_deepest_point": 10.212044985355442
+  },
+  {
+    "label": "GL18_re_plus_80M",
+    "mode": "ose",
+    "slope_last4": 0.9999727531142947,
+    "abs_at_recorded_point": 0.36021511607259654,
+    "abs_at_deepest_point": 5.762896149111364
+  },
+  {
+    "label": "GL18_re_plus_80M",
+    "mode": "inverse_jacobian",
+    "slope_last4": 0.9999723879123351,
+    "abs_at_recorded_point": 0.36273097406906196,
+    "abs_at_deepest_point": 5.803136485672312
+  },
+  {
+    "label": "GL18_re_plus_80M",
+    "mode": "inverse_jacobian_log",
+    "slope_last4": 1.7696059343851092,
+    "abs_at_recorded_point": 11.74045454855927,
+    "abs_at_deepest_point": 1552.7604903506906
+  }
+]

@@ -51,9 +51,9 @@ use crate::{
     DependentMomentaConstructor, GammaLoopContext, settings::RuntimeSettings,
     settings::runtime::DiscreteGraphSamplingSettings, settings::runtime::DiscreteGraphSamplingType,
     settings::runtime::IntegratorSettings, settings::runtime::LmbChannelWeight,
-    settings::runtime::ParameterizationSettings, settings::runtime::Precision,
-    settings::runtime::SamplingSettings, settings::runtime::StabilityLevelSetting,
-    settings::runtime::StabilitySettings,
+    settings::runtime::ParameterizationMode, settings::runtime::ParameterizationSettings,
+    settings::runtime::Precision, settings::runtime::SamplingSettings,
+    settings::runtime::StabilityLevelSetting, settings::runtime::StabilitySettings,
 };
 use color_eyre::Result;
 
@@ -1762,6 +1762,7 @@ impl LmbMultiChannelingSetup {
             external_moms: momentum_sample.external_moms.clone(),
             jacobian: momentum_sample.jacobian.clone(),
             orientation: momentum_sample.orientation,
+            parameterization_branch: momentum_sample.parameterization_branch,
         }
     }
 
@@ -1886,6 +1887,58 @@ impl LmbMultiChannelingSetup {
         let selected_lmb = self.channels[channel_index];
         let mut numerator = momentum_sample.zero();
         let e_cm = F::<T>::from_f64(e_cm);
+
+        if matches!(
+            parameterization_settings.mode,
+            ParameterizationMode::SphericalProductCommonRadial
+        ) {
+            let product_settings = ParameterizationSettings {
+                mode: ParameterizationMode::Spherical,
+                mapping: parameterization_settings.mapping.clone(),
+                b: parameterization_settings.b,
+                power: parameterization_settings.power,
+            };
+            let common_radial_settings = ParameterizationSettings {
+                mode: ParameterizationMode::SphericalCommonRadial,
+                mapping: parameterization_settings.mapping.clone(),
+                b: parameterization_settings.b,
+                power: parameterization_settings.power,
+            };
+            let sampled_branch = momentum_sample.sample.parameterization_branch;
+            let denominator = self
+                .channels
+                .iter()
+                .map(|&lmb_index| {
+                    let basis_momenta = self.basis_momenta_for_lmb(lmb_index, momentum_sample);
+                    let (_, product_inverse_jacobian) =
+                        global_inv_parameterize(&basis_momenta, e_cm.clone(), &product_settings);
+                    let (_, common_radial_inverse_jacobian) = global_inv_parameterize(
+                        &basis_momenta,
+                        e_cm.clone(),
+                        &common_radial_settings,
+                    );
+
+                    if selected_lmb == lmb_index {
+                        numerator = match sampled_branch {
+                            Some(0) => product_inverse_jacobian.clone(),
+                            Some(1) => common_radial_inverse_jacobian.clone(),
+                            _ => {
+                                product_inverse_jacobian.clone()
+                                    + common_radial_inverse_jacobian.clone()
+                            }
+                        };
+                    }
+
+                    product_inverse_jacobian + common_radial_inverse_jacobian
+                })
+                .fold(momentum_sample.zero(), |sum, summand| sum + summand);
+
+            return if denominator.is_zero() {
+                momentum_sample.zero()
+            } else {
+                numerator / denominator
+            };
+        }
 
         let denominator = self
             .channels

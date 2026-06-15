@@ -1229,6 +1229,723 @@ GL00-type positive-DOD rays.
 The detailed fixed-ray summary is archived as
 \path{aa_aa_2l_all_graphs_10min_lmbmc/max_weight_uv_diagnostic_summary.json}.
 
+\subsection{Full-amplitude run with explicit summed LMB channels}
+
+I then generated all eleven two-loop graphs together with feyngen symmetry
+factors and integrated the full \(\gamma\gamma\to\gamma\gamma\) amplitude at
+kinematics A and helicity \(+-+-\).  The run used graph Monte Carlo, summed
+orientations, explicit summation over all generated LMB channels,
+\texttt{lmb\_channel\_weight="inverse\_jacobian"}, the spherical linear map,
+\(m_{\rm UV}=9.188\), and \(\mu_R=91.188\).  After
+\(80\,\mathrm{M}\) samples on 20 cores the result was:
+\begin{center}
+\scriptsize
+\begin{tabular}{lrrrr}
+\toprule
+component & value & error & relative error & max-weight impact\\
+\midrule
+real & $-1.4573\times 10^{-7}$ & $1.4224\times 10^{-7}$ &
+97.6\% & 7.04\%\\
+imag & $-1.3755\times 10^{-6}$ & $1.4245\times 10^{-7}$ &
+10.36\% & 1.33\%\\
+\bottomrule
+\end{tabular}
+\end{center}
+The real part is compatible with zero in this helicity/kinematics setup, so the
+imaginary part is the useful convergence target.  The current best full-run
+imaginary uncertainty is just above the requested 10\% level and still an order
+of magnitude away from a 1\% target.  The observed \(1/\sqrt{N}\) scaling would
+require about \(8\,\mathrm{B}\) samples for a brute-force 1\% imaginary-part
+error with this exact setup.
+
+I also recomputed the graph-level variance allocation from the \(80\,\mathrm{M}\)
+grid entries.  The adaptive graph probabilities are already essentially
+optimal for this estimator: at fixed total sample count the best possible
+graph-only allocation would reduce the combined imaginary error by only
+\(2.8\times10^{-4}\) relative, and it gives the same \(8.47\,\mathrm{B}\)
+sample estimate for a 1\% imaginary-part error.  Retuning the graph Monte Carlo
+probabilities therefore cannot solve the current variance bottleneck.
+
+The all-graph generation state reports a peak resident-memory scale of
+\(60.2\,\mathrm{GB}\), or about \(56.1\,\mathrm{GiB}\).  The per-graph
+generation times in that state are \(66.0\,\mathrm{s}\) for \texttt{GL00},
+\(77.1\,\mathrm{s}\) for \texttt{GL01}, \(77.3\,\mathrm{s}\) for
+\texttt{GL03}, \(62.9\,\mathrm{s}\) for \texttt{GL05}, and between
+\(11.7\,\mathrm{s}\) and \(17.3\,\mathrm{s}\) for the remaining seven graphs.
+
+The graph grid at \(80\,\mathrm{M}\) samples was:
+\begin{center}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrr}
+\toprule
+graph & processed samples [$10^6$] & Re $[10^{-6}]$ & Im $[10^{-6}]$\\
+\midrule
+\texttt{GL00} & 6.56 & $-0.036\pm0.040$ & $-0.728\pm0.040$\\
+\texttt{GL01} & 9.93 & $-0.002\pm0.051$ & $-3.994\pm0.050$\\
+\texttt{GL03} & 14.25 & $-0.016\pm0.058$ & $+3.937\pm0.060$\\
+\texttt{GL05} & 5.89 & $+0.020\pm0.039$ & $-0.701\pm0.038$\\
+\texttt{GL06} & 8.97 & $-0.000\pm0.049$ & $-2.284\pm0.047$\\
+\texttt{GL08} & 3.21 & $-0.035\pm0.027$ & $-1.301\pm0.028$\\
+\texttt{GL12} & 2.93 & $+0.037\pm0.027$ & $+1.272\pm0.027$\\
+\texttt{GL14} & 6.26 & $-0.009\pm0.040$ & $+4.184\pm0.039$\\
+\texttt{GL16} & 2.97 & $+0.004\pm0.027$ & $-3.598\pm0.027$\\
+\texttt{GL17} & 6.04 & $-0.002\pm0.038$ & $+4.095\pm0.037$\\
+\texttt{GL18} & 12.99 & $-0.108\pm0.061$ & $-2.282\pm0.059$\\
+\bottomrule
+\end{tabular}}
+\end{center}
+The average total runtime was \(1.40\,\mathrm{ms}\) per sample per core, with
+about \(0.71\,\mathrm{ms}\) in the integrand and \(0.66\,\mathrm{ms}\) in the
+evaluator.  The combined run stayed numerically stable: \(f64\) was used for
+99.9984\% of samples, \(f128\) for 0.00163\%, and the
+nan-or-unstable rate was \(2.5\times 10^{-6}\%\).
+
+\subsection{Final committed-card production run}
+
+For the final wrap-up, I updated
+\path{examples/cli/aa_aa/2L/aa_aa.toml} so that the default command builds the
+full two-loop amplitude with feyngen and then runs
+\texttt{generate\_integrands} followed by \texttt{integrate\_diagrams}.  The
+default integration setup is the best robust setup identified above:
+kinematics A, helicity \(+-+-\), \(m_{\rm UV}=9.188\),
+\(\mu_R=91.188\), graph Monte Carlo, summed orientations, explicit summed LMB
+channels, inverse-Jacobian LMB channel weights, spherical coordinates, the
+linear radial map, 20 integration cores, and \(1\,\mathrm{M}\) samples per
+iteration.  The Havana training phase is explicitly set to the imaginary part
+with \texttt{integrator.integrated\_phase="imag"} both in the
+\texttt{integrate\_diagrams} command block and in the card's default runtime
+settings.  Because vakint tensor reduction calls FORM as an external program
+and the local \texttt{./gammaloop} wrapper does not itself enter the Nix
+development shell, the card also pins \texttt{form\_exe\_path} to the
+Nix-provided FORM executable used in this environment.
+
+Using the already generated all-graph state with these committed settings, I
+ran the final \(25\,\mathrm{M}\)-sample production checkpoint on 20 cores.  It
+finished after 34 minutes and 44 seconds.  The total amplitude was
+\begin{center}
+\scriptsize
+\begin{tabular}{lrrrr}
+\toprule
+component & value & error & relative error & \(\chi^2\)\\
+\midrule
+real & $-9.34\times10^{-8}$ & $2.62\times10^{-7}$ & 281\% & 28.16\\
+imag & $-1.3638\times10^{-6}$ & $2.592\times10^{-7}$ & 19.0\% & 10.15\\
+\bottomrule
+\end{tabular}
+\end{center}
+The corresponding displayed ``sum'' entry is
+\(\mathrm{Re}=(-1.1\pm2.6)\times10^{-7}\) and
+\(\mathrm{Im}=(-1.37\pm0.25)\times10^{-6}\).  The real part is again
+compatible with zero, while the imaginary part agrees with the previous
+\(80\,\mathrm{M}\)-sample central value within the quoted Monte-Carlo error.
+The 30-minute run therefore confirms the central value but does not reach a
+1\% total-amplitude error; the total remains dominated by cancellations between
+graph contributions.
+
+The per-graph top-level discrete-grid entries from this final run were:
+\begin{center}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrr}
+\toprule
+graph & processed samples [$10^6$] & Re $[10^{-6}]$ & Im $[10^{-6}]$ &
+Im rel. error\\
+\midrule
+\texttt{GL00} & 2.10 & $-0.133\pm0.075$ & $-0.629\pm0.074$ & 11.74\%\\
+\texttt{GL01} & 3.18 & $+0.157\pm0.093$ & $-4.036\pm0.091$ & 2.24\%\\
+\texttt{GL03} & 4.19 & $-0.188\pm0.108$ & $+3.817\pm0.106$ & 2.78\%\\
+\texttt{GL05} & 1.91 & $-0.032\pm0.069$ & $-0.769\pm0.069$ & 8.97\%\\
+\texttt{GL06} & 2.81 & $-0.108\pm0.088$ & $-2.238\pm0.086$ & 3.83\%\\
+\texttt{GL08} & 1.05 & $-0.028\pm0.050$ & $-1.193\pm0.050$ & 4.21\%\\
+\texttt{GL12} & 0.97 & $+0.091\pm0.053$ & $+1.309\pm0.050$ & 3.79\%\\
+\texttt{GL14} & 2.05 & $+0.057\pm0.072$ & $+4.187\pm0.071$ & 1.69\%\\
+\texttt{GL16} & 0.95 & $+0.026\pm0.046$ & $-3.627\pm0.048$ & 1.32\%\\
+\texttt{GL17} & 1.79 & $-0.053\pm0.068$ & $+4.215\pm0.066$ & 1.57\%\\
+\texttt{GL18} & 4.01 & $+0.105\pm0.107$ & $-2.402\pm0.106$ & 4.42\%\\
+\bottomrule
+\end{tabular}}
+\end{center}
+
+The average runtime was \(1.401\,\mathrm{ms}\) per sample per core, with
+\(0.710\,\mathrm{ms}\) in the integrand and \(0.658\,\mathrm{ms}\) in the
+evaluator.  Precision escalation was negligible: 99.9984\% of evaluations ran
+in \(f64\), 0.00162\% in \(f128\), none in Arb, and the reported
+nan-or-unstable rate was zero.  The largest signed weights stayed below one in
+absolute value:
+\(+0.646\) for real, \(-0.468\) for real, \(+0.388\) for imaginary, and
+\(-0.317\) for imaginary.  The positive and negative maxima occurred in
+\texttt{GL12} and \texttt{GL00}, respectively, but they are ordinary
+\(\mathcal{O}(1)\) samples, not a resurgence of the earlier double-UV
+large-weight ridge.  The checkpoint and log are archived in
+\path{data/final_30m_all_graphs_inverse_jacobian_sumlmb/}.
+
+I also tested several alternatives against this setup:
+\begin{itemize}
+  \item summing over graphs as well as LMBs gives cleaner discrete sampling but
+        costs about \(15\,\mathrm{ms}\) per sample per core; at
+        \(1\,\mathrm{M}\) samples it gave
+        \(\mathrm{Im}=(-1.92\pm1.10)\times10^{-6}\), so it is not competitive
+        at fixed wall time;
+  \item hyperspherical coordinates with summed inverse-Jacobian LMB channels
+        did not finish a \(1\,\mathrm{M}\)-sample checkpoint before being
+        stopped, making the current implementation too slow for this target;
+  \item a global radial power map
+        \(r=E_{\rm cm} b (x/(1-x))^p\) was implemented and tested.  On the
+        \texttt{GL03} fixed ray, \(p=2\) flattens the asymptotic radial slope,
+        while \(p=3,4\) make it decreasing.  In full integration this does not
+        yet improve the variance: \(p=1.5\) and \(p=1.75\) are stable but have
+        about the same \(1\,\mathrm{M}\)-sample absolute error as the linear
+        map, and \(p=2\) samples much deeper UV points where the double-precision
+        cancellation is unreliable unless high loop-momentum norms are forced
+        to arbitrary precision.  Smaller \(b\) values keep the \(p=2\) ray
+        flat but increase the weight coefficient on the same physical ray;
+  \item Monte Carlo over LMB channels with inverse-Jacobian weights is about an
+        order of magnitude cheaper per sample, but the \(1\,\mathrm{M}\)-sample
+        imaginary error was \(5.61\times10^{-6}\), far worse than the explicit
+        summed-LMB setup.
+\end{itemize}
+
+Several one-iteration integrator controls were also tried with graph Monte
+Carlo, summed orientations, summed LMBs, inverse-Jacobian LMB weights, and the
+linear spherical map:
+\begin{center}
+\scriptsize
+\begin{tabular}{lrrr}
+\toprule
+control & Im value & Im error & avg time per sample/core\\
+\midrule
+\texttt{max\_prob\_ratio=300} &
+\(+0.95\times10^{-6}\) & \(2.24\times10^{-6}\) & \(1.33\,\mathrm{ms}\)\\
+\texttt{n\_bins=128} &
+\(+0.95\times10^{-6}\) & \(2.24\times10^{-6}\) & \(1.31\,\mathrm{ms}\)\\
+\texttt{train\_on\_avg=true} &
+\(-7.62\times10^{-6}\) & \(2.25\times10^{-6}\) & \(1.32\,\mathrm{ms}\)\\
+\texttt{max\_prob\_ratio=1000} &
+\(-7.62\times10^{-6}\) & \(2.25\times10^{-6}\) & \(1.37\,\mathrm{ms}\)\\
+\bottomrule
+\end{tabular}
+\end{center}
+The paired equal central values are from paired one-iteration seeds, so these
+rows should not be overinterpreted statistically.  The useful conclusion is
+that none of these grid controls changes the absolute error scale relative to
+the baseline \(1\,\mathrm{M}\)-sample run.
+
+\subsection{80M max-weight ridge recheck}
+
+The largest signed weights in the \(80\,\mathrm{M}\) full-amplitude run
+occurred in \texttt{GL18}, \texttt{GL01}, \texttt{GL03}, and \texttt{GL17}.
+I first verified from \texttt{display integrand} that the diagrams have the
+full generated LMB sets enabled: \texttt{GL01} and \texttt{GL03} have 11
+channels, while \texttt{GL17} and \texttt{GL18} have 14.  In each case the
+edge-4 channels are present, for example \((4,10)\), \((4,9)\), \((4,8)\),
+\((4,7)\), \((4,6)\), and \((4,5)\) where applicable.  Therefore the latest
+max-weight ridges are not caused by accidentally leaving the LMB heuristic on.
+
+I then reran direct \texttt{inspect} scans from each recorded max-weight point,
+rescaling only the two radial coordinates deeper into the same hard-hard
+direction.  The table reports the fitted log-log slope of the last four
+radial points and the absolute inspected weight at the recorded point:
+\begin{center}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrr}
+\toprule
+point & mode & slope & abs. weight at point & abs. weight deepest\\
+\midrule
+\texttt{GL01} real $-$ & no LMB & 1.0006 & 0.0204 & 0.327\\
+\texttt{GL01} real $-$ & OSE & 1.0003 & 0.0266 & 0.426\\
+\texttt{GL01} real $-$ & inverse $J$ & 1.0002 & 0.0203 & 0.326\\
+\texttt{GL03} imag $+$ & no LMB & 1.0000 & 0.376 & 6.01\\
+\texttt{GL03} imag $+$ & OSE & 1.0000 & 0.305 & 4.88\\
+\texttt{GL03} imag $+$ & inverse $J$ & 1.0000 & 0.303 & 4.84\\
+\texttt{GL17} imag $-$ & no LMB & 1.0966 & 0.0681 & 1.36\\
+\texttt{GL17} imag $-$ & OSE & 1.0945 & 0.0628 & 1.25\\
+\texttt{GL17} imag $-$ & inverse $J$ & 1.0980 & 0.0628 & 1.26\\
+\texttt{GL18} real $+$ & no LMB & 1.0000 & 0.638 & 10.2\\
+\texttt{GL18} real $+$ & OSE & 1.0000 & 0.360 & 5.76\\
+\texttt{GL18} real $+$ & inverse $J$ & 1.0000 & 0.363 & 5.80\\
+\bottomrule
+\end{tabular}}
+\end{center}
+The inverse-Jacobian LMB prefactor is therefore active, but it does not change
+the hard-hard radial power on these locked approaches.  It reduces the
+normalization for \texttt{GL03} and \texttt{GL18}, leaves \texttt{GL01} nearly
+unchanged, and leaves \texttt{GL17} essentially unchanged.  A logarithmic map
+combined with inverse-Jacobian LMB weighting was also tested on the same
+points and made the locked scans worse, with slopes between 1.65 and 1.77 and
+much larger absolute weights.
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figures/maxweight_80m_GL03_im_plus_80M_radial_scan.png}
+    \caption{\texttt{GL03} imaginary positive max.}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{figures/maxweight_80m_GL18_re_plus_80M_radial_scan.png}
+    \caption{\texttt{GL18} real positive max.}
+  \end{subfigure}
+  \caption{Radial approach scans from two of the \(80\,\mathrm{M}\) max-weight
+  points.  All modes include the continuous sampling Jacobian.  The linear
+  inverse-Jacobian LMB prefactor lowers some coefficients, but the positive
+  hard-hard slope remains.}
+  \label{fig:maxweight-80m-radial-scan}
+\end{figure}
+
+An event-level \texttt{inspect} check of \texttt{GL18} at the recorded
+max-weight point confirms that all 14 LMB event contributions are present in
+the summed evaluation.  The edge-4 channels are not missing, and their
+contributions are comparable to the non-edge-4 channels.  For example, with
+inverse-Jacobian weights, channel \((8,10)\) contributes roughly
+\(0.016+0.033i\), channel \((4,10)\) contributes \(0.036+0.036i\), and
+channel \((4,8)\) contributes \(-0.035-0.009i\).  The 14 channel weights sum
+to \(0.244039+0.268363i\), exactly matching the inspected value after the
+common parameterization Jacobian \(1.42839\times10^{53}\) multiplies the
+pre-Jacobian CFF sum \(1.70849\times10^{-54}
++1.87877\times10^{-54}i\).  The parsed event table is stored in
+\texttt{data/current\_maxweight\_diagnostics/}
+\texttt{gl18\_80m\_inspect\_events.json}.  The problem is therefore not that
+the denominator fails to sum the available LMB maps.  The problem is that all
+available maps still use independent spherical variables for their basis
+momenta; none introduces the locally natural continuous variables
+\((P_{\rm common},q)\) for the small relative momentum \(q\).
+
+This also explains why the edge-4 LMBs do not automatically cure the latest
+finite max-weight points.  In the exactly locked ray, \(q\) can remain fixed as
+the common radius grows.  In the actual recorded points the opening angle and
+radius mismatch are small but not zero, so along the radial scan \(q\) grows
+roughly like \(R\theta\).  The ratio \(q/R\) remains small and still produces a
+large collinear coefficient, but the edge-4 spherical density sees a hard
+radial variable and differs from the hard-hard density only by an angular
+constant.  Therefore the inverse-Jacobian denominator can lower coefficients,
+especially for \texttt{GL03} and \texttt{GL18}, but it cannot change the
+observed positive radial power.
+
+The same check was repeated after the additional short control runs, whose
+largest hard-hard points landed in \texttt{GL18}, \texttt{GL14}, and
+\texttt{GL06}.  \texttt{display integrand} confirms that these three diagrams
+each have 14 generated LMB channels enabled, including all edge-4 combinations.
+I reran this check directly against the all-graph inverse-Jacobian state; the
+raw display output and parsed channel list are saved as
+\texttt{data/current\_maxweight\_diagnostics/}
+\texttt{all\_lmb\_display\_gl06\_gl14\_gl18.log} and \texttt{.json}.
+Radial rescans of the new max-weight points again show that inverse-Jacobian
+LMB weighting changes only coefficients:
+\begin{center}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrr}
+\toprule
+point & mode & tail slope & abs. weight at recorded point\\
+\midrule
+\texttt{GL18} short-run max & no LMB & 1.000 & 0.103\\
+\texttt{GL18} short-run max & OSE & 1.000 & 0.0269\\
+\texttt{GL18} short-run max & inverse \(J\) & 1.000 & 0.0237\\
+\texttt{GL14} short-run max & no LMB & 1.000 & 0.0124\\
+\texttt{GL14} short-run max & OSE & 1.000 & 0.00970\\
+\texttt{GL14} short-run max & inverse \(J\) & 1.000 & 0.00986\\
+\texttt{GL06} short-run max & no LMB & 1.000 & 0.0205\\
+\texttt{GL06} short-run max & OSE & 1.000 & 0.0452\\
+\texttt{GL06} short-run max & inverse \(J\) & 1.000 & 0.0424\\
+\bottomrule
+\end{tabular}}
+\end{center}
+For these particular short-run points the edge norms computed from the graph
+momentum signatures are all hard; there is no actual soft edge that an
+edge-containing LMB channel could use as a small radial variable.  Consequently
+all active LMB inverse Jacobians scale with the same hard power, their
+normalized ratios approach constants, and the inverse-Jacobian denominator
+cannot alter the residual hard-hard radial exponent.  A common-radius
+hyperspherical map is a useful diagnostic because it samples the six-dimensional
+hard radius directly.  In practice it did not solve the variance problem:
+with no LMB multichanneling the \(1\,\mathrm{M}\)-sample run gave
+\[
+  {\rm Im}=+6.83\times 10^{-5}\pm2.68\times10^{-4},
+\]
+and with OSE-weighted summed LMBs it gave
+\[
+  {\rm Im}=+1.00\times 10^{-4}\pm7.36\times10^{-5}.
+\]
+The corresponding maximum inspected weights were of order \(200\) and \(69\),
+respectively.  A summed inverse-Jacobian hyperspherical run was much slower
+than the spherical production mode and did not reach a useful checkpoint in the
+short diagnostic window.  Therefore the common-radius map is not currently a
+practical production fix.
+
+I then repeated the radial scan in selected-channel mode, i.e. with
+\texttt{lmb\_channels="monte\_carlo"} and explicit \texttt{--discrete-dim}
+selection of each generated LMB channel.  This removes any ambiguity about the
+denominator: if one available chart really resolved the ridge, its selected
+channel should show a different hard-radius power.  It does not.  For all three
+representative hard-edge points, the summed inverse-Jacobian scan and every
+single selected channel still have slope approximately \(+1\):
+\begin{center}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrr}
+\toprule
+point & summed slope & selected-channel slope range &
+selected abs. range at point & selected abs. range deepest\\
+\midrule
+\texttt{GL06} short-run max & 1.00007 & 0.99991--1.00007 &
+\(2.60\times10^{-3}\)--\(1.26\times10^{-2}\) &
+\(4.16\times10^{-2}\)--\(2.02\times10^{-1}\)\\
+\texttt{GL14} short-run max & 0.99976 & 0.99967--0.99998 &
+\(3.25\times10^{-4}\)--\(2.11\times10^{-3}\) &
+\(5.21\times10^{-3}\)--\(3.37\times10^{-2}\)\\
+\texttt{GL18} \(80\,\mathrm{M}\) max & 0.99997 & 0.99996--0.99999 &
+\(3.14\times10^{-2}\)--\(5.04\times10^{-2}\) &
+\(5.03\times10^{-1}\)--\(8.07\times10^{-1}\)\\
+\bottomrule
+\end{tabular}}
+\end{center}
+The vector sum of the selected \texttt{GL18} channel contributions reproduces
+the explicit summed-LMB inspect value at both the recorded and deepest scan
+points, so this is not a bookkeeping mismatch.  The output is saved as
+\texttt{data/current\_maxweight\_diagnostics/}
+\texttt{hard\_edge\_ridges\_per\_lmb\_channel\_radial\_scan.json} and
+\texttt{\_summary.json}.  This is the strongest diagnostic for the current
+sampler: all LMBs are active, inverse-Jacobian multichanneling is applied, but
+none of the sampled charts contains the missing repeated-hard-edge coordinate.
+
+I also evaluated the inverse-Jacobian channel densities themselves at three
+representative ridge points.  This diagnostic computes the inverse spherical
+map density for every generated LMB channel at the same physical point.  It is
+stored as
+\texttt{data/current\_maxweight\_diagnostics/}
+\texttt{inverse\_jacobian\_channel\_density\_at\_ridges.json}.  The result
+again shows that the issue is not a missing channel: the available densities
+are spread over ordinary hard LMBs rather than enhanced by the repeated
+internal-edge structure.
+\begin{center}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrl}
+\toprule
+point & largest density channel(s) & top fraction & nearest pair\\
+\midrule
+\texttt{GL06} max & \((4,8)\), \((4,5)\) & 0.227 each &
+\((6,9)\), difference \(0\)\\
+\texttt{GL14} max & \((4,7)\), \((4,5)\), \((4,9)\), \((4,10)\) &
+0.169 each & \((6,8)\), difference \(4.15\times10^{-5}\)\\
+\texttt{GL18} \(80\,\mathrm{M}\) max & several channels, e.g. \((6,9)\),
+\((8,9)\), \((6,10)\), \((6,7)\) & 0.080 each &
+\((7,10)\), difference \(0\)\\
+\bottomrule
+\end{tabular}}
+\end{center}
+For \texttt{GL06} and \texttt{GL18} at kinematics A this is especially
+important: the closest top-edge pair is rank deficient as a coordinate pair,
+because both edges have the same internal loop signature and differ only by
+\(\vec P_0+\vec P_1=0\).  There is no invertible LMB channel that samples
+these two edge momenta as independent variables.  A production fix for these
+points therefore needs an edge-cluster or hard-ray channel whose balance
+density knows that several propagator energies share the same hard
+three-momentum.  A \((P_{\rm common},q)\) relative-momentum channel is still
+the right model for genuinely variable small differences, but the exactly
+locked kinematics-A cases require the repeated-hard-ray limit as well.
+
+The more precise reason is visible from the graph edge signatures.  I parsed
+the generated dot files and evaluated all hard internal edge three-momenta at
+the recorded short-run and \(80\,\mathrm{M}\) max-weight points.  The nearest
+edge pairs are not generally the two sampled LMB basis vectors; they are often
+dependent top edges that differ only by fixed external shifts.  For kinematics
+A, \(P_0+P_1\) has zero spatial part, so some of these pairs are exactly
+identical as three-momenta:
+\begin{center}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llll}
+\toprule
+point & nearest hard edge pair & relative difference & edge representations\\
+\midrule
+\texttt{GL06} short-run max & \(e_6,e_9\) & \(0\) &
+\(\vec k_1-\vec P_0-\vec P_1\), \(\vec k_1\)\\
+\texttt{GL14} short-run max & \(e_6,e_8\) & \(4.15\times10^{-5}\) &
+\(-\vec k_0+\vec k_1-\vec P_1+\vec P_2\),
+\(-\vec k_0+\vec k_1-\vec P_1\)\\
+\texttt{GL18} short-run max & \(e_7,e_{10}\) & \(0\) &
+\(\vec k_1+\vec P_2\), \(\vec k_1+\vec P_2-\vec P_0-\vec P_1\)\\
+\texttt{GL18} \(80\,\mathrm{M}\) max & \(e_7,e_{10}\) & \(0\) &
+\(\vec k_1+\vec P_2\), \(\vec k_1+\vec P_2-\vec P_0-\vec P_1\)\\
+\bottomrule
+\end{tabular}}
+\end{center}
+This diagnostic is saved in
+\texttt{data/current\_maxweight\_diagnostics/edge\_uv\_pair\_diagnostics.json}
+and can be regenerated with
+\texttt{diagnose\_edge\_uv\_pairs.py}.  It explains why ordinary all-LMB
+multichanneling does not change the power: the problematic equal-energy
+structure is not a missing independent LMB.  A relative coordinate built from
+the two LMB basis vectors also leaves the same \(R^{+1}\) tail on the current
+\texttt{GL06}, \texttt{GL14}, and \texttt{GL18} rays, because it does not
+parameterize these dependent edge-pair degeneracies.
+
+\subsection{Common-radial and hybrid radial probes}
+
+The previous observation suggests a more precise coordinate-level diagnostic.
+The product spherical map used in the production runs maps each loop radius
+independently.  In a double-UV limit with a fixed ratio between the two loop
+radii this introduces two large radial derivatives, whereas the physical
+two-loop scaling has only one common hard radius.  I therefore added an
+opt-in two-loop map
+\[
+  (r_0,r_1)=(R\,y,R(1-y)),
+\]
+with ordinary spherical angles for the two loop directions.  This
+\texttt{spherical\_common\_radial} map has the correct common hard-radius
+Jacobian for the double-UV diagonal.
+
+Rescanning the \(80\,\mathrm{M}\) max-weight points with the same physical
+momenta transformed into this coordinate system confirms the diagnosis: the
+old \(R^{+1}\) tails disappear for \texttt{GL01}, \texttt{GL03}, and
+\texttt{GL18}, and are strongly reduced for \texttt{GL17}.
+\begin{center}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrr}
+\toprule
+point & old inverse-\(J\) slope & common-radial summed slope &
+selected-channel slope range\\
+\midrule
+\texttt{GL01} \(80\,\mathrm{M}\) max & 1.0002 & 0.00039 &
+0.00011--0.00072\\
+\texttt{GL03} \(80\,\mathrm{M}\) max & 1.0000 & \(-0.00002\) &
+\(-0.00002\)--0.00001\\
+\texttt{GL17} \(80\,\mathrm{M}\) max & 1.0980 & 0.101 &
+\(-0.013\)--0.637\\
+\texttt{GL18} \(80\,\mathrm{M}\) max & 1.0000 & \(-0.00001\) &
+\(-0.00002\)--0.00001\\
+\bottomrule
+\end{tabular}}
+\end{center}
+The raw scan output is saved as
+\texttt{data/current\_maxweight\_diagnostics/common\_radial\_ridge\_scan.json}
+and \texttt{\_summary.json}.
+
+The pure common-radial map is not a production map by itself.  It handles the
+double-hard diagonal, but it undersamples single-hard-loop boundaries
+\(y\to0\) and \(y\to1\).  A \(1\,\mathrm{M}\)-sample all-graph run with
+summed inverse-Jacobian LMBs found new maxima at \(y\simeq4\times10^{-4}\) and
+gave
+\[
+  {\rm Im}=-1.62\times10^{-6}\pm1.99\times10^{-6}.
+\]
+This is worse than the product-spherical production estimator.
+
+I then implemented an experimental hybrid map
+\texttt{spherical\_product\_common\_radial}.  Half of the first integration
+coordinate selects the ordinary product-spherical radial map, and the other
+half selects the common-radial map.  The sampled branch is tagged on the
+momentum sample; for inverse-Jacobian LMB multichanneling the numerator uses
+the inverse density of the sampled branch and the denominator sums both
+product and common-radial densities over all LMBs.  This keeps the product
+radial sectors for single-hard-loop limits while adding a true common-radius
+sector for double-hard limits.
+
+At \(1\,\mathrm{M}\) samples, the hybrid map removed the visible hard-radial
+maxima: all max-weight points were bulk-like and below \(0.15\), with
+negligible instability.  However, a \(10\,\mathrm{M}\)-sample run found a new
+\texttt{GL00} common-branch point,
+\[
+  x=(0.9999999761,\ 0.68264,\ 0.21318,\ 0.82083,\ 0.22210,\ 0.90592),
+\]
+with maximum imaginary weight about \(1.07\times10^3\).  The resulting
+integral estimate was dominated by this point,
+\[
+  {\rm Im}=+1.05\times10^{-4}\pm1.07\times10^{-4},
+\]
+and is therefore unusable.
+
+\texttt{display integrand} confirms that \texttt{GL00} has all 11 generated
+LMB channels enabled:
+\[
+  (5,10),(4,10),(5,9),(4,9),(5,8),(4,8),
+  (5,7),(4,7),(5,6),(4,6),(4,5).
+\]
+A direct radial rescan of the \texttt{GL00} hybrid max with all 11 selected
+channels gives slope \(+1.000\) in every channel:
+\begin{center}
+\scriptsize
+\begin{tabular}{lrrr}
+\toprule
+mode & slope & abs. at recorded point & deepest selected abs. range\\
+\midrule
+summed LMBs & 1.0000 & 42.6 & --\\
+selected LMB channels & 1.0000--1.0000 &
+2.03--7.06 & 32.5--84.2\\
+\bottomrule
+\end{tabular}
+\end{center}
+This is qualitatively different from the earlier parameterization artifact.
+Because the common-radial Jacobian has the correct double-UV measure, a
+remaining event-weight slope \(R^{+1}\) corresponds to a physical
+two-loop UV behavior close to degree zero along this \texttt{GL00} ray.  I
+attempted to confirm this with \texttt{profile ultra-violet} using the same
+fixed ray and \(\max\) scaling \(10^8\), but the graph-unrestricted profile
+run reached about \(91\,\mathrm{GB}\) RSS and was stopped before the
+\(100\,\mathrm{GB}\) safety threshold.  The safer direct inspect scan is
+therefore the current evidence.  The data are stored as
+\texttt{all\_lmb\_display\_gl00.json},
+\texttt{hybrid\_gl00\_max\_radial\_scan.json}, and
+\texttt{hybrid\_gl00\_max\_radial\_scan\_summary.json}.
+
+The conclusion from these probes is narrower but important.  The original
+\texttt{GL01}/\texttt{GL03}/\texttt{GL18} ridges are indeed caused by the
+product-radial parameterization over-resolving a common hard radius.  A
+hybrid continuous channel can remove those ridges.  The full amplitude is
+nevertheless still blocked by a \texttt{GL00} two-loop UV ray that appears to
+survive even in the common-radius measure.  That points back to the local
+UV subtraction or the generated integrated-CT structure for \texttt{GL00},
+rather than to LMB channel selection.
+
+Two additional controls exclude simple alternatives.  First, I regenerated
+\texttt{GL18} alone with tropical subgraph tables enabled and integrated it
+with \texttt{coordinate\_system="tropical"}.  The \(100\,\mathrm{k}\)-sample
+run gave
+\[
+  {\rm Im}=-6.75\times10^{-6}\pm1.81\times10^{-5}
+\]
+at about \(2.64\,\mathrm{ms}\) per sample per core, with maximum-weight impact
+\(1.52\).  This is much worse than the spherical inverse-Jacobian LMB
+estimator scaled to the same graph/sample count, so the current tropical
+sampler does not capture this repeated-hard-ray feature.  The card, log, and
+result are stored as
+\texttt{aa\_aa\_2l\_gl18\_tropical\_probe.toml},
+\texttt{data/current\_maxweight\_diagnostics/gl18\_tropical\_probe\_100k.log},
+and \texttt{.../gl18\_tropical\_probe\_100k\_result.json}.
+I also attempted a short fresh-generation probe with nondefault tropical
+\texttt{target\_omega} values.  That did not produce an integration result: the
+fresh GL18 state failed during the integrated-UV/vakint tensor-reduction stage
+before sampling began.  The log is saved as
+\texttt{data/current\_maxweight\_diagnostics/}
+\texttt{gl18\_tropical\_omega\_2p0\_100k.log}.  This is a generation-side issue,
+not evidence that the tuned tropical sampler improves or worsens the ridge, so
+I did not use it in the statistical comparison.
+
+Second, I tested whether the existing OSE balance weight could be pushed into
+the hard tail by choosing \(\alpha=-1\), so that the OSE factor grows with the
+hard energies rather than suppressing them.  With all graphs, summed
+orientations, summed LMBs, kinematics A, and helicity \(+-+-\), the
+\(1\,\mathrm{M}\)-sample run gave
+\[
+  {\rm Im}=+2.94\times10^{-6}\pm3.38\times10^{-5}.
+\]
+The largest signed weights rose to about \(64\) in the real part and \(16\) in
+the imaginary part.  This overcorrects badly and moves variance into other
+regions.  The result is saved as
+\texttt{data/current\_maxweight\_diagnostics/}
+\texttt{ose\_alpha\_minus1\_1m\_result.json}.  A useful fix must therefore be
+more local than a global sign flip of the OSE exponent.
+
+\subsection{Radial power-map and precision controls}
+
+A follow-up test asked whether the ridge could be handled by changing only the
+global radial density.  For the \(80\,\mathrm{M}\) \texttt{GL03} max-weight
+ray I transformed the same physical momenta to the power map
+\[
+  r=E_{\rm cm} b \left(\frac{x}{1-x}\right)^p
+\]
+and rescanned the full all-graph summed inspected weight.  With \(b=1\), the
+large-radius slopes were:
+\begin{center}
+\scriptsize
+\begin{tabular}{cr}
+\toprule
+power \(p\) & fitted slope on the \texttt{GL03} ray\\
+\midrule
+1.25 & \(+0.600\)\\
+1.50 & \(+0.332\)\\
+2.00 & \(-0.007\) to \(-0.04\) over the scanned range\\
+3.00 & about \(-0.36\)\\
+4.00 & about \(-0.56\)\\
+\bottomrule
+\end{tabular}
+\end{center}
+Thus \(p=2\) is the first simple radial map that neutralizes the observed
+linear hard-radius growth on this fixed ray.  This confirms that the ridge is
+partly a mismatch between the hard-radius tail and the sampling density.
+
+However, the full integration test is less favorable.  The table below shows
+matched \(1\,\mathrm{M}\)-sample graph-Monte-Carlo, summed-LMB runs with
+kinematics A and helicity \(+-+-\):
+\begin{center}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrr}
+\toprule
+sampling & Im value & Im error & f128 & Arb & nan/unstable\\
+\midrule
+linear, inverse-\(J\) LMB & \(-1.41\times10^{-6}\) &
+  \(2.25\times10^{-6}\) & 0.0018\% & 0 & 0\\
+relative spherical, inverse-\(J\) LMB, \(1.45\,\mathrm{M}\) samples &
+  \(-1.35\times10^{-6}\) & \(1.21\times10^{-6}\) &
+  0.00145\% & 0 & 0\\
+power \(p=1.5\), inverse-\(J\) LMB & \(+1.28\times10^{-6}\) &
+  \(2.26\times10^{-6}\) & 0.0716\% & 0 & \(3.0\times10^{-4}\%\)\\
+power \(p=1.75\), inverse-\(J\) LMB & \(-0.46\times10^{-6}\) &
+  \(2.40\times10^{-6}\) & 0.1799\% & 0 & \(2.4\times10^{-3}\%\)\\
+power \(p=2\), quad for high norms & \(-15.7\times10^{-6}\) &
+  \(12.4\times10^{-6}\) & 0.4109\% & 0 & \(7.8\times10^{-3}\%\)\\
+\bottomrule
+\end{tabular}}
+\end{center}
+The relative-spherical control used all generated LMB channels and the
+inverse-Jacobian balance denominator, and its maximum signed weights stayed at
+\(\mathcal{O}(10^{-1})\).  Nevertheless the total imaginary relative error was
+still about \(90\%\) at \(1.45\,\mathrm{M}\) samples, so the control did not
+change the full-amplitude cost scaling.  This is consistent with the edge-pair
+diagnostic above: the hard-hard equal-momentum pairs are dependent internal
+edges, not generally the two LMB basis vectors used by the relative-spherical
+map.  The checkpoint is stored as
+\texttt{data/additional\_sampling\_controls/relative\_spherical\_145M/}
+\texttt{integration\_result\_iter\_0010.json}.
+
+The \(p=1.5\) and \(p=1.75\) maps do not improve the absolute error.  The
+\(p=2\) map overexposes very deep UV samples.  Several apparent
+\(\mathcal{O}(1)\) to \(\mathcal{O}(10^4)\) max weights in these runs are
+double- or quad-precision cancellation artifacts: direct arbitrary-precision
+\texttt{inspect} at the same points gives ordinary weights of order
+\(10^{-5}\) or smaller.  For example, the \texttt{GL00} \(p=2\) point printed
+\(+1.16\times10^4 i\) in the integration max table but evaluates to
+\(-8.2\times10^{-6}-9.1\times10^{-6}i\) in arbitrary precision.  A
+\texttt{GL08} \(p=2\) point printed a weight around \(-12i\) but evaluates to
+\(-3.1\times10^{-7}-1.1\times10^{-6}i\) in arbitrary precision.
+
+Forcing high loop-momentum norms directly to arbitrary precision removes those
+fake max weights.  In a \(100\,\mathrm{k}\)-sample \(p=2\) control with
+\(\sum |\vec k_i| > 10^6 E_{\rm cm}\) escalated to the final Arb level, the
+precision mix was 99.519\% f64, 0.295\% f128, 0.186\% Arb, and 0
+nan/unstable samples.  The max weights then returned to \(\mathcal{O}(0.1)\).
+The statistical error, however, remained comparable to the linear baseline
+when scaled to \(1\,\mathrm{M}\) samples.  This means the global radial map can
+regularize selected approach plots, but it is not yet an efficient production
+sampler for the full amplitude.
+
+The practical conclusion from this test is that a global hard-radius density
+is too blunt.  The required channel should target the asymptotic OSE cluster,
+the repeated hard ray, or a genuinely small hard-hard relative variable
+locally, while leaving the rest of the UV domain to the ordinary
+spherical/LMB channels.  Such a channel must also trigger arbitrary precision
+in the very-deep-UV cancellation region, or use a more reliable stability
+criterion there.
+
+The proxy channel-partition scan gives a concrete target for such a fix.  In
+the standalone proxy, the raw bad hard-hard channel grows as \(R^{+1}\) when
+the relative momentum \(q\) is held fixed.  If the balance denominator also
+contains a true \((P_{\rm common},q)\) channel, the bad direct-channel
+contribution instead scales as \(R^{-3}\) with the inverse-Jacobian density
+for the linear map, and as \(R^{-2}\) with an OSE \(\alpha=3\) proxy.  This
+is the behavior the current GL00 estimator is missing in the variable-\(q\)
+case: the implemented inverse-Jacobian denominator is correct for the existing
+LMB maps, but the existing map set does not include the dependent
+internal-edge relative channel.  For the exactly locked kinematics-A pairs,
+where \(q\) is fixed by the external spatial shift, the analogous missing
+object is a repeated-hard-ray edge-cluster density rather than an invertible
+two-edge LMB.
+
 \section{Implications}
 
 The current evidence points to a high-variance, locally integrable
@@ -1236,11 +1953,23 @@ relative-momentum singularity rather than a wrong integrated UV counterterm or a
 missing local UV cancellation.  The practical options suggested by the toy
 model are:
 \begin{enumerate}
-  \item add a specialized channel or remapping for hard-hard relative momentum
-        ridges, using variables close to $(P_{\rm common},q)$;
-  \item scan the LMB prefactor exponent $\alpha$; larger values focus more
-        strongly on channels containing the small OSE, while smaller values
-        avoid over-focusing and may improve other regions;
+  \item add a specialized continuous channel or remapping for hard-hard
+        relative momentum ridges and repeated-hard-ray edge clusters.  For
+        variable relative momentum, a concrete implementation target is a map
+        that samples variables close to \((P_{\rm common},q)\), for example
+        \(k=P_{\rm common}+q/2+\Delta\) and
+        \(l=P_{\rm common}-q/2+\Delta'\), with the external shifts chosen from
+        the small internal edge under consideration.  For the exactly locked
+        kinematics-A cases, where the two top-edge three-momenta are the same
+        function of one loop momentum, the channel should instead encode the
+        repeated-edge hard-ray multiplicity.  In both cases the channel
+        density must enter the same balance denominator as the LMB channels
+        through its actual inverse Jacobian or another normalized positive
+        channel weight assigned to a sampled channel;
+  \item avoid using a global OSE exponent scan as the primary cure.  The
+        \(\alpha=-1\) control shows that a hard-tail sign flip overcorrects
+        and produces much larger max weights.  Any useful OSE-based variant
+        has to be local to the repeated hard-edge cluster;
   \item use explicit summed LMB channels as a diagnostic, while recognizing
         that this reduces discrete-channel variance but does not by itself
         remap the continuous relative-ridge variables.

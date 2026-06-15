@@ -13,7 +13,7 @@ use symbolica::{atom::AtomCore, parse_lit};
 
 use crate::{
     momentum::ThreeMomentum,
-    settings::runtime::ParameterizationSettings,
+    settings::runtime::{ParameterizationMode, ParameterizationSettings},
     utils::{F, GS, global_inv_parameterize, global_parameterize, symbolica_ext::CallSymbol},
 };
 
@@ -81,6 +81,64 @@ fn test_inv_param() {
     let (xs, jac_2) = global_inv_parameterize(&actual_momenta, e_cm, &param_settings);
 
     for i in 0..9 {
+        assert_approx_eq(&x[i], &xs[i], &F(1.0e-14));
+    }
+
+    let prod = jac_1 * jac_2;
+    assert_approx_eq(&prod, &F(1.0), &F(1.0e-14));
+}
+
+#[test]
+fn test_relative_spherical_inv_param() {
+    let x = [F(0.17), F(0.23), F(0.31), F(0.43), F(0.59), F(0.71)];
+    let e_cm = F(173.0);
+    let param_settings = ParameterizationSettings {
+        mode: ParameterizationMode::RelativeSpherical,
+        ..Default::default()
+    };
+
+    let (momenta, jac_1) = global_parameterize(&x, e_cm, &param_settings);
+    let actual_momenta = momenta
+        .iter()
+        .map(|p| ThreeMomentum {
+            px: p[0],
+            py: p[1],
+            pz: p[2],
+        })
+        .collect_vec();
+
+    let (xs, jac_2) = global_inv_parameterize(&actual_momenta, e_cm, &param_settings);
+
+    for i in 0..6 {
+        assert_approx_eq(&x[i], &xs[i], &F(1.0e-14));
+    }
+
+    let prod = jac_1 * jac_2;
+    assert_approx_eq(&prod, &F(1.0), &F(1.0e-14));
+}
+
+#[test]
+fn test_spherical_common_radial_inv_param() {
+    let x = [F(0.17), F(0.23), F(0.31), F(0.43), F(0.59), F(0.71)];
+    let e_cm = F(173.0);
+    let param_settings = ParameterizationSettings {
+        mode: ParameterizationMode::SphericalCommonRadial,
+        ..Default::default()
+    };
+
+    let (momenta, jac_1) = global_parameterize(&x, e_cm, &param_settings);
+    let actual_momenta = momenta
+        .iter()
+        .map(|p| ThreeMomentum {
+            px: p[0],
+            py: p[1],
+            pz: p[2],
+        })
+        .collect_vec();
+
+    let (xs, jac_2) = global_inv_parameterize(&actual_momenta, e_cm, &param_settings);
+
+    for i in 0..6 {
         assert_approx_eq(&x[i], &xs[i], &F(1.0e-14));
     }
 

@@ -1,0 +1,302 @@
+{
+  "slots": [
+    {
+      "key": "aa_aa@2L",
+      "process": "aa_aa",
+      "integrand": "2L",
+      "target": null,
+      "integral": {
+        "neval": 1000000,
+        "real_zero": 0,
+        "im_zero": 0,
+        "result": {
+          "re": -1.2676996762590594e-6,
+          "im": 9.534414158194658e-7
+        },
+        "error": {
+          "re": 2.2204411965712906e-6,
+          "im": 2.2376826056829255e-6
+        },
+        "real_chisq": 0.0,
+        "im_chisq": 0.0
+      },
+      "table_results": [
+        {
+          "component": "re",
+          "value": -1.2676996762590594e-6,
+          "error": 2.2204411965712906e-6,
+          "relative_error_percent": 175.15514424707754,
+          "chi_sq_per_dof": 0.0,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.16165664831775006
+        },
+        {
+          "component": "im",
+          "value": 9.534414158194658e-7,
+          "error": 2.2376826056829255e-6,
+          "relative_error_percent": 234.69534347421623,
+          "chi_sq_per_dof": 0.0,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.16886659176896215
+        }
+      ],
+      "integration_statistics": {
+        "num_evals": 1000000,
+        "average_total_time_seconds": 0.001314083,
+        "average_parameterization_time_seconds": 6.13e-7,
+        "average_integrand_time_seconds": 0.000665405,
+        "average_evaluator_time_seconds": 0.000612144,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 2.387e-6,
+        "f64_percentage": 99.9981,
+        "f128_percentage": 0.0019000000000000002,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 0.1569987439288281,
+          "coordinates": "graph: 2, xs: [\n2.2479274754687073e-01 2.5359720774351269e-01 2.3911868088240751e-01\n3.0360653152751449e-01 2.8008835480614558e-01 5.1774772736899144e-01 ]"
+        },
+        {
+          "component": "re",
+          "sign": "-",
+          "max_eval": -0.20493208073753635,
+          "coordinates": "graph: 10, xs: [\n9.9972605511944601e-01 5.9527066218796598e-01 2.8121655386487698e-02\n9.9929042279752922e-01 9.9432932400174268e-01 8.6220910818747232e-01 ]"
+        },
+        {
+          "component": "im",
+          "sign": "+",
+          "max_eval": 0.161004402340807,
+          "coordinates": "graph: 10, xs: [\n9.9972605511944601e-01 5.9527066218796598e-01 2.8121655386487698e-02\n9.9929042279752922e-01 9.9432932400174268e-01 8.6220910818747232e-01 ]"
+        },
+        {
+          "component": "im",
+          "sign": "-",
+          "max_eval": -0.10781011926562639,
+          "coordinates": "graph: 7, xs: [\n9.9928560786268694e-01 6.9209294959349577e-01 2.8659450247430496e-01\n9.9985395518723508e-01 1.1911699688086141e-01 5.0153678028659998e-02 ]"
+        }
+      ],
+      "grid_breakdown": {
+        "re": {
+          "axis_label": "graph",
+          "fixed_coordinates": [],
+          "entries": [
+            {
+              "bin_index": 0,
+              "bin_label": "GL00",
+              "pdf": 0.08430546153912244,
+              "value": 9.511250802444985e-8,
+              "error": 5.525543785128731e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 91237
+            },
+            {
+              "bin_index": 1,
+              "bin_label": "GL01",
+              "pdf": 0.1408260684785795,
+              "value": -2.3941264808115103e-8,
+              "error": 9.149382391670221e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90818
+            },
+            {
+              "bin_index": 2,
+              "bin_label": "GL03",
+              "pdf": 0.1807387181890854,
+              "value": -1.98290511418938e-7,
+              "error": 1.1638891075024154e-6,
+              "chi_sq": 0.0,
+              "processed_samples": 90949
+            },
+            {
+              "bin_index": 3,
+              "bin_label": "GL05",
+              "pdf": 0.07549386107875206,
+              "value": -3.3755898437409367e-7,
+              "error": 5.013958913295074e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90444
+            },
+            {
+              "bin_index": 4,
+              "bin_label": "GL06",
+              "pdf": 0.12036463681058734,
+              "value": -2.2648654637194067e-7,
+              "error": 7.82309451279377e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90643
+            },
+            {
+              "bin_index": 5,
+              "bin_label": "GL08",
+              "pdf": 0.033857317022762984,
+              "value": 2.612834734568321e-7,
+              "error": 2.2570874199189865e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90953
+            },
+            {
+              "bin_index": 6,
+              "bin_label": "GL12",
+              "pdf": 0.03143455955167603,
+              "value": -1.221780449248947e-7,
+              "error": 1.884109687859379e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90791
+            },
+            {
+              "bin_index": 7,
+              "bin_label": "GL14",
+              "pdf": 0.08613907129375077,
+              "value": -7.979976509565668e-7,
+              "error": 5.333451765971551e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 91217
+            },
+            {
+              "bin_index": 8,
+              "bin_label": "GL16",
+              "pdf": 0.03003557056269816,
+              "value": -1.1756107743186813e-7,
+              "error": 1.8265580889578857e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90741
+            },
+            {
+              "bin_index": 9,
+              "bin_label": "GL17",
+              "pdf": 0.06883186315377425,
+              "value": 1.4909741306654383e-7,
+              "error": 4.4376600296824597e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90796
+            },
+            {
+              "bin_index": 10,
+              "bin_label": "GL18",
+              "pdf": 0.14797287231921094,
+              "value": 5.0259653215005086e-8,
+              "error": 9.804293192216335e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 91411
+            }
+          ]
+        },
+        "im": {
+          "axis_label": "graph",
+          "fixed_coordinates": [],
+          "entries": [
+            {
+              "bin_index": 0,
+              "bin_label": "GL00",
+              "pdf": 0.08430546153912244,
+              "value": 1.2393135098903513e-7,
+              "error": 5.505587655662998e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 91237
+            },
+            {
+              "bin_index": 1,
+              "bin_label": "GL01",
+              "pdf": 0.1408260684785795,
+              "value": -3.456106382656026e-6,
+              "error": 9.217869782290263e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90818
+            },
+            {
+              "bin_index": 2,
+              "bin_label": "GL03",
+              "pdf": 0.1807387181890854,
+              "value": 3.128581232513765e-6,
+              "error": 1.1821857247911169e-6,
+              "chi_sq": 0.0,
+              "processed_samples": 90949
+            },
+            {
+              "bin_index": 3,
+              "bin_label": "GL05",
+              "pdf": 0.07549386107875206,
+              "value": -2.9214331957138565e-7,
+              "error": 4.951710516640017e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90444
+            },
+            {
+              "bin_index": 4,
+              "bin_label": "GL06",
+              "pdf": 0.12036463681058734,
+              "value": -2.35570013391664e-6,
+              "error": 7.886154103943198e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90643
+            },
+            {
+              "bin_index": 5,
+              "bin_label": "GL08",
+              "pdf": 0.033857317022762984,
+              "value": -1.2799878379159857e-6,
+              "error": 2.214509270996731e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90953
+            },
+            {
+              "bin_index": 6,
+              "bin_label": "GL12",
+              "pdf": 0.03143455955167603,
+              "value": 1.1649122847347693e-6,
+              "error": 2.0578772260943757e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90791
+            },
+            {
+              "bin_index": 7,
+              "bin_label": "GL14",
+              "pdf": 0.08613907129375077,
+              "value": 3.739958453029067e-6,
+              "error": 5.625948635306104e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 91217
+            },
+            {
+              "bin_index": 8,
+              "bin_label": "GL16",
+              "pdf": 0.03003557056269816,
+              "value": -3.5804490766628026e-6,
+              "error": 1.966833461700036e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90741
+            },
+            {
+              "bin_index": 9,
+              "bin_label": "GL17",
+              "pdf": 0.06883186315377425,
+              "value": 3.9352118727375725e-6,
+              "error": 4.5059840309070066e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90796
+            },
+            {
+              "bin_index": 10,
+              "bin_label": "GL18",
+              "pdf": 0.14797287231921094,
+              "value": -1.9959889846776583e-7,
+              "error": 9.6542010547086e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 91411
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

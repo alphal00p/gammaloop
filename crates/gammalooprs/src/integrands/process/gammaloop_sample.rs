@@ -6,8 +6,9 @@ use crate::momentum::{Rotation, ThreeMomentum};
 use crate::utils::{self, F, FloatLike, global_parameterize};
 use crate::{
     DependentMomentaConstructor, settings::runtime::DiscreteGraphSamplingType,
-    settings::runtime::LmbChannelWeight, settings::runtime::ParameterizationSettings,
-    settings::runtime::SamplingSettings, settings::runtime::kinematic::KinematicsSettings,
+    settings::runtime::LmbChannelWeight, settings::runtime::ParameterizationMode,
+    settings::runtime::ParameterizationSettings, settings::runtime::SamplingSettings,
+    settings::runtime::kinematic::KinematicsSettings,
 };
 use color_eyre::Result;
 use eyre::eyre;
@@ -613,7 +614,7 @@ fn default_parametrize<T: FloatLike>(
 
     let jacobian = param_jacobian;
     // info!("Default parametrize with ext cache id:{external_mom_cache_id}");
-    MomentumSample::new(
+    let mut sample = MomentumSample::new(
         loop_moms,
         loop_mom_cache_id,
         externals,
@@ -622,5 +623,14 @@ fn default_parametrize<T: FloatLike>(
         dependent_momenta_constructor,
         orientation,
     )
-    .unwrap()
+    .unwrap();
+
+    if matches!(
+        parameterization_settings.mode,
+        ParameterizationMode::SphericalProductCommonRadial
+    ) {
+        sample.sample.parameterization_branch = Some(if xs[0] < F::from_f64(0.5) { 0 } else { 1 });
+    }
+
+    sample
 }

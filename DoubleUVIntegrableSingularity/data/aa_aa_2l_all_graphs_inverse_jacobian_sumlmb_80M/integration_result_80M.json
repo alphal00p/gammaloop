@@ -1,0 +1,302 @@
+{
+  "slots": [
+    {
+      "key": "aa_aa@2L",
+      "process": "aa_aa",
+      "integrand": "2L",
+      "target": null,
+      "integral": {
+        "neval": 80000000,
+        "real_zero": 2,
+        "im_zero": 2,
+        "result": {
+          "re": -1.4572796652808415e-7,
+          "im": -1.3754709076881031e-6
+        },
+        "error": {
+          "re": 1.4223735875136768e-7,
+          "im": 1.4244992680836992e-7
+        },
+        "real_chisq": 86.40441267753607,
+        "im_chisq": 90.50584482231969
+      },
+      "table_results": [
+        {
+          "component": "re",
+          "value": -1.4572796652808415e-7,
+          "error": 1.4223735875136768e-7,
+          "relative_error_percent": 97.60470974797842,
+          "chi_sq_per_dof": 1.0800551584692009,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.0704406072283434
+        },
+        {
+          "component": "im",
+          "value": -1.3754709076881031e-6,
+          "error": 1.4244992680836992e-7,
+          "relative_error_percent": 10.356447818136722,
+          "chi_sq_per_dof": 1.131323060278996,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.013269476541573367
+        }
+      ],
+      "integration_statistics": {
+        "num_evals": 80000000,
+        "average_total_time_seconds": 0.001395611,
+        "average_parameterization_time_seconds": 6.14e-7,
+        "average_integrand_time_seconds": 0.000709216,
+        "average_evaluator_time_seconds": 0.000658942,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 1.33e-6,
+        "f64_percentage": 99.9983725,
+        "f128_percentage": 0.0016274999999999998,
+        "arb_percentage": 0.0,
+        "nan_percentage": 2.4999999999999998e-6,
+        "nan_or_unstable_percentage": 2.4999999999999998e-6,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 0.821213316191196,
+          "coordinates": "graph: 10, xs: [\n9.9997382389284328e-01 6.7618699371192770e-01 4.7916686284283300e-01\n9.9996380436989318e-01 1.7088467296021152e-02 8.9351750858297729e-01 ]"
+        },
+        {
+          "component": "re",
+          "sign": "-",
+          "max_eval": -0.42391582478949374,
+          "coordinates": "graph: 1, xs: [\n9.9974368510280476e-01 4.2277449086096408e-01 3.0449679339237290e-01\n9.9982033920914570e-01 4.7458938787899707e-01 4.7185501006813324e-01 ]"
+        },
+        {
+          "component": "im",
+          "sign": "+",
+          "max_eval": 1.4601423154547128,
+          "coordinates": "graph: 2, xs: [\n9.9985130679222345e-01 7.5249970972273350e-01 3.6093249964439938e-01\n9.9996982475085883e-01 6.7218748763223490e-01 6.2529148254131051e-01 ]"
+        },
+        {
+          "component": "im",
+          "sign": "-",
+          "max_eval": -0.9514047828518165,
+          "coordinates": "graph: 9, xs: [\n9.9974259613228311e-01 1.3057304141503270e-01 8.8335036792594457e-01\n9.9999387143446894e-01 4.4900669230836104e-01 9.3489937965327485e-01 ]"
+        }
+      ],
+      "grid_breakdown": {
+        "re": {
+          "axis_label": "graph",
+          "fixed_coordinates": [],
+          "entries": [
+            {
+              "bin_index": 0,
+              "bin_label": "GL00",
+              "pdf": 0.08082401175277566,
+              "value": -3.6193720987212946e-8,
+              "error": 4.0121247424799624e-8,
+              "chi_sq": 67.14533909215773,
+              "processed_samples": 6563331
+            },
+            {
+              "bin_index": 1,
+              "bin_label": "GL01",
+              "pdf": 0.12392398746067304,
+              "value": -2.362055396086075e-9,
+              "error": 5.130140365311709e-8,
+              "chi_sq": 99.40675447751438,
+              "processed_samples": 9926483
+            },
+            {
+              "bin_index": 2,
+              "bin_label": "GL03",
+              "pdf": 0.17946436199381058,
+              "value": -1.5756440244844833e-8,
+              "error": 5.820642488498786e-8,
+              "chi_sq": 96.12451721003939,
+              "processed_samples": 14249180
+            },
+            {
+              "bin_index": 3,
+              "bin_label": "GL05",
+              "pdf": 0.07306974274428177,
+              "value": 2.6085714076521345e-8,
+              "error": 3.829412721082115e-8,
+              "chi_sq": 76.4161384872336,
+              "processed_samples": 5887601
+            },
+            {
+              "bin_index": 4,
+              "bin_label": "GL06",
+              "pdf": 0.11215910218621704,
+              "value": -8.158799721985532e-8,
+              "error": 4.824972605714208e-8,
+              "chi_sq": 82.93494346266186,
+              "processed_samples": 8973398
+            },
+            {
+              "bin_index": 5,
+              "bin_label": "GL08",
+              "pdf": 0.03964780408744941,
+              "value": 7.670927470373249e-8,
+              "error": 2.810921039643173e-8,
+              "chi_sq": 73.77867811286389,
+              "processed_samples": 3207163
+            },
+            {
+              "bin_index": 6,
+              "bin_label": "GL12",
+              "pdf": 0.03618732453068789,
+              "value": 2.4400399273992094e-9,
+              "error": 2.6074664735247593e-8,
+              "chi_sq": 89.74000812331154,
+              "processed_samples": 2932046
+            },
+            {
+              "bin_index": 7,
+              "bin_label": "GL14",
+              "pdf": 0.07713030287007129,
+              "value": -5.222251437428811e-8,
+              "error": 3.965401929501797e-8,
+              "chi_sq": 65.26839397556628,
+              "processed_samples": 6262896
+            },
+            {
+              "bin_index": 8,
+              "bin_label": "GL16",
+              "pdf": 0.03637223006838674,
+              "value": 1.6272875642320168e-8,
+              "error": 2.5944189771851317e-8,
+              "chi_sq": 78.13690540819353,
+              "processed_samples": 2965682
+            },
+            {
+              "bin_index": 9,
+              "bin_label": "GL17",
+              "pdf": 0.07184063626582039,
+              "value": 2.3799735370193526e-8,
+              "error": 3.680342868546299e-8,
+              "chi_sq": 68.43684879760548,
+              "processed_samples": 6044340
+            },
+            {
+              "bin_index": 10,
+              "bin_label": "GL18",
+              "pdf": 0.1693804960398262,
+              "value": -9.298997788305017e-8,
+              "error": 5.956070359815816e-8,
+              "chi_sq": 104.60209333642348,
+              "processed_samples": 12987880
+            }
+          ]
+        },
+        "im": {
+          "axis_label": "graph",
+          "fixed_coordinates": [],
+          "entries": [
+            {
+              "bin_index": 0,
+              "bin_label": "GL00",
+              "pdf": 0.08082401175277566,
+              "value": -7.279244027635912e-7,
+              "error": 3.992716298719542e-8,
+              "chi_sq": 69.20293675270455,
+              "processed_samples": 6563331
+            },
+            {
+              "bin_index": 1,
+              "bin_label": "GL01",
+              "pdf": 0.12392398746067304,
+              "value": -3.994210184138238e-6,
+              "error": 4.9779195019180536e-8,
+              "chi_sq": 88.29851295382355,
+              "processed_samples": 9926483
+            },
+            {
+              "bin_index": 2,
+              "bin_label": "GL03",
+              "pdf": 0.17946436199381058,
+              "value": 3.936505243299377e-6,
+              "error": 6.016909345323398e-8,
+              "chi_sq": 70.9194709929296,
+              "processed_samples": 14249180
+            },
+            {
+              "bin_index": 3,
+              "bin_label": "GL05",
+              "pdf": 0.07306974274428177,
+              "value": -7.005117568589533e-7,
+              "error": 3.8111724458589106e-8,
+              "chi_sq": 84.40554444195755,
+              "processed_samples": 5887601
+            },
+            {
+              "bin_index": 4,
+              "bin_label": "GL06",
+              "pdf": 0.11215910218621704,
+              "value": -2.2837188325376833e-6,
+              "error": 4.7385585700938413e-8,
+              "chi_sq": 91.51421131476991,
+              "processed_samples": 8973398
+            },
+            {
+              "bin_index": 5,
+              "bin_label": "GL08",
+              "pdf": 0.03964780408744941,
+              "value": -1.3005348325149133e-6,
+              "error": 2.801875668696545e-8,
+              "chi_sq": 60.012897085277956,
+              "processed_samples": 3207163
+            },
+            {
+              "bin_index": 6,
+              "bin_label": "GL12",
+              "pdf": 0.03618732453068789,
+              "value": 1.2717711884800658e-6,
+              "error": 2.6746153294975577e-8,
+              "chi_sq": 87.05861790435867,
+              "processed_samples": 2932046
+            },
+            {
+              "bin_index": 7,
+              "bin_label": "GL14",
+              "pdf": 0.07713030287007129,
+              "value": 4.1837016749085455e-6,
+              "error": 3.900566094223476e-8,
+              "chi_sq": 107.19806263616675,
+              "processed_samples": 6262896
+            },
+            {
+              "bin_index": 8,
+              "bin_label": "GL16",
+              "pdf": 0.03637223006838674,
+              "value": -3.598164565914293e-6,
+              "error": 2.672993372824034e-8,
+              "chi_sq": 75.66220656780615,
+              "processed_samples": 2965682
+            },
+            {
+              "bin_index": 9,
+              "bin_label": "GL17",
+              "pdf": 0.07184063626582039,
+              "value": 4.095439512510981e-6,
+              "error": 3.6981620105409575e-8,
+              "chi_sq": 84.02078715210183,
+              "processed_samples": 6044340
+            },
+            {
+              "bin_index": 10,
+              "bin_label": "GL18",
+              "pdf": 0.1693804960398262,
+              "value": -2.2822435972917237e-6,
+              "error": 5.9481848067464494e-8,
+              "chi_sq": 97.89368005568667,
+              "processed_samples": 12987880
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

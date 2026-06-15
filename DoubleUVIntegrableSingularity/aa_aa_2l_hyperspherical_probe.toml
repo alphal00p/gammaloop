@@ -1,0 +1,157 @@
+[[command_blocks]]
+name = "setup_all_graphs_pmpm_kinematics_a"
+commands = [
+  "run set_model_parameters",
+  "run set_kinematics_a",
+  "set process -p aa_aa kv kinematics.externals.data.helicities=[+1,-1,+1,-1] general.mu_r=91.188 general.m_uv=9.188",
+]
+
+[[command_blocks]]
+name = "integrate_graph_mc_hyperspherical_invj_sumlmb_10k"
+commands = [
+  "run setup_all_graphs_pmpm_kinematics_a",
+  "set process -p aa_aa kv integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=10000 integrator.seed=260731 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=0.01",
+  """set process -p aa_aa string '
+        [sampling]
+        graphs = "monte_carlo"
+        orientations = "summed"
+        lmb_multichanneling = true
+        lmb_channels = "summed"
+        lmb_channel_weight = "inverse_jacobian"
+        coordinate_system = "hyperspherical"
+        mapping = "linear"
+        b = 1.0
+    '""",
+  """integrate -p aa_aa -i 2L
+             --n-cores 20
+             --workspace-path /tmp/aa_aa_2l_graph_mc_invj_sumlmb_hyperspherical_10k_workspace
+             --renderer tabled
+             --batch-size 1000
+             --show-phase both
+             --show-max-weight-info
+             --show-top-discrete-grid
+             --show-discrete-contributions-sum
+             --write-results-for-each-iteration
+             --restart
+    """,
+]
+
+[[command_blocks]]
+name = "integrate_graph_mc_hyperspherical_invj_lmbmc_100k"
+commands = [
+  "run setup_all_graphs_pmpm_kinematics_a",
+  "set process -p aa_aa kv integrator.n_increase=0 integrator.n_start=100000 integrator.n_max=100000 integrator.seed=260732 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=0.01",
+  """set process -p aa_aa string '
+        [sampling]
+        graphs = "monte_carlo"
+        orientations = "summed"
+        lmb_multichanneling = true
+        lmb_channels = "monte_carlo"
+        lmb_channel_weight = "inverse_jacobian"
+        coordinate_system = "hyperspherical"
+        mapping = "linear"
+        b = 1.0
+    '""",
+  """integrate -p aa_aa -i 2L
+             --n-cores 20
+             --workspace-path /tmp/aa_aa_2l_graph_mc_invj_lmbmc_hyperspherical_100k_workspace
+             --renderer tabled
+             --batch-size 1000
+             --show-phase both
+             --show-max-weight-info
+             --show-top-discrete-grid
+             --show-discrete-contributions-sum
+             --write-results-for-each-iteration
+             --restart
+    """,
+]
+
+[[command_blocks]]
+name = "integrate_graph_mc_common_radial_invj_sumlmb_1m"
+commands = [
+  "run setup_all_graphs_pmpm_kinematics_a",
+  "set process -p aa_aa kv integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=1000000 integrator.seed=260733 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=0.01",
+  """set process -p aa_aa string '
+        [sampling]
+        graphs = "monte_carlo"
+        orientations = "summed"
+        lmb_multichanneling = true
+        lmb_channels = "summed"
+        lmb_channel_weight = "inverse_jacobian"
+        coordinate_system = "spherical_common_radial"
+        mapping = "linear"
+        b = 1.0
+    '""",
+  """integrate -p aa_aa -i 2L
+             --n-cores 20
+             --workspace-path /tmp/aa_aa_2l_graph_mc_invj_sumlmb_common_radial_1m_workspace
+             --renderer tabled
+             --batch-size 10000
+             --show-phase both
+             --show-max-weight-info
+             --show-top-discrete-grid
+             --show-discrete-contributions-sum
+             --write-results-for-each-iteration
+             --restart
+    """,
+]
+
+[[command_blocks]]
+name = "integrate_graph_mc_hybrid_radial_invj_sumlmb_1m"
+commands = [
+  "run setup_all_graphs_pmpm_kinematics_a",
+  "set process -p aa_aa kv integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=1000000 integrator.seed=260734 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=0.01",
+  """set process -p aa_aa string '
+        [sampling]
+        graphs = "monte_carlo"
+        orientations = "summed"
+        lmb_multichanneling = true
+        lmb_channels = "summed"
+        lmb_channel_weight = "inverse_jacobian"
+        coordinate_system = "spherical_product_common_radial"
+        mapping = "linear"
+        b = 1.0
+    '""",
+  """integrate -p aa_aa -i 2L
+             --n-cores 20
+             --workspace-path /tmp/aa_aa_2l_graph_mc_invj_sumlmb_hybrid_radial_1m_workspace
+             --renderer tabled
+             --batch-size 10000
+             --show-phase both
+             --show-max-weight-info
+             --show-top-discrete-grid
+             --show-discrete-contributions-sum
+             --write-results-for-each-iteration
+             --restart
+    """,
+]
+
+[[command_blocks]]
+name = "integrate_graph_mc_hybrid_radial_invj_sumlmb_10m"
+commands = [
+  "run setup_all_graphs_pmpm_kinematics_a",
+  "set process -p aa_aa kv integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=10000000 integrator.seed=260735 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=0.01",
+  """set process -p aa_aa string '
+        [sampling]
+        graphs = "monte_carlo"
+        orientations = "summed"
+        lmb_multichanneling = true
+        lmb_channels = "summed"
+        lmb_channel_weight = "inverse_jacobian"
+        coordinate_system = "spherical_product_common_radial"
+        mapping = "linear"
+        b = 1.0
+    '""",
+  """integrate -p aa_aa -i 2L
+             --n-cores 20
+             --workspace-path /tmp/aa_aa_2l_graph_mc_invj_sumlmb_hybrid_radial_10m_workspace
+             --renderer tabled
+             --batch-size 10000
+             --show-phase both
+             --show-max-weight-info
+             --show-top-discrete-grid
+             --show-discrete-contributions-sum
+             --write-results-for-each-iteration
+             --restart
+    """,
+]

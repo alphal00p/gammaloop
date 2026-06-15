@@ -1,0 +1,107 @@
+[
+  {
+    "mode": "summed",
+    "channel": null,
+    "slope_last4": 0.9999723879123351,
+    "abs_at_recorded_point": 0.36273097406906196,
+    "abs_at_deepest_point": 5.803136485672312
+  },
+  {
+    "mode": "selected_channel",
+    "channel": 0,
+    "slope_last4": 0.999986800627895,
+    "abs_at_recorded_point": 0.03657434386831946,
+    "abs_at_deepest_point": 0.5851712532293029
+  },
+  {
+    "mode": "selected_channel",
+    "channel": 1,
+    "slope_last4": 0.9999843945943023,
+    "abs_at_recorded_point": 0.03657476824301566,
+    "abs_at_deepest_point": 0.5851716779590265
+  },
+  {
+    "mode": "selected_channel",
+    "channel": 2,
+    "slope_last4": 0.9999866255493374,
+    "abs_at_recorded_point": 0.036574374740944444,
+    "abs_at_deepest_point": 0.5851712841057357
+  },
+  {
+    "mode": "selected_channel",
+    "channel": 3,
+    "slope_last4": 0.999984219536,
+    "abs_at_recorded_point": 0.036574799113885885,
+    "abs_at_deepest_point": 0.585171708758478
+  },
+  {
+    "mode": "selected_channel",
+    "channel": 4,
+    "slope_last4": 0.9999615105360294,
+    "abs_at_recorded_point": 0.03142986189561215,
+    "abs_at_deepest_point": 0.5028046196699325
+  },
+  {
+    "mode": "selected_channel",
+    "channel": 5,
+    "slope_last4": 0.9999843945943023,
+    "abs_at_recorded_point": 0.03657476824301566,
+    "abs_at_deepest_point": 0.5851716779590265
+  },
+  {
+    "mode": "selected_channel",
+    "channel": 6,
+    "slope_last4": 0.9999633901804791,
+    "abs_at_recorded_point": 0.031429577016543205,
+    "abs_at_deepest_point": 0.5028043347626872
+  },
+  {
+    "mode": "selected_channel",
+    "channel": 7,
+    "slope_last4": 0.9999651760293178,
+    "abs_at_recorded_point": 0.03142930636546508,
+    "abs_at_deepest_point": 0.5028040640186381
+  },
+  {
+    "mode": "selected_channel",
+    "channel": 8,
+    "slope_last4": 0.9999773430665748,
+    "abs_at_recorded_point": 0.05042981234724612,
+    "abs_at_deepest_point": 0.8068173395677307
+  },
+  {
+    "mode": "selected_channel",
+    "channel": 9,
+    "slope_last4": 0.9999801860950215,
+    "abs_at_recorded_point": 0.05042912103215776,
+    "abs_at_deepest_point": 0.8068166485658819
+  },
+  {
+    "mode": "selected_channel",
+    "channel": 10,
+    "slope_last4": 0.9999823283681762,
+    "abs_at_recorded_point": 0.03607917796017979,
+    "abs_at_deepest_point": 0.5772371750622982
+  },
+  {
+    "mode": "selected_channel",
+    "channel": 11,
+    "slope_last4": 0.9999792166360042,
+    "abs_at_recorded_point": 0.05042935673107163,
+    "abs_at_deepest_point": 0.8068168836254286
+  },
+  {
+    "mode": "selected_channel",
+    "channel": 12,
+    "slope_last4": 0.9999820012463269,
+    "abs_at_recorded_point": 0.0360792349649842,
+    "abs_at_deepest_point": 0.577237232556226
+  },
+  {
+    "mode": "selected_channel",
+    "channel": 13,
+    "slope_last4": 0.9999773430665748,
+    "abs_at_recorded_point": 0.05042981234724612,
+    "abs_at_deepest_point": 0.8068173395677307
+  }
+]

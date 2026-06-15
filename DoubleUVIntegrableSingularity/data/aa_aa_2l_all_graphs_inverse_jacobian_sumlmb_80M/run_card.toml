@@ -1,8 +1,4 @@
-commands = ["run generate_diagrams generate_integrands integrate_diagrams"]
-
 [cli_settings]
-override_state = true
-
 [cli_settings.state]
 name = "aa_aa_2L"
 folder = "./examples/cli/aa_aa/2L/gammaloop_state"
@@ -31,9 +27,6 @@ use_legacy = true
 cached = true
 renormalization_schemes = []
 
-[cli_settings.global.generation.uv.vakint]
-form_exe_path = "/nix/store/b72akpm5kyfzks88x9c1hlpwlw8v48lm-form-4.3.1/bin/form"
-
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false
 store_atom = false
@@ -48,9 +41,6 @@ cpe_iterations = 5
 enable_thresholds = false
 # The option below specifies the generation of threshold for the kinematics supplied
 check_esurface_at_generation = false
-
-[cli_settings.global.generation]
-override_lmb_heuristics = true
 
 [cli_settings.global.generation.compile]
 compilation_mode = "assembly"
@@ -75,6 +65,7 @@ commands = [
   "import model sm-default.json",
   "set global kv global.n_cores.feyngen=10",
   # "set global kv global.generation.uv.use_legacy=true",
+  "set global kv global.generation.override_lmb_heuristics=true",
 
   # --select-graphs GL00 GL06 GL08 GL16
   # --select-graphs GL16
@@ -86,7 +77,6 @@ commands = [
         -p aa_aa -i 2L --only-diagrams""",
   # "import graphs ./aa_aa_2L.dot -p aa_aa -i 2L",
 
-  "save dot",
   "save state -o"
 ]
 
@@ -110,31 +100,31 @@ commands = [
   "remove processes -p aa_aa -i 2L_muv_22p797",
   "remove processes -p aa_aa -i 2L_muv_91p188",
   "remove processes -p aa_aa -i 2L_muv_364p752",
-  "remove processes -p aa_aa -i 2L_m_uv_UP",
-  "remove processes -p aa_aa -i 2L_m_uv_DOWN",
-  "remove processes -p aa_aa -i 2L_mu_r_UP",
-  "remove processes -p aa_aa -i 2L_mu_r_DOWN",
   "run set_model_parameters",
   "run set_kinematics_a",
   "set process -p aa_aa kv kinematics.externals.data.helicities=[+1,-1,+1,-1]",
   "set process -p aa_aa kv general.mu_r=91.188",
-  "set process -p aa_aa kv integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=25000000 integrator.seed=1337 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-2",
+  "set process -p aa_aa kv integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=1000000000 integrator.seed=1337 integrator.integrated_phase=\"real\" integrator.target_relative_accuracy=1.0e-3",
   "set process -p aa_aa -i 2L kv general.m_uv=9.188",
+  "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_muv_22p797",
+  "set process -p aa_aa -i 2L_muv_22p797 kv general.m_uv=22.797",
+  "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_muv_91p188",
+  "set process -p aa_aa -i 2L_muv_91p188 kv general.m_uv=91.188",
+  "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_muv_364p752",
+  "set process -p aa_aa -i 2L_muv_364p752 kv general.m_uv=364.752",
   """set process -p aa_aa string '
         [sampling]
         graphs = "monte_carlo"
         orientations = "summed"
         lmb_multichanneling = true
         lmb_channels = "summed"
-        lmb_channel_weight = "inverse_jacobian"
         coordinate_system = "spherical"
         mapping = "linear"
         b = 1.0
     '""",
-  """integrate -p aa_aa -i 2L
+  """integrate -p aa_aa -i 2L -p aa_aa -i 2L_muv_22p797 -p aa_aa -i 2L_muv_91p188 -p aa_aa -i 2L_muv_364p752
              --n-cores 20
-             --workspace-path /tmp/aa_aa_2l_full_amplitude_final_30m_workspace
-             --renderer tabled
+             --renderer ratatui
              --batch-size 10000
              --show-phase both
              --show-max-weight-info
@@ -501,15 +491,38 @@ graphs = "monte_carlo"
 orientations = "summed"
 lmb_multichanneling = true
 lmb_channels = "summed"
-lmb_channel_weight = "inverse_jacobian"
 coordinate_system = "spherical"
 mapping = "linear"
 b = 1.0
 
-[default_runtime_settings.integrator]
-n_start = 1000000
-n_increase = 0
-n_max = 25000000
-integrated_phase = "imag"
-target_relative_accuracy = 1.0e-2
-seed = 1337
+[[command_blocks]]
+name = "integrate_all_graphs_deep_inverse_jacobian"
+commands = [
+  "run set_model_parameters",
+  "run set_kinematics_a",
+  "set process -p aa_aa kv kinematics.externals.data.helicities=[+1,-1,+1,-1] general.mu_r=91.188 general.m_uv=9.188",
+  "set process -p aa_aa kv integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=10000000000 integrator.seed=260614 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=0.01",
+  """set process -p aa_aa string '
+        [sampling]
+        graphs = "monte_carlo"
+        orientations = "summed"
+        lmb_multichanneling = true
+        lmb_channels = "summed"
+        lmb_channel_weight = "inverse_jacobian"
+        coordinate_system = "spherical"
+        mapping = "linear"
+        b = 1.0
+    '""",
+  """integrate -p aa_aa -i 2L
+             --n-cores 20
+             --workspace-path /tmp/aa_aa_2l_all_graphs_invj_sumlmb_workspace
+             --renderer tabled
+             --batch-size 10000
+             --show-phase both
+             --show-max-weight-info
+             --show-top-discrete-grid
+             --show-discrete-contributions-sum
+             --write-results-for-each-iteration
+             --restart
+    """,
+]

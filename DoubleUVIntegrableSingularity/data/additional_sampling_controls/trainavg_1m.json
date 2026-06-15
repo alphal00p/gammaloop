@@ -1,0 +1,302 @@
+{
+  "slots": [
+    {
+      "key": "aa_aa@2L",
+      "process": "aa_aa",
+      "integrand": "2L",
+      "target": null,
+      "integral": {
+        "neval": 1000000,
+        "real_zero": 0,
+        "im_zero": 0,
+        "result": {
+          "re": -4.209634977246155e-6,
+          "im": -7.622819804952551e-6
+        },
+        "error": {
+          "re": 2.230556209033503e-6,
+          "im": 2.2507588814319143e-6
+        },
+        "real_chisq": 0.0,
+        "im_chisq": 0.0
+      },
+      "table_results": [
+        {
+          "component": "re",
+          "value": -4.209634977246155e-6,
+          "error": 2.230556209033503e-6,
+          "relative_error_percent": 52.98692692098166,
+          "chi_sq_per_dof": 0.0,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.10308841599639974
+        },
+        {
+          "component": "im",
+          "value": -7.622819804952551e-6,
+          "error": 2.2507588814319143e-6,
+          "relative_error_percent": 29.52659172094813,
+          "chi_sq_per_dof": 0.0,
+          "target_delta_sigma": null,
+          "target_delta_percent": null,
+          "max_weight_impact": 0.03396626580323833
+        }
+      ],
+      "integration_statistics": {
+        "num_evals": 1000000,
+        "average_total_time_seconds": 0.001322027,
+        "average_parameterization_time_seconds": 6.17e-7,
+        "average_integrand_time_seconds": 0.000670077,
+        "average_evaluator_time_seconds": 0.000616509,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 2.046e-6,
+        "f64_percentage": 99.9989,
+        "f128_percentage": 0.0011,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+        {
+          "component": "re",
+          "sign": "+",
+          "max_eval": 0.4339646017273464,
+          "coordinates": "graph: 4, xs: [\n9.9988492079262081e-01 4.4226073563398893e-01 2.9422178156572731e-01\n9.9995583397035226e-01 2.5056458851596020e-01 6.9123913846451557e-02 ]"
+        },
+        {
+          "component": "re",
+          "sign": "-",
+          "max_eval": -0.09570470979669496,
+          "coordinates": "graph: 2, xs: [\n6.9300732714018931e-02 5.1644551108046277e-01 3.5338233831110799e-01\n2.4606334550584397e-01 3.6730307460897693e-01 2.6501803963689374e-01 ]"
+        },
+        {
+          "component": "im",
+          "sign": "+",
+          "max_eval": 0.17030899844716169,
+          "coordinates": "graph: 4, xs: [\n9.9988492079262081e-01 4.4226073563398893e-01 2.9422178156572731e-01\n9.9995583397035226e-01 2.5056458851596020e-01 6.9123913846451557e-02 ]"
+        },
+        {
+          "component": "im",
+          "sign": "-",
+          "max_eval": -0.25891872366520774,
+          "coordinates": "graph: 2, xs: [\n2.1216185888855021e-01 2.8787884166129263e-01 1.5998657112357084e-01\n3.5603322198840270e-01 2.6156785952306427e-01 1.9617560803513723e-01 ]"
+        }
+      ],
+      "grid_breakdown": {
+        "re": {
+          "axis_label": "graph",
+          "fixed_coordinates": [],
+          "entries": [
+            {
+              "bin_index": 0,
+              "bin_label": "GL00",
+              "pdf": 0.04847437898620217,
+              "value": -7.611404512301662e-7,
+              "error": 5.790620927783425e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90868
+            },
+            {
+              "bin_index": 1,
+              "bin_label": "GL01",
+              "pdf": 0.1955071644832112,
+              "value": -1.6563594803356818e-6,
+              "error": 9.074177653759145e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 91192
+            },
+            {
+              "bin_index": 2,
+              "bin_label": "GL03",
+              "pdf": 0.03401801567065106,
+              "value": -1.5072163088099397e-6,
+              "error": 1.1294645459289732e-6,
+              "chi_sq": 0.0,
+              "processed_samples": 91058
+            },
+            {
+              "bin_index": 3,
+              "bin_label": "GL05",
+              "pdf": 0.042643687167818925,
+              "value": -3.978853392172116e-8,
+              "error": 4.776922287339113e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 91034
+            },
+            {
+              "bin_index": 4,
+              "bin_label": "GL06",
+              "pdf": 0.12092541240937461,
+              "value": 1.2667085839998267e-6,
+              "error": 8.880659362067148e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90578
+            },
+            {
+              "bin_index": 5,
+              "bin_label": "GL08",
+              "pdf": 0.048395121596760446,
+              "value": 3.70730301003128e-8,
+              "error": 2.3099450269455548e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90623
+            },
+            {
+              "bin_index": 6,
+              "bin_label": "GL12",
+              "pdf": 0.06195701626082822,
+              "value": 1.0843177774610593e-8,
+              "error": 1.8767417643664513e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90968
+            },
+            {
+              "bin_index": 7,
+              "bin_label": "GL14",
+              "pdf": 0.14536470344468058,
+              "value": 5.336921113710833e-7,
+              "error": 5.2306632907367e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90894
+            },
+            {
+              "bin_index": 8,
+              "bin_label": "GL16",
+              "pdf": 0.1437387271802943,
+              "value": 2.8802150175250277e-8,
+              "error": 1.8368635693772592e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90827
+            },
+            {
+              "bin_index": 9,
+              "bin_label": "GL17",
+              "pdf": 0.0975745684762221,
+              "value": -7.532387190084285e-7,
+              "error": 4.2865715829180485e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 91326
+            },
+            {
+              "bin_index": 10,
+              "bin_label": "GL18",
+              "pdf": 0.06140120432395653,
+              "value": -1.35752227115858e-6,
+              "error": 9.72116714356466e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90632
+            }
+          ]
+        },
+        "im": {
+          "axis_label": "graph",
+          "fixed_coordinates": [],
+          "entries": [
+            {
+              "bin_index": 0,
+              "bin_label": "GL00",
+              "pdf": 0.04847437898620217,
+              "value": -1.1497376794810808e-6,
+              "error": 5.649043578033464e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90868
+            },
+            {
+              "bin_index": 1,
+              "bin_label": "GL01",
+              "pdf": 0.1955071644832112,
+              "value": -4.637129104404526e-6,
+              "error": 9.111880581426875e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 91192
+            },
+            {
+              "bin_index": 2,
+              "bin_label": "GL03",
+              "pdf": 0.03401801567065106,
+              "value": 8.068549864013368e-7,
+              "error": 1.2145659657626872e-6,
+              "chi_sq": 0.0,
+              "processed_samples": 91058
+            },
+            {
+              "bin_index": 3,
+              "bin_label": "GL05",
+              "pdf": 0.042643687167818925,
+              "value": -1.0114426415406166e-6,
+              "error": 4.923367809917645e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 91034
+            },
+            {
+              "bin_index": 4,
+              "bin_label": "GL06",
+              "pdf": 0.12092541240937461,
+              "value": -2.868164708070247e-6,
+              "error": 7.955726129788898e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90578
+            },
+            {
+              "bin_index": 5,
+              "bin_label": "GL08",
+              "pdf": 0.048395121596760446,
+              "value": -1.147857816161029e-6,
+              "error": 2.2820218514103642e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90623
+            },
+            {
+              "bin_index": 6,
+              "bin_label": "GL12",
+              "pdf": 0.06195701626082822,
+              "value": 1.469525089193458e-6,
+              "error": 1.9857258178020457e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90968
+            },
+            {
+              "bin_index": 7,
+              "bin_label": "GL14",
+              "pdf": 0.14536470344468058,
+              "value": 3.4478270854076348e-6,
+              "error": 5.637504414430296e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90894
+            },
+            {
+              "bin_index": 8,
+              "bin_label": "GL16",
+              "pdf": 0.1437387271802943,
+              "value": -3.4092614303914264e-6,
+              "error": 1.935994329635956e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90827
+            },
+            {
+              "bin_index": 9,
+              "bin_label": "GL17",
+              "pdf": 0.0975745684762221,
+              "value": 2.3143186211452447e-6,
+              "error": 4.444965000255106e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 91326
+            },
+            {
+              "bin_index": 10,
+              "bin_label": "GL18",
+              "pdf": 0.06140120432395653,
+              "value": -1.4563420853078664e-6,
+              "error": 9.588866639174348e-7,
+              "chi_sq": 0.0,
+              "processed_samples": 90632
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -878,6 +878,7 @@ impl AmplitudeIntegrand {
                 mode: ParameterizationMode::MomentumSpace,
                 mapping: ParameterizationMapping::default(),
                 b: 10.0,
+                power: 1.0,
             }),
         });
 
@@ -1185,6 +1186,7 @@ impl CrossSectionIntegrand {
                 mode: ParameterizationMode::MomentumSpace,
                 mapping: ParameterizationMapping::default(),
                 b: 10.0,
+                power: 1.0,
             }),
         });
 
@@ -2602,6 +2604,7 @@ mod tests {
                 external_mom_base_cache_id: 0,
                 jacobian: F::from_f64(1.0),
                 orientation: None,
+                parameterization_branch: None,
             },
         }
     }

@@ -1,0 +1,112 @@
+[cli_settings]
+[cli_settings.state]
+name = "aa_aa_2L_GL18_tropical_probe"
+folder = "/tmp/gammaloop_aa_aa_2l_gl18_tropical_probe_state"
+
+[cli_settings.global]
+display_directive = "info,gammalooprs[{#generation, #profile, #uv, #graph, #term, #summary}]=debug"
+logfile_directive = "off"
+
+[cli_settings.global.generation.uv]
+softct = false
+generate_integrated = true
+add_integrated_uv_with_n_loops = 1
+subtract_uv = true
+only_integrated = false
+pole_part = false
+add_sigma = false
+keep_sigma = true
+inner_products = true
+use_legacy = true
+cached = true
+renormalization_schemes = []
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = false
+summed = false
+summed_function_map = true
+horner_iterations = 5
+cpe_iterations = 5
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+check_esurface_at_generation = false
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 10
+integrate = 20
+
+[[command_blocks]]
+name = "generate_gl18"
+commands = [
+  "import model sm-default.json",
+  "set global kv global.generation.override_lmb_heuristics=true",
+  "remove processes -p aa_aa",
+  "import graphs ./examples/cli/aa_aa/2L/graphs/GL18.dot -p aa_aa -i 2L -o",
+  "generate existing -p aa_aa -i 2L",
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "set_model_parameters"
+commands = [
+  "set model MT=173.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set model aS=0.118",
+  "set model aEWM1=137.036",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+]
+
+[[command_blocks]]
+name = "set_kinematics_a"
+commands = [
+  """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+        [ 86.5, 0.0, 0.0, 86.5 ],
+        [ 86.5, 0.0, 0.0, -86.5 ],
+        [ 86.5, 0.0, -79.27855952273603, -34.6 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "integrate_gl18_tropical_100k"
+commands = [
+  "run set_model_parameters",
+  "run set_kinematics_a",
+  "set process -p aa_aa kv kinematics.externals.data.helicities=[+1,-1,+1,-1] general.mu_r=91.188 general.m_uv=9.188",
+  "set process -p aa_aa kv integrator.n_increase=0 integrator.n_start=100000 integrator.n_max=100000 integrator.seed=261101 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=0.01",
+  """set process -p aa_aa string '
+        [sampling]
+        graphs = "monte_carlo"
+        orientations = "summed"
+        lmb_multichanneling = false
+        coordinate_system = "tropical"
+    '""",
+  """integrate -p aa_aa -i 2L
+             --n-cores 20
+             --workspace-path /tmp/aa_aa_2l_gl18_tropical_100k_workspace
+             --renderer tabled
+             --batch-size 10000
+             --show-phase both
+             --show-max-weight-info
+             --show-top-discrete-grid
+             --show-discrete-contributions-sum
+             --write-results-for-each-iteration
+             --restart
+    """,
+]

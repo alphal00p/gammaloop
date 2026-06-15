@@ -584,6 +584,7 @@ mod tests {
         assert!(toml.contains("alpha = 3.0"));
         assert!(toml.contains("lmb_channel_weight = \"inverse_jacobian\""));
         assert!(toml.contains("coordinate_system = \"spherical\""));
+        assert!(toml.contains("power = 1.0"));
         assert!(!toml.contains("type = \"discrete_graph_sampling\""));
         assert!(!toml.contains("subtype = \"discrete_multi_channeling\""));
     }
@@ -618,6 +619,7 @@ lmb_channel_weight = "inverse_jacobian"
 coordinate_system = "momentum_space"
 mapping = "log"
 b = 5.0
+power = 2.0
 "#;
 
         let settings: SamplingSettings = toml::from_str(toml).unwrap();
@@ -634,6 +636,94 @@ b = 5.0
                                 mode: crate::settings::runtime::ParameterizationMode::MomentumSpace,
                                 mapping: crate::settings::runtime::ParameterizationMapping::Log,
                                 b: 5.0,
+                                power: 2.0,
+                            },
+                    },
+                ),
+            })
+        );
+    }
+
+    #[test]
+    fn sampling_settings_deserializes_power_mapping() {
+        let toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "spherical"
+mapping = "power"
+b = 1.5
+power = 4.0
+"#;
+
+        let settings: SamplingSettings = toml::from_str(toml).unwrap();
+        assert_eq!(
+            settings,
+            SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                sample_orientations: false,
+                sampling_type: DiscreteGraphSamplingType::MultiChanneling(
+                    crate::settings::runtime::MultiChannelingSettings {
+                        alpha: 3.0,
+                        channel_weight: crate::settings::runtime::LmbChannelWeight::InverseJacobian,
+                        parameterization_settings:
+                            crate::settings::runtime::ParameterizationSettings {
+                                mode: crate::settings::runtime::ParameterizationMode::Spherical,
+                                mapping: crate::settings::runtime::ParameterizationMapping::Power,
+                                b: 1.5,
+                                power: 4.0,
+                            },
+                    },
+                ),
+            })
+        );
+    }
+
+    #[test]
+    fn sampling_settings_rejects_invalid_power_mapping_exponent() {
+        let invalid_toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "power"
+power = 0.0
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(err.to_string().contains("requires power >= 1"));
+    }
+
+    #[test]
+    fn sampling_settings_deserializes_relative_spherical_coordinates() {
+        let toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "relative_spherical"
+mapping = "linear"
+b = 1.0
+"#;
+
+        let settings: SamplingSettings = toml::from_str(toml).unwrap();
+        assert_eq!(
+            settings,
+            SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                sample_orientations: false,
+                sampling_type: DiscreteGraphSamplingType::MultiChanneling(
+                    crate::settings::runtime::MultiChannelingSettings {
+                        alpha: 3.0,
+                        channel_weight: crate::settings::runtime::LmbChannelWeight::InverseJacobian,
+                        parameterization_settings:
+                            crate::settings::runtime::ParameterizationSettings {
+                                mode: crate::settings::runtime::ParameterizationMode::RelativeSpherical,
+                                mapping: crate::settings::runtime::ParameterizationMapping::Linear,
+                                b: 1.0,
+                                power: 1.0,
                             },
                     },
                 ),

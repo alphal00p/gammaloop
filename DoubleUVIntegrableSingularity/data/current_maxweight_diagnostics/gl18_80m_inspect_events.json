@@ -1,0 +1,330 @@
+{
+  "events": [
+    {
+      "channel": "(8,10)",
+      "channel_id": 0,
+      "factor_times_original": {
+        "im": 0.03289743656485029,
+        "re": 0.015982530990419786
+      },
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.4283948480430382e+53
+      },
+      "graph": 10,
+      "original": {
+        "im": 2.3031052380174272e-55,
+        "re": 1.1189154744093718e-55
+      },
+      "weight": {
+        "im": 0.03289743656485029,
+        "re": 0.015982530990419786
+      },
+      "weight_over_factor_original_abs_ratio": 1.0
+    },
+    {
+      "channel": "(6,10)",
+      "channel_id": 1,
+      "factor_times_original": {
+        "im": 0.03289789816771945,
+        "re": 0.015982551991990137
+      },
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.4283948480430382e+53
+      },
+      "graph": 10,
+      "original": {
+        "im": 2.3031375542127567e-55,
+        "re": 1.1189169447010337e-55
+      },
+      "weight": {
+        "im": 0.03289789816771945,
+        "re": 0.015982551991990137
+      },
+      "weight_over_factor_original_abs_ratio": 1.0
+    },
+    {
+      "channel": "(8,9)",
+      "channel_id": 2,
+      "factor_times_original": {
+        "im": 0.032897107407120756,
+        "re": 0.015983279135878083
+      },
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.4283948480430382e+53
+      },
+      "graph": 10,
+      "original": {
+        "im": 2.3030821941279888e-55,
+        "re": 1.118967851065541e-55
+      },
+      "weight": {
+        "im": 0.032897107407120756,
+        "re": 0.015983279135878083
+      },
+      "weight_over_factor_original_abs_ratio": 1.0
+    },
+    {
+      "channel": "(6,9)",
+      "channel_id": 3,
+      "factor_times_original": {
+        "im": 0.032897569007858354,
+        "re": 0.01598330014716314
+      },
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.4283948480430382e+53
+      },
+      "graph": 10,
+      "original": {
+        "im": 2.3031145101740897e-55,
+        "re": 1.1189693220373164e-55
+      },
+      "weight": {
+        "im": 0.032897569007858354,
+        "re": 0.01598330014716314
+      },
+      "weight_over_factor_original_abs_ratio": 1.0
+    },
+    {
+      "channel": "(7,8)",
+      "channel_id": 4,
+      "factor_times_original": {
+        "im": -0.00702639140616375,
+        "re": 0.03063439313230541
+      },
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.4283948480430382e+53
+      },
+      "graph": 10,
+      "original": {
+        "im": -4.919082014185507e-56,
+        "re": 2.1446726144578183e-55
+      },
+      "weight": {
+        "im": -0.00702639140616375,
+        "re": 0.03063439313230541
+      },
+      "weight_over_factor_original_abs_ratio": 1.0
+    },
+    {
+      "channel": "(6,7)",
+      "channel_id": 5,
+      "factor_times_original": {
+        "im": 0.03289789816771945,
+        "re": 0.015982551991990137
+      },
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.4283948480430382e+53
+      },
+      "graph": 10,
+      "original": {
+        "im": 2.3031375542127567e-55,
+        "re": 1.1189169447010337e-55
+      },
+      "weight": {
+        "im": 0.03289789816771945,
+        "re": 0.015982551991990137
+      },
+      "weight_over_factor_original_abs_ratio": 1.0
+    },
+    {
+      "channel": "(5,8)",
+      "channel_id": 6,
+      "factor_times_original": {
+        "im": -0.007025818852741105,
+        "re": 0.030634232173946986
+      },
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.4283948480430382e+53
+      },
+      "graph": 10,
+      "original": {
+        "im": -4.918681177243656e-56,
+        "re": 2.144661345979873e-55
+      },
+      "weight": {
+        "im": -0.007025818852741105,
+        "re": 0.030634232173946986
+      },
+      "weight_over_factor_original_abs_ratio": 1.0
+    },
+    {
+      "channel": "(5,6)",
+      "channel_id": 7,
+      "factor_times_original": {
+        "im": -0.007025416674510153,
+        "re": 0.030634046731762003
+      },
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.4283948480430382e+53
+      },
+      "graph": 10,
+      "original": {
+        "im": -4.918399617679435e-56,
+        "re": 2.1446483634221974e-55
+      },
+      "weight": {
+        "im": -0.007025416674510153,
+        "re": 0.030634046731762003
+      },
+      "weight_over_factor_original_abs_ratio": 1.0
+    },
+    {
+      "channel": "(4,10)",
+      "channel_id": 8,
+      "factor_times_original": {
+        "im": 0.03581222031832829,
+        "re": 0.03550564531521672
+      },
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.4283948480430382e+53
+      },
+      "graph": 10,
+      "original": {
+        "im": 2.5071653238873383e-55,
+        "re": 2.4857024207179808e-55
+      },
+      "weight": {
+        "im": 0.03581222031832829,
+        "re": 0.03550564531521672
+      },
+      "weight_over_factor_original_abs_ratio": 1.0
+    },
+    {
+      "channel": "(4,9)",
+      "channel_id": 9,
+      "factor_times_original": {
+        "im": 0.035811236914096455,
+        "re": 0.035505655306703916
+      },
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.4283948480430382e+53
+      },
+      "graph": 10,
+      "original": {
+        "im": 2.507096477081206e-55,
+        "re": 2.4857031202085456e-55
+      },
+      "weight": {
+        "im": 0.035811236914096455,
+        "re": 0.035505655306703916
+      },
+      "weight_over_factor_original_abs_ratio": 1.0
+    },
+    {
+      "channel": "(4,8)",
+      "channel_id": 10,
+      "factor_times_original": {
+        "im": -0.009147053419020931,
+        "re": -0.03490040825021822
+      },
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.4283948480430382e+53
+      },
+      "graph": 10,
+      "original": {
+        "im": -6.40372893500196e-56,
+        "re": -2.4433305887397497e-55
+      },
+      "weight": {
+        "im": -0.009147053419020931,
+        "re": -0.03490040825021822
+      },
+      "weight_over_factor_original_abs_ratio": 1.0
+    },
+    {
+      "channel": "(4,5)",
+      "channel_id": 11,
+      "factor_times_original": {
+        "im": 0.03581082745948447,
+        "re": 0.035506403041940374
+      },
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.4283948480430382e+53
+      },
+      "graph": 10,
+      "original": {
+        "im": 2.507067811715145e-55,
+        "re": 2.4857554681456362e-55
+      },
+      "weight": {
+        "im": 0.03581082745948447,
+        "re": 0.035506403041940374
+      },
+      "weight_over_factor_original_abs_ratio": 1.0
+    },
+    {
+      "channel": "(4,6)",
+      "channel_id": 12,
+      "factor_times_original": {
+        "im": -0.00914699940336214,
+        "re": -0.03490048133727429
+      },
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.4283948480430382e+53
+      },
+      "graph": 10,
+      "original": {
+        "im": -6.403691119366553e-56,
+        "re": -2.4433357054661343e-55
+      },
+      "weight": {
+        "im": -0.00914699940336214,
+        "re": -0.03490048133727429
+      },
+      "weight_over_factor_original_abs_ratio": 1.0
+    },
+    {
+      "channel": "(4,7)",
+      "channel_id": 13,
+      "factor_times_original": {
+        "im": 0.03581222031832829,
+        "re": 0.03550564531521672
+      },
+      "full_multiplicative_factor": {
+        "im": 0.0,
+        "re": 1.4283948480430382e+53
+      },
+      "graph": 10,
+      "original": {
+        "im": 2.5071653238873383e-55,
+        "re": 2.4857024207179808e-55
+      },
+      "weight": {
+        "im": 0.03581222031832829,
+        "re": 0.03550564531521672
+      },
+      "weight_over_factor_original_abs_ratio": 1.0
+    }
+  ],
+  "summary": {
+    "common_full_multiplicative_factor": 1.4283948480430382e+53,
+    "event_count_parsed": 14,
+    "generated_events": 14,
+    "integrand_result_before_jacobian": {
+      "im": 1.878771370096834e-54,
+      "re": 1.7084865996358447e-54
+    },
+    "parameterization_jacobian": 1.4283948480430382e+53,
+    "sum_original": {
+      "im": 1.8787713700968337e-54,
+      "re": 1.7084865996358444e-54
+    },
+    "sum_weight": {
+      "im": 0.2683627345697077,
+      "re": 0.24403934568704092
+    }
+  }
+}

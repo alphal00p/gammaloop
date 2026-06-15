@@ -1,0 +1,359 @@
+{
+  "GL06": {
+    "channel_count": 14,
+    "channels": [
+      {
+        "basis_id": 0,
+        "channel_id": 0,
+        "edges": [
+          8,
+          10
+        ]
+      },
+      {
+        "basis_id": 1,
+        "channel_id": 1,
+        "edges": [
+          7,
+          8
+        ]
+      },
+      {
+        "basis_id": 2,
+        "channel_id": 2,
+        "edges": [
+          5,
+          10
+        ]
+      },
+      {
+        "basis_id": 3,
+        "channel_id": 3,
+        "edges": [
+          5,
+          7
+        ]
+      },
+      {
+        "basis_id": 4,
+        "channel_id": 4,
+        "edges": [
+          8,
+          9
+        ]
+      },
+      {
+        "basis_id": 5,
+        "channel_id": 5,
+        "edges": [
+          5,
+          9
+        ]
+      },
+      {
+        "basis_id": 6,
+        "channel_id": 6,
+        "edges": [
+          6,
+          8
+        ]
+      },
+      {
+        "basis_id": 7,
+        "channel_id": 7,
+        "edges": [
+          5,
+          6
+        ]
+      },
+      {
+        "basis_id": 8,
+        "channel_id": 8,
+        "edges": [
+          4,
+          10
+        ]
+      },
+      {
+        "basis_id": 9,
+        "channel_id": 9,
+        "edges": [
+          4,
+          8
+        ]
+      },
+      {
+        "basis_id": 10,
+        "channel_id": 10,
+        "edges": [
+          4,
+          7
+        ]
+      },
+      {
+        "basis_id": 11,
+        "channel_id": 11,
+        "edges": [
+          4,
+          9
+        ]
+      },
+      {
+        "basis_id": 12,
+        "channel_id": 12,
+        "edges": [
+          4,
+          6
+        ]
+      },
+      {
+        "basis_id": 13,
+        "channel_id": 13,
+        "edges": [
+          4,
+          5
+        ]
+      }
+    ],
+    "graph_id": 4,
+    "group": 4
+  },
+  "GL14": {
+    "channel_count": 14,
+    "channels": [
+      {
+        "basis_id": 0,
+        "channel_id": 0,
+        "edges": [
+          8,
+          10
+        ]
+      },
+      {
+        "basis_id": 1,
+        "channel_id": 1,
+        "edges": [
+          6,
+          10
+        ]
+      },
+      {
+        "basis_id": 2,
+        "channel_id": 2,
+        "edges": [
+          8,
+          9
+        ]
+      },
+      {
+        "basis_id": 3,
+        "channel_id": 3,
+        "edges": [
+          6,
+          9
+        ]
+      },
+      {
+        "basis_id": 4,
+        "channel_id": 4,
+        "edges": [
+          7,
+          8
+        ]
+      },
+      {
+        "basis_id": 5,
+        "channel_id": 5,
+        "edges": [
+          6,
+          7
+        ]
+      },
+      {
+        "basis_id": 6,
+        "channel_id": 6,
+        "edges": [
+          5,
+          8
+        ]
+      },
+      {
+        "basis_id": 7,
+        "channel_id": 7,
+        "edges": [
+          5,
+          6
+        ]
+      },
+      {
+        "basis_id": 8,
+        "channel_id": 8,
+        "edges": [
+          4,
+          10
+        ]
+      },
+      {
+        "basis_id": 9,
+        "channel_id": 9,
+        "edges": [
+          4,
+          9
+        ]
+      },
+      {
+        "basis_id": 10,
+        "channel_id": 10,
+        "edges": [
+          4,
+          8
+        ]
+      },
+      {
+        "basis_id": 11,
+        "channel_id": 11,
+        "edges": [
+          4,
+          7
+        ]
+      },
+      {
+        "basis_id": 12,
+        "channel_id": 12,
+        "edges": [
+          4,
+          6
+        ]
+      },
+      {
+        "basis_id": 13,
+        "channel_id": 13,
+        "edges": [
+          4,
+          5
+        ]
+      }
+    ],
+    "graph_id": 7,
+    "group": 7
+  },
+  "GL18": {
+    "channel_count": 14,
+    "channels": [
+      {
+        "basis_id": 0,
+        "channel_id": 0,
+        "edges": [
+          8,
+          10
+        ]
+      },
+      {
+        "basis_id": 1,
+        "channel_id": 1,
+        "edges": [
+          6,
+          10
+        ]
+      },
+      {
+        "basis_id": 2,
+        "channel_id": 2,
+        "edges": [
+          8,
+          9
+        ]
+      },
+      {
+        "basis_id": 3,
+        "channel_id": 3,
+        "edges": [
+          6,
+          9
+        ]
+      },
+      {
+        "basis_id": 4,
+        "channel_id": 4,
+        "edges": [
+          7,
+          8
+        ]
+      },
+      {
+        "basis_id": 5,
+        "channel_id": 5,
+        "edges": [
+          6,
+          7
+        ]
+      },
+      {
+        "basis_id": 6,
+        "channel_id": 6,
+        "edges": [
+          5,
+          8
+        ]
+      },
+      {
+        "basis_id": 7,
+        "channel_id": 7,
+        "edges": [
+          5,
+          6
+        ]
+      },
+      {
+        "basis_id": 8,
+        "channel_id": 8,
+        "edges": [
+          4,
+          10
+        ]
+      },
+      {
+        "basis_id": 9,
+        "channel_id": 9,
+        "edges": [
+          4,
+          9
+        ]
+      },
+      {
+        "basis_id": 10,
+        "channel_id": 10,
+        "edges": [
+          4,
+          8
+        ]
+      },
+      {
+        "basis_id": 11,
+        "channel_id": 11,
+        "edges": [
+          4,
+          5
+        ]
+      },
+      {
+        "basis_id": 12,
+        "channel_id": 12,
+        "edges": [
+          4,
+          6
+        ]
+      },
+      {
+        "basis_id": 13,
+        "channel_id": 13,
+        "edges": [
+          4,
+          7
+        ]
+      }
+    ],
+    "graph_id": 10,
+    "group": 10
+  }
+}

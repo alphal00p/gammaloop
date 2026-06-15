@@ -377,12 +377,15 @@ pub struct ParameterizationSettings {
     pub mapping: ParameterizationMapping,
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub b: f64,
+    #[serde(skip_serializing_if = "is_float::<1>")]
+    pub power: f64,
 }
 
 impl Default for ParameterizationSettings {
     fn default() -> Self {
         Self {
             b: 1.0,
+            power: 1.0,
             mode: ParameterizationMode::default(),
             mapping: ParameterizationMapping::default(),
         }
@@ -931,6 +934,12 @@ pub enum ParameterizationMode {
     HyperSphericalFlat,
     #[serde(rename = "momentum_space")]
     MomentumSpace,
+    #[serde(rename = "relative_spherical")]
+    RelativeSpherical,
+    #[serde(rename = "spherical_common_radial")]
+    SphericalCommonRadial,
+    #[serde(rename = "spherical_product_common_radial")]
+    SphericalProductCommonRadial,
 }
 
 #[cfg_attr(
@@ -953,6 +962,13 @@ impl Display for ParameterizationMode {
         match self {
             ParameterizationMode::Cartesian => write!(f, "cartesian"),
             ParameterizationMode::Spherical => write!(f, "spherical"),
+            ParameterizationMode::RelativeSpherical => write!(f, "relative spherical"),
+            ParameterizationMode::SphericalCommonRadial => {
+                write!(f, "common-radial spherical")
+            }
+            ParameterizationMode::SphericalProductCommonRadial => {
+                write!(f, "product/common-radial spherical")
+            }
             ParameterizationMode::HyperSpherical => write!(f, "hyperspherical"),
             ParameterizationMode::HyperSphericalFlat => write!(f, "flat hyperspherical"),
             ParameterizationMode::MomentumSpace => write!(f, "momentum space"),
@@ -966,6 +982,8 @@ impl Display for ParameterizationMode {
 pub enum ParameterizationMapping {
     #[serde(rename = "log")]
     Log,
+    #[serde(rename = "power")]
+    Power,
     #[serde(rename = "linear")]
     #[default]
     Linear,
@@ -1007,6 +1025,8 @@ pub struct SamplingSettingsParser {
     pub mapping: ParameterizationMapping,
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub b: f64,
+    #[serde(skip_serializing_if = "is_float::<1>")]
+    pub power: f64,
 }
 
 impl Default for SamplingSettingsParser {
@@ -1021,6 +1041,7 @@ impl Default for SamplingSettingsParser {
             coordinate_system: CoordinateSystem::Spherical,
             mapping: ParameterizationMapping::Linear,
             b: 1.0,
+            power: 1.0,
         }
     }
 }
@@ -1072,6 +1093,12 @@ pub enum CoordinateSystem {
     MomentumSpace,
     #[serde(rename = "tropical")]
     MomTrop,
+    #[serde(rename = "relative_spherical")]
+    RelativeSpherical,
+    #[serde(rename = "spherical_common_radial")]
+    SphericalCommonRadial,
+    #[serde(rename = "spherical_product_common_radial")]
+    SphericalProductCommonRadial,
 }
 
 impl Default for SamplingSettings {
@@ -1093,6 +1120,7 @@ impl SamplingSettings {
                 coordinate_system: CoordinateSystem::from_mode(settings.mode.clone()),
                 mapping: settings.mapping.clone(),
                 b: settings.b,
+                power: settings.power,
             },
             SamplingSettings::MultiChanneling(settings) => SamplingSettingsParser {
                 graphs: SumMode::Summed,
@@ -1106,6 +1134,7 @@ impl SamplingSettings {
                 ),
                 mapping: settings.parameterization_settings.mapping.clone(),
                 b: settings.parameterization_settings.b,
+                power: settings.parameterization_settings.power,
             },
             SamplingSettings::DiscreteGraphs(settings) => {
                 let orientations = if settings.sample_orientations {
@@ -1128,6 +1157,7 @@ impl SamplingSettings {
                             ),
                             mapping: parameterization_settings.mapping.clone(),
                             b: parameterization_settings.b,
+                            power: parameterization_settings.power,
                         }
                     }
                     DiscreteGraphSamplingType::MultiChanneling(multichanneling_settings) => {
@@ -1149,6 +1179,7 @@ impl SamplingSettings {
                                 .mapping
                                 .clone(),
                             b: multichanneling_settings.parameterization_settings.b,
+                            power: multichanneling_settings.parameterization_settings.power,
                         }
                     }
                     DiscreteGraphSamplingType::DiscreteMultiChanneling(
@@ -1171,6 +1202,7 @@ impl SamplingSettings {
                             .mapping
                             .clone(),
                         b: multichanneling_settings.parameterization_settings.b,
+                        power: multichanneling_settings.parameterization_settings.power,
                     },
                     DiscreteGraphSamplingType::TropicalSampling(_) => SamplingSettingsParser {
                         graphs: SumMode::MonteCarlo,
@@ -1182,6 +1214,7 @@ impl SamplingSettings {
                         coordinate_system: CoordinateSystem::MomTrop,
                         mapping: ParameterizationMapping::default(),
                         b: 1.0,
+                        power: 1.0,
                     },
                 }
             }
@@ -1199,6 +1232,7 @@ impl SamplingSettings {
             coordinate_system,
             mapping,
             b,
+            power,
         } = parser;
 
         let sample_orientations = match (graphs.clone(), orientations) {
@@ -1238,6 +1272,14 @@ impl SamplingSettings {
         }
 
         let mode = coordinate_system.into_mode();
+        if matches!(mode, ParameterizationMode::SphericalProductCommonRadial)
+            && (!lmb_multichanneling || lmb_channel_weight != LmbChannelWeight::InverseJacobian)
+        {
+            return Err(
+                "Invalid sampling settings: coordinate_system = 'spherical_product_common_radial' requires lmb_multichanneling = true and lmb_channel_weight = 'inverse_jacobian'."
+                    .to_string(),
+            );
+        }
         if lmb_channel_weight == LmbChannelWeight::InverseJacobian
             && matches!(mode, ParameterizationMode::HyperSphericalFlat)
         {
@@ -1246,7 +1288,33 @@ impl SamplingSettings {
                     .to_string(),
             );
         }
-        let parameterization_settings = ParameterizationSettings { mode, mapping, b };
+        if matches!(mapping, ParameterizationMapping::Power) {
+            if !matches!(
+                mode,
+                ParameterizationMode::Spherical
+                    | ParameterizationMode::RelativeSpherical
+                    | ParameterizationMode::SphericalCommonRadial
+                    | ParameterizationMode::SphericalProductCommonRadial
+                    | ParameterizationMode::HyperSpherical
+                    | ParameterizationMode::HyperSphericalFlat
+            ) {
+                return Err(
+                    "Invalid sampling settings: mapping = 'power' requires a spherical coordinate system."
+                        .to_string(),
+                );
+            }
+            if !power.is_finite() || power < 1.0 {
+                return Err(
+                    "Invalid sampling settings: mapping = 'power' requires power >= 1.".to_string(),
+                );
+            }
+        }
+        let parameterization_settings = ParameterizationSettings {
+            mode,
+            mapping,
+            b,
+            power,
+        };
 
         match graphs {
             SumMode::Summed => {
@@ -1337,6 +1405,11 @@ impl CoordinateSystem {
         match mode {
             ParameterizationMode::Cartesian => Self::Cartesian,
             ParameterizationMode::Spherical => Self::Spherical,
+            ParameterizationMode::RelativeSpherical => Self::RelativeSpherical,
+            ParameterizationMode::SphericalCommonRadial => Self::SphericalCommonRadial,
+            ParameterizationMode::SphericalProductCommonRadial => {
+                Self::SphericalProductCommonRadial
+            }
             ParameterizationMode::HyperSpherical => Self::HyperSpherical,
             ParameterizationMode::HyperSphericalFlat => Self::HyperSphericalFlat,
             ParameterizationMode::MomentumSpace => Self::MomentumSpace,
@@ -1347,6 +1420,11 @@ impl CoordinateSystem {
         match self {
             CoordinateSystem::Cartesian => ParameterizationMode::Cartesian,
             CoordinateSystem::Spherical => ParameterizationMode::Spherical,
+            CoordinateSystem::RelativeSpherical => ParameterizationMode::RelativeSpherical,
+            CoordinateSystem::SphericalCommonRadial => ParameterizationMode::SphericalCommonRadial,
+            CoordinateSystem::SphericalProductCommonRadial => {
+                ParameterizationMode::SphericalProductCommonRadial
+            }
             CoordinateSystem::HyperSpherical => ParameterizationMode::HyperSpherical,
             CoordinateSystem::HyperSphericalFlat => ParameterizationMode::HyperSphericalFlat,
             CoordinateSystem::MomentumSpace => ParameterizationMode::MomentumSpace,

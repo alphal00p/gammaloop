@@ -1,0 +1,143 @@
+[[command_blocks]]
+name = "setup_all_graphs_pmpm_kinematics_a"
+commands = [
+  "run set_model_parameters",
+  "run set_kinematics_a",
+  "set process -p aa_aa kv kinematics.externals.data.helicities=[+1,-1,+1,-1] general.mu_r=91.188 general.m_uv=9.188",
+]
+
+[[command_blocks]]
+name = "integrate_graph_summed_relative_no_lmb_100k"
+commands = [
+  "run setup_all_graphs_pmpm_kinematics_a",
+  "set process -p aa_aa kv integrator.n_bins=64 integrator.min_samples_for_update=1000 integrator.n_increase=0 integrator.n_start=100000 integrator.n_max=100000 integrator.seed=262001 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=0.01",
+  """set process -p aa_aa string '
+        [sampling]
+        graphs = "summed"
+        orientations = "summed"
+        lmb_multichanneling = false
+        coordinate_system = "relative_spherical"
+        mapping = "linear"
+        b = 1.0
+    '""",
+  """integrate -p aa_aa -i 2L
+             --n-cores 20
+             --workspace-path /tmp/aa_aa_2l_graph_summed_relative_no_lmb_100k_workspace
+             --renderer tabled
+             --batch-size 1000
+             --show-phase both
+             --show-max-weight-info
+             --write-results-for-each-iteration
+             --restart
+    """,
+]
+
+[[command_blocks]]
+name = "integrate_graph_summed_relative_invj_sumlmb_100k"
+commands = [
+  "run setup_all_graphs_pmpm_kinematics_a",
+  "set process -p aa_aa kv integrator.n_bins=64 integrator.min_samples_for_update=1000 integrator.n_increase=0 integrator.n_start=100000 integrator.n_max=100000 integrator.seed=262002 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=0.01",
+  """set process -p aa_aa string '
+        [sampling]
+        graphs = "summed"
+        orientations = "summed"
+        lmb_multichanneling = true
+        lmb_channels = "summed"
+        lmb_channel_weight = "inverse_jacobian"
+        coordinate_system = "relative_spherical"
+        mapping = "linear"
+        b = 1.0
+    '""",
+  """integrate -p aa_aa -i 2L
+             --n-cores 20
+             --workspace-path /tmp/aa_aa_2l_graph_summed_relative_invj_sumlmb_100k_workspace
+             --renderer tabled
+             --batch-size 1000
+             --show-phase both
+             --show-max-weight-info
+             --write-results-for-each-iteration
+             --restart
+    """,
+]
+
+[[command_blocks]]
+name = "integrate_graph_summed_relative_no_lmb_1m"
+commands = [
+  "run setup_all_graphs_pmpm_kinematics_a",
+  "set process -p aa_aa kv integrator.n_bins=64 integrator.min_samples_for_update=1000 integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=1000000 integrator.seed=262003 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=0.01",
+  """set process -p aa_aa string '
+        [sampling]
+        graphs = "summed"
+        orientations = "summed"
+        lmb_multichanneling = false
+        coordinate_system = "relative_spherical"
+        mapping = "linear"
+        b = 1.0
+    '""",
+  """integrate -p aa_aa -i 2L
+             --n-cores 20
+             --workspace-path /tmp/aa_aa_2l_graph_summed_relative_no_lmb_1m_workspace
+             --renderer tabled
+             --batch-size 10000
+             --show-phase both
+             --show-max-weight-info
+             --write-results-for-each-iteration
+             --restart
+    """,
+]
+
+[[command_blocks]]
+name = "integrate_graph_summed_relative_invj_sumlmb_trainavg_100k"
+commands = [
+  "run setup_all_graphs_pmpm_kinematics_a",
+  "set process -p aa_aa kv integrator.train_on_avg=true integrator.n_bins=64 integrator.min_samples_for_update=1000 integrator.n_increase=0 integrator.n_start=100000 integrator.n_max=100000 integrator.seed=262004 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=0.01",
+  """set process -p aa_aa string '
+        [sampling]
+        graphs = "summed"
+        orientations = "summed"
+        lmb_multichanneling = true
+        lmb_channels = "summed"
+        lmb_channel_weight = "inverse_jacobian"
+        coordinate_system = "relative_spherical"
+        mapping = "linear"
+        b = 1.0
+    '""",
+  """integrate -p aa_aa -i 2L
+             --n-cores 20
+             --workspace-path /tmp/aa_aa_2l_graph_summed_relative_invj_sumlmb_trainavg_100k_workspace
+             --renderer tabled
+             --batch-size 1000
+             --show-phase both
+             --show-max-weight-info
+             --write-results-for-each-iteration
+             --restart
+    """,
+]
+
+[[command_blocks]]
+name = "integrate_graph_summed_relative_invj_sumlmb_bins256_100k"
+commands = [
+  "run setup_all_graphs_pmpm_kinematics_a",
+  "set process -p aa_aa kv integrator.train_on_avg=false integrator.n_bins=256 integrator.min_samples_for_update=200 integrator.n_increase=0 integrator.n_start=100000 integrator.n_max=100000 integrator.seed=262005 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=0.01",
+  """set process -p aa_aa string '
+        [sampling]
+        graphs = "summed"
+        orientations = "summed"
+        lmb_multichanneling = true
+        lmb_channels = "summed"
+        lmb_channel_weight = "inverse_jacobian"
+        coordinate_system = "relative_spherical"
+        mapping = "linear"
+        b = 1.0
+    '""",
+  """integrate -p aa_aa -i 2L
+             --n-cores 20
+             --workspace-path /tmp/aa_aa_2l_graph_summed_relative_invj_sumlmb_bins256_100k_workspace
+             --renderer tabled
+             --batch-size 1000
+             --show-phase both
+             --show-max-weight-info
+             --write-results-for-each-iteration
+             --restart
+    """,
+]
