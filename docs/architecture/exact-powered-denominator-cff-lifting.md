@@ -2270,6 +2270,8 @@ requires fresh validation after subsequent source changes. Four cases in that
 historical run used an f64-input `1e-14` unit-scale fallback. Current nonzero
 comparisons require finite values and precision-scaled relative agreement;
 only an exact source-zero certificate permits a separate absolute bound.
+Fresh reconstructed-stack evidence belongs to the
+[stack validation record](raised-energy-cff-stack-review-validation.md).
 
 ## Validation map
 

@@ -1,0 +1,13 @@
+{
+  "archive": "docs/architecture/raised-energy-cff-powered-dot-evidence.tar.gz",
+  "archive_bytes": 42247,
+  "archive_sha256": "494b29f8bb4c128efd3ec2f374e44c8638fe5f92a5f575345ee0e7a93d5f6100",
+  "files": 70,
+  "unique_contents": 50,
+  "source_bytes": 602017,
+  "symbolic_atom_outputs": 0,
+  "saved_state_payloads": [],
+  "all_indexed_payload_hashes_match": true,
+  "regular_files_and_internal_prior_hard_links_only": true,
+  "no_ELF_payloads_or_license_format_found": true
+}
