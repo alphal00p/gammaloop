@@ -58,6 +58,8 @@ impl UvMarker {
         function!(GS.uv_subgraph, Self::label(current), Self::label(given))
     }
 
+    // The forest history inside a CT parameter remains one atomic parameter.
+    // Merge directly multiplied markers and integer powers without expanding the source.
     fn normalize(atom: &Atom) -> Atom {
         atom.replace(function!(GS.ct_marker, W_.a_).pow(Atom::var(W_.b_)))
             .when(W_.b_.filter(|exponent| exponent.is_integer()))

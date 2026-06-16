@@ -3,9 +3,11 @@
 ## Scope
 This document describes the current, implemented architecture of this repository.
 
-The workspace is organized around two main Rust crates:
+The application is organized around two main Rust crates:
 - `gammalooprs` (`crates/gammalooprs`): core physics/domain logic, graph processing, integrand construction, evaluation, and integration.
 - `gammaloop-api` (`crates/gammaloop-api`): CLI, REPL, Python bindings, command parsing, and persisted state orchestration.
+
+The shared `three-dimensional-reps` crate supplies exact generalized CFF algebra.
 
 ## High-Level Architecture
 At a high level, gammaLoop uses a layered architecture with a stateful application shell.
@@ -101,6 +103,220 @@ multiplied as though it were scalar. The maintained sign, projection, marker,
 and backend-boundary invariants are documented in
 [`uv-renormalization.md`](uv-renormalization.md).
 
+### 3.2 CFF production and numerator-energy ownership
+
+GammaLoop owns production graph/source construction, UV orchestration, exact
+source mapping, and evaluator preparation. The `three-dimensional-reps` crate
+owns the shared CFF algebra. Its feature-gated eager evaluator is a diagnostic
+tool: GammaLoop owns production inputs, factors, and evaluator preparation.
+
+The shared `LinearEnergyExpr` stores exact `Rational` coefficients for indexed
+internal/external energies, the uniform scale and the constant term;
+`CFFVariant::prefactor` is also `Rational`. Arithmetic and cut handling retain
+that type until symbolic output converts it with `Atom::num`. Native rational
+serde/bincode support owns coefficient persistence; old Atom coefficient encodings
+are not a compatibility contract.
+
+All CFF power and capacity questions, including numerator and finite-pole
+powers of repeated occurrences, are expressed solely in physical EMR/source-edge
+energies. LMB coordinates describe momentum routing and are never consulted to
+identify, cap, or substitute an energy power. Production capacity analysis
+accepts physical `Q(edge, index)` atoms and rejects `K(loop, index)` until its
+producer normalizes it with physical edge provenance.
+
+Both direct local-3D modes first perform the complete loop-energy integration
+and build the complete/global CFF expression; the UV Taylor operators then act
+on that CFF expression. They use the same Taylor-transformed CFF bodies.
+Writing the generalized residue map as `{ k -> C_k }`,
+`explicit_orientation_sum_only=false` is `sum_k sigma(k) C_k`, with `sigma(k)`
+the one-hot selector for the complete residue-map key. The Taylor operator is
+applied independently to every keyed body and leaves that selector opaque.
+`explicit_orientation_sum_only=true` only replaces each selector by one and
+explicitly sums the same bodies. Neither direct mode reconstructs
+or projects completed local-4D Taylor structures.
+
+Only the projected local-4D route represents completed terms with raised
+propagators by source-backed occurrence graphs. The original `EdgeIndex`
+survives the Taylor operator in the typed denominator wrapper. Disjoint-set
+contraction of absent edges in the original graph then constructs the cograph
+and UV source minors, and every
+occurrence inherits the endpoints of its `source_edge` in the appropriate
+minor. Only repeated occurrences of that same source edge subdivide its
+incidence into a serial dotted chain. Exact momentum signatures are normalized
+up to sign to validate denominator equality and record repeated occurrences;
+they never infer endpoints or merge physical owners. The rank solve at this
+source-topology boundary selects a unique `+/-` routing sign modulo the opposite
+source domain on those
+already fixed endpoints. There is no incidence/Kirchhoff reconstruction and no
+external-balance synthesis. The raw `+/-Q` sign remains available to the
+numerator mapper, while a post-construction Graphica pass canonically relabels
+nodes and exact edges for deterministic cache keys.
+
+Projection prepares each genuinely outer additive Taylor term once, then
+compares at most three certified assignments by actual native source-map count.
+Generated expressions are reused only for equal canonical topology and
+identical per-occurrence capacity. Every term keeps its selected factorized
+assignment and matching generated payload.
+Equal physical energies do not authorize the cache to redistribute bounds
+between their distinct occurrences. Independent requests never contribute a
+shared capacity maximum, and no preliminary registration pass is needed.
+The real degree-one triangle regression retains the natural UV-owner
+multiplicities `(1,1,1)`, `(2,1,1)` and `(1,1,2)` as separate denominator
+topologies. Terms with the same denominators may share a factorized additive
+numerator; collecting a common denominator across different topologies would
+manufacture positive denominator factors and inflate the required CFF rank.
+Genuine positive typed denominator factors already present in a numerator
+remain supported, with their original ownership and CFF lower sectors intact.
+Non-vacuum exact sources retain pure-external boundaries as explicit
+source-crown hedges. Future on-shell two-point insertions such as `(m,0,0,0)`
+require an explicit fixed-boundary payload, not topology reconstruction.
+This exact-source reconstruction and bounded dispatch search is exclusive to
+the projected local-4D route; direct local-3D and LTD dispatch are unchanged.
+Original factors retain their own occurrences; newly denominator-derived hard
+factors may use only their line's serial copies. The descending rank envelope
+orders proposals, preferring `(4,2,2)` to `(4,3,1)` while the original quartic
+stays fixed. The hard search compares that baseline with at most two
+deterministic alternatives, each changing a single owner's assignment. New soft
+Taylor factors retain explicit crown provenance until outer assembly, where the
+completed child coefficient is multiplied by the untouched outer numerator.
+The soft search proposes at
+most three certified off-shell cograph routings, including every fixed external
+shift.
+
+Both searches select the smallest actual native generated source-map row count
+(`generated.expression.orientations.len()`), with proposal order breaking ties.
+This counts stored operational rows after the core's own emission/coalescing,
+including retained zero rows, before surface conversion and cut/host selection.
+It is not a degree-product estimate or a global union of keys across Taylor
+terms. Final selected host/map branches can have a different count. Existing
+rank/Pareto and basis restrictions define a bounded proposal class, so this is
+best-of-three selection, not a global optimum or a bound on generation time/RAM.
+
+The hard cache admits full payloads only for winning keys and retains small
+count-only records for contenders under the same complete source/options/bounds
+key. The soft path has no persistent count memo: it holds an incumbent and
+challenger, drops the loser, then performs surface conversion, cut/hosting,
+reporting and numerator mapping only for the winner. Existing root-expression
+reuse bypasses this search instead of regenerating its established capacity.
+The chosen factorized expression and immutable plan supply both the generated
+capacity and numerator mapping. No numerator expansion, on-shell routing
+identity, or change of original ownership is involved.
+The full design, sign argument for `D(Q)=D(-Q)`, and concrete production fixtures
+are documented in
+[`exact-powered-denominator-cff-lifting.md`](exact-powered-denominator-cff-lifting.md).
+
+The production numerator remains factorized. Degree analysis traverses its
+factors without expanding them, each UV step attaches only newly owned factors,
+and final assembly attaches outside and global factors exactly once. When one
+outer CFF serves independently evaluated residue branches, its capacity is the
+per-edge maximum of their separately analyzed factorized products, including
+the common remaining numerator. Equal branch bodies need only one rank analysis;
+opposite bodies remain independent and cannot cancel each other's capacity.
+The analysis streams degree maps without constructing a tagged symbolic sum.
+Initial-cut and tree-edge energies remain outside this internal CFF capacity
+domain; stored production-root CFF reuse retains its existing boundary. For higher
+power projection, the term parser splits only the completed expression's outer
+Taylor sum when its addends carry separate denominator topologies. Nested
+numerator sums and positive typed `GS.den` factors remain factorized and are
+never cancelled against denominator occurrences upstream; generalized CFF owns
+the resulting pinches and lower sectors. For higher powers,
+interpolation may replace an EMR energy by `a*M`, where `a` is a signed
+integer and `M` is the common auxiliary CFF numerator-sampling scale. This is an
+EMR substitution, never an LMB rewrite. Production evaluator parameter lists
+always include `M`, and runtime settings require `M != 0` for every process.
+The physical result is invariant under changing its nonzero value.
+
+The signed sampling coefficient is neither a physical edge-direction sign nor
+the runtime residue-map-key selector `sigma(map_id)`. Pole signs enter the generation-time affine map, after which an
+orientation entry stores `a` in `LinearEnergyExpr::uniform_scale_coeff` and its
+interpolation weight stores the compensating inverse power in
+`CFFVariant::uniform_scale_power`. Multiple numerator maps may therefore share
+the same coarse orientation. Their complete loop/edge energy maps and distinct
+`numerator_map_index` values remain attached to the factorized numerator. Each
+such entry has its own complete map key and therefore its own `sigma(map_id)`;
+entries must never be merged merely because their physical edge directions
+agree.
+
+Integrated finite UV terms retain their exact source-local EMR maps. Production
+map-key selectors partition complete generalized residue-map entries but do not
+replace those maps.
+In orientation-local direct-3D generation, shrinking a UV subgraph preserves
+the orientation selected on every surviving outer edge. Among the cut-valid
+full orientations which extend that outer assignment, one deterministic inner
+orientation is selected to host the complete integrated finite counterterm; the
+other inner extensions receive none, so summing orientations counts the addback
+exactly once. In explicit-sum direct-3D generation the same reduced residue is
+kept once without a selector. Projected local-4D counterterms are likewise
+selector-free: each completed exact source owns its full source-local
+orientation sum, independently of production-orientation IDs.
+After that sum, a projected sector stores only its coefficient and frozen
+localizing factor. Its child map lengths need not agree across Taylor
+topologies. Actual outer branches keep their own maps until the coefficient
+and remaining numerator have been mapped, then sum by cut order. Typed zeros
+retain the allowed cut keys without requiring a map; direct and integrated
+localization retain their own production-host rules.
+The empty UV forest is the ordinary factorized production root in both local-UV
+routes; the expanded-4D setting changes only proper, nonempty UV nodes.
+
+Final assembly uses one `Integrands` map of cut-indexed factorized expressions.
+UV markers and tensor replacements act on those expressions before the ordinary
+evaluator preprocessing; there is no parallel deferred-body state. Direct-3D
+sequential forest construction composes the same local and integrated replay
+operations used by disconnected forests. Integrated localization registers its
+source surfaces before either Taylor branch reads the graph, and its normalized
+localizing factor remains inert under subsequent Taylor operations.
+
+The shared CFF core also returns its connected-loop and pure
+duplicate-denominator global sign as typed metadata. GammaLoop consumes that
+bridge exactly once for root, reduced, and exact production CFF sources,
+cancelling the shared-core-local uniform convention and retaining GammaLoop's
+established complete-integrand convention.
+### 3.3 Tensor-network contraction order
+
+Evaluator construction parses the factorized numerator into a Spenso network,
+aliases large scalar references, and contracts its tensor products before
+resolving those aliases. The default `intermediate_cost` preset selects
+`MinIntermediateCost`, a configuration of the existing `ContractionStrategy`
+implementation. It changes pair selection, preserving the scalar, trace,
+library, disconnected-product and final cleanup rules.
+
+The greedy score first estimates copied symbolic payload, then symbolic
+normalization work, before using sparse support, tensor volume and rank as
+later criteria. For a candidate pair, let `J` count the estimated nonzero entry
+products with matching contracted coordinates. Let `b` and `t` be each
+operand's mean entry bytes and top-level terms, rounded up. The two leading
+scores are `J * (b_left + b_right)` and
+`J * (b_left * t_right + b_right * t_left)`. Sparse support supplies the join
+count without multiplying coefficients. Otherwise the fallback uses the
+Cartesian entry count, capped by output and contracted-coordinate volume for
+single tensors. That cap is not applied to lazy sums, whose terms may share
+coordinates. The existing bounded output-support join and deterministic
+operand-order ties remain in use.
+
+These scores estimate work before cancellations. They are not physical memory
+bounds or a prediction of the globally best contraction sequence. They use
+existing structure and scalar-size profiles, with saturating arithmetic; the
+planner performs no speculative contractions or numerator expansion. A higher
+rank intermediate can therefore be preferred when its estimated cost is lower.
+Performance claims require identical-input measurements of both time and memory.
+
+The previous sparse-aware preset and all other presets remain explicit choices.
+To restore the preceding production configuration in a run card, use:
+
+```toml
+[cli_settings.global.generation.evaluator]
+spenso_execution_mode = ["Sequential", "MinResultRank"]
+tensor_network_contraction_order = "sparse_atom_aware"
+```
+
+Within a running session, switch the preset with the existing command
+`set global kv global.generation.evaluator.tensor_network_contraction_order=sparse_atom_aware`.
+Use `intermediate_cost` to select the default again. The preset applies to
+`ContractionMode::MinResultRank` with the supported sequential executors;
+explicit `SmallestDegree` selection is unchanged. The existing
+`bnl_evaluator_atom_mwe` diagnostic exposes the same choices through
+`--contraction-order`, using hyphenated names such as `intermediate-cost`.
+
 ## Lifecycle and Data Flow
 
 ### 1. Startup
@@ -129,6 +345,11 @@ and backend-boundary invariants are documented in
 ### 3. Evaluation and Integration Flow
 1. Commands (`inspect`, `evaluate`, `integrate`) resolve process + integrand references.
 2. Integrand is warmed up (`ProcessIntegrand::warm_up`) to initialize rotations and caches.
+   Every evaluator receives the auxiliary numerator sampling scale `M` as an
+   input, defaulting to one. Warm-up rejects a zero runtime scale for every
+   amplitude or cross-section integrand, including evaluators that do not use
+   `M`. No source-expression scan or serialized usage flag is needed. This
+   enforces the EMR-only `a*M` contract above; `M` is not an LMB coordinate.
 3. Sampling path parameterizes points and evaluates graph terms.
 4. Stability checks may escalate precision (`f64 -> f128 -> arbitrary`) and rotate kinematics.
 5. Process graph evaluation returns a rich `GraphEvaluationResult<T>` rather
@@ -350,9 +571,14 @@ For local experimentation, prefer an isolated path such as `.local/scratch/<run>
 The persistence model is file-system based and intentionally human-editable for settings/run cards, mixed with binary artifacts for performance-heavy data.
 
 ### Persistence Compatibility Contract
-- State format is versioned with `state_manifest.toml` (`version = 1` currently).
-- `State::load` validates the manifest version and rejects states from newer binaries.
-- If no manifest is present, load falls back to a legacy compatibility path (`version = 0`) and runs migration checks on required layout entries before loading.
+- State format is versioned with `state_manifest.toml` (`version = 7` currently).
+- Version 7 stores exact CFF coefficients as native rationals. Version 6 removed
+  obsolete deferred-integrand fields; version 5 added component-local generated-CFF
+  ownership and prefactor metadata; version 4 added the typed global-prefactor sign.
+  These changes affect positional bincode data, so older states must be regenerated
+  rather than relabeled.
+- State loading and direct overwrite both require exactly the current manifest version; older states must be regenerated, and states from newer binaries require a newer GammaLoop binary.
+- A missing manifest denotes an unmanifested folder rather than a legacy state and is never loaded as saved state.
 - Process settings history now uses `settings_history.toml` consistently; loader still accepts legacy `settings_history.yaml` for backward compatibility and migration.
 
 ## Configuration Architecture

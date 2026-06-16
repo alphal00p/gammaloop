@@ -463,6 +463,8 @@ pub struct UVgenerationSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub final_integrand: FinalIntegrandDimension,
     #[serde(skip_serializing_if = "is_false")]
+    pub local_uv_cts_from_expanded_4d_integrands: bool,
+    #[serde(skip_serializing_if = "is_false")]
     pub add_marker: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub keep_marker: bool,
@@ -483,6 +485,7 @@ impl Default for UVgenerationSettings {
             generate_integrated: true,
             subtract_uv: true,
             final_integrand: FinalIntegrandDimension::default(),
+            local_uv_cts_from_expanded_4d_integrands: false,
             inner_products: true,
             orchestrator: UVOrchestrator::default(),
             add_marker: false,

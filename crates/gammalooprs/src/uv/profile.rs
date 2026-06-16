@@ -1029,6 +1029,7 @@ impl<'a> UVProfileRunner<'a> {
             .cff_expression
             .as_ref()
             .unwrap()
+            .expression
             .orientations
             .iter()
             .collect();

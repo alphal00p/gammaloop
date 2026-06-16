@@ -38,27 +38,30 @@ pub(crate) fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dim
     spenso_lor(tag, ind, dim).to_symbolic(None).unwrap()
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct IntegrandExpr {
-    integrands: BTreeMap<CutCFFIndex, Atom>,
-    // add_arg: Option<Atom>,
-}
-
+/// Cut-indexed factorized integrands. UV markers and final tensor replacements
+/// act on these expressions before evaluator construction.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct Integrands(BTreeMap<CutCFFIndex, Atom>);
 
 impl Integrands {
     pub fn map<F: FnMut(&Atom) -> Atom>(&self, mut f: F) -> Self {
-        Integrands(self.0.iter().map(|(k, v)| (*k, f(v))).collect())
+        self.iter().map(|(key, atom)| (*key, f(atom))).collect()
     }
 
     pub fn fallible_map<F: FnMut(&Atom) -> Result<Atom>>(&self, mut f: F) -> Result<Self> {
-        self.0.iter().map(|(k, v)| Ok((*k, f(v)?))).collect()
+        self.iter()
+            .map(|(key, atom)| Ok((*key, f(atom)?)))
+            .collect()
     }
 
+    /// Iterate over the factorized expressions passed to evaluators.
     pub fn iter(&self) -> impl Iterator<Item = (&CutCFFIndex, &Atom)> {
         self.0.iter()
+    }
+
+    pub(crate) fn zero_like(&self) -> Self {
+        self.map(|_| Atom::Zero)
     }
 
     pub fn checked_zip(
@@ -66,9 +69,8 @@ impl Integrands {
         other: &Integrands,
         mut map: impl FnMut(&CutCFFIndex, &Atom, &Atom) -> Result<Atom>,
     ) -> Result<Integrands> {
-        self.0
-            .iter()
-            .merge_join_by(&other.0, |(left_key, _), (right_key, _)| {
+        self.iter()
+            .merge_join_by(other.iter(), |(left_key, _), (right_key, _)| {
                 left_key.cmp(right_key)
             })
             .map(|pair| match pair {
@@ -86,14 +88,15 @@ impl Integrands {
     pub fn zip_mul(&self, other: &Integrands) -> Result<Integrands> {
         self.checked_zip(other, |_, v1, v2| Ok(v1 * v2))
     }
-    pub fn zip_add(&self, other: &Integrands) -> Result<Integrands> {
-        self.checked_zip(other, |_, v1, v2| Ok(v1 + v2))
+
+    pub fn zip_add(self, other: Integrands) -> Result<Integrands> {
+        self.checked_zip(&other, |_, left, right| Ok(left + right))
     }
 }
 
 impl FromIterator<(CutCFFIndex, Atom)> for Integrands {
     fn from_iter<I: IntoIterator<Item = (CutCFFIndex, Atom)>>(iter: I) -> Self {
-        Integrands(BTreeMap::from_iter(iter))
+        Self(BTreeMap::from_iter(iter))
     }
 }
 
@@ -123,12 +126,12 @@ impl Mul<&Atom> for Integrands {
 
 impl Rooted for Integrands {
     fn root() -> Self {
-        Integrands(BTreeMap::from([(
-            CutCFFIndex::new_all_none(),
-            Atom::num(1),
-        )]))
+        [(CutCFFIndex::new_all_none(), Atom::num(1))]
+            .into_iter()
+            .collect()
     }
 }
+
 #[allow(dead_code)]
 pub(crate) fn is_not_paired(pair: &HedgePair) -> bool {
     !pair.is_paired()
@@ -157,7 +160,6 @@ pub mod wood;
 pub use wood::Wood;
 
 pub mod approx;
-pub use approx::ApproxOp;
 
 pub mod export;
 

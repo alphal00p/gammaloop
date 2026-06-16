@@ -1172,19 +1172,16 @@ pub(crate) fn orientation_labels_for_graph<I: ProcessIntegrandImpl>(
     integrand: &I,
     graph_id: usize,
 ) -> Result<Vec<String>> {
-    let group_id = integrand
-        .graph_group_id_for_graph(graph_id)
-        .map(GroupId)
-        .ok_or_else(|| {
-            eyre!(
-                "Unknown graph '{}' while resolving orientation labels.",
-                graph_id
-            )
-        })?;
-    let master = integrand.get_master_graph(group_id);
-    Ok((0..master.get_num_orientations())
+    if graph_id >= integrand.graph_count() {
+        return Err(eyre!(
+            "Unknown graph '{}' while resolving orientation labels.",
+            graph_id
+        ));
+    }
+    let graph = integrand.get_graph(graph_id);
+    Ok((0..graph.get_num_orientations())
         .map(|orientation_id| {
-            master
+            graph
                 .orientation_label(orientation_id)
                 .unwrap_or_else(|| format!("#{}", orientation_id))
         })
@@ -1552,10 +1549,12 @@ fn apply_full_event_multiplicative_factor_precise<T: FloatLike>(
             event.weight *= full_factor.clone();
 
             if !event.additional_weights.weights.is_empty() {
-                event.additional_weights.weights.insert(
-                    AdditionalWeightKey::FullMultiplicativeFactor,
-                    full_factor.clone(),
-                );
+                event
+                    .additional_weights
+                    .weights
+                    .entry(AdditionalWeightKey::FullMultiplicativeFactor)
+                    .and_modify(|value| *value *= full_factor.clone())
+                    .or_insert_with(|| full_factor.clone());
             }
         }
     }
@@ -2537,7 +2536,108 @@ pub trait ProcessIntegrandImpl {
         false
     }
 
+    fn uses_explicit_orientation_sum_only(&self) -> bool {
+        false
+    }
+
     // fn get_builder_cache(&self) -> &ParamBuilder<f64>;
+}
+
+pub(crate) fn validate_process_runtime_settings(
+    settings: &RuntimeSettings,
+    explicit_orientation_sum_only: bool,
+) -> Result<()> {
+    if settings.general.use_ltd {
+        return Err(eyre!(
+            "`runtime.general.use_ltd = true` is reserved for deferred proper-LTD support; the current evaluation backend is CFF"
+        ));
+    }
+
+    // The shared process parameter layout always includes M, even when unused.
+    if settings.general.numerator_sampling_scale == 0.0 {
+        return Err(eyre!(
+            "`runtime.general.numerator_sampling_scale` must be nonzero for the auxiliary sampling scale M"
+        ));
+    }
+
+    if !explicit_orientation_sum_only {
+        return Ok(());
+    }
+
+    if settings.general.orientation_pat.pat.is_some() {
+        return Err(eyre!(
+            "`global.generation.explicit_orientation_sum_only = true` already contains the complete orientation sum; `runtime.general.orientation_pat` must be unset"
+        ));
+    }
+
+    if let SamplingSettings::DiscreteGraphs(discrete_settings) = &settings.sampling
+        && discrete_settings.sample_orientations
+    {
+        return Err(eyre!(
+            "`global.generation.explicit_orientation_sum_only = true` does not support runtime individual-orientation Monte Carlo sampling; set `sampling.sample_orientations = false`"
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_orientation_catalog_group<'a>(
+    group_id: GroupId,
+    catalogs: impl IntoIterator<Item = (String, Vec<&'a str>)>,
+) -> Result<()> {
+    let mut catalogs = catalogs.into_iter();
+    let Some((master_name, master_catalog)) = catalogs.next() else {
+        return Ok(());
+    };
+    for (graph_name, catalog) in catalogs {
+        if catalog != master_catalog {
+            let first_difference = master_catalog
+                .iter()
+                .zip_longest(&catalog)
+                .position(|entry| match entry {
+                    itertools::EitherOrBoth::Both(left, right) => left != right,
+                    itertools::EitherOrBoth::Left(_) | itertools::EitherOrBoth::Right(_) => true,
+                })
+                .unwrap_or_default();
+            return Err(eyre!(
+                "Runtime orientation Monte Carlo cannot use graph group {} because graph '{}' and master '{}' have different exact residue-map catalogs ({} versus {} selected maps; first difference at channel {}). Disable `sampling.sample_orientations` so each graph explicitly sums its own complete map catalog.",
+                group_id.0,
+                graph_name,
+                master_name,
+                catalog.len(),
+                master_catalog.len(),
+                first_difference,
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_group_orientation_catalogs<G: GraphTerm>(
+    settings: &RuntimeSettings,
+    graph_terms: &[G],
+    groups: &TiVec<GroupId, GraphGroup>,
+) -> Result<()> {
+    let SamplingSettings::DiscreteGraphs(discrete_settings) = &settings.sampling else {
+        return Ok(());
+    };
+    if !discrete_settings.sample_orientations {
+        return Ok(());
+    }
+
+    for (group_id, group) in groups.iter_enumerated() {
+        let master_id = group.master();
+        validate_orientation_catalog_group(
+            group_id,
+            std::iter::once(master_id)
+                .chain(group.into_iter().filter(|graph_id| *graph_id != master_id))
+                .map(|graph_id| {
+                    let graph = &graph_terms[graph_id];
+                    (graph.name(), graph.selected_production_orientation_keys())
+                }),
+        )?;
+    }
+    Ok(())
 }
 
 fn get_global_dimension_if_exists<I: ProcessIntegrandImpl>(integrand: &I) -> Option<usize> {
@@ -2578,6 +2678,8 @@ pub trait GraphTerm {
     fn get_graph(&self) -> &Graph;
     fn get_num_channels(&self, parameterization_settings: &ParameterizationSettings) -> usize;
     fn get_num_orientations(&self) -> usize;
+    fn production_orientation_keys(&self) -> &[String];
+    fn selected_production_orientation_keys(&self) -> Vec<&str>;
     fn selected_lmb_basis_id(
         &self,
         parameterization_settings: &ParameterizationSettings,
@@ -3420,6 +3522,12 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     input: &MomentumSpaceEvaluationInput,
 ) -> Result<GammaLoopSample<T>> {
+    if integrand.uses_explicit_orientation_sum_only() && input.orientation.is_some() {
+        return Err(eyre!(
+            "`global.generation.explicit_orientation_sum_only = true` represents all orientations as a single summed contribution, so explicit orientation selection is not supported"
+        ));
+    }
+
     let expected_loop_count = if let Some(graph_id) = input.graph_id {
         let group_id = integrand
             .get_group_structure()
@@ -4084,18 +4192,23 @@ mod tests {
     use super::{
         ChannelIndex, LmbChannelWeightingSettings, LmbMultiChannelingSetup, RuntimeCache,
         filtered_orientation_count, resolve_visible_orientation_id,
+        validate_orientation_catalog_group, validate_process_runtime_settings,
     };
     use crate::cff::expression::OrientationID;
     use crate::{
         dot,
-        graph::{Graph, LMBext, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph},
+        graph::{Graph, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph},
         initialisation::test_initialise,
         momentum::{
             ThreeMomentum,
             sample::{BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample},
             signature::LoopExtSignature,
         },
-        settings::runtime::{LmbChannelWeight, ParameterizationSettings},
+        settings::{
+            RuntimeSettings,
+            global::OrientationPattern,
+            runtime::{LmbChannelWeight, ParameterizationSettings},
+        },
         utils::{F, load_generic_model},
     };
     use linnet::half_edge::{
@@ -4104,6 +4217,121 @@ mod tests {
     };
     use std::sync::OnceLock;
     use typed_index_collections::TiVec;
+
+    #[test]
+    fn precise_event_normalization_preserves_prior_factors_and_partial_weights() {
+        use crate::{
+            observables::{
+                AdditionalWeightKey, GenericEvent, GenericEventGroup, GenericEventGroupList,
+            },
+            utils::ArbPrec,
+        };
+        use spenso::algebra::complex::Complex;
+
+        let one = F::<ArbPrec>::default().one();
+        let original = Complex::new_re(one.from_usize(3));
+        let counterterm = Complex::new_re(-one.clone());
+        let prior_factor = Complex::new_re(one.from_usize(5));
+        let mut event = GenericEvent::<ArbPrec> {
+            weight: (&original + &counterterm) * &prior_factor,
+            ..Default::default()
+        };
+        event.additional_weights.weights.extend([
+            (AdditionalWeightKey::Original, original.clone()),
+            (
+                AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
+                counterterm.clone(),
+            ),
+            (
+                AdditionalWeightKey::FullMultiplicativeFactor,
+                prior_factor.clone(),
+            ),
+        ]);
+        let mut events = GenericEventGroupList(vec![GenericEventGroup(vec![event])]);
+        let final_factor = super::full_event_multiplicative_factor_precise(
+            Some(one.from_usize(7)),
+            one.from_usize(11),
+        );
+        super::apply_full_event_multiplicative_factor_precise(&mut events, &final_factor);
+        let event = &events[0][0];
+        let weights = &event.additional_weights.weights;
+        assert_eq!(weights[&AdditionalWeightKey::Original], original);
+        assert_eq!(
+            weights[&AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 }],
+            counterterm
+        );
+        assert_eq!(
+            weights[&AdditionalWeightKey::FullMultiplicativeFactor],
+            &prior_factor * &final_factor
+        );
+        assert_eq!(
+            event.weight,
+            (&original + &counterterm) * &weights[&AdditionalWeightKey::FullMultiplicativeFactor]
+        );
+        assert_eq!(event.weight, Complex::new_re(one.from_usize(770)));
+    }
+
+    #[test]
+    fn explicit_orientation_sum_rejects_runtime_filters_and_ltd() {
+        let mut settings = RuntimeSettings::default();
+        settings.general.orientation_pat = OrientationPattern::from_user_pattern("(+)").unwrap();
+        let error = validate_process_runtime_settings(&settings, true).unwrap_err();
+        assert!(error.to_string().contains("orientation_pat` must be unset"));
+
+        validate_process_runtime_settings(&settings, false).unwrap();
+
+        settings.general.orientation_pat = OrientationPattern::default();
+        settings.general.use_ltd = true;
+        let error = validate_process_runtime_settings(&settings, false).unwrap_err();
+        assert!(error.to_string().contains("deferred proper-LTD support"));
+    }
+
+    #[test]
+    fn numerator_sampling_scale_requires_nonzero_runtime_value() {
+        let mut settings = RuntimeSettings::default();
+        validate_process_runtime_settings(&settings, false).unwrap();
+
+        for scale in [0.0, -0.0] {
+            settings.general.numerator_sampling_scale = scale;
+            for explicit_orientation_sum_only in [false, true] {
+                let error =
+                    validate_process_runtime_settings(&settings, explicit_orientation_sum_only)
+                        .unwrap_err();
+                assert!(error.to_string().contains("sampling scale M"));
+            }
+        }
+
+        settings.general.numerator_sampling_scale = -2.0;
+        validate_process_runtime_settings(&settings, false).unwrap();
+    }
+
+    #[test]
+    fn grouped_orientation_sampling_requires_identical_exact_map_catalogs() {
+        let master = ["O[+0]|M[0]", "O[+0]|M[1]"];
+        validate_orientation_catalog_group(
+            GroupId(3),
+            [
+                ("master".to_string(), master.to_vec()),
+                ("matching".to_string(), master.to_vec()),
+            ],
+        )
+        .unwrap();
+
+        let error = validate_orientation_catalog_group(
+            GroupId(3),
+            [
+                ("master".to_string(), master.to_vec()),
+                ("different".to_string(), vec!["O[+0]|M[0]", "O[+0]|M[2]"]),
+            ],
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("different exact residue-map catalogs")
+        );
+        assert!(error.to_string().contains("first difference at channel 1"));
+    }
 
     #[test]
     fn runtime_cache_serializes_as_empty() {
