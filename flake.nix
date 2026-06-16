@@ -2685,6 +2685,7 @@
             "gammaloop-tracing-filter"
             "gammaloop-tracing-filter-macros"
             "gammalooprs"
+            "three-dimensional-reps"
           ];
         }
         {

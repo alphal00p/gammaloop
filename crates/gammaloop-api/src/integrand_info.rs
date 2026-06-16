@@ -128,7 +128,7 @@ impl IntegrandCutThresholdInfo {
         settings: &RuntimeSettings,
     ) -> Self {
         Self {
-            esurface_id: association.esurface_id.0,
+            esurface_id: association.topological_threshold_id.0,
             status: association
                 .classify_for_model(
                     graph,
@@ -640,16 +640,11 @@ fn cross_section_graph_groups(
                 })
                 .collect::<Vec<_>>();
 
-            let threshold_esurface_ids = master_graph
-                .threshold_candidate_esurface_ids
-                .iter()
-                .map(|esurface_id| esurface_id.0)
-                .collect::<Vec<_>>();
-
-            let threshold_esurfaces = threshold_esurface_ids
-                .iter()
-                .copied()
-                .map(|esurface_id| {
+            let threshold_esurfaces = master_graph
+                .topological_threshold_esurfaces
+                .iter_enumerated()
+                .map(|(topological_threshold_id, esurface)| {
+                    let esurface_id = topological_threshold_id.0;
                     let active_cuts = cuts
                         .iter()
                         .filter_map(|cut| cut.active_threshold_cut(esurface_id))
@@ -658,15 +653,16 @@ fn cross_section_graph_groups(
                     IntegrandThresholdEsurfaceInfo {
                         esurface_id,
                         representative_graph_id: master_graph_id,
-                        edge_ids: threshold_esurface_edge_ids(
-                            &master_graph.graph.surface_cache.esurface_cache,
-                            esurface_id,
-                        ),
+                        edge_ids: esurface.energies.iter().map(|edge_id| edge_id.0).collect(),
                         classification: None,
                         active_cuts,
                     }
                 })
                 .collect::<Vec<_>>();
+            let threshold_esurface_ids = threshold_esurfaces
+                .iter()
+                .map(|threshold| threshold.esurface_id)
+                .collect();
 
             Ok(IntegrandGraphGroupInfo {
                 group_id,

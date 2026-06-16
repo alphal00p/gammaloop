@@ -1,22 +1,27 @@
 use std::{collections::BTreeMap, fmt::Display};
 
 use bincode_trait_derive::{Decode, Encode};
-use linnet::half_edge::{
-    involution::{EdgeVec, Orientation},
-    subgraph::{SubGraphLike, SubSetLike, SubSetOps},
-};
+use linnet::half_edge::subgraph::{SubGraphLike, SubSetLike, SubSetOps};
+use serde::{Deserialize, Serialize};
 use symbolica::atom::{Atom, AtomCore};
 
 use crate::{
-    cff::orientations::GraphOrientation,
+    cff::{
+        expression::{
+            GammaLoopOrientationExpression, OrientationExpression, OrientationID,
+            OrientationSelector, ThreeDExpression,
+        },
+        orientations::GraphOrientation,
+        surface::GammaLoopSurfaceCache,
+    },
     graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
     settings::global::OrientationPattern,
     utils::GS,
     uv::Integrands,
 };
 use color_eyre::Result;
+use three_dimensional_reps::Generate3DExpressionOptions;
 
-pub mod cff_graph;
 pub mod orientations;
 //pub mod cut_expression;
 pub mod esurface;
@@ -25,24 +30,35 @@ pub mod generation;
 pub mod hsurface;
 pub mod surface;
 pub mod tree;
+mod vertex_set;
+pub(crate) use vertex_set::VertexSet;
+
+pub(crate) struct CFFOrientationTerm {
+    pub(crate) expression: Atom,
+    pub(crate) orientation: OrientationExpression,
+}
 
 pub struct CFFTerm {
-    // One per orientation
-    pub expression: Vec<Atom>,
-    pub orientations: Vec<EdgeVec<Orientation>>,
+    // One denominator expression per reduced-graph energy map. Keep the map
+    // until the UV localizer can assign its full-graph OrientationID.
+    pub(crate) orientations: Vec<CFFOrientationTerm>,
 }
 
 impl CFFTerm {
     pub fn expression_with_selectors(&self) -> Atom {
-        let mut result = Atom::Zero;
-        for (expr, orient) in self.expression.iter().zip(self.orientations.iter()) {
-            result += expr.clone() * orient.orientation_thetas();
-        }
-        result
+        self.orientations
+            .iter()
+            .map(|term| {
+                term.expression.clone() * term.orientation.data.orientation.orientation_thetas()
+            })
+            .reduce(|left, right| left + right)
+            .unwrap_or(Atom::Zero)
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Encode, Decode)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Encode, Decode, Serialize, Deserialize,
+)]
 // This describes the combinations of residues that are selected.
 pub struct CutCFFIndex {
     pub left_threshold_order: Option<usize>,
@@ -96,14 +112,55 @@ impl CutCFF {
     }
 }
 
+#[derive(Clone, Copy)]
+enum CutCffResidueAxis {
+    RightThreshold,
+    LeftThreshold,
+    LuCut,
+}
+
+impl CutCffResidueAxis {
+    fn set_order(self, index: &mut CutCFFIndex, order: usize) {
+        match self {
+            Self::RightThreshold => index.right_threshold_order = Some(order),
+            Self::LeftThreshold => index.left_threshold_order = Some(order),
+            Self::LuCut => index.lu_cut_order = Some(order),
+        }
+    }
+}
+
+fn apply_indexed_residue_selection<F>(
+    residues: Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>,
+    axis: CutCffResidueAxis,
+    mut select: F,
+) -> Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>
+where
+    F: FnMut(ThreeDExpression<OrientationID>) -> Vec<ThreeDExpression<OrientationID>>,
+{
+    residues
+        .into_iter()
+        .flat_map(|(index, expression)| {
+            select(expression)
+                .into_iter()
+                .enumerate()
+                .map(move |(i, residue)| {
+                    let mut new_index = index;
+                    axis.set_order(&mut new_index, i + 1);
+                    (new_index, residue)
+                })
+        })
+        .collect()
+}
+
 impl Graph {
     pub fn cff<S: SubGraphLike + SubSetLike>(
         &mut self,
         contract_subgraph: &S,
         cutset: &CutSet,
         orientation_pattern: &OrientationPattern,
+        options: &Generate3DExpressionOptions,
+        analysis_numerator: Option<&Atom>,
     ) -> Result<CutCFF> {
-        let canonize_esurface = self.get_esurface_canonization(&self.loop_momentum_basis);
         let mut contract_edges = vec![];
 
         for (p, eid, _) in self.iter_edges_of(contract_subgraph) {
@@ -111,66 +168,58 @@ impl Graph {
                 contract_edges.push(eid);
             }
         }
+        contract_edges.sort_unstable();
+        contract_edges.dedup();
 
-        let cff = [(
-            CutCFFIndex::new_all_none(),
-            self.generate_cff(&contract_edges, &canonize_esurface, orientation_pattern)?,
-        )];
+        let canonize_esurface = self.get_esurface_canonization(&self.loop_momentum_basis);
 
-        let mut residues = BTreeMap::new();
+        // Reduced UV graphs use the same CFF dispatcher and representation family as the
+        // production graph. The old
+        // repeated-channel branch switched only this side to a generated residue coordinate, so
+        // its surviving edge-energy maps could not be exact restrictions of production maps.
+        // Repeated thresholds are selected below in the canonical E-surface family; a distinct
+        // confluent/LTD representation remains deferred rather than being selected implicitly.
+        let cff = self.generate_3d_expression_for_integrand(
+            &contract_edges,
+            &canonize_esurface,
+            options,
+            analysis_numerator,
+            false,
+        )?;
 
-        cff.into_iter()
-            .flat_map(|(index, cff_expression)| {
-                if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
-                    cff_expression
-                        .select_esurface_residue(right_threshold)
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, residue)| {
-                            let mut new_index = index;
-                            new_index.right_threshold_order = Some(i + 1);
-                            (new_index, residue)
-                        })
-                        .collect()
-                } else {
-                    vec![(index, cff_expression)]
-                }
-            })
-            .flat_map(|(index, cff_expression)| {
-                if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
-                    cff_expression
-                        .select_esurface_residue(left_threshold)
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, residue)| {
-                            let mut new_index = index;
-                            new_index.left_threshold_order = Some(i + 1);
-                            (new_index, residue)
-                        })
-                        .collect()
-                } else {
-                    vec![(index, cff_expression)]
-                }
-            })
-            .flat_map(|(index, cff_expression)| {
-                if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
-                    cff_expression
-                        .select_esurface_residue(lu_cut)
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, residue)| {
-                            let mut new_index = index;
-                            new_index.lu_cut_order = Some(i + 1);
-                            (new_index, residue)
-                        })
-                        .collect()
-                } else {
-                    vec![(index, cff_expression)]
-                }
-            })
-            .for_each(|(index, residue)| {
-                residues.insert(index, residue);
-            });
+        let mut residues = vec![(CutCFFIndex::new_all_none(), cff)];
+
+        if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
+            residues = apply_indexed_residue_selection(
+                residues,
+                CutCffResidueAxis::RightThreshold,
+                |expression| expression.select_esurface_residue(right_threshold),
+            );
+        }
+
+        if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
+            residues = apply_indexed_residue_selection(
+                residues,
+                CutCffResidueAxis::LeftThreshold,
+                |expression| expression.select_esurface_residue(left_threshold),
+            );
+        }
+
+        if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
+            residues =
+                apply_indexed_residue_selection(residues, CutCffResidueAxis::LuCut, |expression| {
+                    // The old branch distinguished threshold E-surface residues here so a
+                    // confluent source could remain in its generated repeated-channel coordinate
+                    // without reapplying the canonical selected-denominator sign. It also filtered
+                    // lower-sector variants against each individual Cutkosky cut. Main's selector
+                    // exposes neither that classification nor those edge-set alternatives, and its
+                    // union subgraph is not equivalent to them. Retain main's canonical LU
+                    // residue semantics until neutral metadata has an agreed owner: residues are
+                    // assembled in GammaLoop's positive-energy Cutkosky convention, so no
+                    // generated E-surface selection sign is applied here.
+                    expression.select_esurface_residue(lu_cut)
+                });
+        }
 
         // println!("residue orders: {}", residue.len());
 
@@ -198,29 +247,27 @@ impl Graph {
 
         let mut terms = BTreeMap::new();
 
-        let replacement_rules = if cutset.canonicalize_external_shifts {
-            self.surface_cache
-                .get_all_replacements_in_lmb(&[], &self.loop_momentum_basis)
-        } else {
-            self.surface_cache.get_all_replacements(&[])
-        };
-
-        for (cut_cff_index, expr) in residues.into_iter() {
+        for (cut_cff_index, expr) in residues {
+            let replacement_rules = if cutset.canonicalize_external_shifts {
+                expr.surfaces
+                    .get_all_replacements_gs_in_lmb(&[], &self.loop_momentum_basis)
+            } else {
+                expr.surfaces.get_all_replacements_gs(&[])
+            };
             let mut cff_term = CFFTerm {
-                expression: vec![],
                 orientations: vec![],
             };
-            for orientation in expr.orientations.iter() {
-                let eta_expr = orientation.expression.to_atom_inv();
+            for orientation in expr.orientations.iter().filter(|orientation| {
+                orientation_pattern.filter_orientation(&orientation.data.orientation)
+            }) {
+                let eta_expr = orientation.to_atom_gs();
                 let mut ose_expr = eta_expr.replace_multiple(&replacement_rules);
-
-                let inverse_energies = get_cff_inverse_energy_product_impl(
+                ose_expr *= get_cff_inverse_energy_product_impl(
                     self,
                     &graph_without_is_cut,
                     &contract_edges,
                 );
 
-                ose_expr *= inverse_energies;
                 ose_expr *= cff_normalization.clone();
 
                 crate::debug_tags!(#cff, #trace;
@@ -231,10 +278,10 @@ impl Graph {
                     "Graph CFF term expression"
                 );
                 // println!("ose expr :{}", ose_expr);
-                cff_term.expression.push(ose_expr);
-                cff_term
-                    .orientations
-                    .push(orientation.data.orientation.clone());
+                cff_term.orientations.push(CFFOrientationTerm {
+                    expression: ose_expr,
+                    orientation: orientation.clone(),
+                });
             }
             terms.insert(cut_cff_index, cff_term);
         }

@@ -345,7 +345,7 @@ fn scalars_integrated_cts_compare_legacy_and_hedge_poset() {
     )
     .unwrap();
 
-    amp.generate_cff(&OrientationPattern::default()).unwrap();
+    amp.generate_cff(&GenerationSettings::default()).unwrap();
     let orientation_pattern = OrientationPattern::from_orientation(
         &amp.derived_data
             .cff_expression
@@ -391,7 +391,7 @@ fn scalars_integrated_banana_hedge_poset() {
     )
     .unwrap();
 
-    amp.generate_cff(&OrientationPattern::default()).unwrap();
+    amp.generate_cff(&GenerationSettings::default()).unwrap();
     let orientation_pattern = OrientationPattern::from_orientation(
         &amp.derived_data
             .cff_expression
@@ -1622,6 +1622,7 @@ mod failing {
         )
         .unwrap();
 
+        amp.generate_cff(&GenerationSettings::default()).unwrap();
         let set = GenerationSettings {
             orientation_pattern: OrientationPattern::from_orientation(
                 &amp.derived_data
@@ -1639,7 +1640,6 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff(&OrientationPattern::default()).unwrap();
         amp.build_integrands(&set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
@@ -1663,6 +1663,7 @@ mod failing {
         )
         .unwrap();
 
+        amp.generate_cff(&GenerationSettings::default()).unwrap();
         let set = GenerationSettings {
             orientation_pattern: OrientationPattern::from_orientation(
                 &amp.derived_data
@@ -1680,7 +1681,6 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff(&OrientationPattern::default()).unwrap();
         amp.build_integrands(&set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);

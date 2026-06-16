@@ -2,13 +2,14 @@ use std::fmt;
 
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Result as EyreResult, eyre};
+use linnet::half_edge::involution::{EdgeVec, Orientation};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use symbolica::prelude::*;
 
 use crate::{
     GammaLoopContext,
-    cff::orientations::GraphOrientation,
+    cff::{expression::OrientationSelector, orientations::GraphOrientation},
     processes::EvaluatorSettings,
     utils::{
         DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, W_,
@@ -39,6 +40,8 @@ pub struct GenerationSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pattern: OrientationPattern,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub uniform_numerator_sampling_scale: UniformNumeratorSamplingScale,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub compile: GammaloopCompileOptions,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub tropical_subgraph_table: TropicalSubgraphTableSettings,
@@ -52,6 +55,20 @@ pub struct GenerationSettings {
     pub force_cuts: Vec<Vec<String>>,
     #[serde(skip_serializing_if = "is_false")]
     pub override_lmb_heuristics: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub explicit_orientation_sum_only: bool,
+}
+
+impl GenerationSettings {
+    pub(crate) fn validate_explicit_orientation_sum_options(&self) -> EyreResult<()> {
+        if self.explicit_orientation_sum_only && self.orientation_pattern.pat.is_some() {
+            return Err(eyre!(
+                "`global.generation.explicit_orientation_sum_only = true` requires summing all generated orientations; `global.generation.orientation_pattern` must be unset"
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg_attr(
@@ -105,6 +122,18 @@ pub enum VectorPolarizationSumGauge {
     #[default]
     #[serde(rename = "LightLikeAxial", alias = "light_like_axial")]
     LightLikeAxial,
+}
+
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema, Default,
+)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[serde(rename_all = "snake_case")]
+pub enum UniformNumeratorSamplingScale {
+    #[default]
+    None,
+    BeyondQuadratic,
+    All,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, Copy, JsonSchema)]
@@ -591,6 +620,12 @@ impl OrientationPattern {
     }
 
     pub fn alt_filter<O: GraphOrientation>(&self, orientation: &O) -> bool {
+        self.filter(orientation)
+    }
+}
+
+impl OrientationSelector for OrientationPattern {
+    fn filter_orientation(&self, orientation: &EdgeVec<Orientation>) -> bool {
         self.filter(orientation)
     }
 }

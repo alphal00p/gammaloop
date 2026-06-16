@@ -26,8 +26,8 @@ pub use expression::{
     OrientationSelector, ThreeDExpression,
 };
 pub use generation::{
-    Generate3DExpressionOptions, NumeratorSamplingScaleMode, RepresentationMode,
-    generate_3d_expression, generate_3d_expression_from_parsed, generate_confluent_cff_expression,
+    Generate3DExpressionOptions, NumeratorSamplingScaleMode, generate_3d_expression,
+    generate_3d_expression_from_parsed, generate_confluent_cff_expression,
     generate_confluent_cff_expression_from_parsed,
 };
 pub use graph_io::{

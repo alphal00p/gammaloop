@@ -28,7 +28,7 @@ use tracing::warn;
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::generation::SurfaceCache,
+    cff::surface::SurfaceCache,
     define_index,
     feyngen::diagram_generator::evaluate_overall_factor,
     integrands::process::{ChannelIndex, LmbMultiChannelingSetup, ParamBuilder},
@@ -37,7 +37,7 @@ use crate::{
     processes::DotExportSettings,
     settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
     utils::{F, Length, ose_atom_from_index},
-    uv::uv_graph::UVE,
+    uv::{UltravioletGraph, uv_graph::UVE},
 };
 
 pub(crate) mod attribute_warnings;
@@ -144,6 +144,14 @@ impl Graph {
         &self.global_prefactor.num
             * &self.global_prefactor.projector
             * evaluate_overall_factor(self.overall_factor.as_view())
+    }
+
+    pub(crate) fn production_numerator_atom_for_full_3d_expression(&self) -> Atom {
+        let reduced = self.full_filter().subtract(&self.initial_state_cut);
+        self.numerator(&reduced, &self.empty_subgraph())
+            .get_single_atom()
+            .expect("Graph numerator should be available")
+            * self.global_atom()
     }
 
     pub(crate) fn external_momentum_edge_order(&self) -> Vec<EdgeIndex> {
@@ -576,7 +584,7 @@ impl Graph {
             let group_position = result.iter().position(|group| {
                 group.iter().all(|e| {
                     self.loop_momentum_basis.edges_are_raised(*e, edge_index)
-                        && self[edge_index].mass == self[*e].mass
+                        && self[edge_index].particle.mass_atom() == self[*e].particle.mass_atom()
                 })
             });
 
@@ -638,6 +646,8 @@ pub use autogen::Autogen;
 pub use edge::Edge;
 pub mod hedge_data;
 pub use hedge_data::HedgeData;
+pub(crate) mod three_d_source;
+pub(crate) use three_d_source::GraphThreeDSource;
 pub mod vertex;
 pub use vertex::Vertex;
 

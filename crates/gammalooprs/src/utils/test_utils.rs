@@ -9,7 +9,10 @@ use linnet::half_edge::{
 };
 use momtrop::assert_approx_eq;
 use spenso::structure::abstract_index::AIND_SYMBOLS;
-use symbolica::{atom::AtomCore, parse_lit};
+use symbolica::{
+    atom::{AtomCore, AtomView},
+    parse_lit,
+};
 
 use crate::{
     momentum::ThreeMomentum,
@@ -42,6 +45,14 @@ fn normalization() {
 
     assert_snapshot!(a.to_canonical_string(),@"0");
     assert_snapshot!(b.to_canonical_string(),@"gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(1))");
+
+    let abstract_index = parse_lit!(spenso::mink(4, 1));
+    let b = GS.emr_vec_index(EdgeIndex(1), abstract_index.as_view());
+    let AtomView::Fun(b) = b.as_view() else {
+        panic!("Q3 with an abstract Minkowski index should remain indexed");
+    };
+    assert_eq!(b.get_symbol(), GS.emr_vec);
+    assert_eq!(b.get(1), abstract_index.as_view());
 
     let c = GS.energy_delta(GS.cind(1));
     assert_snapshot!(c.to_canonical_string(),@"0");

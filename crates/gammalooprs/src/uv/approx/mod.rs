@@ -1,4 +1,7 @@
 use crate::{
+    cff::expression::{
+        GammaLoopOrientationExpression, OrientationExpression, OrientationID, OrientationSelector,
+    },
     debug_tags,
     graph::{Graph, LoopMomentumBasis, cuts::CutSet},
     momentum::Sign,
@@ -23,12 +26,14 @@ use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use std::hash::Hash;
 
 use symbolica::{
-    atom::{Atom, AtomOrView},
+    atom::{Atom, AtomCore, AtomOrView},
     function,
 };
 
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
+use three_dimensional_reps::Generate3DExpressionOptions;
+use typed_index_collections::TiVec;
 
 use super::IntegrandExpr;
 use vakint::Vakint;
@@ -243,19 +248,109 @@ pub struct CutStructure {
 }
 
 #[derive(Clone, Copy, Debug)]
+enum OrientationProjectionSource<'a> {
+    Exact(&'a TiVec<OrientationID, OrientationExpression>),
+    Coarse(&'a [EdgeVec<Orientation>]),
+}
+
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct OrientationProjection<'a> {
-    pub(crate) valid_orientations: &'a [EdgeVec<Orientation>],
+    source: OrientationProjectionSource<'a>,
+    options: Option<&'a Generate3DExpressionOptions>,
     pub(crate) orientation_pattern: &'a OrientationPattern,
 }
 
 impl<'a> OrientationProjection<'a> {
+    /// Construct the ordinary coarse-orientation projector used by legacy
+    /// exports and isolated UV tests. Production 3D UV uses [`Self::exact`].
     pub(crate) fn new(
         valid_orientations: &'a [EdgeVec<Orientation>],
         orientation_pattern: &'a OrientationPattern,
     ) -> Self {
         Self {
-            valid_orientations,
+            source: OrientationProjectionSource::Coarse(valid_orientations),
+            options: None,
             orientation_pattern,
+        }
+    }
+
+    pub(crate) fn exact(
+        orientations: &'a TiVec<OrientationID, OrientationExpression>,
+        options: &'a Generate3DExpressionOptions,
+        orientation_pattern: &'a OrientationPattern,
+    ) -> Self {
+        Self {
+            source: OrientationProjectionSource::Exact(orientations),
+            options: Some(options),
+            orientation_pattern,
+        }
+    }
+
+    pub(crate) fn cff_options(self, graph: &Graph) -> Generate3DExpressionOptions {
+        self.options
+            .cloned()
+            .unwrap_or_else(|| graph.denominator_only_cff_3d_expression_options())
+    }
+
+    pub(crate) fn orientation_ids(self) -> Vec<OrientationID> {
+        match self.source {
+            OrientationProjectionSource::Exact(orientations) => orientations
+                .iter_enumerated()
+                .filter_map(|(id, orientation)| {
+                    self.orientation_pattern
+                        .filter_orientation(&orientation.data.orientation)
+                        .then_some(id)
+                })
+                .collect(),
+            OrientationProjectionSource::Coarse([]) => {
+                vec![OrientationID(0)]
+            }
+            OrientationProjectionSource::Coarse(orientations) => orientations
+                .iter()
+                .enumerate()
+                .filter_map(|(id, orientation)| {
+                    self.orientation_pattern
+                        .filter_orientation(orientation)
+                        .then_some(OrientationID(id))
+                })
+                .collect(),
+        }
+    }
+
+    pub(crate) fn exact_orientations(
+        self,
+    ) -> Option<&'a TiVec<OrientationID, OrientationExpression>> {
+        match self.source {
+            OrientationProjectionSource::Exact(orientations) => Some(orientations),
+            OrientationProjectionSource::Coarse(_) => None,
+        }
+    }
+
+    pub(crate) fn orientation(self, id: OrientationID) -> Option<&'a EdgeVec<Orientation>> {
+        match self.source {
+            OrientationProjectionSource::Exact(orientations) => orientations
+                .get(id)
+                .map(|orientation| &orientation.data.orientation),
+            OrientationProjectionSource::Coarse(orientations) => orientations.get(id.0),
+        }
+    }
+
+    /// Apply one production energy map only to the newly owned numerator
+    /// fragment. Coarse projectors retain the ordinary UV behavior.
+    pub(crate) fn map_numerator(
+        self,
+        graph: &Graph,
+        id: OrientationID,
+        numerator: &Atom,
+    ) -> Result<Atom> {
+        match self.source {
+            OrientationProjectionSource::Exact(orientations) => {
+                let orientation = orientations.get(id).ok_or_else(|| {
+                    eyre!("missing production energy map for orientation {}", id.0)
+                })?;
+                Ok(numerator.replace_multiple(orientation.energy_replacements_gs(graph)))
+            }
+            OrientationProjectionSource::Coarse(_) => Ok(numerator.clone()),
         }
     }
 }

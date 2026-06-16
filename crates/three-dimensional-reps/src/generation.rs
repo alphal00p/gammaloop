@@ -12,7 +12,9 @@ use crate::{
     OrientationData, OrientationExpression, OrientationID, ParsedGraph, ThreeDExpression,
     cff_recursion::enumerate_cff_surface_chains,
     cut_structure::{ContourClosure, EnergyResidue, energy_residues},
-    energy_bounds::{energy_divergence_report, normalize_energy_degree_bounds},
+    energy_bounds::{
+        EnergyDivergenceReport, energy_divergence_report, normalize_energy_degree_bounds,
+    },
     expression::assign_numerator_map_labels,
     graph_io::{
         ParsedGraphExternalEdge, ParsedGraphInitialStateCutEdge, ParsedGraphInternalEdge,
@@ -30,11 +32,6 @@ use crate::{
         multiindices_leq, rank_i64, rank_rational, rational_pow_i64, rising, solve_rational_system,
     },
 };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum RepresentationMode {
-    Cff,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum NumeratorSamplingScaleMode {
@@ -56,8 +53,11 @@ impl NumeratorSamplingScaleMode {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Generate3DExpressionOptions {
-    pub representation: RepresentationMode,
-    pub energy_degree_bounds: Vec<(usize, usize)>,
+    /// `None` keeps the legacy numerator class, which is affine in every EMR
+    /// edge energy. `Some` selects an explicit bounded class; omitted edges
+    /// then have degree zero, including when the vector itself is empty.
+    #[serde(default)]
+    pub energy_degree_bounds: Option<Vec<(usize, usize)>>,
     pub numerator_sampling_scale: NumeratorSamplingScaleMode,
     #[serde(default = "default_true")]
     pub include_cff_duplicate_signature_excess_sign: bool,
@@ -70,8 +70,7 @@ const fn default_true() -> bool {
 impl Default for Generate3DExpressionOptions {
     fn default() -> Self {
         Self {
-            representation: RepresentationMode::Cff,
-            energy_degree_bounds: Vec::new(),
+            energy_degree_bounds: None,
             numerator_sampling_scale: NumeratorSamplingScaleMode::None,
             include_cff_duplicate_signature_excess_sign: true,
         }
@@ -98,12 +97,18 @@ pub enum GenerationError {
     EnergyBounds(#[from] crate::energy_bounds::EnergyBoundsError),
     #[error("{0}")]
     GraphIo(#[from] crate::graph_io::GraphIoError),
-    #[error("energy-degree bounds leave a non-vanishing residue at infinity")]
-    EnergyDegreeBoundsNonConvergent,
     #[error(
         "energy-degree bound was requested for edge {edge_id}, but this is not an internal edge of the selected graph"
     )]
     UnknownEnergyDegreeBoundEdge { edge_id: usize },
+    #[error(
+        "contracting the last denominator carrying loop-energy variable {variable} leaves an unlocalized quotient of power {power}"
+    )]
+    UnlocalizedEnergyContact { variable: usize, power: usize },
+    #[error(
+        "energy-degree bounds do not certify vanishing residues at infinity under the conservative cap check: {report:?}"
+    )]
+    EnergyUvNotCertified { report: EnergyDivergenceReport },
 }
 
 pub type Result<T> = std::result::Result<T, GenerationError>;
@@ -117,9 +122,15 @@ pub fn generate_3d_expression<G: ThreeDGraphSource + ?Sized>(
         return generate_3d_expression_from_parsed(&parsed, options);
     };
     let mut local_options = options.clone();
-    local_options.energy_degree_bounds = edge_map
-        .remap_bounds_to_local(&options.energy_degree_bounds)
-        .map_err(|edge_id| GenerationError::UnknownEnergyDegreeBoundEdge { edge_id })?;
+    local_options.energy_degree_bounds = options
+        .energy_degree_bounds
+        .as_deref()
+        .map(|bounds| -> Result<Vec<(usize, usize)>> {
+            edge_map
+                .remap_bounds_to_local(bounds)
+                .map_err(|edge_id| GenerationError::UnknownEnergyDegreeBoundEdge { edge_id })
+        })
+        .transpose()?;
     let mut expression = generate_3d_expression_from_parsed(&parsed, &local_options)?
         .remap_energy_edge_indices(&edge_map)
         .fuse_compatible_variants();
@@ -136,9 +147,15 @@ pub fn generate_confluent_cff_expression<G: ThreeDGraphSource + ?Sized>(
         return generate_confluent_cff_expression_from_parsed(&parsed, options);
     };
     let mut local_options = options.clone();
-    local_options.energy_degree_bounds = edge_map
-        .remap_bounds_to_local(&options.energy_degree_bounds)
-        .map_err(|edge_id| GenerationError::UnknownEnergyDegreeBoundEdge { edge_id })?;
+    local_options.energy_degree_bounds = options
+        .energy_degree_bounds
+        .as_deref()
+        .map(|bounds| {
+            edge_map
+                .remap_bounds_to_local(bounds)
+                .map_err(|edge_id| GenerationError::UnknownEnergyDegreeBoundEdge { edge_id })
+        })
+        .transpose()?;
     let mut expression = generate_confluent_cff_expression_from_parsed(&parsed, &local_options)?
         .remap_energy_edge_indices(&edge_map)
         .fuse_compatible_variants();
@@ -150,22 +167,21 @@ pub fn generate_3d_expression_from_parsed(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
 ) -> Result<ThreeDExpression<OrientationID>> {
-    if let Some(expression) = generate_disconnected_component_product(parsed, options)? {
-        let mut expression = expression.fuse_compatible_variants();
-        assign_numerator_map_labels(&mut expression.orientations);
-        return Ok(expression);
-    }
-
-    if !options.energy_degree_bounds.is_empty() {
+    if let Some(bounds) = options.energy_degree_bounds.as_deref() {
         let signatures = parsed
             .internal_edges
             .iter()
             .map(|edge| edge.signature.clone())
             .collect::<Vec<_>>();
-        let report = energy_divergence_report(&signatures, &options.energy_degree_bounds)?;
+        let report = energy_divergence_report(&signatures, bounds)?;
         if !report.convergent {
-            return Err(GenerationError::EnergyDegreeBoundsNonConvergent);
+            return Err(GenerationError::EnergyUvNotCertified { report });
         }
+    }
+    if let Some(expression) = generate_disconnected_component_product(parsed, options)? {
+        let mut expression = expression.fuse_compatible_variants();
+        assign_numerator_map_labels(&mut expression.orientations);
+        return Ok(expression);
     }
 
     let expression = if cff_bounds_need_generalized_expression_from_options(parsed, options)? {
@@ -191,9 +207,18 @@ pub fn generate_confluent_cff_expression_from_parsed(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
 ) -> Result<ThreeDExpression<OrientationID>> {
-    let mut options = options.clone();
-    options.representation = RepresentationMode::Cff;
-    BoundedCffBuilder::new(parsed, &options)?
+    if let Some(bounds) = options.energy_degree_bounds.as_deref() {
+        let signatures = parsed
+            .internal_edges
+            .iter()
+            .map(|edge| edge.signature.clone())
+            .collect::<Vec<_>>();
+        let report = energy_divergence_report(&signatures, bounds)?;
+        if !report.convergent {
+            return Err(GenerationError::EnergyUvNotCertified { report });
+        }
+    }
+    BoundedCffBuilder::new(parsed, options)?
         .with_confluent_duplicate_channels(true)
         .build()
 }
@@ -415,18 +440,23 @@ fn project_component_options(
     n_original_edges: usize,
     embedding: &ParsedComponentEmbedding,
 ) -> Result<Generate3DExpressionOptions> {
-    let bounds = normalize_energy_degree_bounds(&options.energy_degree_bounds, n_original_edges)?;
-    let local_bounds = embedding
-        .local_to_orig_edge
-        .iter()
-        .enumerate()
-        .filter_map(|(local_id, orig_id)| {
-            let degree = bounds[*orig_id];
-            (degree != 0).then_some((local_id, degree))
+    let local_bounds = options
+        .energy_degree_bounds
+        .as_deref()
+        .map(|bounds| -> Result<Vec<(usize, usize)>> {
+            let bounds = normalize_energy_degree_bounds(bounds, n_original_edges)?;
+            Ok(embedding
+                .local_to_orig_edge
+                .iter()
+                .enumerate()
+                .filter_map(|(local_id, orig_id)| {
+                    let degree = bounds[*orig_id];
+                    (degree != 0).then_some((local_id, degree))
+                })
+                .collect::<Vec<_>>())
         })
-        .collect::<Vec<_>>();
+        .transpose()?;
     Ok(Generate3DExpressionOptions {
-        representation: options.representation,
         energy_degree_bounds: local_bounds,
         numerator_sampling_scale: options.numerator_sampling_scale,
         include_cff_duplicate_signature_excess_sign: options
@@ -1858,6 +1888,7 @@ impl DenominatorFactor {
 struct BoundedCffBuilder<'a> {
     parsed: &'a ParsedGraph,
     bounds: Vec<usize>,
+    bounds_are_explicit: bool,
     sampling_scale_mode: NumeratorSamplingScaleMode,
     include_duplicate_signature_excess_sign: bool,
     confluent_duplicate_channels: bool,
@@ -1868,12 +1899,13 @@ struct BoundedCffBuilder<'a> {
 impl<'a> BoundedCffBuilder<'a> {
     fn new(parsed: &'a ParsedGraph, options: &'a Generate3DExpressionOptions) -> Result<Self> {
         let bounds = normalize_energy_degree_bounds(
-            &options.energy_degree_bounds,
+            options.energy_degree_bounds.as_deref().unwrap_or(&[]),
             parsed.internal_edges.len(),
         )?;
         Ok(Self {
             parsed,
             bounds,
+            bounds_are_explicit: options.energy_degree_bounds.is_some(),
             sampling_scale_mode: options.numerator_sampling_scale,
             include_duplicate_signature_excess_sign: options
                 .include_cff_duplicate_signature_excess_sign,
@@ -1887,6 +1919,7 @@ impl<'a> BoundedCffBuilder<'a> {
         Self {
             parsed,
             bounds,
+            bounds_are_explicit: true,
             sampling_scale_mode: NumeratorSamplingScaleMode::None,
             include_duplicate_signature_excess_sign: true,
             confluent_duplicate_channels: false,
@@ -1908,31 +1941,27 @@ impl<'a> BoundedCffBuilder<'a> {
     fn build(mut self) -> Result<ThreeDExpression<OrientationID>> {
         let needs_generalized_expression = cff_bounds_need_generalized_expression(&self.bounds);
         let has_duplicate_energy_channel = self.has_duplicate_signature_ignoring_mass();
-        let has_initial_state_cut = !self.parsed.initial_state_cut_edges.is_empty();
         let use_confluent_duplicate_channels =
             self.confluent_duplicate_channels && has_duplicate_energy_channel;
-        let use_initial_state_cut_fallback = needs_generalized_expression && has_initial_state_cut;
-        if use_confluent_duplicate_channels || use_initial_state_cut_fallback {
-            let include_duplicate_signature_excess_sign = if use_initial_state_cut_fallback {
-                // This branch delegates the generalized initial-state-cut CFF
-                // sector to the repeated-channel residue construction. The pure
-                // CFF duplicate-sign convention belongs to the independent
-                // pure-CFF basis, not to this confluent-residue fallback.
-                false
-            } else {
-                self.include_duplicate_signature_excess_sign
-            };
+        // Initial-state cut energies are fixed external aliases. They remain
+        // inside the same causal builder and never select a residue backend.
+        let confluent_all_quadratic = use_confluent_duplicate_channels
+            && needs_generalized_expression
+            && self.bounds.iter().all(|degree| *degree <= 2);
+        if use_confluent_duplicate_channels && !confluent_all_quadratic {
             let options = Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: self
-                    .bounds
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(edge_id, degree)| (*degree != 0).then_some((edge_id, *degree)))
-                    .collect(),
+                energy_degree_bounds: self.bounds_are_explicit.then(|| {
+                    self.bounds
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(edge_id, degree)| {
+                            (*degree != 0).then_some((edge_id, *degree))
+                        })
+                        .collect()
+                }),
                 numerator_sampling_scale: self.sampling_scale_mode,
-                include_cff_duplicate_signature_excess_sign:
-                    include_duplicate_signature_excess_sign,
+                include_cff_duplicate_signature_excess_sign: self
+                    .include_duplicate_signature_excess_sign,
             };
             return RepeatedResidueBuilder::new(self.parsed, &options).build();
         }
@@ -1942,16 +1971,15 @@ impl<'a> BoundedCffBuilder<'a> {
                 self.include_duplicate_signature_excess_sign,
             );
         }
-        let uniform_sampling_for_nonlinear_degree = self
-            .bounds
-            .iter()
-            .any(|degree| *degree > 1 && self.sampling_scale_mode.is_active_for_degree(*degree));
-        if !uniform_sampling_for_nonlinear_degree && self.supports_quadratic_e_surface_only() {
+        let uniform_sampling_for_repeated_quadratic = has_duplicate_energy_channel
+            && self.sampling_scale_mode == NumeratorSamplingScaleMode::All
+            && self.bounds.iter().any(|degree| *degree > 1);
+        if !uniform_sampling_for_repeated_quadratic && self.supports_quadratic_e_surface_only() {
             self.build_quadratic_e_surface_only()?;
             self.finalize_numerator_map_labels();
             return Ok(self.expression);
         }
-        if !uniform_sampling_for_nonlinear_degree && self.supports_quadratic_recursive() {
+        if !uniform_sampling_for_repeated_quadratic && self.supports_quadratic_recursive() {
             return self.build_quadratic_recursive(false);
         }
         if self.supports_known_factor_recursive() {
@@ -1971,22 +1999,10 @@ impl<'a> BoundedCffBuilder<'a> {
     fn supports_quadratic_recursive(&self) -> bool {
         self.bounds.iter().any(|degree| *degree > 1)
             && self.bounds.iter().all(|degree| *degree <= 2)
-            && (self.parsed.loop_names.len() == 1
-                || self.bounds.iter().filter(|degree| **degree > 1).count() == 1)
     }
 
     fn supports_known_factor_recursive(&self) -> bool {
         self.bounds.iter().any(|degree| *degree > 1)
-            || RepeatedResidueBuilder::logical_channels(self.parsed)
-                .iter()
-                .any(|channel| {
-                    channel
-                        .members
-                        .iter()
-                        .map(|edge_id| self.bounds[*edge_id])
-                        .sum::<usize>()
-                        > 2
-                })
     }
 
     fn has_duplicate_signature_ignoring_mass(&self) -> bool {
@@ -2029,6 +2045,7 @@ impl<'a> BoundedCffBuilder<'a> {
         let include_remainder_duplicate_sign = self.include_duplicate_signature_excess_sign;
         let remainder_expression = BoundedCffBuilder::for_bounds(self.parsed, remainder_bounds)
             .with_duplicate_signature_excess_sign(include_remainder_duplicate_sign)
+            .with_confluent_duplicate_channels(self.confluent_duplicate_channels)
             .build_quadratic_recursive(lower_sector_base)?;
         self.append_recursive_remainder_terms(active_edge, &remainder_expression)?;
 
@@ -2039,6 +2056,7 @@ impl<'a> BoundedCffBuilder<'a> {
                 .map(|orig_id| self.bounds[*orig_id])
                 .collect::<Vec<_>>();
             let contact_expression = BoundedCffBuilder::for_bounds(&subparsed, sub_bounds)
+                .with_confluent_duplicate_channels(self.confluent_duplicate_channels)
                 .build_quadratic_recursive(true)?;
             self.append_recursive_contact_terms(active_edge, &contact_expression, &sub_to_orig)?;
         }
@@ -2048,6 +2066,25 @@ impl<'a> BoundedCffBuilder<'a> {
     }
 
     fn lower_sector_base_expression(&self) -> Result<ThreeDExpression<OrientationID>> {
+        if self.confluent_duplicate_channels && !repeated_groups(self.parsed).is_empty() {
+            let options = Generate3DExpressionOptions {
+                energy_degree_bounds: self.bounds_are_explicit.then(|| {
+                    self.bounds
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(edge_id, degree)| {
+                            (*degree != 0).then_some((edge_id, *degree))
+                        })
+                        .collect()
+                }),
+                numerator_sampling_scale: self.sampling_scale_mode,
+                // Lower-sector component CFFs do not own the full-graph
+                // duplicate-sign convention. The projected residue builder
+                // must retain that same boundary.
+                include_cff_duplicate_signature_excess_sign: false,
+            };
+            return LowerSectorRankProjection::new(self.parsed)?.build_confluent(&options);
+        }
         LowerSectorCffBuilder::new(self.parsed).build()
     }
 
@@ -2234,13 +2271,11 @@ impl<'a> BoundedCffBuilder<'a> {
 
     fn lift_contracted_cff_terms(&mut self, pinched_edges: &[usize]) -> Result<()> {
         let (subparsed, sub_to_orig) = self.contract_parsed_edges(pinched_edges);
-        if subparsed.internal_edges.is_empty() {
-            return Ok(());
-        }
-
         let use_terminal_residue_basis =
             subparsed.internal_edges.len() == self.parsed.loop_names.len();
-        let sub_expression = if use_terminal_residue_basis {
+        let sub_expression = if subparsed.internal_edges.is_empty() {
+            LowerSectorCffBuilder::new(&subparsed).build()?
+        } else if use_terminal_residue_basis {
             generate_simple_residue_basis_expression_from_parsed(&subparsed)?
         } else {
             generate_pure_cff_expression_from_parsed(&subparsed)?
@@ -2746,8 +2781,31 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 let (subparsed, sub_to_local) =
                     BoundedCffBuilder::for_bounds(parsed, vec![0; parsed.internal_edges.len()])
                         .contract_parsed_edges(&delete);
-                if subparsed.internal_edges.is_empty() {
-                    continue;
+                let free_q_power = term.parity + 2 * term.cancelled_power;
+                let unlocalized_variable = (0..parsed.loop_names.len()).find(|variable| {
+                    rep_signature.loop_signature.iter().enumerate().all(
+                        |(candidate, coefficient)| {
+                            if candidate == *variable {
+                                coefficient.abs() == 1
+                            } else {
+                                *coefficient == 0
+                            }
+                        },
+                    ) && subparsed
+                        .internal_edges
+                        .iter()
+                        .all(|edge| edge.signature.loop_signature[*variable] == 0)
+                });
+                if free_q_power > 0
+                    && let Some(variable) = unlocalized_variable
+                {
+                    return Err(GenerationError::UnlocalizedEnergyContact {
+                        variable,
+                        power: free_q_power,
+                    });
+                }
+                if free_q_power > 0 && subparsed.internal_edges.is_empty() {
+                    return Err(GenerationError::CffHigherEnergyPowerNotImplemented);
                 }
                 let sub_local_to_orig = sub_to_local
                     .iter()
@@ -2929,8 +2987,30 @@ impl<'a> KnownFactorCffBuilder<'a> {
         let (subparsed, sub_to_local) =
             BoundedCffBuilder::for_bounds(parsed, vec![0; parsed.internal_edges.len()])
                 .contract_parsed_edges(&[active]);
-        if subparsed.internal_edges.is_empty() {
-            return Ok(());
+        let active_signature = &parsed.internal_edges[active].signature.loop_signature;
+        let unlocalized_variable = (0..parsed.loop_names.len()).find(|variable| {
+            active_signature
+                .iter()
+                .enumerate()
+                .all(|(candidate, coefficient)| {
+                    if candidate == *variable {
+                        coefficient.abs() == 1
+                    } else {
+                        *coefficient == 0
+                    }
+                })
+                && subparsed
+                    .internal_edges
+                    .iter()
+                    .all(|edge| edge.signature.loop_signature[*variable] == 0)
+        });
+        if total_bounds[active] > 2
+            && let Some(variable) = unlocalized_variable
+        {
+            return Err(GenerationError::UnlocalizedEnergyContact {
+                variable,
+                power: total_bounds[active] - 2,
+            });
         }
         let sub_local_to_orig = sub_to_local
             .iter()
@@ -3863,6 +3943,75 @@ struct LowerSectorPartial {
     edge_exprs: BTreeMap<usize, LinearEnergyExpr>,
 }
 
+/// Full-rank coordinates for a denominator arrangement that supplies a
+/// deterministic diagnostic loop-energy lift without replacing the
+/// authoritative EMR edge-energy samples used for numerator evaluation.
+struct LowerSectorRankProjection {
+    source_signatures: Vec<MomentumSignature>,
+    parsed: ParsedGraph,
+    basis_edges: Vec<usize>,
+}
+
+impl LowerSectorRankProjection {
+    fn new(parsed: &ParsedGraph) -> Result<Self> {
+        let lower_sector = LowerSectorCffBuilder::new(parsed);
+        let source_signatures = lower_sector.signatures();
+        let basis_edges = lower_sector
+            .vector_matroid_components(&source_signatures)
+            .into_iter()
+            .flat_map(|edges| lower_sector.component_basis_edges(&source_signatures, &edges))
+            .collect::<Vec<_>>();
+        if basis_edges.is_empty() {
+            return Err(GenerationError::CffHigherEnergyPowerNotImplemented);
+        }
+        let basis_rows = basis_edges
+            .iter()
+            .map(|edge_id| source_signatures[*edge_id].loop_signature.clone())
+            .collect::<Vec<_>>();
+
+        let mut projected = parsed.clone();
+        projected.loop_names = (0..basis_edges.len())
+            .map(|variable| format!("ell{variable}"))
+            .collect();
+        for (edge, signature) in projected.internal_edges.iter_mut().zip(&source_signatures) {
+            edge.signature.loop_signature = if parsed.is_initial_state_cut_edge(edge.edge_id) {
+                // Initial-state cuts are fixed external-energy aliases and do
+                // not participate in the residue rank.
+                vec![0; basis_edges.len()]
+            } else {
+                lower_sector.row_coordinates_in_basis(&basis_rows, &signature.loop_signature)?
+            };
+        }
+
+        Ok(Self {
+            source_signatures,
+            parsed: projected,
+            basis_edges,
+        })
+    }
+
+    fn build_confluent(
+        &self,
+        options: &Generate3DExpressionOptions,
+    ) -> Result<ThreeDExpression<OrientationID>> {
+        let mut expression = RepeatedResidueBuilder::new(&self.parsed, options).build()?;
+        for orientation in &mut expression.orientations {
+            // Generalized contact and repeated-copy samples need not be the
+            // image of one global loop-energy assignment. Keep their edge map
+            // unchanged and compute only a deterministic particular lift for
+            // diagnostics and the standalone no-carrier loop fallback.
+            let loop_energy_map = solve_loop_energy_particular_from_target_edge_exprs(
+                &self.source_signatures,
+                &self.basis_edges,
+                &orientation.edge_energy_map,
+            )?;
+            orientation.loop_energy_map = loop_energy_map;
+        }
+        assign_numerator_map_labels(&mut expression.orientations);
+        Ok(expression)
+    }
+}
+
 struct LowerSectorCffBuilder<'a> {
     parsed: &'a ParsedGraph,
     expression: ThreeDExpression<OrientationID>,
@@ -3880,6 +4029,16 @@ impl<'a> LowerSectorCffBuilder<'a> {
 
     fn build(mut self) -> Result<ThreeDExpression<OrientationID>> {
         if self.parsed.internal_edges.is_empty() {
+            // A fully contracted scalar contact is the zero-edge lower sector,
+            // whose denominator is the multiplicative identity.
+            let mut data = OrientationData::new(EdgeVec::new());
+            data.label = Some("lower_sector_unit".to_string());
+            let mut orientation =
+                OrientationExpression::pure_cff(data, Tree::from_root(HybridSurfaceID::Unit));
+            orientation.loop_energy_map =
+                vec![LinearEnergyExpr::zero(); self.parsed.loop_names.len()];
+            self.expression.orientations.push(orientation);
+            self.finalize_numerator_map_labels();
             return Ok(self.expression);
         }
         let signatures = self.signatures();
@@ -4227,10 +4386,18 @@ impl<'a> LowerSectorCffBuilder<'a> {
             .iter()
             .map(|signature| signature.loop_signature.clone())
             .collect::<Vec<_>>();
+        let denominator_edges = self
+            .parsed
+            .denominator_internal_edge_ids()
+            .into_iter()
+            .collect::<BTreeSet<_>>();
         let nonzero = rows
             .iter()
             .enumerate()
-            .filter_map(|(edge_id, row)| row.iter().any(|value| *value != 0).then_some(edge_id))
+            .filter_map(|(edge_id, row)| {
+                (denominator_edges.contains(&edge_id) && row.iter().any(|value| *value != 0))
+                    .then_some(edge_id)
+            })
             .collect::<Vec<_>>();
         let mut parent = nonzero
             .iter()
@@ -4252,9 +4419,10 @@ impl<'a> LowerSectorCffBuilder<'a> {
                 basis_rows.push(rows[*edge_id].clone());
                 continue;
             }
-            if let Ok(coords) = self.row_coordinates_in_basis(&basis_rows, &rows[*edge_id]) {
+            if let Ok(coords) = self.rational_row_coordinates_in_basis(&basis_rows, &rows[*edge_id])
+            {
                 for (basis_edge, coeff) in basis.iter().zip(coords) {
-                    if coeff != 0 {
+                    if !coeff.is_zero() {
                         union_nodes(&mut parent, *edge_id, *basis_edge);
                     }
                 }
@@ -4274,9 +4442,8 @@ impl<'a> LowerSectorCffBuilder<'a> {
             })
             .collect::<Vec<_>>();
         components.extend(rows.iter().enumerate().filter_map(|(edge_id, row)| {
-            (!self.parsed.is_initial_state_cut_edge(edge_id)
-                && !row.iter().any(|value| *value != 0))
-            .then_some(vec![edge_id])
+            (denominator_edges.contains(&edge_id) && !row.iter().any(|value| *value != 0))
+                .then_some(vec![edge_id])
         }));
         components.sort_by_key(|component| component[0]);
         components
@@ -4309,6 +4476,30 @@ impl<'a> LowerSectorCffBuilder<'a> {
     }
 
     fn row_coordinates_in_basis(&self, basis_rows: &[Vec<i32>], row: &[i32]) -> Result<Vec<i32>> {
+        let coords = self.rational_row_coordinates_in_basis(basis_rows, row)?;
+        if coords.iter().any(|coord| {
+            coord
+                .to_i64_pair()
+                .is_none_or(|(_, denominator)| denominator != 1)
+        }) {
+            return Err(GenerationError::NonIntegralEnergyMap);
+        }
+        coords
+            .into_iter()
+            .map(|coord| {
+                let (numerator, _) = coord
+                    .to_i64_pair()
+                    .ok_or(GenerationError::CoefficientOutOfRange)?;
+                i32::try_from(numerator).map_err(|_| GenerationError::CoefficientOutOfRange)
+            })
+            .collect()
+    }
+
+    fn rational_row_coordinates_in_basis(
+        &self,
+        basis_rows: &[Vec<i32>],
+        row: &[i32],
+    ) -> Result<Vec<Rational>> {
         let rank = basis_rows.len();
         if rank == 0 {
             return if row.iter().all(|value| *value == 0) {
@@ -4336,22 +4527,17 @@ impl<'a> LowerSectorCffBuilder<'a> {
                 .collect::<Vec<_>>();
             let coords =
                 solve_rational_system(square, rhs).ok_or(GenerationError::SingularBasis)?;
-            if coords.iter().any(|coord| {
-                coord
-                    .to_i64_pair()
-                    .is_none_or(|(_, denominator)| denominator != 1)
-            }) {
-                return Err(GenerationError::NonIntegralEnergyMap);
+            let reconstructs_row = (0..row.len()).all(|column| {
+                basis_rows.iter().zip(&coords).fold(
+                    Rational::zero(),
+                    |value, (basis_row, coord)| {
+                        value + Rational::from(basis_row[column]) * coord.clone()
+                    },
+                ) == row[column]
+            });
+            if reconstructs_row {
+                return Ok(coords);
             }
-            return coords
-                .into_iter()
-                .map(|coord| {
-                    let (numerator, _) = coord
-                        .to_i64_pair()
-                        .ok_or(GenerationError::CoefficientOutOfRange)?;
-                    i32::try_from(numerator).map_err(|_| GenerationError::CoefficientOutOfRange)
-                })
-                .collect();
         }
         Err(GenerationError::SingularBasis)
     }
@@ -4491,14 +4677,14 @@ impl<'a> RepeatedResidueBuilder<'a> {
             .collect::<Vec<_>>();
         let residues =
             energy_residues(&collapsed_signatures, &vec![ContourClosure::Below; n_loops])?;
-        let bounds = if self.options.energy_degree_bounds.is_empty() {
-            None
-        } else {
-            Some(crate::energy_bounds::normalize_energy_degree_bounds(
-                &self.options.energy_degree_bounds,
-                self.signatures.len(),
-            )?)
-        };
+        let bounds = self
+            .options
+            .energy_degree_bounds
+            .as_deref()
+            .map(|bounds| {
+                crate::energy_bounds::normalize_energy_degree_bounds(bounds, self.signatures.len())
+            })
+            .transpose()?;
         let has_repeated_channel = self
             .channels
             .iter()
@@ -5239,12 +5425,15 @@ impl<'a> RepeatedResidueBuilder<'a> {
                 .map(|orig_id| bounds[*orig_id])
                 .collect::<Vec<_>>();
             let sub_options = Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: sub_bounds
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(edge_id, degree)| (*degree != 0).then_some((edge_id, *degree)))
-                    .collect(),
+                energy_degree_bounds: Some(
+                    sub_bounds
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(edge_id, degree)| {
+                            (*degree != 0).then_some((edge_id, *degree))
+                        })
+                        .collect(),
+                ),
                 numerator_sampling_scale: self.options.numerator_sampling_scale,
                 include_cff_duplicate_signature_excess_sign: false,
             };
@@ -5287,12 +5476,13 @@ impl<'a> RepeatedResidueBuilder<'a> {
         let mut remainder_bounds = bounds.to_vec();
         remainder_bounds[active_edge] = 1;
         let remainder_options = Generate3DExpressionOptions {
-            representation: RepresentationMode::Cff,
-            energy_degree_bounds: remainder_bounds
-                .iter()
-                .enumerate()
-                .filter_map(|(edge_id, degree)| (*degree != 0).then_some((edge_id, *degree)))
-                .collect(),
+            energy_degree_bounds: Some(
+                remainder_bounds
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(edge_id, degree)| (*degree != 0).then_some((edge_id, *degree)))
+                    .collect(),
+            ),
             numerator_sampling_scale: self.options.numerator_sampling_scale,
             include_cff_duplicate_signature_excess_sign: false,
         };
@@ -5307,12 +5497,15 @@ impl<'a> RepeatedResidueBuilder<'a> {
                 .map(|orig_id| bounds[*orig_id])
                 .collect::<Vec<_>>();
             let sub_options = Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: sub_bounds
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(edge_id, degree)| (*degree != 0).then_some((edge_id, *degree)))
-                    .collect(),
+                energy_degree_bounds: Some(
+                    sub_bounds
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(edge_id, degree)| {
+                            (*degree != 0).then_some((edge_id, *degree))
+                        })
+                        .collect(),
+                ),
                 numerator_sampling_scale: self.options.numerator_sampling_scale,
                 include_cff_duplicate_signature_excess_sign: false,
             };
@@ -6501,8 +6694,10 @@ fn cff_bounds_need_generalized_expression_from_options(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
 ) -> Result<bool> {
-    let bounds =
-        normalize_energy_degree_bounds(&options.energy_degree_bounds, parsed.internal_edges.len())?;
+    let bounds = normalize_energy_degree_bounds(
+        options.energy_degree_bounds.as_deref().unwrap_or(&[]),
+        parsed.internal_edges.len(),
+    )?;
     Ok(cff_bounds_need_generalized_expression(&bounds))
 }
 
@@ -6511,6 +6706,209 @@ fn cff_bounds_need_generalized_expression(bounds: &[usize]) -> bool {
         return false;
     }
     bounds.iter().any(|degree| *degree > 1)
+}
+
+#[cfg(test)]
+mod lower_sector_regression_tests {
+    use super::*;
+
+    #[test]
+    fn vector_matroid_components_join_rationally_dependent_rows() {
+        let parsed = ParsedGraph {
+            internal_edges: vec![
+                ParsedGraphInternalEdge {
+                    edge_id: 0,
+                    tail: 0,
+                    head: 1,
+                    label: "q0".to_string(),
+                    mass_key: Some("m0".to_string()),
+                    signature: MomentumSignature {
+                        loop_signature: vec![2, 0],
+                        external_signature: Vec::new(),
+                    },
+                    had_pow: false,
+                },
+                ParsedGraphInternalEdge {
+                    edge_id: 1,
+                    tail: 1,
+                    head: 0,
+                    label: "q1".to_string(),
+                    mass_key: Some("m1".to_string()),
+                    signature: MomentumSignature {
+                        loop_signature: vec![1, 0],
+                        external_signature: Vec::new(),
+                    },
+                    had_pow: false,
+                },
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["k0".to_string(), "k1".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: BTreeMap::from([("n0".to_string(), 0), ("n1".to_string(), 1)]),
+        };
+        let lower_sector = LowerSectorCffBuilder::new(&parsed);
+
+        assert_eq!(
+            lower_sector.vector_matroid_components(&lower_sector.signatures()),
+            vec![vec![0, 1]]
+        );
+        // Component connectivity is a rational-vector-matroid property, while
+        // production signatures still require an integral projected lattice.
+        let rational = lower_sector
+            .rational_row_coordinates_in_basis(&[vec![2, 0]], &[1, 0])
+            .unwrap();
+        assert_eq!(rational[0].to_i64_pair(), Some((1, 2)));
+        assert!(matches!(
+            lower_sector.row_coordinates_in_basis(&[vec![2, 0]], &[1, 0]),
+            Err(GenerationError::NonIntegralEnergyMap)
+        ));
+    }
+
+    #[test]
+    fn rank_projection_keeps_initial_cut_outside_denominator_span_external() {
+        let parsed = ParsedGraph {
+            internal_edges: vec![
+                ParsedGraphInternalEdge {
+                    edge_id: 0,
+                    tail: 0,
+                    head: 1,
+                    label: "p_cut".to_string(),
+                    mass_key: Some("mp".to_string()),
+                    signature: MomentumSignature {
+                        // This stored row is deliberately outside the active
+                        // denominator span and must not add residue rank.
+                        loop_signature: vec![0, 1],
+                        external_signature: vec![-1],
+                    },
+                    had_pow: false,
+                },
+                ParsedGraphInternalEdge {
+                    edge_id: 1,
+                    tail: 0,
+                    head: 1,
+                    label: "q1".to_string(),
+                    mass_key: Some("mq".to_string()),
+                    signature: MomentumSignature {
+                        loop_signature: vec![1, 0],
+                        external_signature: vec![0],
+                    },
+                    had_pow: false,
+                },
+                ParsedGraphInternalEdge {
+                    edge_id: 2,
+                    tail: 1,
+                    head: 0,
+                    label: "q2".to_string(),
+                    mass_key: Some("mq".to_string()),
+                    signature: MomentumSignature {
+                        loop_signature: vec![1, 0],
+                        external_signature: vec![0],
+                    },
+                    had_pow: false,
+                },
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: vec![ParsedGraphInitialStateCutEdge {
+                edge_id: 0,
+                external_id: 0,
+                external_sign: -1,
+            }],
+            loop_names: vec!["k0".to_string(), "k1".to_string()],
+            external_names: vec!["p0".to_string()],
+            node_name_to_internal: BTreeMap::from([("n0".to_string(), 0), ("n1".to_string(), 1)]),
+        };
+        let projection = LowerSectorRankProjection::new(&parsed).unwrap();
+
+        assert_eq!(
+            projection.parsed.internal_edges[0].signature.loop_signature,
+            vec![0]
+        );
+        let expression = projection
+            .build_confluent(&Generate3DExpressionOptions {
+                energy_degree_bounds: None,
+                numerator_sampling_scale: NumeratorSamplingScaleMode::None,
+                include_cff_duplicate_signature_excess_sign: false,
+            })
+            .unwrap();
+        assert!(!expression.orientations.is_empty());
+        assert!(expression.orientations.iter().all(|orientation| {
+            orientation.edge_energy_map[0] == LinearEnergyExpr::external(EdgeIndex(0), -1)
+        }));
+    }
+
+    #[test]
+    fn final_denominator_contact_keeps_only_the_representable_scalar_quotient() {
+        let parsed = ParsedGraph {
+            internal_edges: vec![ParsedGraphInternalEdge {
+                edge_id: 0,
+                tail: 0,
+                head: 0,
+                label: "q0".to_string(),
+                mass_key: Some("m0".to_string()),
+                signature: MomentumSignature {
+                    loop_signature: vec![1],
+                    external_signature: Vec::new(),
+                },
+                had_pow: false,
+            }],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["k0".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: BTreeMap::from([("n0".to_string(), 0)]),
+        };
+
+        for numerator_sampling_scale in [
+            NumeratorSamplingScaleMode::None,
+            NumeratorSamplingScaleMode::All,
+        ] {
+            let expression = generate_3d_expression_from_parsed(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    energy_degree_bounds: Some(vec![(0, 2)]),
+                    numerator_sampling_scale,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert!(
+                expression
+                    .orientations
+                    .iter()
+                    .flat_map(|orientation| &orientation.variants)
+                    .any(|variant| {
+                        variant.denominator.get_num_nodes() == 1
+                            && variant.denominator.get_node(NodeId::root()).data
+                                == HybridSurfaceID::Unit
+                    })
+            );
+        }
+
+        for degree in [3, 4] {
+            for numerator_sampling_scale in [
+                NumeratorSamplingScaleMode::None,
+                NumeratorSamplingScaleMode::All,
+            ] {
+                let error = generate_3d_expression_from_parsed(
+                    &parsed,
+                    &Generate3DExpressionOptions {
+                        energy_degree_bounds: Some(vec![(0, degree)]),
+                        numerator_sampling_scale,
+                        ..Default::default()
+                    },
+                )
+                .unwrap_err();
+                assert!(matches!(
+                    error,
+                    GenerationError::UnlocalizedEnergyContact {
+                        variable: 0,
+                        power
+                    } if power == degree - 2
+                ));
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -6538,6 +6936,29 @@ mod graph_source_tests {
     }
 
     #[test]
+    fn component_projection_preserves_explicit_zero_bound_mode() {
+        let embedding = ParsedComponentEmbedding {
+            local_to_orig_edge: vec![1],
+            local_to_orig_loop: vec![0],
+        };
+        let explicit = project_component_options(
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(0, 2)]),
+                ..Default::default()
+            },
+            2,
+            &embedding,
+        )
+        .unwrap();
+        assert_eq!(explicit.energy_degree_bounds, Some(Vec::new()));
+
+        let legacy =
+            project_component_options(&Generate3DExpressionOptions::default(), 2, &embedding)
+                .unwrap();
+        assert_eq!(legacy.energy_degree_bounds, None);
+    }
+
+    #[test]
     fn rich_graph_source_remaps_compact_energy_ids_back_to_source_edge_ids() {
         let parsed = crate::graph_io::test_graphs::box_graph();
         let source = RemappedSource {
@@ -6552,8 +6973,7 @@ mod graph_source_tests {
         let expression = generate_3d_expression(
             &source,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(10, 1), (11, 1)],
+                energy_degree_bounds: Some(vec![(10, 1), (11, 1)]),
                 ..Default::default()
             },
         )
@@ -6596,16 +7016,12 @@ mod graph_source_tests {
 mod initial_state_cut_tests {
     use super::*;
 
-    fn generated_expression(
-        representation: RepresentationMode,
-        external_sign: i32,
-    ) -> ThreeDExpression<OrientationID> {
+    fn generated_expression(external_sign: i32) -> ThreeDExpression<OrientationID> {
         let parsed = crate::graph_io::test_graphs::initial_state_cut_line_graph(external_sign);
         generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation,
-                energy_degree_bounds: Vec::new(),
+                energy_degree_bounds: None,
                 ..Default::default()
             },
         )
@@ -6623,7 +7039,7 @@ mod initial_state_cut_tests {
     #[test]
     fn cff_initial_state_cut_edges_are_external_energy_shifts() {
         for external_sign in [1, -1] {
-            let expression = generated_expression(RepresentationMode::Cff, external_sign);
+            let expression = generated_expression(external_sign);
             assert!(!expression.orientations.is_empty());
             assert!(expression.orientations.iter().all(|orientation| {
                 orientation.edge_energy_map.first().is_some_and(|expr| {
@@ -6820,8 +7236,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: Vec::new(),
+                energy_degree_bounds: None,
                 ..Default::default()
             },
         )
@@ -6857,8 +7272,7 @@ mod cff_tests {
         let expression = generate_confluent_cff_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: Vec::new(),
+                energy_degree_bounds: None,
                 ..Default::default()
             },
         )
@@ -6887,8 +7301,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(2, 5)],
+                energy_degree_bounds: Some(vec![(2, 5)]),
                 ..Default::default()
             },
         )
@@ -6928,8 +7341,7 @@ mod cff_tests {
         let ordinary = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: Vec::new(),
+                energy_degree_bounds: None,
                 ..Default::default()
             },
         )
@@ -6937,8 +7349,7 @@ mod cff_tests {
         let bounded = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(0, 2)],
+                energy_degree_bounds: Some(vec![(0, 2)]),
                 ..Default::default()
             },
         )
@@ -6969,8 +7380,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(0, 3)],
+                energy_degree_bounds: Some(vec![(0, 3)]),
                 ..Default::default()
             },
         )
@@ -7002,13 +7412,35 @@ mod cff_tests {
     }
 
     #[test]
+    fn cff_generation_rejects_uncertified_energy_uv_bounds() {
+        let parsed = parsed_fixture("box.dot");
+        let error = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(0, 7)]),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            GenerationError::EnergyUvNotCertified { report }
+                if !report.convergent
+                    && report.directions.iter().any(|direction| {
+                        direction.divergence_degree == -1
+                            && direction.active_edges == vec![0, 1, 2, 3]
+                    })
+        ));
+    }
+
+    #[test]
     fn cff_generation_builds_one_loop_mixed_high_power_known_factor_completion() {
         let parsed = parsed_fixture("box.dot");
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(0, 1), (1, 1), (2, 1), (3, 3)],
+                energy_degree_bounds: Some(vec![(0, 1), (1, 1), (2, 1), (3, 3)]),
                 ..Default::default()
             },
         )
@@ -7040,8 +7472,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(0, 4), (1, 2)],
+                energy_degree_bounds: Some(vec![(0, 4), (1, 2)]),
                 ..Default::default()
             },
         )
@@ -7072,8 +7503,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(0, 1), (2, 3), (4, 3)],
+                energy_degree_bounds: Some(vec![(0, 1), (2, 3), (4, 3)]),
                 ..Default::default()
             },
         )
@@ -7103,8 +7533,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(0, 2), (1, 1), (2, 1), (3, 2)],
+                energy_degree_bounds: Some(vec![(0, 2), (1, 1), (2, 1), (3, 2)]),
                 ..Default::default()
             },
         )
@@ -7144,8 +7573,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(0, 2)],
+                energy_degree_bounds: Some(vec![(0, 2)]),
                 ..Default::default()
             },
         )
@@ -7175,8 +7603,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(0, 1), (1, 1), (3, 4)],
+                energy_degree_bounds: Some(vec![(0, 1), (1, 1), (3, 4)]),
                 ..Default::default()
             },
         )
@@ -7205,8 +7632,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(0, 1), (1, 1), (3, 4)],
+                energy_degree_bounds: Some(vec![(0, 1), (1, 1), (3, 4)]),
                 numerator_sampling_scale: NumeratorSamplingScaleMode::All,
                 include_cff_duplicate_signature_excess_sign: true,
             },
@@ -7242,8 +7668,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(0, 3), (1, 1), (2, 1), (3, 1)],
+                energy_degree_bounds: Some(vec![(0, 3), (1, 1), (2, 1), (3, 1)]),
                 ..Default::default()
             },
         )
@@ -7282,8 +7707,7 @@ mod cff_tests {
         let beyond_quadratic = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(3, 2)],
+                energy_degree_bounds: Some(vec![(3, 2)]),
                 numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
                 include_cff_duplicate_signature_excess_sign: true,
             },
@@ -7292,8 +7716,7 @@ mod cff_tests {
         let all = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(3, 2)],
+                energy_degree_bounds: Some(vec![(3, 2)]),
                 numerator_sampling_scale: NumeratorSamplingScaleMode::All,
                 include_cff_duplicate_signature_excess_sign: true,
             },

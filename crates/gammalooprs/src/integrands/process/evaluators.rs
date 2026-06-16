@@ -274,6 +274,7 @@ impl Default for EvaluatorMethod {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct EvaluatorStack {
+    explicit_orientation_sum_only: bool,
     pub single_parametric: GenericEvaluator,
     pub iterative: Option<(GenericEvaluator, usize)>,
     // pub iterative_function_map: Option<GenericEvaluator>,
@@ -453,6 +454,23 @@ impl EvaluatorStack {
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
         Ok(Self::new_with_timings(atoms, param_builder, orientations, dual_shape, settings)?.0)
+    }
+
+    pub(crate) fn new_explicit_sum_with_timings<A: AtomCore>(
+        atoms: &[A],
+        param_builder: &ParamBuilder,
+        dual_shape: Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+    ) -> Result<(Self, EvaluatorBuildTimings)> {
+        let mut direct_settings = *settings;
+        direct_settings.iterative_orientation_optimization = false;
+        direct_settings.summed_function_map = false;
+        direct_settings.summed = false;
+
+        let (mut stack, timings) =
+            Self::new_with_timings(atoms, param_builder, &[], dual_shape, &direct_settings)?;
+        stack.explicit_orientation_sum_only = true;
+        Ok((stack, timings))
     }
 
     #[instrument(skip_all, err)]
@@ -820,6 +838,7 @@ impl EvaluatorStack {
 
         Ok((
             EvaluatorStack {
+                explicit_orientation_sum_only: false,
                 single_parametric,
                 iterative,
                 summed_function_map,
@@ -1098,6 +1117,17 @@ impl EvaluatorStack {
             return Err(eyre!(
                 "Runtime evaluator_method={:?} cannot select individual orientations; use SingleParametric for Monte Carlo sampling or runtime filtering over orientations.",
                 settings.general.evaluator_method
+            ));
+        }
+
+        if self.explicit_orientation_sum_only {
+            // The atom already contains the complete orientation sum, so
+            // applying orientation selection again would double count it.
+            return Ok(evaluate_evaluator(
+                &mut self.single_parametric,
+                input.as_slice(),
+                evaluation_metadata,
+                record_primary_timing,
             ));
         }
 

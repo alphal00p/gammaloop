@@ -126,14 +126,26 @@ impl AmplitudeCountertermAtom {
         for (index, integrand) in self.parametric.iter() {
             let dual_shape = shape_from_cut_cff_index(index);
 
-            let (evaluator_stack, evaluator_timings) = EvaluatorStack::new_with_timings(
-                slice::from_ref(integrand),
-                param_builder,
-                orientations.as_slice().as_ref(),
-                dual_shape,
-                &global_settings.generation.evaluator,
-            )
-            .unwrap();
+            // In explicit mode the atom already contains the complete
+            // orientation sum, so selecting orientations again would double count it.
+            let (evaluator_stack, evaluator_timings) =
+                if global_settings.generation.explicit_orientation_sum_only {
+                    EvaluatorStack::new_explicit_sum_with_timings(
+                        slice::from_ref(integrand),
+                        param_builder,
+                        dual_shape,
+                        &global_settings.generation.evaluator,
+                    )
+                } else {
+                    EvaluatorStack::new_with_timings(
+                        slice::from_ref(integrand),
+                        param_builder,
+                        orientations.as_slice().as_ref(),
+                        dual_shape,
+                        &global_settings.generation.evaluator,
+                    )
+                }
+                .unwrap();
             timings += evaluator_timings;
             evaluator_stacks.insert(*index, evaluator_stack);
         }

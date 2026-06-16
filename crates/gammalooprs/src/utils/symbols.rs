@@ -175,6 +175,7 @@ pub struct GammaloopSymbols {
     /// UV localization scale factor
     pub renormalization_localization_scale: Symbol,
     pub mu_r_sq: Symbol,
+    pub numerator_sampling_scale: Symbol,
     pub sign: Symbol,
     pub theta: Symbol,
     pub broadcasting_sqrt: Symbol,
@@ -870,6 +871,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
             }
         }
     ),
+    numerator_sampling_scale: symbol!("M"),
     delta_vec: ETS.delta,
     expr: symbol!(
         "expr",

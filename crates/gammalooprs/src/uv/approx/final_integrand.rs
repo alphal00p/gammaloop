@@ -76,7 +76,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             "Computed global numerator"
         );
 
-        let localized_integrated: Integrands = self
+        let localized_integrated = self
             .localizer
             .localize(
                 &integrated.physical_finite_counterterm_atom(),
@@ -97,55 +97,80 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .integrands()
             .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
         let final_int = localized_integrated.zip_add(&local_terms)?;
-        let mut resnum = graph
+        let resnum = graph
             .numerator(&reduced, current.subgraph())
             .get_single_atom()
-            .unwrap();
+            .unwrap()
+            * &global_num;
         let bridgeless_reduced = reduced.subtract(&graph.tree_edges);
 
-        let mut reps = Vec::new();
-        for (p, eid, _) in graph.as_ref().iter_edges_of(&bridgeless_reduced) {
-            if p.is_paired() {
-                reps.push(GS.add_parametric_sign(eid));
-            }
-        }
-
-        resnum = resnum.replace_multiple(&reps) * &global_num;
-        Ok(FinalIntegrands(final_int.fallible_map(|a| {
-            let mut a = a.clone();
-
-            for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {
-                let eid = usize::from(eid) as i64;
-                if p.is_paired() {
-                    a = a
-                        .replace(function!(GS.energy, eid))
-                        .with(function!(GS.ose, eid));
+        let coarse_energy_replacements = if self.localizer.uses_exact_maps() {
+            None
+        } else {
+            let mut replacements = Vec::new();
+            for (pair, edge_id, _) in graph.as_ref().iter_edges_of(&bridgeless_reduced) {
+                if pair.is_paired() {
+                    replacements.push(GS.add_parametric_sign(edge_id));
                 }
             }
+            Some(replacements)
+        };
 
-            a = a
-                .replace(function!(GS.ose, W_.mass_, W_.prop_))
-                .with(W_.prop_);
+        let mut result: Option<Integrands> = None;
+        for (orientation_id, integrands) in final_int.iter_orientations() {
+            let mapped_resnum = self
+                .localizer
+                .map_numerator(graph, orientation_id, &resnum)?;
+            let mapped = integrands.fallible_map(|a| {
+                let mut a = a.clone();
 
-            a *= &resnum;
+                for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {
+                    let eid = usize::from(eid) as i64;
+                    if p.is_paired() {
+                        a = a
+                            .replace(function!(GS.energy, eid))
+                            .with(function!(GS.ose, eid));
+                    }
+                }
 
-            let color_simplify_input = a.replace(GS.dim).with(4);
+                a = a
+                    .replace(function!(GS.ose, W_.mass_, W_.prop_))
+                    .with(W_.prop_);
 
-            a = color_simplify_input
-                .collect_factors()
-                .simplify_metrics()
-                .simplify_color_with(
-                    ColorSimplifySettings::default().with_cof_dimension_invariants(),
-                );
+                a *= &mapped_resnum;
 
-            a = a.expand_dots()?;
+                let color_simplify_input = a.replace(GS.dim).with(4);
 
-            a = a.replace_multiple(&reps);
+                a = color_simplify_input
+                    .collect_factors()
+                    .simplify_metrics()
+                    .simplify_color_with(
+                        ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                    );
 
-            Ok(a.replace(GS.m_uv_expansion)
-                .with(GS.m_uv_vacuum)
-                .replace(GS.dim_epsilon)
-                .with(0))
+                a = a.expand_dots()?;
+
+                // Coarse export projectors still introduce parametric signs at
+                // this legacy boundary. Exact production branches have already
+                // mapped every owned numerator fragment and must not fall back
+                // to a second coarse replacement here.
+                if let Some(replacements) = &coarse_energy_replacements {
+                    a = a.replace_multiple(replacements);
+                }
+
+                Ok(a.replace(GS.m_uv_expansion)
+                    .with(GS.m_uv_vacuum)
+                    .replace(GS.dim_epsilon)
+                    .with(0))
+            })?;
+            result = Some(match result {
+                Some(sum) => sum.zip_add(&mapped)?,
+                None => mapped,
+            });
+        }
+
+        Ok(FinalIntegrands(result.ok_or_else(|| {
+            eyre::eyre!("final 3D UV integrand contains no production energy maps")
         })?))
     }
 }

@@ -128,7 +128,6 @@ impl EvaluationInput {
         Ok(self)
     }
 }
-
 pub fn load_expression_json(path_or_json: &str) -> Result<ThreeDExpression<OrientationID>> {
     let text = if Path::new(path_or_json).is_file() {
         fs::read_to_string(path_or_json).map_err(|source| EvaluationError::Read {
@@ -980,8 +979,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
-        Generate3DExpressionOptions, NumeratorSamplingScaleMode, RepresentationMode,
-        generate_3d_expression_from_parsed,
+        Generate3DExpressionOptions, NumeratorSamplingScaleMode,
+        generate_3d_expression_from_parsed, generate_confluent_cff_expression_from_parsed,
     };
 
     use super::*;
@@ -1000,13 +999,45 @@ mod tests {
     }
 
     #[test]
+    fn loop_energy_uses_named_emr_carrier_before_diagnostic_fallback() {
+        let mut parsed = crate::graph_io::test_graphs::box_graph();
+        let expression = ThreeDExpression::new_empty();
+        let input = EvaluationInput {
+            external_momenta: vec![[0.0; 4]; 3],
+            loop_spatial_momenta: vec![[0.0; 3]],
+            masses: vec![2.0, 3.0, 4.0, 5.0],
+            uniform_scale: None,
+        };
+        let loop_energy_map = vec![LinearEnergyExpr::ose(
+            linnet::half_edge::involution::EdgeIndex(0),
+            1,
+        )];
+        let edge_energy_map = vec![
+            LinearEnergyExpr::ose(linnet::half_edge::involution::EdgeIndex(1), 1),
+            LinearEnergyExpr::zero(),
+            LinearEnergyExpr::zero(),
+            LinearEnergyExpr::zero(),
+        ];
+
+        let without_carrier = ExpressionEvaluator::new(&parsed, &expression, &input)
+            .loop_four_vectors(&loop_energy_map, &edge_energy_map)
+            .unwrap();
+        assert_eq!(without_carrier[0][0], 2.0);
+
+        parsed.internal_edges[0].label = parsed.loop_names[0].clone();
+        let with_carrier = ExpressionEvaluator::new(&parsed, &expression, &input)
+            .loop_four_vectors(&loop_energy_map, &edge_energy_map)
+            .unwrap();
+        assert_eq!(with_carrier[0][0], 3.0);
+    }
+
+    #[test]
     fn evaluator_requires_nonzero_uniform_scale_when_expression_uses_m() {
         let parsed = crate::graph_io::test_graphs::box_pow3_graph();
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(3, 4)],
+                energy_degree_bounds: Some(vec![(3, 4)]),
                 numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
                 include_cff_duplicate_signature_excess_sign: true,
             },
@@ -1022,5 +1053,311 @@ mod tests {
             parse_uniform_scale(Some("0")),
             Err(EvaluationError::ZeroUniformScale)
         ));
+    }
+
+    #[test]
+    fn rank_projected_confluent_contact_reconstructs_numerator_derivatives() {
+        let edge = |edge_id: usize,
+                    tail: usize,
+                    head: usize,
+                    label: &str,
+                    loop_signature: Vec<i32>,
+                    mass_key: &str| {
+            crate::graph_io::ParsedGraphInternalEdge {
+                edge_id,
+                tail,
+                head,
+                label: label.to_string(),
+                mass_key: Some(mass_key.to_string()),
+                signature: crate::MomentumSignature {
+                    loop_signature,
+                    external_signature: Vec::new(),
+                },
+                had_pow: false,
+            }
+        };
+        let parsed = ParsedGraph {
+            internal_edges: vec![
+                edge(0, 0, 0, "z", vec![0, 0, 1], "mz"),
+                edge(1, 0, 0, "r", vec![1, -1, 0], "mr"),
+                edge(2, 0, 1, "q2", vec![1, 1, 0], "mq"),
+                edge(3, 1, 2, "q3", vec![1, 1, 0], "mq"),
+                edge(4, 2, 0, "q4", vec![1, 1, 0], "mq"),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["k0".to_string(), "k1".to_string(), "k2".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: BTreeMap::from([
+                ("n0".to_string(), 0),
+                ("n1".to_string(), 1),
+                ("n2".to_string(), 2),
+            ]),
+        };
+        let contact_terms = |mut expression: ThreeDExpression<OrientationID>| {
+            for orientation in &mut expression.orientations {
+                orientation.variants.retain(|variant| {
+                    variant.origin.as_deref().is_some_and(|origin| {
+                        origin.starts_with("bounded_degree_quadratic_recursive_contact")
+                    })
+                });
+            }
+            expression
+                .orientations
+                .retain(|orientation| !orientation.variants.is_empty());
+            expression
+        };
+        let contact = contact_terms(
+            generate_confluent_cff_expression_from_parsed(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    // z^2 is carried by edge 0, while k0*k1 is bounded by the
+                    // independent r and q edge-energy coordinates.
+                    energy_degree_bounds: Some(vec![(0, 2), (1, 2), (2, 2)]),
+                    ..Default::default()
+                },
+            )
+            .unwrap(),
+        );
+        let scalar_contact = contact_terms(
+            generate_confluent_cff_expression_from_parsed(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    energy_degree_bounds: Some(vec![(0, 2)]),
+                    ..Default::default()
+                },
+            )
+            .unwrap(),
+        );
+
+        assert!(!contact.orientations.is_empty());
+        assert!(
+            contact
+                .orientations
+                .iter()
+                .all(|orientation| orientation.loop_energy_map.len() == 3),
+            "lower-sector samples must be lifted back to the original loop basis"
+        );
+        let map_coeff = |expr: &LinearEnergyExpr, edge_id: usize| {
+            expr.internal_terms
+                .iter()
+                .find_map(|(candidate, coefficient)| {
+                    (candidate.0 == edge_id).then(|| rational_to_f64(coefficient))
+                })
+                .unwrap_or(0.0)
+        };
+        assert!(contact.orientations.iter().any(|orientation| {
+            let [k0, k1, _] = orientation.loop_energy_map.as_slice() else {
+                return false;
+            };
+            map_coeff(k0, 1) == 0.5
+                && map_coeff(k0, 2) == 0.5
+                && map_coeff(k1, 1) == -0.5
+                && map_coeff(k1, 2) == 0.5
+        }));
+
+        let input = EvaluationInput {
+            external_momenta: Vec::new(),
+            loop_spatial_momenta: vec![[0.0; 3]; 3],
+            masses: vec![0.73, 1.11, 0.89, 0.89, 0.89],
+            uniform_scale: None,
+        };
+        let actual = evaluate_expression(
+            &parsed,
+            &contact,
+            "edges[0][0]**2*(edges[2][0]**2-edges[1][0]**2)/4",
+            &input,
+        )
+        .unwrap()
+        .value;
+        let actual_q_squared =
+            evaluate_expression(&parsed, &contact, "edges[0][0]**2*edges[2][0]**2", &input)
+                .unwrap()
+                .value;
+        let actual_r_squared =
+            evaluate_expression(&parsed, &contact, "edges[0][0]**2*edges[1][0]**2", &input)
+                .unwrap()
+                .value;
+        let parent_scalar = evaluate_expression(&parsed, &scalar_contact, "edges[0][0]**2", &input)
+            .unwrap()
+            .value;
+
+        let residual = ParsedGraph {
+            internal_edges: vec![
+                edge(0, 0, 0, "r", vec![1, 0], "mr"),
+                edge(1, 0, 1, "q1", vec![0, 1], "mq"),
+                edge(2, 1, 2, "q2", vec![0, 1], "mq"),
+                edge(3, 2, 0, "q3", vec![0, 1], "mq"),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["r0".to_string(), "q0".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: BTreeMap::from([
+                ("n0".to_string(), 0),
+                ("n1".to_string(), 1),
+                ("n2".to_string(), 2),
+            ]),
+        };
+        let residual_scalar_expression = generate_confluent_cff_expression_from_parsed(
+            &residual,
+            &Generate3DExpressionOptions {
+                include_cff_duplicate_signature_excess_sign: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let residual_scalar = evaluate_expression(
+            &residual,
+            &residual_scalar_expression,
+            "1",
+            &EvaluationInput {
+                external_momenta: Vec::new(),
+                loop_spatial_momenta: vec![[0.0; 3]; 2],
+                masses: vec![1.11, 0.89, 0.89, 0.89],
+                uniform_scale: None,
+            },
+        )
+        .unwrap()
+        .value;
+
+        // At z contact, k0*k1=(q^2-r^2)/4. The triple q pole therefore has
+        // both the sampled value and the beta=2 numerator derivative:
+        //   -I1(Er)/4 * (I2(Eq) + (Eq^2-Er^2) I3(Eq)).
+        let er = 1.11_f64;
+        let eq = 0.89_f64;
+        let i1 = 1.0 / (2.0 * er);
+        let i2 = -1.0 / (4.0 * eq.powi(3));
+        let i3 = 3.0 / (16.0 * eq.powi(5));
+        let sampled_value = -i1 * (eq.powi(2) - er.powi(2)) * i3 / 4.0;
+        let numerator_derivative = -i1 * i2 / 4.0;
+        let expected = sampled_value + numerator_derivative;
+        let expected_q_squared = -i1 * (i2 + eq.powi(2) * i3);
+        let expected_r_squared = -i1 * er.powi(2) * i3;
+
+        assert!(parent_scalar.is_sign_negative());
+        assert!(residual_scalar.is_sign_positive());
+        assert!((parent_scalar + residual_scalar).abs() < 1.0e-13);
+        assert!((residual_scalar - i1 * i3).abs() < 1.0e-13);
+        assert!(sampled_value.is_sign_positive());
+        assert!(numerator_derivative.is_sign_positive());
+        assert!((numerator_derivative - 0.039_935_306_592_422_02).abs() < 1.0e-15);
+        assert!(
+            (actual_q_squared - expected_q_squared).abs() < 1.0e-13,
+            "q-squared contact {actual_q_squared} differs from analytic {expected_q_squared}"
+        );
+        assert!(
+            (actual_r_squared - expected_r_squared).abs() < 1.0e-13,
+            "r-squared contact {actual_r_squared} differs from analytic {expected_r_squared}"
+        );
+        assert!(
+            (actual - expected).abs() < 1.0e-13,
+            "rank-projected contact {actual} differs from analytic {expected}"
+        );
+    }
+
+    #[test]
+    fn rank_projected_constant_contact_preserves_even_duplicate_parity() {
+        let edge = |edge_id: usize,
+                    tail: usize,
+                    head: usize,
+                    label: &str,
+                    loop_signature: Vec<i32>,
+                    mass_key: &str| {
+            crate::graph_io::ParsedGraphInternalEdge {
+                edge_id,
+                tail,
+                head,
+                label: label.to_string(),
+                mass_key: Some(mass_key.to_string()),
+                signature: crate::MomentumSignature {
+                    loop_signature,
+                    external_signature: Vec::new(),
+                },
+                had_pow: false,
+            }
+        };
+        let parent = ParsedGraph {
+            internal_edges: vec![
+                edge(0, 0, 0, "z", vec![0, 1], "mz"),
+                edge(1, 0, 1, "q1", vec![1, 0], "mq"),
+                edge(2, 1, 0, "q2", vec![1, 0], "mq"),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["kq".to_string(), "kz".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: BTreeMap::from([("n0".to_string(), 0), ("n1".to_string(), 1)]),
+        };
+        let options = Generate3DExpressionOptions {
+            energy_degree_bounds: Some(vec![(0, 2)]),
+            ..Default::default()
+        };
+        let contact_terms = |mut expression: ThreeDExpression<OrientationID>| {
+            for orientation in &mut expression.orientations {
+                orientation.variants.retain(|variant| {
+                    variant.origin.as_deref().is_some_and(|origin| {
+                        origin.starts_with("bounded_degree_quadratic_recursive_contact")
+                    })
+                });
+            }
+            expression
+                .orientations
+                .retain(|orientation| !orientation.variants.is_empty());
+            expression
+        };
+        let projected = contact_terms(
+            generate_confluent_cff_expression_from_parsed(&parent, &options).unwrap(),
+        );
+        let ordinary =
+            contact_terms(generate_3d_expression_from_parsed(&parent, &options).unwrap());
+        let parent_input = EvaluationInput {
+            external_momenta: Vec::new(),
+            loop_spatial_momenta: vec![[0.0; 3]; 2],
+            masses: vec![0.73, 0.89, 0.89],
+            uniform_scale: None,
+        };
+        let projected_value =
+            evaluate_expression(&parent, &projected, "edges[0][0]**2", &parent_input)
+                .unwrap()
+                .value;
+        let ordinary_value =
+            evaluate_expression(&parent, &ordinary, "edges[0][0]**2", &parent_input)
+                .unwrap()
+                .value;
+
+        let residual = ParsedGraph {
+            internal_edges: vec![
+                edge(0, 0, 1, "q1", vec![1], "mq"),
+                edge(1, 1, 0, "q2", vec![1], "mq"),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["kq".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: BTreeMap::from([("n0".to_string(), 0), ("n1".to_string(), 1)]),
+        };
+        let residual_expression = generate_confluent_cff_expression_from_parsed(
+            &residual,
+            &Generate3DExpressionOptions::default(),
+        )
+        .unwrap();
+        let residual_value = evaluate_expression(
+            &residual,
+            &residual_expression,
+            "1",
+            &EvaluationInput {
+                external_momenta: Vec::new(),
+                loop_spatial_momenta: vec![[0.0; 3]],
+                masses: vec![0.89, 0.89],
+                uniform_scale: None,
+            },
+        )
+        .unwrap()
+        .value;
+
+        assert!(residual_value.abs() > 1.0e-12);
+        assert!((projected_value - ordinary_value).abs() < 1.0e-13);
+        assert!((projected_value - residual_value).abs() < 1.0e-13);
     }
 }

@@ -78,6 +78,7 @@ pub mod symbolica_ext;
 mod spensotests;
 
 pub mod aind;
+pub mod energy_degree;
 pub mod ufo;
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 /// Settings for the numerator

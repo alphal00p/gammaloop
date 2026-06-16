@@ -263,11 +263,11 @@ pub struct CFFVariant {
     /// those absorbed signs without touching signs from spectator denominators.
     pub denominator_surface_signs: BTreeMap<HybridSurfaceID, i64>,
     /// Product of routing signs already absorbed in `prefactor`, keyed by the
-    /// denominator-edge support they belong to. This is needed for confluent
-    /// Confluent residue channels can contain repeated copies with opposite
-    /// canonical routing. Global and local evaluation keep the sign, while
-    /// residue selection drops the bookkeeping entry once the corresponding
-    /// denominator support has been selected away.
+    /// denominator-edge support they belong to. Confluent residue channels can
+    /// contain repeated copies with opposite canonical routing. Global and local
+    /// evaluation keep the sign. A future cut-aware selector may drop a selected
+    /// support's bookkeeping entry, but its routing sign remains in the prefactor;
+    /// spectator-support provenance must remain intact.
     pub denominator_edge_support_signs: BTreeMap<Vec<EdgeIndex>, i64>,
     pub uniform_scale_power: usize,
     pub numerator_surfaces: Vec<HybridSurfaceID>,
@@ -382,217 +382,11 @@ impl CFFVariant {
         }
     }
 
-    fn clear_selected_denominator_edge_support_sign(&mut self, cut_edge_sets: &[Vec<EdgeIndex>]) {
-        if cut_edge_sets.is_empty() || self.denominator_edge_support_signs.is_empty() {
-            return;
-        }
-
-        let signs = std::mem::take(&mut self.denominator_edge_support_signs);
-        for (support, sign) in signs {
-            let selected = cut_edge_sets.iter().any(|cut_edges| {
-                cut_edges
-                    .iter()
-                    .all(|cut_edge| support.binary_search(cut_edge).is_ok())
-            });
-            if selected {
-                // The selected support was removed from the local residue, so
-                // the bookkeeping entry is no longer needed. Its routing sign
-                // remains part of the residue prefactor.
-            } else {
-                self.denominator_edge_support_signs.insert(support, sign);
-            }
-        }
-    }
-
     fn numerator_value_count(&self, value: &HybridSurfaceID) -> usize {
         self.numerator_surfaces
             .iter()
             .filter(|surface| *surface == value)
             .count()
-    }
-
-    fn supports_any_cut(&self, cut_edge_sets: &[Vec<EdgeIndex>]) -> bool {
-        cut_edge_sets.is_empty()
-            || cut_edge_sets.iter().any(|cut_edges| {
-                cut_edges
-                    .iter()
-                    .all(|cut_edge| self.denominator_edges.contains(cut_edge))
-            })
-    }
-
-    pub fn selected_denominator_bookkeeping_signs(
-        &self,
-        selected_esurfaces: &[EsurfaceID],
-        cut_edge_sets: &[Vec<EdgeIndex>],
-        occurrence: usize,
-    ) -> Vec<i64> {
-        if !self.supports_any_cut(cut_edge_sets) {
-            return Vec::new();
-        }
-
-        let selected_numerator_count = self
-            .numerator_surfaces
-            .iter()
-            .filter(|surface_id| {
-                matches!(
-                    surface_id,
-                    HybridSurfaceID::Esurface(esurface_id)
-                        if selected_esurfaces.contains(esurface_id)
-                )
-            })
-            .count();
-        let required_denominator_count = occurrence + selected_numerator_count;
-        let selected_edge_support_sign = self
-            .denominator_edge_support_signs
-            .iter()
-            .filter(|(support, _)| {
-                cut_edge_sets.iter().any(|cut_edges| {
-                    cut_edges
-                        .iter()
-                        .all(|cut_edge| support.binary_search(cut_edge).is_ok())
-                })
-            })
-            .map(|(_, sign)| *sign)
-            .product::<i64>();
-
-        denominator_tree_chains(&self.denominator)
-            .into_iter()
-            .filter_map(|chain| {
-                let selected_denominator_esurfaces = chain
-                    .iter()
-                    .filter_map(|surface_id| match surface_id {
-                        HybridSurfaceID::Esurface(esurface_id)
-                            if selected_esurfaces.contains(esurface_id) =>
-                        {
-                            Some(*esurface_id)
-                        }
-                        _ => None,
-                    })
-                    .collect_vec();
-
-                if selected_denominator_esurfaces.len() != required_denominator_count {
-                    return None;
-                }
-
-                let selected_surface_sign = selected_denominator_esurfaces
-                    .iter()
-                    .map(|esurface_id| {
-                        self.denominator_surface_signs
-                            .get(&HybridSurfaceID::Esurface(*esurface_id))
-                            .copied()
-                            .unwrap_or(1)
-                    })
-                    .product::<i64>();
-                Some(selected_surface_sign * selected_edge_support_sign)
-            })
-            .collect()
-    }
-
-    fn signed_esurface_residue_variants(
-        &self,
-        raised_esurface_group: &impl RaisedEsurfaceGroupView,
-        cut_edge_sets: &[Vec<EdgeIndex>],
-        selected_esurface_signs: &BTreeMap<EsurfaceID, i64>,
-        occurrence: usize,
-        clear_selected_denominator_surface_sign: bool,
-    ) -> Vec<Self> {
-        if !self.supports_any_cut(cut_edge_sets) {
-            return Vec::new();
-        }
-
-        let selected_esurfaces = raised_esurface_group.esurface_ids();
-        let selected_numerator_count = self
-            .numerator_surfaces
-            .iter()
-            .filter(|surface_id| {
-                matches!(
-                    surface_id,
-                    HybridSurfaceID::Esurface(esurface_id)
-                        if selected_esurfaces.contains(esurface_id)
-                )
-            })
-            .count();
-        let required_denominator_count = occurrence + selected_numerator_count;
-
-        denominator_tree_chains(&self.denominator)
-            .into_iter()
-            .filter_map(|chain| {
-                let selected_denominator_esurfaces = chain
-                    .iter()
-                    .filter_map(|surface_id| match surface_id {
-                        HybridSurfaceID::Esurface(esurface_id)
-                            if selected_esurfaces.contains(esurface_id) =>
-                        {
-                            Some(*esurface_id)
-                        }
-                        _ => None,
-                    })
-                    .collect_vec();
-
-                if selected_denominator_esurfaces.len() != required_denominator_count {
-                    return None;
-                }
-
-                let denominator_sign = selected_denominator_esurfaces
-                    .iter()
-                    .filter_map(|esurface_id| selected_esurface_signs.get(esurface_id))
-                    .product::<i64>();
-                let numerator_sign = self
-                    .numerator_surfaces
-                    .iter()
-                    .filter_map(|surface_id| match surface_id {
-                        HybridSurfaceID::Esurface(esurface_id)
-                            if selected_esurfaces.contains(esurface_id) =>
-                        {
-                            selected_esurface_signs.get(esurface_id)
-                        }
-                        _ => None,
-                    })
-                    .product::<i64>();
-
-                let mut residue_variant = self.clone();
-                residue_variant.denominator = denominator_tree_from_chains(&[chain
-                    .into_iter()
-                    .filter(|surface_id| {
-                        !matches!(
-                            surface_id,
-                            HybridSurfaceID::Esurface(esurface_id)
-                                if selected_esurfaces.contains(esurface_id)
-                        )
-                    })
-                    .collect_vec()]);
-                residue_variant.numerator_surfaces.retain(|surface_id| {
-                    !matches!(
-                        surface_id,
-                        HybridSurfaceID::Esurface(esurface_id)
-                            if selected_esurfaces.contains(esurface_id)
-                    )
-                });
-                if denominator_sign * numerator_sign < 0 {
-                    residue_variant.prefactor *= Atom::num(-1);
-                }
-
-                if clear_selected_denominator_surface_sign {
-                    let mut surface_signs =
-                        std::mem::take(&mut residue_variant.denominator_surface_signs);
-                    for selected_esurface in &selected_denominator_esurfaces {
-                        if let Some(sign) =
-                            surface_signs.remove(&HybridSurfaceID::Esurface(*selected_esurface))
-                            && sign < 0
-                        {
-                            residue_variant.prefactor *= Atom::num(sign);
-                        }
-                    }
-                    for selected_esurface in selected_esurfaces {
-                        surface_signs.remove(&HybridSurfaceID::Esurface(*selected_esurface));
-                    }
-                    residue_variant.denominator_surface_signs = surface_signs;
-                    residue_variant.clear_selected_denominator_edge_support_sign(cut_edge_sets);
-                }
-
-                (residue_variant.denominator.get_num_nodes() != 0).then_some(residue_variant)
-            })
-            .collect()
     }
 }
 
@@ -1146,10 +940,12 @@ where
         H: Clone,
     {
         // Threshold residues are taken with respect to the canonical
-        // E-surface variable used by the local counterterm. If the selected
-        // generated denominator carries an overall sign, consuming the
-        // denominator must move that sign into the residue prefactor.
-        self.select_esurface_residue_impl(raised_esurface_group, &[], true)
+        // E-surface variable used by the local counterterm. This is the
+        // positive-energy Cutkosky convention: if the selected generated
+        // denominator carries an overall sign, consuming it moves that sign
+        // into the residue prefactor without touching spectator-denominator
+        // signs.
+        self.select_esurface_residue_impl(raised_esurface_group, true)
     }
 
     pub fn select_esurface_residue_in_generated_basis(
@@ -1160,55 +956,17 @@ where
         E: Clone,
         H: Clone,
     {
-        // Generated-basis residues consume the denominator in the generated
-        // surface variable. Any bridge to a canonical physical convention must
-        // be supplied by the caller as residue metadata, not by moving the
-        // generated denominator sign into this local residue.
-        self.select_esurface_residue_impl(raised_esurface_group, &[], false)
-    }
-
-    pub fn select_esurface_residue_with_cut_edges(
-        mut self,
-        raised_esurface_group: &impl RaisedEsurfaceGroupView,
-        cut_edge_sets: &[Vec<EdgeIndex>],
-    ) -> Vec<ThreeDExpression<O, E, H>>
-    where
-        E: Clone,
-        H: Clone,
-    {
-        // Cutkosky/LU residues are selected with a positive-energy cut
-        // convention. If the generated denominator was canonicalized with an
-        // overall minus sign, cancel that selected-denominator sign here while
-        // keeping spectator-denominator signs in the prefactor.
-        self.select_esurface_residue_impl(raised_esurface_group, cut_edge_sets, true)
-    }
-
-    pub fn select_esurface_residue_with_cut_edges_and_esurface_signs(
-        mut self,
-        raised_esurface_group: &impl RaisedEsurfaceGroupView,
-        cut_edge_sets: &[Vec<EdgeIndex>],
-        selected_esurface_signs: &[(EsurfaceID, i64)],
-    ) -> Vec<ThreeDExpression<O, E, H>>
-    where
-        E: Clone,
-        H: Clone,
-    {
-        let selected_esurface_signs = selected_esurface_signs
-            .iter()
-            .copied()
-            .collect::<BTreeMap<_, _>>();
-        self.select_esurface_residue_impl_with_esurface_signs(
-            raised_esurface_group,
-            cut_edge_sets,
-            &selected_esurface_signs,
-            true,
-        )
+        // Generated-basis residues consume the denominator in its generated
+        // or local-series coordinate. Repeated/confluent channels retain that
+        // orientation here: any bridge to a canonical physical convention must
+        // be supplied by the caller as neutral residue metadata, not by moving
+        // the generated denominator sign into this local residue.
+        self.select_esurface_residue_impl(raised_esurface_group, false)
     }
 
     fn select_esurface_residue_impl(
         &mut self,
         raised_esurface_group: &impl RaisedEsurfaceGroupView,
-        cut_edge_sets: &[Vec<EdgeIndex>],
         clear_selected_denominator_surface_sign: bool,
     ) -> Vec<ThreeDExpression<O, E, H>>
     where
@@ -1225,9 +983,6 @@ where
 
             for orientation in new_expression.orientations.iter_mut() {
                 orientation.variants.retain_mut(|variant| {
-                    if !variant.supports_any_cut(cut_edge_sets) {
-                        return false;
-                    }
                     let numerator_count = variant.numerator_value_count(
                         &HybridSurfaceID::Esurface(representative_esurface_id),
                     );
@@ -1238,7 +993,6 @@ where
 
                     if clear_selected_denominator_surface_sign {
                         variant.clear_selected_denominator_surface_sign(raised_esurface_group);
-                        variant.clear_selected_denominator_edge_support_sign(cut_edge_sets);
                     }
 
                     variant
@@ -1259,43 +1013,6 @@ where
                     }
                     variant.denominator.get_num_nodes() != 0
                 });
-            }
-
-            result.push(new_expression);
-        }
-
-        result
-    }
-
-    fn select_esurface_residue_impl_with_esurface_signs(
-        &mut self,
-        raised_esurface_group: &impl RaisedEsurfaceGroupView,
-        cut_edge_sets: &[Vec<EdgeIndex>],
-        selected_esurface_signs: &BTreeMap<EsurfaceID, i64>,
-        clear_selected_denominator_surface_sign: bool,
-    ) -> Vec<ThreeDExpression<O, E, H>>
-    where
-        E: Clone,
-        H: Clone,
-    {
-        let mut result = vec![];
-        for occurrence in 1..=raised_esurface_group.max_occurrence() {
-            let mut new_expression = self.clone();
-
-            for orientation in new_expression.orientations.iter_mut() {
-                orientation.variants = orientation
-                    .variants
-                    .iter()
-                    .flat_map(|variant| {
-                        variant.signed_esurface_residue_variants(
-                            raised_esurface_group,
-                            cut_edge_sets,
-                            selected_esurface_signs,
-                            occurrence,
-                            clear_selected_denominator_surface_sign,
-                        )
-                    })
-                    .collect();
             }
 
             result.push(new_expression);

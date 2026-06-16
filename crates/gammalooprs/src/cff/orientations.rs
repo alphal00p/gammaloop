@@ -187,6 +187,15 @@ pub trait GraphOrientation: Sized {
     }
 }
 
+impl<T> GraphOrientation for T
+where
+    T: three_dimensional_reps::GraphOrientation,
+{
+    fn orientation(&self) -> &EdgeVec<Orientation> {
+        three_dimensional_reps::GraphOrientation::orientation(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

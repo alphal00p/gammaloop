@@ -2537,7 +2537,25 @@ pub trait ProcessIntegrandImpl {
         false
     }
 
+    fn uses_explicit_orientation_sum_only(&self) -> bool {
+        false
+    }
+
     // fn get_builder_cache(&self) -> &ParamBuilder<f64>;
+}
+
+pub(crate) fn validate_explicit_orientation_sum_runtime_settings(
+    settings: &RuntimeSettings,
+) -> Result<()> {
+    if let SamplingSettings::DiscreteGraphs(discrete_settings) = &settings.sampling
+        && discrete_settings.sample_orientations
+    {
+        return Err(eyre!(
+            "`global.generation.explicit_orientation_sum_only = true` does not support runtime individual-orientation Monte Carlo sampling; set `sampling.sample_orientations = false`"
+        ));
+    }
+
+    Ok(())
 }
 
 fn get_global_dimension_if_exists<I: ProcessIntegrandImpl>(integrand: &I) -> Option<usize> {
@@ -3420,6 +3438,12 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     input: &MomentumSpaceEvaluationInput,
 ) -> Result<GammaLoopSample<T>> {
+    if integrand.uses_explicit_orientation_sum_only() && input.orientation.is_some() {
+        return Err(eyre!(
+            "`global.generation.explicit_orientation_sum_only = true` represents all orientations as a single summed contribution, so explicit orientation selection is not supported"
+        ));
+    }
+
     let expected_loop_count = if let Some(graph_id) = input.graph_id {
         let group_id = integrand
             .get_group_structure()

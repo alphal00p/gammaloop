@@ -157,7 +157,8 @@ pub(crate) fn rational_pow_i64(base: i64, exponent: usize) -> Rational {
     Rational::from(base).pow_usize(exponent)
 }
 
-pub(crate) fn rank_i64(rows: &[Vec<i64>]) -> usize {
+/// Compute the exact row rank of an integer matrix.
+pub fn rank_i64(rows: &[Vec<i64>]) -> usize {
     rational_matrix_from_i64(rows).map_or(0, |matrix| matrix.rank())
 }
 
@@ -165,7 +166,8 @@ pub(crate) fn rank_rational(rows: &[Vec<Rational>]) -> usize {
     rational_matrix_from_rows(rows).map_or(0, |matrix| matrix.rank())
 }
 
-pub(crate) fn solve_rational_system(
+/// Solve a square rational linear system exactly.
+pub fn solve_rational_system(
     matrix: Vec<Vec<Rational>>,
     rhs: Vec<Rational>,
 ) -> Option<Vec<Rational>> {

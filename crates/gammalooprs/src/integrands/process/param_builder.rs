@@ -157,6 +157,7 @@ define_gamma_loop_pairs! {
     m_uv,
     renormalization_localization_scale,
     mu_r_sq,
+    numerator_sampling_scale,
     orientations,
     pub model_parameters,
     pub external_energies,
@@ -195,6 +196,8 @@ impl GammaLoopPairs {
     pub fn validate(&self) {
         debug!("Validating mu_r_sq");
         self.mu_r_sq.validate();
+        debug!("Validating numerator_sampling_scale");
+        self.numerator_sampling_scale.validate();
         debug!("Validating model_parameters");
         self.model_parameters.validate();
         debug!("Validating external_energies");
@@ -250,6 +253,9 @@ impl GammaLoopPairs {
                 GS.renormalization_localization_scale,
             ),
             mu_r_sq: ParamValuePairs::default_from_symbol(GS.mu_r_sq),
+            numerator_sampling_scale: ParamValuePairs::default_from_symbol(
+                GS.numerator_sampling_scale,
+            ),
             tstar: ParamValuePairs::default_from_symbol(GS.rescale_star),
             radius_left: ParamValuePairs::default_from_symbol(GS.radius_left),
             radius_right: ParamValuePairs::default_from_symbol(GS.radius_right),
@@ -1306,6 +1312,19 @@ impl<T: FloatLike> ParamBuilder<T> {
         for (index, values) in self.values.iter_mut().enumerate() {
             let multiplicative_offset = index + 1;
             values[self.pairs.mu_r_sq.value_range.start * multiplicative_offset] = mu_r_sq.clone();
+        }
+    }
+
+    pub(crate) fn numerator_sampling_scale_value(
+        &mut self,
+        numerator_sampling_scale: Complex<F<T>>,
+    ) {
+        debug_assert!(self.pairs.numerator_sampling_scale.value_range.len() == 1);
+
+        for (index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = index + 1;
+            values[self.pairs.numerator_sampling_scale.value_range.start * multiplicative_offset] =
+                numerator_sampling_scale.clone();
         }
     }
 

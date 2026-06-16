@@ -10,7 +10,6 @@ The GammaLoop-facing API is intentionally small:
 
 - `generate_3d_expression(...)`
 - `Generate3DExpressionOptions`
-- `RepresentationMode::Cff`
 - the serializable `ThreeDExpression<OrientationID>` data model
 
 The production GammaLoop path calls the graph-first generator through traits

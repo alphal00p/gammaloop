@@ -611,6 +611,9 @@ impl Amplitude {
                     &self.graph_group_structure,
                 ),
                 group_derived_data: self.group_derived_data.clone(),
+                explicit_orientation_sum_only: global_settings
+                    .generation
+                    .explicit_orientation_sum_only,
             },
             event_processing_runtime: Default::default(),
             active_f64_backend: Default::default(),
@@ -779,7 +782,7 @@ impl AmplitudeGraph {
         settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
         if self.derived_data.cff_expression.is_none() {
-            self.generate_cff(&OrientationPattern::default())?;
+            self.generate_cff(&GenerationSettings::default())?;
         }
         let valid_orientations: Vec<_> = self
             .derived_data
@@ -793,6 +796,8 @@ impl AmplitudeGraph {
 
         settings.orchestrator.renormalization_part(
             &mut self.graph,
+            // RenormalizationPart forces a 4D forest, so this projector is
+            // never used to build a CFF or attach 3D numerator factors.
             OrientationProjection::new(&valid_orientations, &OrientationPattern::default()),
             settings,
         )
@@ -816,7 +821,8 @@ impl AmplitudeGraph {
     }
 
     #[instrument(skip_all, err)]
-    pub(crate) fn generate_cff(&mut self, orientation_pattern: &OrientationPattern) -> Result<()> {
+    pub(crate) fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<()> {
+        settings.validate_explicit_orientation_sum_options()?;
         let _progress_guard = generation_progress::enter_detailed_progress_span("Generating CFF");
         let shift_rewrite = self
             .graph
@@ -834,9 +840,17 @@ impl AmplitudeGraph {
             .map(|x| x.1)
             .collect_vec();
 
-        let cff_expression =
-            self.graph
-                .generate_cff(&contract_edges, &shift_rewrite, orientation_pattern)?;
+        let options = self.graph.production_cff_3d_expression_options(settings)?;
+        let analysis_numerator = self
+            .graph
+            .production_numerator_atom_for_full_3d_expression();
+        let cff_expression = self.graph.generate_3d_expression_for_integrand(
+            &contract_edges,
+            &shift_rewrite,
+            &options,
+            Some(&analysis_numerator),
+            false,
+        )?;
 
         self.derived_data.cff_expression = Some(cff_expression);
 
@@ -854,7 +868,7 @@ impl AmplitudeGraph {
         let preprocess_started = std::time::Instant::now();
         let vk = crate::utils::vakint()?;
 
-        self.generate_cff(&settings.orientation_pattern)?;
+        self.generate_cff(settings)?;
 
         // UV orchestration can extend the graph surface cache, while raised IDs
         // belong to the CFF expression generated above.
@@ -1198,19 +1212,17 @@ impl AmplitudeGraph {
             only = %settings.uv.final_integrand,
             "Generation timing milestone"
         );
-        let valid_orientations: Vec<_> = self
+        let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
+        let production_orientations = &self
             .derived_data
             .cff_expression
             .as_ref()
             .expect("cff_expression should have been created")
-            .orientations
-            .iter()
-            .map(|orientation| orientation.data.orientation.clone())
-            .collect();
+            .orientations;
         crate::debug_tags!(#generation, #profile, #graph, #orientation, #summary;
             stage = "amplitude_graph_valid_orientations_done",
             graph = %self.graph.name,
-            orientation_count = valid_orientations.len(),
+            orientation_count = production_orientations.len(),
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Generation timing milestone"
         );
@@ -1220,7 +1232,11 @@ impl AmplitudeGraph {
             &mut self.graph,
             cutstructure,
             vakint,
-            OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
+            OrientationProjection::exact(
+                production_orientations,
+                &cff_options,
+                &settings.orientation_pattern,
+            ),
             &settings.uv,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -1270,15 +1286,13 @@ impl AmplitudeGraph {
     )> {
         let _progress_guard =
             generation_progress::enter_detailed_progress_span("Building Threshold Counterterms");
-        let valid_orientations: Vec<_> = self
+        let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
+        let production_orientations = &self
             .derived_data
             .cff_expression
             .as_ref()
             .expect("cff_expression should have been created")
-            .orientations
-            .iter()
-            .map(|orientation| orientation.data.orientation.clone())
-            .collect();
+            .orientations;
 
         let global_cff = self
             .derived_data
@@ -1392,7 +1406,11 @@ impl AmplitudeGraph {
             &mut self.graph,
             cut_structure,
             vakint,
-            OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
+            OrientationProjection::exact(
+                production_orientations,
+                &cff_options,
+                &settings.orientation_pattern,
+            ),
             &settings.uv,
         )?;
 
@@ -1795,7 +1813,7 @@ pub mod test {
 
         let _model = load_generic_model("sm");
 
-        graph.generate_cff(&OrientationPattern::default()).unwrap();
+        graph.generate_cff(&GenerationSettings::default()).unwrap();
         // graph.build_parametric_integrand(&GenerationSettings::default());
 
         let param_builder = &graph.graph.param_builder;

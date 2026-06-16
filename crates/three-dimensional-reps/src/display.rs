@@ -8,7 +8,7 @@ use tabled::{builder::Builder, settings::Style};
 
 use crate::{
     GraphInfo, HybridSurfaceID, LinearEnergyExpr, LinearSurfaceKind, NumeratorSamplingScaleMode,
-    OrientationExpression, OrientationID, RepresentationMode, ThreeDExpression,
+    OrientationExpression, OrientationID, ThreeDExpression,
     surface::{RationalAtomExt, SurfaceOrigin},
 };
 
@@ -26,7 +26,6 @@ pub struct NumeratorDisplay<'a> {
 
 pub fn render_expression_summary(
     expression: &ThreeDExpression<OrientationID>,
-    family: RepresentationMode,
     graph: &GraphInfo,
     energy_degree_bounds: &[(usize, usize)],
     numerator: NumeratorDisplay<'_>,
@@ -40,13 +39,9 @@ pub fn render_expression_summary(
     let mut out = Vec::new();
     out.push(format!(
         "{}\n{}",
-        title(
-            &format!("{} structure", representation_label(family).to_uppercase()),
-            options.use_color,
-        ),
+        title("CFF structure", options.use_color),
         summary_table(
             expression,
-            family,
             graph,
             energy_degree_bounds,
             numerator,
@@ -62,7 +57,6 @@ pub fn render_expression_summary(
 
 fn summary_table(
     expression: &ThreeDExpression<OrientationID>,
-    family: RepresentationMode,
     graph: &GraphInfo,
     energy_degree_bounds: &[(usize, usize)],
     numerator: NumeratorDisplay<'_>,
@@ -73,7 +67,7 @@ fn summary_table(
     table.push_record(vec![h("field", use_color), h("value", use_color)]);
     table.push_record(vec![
         "family".to_string(),
-        c(representation_label(family), Color::Green, use_color),
+        c("cff", Color::Green, use_color),
     ]);
     table.push_record(vec![
         "internal edges".to_string(),
@@ -435,7 +429,6 @@ impl<'a> DetailSelector<'a> {
         }
     }
 }
-
 fn parse_map_selector(selector: &str) -> Option<usize> {
     selector
         .strip_prefix('N')
@@ -462,12 +455,6 @@ fn c(text: &str, color: Color, use_color: bool) -> String {
         color.paint(text).to_string()
     } else {
         text.to_string()
-    }
-}
-
-fn representation_label(family: RepresentationMode) -> &'static str {
-    match family {
-        RepresentationMode::Cff => "cff",
     }
 }
 
@@ -995,7 +982,7 @@ fn orientation_matches(entry: &OrientationDisplayEntry<'_>, selector: &DetailSel
 #[cfg(test)]
 mod tests {
     use crate::{
-        Generate3DExpressionOptions, HybridSurfaceID, LinearSurfaceID, RepresentationMode,
+        Generate3DExpressionOptions, HybridSurfaceID, LinearSurfaceID,
         expression::CFFVariant,
         generation::generate_3d_expression_from_parsed,
         graph_io::graph_info,
@@ -1011,7 +998,6 @@ mod tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
                 ..Default::default()
             },
         )
@@ -1019,7 +1005,6 @@ mod tests {
 
         let rendered = render_expression_summary(
             &expression,
-            RepresentationMode::Cff,
             &graph_info(&parsed),
             &[],
             NumeratorDisplay::default(),
@@ -1038,7 +1023,6 @@ mod tests {
 
         let rendered = render_expression_summary(
             &expression,
-            RepresentationMode::Cff,
             &graph_info(&parsed),
             &[],
             NumeratorDisplay::default(),
@@ -1060,8 +1044,7 @@ mod tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: vec![(0, 1), (1, 1), (3, 4)],
+                energy_degree_bounds: Some(vec![(0, 1), (1, 1), (3, 4)]),
                 ..Default::default()
             },
         )
@@ -1072,7 +1055,6 @@ mod tests {
 
         let rendered = render_expression_summary(
             &expression,
-            RepresentationMode::Cff,
             &graph_info(&parsed),
             &[],
             NumeratorDisplay::default(),
