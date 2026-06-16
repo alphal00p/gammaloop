@@ -41,6 +41,7 @@ use crate::{
             integrated::Integrated,
             local_3d::Local3DApproximation,
         },
+        export::UVForestNodeExpression,
         forest::ParametricIntegrands,
         settings::VakintSettings,
     },
@@ -1159,6 +1160,42 @@ impl Forests {
         }
 
         Ok(exprs)
+    }
+
+    pub(crate) fn export_node_expressions(
+        &self,
+        forest_index: usize,
+        post_process: &mut impl FnMut(Atom) -> Atom,
+    ) -> Result<Vec<UVForestNodeExpression>> {
+        let (cut_compatible_forest_subset, _) = self
+            .cuts
+            .first()
+            .ok_or_else(|| eyre!("No cuts in hedge-poset forest export"))?;
+        let mut terms = Vec::new();
+        for (node_index, nidx) in self
+            .compatible_topological_order(cut_compatible_forest_subset)?
+            .into_iter()
+            .enumerate()
+        {
+            let operation = &self.graph[nidx];
+            let computed = self.compute_store.require(operation)?;
+            let Integrands::Multiple(final_integrand) = &computed.final_integrand else {
+                return Err(eyre!("{} final_integrand not computed yet", operation));
+            };
+            let node_key = operation.to_string();
+            for (term_index, (&residue_index, numerator)) in final_integrand.iter().enumerate() {
+                terms.push(UVForestNodeExpression {
+                    forest_index,
+                    node_index,
+                    node_key: node_key.clone(),
+                    term_index,
+                    residue_index,
+                    numerator: post_process(numerator.clone()),
+                });
+            }
+        }
+
+        Ok(terms)
     }
 
     // pub fn compute(

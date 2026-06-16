@@ -157,6 +157,7 @@ pub fn atomic_expanded_label_id(indices: &[ConcreteIndex], name: Symbol, args: &
 mod test {
     use crate::network::tags::SPENSO_TAG;
     use symbolica::{
+        atom::AtomCore,
         parse,
         printer::{PrintOptions, PrintUserData},
         symbol, tag,

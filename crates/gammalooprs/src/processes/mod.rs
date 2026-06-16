@@ -3,7 +3,7 @@ use std::{fs, path::Path};
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
-use eyre::Context;
+use eyre::{Context, eyre};
 use rayon::ThreadPool;
 use schemars::JsonSchema;
 use symbolica::evaluate::OptimizationSettings;
@@ -13,6 +13,7 @@ use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     settings::{GlobalSettings, runtime::LockedRuntimeSettings},
     utils::serde_utils::{IsDefault, is_false, is_true, is_usize},
+    uv::export::UVForestExportSettings,
 };
 use serde::{Deserialize, Serialize};
 
@@ -456,6 +457,26 @@ impl ProcessList {
             p.export_dot(&path, settings)?;
         }
         Ok(())
+    }
+
+    pub fn export_uv_forests(
+        &self,
+        path: impl AsRef<Path>,
+        process_id: usize,
+        integrand_name: &str,
+        graph_ids: &[usize],
+        settings: &UVForestExportSettings,
+    ) -> Result<()> {
+        let path = path.as_ref().join("processes");
+        fs::create_dir_all(&path)?;
+        let process = self.processes.get(process_id).ok_or_else(|| {
+            eyre!(
+                "Process id {} is out of range; there are {} processes",
+                process_id,
+                self.processes.len()
+            )
+        })?;
+        process.export_uv_forests(&path, integrand_name, graph_ids, settings)
     }
 
     pub fn export_standalone(

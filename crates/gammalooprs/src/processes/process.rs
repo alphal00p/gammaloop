@@ -31,6 +31,7 @@ use crate::{
     integrands::process::ProcessIntegrand,
     numerator::GlobalPrefactor,
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
+    uv::export::UVForestExportSettings,
 };
 use eyre::{Context, eyre};
 
@@ -833,6 +834,72 @@ impl Process {
                 }
             }
         }
+        Ok(())
+    }
+
+    pub(crate) fn export_uv_forests(
+        &self,
+        path: impl AsRef<Path>,
+        integrand_name: &str,
+        graph_ids: &[usize],
+        settings: &UVForestExportSettings,
+    ) -> Result<()> {
+        let generation_settings = &self
+            .settings_history
+            .as_ref()
+            .ok_or_else(|| {
+                eyre!(
+                    "Cannot export UV forests for process {} without generation settings history",
+                    self.definition.folder_name
+                )
+            })?
+            .generation;
+        let resolved = self.get_integrand(integrand_name)?;
+        let integrand = resolved.require_generated()?;
+        let integrand_path = match &self.collection {
+            ProcessCollection::Amplitudes(_) => path
+                .as_ref()
+                .join("amplitudes")
+                .join(PathBuf::from(self.definition.folder_name.clone()))
+                .join(&resolved.canonical_name),
+            ProcessCollection::CrossSections(_) => path
+                .as_ref()
+                .join("cross_sections")
+                .join(PathBuf::from(self.definition.folder_name.clone()))
+                .join(&resolved.canonical_name),
+        };
+        fs::create_dir_all(&integrand_path).with_context(|| {
+            format!(
+                "Trying to create directory for UV forest export {}",
+                integrand_path.display()
+            )
+        })?;
+
+        for &graph_id in graph_ids {
+            let export =
+                integrand.export_uv_forest_graph(graph_id, generation_settings, settings)?;
+            let forest_path = integrand_path.join(format!("{}.forest.dot", export.graph_name));
+            let mut forest_file = create_overwriting_file(&forest_path, "UV forest")?;
+            forest_file.write_all(export.forest_dot.as_bytes())?;
+
+            for term in export.node_terms {
+                let node_dir = integrand_path
+                    .join(format!("{}_nodes", export.graph_name))
+                    .join(format!("forest_{:03}", term.forest_index));
+                fs::create_dir_all(&node_dir).with_context(|| {
+                    format!(
+                        "Trying to create directory for UV forest node graph {}",
+                        node_dir.display()
+                    )
+                })?;
+                let mut dot = create_overwriting_file(
+                    &node_dir.join(term.file_name()),
+                    "UV forest node graph",
+                )?;
+                dot.write_all(term.dot.as_bytes())?;
+            }
+        }
+
         Ok(())
     }
 
