@@ -1,4 +1,4 @@
-use std::{io::Cursor, mem, time::Instant};
+use std::time::Instant;
 
 use idenso::{
     Cookable, IndexTooling,
@@ -8,12 +8,7 @@ use idenso::{
     shorthands::schoonschip::{Schoonschip, SchoonschipSettings},
 };
 use itertools::Itertools;
-use spenso::{
-    network::{AtomComponentOptimizable, parsing::AtomStructureExt, tags::SPENSO_TAG},
-    shadowing::{TensorCollectExt, symbolica_utils::SpensoPrintSettings},
-    structure::{OrderedStructure, ToSymbolic},
-    tensor_symbol, vector, vector_symbol,
-};
+use spenso::shadowing::{TensorCollectExt, symbolica_utils::SpensoPrintSettings};
 use symbolica::prelude::*;
 
 const FIXTURE: &str = concat!(
@@ -25,8 +20,6 @@ const FIXTURE: &str = concat!(
 #[ignore = "diagnostic timing for GL16 integrated-UV gamma simplification"]
 fn aa_aa_2l_gl16_integrated_uv_simplify_gamma_fixture() {
     initialize();
-
-    let q = vector_symbol!("gammalooprs::Q");
 
     let start = Instant::now();
     let input = std::fs::read_to_string(FIXTURE)
@@ -63,12 +56,13 @@ fn aa_aa_2l_gl16_integrated_uv_simplify_gamma_fixture() {
     let after_gamma = expr.simplify_gamma();
 
     eprintln!(
-        "simplify_gamma: terms={} atom_bytes={} count={}",
+        "simplify_gamma: terms={} atom_bytes={} count={} elapsed={:.3?}",
         after_gamma.nterms(),
         after_gamma.as_view().get_byte_size(),
         after_gamma
-            .alias_subexpressions(|a, _count, i| None)
+            .alias_subexpressions(|_a, _count, _i| None)
             .count_operations(),
+        start.elapsed(),
     );
     let after_aliasing = after_gamma.alias_subtensors("T");
     eprintln!(

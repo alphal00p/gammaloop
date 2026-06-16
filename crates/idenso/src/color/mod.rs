@@ -502,6 +502,7 @@ impl ColorSimplifier for AtomView<'_> {
         self.collect_with_map(
             |a| matches!(a,AtomView::Var(a) if a.get_symbol()==CS.tr || a.get_symbol()==CS.ca|| a.get_symbol()==CS.cf ),
         )
+        .unwrap_collect()
     }
 
     fn collect_color(&self) -> Atom {

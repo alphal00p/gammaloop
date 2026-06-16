@@ -97,8 +97,7 @@ impl Collectable for AtomView<'_> {
         if !hit {
             return self.to_owned();
         }
-        let collected = wrapped.expand_in(*COLLECT);
-        collected.unwrap_collect()
+        wrapped.expand_in(*COLLECT)
     }
     fn collect_with_map(self, mut matches: impl FnMut(AtomView<'_>) -> bool) -> Atom {
         let mut hit = false;
@@ -129,9 +128,18 @@ impl Collectable for AtomView<'_> {
             }
             fun.iter().next()
         }
+
         self.replace_map(|arg, _context, out| {
             if let Some(inner) = collect_inner(arg) {
                 **out = inner.to_owned();
+                return;
+            }
+
+            if let AtomView::Pow(pow) = arg {
+                let (base, exponent) = pow.get_base_exp();
+                if let Some(inner) = collect_inner(base) {
+                    **out = inner.to_owned().pow(exponent.to_owned());
+                }
             }
         })
     }
@@ -271,6 +279,13 @@ pub trait TensorCollectExt {
     /// Expand common tensor leaves that contain `rep` as one of their slot representations.
     fn expand_rep(&self, rep: LibraryRep) -> Atom;
 
+    /// Expand common tensor leaves that contain `rep` as one of their slot representations, using a custom map function.
+    fn expand_rep_with_map<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
+        &self,
+        rep: LibraryRep,
+        map: F,
+    ) -> Atom;
+
     /// Expand common tensor leaves that contain any of the `reps` as one of their slot representations.
     fn expand_reps<const N: usize>(&self, reps: [LibraryRep; N]) -> Atom;
 
@@ -324,6 +339,14 @@ impl TensorCollectExt for Atom {
 
     fn expand_rep(&self, rep: LibraryRep) -> Atom {
         self.as_view().expand_rep(rep)
+    }
+
+    fn expand_rep_with_map<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
+        &self,
+        rep: LibraryRep,
+        map: F,
+    ) -> Atom {
+        self.as_view().expand_rep_with_map(rep, map)
     }
 
     fn expand_reps<const N: usize>(&self, reps: [LibraryRep; N]) -> Atom {
@@ -384,6 +407,14 @@ impl TensorCollectExt for AtomView<'_> {
 
     fn expand_rep(&self, rep: LibraryRep) -> Atom {
         TensorCollectFilter::Reps([rep]).expand(*self)
+    }
+
+    fn expand_rep_with_map<F: FnMut(AtomView, &Context, &mut Settable<'_, Atom>)>(
+        &self,
+        rep: LibraryRep,
+        map: F,
+    ) -> Atom {
+        TensorCollectFilter::Reps([rep]).expand_with_map(*self, map)
     }
 
     fn expand_reps<const N: usize>(&self, reps: [LibraryRep; N]) -> Atom {

@@ -9,6 +9,7 @@ use spenso::{
     network::{
         graph::NetworkEdge,
         library::function_lib::INBUILTS,
+        library::symbolic::ETS,
         parsing::{AtomStructureExt, ParseSettings},
         tags::SPENSO_TAG,
     },
@@ -57,6 +58,7 @@ initialize!(|| {
         let _ = AGS.force_in_initializer().gamma;
         let _ = *EPSILON_SYMBOL.force_in_initializer();
         let _ = CS.force_in_initializer().cf;
+        let _ = ETS.force_in_initializer().metric;
     });
 });
 

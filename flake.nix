@@ -200,6 +200,10 @@
         cargoToml = ./crates/linnest/Cargo.toml;
       };
 
+      clinnetMeta = craneLib.crateNameFromCargoToml {
+        cargoToml = ./crates/clinnet/Cargo.toml;
+      };
+
       # Host Rust target triple, e.g. x86_64-unknown-linux-gnu
       rustTarget = pkgs.stdenv.hostPlatform.rust.rustcTarget;
 
@@ -688,16 +692,15 @@
         '';
       };
 
-      gungraunRunner = pkgs.rustPlatform.buildRustPackage rec {
-        pname = "gungraun-runner";
-        version = "0.18.2";
-        src = pkgs.fetchCrate {
-          inherit pname version;
-          hash = "sha256-DiJq9TZCZdWKSstIyMjkLuxaYXua0WKD2AVbEIxM590=";
-        };
-        cargoHash = "sha256-eb9U1MgCg7MpwzS2RnFXMWdPitweKMMty0n3SC0F6+I=";
-        doCheck = false;
-      };
+      clinnet-cli = craneLib.buildPackage (ciArgs
+        // {
+          inherit cargoArtifacts;
+          pname = "clinnet";
+          inherit (clinnetMeta) version;
+          cargoBuildCommand = "cargo build --profile ${ciCargoProfile}";
+          cargoExtraArgs = "--locked -p clinnet --bin linnet";
+          doCheck = false;
+        });
     in {
       checks =
         {
@@ -757,7 +760,6 @@
         }
         // impureCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
-          inherit gungraunRunner;
           gammaloop-llvm-coverage = craneLib.cargoLlvmCov (commonArgs
             // {
               src = workspaceTestSrc;
@@ -833,34 +835,11 @@
               rust-analyzer
               maturin
               virtualenv
+              clinnet-cli
             ]
             ++ lib.optionals (!pkgs.stdenv.isDarwin) [
-              gungraunRunner
               valgrind
-            ]
-            ++ [
-              (pkgs.rustPlatform.buildRustPackage rec {
-                pname = "clinnet";
-                version = "0.1.8";
-                src = pkgs.fetchCrate {
-                  inherit pname version;
-                  sha256 = "sha256-CbZBHbf+8bIkdiSI5LMFO2Qc3zDr9UEBEry+fZOuep8=";
-                };
-                cargoHash = "sha256-GTixU2ZJZVMrEWLOfWjEnXMVLG2+cpkPbJuNnkTuFfo=";
-              })
-              (pkgs.rustPlatform.buildRustPackage rec {
-                pname = "rscls";
-                version = "0.2.3";
-                src = pkgs.fetchCrate {
-                  inherit pname version;
-                  sha256 = "sha256-tahAhWCjhIVjbJ1NzrtiHBwGb/FBmUdK4XP9VlSPqh0=";
-                };
-                cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
-              })
             ];
-        }
-        // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
-          GUNGRAUN_RUNNER = "${gungraunRunner}/bin/gungraun-runner";
         });
     });
 }

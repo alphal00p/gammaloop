@@ -4,12 +4,15 @@ use spenso::network::parsing::ParseSettings;
 use spenso::network::store::TensorScalarStore;
 use spenso::p;
 use spenso::q;
-use spenso::shadowing::symbolica_utils::AtomCoreExt;
-use spenso::shadowing::symbolica_utils::TypstSettings;
+use spenso::shadowing::{
+    TensorCollectExt,
+    symbolica_utils::{AtomCoreExt, TypstSettings},
+};
 use spenso::structure::IndexlessNamedStructure;
 use spenso::structure::PermutedStructure;
 use spenso::{chain, s, slot, trace};
 
+use crate::representations::Bispinor;
 use crate::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
 use crate::{gamma, gamma0, gamma5, u, v};
 
@@ -30,14 +33,15 @@ use super::*;
 use crate::color::ColorSimplifier;
 use crate::tensor::SymbolicNetParse;
 use crate::tensor::SymbolicTensor;
-use spenso::structure::{abstract_index::AbstractIndex, permuted::Perm};
-use symbolica::{
-    atom::{Atom, AtomCore},
-    parse_lit,
+use spenso::structure::{
+    abstract_index::AbstractIndex,
+    permuted::Perm,
+    representation::{LibraryRep, Minkowski},
 };
+use symbolica::parse_lit;
 
-use crate::Cookable;
 use crate::test_support::test_initialize;
+use crate::{CookMode, CookSettings, Cookable};
 
 #[test]
 fn gamma_construct() {
@@ -526,7 +530,9 @@ fn gamma_alg() {
         * (mink_dim.g(1, 2) * mink_dim.g(3, 4) * mink_dim.g(5, 6)
             - mink_dim.g(1, 3) * mink_dim.g(2, 6) * mink_dim.g(5, 4))
         * (mink_dim.g(1, 2) * mink_dim.g(3, 4) - mink_dim.g(1, 3) * mink_dim.g(2, 4)))
-    .simplify_gamma();
+    .simplify_gamma()
+    .collect_metrics()
+    .simplify_metrics();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"-1*d+d^3");
 
@@ -557,6 +563,11 @@ fn gamma_alg() {
         * gamma!(slot!(mink_dim, nu), slot!(bis4, 3), slot!(bis4, 4))
         * gamma!(slot!(mink_dim, nu3), slot!(bis4, 4), slot!(bis4, 5))
         * gamma!(slot!(mink_dim, nu), slot!(bis4, 5), slot!(bis4, 1)))
+    .collect_reps([
+        LibraryRep::from(Minkowski {}),
+        LibraryRep::from(Bispinor {}),
+    ])
+    .schoonschip()
     .simplify_gamma();
 
     assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*-4*d+(p(mink(d,d_0)))^2*8+-4*d*p(mink(d,d_0))*q(mink(d,d_0))+8*p(mink(d,d_0))*q(mink(d,d_0))");
@@ -579,7 +590,9 @@ fn gamma_alg() {
         * gamma!(slot!(mink_dim, nu), slot!(bis4, 3), slot!(bis4, 4))
         * gamma!(slot!(mink_dim, mu), slot!(bis4, 4), slot!(bis4, 5))
         * gamma!(slot!(mink_dim, nu), slot!(bis4, 5), slot!(bis4, 2)))
-    .simplify_gamma();
+    .simplify_gamma()
+    .collect_metrics()
+    .simplify_metrics();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"(-1*d^2+2*d)*g(bis(4,1),bis(4,2))");
 }
@@ -936,10 +949,16 @@ fn val_test() {
         7776 * G ^ 6 * dot(P(2, mink(4)), P(3, mink(4))),
         default_namespace = "spenso"
     );
-    assert_eq!(
-        res,
-        expr.simplify_gamma().to_dots(),
-        "fount{}",
-        expr.simplify_gamma().to_dots()
-    );
+    let index_cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+    let simplified = expr
+        .cook_indices_with_settings(&index_cooking)
+        .collect_reps([
+            LibraryRep::from(Minkowski {}),
+            LibraryRep::from(Bispinor {}),
+        ])
+        .simplify_metrics()
+        .simplify_gamma()
+        .uncook_with_settings(&index_cooking)
+        .to_dots();
+    assert_eq!(res, simplified, "fount{}", simplified);
 }

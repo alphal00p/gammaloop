@@ -130,6 +130,21 @@ fn collect_rep_only_wraps_matching_representations() {
 }
 
 #[test]
+fn expand_rep_with_map_visits_expanded_collect_wrappers() {
+    let (a, b, mapped_tensor) = symbol!("a", "b", "mapped_tensor");
+    let expr = (Atom::var(a) + Atom::var(b)) * p!(mink!(4));
+
+    let expanded = expr.expand_rep_with_map(LibraryRep::from(Minkowski {}), |_arg, _ctx, out| {
+        **out = Atom::var(mapped_tensor);
+    });
+
+    insta::assert_snapshot!(
+        expanded.to_bare_ordered_string(),
+        @"(a+b)*mapped_tensor"
+    );
+}
+
+#[test]
 fn collect_metrics_only_wraps_metric_heads() {
     let (a, b) = symbol!("a", "b");
     let metric = g!(mink!(4, mu), mink!(4, nu));

@@ -24,7 +24,7 @@ thiserror = { workspace = true }
 [dependencies.symbolica]
 workspace = true
 default-features = false
-features = ["bincode", "serde"]
+features = ["bincode", "python_export", "serde"]
 
 [features]
 python_stubgen = [

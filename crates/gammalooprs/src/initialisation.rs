@@ -1,5 +1,5 @@
 use color_eyre::{Result, config::HookBuilder};
-use spenso::symbolica_init::in_symbolica_initializer;
+use spenso::{network::library::symbolic::ETS, symbolica_init::in_symbolica_initializer};
 use symbolica::{activate_oem_license, initialize};
 
 use crate::numerator::ufo::UFO;
@@ -8,6 +8,7 @@ static INITIALISED: std::sync::Once = std::sync::Once::new();
 
 initialize!(|| {
     in_symbolica_initializer(|| {
+        let _ = ETS.force_in_initializer().metric;
         let _ = GS.force_in_initializer();
         let _ = UFO.force_in_initializer();
     });

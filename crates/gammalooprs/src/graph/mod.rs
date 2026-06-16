@@ -67,7 +67,7 @@ pub struct Graph {
 
 impl LogMessage for Graph {
     fn log_display(&self) -> String {
-        format!("{}", self.name)
+        self.name.to_string()
     }
 }
 

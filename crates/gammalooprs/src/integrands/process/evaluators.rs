@@ -1930,7 +1930,7 @@ mod tests {
     #[test]
     fn pi_eval() {
         let params = vec![parse!("x"), parse!("y")];
-        let mut evaluator = (parse!("x + y") + Symbol::PI / CS.cf)
+        let _evaluator = (parse!("x + y") + Symbol::PI / CS.cf)
             .evaluator(&params)
             .build()
             .unwrap();

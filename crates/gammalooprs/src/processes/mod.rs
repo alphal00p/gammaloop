@@ -72,7 +72,10 @@ pub struct EvaluatorSettings {
     pub store_atom: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub do_fn_map_replacements: bool,
-    #[serde(default, skip_serializing_if = "is_true")]
+    #[serde(
+        default = "evaluator_default_direct_translation",
+        skip_serializing_if = "is_true"
+    )]
     pub direct_translation: bool,
     #[serde(
         default = "evaluator_default_horner_iterations",
@@ -122,6 +125,10 @@ const fn evaluator_default_iterative_orientation_optimization() -> bool {
     true
 }
 
+const fn evaluator_default_direct_translation() -> bool {
+    true
+}
+
 const fn evaluator_default_horner_iterations() -> usize {
     10
 }
@@ -158,7 +165,7 @@ impl Default for EvaluatorSettings {
             summed: false,
             do_algebra: false,
             summed_function_map: false,
-            direct_translation: true,
+            direct_translation: evaluator_default_direct_translation(),
             compile: false,
             do_fn_map_replacements: false,
             store_atom: false,
