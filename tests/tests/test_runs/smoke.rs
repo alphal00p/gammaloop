@@ -202,7 +202,7 @@ mod failing {
         }
         .run(&mut state)?;
 
-        assert_snapshot!(format!("{:.8e}",a*jac.unwrap()),@"(6.923469780323106e-4+-6.181987787694587e-4i)");
+        assert_snapshot!(format!("{:.8e}",a*jac.unwrap()),@"(-6.923469780323106e-4+6.181987787694587e-4i)");
 
         Ok(())
     }

@@ -152,8 +152,26 @@ pub(crate) fn load_ufo_model(
         let (py_model, py_card): (Py<PyAny>, Py<PyAny>) = out.extract()?;
 
         // to_json() -> String
-        let model_json: String = py_model.call_method0(py, "to_json")?.extract(py)?;
+        let mut model_json: String = py_model.call_method0(py, "to_json")?.extract(py)?;
         let card_json: String = py_card.call_method0(py, "to_json")?.extract(py)?;
+
+        // The loader imports this module but does not serialize GammaLoop's
+        // explicit BRST cut-state declaration. Preserve it at the UFO boundary,
+        // rather than reconstructing physical partners from mass degeneracies.
+        let module_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| eyre::eyre!("Invalid UFO module path: {}", path.display()))?;
+        let module = sys.getattr("modules")?.get_item(module_name)?;
+        if module.hasattr("covariant_cut_multiplets")? {
+            let declaration: String = py
+                .import("json")?
+                .call_method1("dumps", (module.getattr("covariant_cut_multiplets")?,))?
+                .extract()?;
+            let mut serialized: serde_json::Value = serde_json::from_str(&model_json)?;
+            serialized["covariant_cut_multiplets"] = serde_json::from_str(&declaration)?;
+            model_json = serde_json::to_string(&serialized)?;
+        }
 
         // deserialize into your Rust types
         let model: Model = Model::from_str(model_json, "json")
@@ -686,5 +704,45 @@ fn canonical_dir_allow_abs_missing(p: &Path) -> Result<PathBuf> {
         Ok(c.join(p.file_name().unwrap()))
     } else {
         Err(eyre!("invalid base path '{}'", p.display()))
+    }
+}
+
+#[cfg(all(test, feature = "ufo_support"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fresh_sm_ufo_preserves_virtual_gauge_and_covariant_cut_states() -> Result<()> {
+        gammalooprs::initialisation::test_initialise()?;
+        let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/models");
+        let (imported, _) = load_ufo_model(&assets.join("ufo/sm"), None, false)?;
+        let canonical = Model::from_file(assets.join("json/sm/sm.json"))?;
+        assert_eq!(
+            imported.covariant_cut_multiplets,
+            canonical.covariant_cut_multiplets
+        );
+        for name in [
+            "W+", "W-", "Z", "G+", "G-", "G0", "ghWp", "ghWp~", "ghWm", "ghWm~", "ghZ", "ghZ~",
+        ] {
+            let fresh = imported
+                .propagators
+                .iter()
+                .find(|p| p.particle.name.as_str() == name)
+                .unwrap();
+            let saved = canonical
+                .propagators
+                .iter()
+                .find(|p| p.particle.name.as_str() == name)
+                .unwrap();
+            assert_eq!(fresh.numerator, saved.numerator, "{name} numerator");
+            assert_eq!(fresh.denominator, saved.denominator, "{name} denominator");
+            assert_eq!(
+                fresh.particle.is_goldstone(),
+                saved.particle.is_goldstone(),
+                "{name} Goldstone metadata"
+            );
+            assert_eq!(fresh.particle.mass, saved.particle.mass, "{name} pole mass");
+        }
+        Ok(())
     }
 }

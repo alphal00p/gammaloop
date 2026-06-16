@@ -1130,6 +1130,10 @@ mod failing {
 
     #[test]
     fn vertex_rules() {
+        use idenso::IndexTooling;
+        use itertools::Itertools;
+        use symbolica::{atom::AtomCore, parse};
+
         test_initialise().unwrap();
         let gs: Vec<Graph> = dot!(
             digraph g1{
@@ -1177,12 +1181,66 @@ mod failing {
         )
         .unwrap();
 
-        insta::assert_snapshot!(gs[0].underlying[NodeIndex(0)].num.to_ordered_simple(),@"(-1*Q(0,mink(4,hedge(1)))*g(mink(4,hedge(0)),mink(4,hedge(2)))+-1*Q(1,mink(4,hedge(2)))*g(mink(4,hedge(0)),mink(4,hedge(1)))+-1*Q(2,mink(4,hedge(0)))*g(mink(4,hedge(1)),mink(4,hedge(2)))+Q(0,mink(4,hedge(2)))*g(mink(4,hedge(0)),mink(4,hedge(1)))+Q(1,mink(4,hedge(0)))*g(mink(4,hedge(1)),mink(4,hedge(2)))+Q(2,mink(4,hedge(1)))*g(mink(4,hedge(0)),mink(4,hedge(2))))*GC_10*f(coad(8,hedge(0)),coad(8,hedge(1)),coad(8,hedge(2)))");
-        insta::assert_snapshot!(gs[1].underlying[NodeIndex(0)].num.to_ordered_simple(),@"GC_11*gamma(bis(4,hedge(1)),bis(4,hedge(0)),mink(4,hedge(2)))*t(coad(8,hedge(2)),cof(3,hedge(0)),dind(cof(3,hedge(1))))");
-        insta::assert_snapshot!(gs[2].underlying[NodeIndex(0)].num.to_ordered_simple(),@"-1*GC_10*Q(1,mink(4,hedge(2)))*f(coad(8,hedge(2)),coad(8,hedge(0)),coad(8,hedge(1)))");
-        insta::assert_snapshot!(gs[3].underlying[NodeIndex(0)].num.to_ordered_simple(),@"GC_10*Q(1,mink(4,hedge(1)))*f(coad(8,hedge(1)),coad(8,hedge(0)),coad(8,hedge(2)))");
-        insta::assert_snapshot!(gs[4].underlying[NodeIndex(0)].num.to_ordered_simple(),@"GC_10*Q(2,mink(4,hedge(0)))*f(coad(8,hedge(0)),coad(8,hedge(1)),coad(8,hedge(2)))");
-        insta::assert_snapshot!(gs[5].underlying[NodeIndex(0)].num.to_ordered_simple(),@"GC_10*Q(1,mink(4,hedge(0)))*f(coad(8,hedge(0)),coad(8,hedge(2)),coad(8,hedge(1)))");
+        // Compare complete vertex tensors, preserving physical hedge/EMR labels while
+        // allowing equivalent algebra and contracted dummy names to vary.
+        let expected = [
+            parse!(
+                "\
+                (-1*Q(0,spenso::mink(4,hedge(1)))*spenso::g(spenso::mink(4,hedge(0)),spenso::mink(4,hedge(2)))+
+                -1*Q(1,spenso::mink(4,hedge(2)))*spenso::g(spenso::mink(4,hedge(0)),spenso::mink(4,hedge(1)))+
+                -1*Q(2,spenso::mink(4,hedge(0)))*spenso::g(spenso::mink(4,hedge(1)),spenso::mink(4,hedge(2)))+
+                Q(0,spenso::mink(4,hedge(2)))*spenso::g(spenso::mink(4,hedge(0)),spenso::mink(4,hedge(1)))+
+                Q(1,spenso::mink(4,hedge(0)))*spenso::g(spenso::mink(4,hedge(1)),spenso::mink(4,hedge(2)))+
+                Q(2,spenso::mink(4,hedge(1)))*spenso::g(spenso::mink(4,hedge(0)),spenso::mink(4,hedge(2))))*UFO::GC_10*spenso::f(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)),spenso::coad(8,hedge(2)))",
+                default_namespace = "gammalooprs"
+            ),
+            parse!(
+                "\
+                UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(1)),spenso::bis(4,hedge(0)),spenso::mink(4,hedge(2)))*spenso::t(spenso::coad(8,hedge(2)),spenso::cof(3,hedge(0)),spenso::dind(spenso::cof(3,hedge(1))))",
+                default_namespace = "gammalooprs"
+            ),
+            // The corrected UUV1 rule reverses these four ghost-vector orientations.
+            parse!(
+                "\
+                UFO::GC_10*Q(1,spenso::mink(4,hedge(2)))*spenso::f(spenso::coad(8,hedge(2)),spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))",
+                default_namespace = "gammalooprs"
+            ),
+            parse!(
+                "\
+                -1*UFO::GC_10*Q(1,spenso::mink(4,hedge(1)))*spenso::f(spenso::coad(8,hedge(1)),spenso::coad(8,hedge(0)),spenso::coad(8,hedge(2)))",
+                default_namespace = "gammalooprs"
+            ),
+            parse!(
+                "\
+                -1*UFO::GC_10*Q(2,spenso::mink(4,hedge(0)))*spenso::f(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)),spenso::coad(8,hedge(2)))",
+                default_namespace = "gammalooprs"
+            ),
+            parse!(
+                "\
+                -1*UFO::GC_10*Q(1,spenso::mink(4,hedge(0)))*spenso::f(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(2)),spenso::coad(8,hedge(1)))",
+                default_namespace = "gammalooprs"
+            ),
+        ];
+        assert_eq!(
+            gs.len(),
+            expected.len(),
+            "every input vertex needs an oracle"
+        );
+        for (graph, expected) in gs.iter().zip(expected) {
+            let actual = graph
+                .underlying
+                .iter_nodes()
+                .map(|(_, _, vertex)| vertex.get_num())
+                .exactly_one()
+                .unwrap_or_else(|_| panic!("input contains one physical vertex"))
+                .canonize(Aind::Dummy);
+            let expected = expected.canonize(Aind::Dummy);
+            assert!(
+                (actual - expected).expand().is_zero(),
+                "vertex rule for {} changed",
+                graph.name,
+            );
+        }
 
         let gs: Vec<Graph> = dot!(
             digraph g1{
@@ -1193,7 +1251,27 @@ mod failing {
             },"scalar_gravity"
         )
         .unwrap();
-        insta::assert_snapshot!(gs[0].underlying[NodeIndex(0)].num.to_ordered_simple(),@"(-1*Q(0,mink(4,vertex(0,1)))*Q(1,mink(4,vertex(0,1)))*g(mink(4,hedge(2)),mink(4,hedge(2,1)))+Q(0,mink(4,hedge(2)))*Q(1,mink(4,hedge(2,1)))+Q(0,mink(4,hedge(2,1)))*Q(1,mink(4,hedge(2))))*SST+-1*SSTmpart0*g(mink(4,hedge(2)),mink(4,hedge(2,1)))");
+        let expected = parse!(
+            "\
+            (-1*Q(0,spenso::mink(4,vertex(0,1)))*Q(1,spenso::mink(4,vertex(0,1)))*spenso::g(spenso::mink(4,hedge(2)),spenso::mink(4,hedge(2,1)))+
+            Q(0,spenso::mink(4,hedge(2)))*Q(1,spenso::mink(4,hedge(2,1)))+
+            Q(0,spenso::mink(4,hedge(2,1)))*Q(1,spenso::mink(4,hedge(2))))*UFO::SST+
+            -1*UFO::SSTmpart0*spenso::g(spenso::mink(4,hedge(2)),spenso::mink(4,hedge(2,1)))",
+            default_namespace = "gammalooprs"
+        );
+        assert_eq!(gs.len(), 1, "the scalar-gravity input needs one oracle");
+        let actual = gs[0]
+            .underlying
+            .iter_nodes()
+            .map(|(_, _, vertex)| vertex.get_num())
+            .exactly_one()
+            .unwrap_or_else(|_| panic!("input contains one physical vertex"))
+            .canonize(Aind::Dummy);
+        let expected = expected.canonize(Aind::Dummy);
+        assert!(
+            (actual - expected).expand().is_zero(),
+            "scalar-gravity vertex rule changed",
+        );
     }
 
     #[test]

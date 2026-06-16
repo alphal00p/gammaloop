@@ -8,6 +8,17 @@ comparisons, temporary log locations, and external-reference convention tables
 belong in tests or investigation records rather than in the current
 architecture.
 
+## Physical loop measure
+
+The amplitude measure is $\prod_\ell d^4k_\ell/(2\pi)^4$. Signed CFF
+contours use $dq^0/(2\pi i)$, so each remaining CFF loop contributes
+$i/(2\pi)^3$. Integrated UV subgraphs use the same Minkowski convention:
+`VakintSettings::additional_normalization` defaults to `"1"`; the historical
+`"-1"` inserted an extra minus sign per integrated loop. The standard Vakint
+normalization, forest subtraction signs, and causal prescriptions retain
+their separate meanings. A graph with $L$ loops consequently receives the
+same phase whether a loop is represented by CFF or by an integrated UV term.
+
 ## Orchestrators
 
 `UVgenerationSettings::orchestrator` selects one of three execution modes:

@@ -68,7 +68,8 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .with(Atom::num((1, 2)))
         .replace(CS.nc)
         .with(CS.ca)
-        // RQFT writes the fundamental Dynkin index as T_F = n_f / 2.
+        // RQFT closed-quark-loop references write the flavor-summed index as
+        // T_F = n_f / 2. External projection traces must first be restored to C_F.
         .replace(color_idx!(2, cof!(3)))
         .with(parse!("nf") / Atom::num(2))
         .replace(parse!("UFO::aS"))
@@ -169,11 +170,11 @@ fn finite_part_quark_lo() {
     println!("ren part: {:>}", a.log_print(Some(80)));
     // RQFT quark_lo_0_in.h forest order, H = p1.p1*gs^2*cf (cf = 4/3):
     // F0 (direct) / H = +ep^-1.
-    // Sum / H = +ep^-1; native GammaLoop / RQFT = +1. The one-loop Vakint sign
-    // and the two quark-gluon vertex phase differences cancel.
+    // Sum / H = +ep^-1; native GammaLoop / RQFT = -1. With the physical
+    // one-loop Vakint measure, the two quark-gluon vertex phase differences remain.
     let aligned_pole = align_external_quark(&a);
     let expected = parse!(
-        "spenso::cas(2,spenso::cof(3))
+        "-1*spenso::cas(2,spenso::cof(3))
          *spenso::dot(gammalooprs::P(0,spenso::mink(4)),gammalooprs::P(0,spenso::mink(4)))
          *gs^2*gammalooprs::ε^(-1)"
     );
@@ -185,26 +186,20 @@ fn finite_part_quark_lo() {
             ..Default::default()
         })
         .unwrap();
-    let muv = align_external_quark(&muv)
-        .replace(GS.dim_epsilon)
-        .with(0)
-        .expand();
+    let muv = align_external_quark(&muv).replace(GS.dim_epsilon).with(0);
     // Extract the physical scale-log coefficient independently of logarithm spelling.
     let log_coefficient = Atom::var(GS.mu_r_sq) * muv.derivative(GS.mu_r_sq);
     let contracted_log_coefficient = log_coefficient
         .normalize_dots()
         .metric_shorthand_to_dot()
         .collect_factors();
-    // Vakint leaves the repeated UV dummy as an indexed momentum squared. After
+    // Vakint can leave a repeated Lorentz dummy as an indexed momentum squared. After
     // contracting it and stripping the standard i/(16 pi^2) loop normalization,
     // the MUV scale logarithm must be minus the already verified pole residue.
     let normalized_log_coefficient =
         (contracted_log_coefficient * Atom::num(-16) * Atom::i() * Atom::var(Symbol::PI).pow(2))
-            .expand()
             .collect_factors();
-    let pole_residue = (aligned_pole * Atom::var(GS.dim_epsilon))
-        .expand()
-        .collect_factors();
+    let pole_residue = (aligned_pole * Atom::var(GS.dim_epsilon)).collect_factors();
     assert_eq!(normalized_log_coefficient, -pole_residue);
 }
 
@@ -481,9 +476,11 @@ fn finite_part_ghost_2loop() {
     // F1 (140 -> DM -> 0) / H = -3/16*ep^-2.
     // F2 (140 -> 132 -> 0) / H = -3/16*ep^-2.
     // F3 (not emitted by GammaLoop) / H = 0.
-    // Sum / H = -3/16*ep^-2 + 5/32*ep^-1; native GammaLoop / RQFT = +1.
+    // Sum / H = -3/16*ep^-2 + 5/32*ep^-1; native GammaLoop / RQFT = -1.
+    // The corrected ghost-gluon rule reverses all three UUV1 vertices in d1;
+    // each forest term changes sign, while the quoted RQFT coefficients stay fixed.
     let expected = parse!(
-        "(-3𝑖/16+5𝑖/32*gammalooprs::ε)*(spenso::cas(2,spenso::coad(8)))^2
+        "(-5𝑖/32*gammalooprs::ε+3𝑖/16)*(spenso::cas(2,spenso::coad(8)))^2
          *spenso::dot(gammalooprs::P(0,spenso::mink(4)),gammalooprs::P(0,spenso::mink(4)))
          *gs^4*gammalooprs::ε^(-2)"
     );
@@ -598,10 +595,10 @@ fn finit_part_ghlo() {
     println!("ren part: {:>}", a);
     // RQFT ghost_lo_0_in.h forest order, H = p1.p1*gs^2*ca:
     // F0 (direct) / H = +1/2*ep^-1.
-    // Sum / H = +1/2*ep^-1; native GammaLoop / RQFT = -1 after preserving
-    // the antisymmetric color orientation.
+    // Sum / H = +1/2*ep^-1; native GammaLoop / RQFT = +1 with the physical
+    // one-loop Vakint measure and the preserved antisymmetric color orientation.
     let expected = parse!(
-        "-1/2*spenso::cas(2,spenso::coad(8))
+        "1/2*spenso::cas(2,spenso::coad(8))
          *spenso::dot(gammalooprs::P(0,spenso::mink(4)),gammalooprs::P(0,spenso::mink(4)))
          *gs^2*gammalooprs::ε^(-1)"
     );
@@ -706,7 +703,7 @@ mod failing {
     }
 
     #[test]
-    fn finite_part_ghost_3loop() {
+    fn finite_part_ghost_3loop_developed() {
         test_initialise().unwrap();
 
         let model = load_generic_model("sm");
@@ -791,11 +788,12 @@ mod failing {
         // F1, F3..F5, F7, F9 = 0
         // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1);
         // Hedge terminals F0={H2y}, F2={GEe}{H2y}, F6={Fyy}{H2y}, and
-        // F8={Fyy}{GEe}{H2y} match these coefficients before coupling replacement.
-        // Their common i*GC_10^4*GC_12 becomes -gs^6, so native GammaLoop / RQFT
-        // = -1 at the model/RQFT convention boundary, not in the forest recursion.
+        // F8={Fyy}{GEe}{H2y} previously matched them before coupling replacement.
+        // Before correcting UUV1, their common i*GC_10^4*GC_12 became -gs^6.
+        // The three corrected ghost-gluon vertices reverse every forest term,
+        // so native GammaLoop / RQFT = +1 at the model convention boundary.
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9/128+-9/128*ε^2+39/256*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-39/256*ε+9/128+9/128*ε^2)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[3].renormalization_part(&settings).unwrap();
@@ -808,11 +806,12 @@ mod failing {
         // F1..F6, F8..F13 = 0
         // sum(Fi)/H = rat(-9/64*ep^-2 + 21/128*ep^-1)
         // RQFT uses the ghost momentum at a ghost-gluon vertex, whereas the SM UFO
-        // uses minus the antighost momentum. This exchanges the mirror pair d4/d5:
+        // now uses the antighost momentum. This still exchanges the mirror pair d4/d5:
         // Hedge terminals {H2y}=F0 and {Fyy}{H2y}=F7, while the others are zero.
-        // Their common i*GC_10^4*GC_12 gives native GammaLoop / RQFT = -1.
+        // Their historical common i*GC_10^4*GC_12 gave a relative -1.
+        // Correcting the three UUV1 vertices gives native GammaLoop / RQFT = +1.
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-21/128*ε+9/64)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9/64+21/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );
 
         let a = amp.graphs[4].renormalization_part(&settings).unwrap();
@@ -831,9 +830,10 @@ mod failing {
         // F1..F4, F6, F8..F12 = 0
         // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)
         // Hedge terminals {H2y}=F0, {GqO}{H2y}=F5, {Fyy}{H2y}=F7, and
-        // {Fyy}{GqO}{H2y}=F13. By the mirror mapping, native GammaLoop / RQFT = -1.
+        // {Fyy}{GqO}{H2y}=F13. The mirror mapping and three corrected UUV1
+        // vertices give native GammaLoop / RQFT = +1.
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-27/128*ε^2+-9/128+39/256*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-39/256*ε+27/128*ε^2+9/128)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[5].renormalization_part(&settings).unwrap();
@@ -926,6 +926,31 @@ mod failing {
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
         );
+    }
+
+    // Preserve the unfinished references separately: d11..d78 still contain
+    // historical placeholders and cannot validate the developed phase checks.
+    #[test]
+    fn finite_part_ghost_3loop_unfinished() {
+        test_initialise().unwrap();
+
+        let model = load_generic_model("sm");
+        let g: Vec<Graph> = Graph::from_path(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
+            ),
+            &model,
+        )
+        .unwrap();
+
+        let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
+        assert_eq!(amp.graphs.len(), 78);
+        for (index, graph) in amp.graphs.iter().enumerate() {
+            assert_eq!(graph.graph.name, format!("d{}", index + 1));
+        }
+
+        let settings = rqft_3loop_settings();
 
         let a = amp.graphs[10].renormalization_part(&settings).unwrap();
         // d11: RQFT `ghost_nnlo_10`.

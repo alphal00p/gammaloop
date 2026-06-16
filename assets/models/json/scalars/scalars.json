@@ -1,11 +1,11 @@
 {
   "couplings": [{
-    "expression": "1𝑖*UFO::{}::lam",
+    "expression": "-1𝑖*UFO::{}::lam",
     "name": "SCALAR_COUPLING",
     "orders": [
       ["QCD", 1]
     ],
-    "value": [0.0, 1.0]
+    "value": [0.0, -1.0]
   }],
   "lorentz_structures": [{
     "name": "SCALAR_3_LORENTZ_STRUCTURE",
