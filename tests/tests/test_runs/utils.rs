@@ -353,7 +353,7 @@ pub(super) fn assert_integration_results_match_ignoring_timings(
 pub(super) fn complex_distance(lhs: Complex<f64>, rhs: Complex<f64>) -> f64 {
     let delta_re = lhs.re - rhs.re;
     let delta_im = lhs.im - rhs.im;
-    (delta_re * delta_re + delta_im * delta_im).sqrt()
+    delta_re.hypot(delta_im)
 }
 
 pub(super) fn default_xspace_point_for(
@@ -457,15 +457,195 @@ pub(super) fn average_over_generated_helicity_processes(
 pub(super) fn assert_complex_approx_eq(
     actual: Complex<f64>,
     expected: Complex<f64>,
+    context: impl std::fmt::Display,
+) {
+    let scale = actual
+        .re
+        .abs()
+        .max(actual.im.abs())
+        .max(expected.re.abs())
+        .max(expected.im.abs());
+    let relative_distance = if scale == 0.0 {
+        0.0
+    } else {
+        complex_distance(actual / scale, expected / scale)
+    };
+    assert!(
+        actual.re.is_finite()
+            && actual.im.is_finite()
+            && expected.re.is_finite()
+            && expected.im.is_finite()
+            && relative_distance <= 1.0e-10,
+        "{context}: actual={actual}, expected={expected}, relative distance={relative_distance}, tolerance=1e-10"
+    );
+}
+
+pub(super) fn mink_dot(left_edge: usize, right_edge: usize, dummy_index: usize) -> String {
+    format!(
+        "gammalooprs::Q({left_edge},spenso::mink(4,{dummy_index}))*gammalooprs::Q({right_edge},spenso::mink(4,{dummy_index}))",
+    )
+}
+
+pub(super) fn evaluate_xspace_process_with_events(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    process: &str,
+    integrand: &str,
+    point: &[f64],
+    discrete_dims: &[usize],
+) -> Result<gammalooprs::integrands::evaluation::SingleSampleEvaluationResult> {
+    let (process_id, resolved_integrand_name) = cli.state.find_integrand_ref(
+        Some(&ProcessRef::Unqualified(process.to_string())),
+        Some(&integrand.to_string()),
+    )?;
+    let points = ndarray::Array2::from_shape_vec((1, point.len()), point.to_vec())?;
+    let discrete_dims =
+        ndarray::Array2::from_shape_vec((1, discrete_dims.len()), discrete_dims.to_vec())?;
+    evaluate_sample(
+        &mut cli.state,
+        &EvaluateSamples {
+            process_id: Some(process_id),
+            integrand_name: Some(resolved_integrand_name),
+            use_arb_prec: false,
+            minimal_output: false,
+            return_generated_events: Some(true),
+            momentum_space: false,
+            points: points.view(),
+            integrator_weights: None,
+            discrete_dims: Some(discrete_dims.view()),
+            graph_names: None,
+            orientations: None,
+        },
+    )
+}
+
+pub(super) fn complex_ff64(value: &Complex<F<f64>>) -> Complex<f64> {
+    Complex::new(value.re.0, value.im.0)
+}
+
+pub(super) fn assert_f64_approx_eq(actual: f64, expected: f64, context: &str) {
+    assert_complex_approx_eq(
+        Complex::new(actual, 0.0),
+        Complex::new(expected, 0.0),
+        context,
+    );
+}
+
+pub(super) fn assert_evaluation_outputs_match(
+    actual: &gammalooprs::integrands::evaluation::EvaluationResultOutput,
+    expected: &gammalooprs::integrands::evaluation::EvaluationResultOutput,
     context: &str,
 ) {
-    let actual_norm = (actual.re * actual.re + actual.im * actual.im).sqrt();
-    let expected_norm = (expected.re * expected.re + expected.im * expected.im).sqrt();
-    let scale = actual_norm.max(expected_norm).max(1.0);
-    let tolerance = 1.0e-10 * scale;
-    assert!(
-        complex_distance(actual, expected) <= tolerance,
-        "{context}: actual={actual}, expected={expected}, tolerance={tolerance}"
+    match (
+        actual.parameterization_jacobian.as_ref(),
+        expected.parameterization_jacobian.as_ref(),
+    ) {
+        (Some(actual), Some(expected)) => {
+            assert_f64_approx_eq(actual.0, expected.0, &format!("{context}: jacobian"));
+        }
+        (None, None) => {}
+        _ => panic!("{context}: jacobian presence differs"),
+    }
+    assert_f64_approx_eq(
+        actual.integrator_weight.0,
+        expected.integrator_weight.0,
+        &format!("{context}: integrator weight"),
+    );
+
+    assert_eq!(
+        actual.event_groups.len(),
+        expected.event_groups.len(),
+        "{context}: event-group count differs"
+    );
+    for (group_index, (actual_group, expected_group)) in actual
+        .event_groups
+        .iter()
+        .zip(expected.event_groups.iter())
+        .enumerate()
+    {
+        assert_eq!(
+            actual_group.len(),
+            expected_group.len(),
+            "{context}: event count differs in group {group_index}"
+        );
+        let actual_events = actual_group
+            .iter()
+            .sorted_by_key(|event| {
+                (
+                    event.cut_info.graph_group_id,
+                    event.cut_info.graph_id,
+                    event.cut_info.cut_id,
+                    event.cut_info.orientation_id,
+                    event.cut_info.lmb_channel_id,
+                )
+            })
+            .collect_vec();
+        let expected_events = expected_group
+            .iter()
+            .sorted_by_key(|event| {
+                (
+                    event.cut_info.graph_group_id,
+                    event.cut_info.graph_id,
+                    event.cut_info.cut_id,
+                    event.cut_info.orientation_id,
+                    event.cut_info.lmb_channel_id,
+                )
+            })
+            .collect_vec();
+
+        for (event_index, (actual_event, expected_event)) in
+            actual_events.iter().zip(expected_events.iter()).enumerate()
+        {
+            let event_context = format!(
+                "{context}: group {group_index} event {event_index}; actual cut={:?}; expected cut={:?}; actual additional={:?}; expected additional={:?}",
+                actual_event.cut_info,
+                expected_event.cut_info,
+                actual_event.additional_weights.weights,
+                expected_event.additional_weights.weights
+            );
+            assert_eq!(
+                actual_event.cut_info.cut_id, expected_event.cut_info.cut_id,
+                "{event_context}: cut id differs"
+            );
+            assert_eq!(
+                actual_event.cut_info.graph_id, expected_event.cut_info.graph_id,
+                "{event_context}: graph id differs"
+            );
+            assert_eq!(
+                actual_event.cut_info.graph_group_id, expected_event.cut_info.graph_group_id,
+                "{event_context}: graph-group id differs"
+            );
+            assert_eq!(
+                actual_event.cut_info.orientation_id, expected_event.cut_info.orientation_id,
+                "{event_context}: orientation id differs"
+            );
+            assert_complex_approx_eq(
+                complex_ff64(&actual_event.weight),
+                complex_ff64(&expected_event.weight),
+                format!("{event_context}: event weight"),
+            );
+            assert_eq!(
+                actual_event.additional_weights.weights.keys().collect_vec(),
+                expected_event
+                    .additional_weights
+                    .weights
+                    .keys()
+                    .collect_vec(),
+                "{event_context}: additional-weight keys differ"
+            );
+            for (key, expected_weight) in &expected_event.additional_weights.weights {
+                let actual_weight = &actual_event.additional_weights.weights[key];
+                assert_complex_approx_eq(
+                    complex_ff64(actual_weight),
+                    complex_ff64(expected_weight),
+                    format!("{event_context}: additional weight {key:?}"),
+                );
+            }
+        }
+    }
+    assert_complex_approx_eq(
+        complex_ff64(&actual.integrand_result),
+        complex_ff64(&expected.integrand_result),
+        format_args!("{context}: integrand result; actual={actual:?}; expected={expected:?}"),
     );
 }
 
@@ -591,4 +771,63 @@ disable_threshold_subtraction = true
     }
 
     Ok(cli)
+}
+
+#[test]
+fn comparisons_reject_nonfinite_and_large_relative_errors() {
+    use gammalooprs::integrands::evaluation::EvaluationResult;
+    for (actual, expected) in [
+        (Complex::new(f64::NAN, 0.0), Complex::new(1.0, 0.0)),
+        (Complex::new(f64::INFINITY, 0.0), Complex::new(1.0, 0.0)),
+        (Complex::new(1.0e-18, 0.0), Complex::new(2.0e-18, 0.0)),
+        (
+            Complex::new(1.7e308, 1.7e308),
+            Complex::new(0.8e308, 1.7e308),
+        ),
+    ] {
+        assert!(
+            std::panic::catch_unwind(|| assert_complex_approx_eq(actual, expected, "invalid pair"))
+                .is_err()
+        );
+        let mut actual_output = EvaluationResult::zero().into_output(true);
+        actual_output.integrand_result = Complex::new(F(actual.re), F(actual.im));
+        let mut expected_output = EvaluationResult::zero().into_output(true);
+        expected_output.integrand_result = Complex::new(F(expected.re), F(expected.im));
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                assert_evaluation_outputs_match(&actual_output, &expected_output, "invalid totals");
+            }))
+            .is_err()
+        );
+    }
+    for (actual, expected) in [(f64::INFINITY, 1.0), (f64::NAN, 1.0), (1.0e-18, 2.0e-18)] {
+        for jacobian in [false, true] {
+            let mut actual_output = EvaluationResult::zero().into_output(true);
+            let mut expected_output = EvaluationResult::zero().into_output(true);
+            if jacobian {
+                actual_output.parameterization_jacobian = Some(F(actual));
+                expected_output.parameterization_jacobian = Some(F(expected));
+            } else {
+                actual_output.integrator_weight = F(actual);
+                expected_output.integrator_weight = F(expected);
+            }
+            assert!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    assert_evaluation_outputs_match(
+                        &actual_output,
+                        &expected_output,
+                        "invalid real weight",
+                    );
+                }))
+                .is_err()
+            );
+        }
+    }
+    for value in [0.0, 1.0e-300, 1.0e300, 1.7e308] {
+        assert_complex_approx_eq(
+            Complex::new(value, value),
+            Complex::new(value, value),
+            "identical finite values",
+        );
+    }
 }

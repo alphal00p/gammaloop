@@ -33,6 +33,7 @@
       "spenso",
       "spenso-hep-lib",
       "symbolica-utils",
+      "three-dimensional-reps",
       "vakint"
     ],
     "idenso": [
@@ -133,6 +134,7 @@
       ],
       "spenso-hep-lib": [],
       "symbolica-utils": [],
+      "three-dimensional-reps": [],
       "vakint": []
     },
     "idenso": {
@@ -252,6 +254,7 @@
       "spenso-hep-lib",
       "spenso-macros",
       "symbolica-utils",
+      "three-dimensional-reps",
       "vakint"
     ],
     "gammaloop-integration-tests": [
@@ -266,6 +269,7 @@
       "spenso-hep-lib",
       "spenso-macros",
       "symbolica-utils",
+      "three-dimensional-reps",
       "vakint"
     ],
     "gammaloop-tracing-filter": [
@@ -288,6 +292,7 @@
       "spenso-hep-lib",
       "spenso-macros",
       "symbolica-utils",
+      "three-dimensional-reps",
       "vakint"
     ],
     "idenso": [
@@ -355,6 +360,7 @@
       "spenso-hep-lib",
       "spenso-macros",
       "symbolica-utils",
+      "three-dimensional-reps",
       "vakint"
     ],
     "gammaloop-integration-tests": [
@@ -369,6 +375,7 @@
       "spenso-hep-lib",
       "spenso-macros",
       "symbolica-utils",
+      "three-dimensional-reps",
       "vakint"
     ],
     "gammaloop-tracing-filter": [
@@ -391,6 +398,7 @@
       "spenso-hep-lib",
       "spenso-macros",
       "symbolica-utils",
+      "three-dimensional-reps",
       "vakint"
     ],
     "idenso": [
@@ -521,6 +529,7 @@
       "spenso",
       "spenso-hep-lib",
       "symbolica-utils",
+      "three-dimensional-reps",
       "vakint"
     ],
     "idenso": [
@@ -625,6 +634,7 @@
       ],
       "spenso-hep-lib": [],
       "symbolica-utils": [],
+      "three-dimensional-reps": [],
       "vakint": []
     },
     "idenso": {

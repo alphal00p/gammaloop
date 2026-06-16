@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::Path, slice};
+use std::{collections::BTreeMap, path::Path};
 
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -107,7 +107,7 @@ impl AmplitudeCountertermAtom {
 
     pub(crate) fn zero_like(&self) -> Self {
         Self {
-            parametric: self.parametric.map(|_| symbolica::atom::Atom::Zero),
+            parametric: self.parametric.zero_like(),
         }
     }
 
@@ -116,6 +116,7 @@ impl AmplitudeCountertermAtom {
         &self,
         param_builder: &ParamBuilder,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+        production_orientation_ids: &[OrientationID],
         global_settings: &GlobalSettings,
     ) -> (AmplitudeCountertermEvaluator, EvaluatorBuildTimings) {
         let _progress_guard =
@@ -126,10 +127,13 @@ impl AmplitudeCountertermAtom {
         for (index, integrand) in self.parametric.iter() {
             let dual_shape = shape_from_cut_cff_index(index);
 
-            let (evaluator_stack, evaluator_timings) = EvaluatorStack::new_with_timings(
-                slice::from_ref(integrand),
+            // In explicit mode the atom already contains the complete
+            // orientation sum, so selecting orientations again would double count it.
+            let (evaluator_stack, evaluator_timings) = EvaluatorStack::from_integrand_with_timings(
+                integrand,
                 param_builder,
-                orientations.as_slice().as_ref(),
+                (!global_settings.generation.explicit_orientation_sum_only)
+                    .then_some((orientations.as_slice().as_ref(), production_orientation_ids)),
                 dual_shape,
                 &global_settings.generation.evaluator,
             )

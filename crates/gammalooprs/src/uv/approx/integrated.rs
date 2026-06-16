@@ -16,7 +16,7 @@ use idenso::{
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
-    involution::HedgePair,
+    involution::{EdgeIndex, HedgePair},
     subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike},
 };
 use spenso::{
@@ -38,7 +38,7 @@ use vakint::{Vakint, VakintExpression, vakint_symbol};
 
 use crate::{
     debug_tags,
-    graph::LMBext,
+    graph::{LMBext, LoopMomentumBasis},
     numerator::aind::Aind,
     utils::{GS, W_},
     uv::{
@@ -88,6 +88,10 @@ impl IntegratedCts {
     }
 
     fn projected_atom(&self, finite: bool) -> Atom {
+        // The enclosing forest Taylor operation rescales the vacuum mass in
+        // this coefficient along with its active momenta. The bookkeeping
+        // factor restores only consumed loop measures; physical projections
+        // and the next integration set it to one.
         truncate(&self.expansion, finite)
             * Atom::var(GS.integrated_loop_scale).pow(self.scale_power)
     }
@@ -157,12 +161,13 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
         log.expr = schoonschip,
         "After gamma schoonschip"
     );
+    // Vakint receives the individual Taylor denominator topologies; a common
+    // denominator would introduce artificial numerator powers before reduction.
     let collected = schoonschip
         .collect_chains_and_traces()
         .simplify_metrics()
         .collect_gamma_chains()
-        .collect_color()
-        .collect_factors();
+        .collect_color();
     debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
         log.expr = collected,
         "After gamma collection"
@@ -302,6 +307,7 @@ impl Integrated<'_> {
             graph,
             current.subgraph(),
             given.subgraph(),
+            current.lmb(),
             &settings.vakint,
             true,
         )?;
@@ -490,12 +496,14 @@ pub(crate) fn to_vakint_integrand<
     graph: &HedgeGraph<E, V, H>,
     reduced: &S,
     dependent_subgraph: &SS,
+    source_lmb: &LoopMomentumBasis,
     settings: &VakintSettings,
     substitute_masses_to_m_uv: bool,
 ) -> Result<VakintExpression> {
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
-    let mut integrand_vakint = integrand
+    let mut integrand_vakint = GS
+        .erase_uv_momentum_provenance(integrand)
         .undo_schoonschip::<Aind>()
         .undo_chain::<Aind>()
         .undo_trace::<Aind>();
@@ -509,23 +517,16 @@ pub(crate) fn to_vakint_integrand<
     );
     //Atom::Zero
 
-    // strip the momentum wrapper from the denominator
-    integrand_vakint = integrand_vakint
-        // .replace(function!(
-        //     GS.den,
-        //     W_.prop_,
-        //     function!(GS.emr_mom, W_.prop_, W_.mom_),
-        //     W_.x__
-        // ))
-        // .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__))
-        .expand();
-    debug_tags!(#uv, #integrated, #vakint, #trace;
-        stage = "to_vakint_integrand_after_den_strip_expand",
-        reduced = %reduced_label,
-        dependent_subgraph = %dependent_subgraph_label,
-        log.integrand = integrand_vakint,
-        "Vakint trace after denominator strip and expand"
-    );
+    // The denominator-to-propagator replacements below strip the momentum
+    // wrapper without distributing the numerator. The former standalone
+    // denominator rewrite was:
+    // .replace(function!(
+    //     GS.den,
+    //     W_.prop_,
+    //     function!(GS.emr_mom, W_.prop_, W_.mom_),
+    //     W_.x__
+    // ))
+    // .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__))
 
     // Nested counterterms can expose a boundary metric next to the propagator
     // metric of the reduced graph. Contract those metric-only structures before
@@ -539,7 +540,22 @@ pub(crate) fn to_vakint_integrand<
         "Vakint trace after metric simplification"
     );
 
+    // Separate denominator monomials before contracting their graph incidence.
+    // In A*B*(c*B+d*B^2), fusing only the outside A*B would leave the
+    // inner B attached to nodes that have already been contracted. Collect
+    // only complete denominator atoms; numerator sums stay factored coefficients.
+    let denominator_pattern = function!(GS.den, W_.x___).to_pattern();
+    let denominators = integrand_vakint
+        .pattern_match(&denominator_pattern, None, None)
+        .map(|matched| denominator_pattern.replace_wildcards(&matched).unwrap())
+        .collect::<std::collections::HashSet<_>>();
+    integrand_vakint = integrand_vakint
+        .coefficient_list::<i32>(&denominators.into_iter().collect::<Vec<_>>())
+        .into_iter()
+        .map(|(denominator, numerator)| denominator * numerator)
+        .sum();
     let mut propagator_id = 1;
+    let mut propagator_replacements = Vec::new();
 
     let vk_prop = vakint::symbols::S.prop;
     let vk_edge = vakint_symbol!("edge");
@@ -568,15 +584,15 @@ pub(crate) fn to_vakint_integrand<
             // } else {
             //     graph.node_id(sink)
             // };
-            integrand_vakint = integrand_vakint
-                .replace(function!(
+            propagator_replacements.push(Replacement::new(
+                function!(
                     GS.den,
                     usize::from(index) as i64,
                     W_.mom_,
                     W_.mass_,
                     W_.x___
-                ))
-                .with(function!(
+                ),
+                function!(
                     vk_prop,
                     propagator_id,
                     function!(
@@ -591,12 +607,17 @@ pub(crate) fn to_vakint_integrand<
                         W_.mass_
                     },
                     1
-                ))
-                .replace(function!(vk_prop, W_.x___, 1).pow(Atom::var(W_.e_)))
-                .with(function!(vk_prop, W_.x___, -Atom::var(W_.e_)));
+                ),
+            ));
             propagator_id += 1;
         }
     }
+    // Edge IDs make these denominator replacements disjoint. Convert all
+    // propagators together, then encode their powers once for the whole atom.
+    integrand_vakint = integrand_vakint
+        .replace_multiple(&propagator_replacements)
+        .replace(function!(vk_prop, W_.x___, 1).pow(Atom::var(W_.e_)))
+        .with(function!(vk_prop, W_.x___, -Atom::var(W_.e_)));
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_after_den_to_prop",
         reduced = %reduced_label,
@@ -901,6 +922,15 @@ pub(crate) fn to_vakint_integrand<
                     .mom
                     .pattern_match(&mom_pat, None, None)
                     .for_each(|m| {
+                        // An affine vacuum routing can contain fixed source
+                        // external momenta. Solve only for hard coordinates;
+                        // otherwise H=Q-P can solve for P and leave Q in the
+                        // integrated numerator as a spurious external variable.
+                        if usize::try_from(m[&W_.a_].as_view())
+                            .is_ok_and(|edge| source_lmb.ext_from(EdgeIndex(edge)).is_some())
+                        {
+                            return;
+                        }
                         let var = mom_pat.replace_wildcards(&m).unwrap();
                         if !momentum_variables.iter().any(|existing| existing == &var) {
                             momentum_variables.push(var);
@@ -1391,5 +1421,172 @@ mod tests {
 
         assert!(no_variables.free_variables.is_empty());
         assert_eq!(free_variable.free_variables, vec![q0]);
+    }
+
+    #[test]
+    fn affine_vakint_routing_keeps_external_momenta_fixed() {
+        use crate::{
+            dot,
+            graph::{Graph, parse::IntoGraph},
+        };
+
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph affine_vakint_tadpole {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0]
+            a -> a [id=1 lmb_id=0]
+            a -> outgoing [id=2]
+        })
+        .unwrap();
+        let hard = function!(GS.emr_mom, 1) - function!(GS.emr_mom, 0);
+        let minkowski = Minkowski {}.new_rep(GS.dim).to_symbolic([]);
+        let indexed_hard =
+            function!(GS.emr_mom, 1, &minkowski) - function!(GS.emr_mom, 0, &minkowski);
+        let numerator = function!(
+            SPENSO_TAG.dot,
+            function!(GS.emr_mom, 0, &minkowski),
+            &indexed_hard
+        ) * function!(
+            SPENSO_TAG.dot,
+            function!(GS.emr_mom, 2, &minkowski),
+            &indexed_hard
+        );
+        let settings = VakintSettings {
+            additional_normalization: "1".to_string(),
+            ..Default::default()
+        };
+        for sign in [-1, 1] {
+            let denominator = function!(
+                GS.den,
+                1,
+                Atom::num(sign) * &hard,
+                Atom::var(GS.m_uv_vacuum).pow(2),
+                function!(SPENSO_TAG.dot, &indexed_hard, &indexed_hard)
+                    - Atom::var(GS.m_uv_vacuum).pow(2)
+            );
+            let actual = to_vakint_integrand(
+                &(&numerator / denominator.pow(3)),
+                &graph,
+                &graph.full_filter(),
+                &graph.empty_subgraph::<SuBitGraph>(),
+                &graph.loop_momentum_basis,
+                &settings,
+                true,
+            )
+            .unwrap();
+            // Compare the complete rational integrand through Vakint's public
+            // expression conversion, independent of topology IDs and term layout.
+            let actual = Atom::from(actual)
+                .replace(function!(vakint::symbols::S.topo, W_.x_))
+                .with(W_.x_)
+                .replace(function!(
+                    vakint::symbols::S.prop,
+                    W_.a_,
+                    W_.b_,
+                    W_.c_,
+                    W_.d_,
+                    W_.e_
+                ))
+                .with(
+                    (function!(vakint::symbols::S.dot, W_.c_, W_.c_) - Atom::var(W_.d_))
+                        .pow(-Atom::var(W_.e_)),
+                );
+            let expected_numerator = function!(
+                vakint::symbols::S.dot,
+                function!(vakint::symbols::S.p, 0),
+                function!(vakint::symbols::S.k, 0)
+            ) * function!(
+                vakint::symbols::S.dot,
+                function!(vakint::symbols::S.p, 2),
+                function!(vakint::symbols::S.k, 0)
+            );
+            let radial = function!(
+                vakint::symbols::S.dot,
+                function!(vakint::symbols::S.k, 0),
+                function!(vakint::symbols::S.k, 0)
+            ) - Atom::var(GS.m_uv_vacuum).pow(2);
+            assert!(
+                (actual.collect_factors() - (expected_numerator / radial.pow(3)).collect_factors())
+                    .is_zero(),
+                "the complete integrand must retain the fixed external momenta for either D(H) spelling"
+            );
+        }
+    }
+
+    #[test]
+    fn nested_vacuum_denominators_preserve_incidence_and_factorized_numerators() {
+        use crate::{
+            dot,
+            graph::{Graph, parse::IntoGraph},
+        };
+
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph nested_vacuum_bubble {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0]
+            b -> outgoing [id=1]
+            a -> b [id=2 lmb_id=0]
+            a -> b [id=3]
+        })
+        .unwrap();
+        let denominators = [(2, 1), (3, -1)].map(|(edge, sign)| {
+            function!(
+                GS.den,
+                edge,
+                Atom::num(sign) * function!(GS.emr_mom, 2),
+                Atom::var(GS.m_uv_vacuum).pow(2)
+            )
+        });
+        let numerator = parse!("(a+b)*(c+d)");
+        let [first, second] = [parse!("s"), parse!("t")];
+        // Include powers beyond signed eight-bit range, matching the i32
+        // propagator powers used by the incidence conversion below.
+        for base_power in [1, 127] {
+            let input = &numerator / (&denominators[0] * denominators[1].pow(base_power))
+                * (&first / &denominators[1] + &second / denominators[1].pow(2));
+            let actual = to_vakint_integrand(
+                &input,
+                &graph,
+                &graph.full_filter(),
+                &graph.empty_subgraph::<SuBitGraph>(),
+                &graph.loop_momentum_basis,
+                &VakintSettings {
+                    // This conversion oracle uses unit loop normalization in every prefix.
+                    additional_normalization: "1".to_string(),
+                    ..VakintSettings::default()
+                },
+                true,
+            )
+            .unwrap();
+            let actual = Atom::from(actual)
+                .replace(function!(vakint::symbols::S.topo, W_.x_))
+                .with(W_.x_)
+                .replace(function!(
+                    vakint::symbols::S.prop,
+                    W_.a_,
+                    W_.b_,
+                    W_.c_,
+                    W_.d_,
+                    W_.e_
+                ))
+                .with(
+                    (function!(vakint::symbols::S.dot, W_.c_, W_.c_) - Atom::var(W_.d_))
+                        .pow(-Atom::var(W_.e_)),
+                );
+            let radial = function!(
+                vakint::symbols::S.dot,
+                function!(vakint::symbols::S.k, 0),
+                function!(vakint::symbols::S.k, 0)
+            ) - Atom::var(GS.m_uv_vacuum).pow(2);
+            let expected = &numerator
+                * (&first / radial.pow(base_power + 2) + &second / radial.pow(base_power + 3));
+            assert_eq!(actual.collect_factors(), expected.collect_factors());
+        }
     }
 }

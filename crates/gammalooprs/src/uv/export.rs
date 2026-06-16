@@ -63,9 +63,10 @@ pub(crate) struct UVForestNodeExpression {
 }
 
 impl ProcessIntegrand {
-    pub fn export_uv_forest_graph(
+    pub(crate) fn export_uv_forest_graph(
         &self,
         graph_id: usize,
+        orientation: Option<OrientationProjection<'_>>,
         generation_settings: &GenerationSettings,
         export_settings: &UVForestExportSettings,
     ) -> Result<UVForestExport> {
@@ -84,7 +85,7 @@ impl ProcessIntegrand {
                 export_graph(
                     &term.graph,
                     cut_structure,
-                    term.orientations.iter().cloned().collect(),
+                    orientation,
                     generation_settings,
                     export_settings,
                     |atom| atom / &post_factor,
@@ -104,7 +105,7 @@ impl ProcessIntegrand {
                     .iter()
                     .map(|cuts| CutSet {
                         residue_selector: ResidueSelector {
-                            lu_cut: Some(cuts.related_esurface_group.clone()),
+                            lu: Some(cuts.lu_cut_selection(&term.graph, &term.cuts)),
                             left_th_cut: None,
                             right_th_cut: None,
                         },
@@ -128,7 +129,7 @@ impl ProcessIntegrand {
                 export_graph(
                     &term.graph,
                     cut_structure,
-                    term.orientations.iter().cloned().collect(),
+                    orientation,
                     generation_settings,
                     export_settings,
                     |atom| atom * &lu_prefactor,
@@ -141,9 +142,7 @@ impl ProcessIntegrand {
 fn export_graph(
     graph: &Graph,
     cut_structure: CutStructure,
-    orientations: Vec<
-        linnet::half_edge::involution::EdgeVec<linnet::half_edge::involution::Orientation>,
-    >,
+    orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
     export_settings: &UVForestExportSettings,
     mut post_process: impl FnMut(Atom) -> Atom,
@@ -169,7 +168,7 @@ fn export_graph(
                 &forest_name,
                 &mut graph,
                 single_cut,
-                &orientations,
+                orientation,
                 generation_settings,
                 export_settings,
                 &mut post_process,
@@ -181,7 +180,7 @@ fn export_graph(
                 &forest_name,
                 &mut graph,
                 single_cut,
-                &orientations,
+                orientation,
                 generation_settings,
                 export_settings,
                 &mut post_process,
@@ -205,9 +204,7 @@ fn export_legacy_forest(
     forest_name: &str,
     graph: &mut Graph,
     cut_structure: CutStructure,
-    orientations: &[linnet::half_edge::involution::EdgeVec<
-        linnet::half_edge::involution::Orientation,
-    >],
+    orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
     export_settings: &UVForestExportSettings,
     post_process: &mut impl FnMut(Atom) -> Atom,
@@ -226,7 +223,10 @@ fn export_legacy_forest(
         return Ok(());
     }
 
-    compute_legacy_forest(graph, &mut cut_forests, orientations, generation_settings)?;
+    let orientation = orientation.ok_or_else(|| {
+        eyre!("Computed UV forest export requires its stored production CFF expression")
+    })?;
+    compute_legacy_forest(graph, &mut cut_forests, orientation, generation_settings)?;
     let forest = cut_forests
         .forests
         .first()
@@ -244,15 +244,13 @@ fn export_legacy_forest(
 fn compute_legacy_forest(
     graph: &mut Graph,
     cut_forests: &mut CutForests,
-    orientations: &[linnet::half_edge::involution::EdgeVec<
-        linnet::half_edge::involution::Orientation,
-    >],
+    orientation: OrientationProjection<'_>,
     generation_settings: &GenerationSettings,
 ) -> Result<()> {
     cut_forests.compute(
         graph,
         crate::utils::vakint()?,
-        OrientationProjection::new(orientations, &generation_settings.orientation_pattern),
+        orientation,
         &generation_settings.uv,
     )
 }
@@ -263,9 +261,7 @@ fn export_hedge_poset_forest(
     forest_name: &str,
     graph: &mut Graph,
     cut_structure: CutStructure,
-    orientations: &[linnet::half_edge::involution::EdgeVec<
-        linnet::half_edge::involution::Orientation,
-    >],
+    orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
     export_settings: &UVForestExportSettings,
     post_process: &mut impl FnMut(Atom) -> Atom,
@@ -284,7 +280,9 @@ fn export_hedge_poset_forest(
     forests.compute(
         graph,
         crate::utils::vakint()?,
-        OrientationProjection::new(orientations, &generation_settings.orientation_pattern),
+        orientation.ok_or_else(|| {
+            eyre!("Computed UV forest export requires its stored production CFF expression")
+        })?,
         &generation_settings.uv,
     )?;
     node_terms.extend(
@@ -404,14 +402,20 @@ mod tests {
     use symbolica::{atom::Atom, function};
 
     use super::{
-        UVForestNodeExpression, UVForestNodeTerm, node_expression_to_dot, sanitize_file_component,
+        UVForestExportSettings, UVForestNodeExpression, UVForestNodeTerm, export_graph,
+        node_expression_to_dot, sanitize_file_component,
     };
     use crate::{
         cff::CutCFFIndex,
         dot,
-        graph::{Graph, parse::IntoGraph},
+        graph::{FeynmanGraph, Graph, parse::IntoGraph},
         initialisation::test_initialise,
+        settings::global::GenerationSettings,
         utils::GS,
+        uv::{
+            UVOrchestrator,
+            approx::{CutStructure, OrientationProjection},
+        },
     };
 
     #[test]
@@ -482,5 +486,84 @@ mod tests {
 
         assert!(exported.dot.contains(r#"full_num = "op(\"Tr\")(1)";"#));
         assert!(!exported.dot.contains("gammalooprs::Truncate"));
+    }
+
+    #[test]
+    fn computed_export_retains_nonempty_forests_in_all_routes_and_orchestrators()
+    -> color_eyre::Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph computed_direct_forest {
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+        })?;
+        let mut generation = GenerationSettings::default();
+        assert!(generation.uv.subtract_uv);
+        assert!(generation.uv.generate_integrated);
+        assert_eq!(
+            generation.uv.final_integrand,
+            crate::uv::settings::FinalIntegrandDimension::ThreeD
+        );
+        let options = graph.production_cff_3d_expression_options(&generation)?;
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &options,
+            Some(&Atom::one()),
+        )?;
+        assert!(!production.expression.orientations.is_empty());
+
+        for orchestrator in [UVOrchestrator::LegacyDagForest, UVOrchestrator::HedgePoset] {
+            generation.uv.orchestrator = orchestrator;
+            for (explicit_sum, projected) in [(false, false), (true, false), (true, true)] {
+                generation.explicit_orientation_sum_only = explicit_sum;
+                generation.uv.local_uv_cts_from_expanded_4d_integrands = projected;
+                let projection = OrientationProjection::exact_expression(
+                    &production,
+                    &options,
+                    &generation.orientation_pattern,
+                    generation.explicit_orientation_sum_only,
+                );
+                let exported = export_graph(
+                    &graph,
+                    CutStructure::empty(&graph),
+                    Some(projection),
+                    &generation,
+                    &UVForestExportSettings { computed: true },
+                    |atom| atom,
+                )?;
+                let node_indices = exported
+                    .node_terms
+                    .iter()
+                    .map(|term| term.node_index)
+                    .collect::<std::collections::BTreeSet<_>>();
+                // Require the empty-forest root and at least one actual UV node;
+                // merely exporting the uncomputed forest DOT misses this failure.
+                assert!(
+                    node_indices.len() > 1,
+                    "{} (summed={explicit_sum}, projected={projected}): no nonempty computed forest",
+                    generation.uv.orchestrator
+                );
+                assert!(exported.node_terms.iter().all(|term| {
+                    term.forest_index == 0
+                        && term.residue_index == CutCFFIndex::new_all_none()
+                        && term.dot.contains("forest_residue_index")
+                }));
+
+                let topology = export_graph(
+                    &graph,
+                    CutStructure::empty(&graph),
+                    None,
+                    &generation,
+                    &UVForestExportSettings { computed: false },
+                    |atom| atom,
+                )?;
+                assert!(!topology.forest_dot.is_empty());
+                assert!(topology.node_terms.is_empty());
+            }
+        }
+        Ok(())
     }
 }

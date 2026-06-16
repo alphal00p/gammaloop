@@ -1,6 +1,5 @@
 use std::{env, path::PathBuf};
 
-use insta::assert_snapshot;
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NoData,
@@ -9,7 +8,10 @@ use linnet::half_edge::{
 };
 use momtrop::assert_approx_eq;
 use spenso::structure::abstract_index::AIND_SYMBOLS;
-use symbolica::{atom::AtomCore, parse_lit};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    parse_lit,
+};
 
 use crate::{
     momentum::ThreeMomentum,
@@ -40,16 +42,53 @@ fn normalization() {
     let a = GS.emr_vec_index(EdgeIndex(1), AIND_SYMBOLS.cind.call_args([0]));
     let b = GS.emr_vec_index(EdgeIndex(1), AIND_SYMBOLS.cind.call_args([1]));
 
-    assert_snapshot!(a.to_canonical_string(),@"0");
-    assert_snapshot!(b.to_canonical_string(),@"gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(1))");
+    assert!(a.is_zero());
+    assert!((b - GS.emr_mom(EdgeIndex(1), GS.cind(1))).is_zero());
+
+    let abstract_index = parse_lit!(spenso::mink(4, 1));
+    let b = GS.emr_vec_index(EdgeIndex(1), abstract_index.as_view());
+    for component in 0..4 {
+        let actual = b
+            .replace(abstract_index.to_pattern())
+            .with(GS.cind(component));
+        let expected = if component == 0 {
+            Atom::Zero
+        } else {
+            GS.emr_mom(EdgeIndex(1), GS.cind(component))
+        };
+        assert!((actual - expected).is_zero());
+    }
 
     let c = GS.energy_delta(GS.cind(1));
-    assert_snapshot!(c.to_canonical_string(),@"0");
+    assert!(c.is_zero());
     let c = GS.energy_delta(GS.cind(0));
-    assert_snapshot!(c.to_canonical_string(),@"1");
+    assert!((c - Atom::one()).is_zero());
 
     let expr = parse_lit!(f(a + p + r));
-    assert_snapshot!(GS.linearize.call_args([expr]).to_canonical_string(),@"gammalooprs::{}::f(gammalooprs::{}::a)+gammalooprs::{}::f(gammalooprs::{}::p)+gammalooprs::{}::f(gammalooprs::{}::r)");
+    let expected = parse_lit!(f(a) + f(p) + f(r));
+    assert!(
+        (GS.linearize.call_args([expr]) - expected)
+            .expand()
+            .is_zero()
+    );
+}
+
+#[test]
+fn spatial_emr_rescaling_covers_abstract_and_concrete_indices() {
+    let edge = EdgeIndex(1);
+    let abstract_index = parse_lit!(spenso::mink(4, 1));
+    let abstract_momentum = GS.emr_vec_index(edge, abstract_index.as_view());
+    let concrete_momentum = GS.emr_vec_index(edge, GS.cind(1));
+    let rescale = |momentum: &symbolica::atom::Atom| {
+        momentum
+            .replace(GS.emr_vec_index(edge, crate::utils::W_.x___))
+            .with(GS.emr_vec_index(edge, crate::utils::W_.x___) * GS.rescale)
+            .replace(GS.emr_mom(edge, crate::utils::W_.x___))
+            .with(GS.emr_mom(edge, crate::utils::W_.x___) * GS.rescale)
+    };
+
+    assert_eq!(rescale(&abstract_momentum), abstract_momentum * GS.rescale);
+    assert_eq!(rescale(&concrete_momentum), concrete_momentum * GS.rescale);
 }
 
 #[test]

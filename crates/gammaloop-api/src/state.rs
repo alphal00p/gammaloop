@@ -1459,11 +1459,17 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 1;
+// Version 7 stores CFF coefficients as native rationals.
+// Version 6 removes obsolete deferred-integrand fields from the positional
+// amplitude and cut-integrand layouts.
+// Version 5 persists component-local generated-CFF ownership and prefactor
+// metadata. Older states use a previous positional bincode layout and must be
+// regenerated rather than decoded as the new expression type.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 7;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default, deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 struct StateManifest {
     version: u32,
 }
@@ -1477,6 +1483,13 @@ impl Default for StateManifest {
 }
 
 fn ensure_supported_state_manifest_version(manifest: &StateManifest) -> Result<()> {
+    if manifest.version < CURRENT_STATE_MANIFEST_VERSION {
+        return Err(eyre!(
+            "State version {} predates the supported version {} and cannot be migrated. Please regenerate the saved state with this gammaloop binary.",
+            manifest.version,
+            CURRENT_STATE_MANIFEST_VERSION
+        ));
+    }
     if manifest.version > CURRENT_STATE_MANIFEST_VERSION {
         return Err(eyre!(
             "State version {} is newer than this binary supports (max {}). Please upgrade gammaloop.",
@@ -1488,11 +1501,11 @@ fn ensure_supported_state_manifest_version(manifest: &StateManifest) -> Result<(
     Ok(())
 }
 
-fn run_state_migration_checks(manifest: &StateManifest, save_path: &Path) -> Result<()> {
+fn validate_state_layout(manifest: &StateManifest, save_path: &Path) -> Result<()> {
     ensure_supported_state_manifest_version(manifest)?;
 
     match manifest.version {
-        1 => {
+        CURRENT_STATE_MANIFEST_VERSION => {
             if !save_path.join("symbolica_state.bin").exists() {
                 return Err(eyre!(
                     "Saved state at '{}' is missing required file symbolica_state.bin",
@@ -1548,7 +1561,7 @@ pub fn classify_state_folder(save_path: &Path) -> Result<StateFolderKind> {
     let manifest_path = save_path.join(STATE_MANIFEST_FILE);
     if manifest_path.exists() {
         let manifest = load_state_manifest(save_path)?;
-        return Ok(match run_state_migration_checks(&manifest, save_path) {
+        return Ok(match validate_state_layout(&manifest, save_path) {
             Ok(()) => StateFolderKind::Saved,
             Err(err) => StateFolderKind::Invalid(err.to_string()),
         });
@@ -1575,9 +1588,9 @@ fn load_state_manifest(save_path: &Path) -> Result<StateManifest> {
             manifest_path.display()
         )
     })?;
-    let manifest = toml::from_str::<StateManifest>(&raw_manifest).with_context(|| {
-        format!(
-            "Trying to parse state manifest file {}",
+    let manifest = toml::from_str::<StateManifest>(&raw_manifest).map_err(|error| {
+        eyre!(
+            "Trying to parse state manifest file {}: {error}",
             manifest_path.display()
         )
     })?;
@@ -2632,6 +2645,22 @@ impl State {
             let p = &mut state.process_list.processes[process_id];
             let process_name = p.definition.folder_name.clone();
             if let Some(name) = &integrand_name {
+                let _ = p.get_integrand(name)?;
+                // A process has one shared generation history. Do not relabel
+                // a generated sibling with settings which only this target uses.
+                for other in p.get_integrand_names() {
+                    if other != name.as_str()
+                        && p.get_integrand(other)?.integrand.is_some()
+                        && p.settings_history.as_ref().is_none_or(|history| {
+                            history.generation != global_settings.generation
+                        })
+                    {
+                        return Err(eyre!(
+                            "Cannot generate only integrand '{}' in process '{}' with absent or different shared generation settings while sibling '{}' is already generated; regenerate the whole process without --integrand-name",
+                            name, process_name, other
+                        ));
+                    }
+                }
                 let mut reports = Vec::new();
                 match &mut p.collection {
                     ProcessCollection::Amplitudes(a) => {
@@ -2714,6 +2743,9 @@ impl State {
                         }
                     }
                 }
+                // Named generation bypasses Process::preprocess, which normally
+                // records the settings required by persistent source exports.
+                p.settings_history = Some(global_settings.clone());
                 Ok(reports)
             } else {
                 let mut reports = p.preprocess(
@@ -3097,7 +3129,7 @@ impl State {
     ) -> Result<Self> {
         // let root_folder = root_folder.join("gammaloop_state");
         let manifest = load_state_manifest(&save_path)?;
-        run_state_migration_checks(&manifest, &save_path)?;
+        validate_state_layout(&manifest, &save_path)?;
         // Install GammaLoop's subscriber before importing Symbolica state. Symbolica warnings
         // initialize its fallback subscriber on first use, which would otherwise claim the global
         // tracing dispatch and escape ANSI styling in all subsequent GammaLoop output.
@@ -3257,6 +3289,9 @@ impl State {
             }
         }
 
+        if selected_root_folder.join(STATE_MANIFEST_FILE).exists() {
+            load_state_manifest(&selected_root_folder)?;
+        }
         fs::create_dir_all(&selected_root_folder)?;
 
         let mut state_file =
@@ -3303,6 +3338,7 @@ mod tests {
         },
         utils::{load_generic_model, serde_utils::SHOWDEFAULTS},
     };
+    use symbolica::atom::{Atom, AtomCore};
     use tempfile::tempdir;
 
     use crate::commands::{
@@ -3345,6 +3381,203 @@ mod tests {
             .expect("integrand generation should succeed");
 
         state
+    }
+
+    #[test]
+    fn named_generation_records_common_settings_for_persistent_uv_exports() -> Result<()> {
+        use gammalooprs::{
+            cff::{expression::AllOrientations, surface::GammaLoopSurfaceCache},
+            uv::{export::UVForestExportSettings, UVOrchestrator},
+        };
+
+        test_initialise()?;
+        for (folder, source) in [
+            (
+                "amplitudes",
+                include_str!("../../../tests/resources/graphs/scalar_bubble.dot"),
+            ),
+            (
+                "cross_sections",
+                include_str!(
+                    "../../../tests/resources/graphs/mass_approach_scalar_self_energy.dot"
+                ),
+            ),
+        ] {
+            let temp = tempdir()?;
+            let mut state = State::new_test();
+            state.model = load_generic_model("scalars");
+            state.model_parameters = InputParamCard::default_from_model(&state.model);
+            let mut graphs = Graph::from_string(source, &state.model)?;
+            graphs.truncate(1);
+            let graph_name = graphs[0].name.clone();
+            for name in ["first", "second"] {
+                state.import_graphs(
+                    graphs.clone(),
+                    Some("named_export".into()),
+                    None,
+                    Some(name.into()),
+                    false,
+                    false,
+                )?;
+            }
+            let mut settings = GlobalSettings::default();
+            settings.n_cores.generate = 1;
+            settings.generation.uv.orchestrator = UVOrchestrator::HedgePoset;
+            assert!(!settings.generation.evaluator.compile);
+            assert!(!settings.generation.evaluator.store_atom);
+            assert!(settings.generation.uv.subtract_uv);
+            assert!(settings.generation.uv.generate_integrated);
+            assert!(settings.generation.uv.softct);
+            assert!(settings.generation.threshold_subtraction.enable_thresholds);
+            let runtime = RuntimeSettings::default();
+            assert!(state.process_list.processes[0].settings_history.is_none());
+            for name in ["first", "second"] {
+                // The second named build must keep the already-generated sibling's
+                // identical source settings, without regenerating the whole process.
+                state.generate_integrand(&settings, (&runtime).into(), 0, Some(name.into()))?;
+                assert_eq!(
+                    state.process_list.processes[0].settings_history.as_ref(),
+                    Some(&settings)
+                );
+                state.process_list.processes[0]
+                    .get_integrand(name)?
+                    .require_generated()?;
+            }
+
+            let source_expressions = |state: &State| {
+                ["first", "second"].map(|name| {
+                    let source = match &state.process_list.processes[0].collection {
+                        ProcessCollection::Amplitudes(amplitudes) => amplitudes[name].graphs[0]
+                            .derived_data
+                            .cff_expression
+                            .as_ref()
+                            .unwrap(),
+                        ProcessCollection::CrossSections(cross_sections) => cross_sections[name]
+                            .supergraphs[0]
+                            .derived_data
+                            .global_cff_expression
+                            .as_ref()
+                            .unwrap(),
+                    };
+                    source
+                        .expression
+                        .to_atom(AllOrientations)
+                        .replace_multiple(source.expression.surfaces.get_all_replacements_gs(&[]))
+                })
+            };
+
+            // This State boundary cannot safely overwrite a generated sibling's
+            // provenance. Check both missing and conflicting process history.
+            let mut changed = settings.clone();
+            changed.generation.explicit_orientation_sum_only = true;
+            for missing_history in [false, true] {
+                if missing_history {
+                    state.process_list.processes[0].settings_history = None;
+                }
+                let before = source_expressions(&state);
+                let history_before = state.process_list.processes[0].settings_history.clone();
+                let error = state
+                    .generate_integrand(
+                        if missing_history { &settings } else { &changed },
+                        (&runtime).into(),
+                        0,
+                        Some("first".into()),
+                    )
+                    .unwrap_err();
+                assert!(
+                    error.to_string().contains("regenerate the whole process"),
+                    "{error:?}"
+                );
+                assert!(
+                    source_expressions(&state)
+                        .into_iter()
+                        .zip(before)
+                        .all(|(actual, expected)| (actual - expected).expand().is_zero()),
+                    "named-generation source expressions changed after rejected generation"
+                );
+                assert_eq!(
+                    state.process_list.processes[0].settings_history,
+                    history_before
+                );
+                for name in ["first", "second"] {
+                    state.process_list.processes[0]
+                        .get_integrand(name)?
+                        .require_generated()?;
+                }
+                state.process_list.processes[0].settings_history = Some(settings.clone());
+            }
+
+            let source_before = source_expressions(&state);
+            let mut exported_expression: Option<Atom> = None;
+            for loaded in [false, true] {
+                let process = &state.process_list.processes[0];
+                assert_eq!(process.settings_history.as_ref(), Some(&settings));
+                assert!(
+                    source_expressions(&state)
+                        .into_iter()
+                        .zip(&source_before)
+                        .all(|(actual, expected)| (actual - expected).expand().is_zero()),
+                    "named-generation source expressions changed after persistence"
+                );
+                for computed in [false, true] {
+                    let output = temp.path().join(format!("export-{loaded}-{computed}"));
+                    state.process_list.export_uv_forests(
+                        &output,
+                        0,
+                        "first",
+                        &[0],
+                        &UVForestExportSettings { computed },
+                    )?;
+                    let graph_dir = output
+                        .join("processes")
+                        .join(folder)
+                        .join("named_export/first");
+                    assert!(graph_dir.join(format!("{graph_name}.forest.dot")).is_file());
+                    let nodes = graph_dir.join(format!("{graph_name}_nodes"));
+                    if computed {
+                        let mut exported_graph = false;
+                        let mut expression = Atom::Zero;
+                        for forest in fs::read_dir(&nodes)? {
+                            for node in fs::read_dir(forest?.path())? {
+                                let node = node?;
+                                let dot = fs::read_to_string(node.path())?;
+                                assert!(dot.contains("forest_residue_index"));
+                                for graph in Graph::from_string(&dot, &state.model)? {
+                                    exported_graph = true;
+                                    expression += graph.full_numerator_atom();
+                                }
+                            }
+                        }
+                        assert!(exported_graph, "computed export must contain a graph");
+                        // Re-import the public export to compare its consumed function,
+                        // including persisted source conventions, independently of node layout.
+                        if let Some(expected) = &exported_expression {
+                            assert!(
+                                (&expression - expected).expand().is_zero(),
+                                "computed UV export changed after persistence"
+                            );
+                        } else {
+                            exported_expression = Some(expression);
+                        }
+                    } else {
+                        assert!(!nodes.exists());
+                    }
+                }
+                if !loaded {
+                    let saved = temp.path().join("saved");
+                    state.save(&saved, true, false)?;
+                    let history_path = saved
+                        .join("processes")
+                        .join(folder)
+                        .join("named_export/settings_history.toml");
+                    let history: GlobalSettings =
+                        toml::from_str(&fs::read_to_string(history_path)?)?;
+                    assert_eq!(history, settings);
+                    state = State::load(saved, None, None)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     #[test]
@@ -3434,6 +3667,7 @@ mod tests {
                 evaluator_spenso_time: Duration::from_secs(1),
                 evaluator_symbolica_time: Duration::from_secs(1),
                 evaluator_compile_time: Duration::ZERO,
+                ..Default::default()
             },
             None,
         );
@@ -3448,6 +3682,7 @@ mod tests {
                 evaluator_spenso_time: Duration::from_secs(2),
                 evaluator_symbolica_time: Duration::ZERO,
                 evaluator_compile_time: Duration::ZERO,
+                ..Default::default()
             },
             None,
         );
@@ -4324,6 +4559,46 @@ commands = ["quit -n"]
 
         let manifest = load_state_manifest(temp.path()).unwrap();
         assert_eq!(manifest.version, CURRENT_STATE_MANIFEST_VERSION);
+    }
+
+    #[test]
+    fn state_manifest_rejects_legacy_versions() {
+        for version in 0..CURRENT_STATE_MANIFEST_VERSION {
+            let temp = tempdir().unwrap();
+            fs::write(
+                temp.path().join(STATE_MANIFEST_FILE),
+                format!("version = {version}\n"),
+            )
+            .unwrap();
+
+            let err = load_state_manifest(temp.path()).unwrap_err();
+            let message = err.to_string();
+            assert!(message.contains("cannot be migrated"));
+            assert!(message.contains("regenerate the saved state"));
+        }
+    }
+
+    #[test]
+    fn state_manifest_requires_an_explicit_version() {
+        let temp = tempdir().unwrap();
+        fs::write(temp.path().join(STATE_MANIFEST_FILE), "").unwrap();
+
+        let err = load_state_manifest(temp.path()).unwrap_err();
+        assert!(err.to_string().contains("missing field `version`"));
+    }
+
+    #[test]
+    fn state_save_rejects_legacy_target_before_writing() {
+        let temp = tempdir().unwrap();
+        let symbolica_state = temp.path().join("symbolica_state.bin");
+        fs::write(temp.path().join(STATE_MANIFEST_FILE), "version = 1\n").unwrap();
+        fs::write(&symbolica_state, b"legacy sentinel").unwrap();
+        let mut state = State::new_test();
+
+        let err = state.save(temp.path(), true, false).unwrap_err();
+        assert!(err.to_string().contains("cannot be migrated"));
+        assert_eq!(fs::read(symbolica_state).unwrap(), b"legacy sentinel");
+        assert!(!temp.path().join("model.json").exists());
     }
 
     #[test]

@@ -1,22 +1,40 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 
 use bincode_trait_derive::{Decode, Encode};
 use linnet::half_edge::{
-    involution::{EdgeVec, Orientation},
+    involution::{EdgeIndex, Hedge},
     subgraph::{SubGraphLike, SubSetLike, SubSetOps},
 };
+use serde::{Deserialize, Serialize};
 use symbolica::atom::{Atom, AtomCore};
 
 use crate::{
-    cff::orientations::GraphOrientation,
-    graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
+    cff::{
+        expression::{
+            GammaLoopOrientationExpression, OrientationExpression, OrientationID,
+            OrientationSelector, ThreeDExpression,
+            normalize_cut_edge_support_with_raised_edge_groups,
+            normalize_three_d_expression_cut_support_with_raised_edge_groups,
+        },
+        orientations::GraphOrientation,
+        surface::GammaLoopSurfaceCache,
+    },
+    graph::{
+        ExactUvSubLmbFrame, FeynmanGraph, FourDDenominator, Graph, GraphThreeDSource,
+        LoopMomentumBasis, cuts::CutSet, get_cff_inverse_energy_product_impl,
+        three_d_source::ExactSourceEnergyMapper,
+    },
+    numerator::energy_degree::EnergyPowerAssignmentPlan,
     settings::global::OrientationPattern,
     utils::GS,
     uv::Integrands,
 };
 use color_eyre::Result;
+use three_dimensional_reps::{
+    CffEnergyFactorOwnership, CffGlobalPrefactorSign, Generate3DExpressionOptions,
+    GeneratedThreeDExpression,
+};
 
-pub mod cff_graph;
 pub mod orientations;
 //pub mod cut_expression;
 pub mod esurface;
@@ -25,24 +43,95 @@ pub mod generation;
 pub mod hsurface;
 pub mod surface;
 pub mod tree;
+mod vertex_set;
+pub(crate) use vertex_set::VertexSet;
+
+pub(crate) struct CFFOrientationTerm {
+    pub(crate) expression: Atom,
+    pub(crate) orientation: OrientationExpression,
+    pub(crate) production_orientation_id: Option<OrientationID>,
+}
 
 pub struct CFFTerm {
-    // One per orientation
-    pub expression: Vec<Atom>,
-    pub orientations: Vec<EdgeVec<Orientation>>,
+    // Ordinary CFF maps retain production identity for direct-3D localization;
+    // exact 4D maps instead remain source-local and share their parent mapper.
+    pub(crate) orientations: Vec<CFFOrientationTerm>,
+    exact_source_numerator: Option<Arc<PlannedExactSourceNumerator>>,
+}
+
+struct PlannedExactSourceNumerator {
+    mapper: ExactSourceEnergyMapper,
+    assignment: EnergyPowerAssignmentPlan,
 }
 
 impl CFFTerm {
+    #[cfg(test)]
+    pub(crate) fn map_exact_source_atom(
+        &self,
+        orientation: &OrientationExpression,
+        atom: &Atom,
+    ) -> Result<Atom> {
+        let planned = self
+            .exact_source_numerator
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("ordinary CFF term has no exact-source numerator map"))?;
+        planned.mapper.map_numerator(
+            &orientation.loop_energy_map,
+            &orientation.edge_energy_map,
+            atom,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn map_exact_source_physical_loop_lift_energies(
+        &self,
+        orientation: &OrientationExpression,
+        physical_edges: impl IntoIterator<Item = EdgeIndex>,
+    ) -> Result<Vec<(EdgeIndex, Atom)>> {
+        let planned = self
+            .exact_source_numerator
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("ordinary CFF term has no exact-source numerator map"))?;
+        planned.mapper.map_physical_owner_loop_lift_energies(
+            &orientation.loop_energy_map,
+            &orientation.edge_energy_map,
+            physical_edges,
+        )
+    }
+
+    pub(crate) fn map_exact_source_numerator(
+        &self,
+        orientation: &OrientationExpression,
+    ) -> Result<Atom> {
+        let planned = self
+            .exact_source_numerator
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("ordinary CFF term has no exact-source numerator plan"))?;
+        planned.mapper.map_planned_numerator(
+            &orientation.loop_energy_map,
+            &orientation.edge_energy_map,
+            &planned.assignment,
+        )
+    }
+
     pub fn expression_with_selectors(&self) -> Atom {
-        let mut result = Atom::Zero;
-        for (expr, orient) in self.expression.iter().zip(self.orientations.iter()) {
-            result += expr.clone() * orient.orientation_thetas();
-        }
-        result
+        self.orientations
+            .iter()
+            .map(|term| {
+                let selector = term.production_orientation_id.map_or_else(
+                    || term.orientation.data.orientation.orientation_thetas(),
+                    OrientationID::atom,
+                );
+                term.expression.clone() * selector
+            })
+            .reduce(|left, right| left + right)
+            .unwrap_or(Atom::Zero)
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Encode, Decode)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Encode, Decode, Serialize, Deserialize,
+)]
 // This describes the combinations of residues that are selected.
 pub struct CutCFFIndex {
     pub left_threshold_order: Option<usize>,
@@ -83,27 +172,609 @@ impl Display for CutCFFIndex {
     }
 }
 
+/// Namespace used by the energy-degree bounds supplied to a CFF source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CffEnergyBoundSourceKind {
+    /// Source IDs are physical graph-edge IDs.
+    PhysicalGraph,
+    /// Source IDs are exact four-dimensional denominator-occurrence IDs.
+    ExactFourD,
+}
+
+/// Transient diagnostic record for one CFF generation source.
+///
+/// Exact four-dimensional Taylor terms can contain several denominator
+/// occurrences owned by one physical edge. The CFF generator must receive the
+/// selected certified assignment in that occurrence namespace, while the physical-parent
+/// bounds remain useful for checking the numerator analysis. Keeping both
+/// explicitly prevents occurrence IDs from being mistaken for physical edges.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CffEnergyDegreeBoundReport {
+    pub source_kind: CffEnergyBoundSourceKind,
+    pub physical_parent_bounds: Vec<(usize, usize)>,
+    pub assigned_cff_source_bounds: Vec<(usize, usize)>,
+}
+
 pub struct CutCFF {
     pub terms: BTreeMap<CutCFFIndex, CFFTerm>,
+    pub(crate) energy_degree_bound_report: CffEnergyDegreeBoundReport,
+    // Terms retain the shared-core contour convention for exact-CFF users and
+    // normalization oracles. GammaLoop production consumes this typed bridge
+    // only when localizing either the direct-3D or exact-4D route.
+    production_prefactor_bridge: CffGlobalPrefactorSign,
 }
 
 impl CutCFF {
+    /// Convert a generated CFF into GammaLoop's scalar-denominator convention.
+    ///
+    /// `three-dimensional-reps` writes every source with positive local
+    /// `1/(2E_i)` factors. For an ordinary CFF, surface conversion removes
+    /// those factors and `Graph::cff` restores the historical global
+    /// `1/prod(-2E_i)` product. Its `(-1)^N` is therefore already explicit in
+    /// the converted expression. A generalized CFF must retain its factors on
+    /// each variant because contact terms need not have the same half-edge
+    /// support; in that case the same `(-1)^N` conversion is supplied here.
+    ///
+    /// An ordinary component keeps its established core conversion. A
+    /// generalized component instead uses the numerator-bound-independent
+    /// scalar-denominator frame. Its generalized core sign is already encoded
+    /// in the raw Laurent functional and must not be multiplied again: doing
+    /// so would let an unused numerator-rank allowance change the value of an
+    /// otherwise identical scalar integrand.
+    fn gamma_loop_prefactor_conversion<E, H>(
+        generated: &GeneratedThreeDExpression<E, H>,
+    ) -> CffGlobalPrefactorSign {
+        let retained_positive_energy_factors =
+            generated.energy_factor_ownership == CffEnergyFactorOwnership::VariantLocal;
+        generated.energy_factor_components.iter().fold(
+            CffGlobalPrefactorSign::default(),
+            |conversion, component| {
+                let source_frame = match component.ownership {
+                    CffEnergyFactorOwnership::GlobalSourceProduct => {
+                        component.core_global_prefactor_sign
+                    }
+                    CffEnergyFactorOwnership::VariantLocal => {
+                        component.denominator_only_global_prefactor_sign
+                    }
+                };
+                conversion
+                    .product(CffGlobalPrefactorSign::from_exponent(
+                        component.internal_edge_ids.len()
+                            * usize::from(retained_positive_energy_factors),
+                    ))
+                    .product(source_frame)
+            },
+        )
+    }
+
+    pub(crate) const fn production_prefactor_factor(&self) -> i64 {
+        self.production_prefactor_bridge.factor()
+    }
+
     pub fn expression_with_selectors(&self) -> Integrands {
+        let production_prefactor = Atom::num(self.production_prefactor_factor());
         self.terms
             .iter()
-            .map(|(index, term)| (*index, term.expression_with_selectors()))
+            .map(|(index, term)| {
+                (
+                    *index,
+                    term.expression_with_selectors() * &production_prefactor,
+                )
+            })
             .collect()
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum CutCffResidueAxis {
+    RightThreshold,
+    LeftThreshold,
+    LuCut,
+}
+
+impl CutCffResidueAxis {
+    fn set_order(self, index: &mut CutCFFIndex, order: usize) {
+        match self {
+            Self::RightThreshold => index.right_threshold_order = Some(order),
+            Self::LeftThreshold => index.left_threshold_order = Some(order),
+            Self::LuCut => index.lu_cut_order = Some(order),
+        }
+    }
+}
+
+fn apply_indexed_residue_selection<F>(
+    residues: Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>,
+    axis: CutCffResidueAxis,
+    mut select: F,
+) -> Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>
+where
+    F: FnMut(ThreeDExpression<OrientationID>) -> Vec<ThreeDExpression<OrientationID>>,
+{
+    residues
+        .into_iter()
+        .flat_map(|(index, expression)| {
+            select(expression)
+                .into_iter()
+                .enumerate()
+                .map(move |(i, residue)| {
+                    let mut new_index = index;
+                    axis.set_order(&mut new_index, i + 1);
+                    // One causal coordinate has been consumed regardless of
+                    // which raised-order branch `i` labels. Its energy-factor,
+                    // contact, and residue signs remain owned by the selected
+                    // CFF variant; the index records only the residue order.
+                    (new_index, residue)
+                })
+        })
+        .collect()
+}
+
+fn select_indexed_cff_residues(
+    cff: ThreeDExpression<OrientationID>,
+    cutset: &CutSet,
+) -> Result<Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>> {
+    if let Some(lu) = cutset.residue_selector.lu.as_ref()
+        && (lu.cut_edge_alternatives.is_empty()
+            || lu.cut_edge_alternatives.iter().any(Vec::is_empty))
+    {
+        return Err(eyre::eyre!(
+            "LU residue selection requires at least one non-empty physical cut alternative"
+        ));
+    }
+    for group in cutset
+        .residue_selector
+        .right_th_cut
+        .iter()
+        .chain(&cutset.residue_selector.left_th_cut)
+        .chain(cutset.residue_selector.lu.iter().map(|lu| &lu.raised_group))
+    {
+        if group.esurface_ids.is_empty() || group.max_occurence == 0 {
+            return Err(eyre::eyre!(
+                "CFF residue selection requires a nonempty surface group and a positive residue order"
+            ));
+        }
+        if let Some(id) = group
+            .esurface_ids
+            .iter()
+            .find(|id| cff.surfaces.esurface_cache.get(**id).is_none())
+        {
+            return Err(eyre::eyre!(
+                "CFF residue selection references missing E-surface {id:?}"
+            ));
+        }
+    }
+    // Carry selected causal coordinates through the operation pipeline rather
+    // than reconstructing them later from raised-order labels in
+    // `CutCFFIndex`. Energy-factor ownership stays with the generated CFF
+    // variants and is deliberately independent of this indexing operation.
+    let mut residues = vec![(CutCFFIndex::new_all_none(), cff)];
+
+    if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
+        residues = apply_indexed_residue_selection(
+            residues,
+            CutCffResidueAxis::RightThreshold,
+            |expression| expression.select_esurface_residue(right_threshold),
+        );
+    }
+
+    if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
+        residues = apply_indexed_residue_selection(
+            residues,
+            CutCffResidueAxis::LeftThreshold,
+            // Powered poles are completed in the canonical causal basis, so
+            // left- and right-threshold selections use the same positive-
+            // energy Cutkosky convention as ordinary CFF terms.
+            |expression| expression.select_esurface_residue(left_threshold),
+        );
+    }
+
+    if let Some(lu) = cutset.residue_selector.lu.as_ref() {
+        residues =
+            apply_indexed_residue_selection(residues, CutCffResidueAxis::LuCut, |expression| {
+                // Physical support selection is independent of the 3D
+                // representation. CFF then consumes the selected surface in
+                // GammaLoop's positive-energy Cutkosky convention; future LTD
+                // signs and local-series coordinates remain LTD-owned.
+                expression
+                    .restrict_to_cut_alternatives(&lu.cut_edge_alternatives)
+                    .select_esurface_residue(&lu.raised_group)
+            });
+    }
+
+    Ok(residues)
+}
+
 impl Graph {
+    pub(crate) fn cff_from_production_expression(
+        &self,
+        production: &GeneratedThreeDExpression<esurface::Esurface, hsurface::Hsurface>,
+        cutset: &CutSet,
+        orientation_pattern: &OrientationPattern,
+    ) -> Result<CutCFF> {
+        let production_prefactor_bridge = CutCFF::gamma_loop_prefactor_conversion(production);
+        let mut cff = production.expression.clone();
+        normalize_three_d_expression_cut_support_with_raised_edge_groups(
+            &mut cff,
+            &self.get_raised_edge_groups(),
+        );
+        let residues = select_indexed_cff_residues(cff, cutset)?;
+        let contract_subgraph = self.tree_edges.subtract(&self.initial_state_cut);
+        let contract_edges = self
+            .iter_edges_of(&contract_subgraph)
+            .filter_map(|(pair, edge_id, _)| pair.is_paired().then_some(edge_id))
+            .collect::<Vec<_>>();
+        let graph_without_is_cut = self
+            .underlying
+            .full_filter()
+            .subtract(&self.initial_state_cut.left)
+            .subtract(&self.initial_state_cut.right);
+        let cff_loop_number = self
+            .get_loop_number()
+            .saturating_sub(self.cyclotomatic_number(&contract_subgraph));
+        let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
+        let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
+        let cff_energy_factor = match production.energy_factor_ownership {
+            CffEnergyFactorOwnership::GlobalSourceProduct => {
+                get_cff_inverse_energy_product_impl(self, &graph_without_is_cut, &contract_edges)
+            }
+            CffEnergyFactorOwnership::VariantLocal => Atom::num(1),
+        };
+
+        let mut terms = BTreeMap::new();
+        for (cut_cff_index, expr) in residues {
+            let replacement_rules = if cutset.canonicalize_external_shifts {
+                expr.surfaces
+                    .get_all_replacements_gs_in_lmb(&[], &self.loop_momentum_basis)
+            } else {
+                expr.surfaces.get_all_replacements_gs(&[])
+            };
+            let mut cff_term = CFFTerm {
+                orientations: Vec::new(),
+                exact_source_numerator: None,
+            };
+            for (orientation_index, orientation) in expr.orientations.into_iter().enumerate() {
+                if !orientation_pattern.filter_orientation(&orientation.data.orientation) {
+                    continue;
+                }
+                let expression = orientation
+                    .to_atom_gs()
+                    .replace_multiple(&replacement_rules)
+                    * &cff_energy_factor
+                    * &cff_normalization;
+                cff_term.orientations.push(CFFOrientationTerm {
+                    expression,
+                    orientation,
+                    production_orientation_id: Some(OrientationID(orientation_index)),
+                });
+            }
+            terms.insert(cut_cff_index, cff_term);
+        }
+
+        Ok(CutCFF {
+            terms,
+            energy_degree_bound_report: CffEnergyDegreeBoundReport {
+                source_kind: CffEnergyBoundSourceKind::PhysicalGraph,
+                physical_parent_bounds: production.source_energy_degree_bounds.clone(),
+                assigned_cff_source_bounds: production.source_energy_degree_bounds.clone(),
+            },
+            production_prefactor_bridge,
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn cff_from_4d_denominators(
+        &mut self,
+        denominators: &[FourDDenominator],
+        cutset: &CutSet,
+        options: &Generate3DExpressionOptions,
+        analysis_numerator: &Atom,
+    ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
+        self.cff_from_4d_denominators_in_uv_edges(
+            denominators,
+            [],
+            cutset,
+            options,
+            analysis_numerator,
+            None,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn cff_from_4d_denominators_in_uv_edges(
+        &mut self,
+        denominators: &[FourDDenominator],
+        uv_edges: impl IntoIterator<Item = EdgeIndex>,
+        cutset: &CutSet,
+        options: &Generate3DExpressionOptions,
+        analysis_numerator: &Atom,
+        generation_cache: Option<&mut generation::ExactCffGenerationCache>,
+    ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
+        self.cff_from_4d_denominators_in_uv_edges_and_boundaries(
+            denominators,
+            uv_edges,
+            [],
+            cutset,
+            options,
+            analysis_numerator,
+            generation_cache,
+        )
+    }
+
+    /// Generate an exact CFF while retaining the crown of a non-vacuum UV
+    /// source. Vacuum Taylor terms use the boundary-free wrapper above.
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn cff_from_4d_denominators_in_uv_edges_and_boundaries(
+        &mut self,
+        denominators: &[FourDDenominator],
+        uv_edges: impl IntoIterator<Item = EdgeIndex>,
+        uv_boundary_hedges: impl IntoIterator<Item = Hedge>,
+        cutset: &CutSet,
+        options: &Generate3DExpressionOptions,
+        analysis_numerator: &Atom,
+        generation_cache: Option<&mut generation::ExactCffGenerationCache>,
+    ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
+        self.cff_from_4d_denominators_in_uv_coordinates(
+            denominators,
+            uv_edges,
+            uv_boundary_hedges,
+            None,
+            cutset,
+            options,
+            analysis_numerator,
+            generation_cache,
+        )
+    }
+
+    /// Generate a proper-subgraph exact CFF in its sub-LMB coordinates. Crown
+    /// momenta are external in this source and remain available to the later
+    /// outer CFF instead of being treated as inactive child loop energies.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn cff_from_4d_denominators_in_uv_sub_lmb(
+        &mut self,
+        denominators: &[FourDDenominator],
+        uv_edges: impl IntoIterator<Item = EdgeIndex>,
+        uv_boundary_hedges: impl IntoIterator<Item = Hedge>,
+        sub_lmb: &LoopMomentumBasis,
+        frame: ExactUvSubLmbFrame,
+        cutset: &CutSet,
+        options: &Generate3DExpressionOptions,
+        analysis_numerator: &Atom,
+        generation_cache: Option<&mut generation::ExactCffGenerationCache>,
+    ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
+        self.cff_from_4d_denominators_in_uv_coordinates(
+            denominators,
+            uv_edges,
+            uv_boundary_hedges,
+            Some((sub_lmb, frame)),
+            cutset,
+            options,
+            analysis_numerator,
+            generation_cache,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn cff_from_4d_denominators_in_uv_coordinates(
+        &mut self,
+        denominators: &[FourDDenominator],
+        uv_edges: impl IntoIterator<Item = EdgeIndex>,
+        uv_boundary_hedges: impl IntoIterator<Item = Hedge>,
+        coordinates: Option<(&LoopMomentumBasis, ExactUvSubLmbFrame)>,
+        cutset: &CutSet,
+        options: &Generate3DExpressionOptions,
+        analysis_numerator: &Atom,
+        generation_cache: Option<&mut generation::ExactCffGenerationCache>,
+    ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
+        let (
+            generated,
+            physical_surfaces,
+            physical_energy_edges,
+            exact_source_numerator,
+            inverse_energy_product,
+            cff_loop_number,
+            contract_subgraph,
+            energy_degree_bound_report,
+            physical_cut_support_edges,
+            production_prefactor_bridge,
+        ) = {
+            let source = if let Some((sub_lmb, frame)) = coordinates {
+                GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+                    self,
+                    denominators,
+                    uv_edges,
+                    uv_boundary_hedges,
+                    sub_lmb,
+                    frame,
+                )?
+            } else {
+                GraphThreeDSource::from_exact_denominators_in_uv_edges_and_boundaries(
+                    self,
+                    denominators,
+                    uv_edges,
+                    uv_boundary_hedges,
+                )?
+            };
+            let (
+                generated,
+                exact_source_energy_mapper,
+                energy_assignment,
+                energy_degree_bound_report,
+            ) = self.generate_3d_expression_for_4d_term(
+                &source,
+                options,
+                analysis_numerator,
+                generation_cache,
+            )?;
+            let physical_surfaces = generated
+                .expression
+                .surfaces
+                .linear_surface_cache
+                .iter()
+                .map(|surface| source.physical_linear_surface(surface))
+                .collect::<Vec<_>>();
+            let physical_energy_edges = source
+                .physical_energy_edge_index_map()
+                .expect("exact 4D source has a physical energy-edge projection");
+            let production_prefactor_bridge = CutCFF::gamma_loop_prefactor_conversion(&generated);
+            (
+                generated,
+                physical_surfaces,
+                physical_energy_edges,
+                Arc::new(PlannedExactSourceNumerator {
+                    mapper: exact_source_energy_mapper,
+                    assignment: energy_assignment,
+                }),
+                source
+                    .exact_inverse_energy_product()
+                    .expect("exact 4D source has an occurrence-local energy product"),
+                source.active_loop_count(),
+                source.contract_subgraph(),
+                energy_degree_bound_report,
+                source
+                    .physical_cut_support_edge_index_map()
+                    .expect("exact 4D source has a physical cut-support projection"),
+                production_prefactor_bridge,
+            )
+        };
+        let (generated, surface_ownership) =
+            self.convert_4d_expression_surfaces(generated, &physical_surfaces)?;
+        let energy_factor_ownership = generated.energy_factor_ownership;
+        // Component metadata records the precise typed convention consumed by
+        // the conversion above; no incidence or momentum-sign reconstruction
+        // is performed after generation.
+        crate::debug_tags!(#generation, #cff, #inspect;
+            denominator_count = denominators.len(),
+            production_prefactor_bridge = ?production_prefactor_bridge,
+            aggregate_ownership = ?energy_factor_ownership,
+            components = ?generated.energy_factor_components,
+            physical_energy_edges = ?physical_energy_edges,
+            surface_ownership = ?surface_ownership,
+            "Exact CFF energy-factor component metadata: context={:?}, bridge={}, ownership={:?}, components={:?}, physical_energy_edges={:?}",
+            options.cff_generation_context,
+            production_prefactor_bridge.factor(),
+            energy_factor_ownership,
+            generated.energy_factor_components,
+            physical_energy_edges,
+        );
+        let mut cff = generated.expression;
+        // Residue support belongs to physical Cutkosky alternatives even
+        // though exact numerator maps and half-edge energies remain
+        // occurrence-local. Project only that neutral provenance across the
+        // dual-ID boundary.
+        let physical_edges = |edge: linnet::half_edge::involution::EdgeIndex| {
+            let edge_id = usize::from(edge);
+            if edge_id < physical_energy_edges.orientation_edge_count {
+                return Ok(vec![edge]);
+            }
+            physical_cut_support_edges
+                .get(&edge_id)
+                .cloned()
+                .ok_or_else(|| {
+                    eyre::eyre!("exact CFF cut support contains unmapped occurrence edge {edge_id}")
+                })
+        };
+        let raised_edge_groups = self.get_raised_edge_groups();
+        let retain_physical_support_with_raised_representatives = |support: &mut Vec<
+            linnet::half_edge::involution::EdgeIndex,
+        >| {
+            let representatives =
+                normalize_cut_edge_support_with_raised_edge_groups(support, &raised_edge_groups);
+            support.extend(representatives);
+            support.sort_unstable();
+            support.dedup();
+        };
+        for orientation in cff.orientations.iter_mut() {
+            for variant in &mut orientation.variants {
+                let mut denominator_edges = variant
+                    .denominator_edges
+                    .iter()
+                    .copied()
+                    .map(&physical_edges)
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>();
+                retain_physical_support_with_raised_representatives(&mut denominator_edges);
+                variant.denominator_edges = denominator_edges;
+                variant.denominator_edge_support_signs =
+                    std::mem::take(&mut variant.denominator_edge_support_signs)
+                        .into_iter()
+                        .try_fold(BTreeMap::new(), |mut mapped, (support, sign)| {
+                            let mut support = support
+                                .into_iter()
+                                .map(&physical_edges)
+                                .collect::<Result<Vec<_>>>()?
+                                .into_iter()
+                                .flatten()
+                                .collect::<Vec<_>>();
+                            retain_physical_support_with_raised_representatives(&mut support);
+                            *mapped.entry(support).or_insert(1) *= sign;
+                            Ok::<_, color_eyre::Report>(mapped)
+                        })?;
+            }
+        }
+        let residues = select_indexed_cff_residues(cff, cutset)?;
+        let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
+        let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
+        let mut terms = BTreeMap::new();
+        for (cut_cff_index, expr) in residues {
+            let cff_energy_factor = match energy_factor_ownership {
+                CffEnergyFactorOwnership::GlobalSourceProduct => inverse_energy_product.clone(),
+                CffEnergyFactorOwnership::VariantLocal => Atom::num(1),
+            };
+            crate::debug_tags!(#generation, #cff, #inspect;
+                cut_index = ?cut_cff_index,
+                log.cff_energy_factor = cff_energy_factor,
+                "Exact CFF component-local energy-factor bridge"
+            );
+            let replacement_rules = if cutset.canonicalize_external_shifts {
+                expr.surfaces
+                    .get_all_replacements_gs_in_lmb(&[], &self.loop_momentum_basis)
+            } else {
+                expr.surfaces.get_all_replacements_gs(&[])
+            };
+            let mut cff_term = CFFTerm {
+                orientations: Vec::new(),
+                exact_source_numerator: Some(exact_source_numerator.clone()),
+            };
+            for orientation in expr.orientations {
+                let expression = orientation
+                    .to_atom_gs()
+                    .replace_multiple(&replacement_rules)
+                    .replace_multiple(exact_source_numerator.mapper.exact_ose_replacements())
+                    * &cff_energy_factor
+                    * &cff_normalization;
+                // Distinct exact factors remain in `expression`. The
+                // orientation is deliberately source-local: its affine map
+                // evaluates the complete parent numerator directly, rather
+                // than being remapped to a production OrientationID.
+                cff_term.orientations.push(CFFOrientationTerm {
+                    expression,
+                    orientation,
+                    production_orientation_id: None,
+                });
+            }
+            terms.insert(cut_cff_index, cff_term);
+        }
+        Ok((
+            CutCFF {
+                terms,
+                energy_degree_bound_report,
+                production_prefactor_bridge,
+            },
+            contract_subgraph,
+        ))
+    }
+
     pub fn cff<S: SubGraphLike + SubSetLike>(
         &mut self,
         contract_subgraph: &S,
         cutset: &CutSet,
         orientation_pattern: &OrientationPattern,
+        options: &Generate3DExpressionOptions,
+        analysis_numerator: Option<&Atom>,
     ) -> Result<CutCFF> {
-        let canonize_esurface = self.get_esurface_canonization(&self.loop_momentum_basis);
         let mut contract_edges = vec![];
 
         for (p, eid, _) in self.iter_edges_of(contract_subgraph) {
@@ -111,66 +782,54 @@ impl Graph {
                 contract_edges.push(eid);
             }
         }
+        contract_edges.sort_unstable();
+        contract_edges.dedup();
 
-        let cff = [(
-            CutCFFIndex::new_all_none(),
-            self.generate_cff(&contract_edges, &canonize_esurface, orientation_pattern)?,
-        )];
+        let canonize_esurface = self.get_esurface_canonization(&self.loop_momentum_basis);
 
-        let mut residues = BTreeMap::new();
+        // Reduced UV graphs use the same CFF dispatcher and representation family as the
+        // production graph. Switching only this side to a residue coordinate would make its
+        // surviving edge-energy maps different numerator samples rather than exact restrictions
+        // of production maps. Proper LTD remains a separate deferred representation.
+        let generated = self.generate_3d_expression_for_integrand(
+            &contract_edges,
+            &canonize_esurface,
+            options,
+            analysis_numerator,
+        )?;
+        self.cff_from_generated_expression(
+            generated,
+            contract_subgraph,
+            cutset,
+            orientation_pattern,
+            options,
+        )
+    }
 
-        cff.into_iter()
-            .flat_map(|(index, cff_expression)| {
-                if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
-                    cff_expression
-                        .select_esurface_residue(right_threshold)
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, residue)| {
-                            let mut new_index = index;
-                            new_index.right_threshold_order = Some(i + 1);
-                            (new_index, residue)
-                        })
-                        .collect()
-                } else {
-                    vec![(index, cff_expression)]
-                }
-            })
-            .flat_map(|(index, cff_expression)| {
-                if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
-                    cff_expression
-                        .select_esurface_residue(left_threshold)
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, residue)| {
-                            let mut new_index = index;
-                            new_index.left_threshold_order = Some(i + 1);
-                            (new_index, residue)
-                        })
-                        .collect()
-                } else {
-                    vec![(index, cff_expression)]
-                }
-            })
-            .flat_map(|(index, cff_expression)| {
-                if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
-                    cff_expression
-                        .select_esurface_residue(lu_cut)
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, residue)| {
-                            let mut new_index = index;
-                            new_index.lu_cut_order = Some(i + 1);
-                            (new_index, residue)
-                        })
-                        .collect()
-                } else {
-                    vec![(index, cff_expression)]
-                }
-            })
-            .for_each(|(index, residue)| {
-                residues.insert(index, residue);
-            });
+    pub(crate) fn cff_from_generated_expression<S: SubGraphLike + SubSetLike>(
+        &self,
+        generated: GeneratedThreeDExpression<esurface::Esurface, hsurface::Hsurface>,
+        contract_subgraph: &S,
+        cutset: &CutSet,
+        orientation_pattern: &OrientationPattern,
+        options: &Generate3DExpressionOptions,
+    ) -> Result<CutCFF> {
+        let mut contract_edges = self
+            .iter_edges_of(contract_subgraph)
+            .filter_map(|(pair, edge, _)| pair.is_paired().then_some(edge))
+            .collect::<Vec<_>>();
+        contract_edges.sort_unstable();
+        contract_edges.dedup();
+        let energy_factor_ownership = generated.energy_factor_ownership;
+        let source_energy_degree_bounds = generated.source_energy_degree_bounds.clone();
+        let production_prefactor_bridge = CutCFF::gamma_loop_prefactor_conversion(&generated);
+        let mut cff = generated.expression;
+        normalize_three_d_expression_cut_support_with_raised_edge_groups(
+            &mut cff,
+            &self.get_raised_edge_groups(),
+        );
+
+        let residues = select_indexed_cff_residues(cff, cutset)?;
 
         // println!("residue orders: {}", residue.len());
 
@@ -179,7 +838,6 @@ impl Graph {
             .full_filter()
             .subtract(&self.initial_state_cut.left)
             .subtract(&self.initial_state_cut.right);
-
         // The CFF carries the measure normalization for the loop variables that remain after
         // contracting a UV subgraph. Fully contracted integrated CTs therefore get no extra CFF
         // measure factor, while ordinary root terms get the full graph-loop factor.
@@ -188,39 +846,44 @@ impl Graph {
             .saturating_sub(self.cyclotomatic_number(contract_subgraph));
         let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
         let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
+        let cff_energy_factor = match energy_factor_ownership {
+            CffEnergyFactorOwnership::GlobalSourceProduct => {
+                get_cff_inverse_energy_product_impl(self, &graph_without_is_cut, &contract_edges)
+            }
+            CffEnergyFactorOwnership::VariantLocal => Atom::num(1),
+        };
         crate::debug_tags!(#cff, #trace;
             stage = "graph_cff_normalization",
             graph = %self.name,
             cff_loop_number = cff_loop_number,
+            production_prefactor_bridge = ?production_prefactor_bridge,
             log.cff_normalization = cff_normalization,
-            "Graph CFF normalization"
+            "Graph CFF normalization: graph={}, context={:?}, loops={}, bridge={}",
+            self.name,
+            options.cff_generation_context,
+            cff_loop_number,
+            production_prefactor_bridge.factor(),
         );
 
         let mut terms = BTreeMap::new();
 
-        let replacement_rules = if cutset.canonicalize_external_shifts {
-            self.surface_cache
-                .get_all_replacements_in_lmb(&[], &self.loop_momentum_basis)
-        } else {
-            self.surface_cache.get_all_replacements(&[])
-        };
-
-        for (cut_cff_index, expr) in residues.into_iter() {
-            let mut cff_term = CFFTerm {
-                expression: vec![],
-                orientations: vec![],
+        for (cut_cff_index, expr) in residues {
+            let replacement_rules = if cutset.canonicalize_external_shifts {
+                expr.surfaces
+                    .get_all_replacements_gs_in_lmb(&[], &self.loop_momentum_basis)
+            } else {
+                expr.surfaces.get_all_replacements_gs(&[])
             };
-            for orientation in expr.orientations.iter() {
-                let eta_expr = orientation.expression.to_atom_inv();
+            let mut cff_term = CFFTerm {
+                orientations: vec![],
+                exact_source_numerator: None,
+            };
+            for orientation in expr.orientations.iter().filter(|orientation| {
+                orientation_pattern.filter_orientation(&orientation.data.orientation)
+            }) {
+                let eta_expr = orientation.to_atom_gs();
                 let mut ose_expr = eta_expr.replace_multiple(&replacement_rules);
-
-                let inverse_energies = get_cff_inverse_energy_product_impl(
-                    self,
-                    &graph_without_is_cut,
-                    &contract_edges,
-                );
-
-                ose_expr *= inverse_energies;
+                ose_expr *= &cff_energy_factor;
                 ose_expr *= cff_normalization.clone();
 
                 crate::debug_tags!(#cff, #trace;
@@ -231,15 +894,5576 @@ impl Graph {
                     "Graph CFF term expression"
                 );
                 // println!("ose expr :{}", ose_expr);
-                cff_term.expression.push(ose_expr);
-                cff_term
-                    .orientations
-                    .push(orientation.data.orientation.clone());
+                cff_term.orientations.push(CFFOrientationTerm {
+                    expression: ose_expr,
+                    orientation: orientation.clone(),
+                    production_orientation_id: None,
+                });
             }
             terms.insert(cut_cff_index, cff_term);
         }
 
-        let cut_cff = CutCFF { terms };
+        let cut_cff = CutCFF {
+            terms,
+            energy_degree_bound_report: CffEnergyDegreeBoundReport {
+                source_kind: CffEnergyBoundSourceKind::PhysicalGraph,
+                physical_parent_bounds: source_energy_degree_bounds.clone(),
+                assigned_cff_source_bounds: source_energy_degree_bounds,
+            },
+            production_prefactor_bridge,
+        };
         Ok(cut_cff)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::*;
+    use crate::{
+        dot,
+        graph::{LMBext, parse::IntoGraph},
+        initialisation::test_initialise,
+        integrands::{
+            evaluation::EvaluationMetaData,
+            process::{
+                GenericEvaluatorFloat,
+                evaluators::{EvaluatorStack, SingleOrAllOrientations},
+            },
+        },
+        momentum::{
+            ThreeMomentum,
+            sample::{BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample},
+        },
+        processes::EvaluatorSettings,
+        settings::RuntimeSettings,
+        utils::{ArbPrec, F, FloatLike, W_, cut_energy},
+        uv::{
+            UltravioletGraph,
+            approx::{OrientationProjection, local_3d::Localizer, local_4d::Full4dCts},
+        },
+    };
+    use itertools::Itertools;
+    use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+    use linnet::half_edge::subgraph::{
+        InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps, subset::SubSet,
+    };
+    use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
+    use symbolica::{
+        atom::FunctionBuilder,
+        domains::{
+            float::{Complex as SymComplex, Real},
+            integer::IntegerRing,
+            rational::{Fraction, Rational},
+        },
+        evaluate::ExpressionEvaluator,
+        function,
+        id::Replacement,
+    };
+    use three_dimensional_reps::{
+        OrientationData, OrientationID, ThreeDGraphSource, repeated_groups,
+    };
+    use typed_index_collections::TiVec;
+
+    #[test]
+    fn cff_term_selects_duplicate_physical_orientations_by_production_map_key() {
+        let orientation = || OrientationExpression {
+            data: OrientationData::new(EdgeVec::from_iter([Orientation::Default])),
+            loop_energy_map: Vec::new(),
+            edge_energy_map: Vec::new(),
+            variants: Vec::new(),
+        };
+        let keyed = CFFTerm {
+            orientations: vec![
+                CFFOrientationTerm {
+                    expression: Atom::num(2),
+                    orientation: orientation(),
+                    production_orientation_id: Some(OrientationID(0)),
+                },
+                CFFOrientationTerm {
+                    expression: Atom::num(3),
+                    orientation: orientation(),
+                    production_orientation_id: Some(OrientationID(1)),
+                },
+            ],
+            exact_source_numerator: None,
+        }
+        .expression_with_selectors();
+
+        assert_eq!(OrientationID(0).select(&keyed).expand(), Atom::num(2));
+        assert_eq!(OrientationID(1).select(&keyed).expand(), Atom::num(3));
+        assert_eq!(
+            keyed
+                .replace(function!(OrientationID::symbol(), W_.a_))
+                .with(Atom::one())
+                .expand(),
+            Atom::num(5),
+            "explicit summation must retain every distinct map key even when their physical directions coincide",
+        );
+
+        let source_local = CFFTerm {
+            orientations: vec![CFFOrientationTerm {
+                expression: Atom::num(7),
+                orientation: orientation(),
+                production_orientation_id: None,
+            }],
+            exact_source_numerator: None,
+        }
+        .expression_with_selectors();
+        assert_eq!(
+            source_local,
+            Atom::num(7) * GS.sign_theta(GS.sign(EdgeIndex(0))),
+            "a source-local term without a production map key must retain its physical selector",
+        );
+    }
+
+    #[test]
+    fn lu_residue_selection_rejects_missing_physical_cut_support() {
+        let mut cutset = CutSet::empty(0);
+        cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            raised_group: crate::cff::esurface::RaisedEsurfaceGroup {
+                esurface_ids: Vec::new(),
+                max_occurence: 1,
+            },
+            cut_edge_alternatives: Vec::new(),
+        });
+
+        assert!(select_indexed_cff_residues(ThreeDExpression::new_empty(), &cutset).is_err());
+
+        let mut expression = ThreeDExpression::new_empty();
+        expression.surfaces.esurface_cache.push(esurface::Esurface {
+            energies: vec![EdgeIndex(0)],
+            external_shift: Vec::new(),
+            vertex_set: VertexSet::dummy(),
+        });
+        for (esurface_ids, max_occurence) in [
+            (Vec::new(), 1),
+            (vec![esurface::EsurfaceID(0)], 0),
+            (vec![esurface::EsurfaceID(1)], 1),
+        ] {
+            let group = esurface::RaisedEsurfaceGroup {
+                esurface_ids,
+                max_occurence,
+            };
+            for axis in [
+                CutCffResidueAxis::RightThreshold,
+                CutCffResidueAxis::LeftThreshold,
+                CutCffResidueAxis::LuCut,
+            ] {
+                let mut cutset = CutSet::empty(0);
+                match axis {
+                    CutCffResidueAxis::RightThreshold => {
+                        cutset.residue_selector.right_th_cut = Some(group.clone())
+                    }
+                    CutCffResidueAxis::LeftThreshold => {
+                        cutset.residue_selector.left_th_cut = Some(group.clone())
+                    }
+                    CutCffResidueAxis::LuCut => {
+                        cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+                            raised_group: group.clone(),
+                            cut_edge_alternatives: vec![vec![EdgeIndex(0)]],
+                        })
+                    }
+                }
+                assert!(
+                    select_indexed_cff_residues(expression.clone(), &cutset).is_err(),
+                    "malformed residue group must return an error for {axis:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn exact_child_sub_lmb_retains_parent_loop_crown_shift() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_child_sub_lmb {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> v3 [id=0]
+            v0 -> v1 [id=1 lmb_id=0]
+            v0 -> v1 [id=2]
+            v3 -> v0 [id=3 lmb_id=1]
+            v1 -> v2 [id=4]
+            v2 -> v3 [id=5]
+            v2 -> outgoing [id=6]
+        })?;
+        let uv_edges = [EdgeIndex(1), EdgeIndex(2)];
+        let uv_filter = graph
+            .get_edge_subgraph(uv_edges[0])
+            .union(&graph.get_edge_subgraph(uv_edges[1]));
+        let uv_subgraph = InternalSubGraph::cleaned_filter_optimist(uv_filter, graph.as_ref());
+        let crown = graph.dummy_stripped_external_flows_of(&uv_subgraph);
+        let boundary_hedges = crown.included_iter().collect::<Vec<_>>();
+        let sub_lmb =
+            graph.try_compatible_sub_lmb(&uv_subgraph, crown, &graph.loop_momentum_basis)?;
+        assert_eq!(sub_lmb.loop_edges.len(), 1);
+        assert!(sub_lmb.ext_edges.contains(&EdgeIndex(4)));
+
+        let denominators = uv_edges.map(|edge| FourDDenominator {
+            source_edge: edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish(),
+            mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+            full_expr: Atom::one(),
+        });
+        assert!(
+            GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+                &graph,
+                &denominators,
+                uv_edges,
+                boundary_hedges.iter().copied().take(1),
+                &sub_lmb,
+                ExactUvSubLmbFrame::RetainedPhysicalCrown,
+            )
+            .is_err(),
+            "a proper child source must not omit part of its non-dummy crown",
+        );
+        {
+            let source = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+                &graph,
+                &denominators,
+                uv_edges,
+                boundary_hedges.iter().copied(),
+                &sub_lmb,
+                ExactUvSubLmbFrame::RetainedPhysicalCrown,
+            )?;
+            let parsed = source.to_three_d_parsed_graph()?;
+            assert_eq!(parsed.loop_names.len(), 1);
+            let local_to_occurrence = source
+                .energy_edge_index_map(&parsed)
+                .expect("the exact child source exposes occurrence energies")
+                .internal;
+            let occurrence_to_owner = source
+                .physical_energy_edge_index_map()
+                .expect("the exact child source exposes physical owners")
+                .internal;
+            let shifted_local_edge = local_to_occurrence
+                .iter()
+                .find_map(|(local, occurrence)| {
+                    (occurrence_to_owner.get(occurrence) == Some(&usize::from(uv_edges[1])))
+                        .then_some(*local)
+                })
+                .expect("the second child denominator retains its source occurrence");
+            let shifted_signature = &parsed.internal_edges[shifted_local_edge].signature;
+            assert!(
+                shifted_signature
+                    .external_signature
+                    .iter()
+                    .any(|coefficient| *coefficient != 0),
+                "D2 must retain the parent-loop crown momentum as a child external shift",
+            );
+        }
+
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let (exact, _) = graph.cff_from_4d_denominators_in_uv_sub_lmb(
+            &denominators,
+            uv_edges,
+            boundary_hedges,
+            &sub_lmb,
+            ExactUvSubLmbFrame::RetainedPhysicalCrown,
+            &cutset,
+            &options,
+            &Atom::one(),
+            None,
+        )?;
+        let exact_term = exact
+            .terms
+            .get(&CutCFFIndex::new_all_none())
+            .expect("the exact child has one uncut sector");
+        let exact_sum = exact_term.orientations.iter().try_fold(
+            Atom::Zero,
+            |sum, orientation| -> Result<Atom> {
+                Ok(sum
+                    + &orientation.expression
+                        * exact_term.map_exact_source_numerator(&orientation.orientation)?)
+            },
+        )? * Atom::num(exact.production_prefactor_factor());
+
+        let mut child: Graph = dot!(digraph ordinary_child {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> a [id=2]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+            b -> outgoing [id=3]
+        })?;
+        let child_options = child.denominator_only_cff_3d_expression_options();
+        let child_cutset = CutSet::empty(child.n_hedges());
+        let child_contract = child.empty_subgraph::<SuBitGraph>();
+        let ordinary = child.cff(
+            &child_contract,
+            &child_cutset,
+            &OrientationPattern::default(),
+            &child_options,
+            None,
+        )?;
+        let ordinary_term = ordinary
+            .terms
+            .get(&CutCFFIndex::new_all_none())
+            .expect("the standalone child has one uncut sector");
+        let mut ordinary_sum = ordinary_term
+            .orientations
+            .iter()
+            .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
+            * Atom::num(ordinary.production_prefactor_factor());
+        ordinary_sum = ordinary_sum.replace_multiple(
+            [(0, 1), (1, 2), (2, 3), (3, 4)]
+                .into_iter()
+                .flat_map(|(child_edge, parent_edge)| {
+                    [
+                        Replacement::new(
+                            function!(GS.ose, child_edge, W_.x___).to_pattern(),
+                            function!(GS.ose, parent_edge, W_.x___).to_pattern(),
+                        ),
+                        Replacement::new(
+                            function!(GS.emr_mom, child_edge, W_.x___).to_pattern(),
+                            function!(GS.emr_mom, parent_edge, W_.x___).to_pattern(),
+                        ),
+                    ]
+                })
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(
+            exact_sum, ordinary_sum,
+            "the parent-source child CFF must equal its standalone ordinary representation"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_child_sub_lmb_keeps_remote_cut_and_crown_emrs_factorized() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(
+            digraph exact_child_lu_aliases {
+                num = 1
+                edge [particle="scalar_1" num=1]
+                node [num=1]
+
+                ext0 [style=invis is_cut=0]
+                v2 -> ext0 [id=0]
+                ext0 -> v3
+                v0 -> v1 [id=1 lmb_id=0]
+                v0 -> v1 [id=2]
+                v3 -> v0 [id=3 lmb_id=1]
+                v1 -> v2 [id=4]
+                v2 -> v3 [id=5]
+            },
+            "scalars"
+        )?;
+        let uv_edges = [EdgeIndex(1), EdgeIndex(2)];
+        let uv_filter = graph
+            .get_edge_subgraph(uv_edges[0])
+            .union(&graph.get_edge_subgraph(uv_edges[1]));
+        let uv_subgraph = InternalSubGraph::cleaned_filter_optimist(uv_filter, graph.as_ref());
+        let crown = graph.dummy_stripped_external_flows_of(&uv_subgraph);
+        let boundary_hedges = crown.included_iter().collect::<Vec<_>>();
+        assert!(
+            boundary_hedges
+                .iter()
+                .all(|hedge| graph.underlying[hedge] != EdgeIndex(0)),
+            "the remote Cutkosky carrier is not part of the physical child crown",
+        );
+        let sub_lmb =
+            graph.try_compatible_sub_lmb(&uv_subgraph, crown, &graph.loop_momentum_basis)?;
+        assert!(
+            sub_lmb.edge_signatures[EdgeIndex(0)]
+                .external
+                .iter()
+                .all(|coefficient| *coefficient == crate::momentum::SignOrZero::Zero),
+            "the remote cut must have no child external coordinate",
+        );
+        let denominators = uv_edges.map(|edge| FourDDenominator {
+            source_edge: edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish(),
+            mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+            full_expr: Atom::one(),
+        });
+        {
+            let source = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+                &graph,
+                &denominators,
+                uv_edges,
+                boundary_hedges.iter().copied(),
+                &sub_lmb,
+                ExactUvSubLmbFrame::RetainedPhysicalCrown,
+            )?;
+            let parsed = source.to_three_d_parsed_graph()?;
+            assert_eq!(parsed.loop_names.len(), 1);
+            assert!(
+                parsed.initial_state_cut_edges.is_empty(),
+                "a factorized UV child must not import its parent's Cutkosky carrier",
+            );
+
+            let options = graph.denominator_only_cff_3d_expression_options();
+            let shell_energy = GS.emr_mom(EdgeIndex(1), GS.cind(0));
+            let crown_energy = GS.emr_mom(EdgeIndex(3), GS.cind(0));
+            let analysis_numerator = &shell_energy * &crown_energy;
+            let (generated, mapper, plan, report) = graph.generate_3d_expression_for_4d_term(
+                &source,
+                &options,
+                &analysis_numerator,
+                None,
+            )?;
+            assert_eq!(report.physical_parent_bounds, vec![(1, 1)]);
+            assert_eq!(
+                report.assigned_cff_source_bounds,
+                plan.energy_degree_bounds()
+            );
+            assert!(!generated.expression.orientations.is_empty());
+            for orientation in &generated.expression.orientations {
+                let mapped_shell = mapper.map_numerator(
+                    &orientation.loop_energy_map,
+                    &orientation.edge_energy_map,
+                    &shell_energy,
+                )?;
+                assert_ne!(mapped_shell, shell_energy);
+                assert_eq!(
+                    mapper.map_numerator(
+                        &orientation.loop_energy_map,
+                        &orientation.edge_energy_map,
+                        &analysis_numerator,
+                    )?,
+                    mapped_shell * &crown_energy,
+                    "the shell energy is CFF-mapped while the crown energy stays factorized",
+                );
+                let factorized_parent =
+                    GS.emr_mom(EdgeIndex(0), GS.cind(0)) + GS.emr_mom(EdgeIndex(3), GS.cind(0));
+                assert_eq!(
+                    mapper.map_numerator(
+                        &orientation.loop_energy_map,
+                        &orientation.edge_energy_map,
+                        &factorized_parent,
+                    )?,
+                    factorized_parent,
+                    "remote cut and crown EMRs must remain T-inert for the outer graph",
+                );
+            }
+        }
+
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let cutset = CutSet::empty(graph.n_hedges());
+        graph.cff_from_4d_denominators_in_uv_sub_lmb(
+            &denominators,
+            uv_edges,
+            boundary_hedges,
+            &sub_lmb,
+            ExactUvSubLmbFrame::RetainedPhysicalCrown,
+            &cutset,
+            &options,
+            &Atom::one(),
+            None,
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn exact_child_signed_maps_keep_owner_invariant_production_hosts() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_child_orientation_projection {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> v3 [id=0]
+            v0 -> v1 [id=1 lmb_id=0]
+            v0 -> v1 [id=2]
+            v3 -> v0 [id=3 lmb_id=1]
+            v1 -> v2 [id=4]
+            v2 -> v3 [id=5]
+            v2 -> outgoing [id=6]
+        })?;
+        let uv_edges = [EdgeIndex(1), EdgeIndex(2)];
+        let uv_filter = graph
+            .get_edge_subgraph(uv_edges[0])
+            .union(&graph.get_edge_subgraph(uv_edges[1]));
+        let uv_subgraph = InternalSubGraph::cleaned_filter_optimist(uv_filter, graph.as_ref());
+        let crown = graph.dummy_stripped_external_flows_of(&uv_subgraph);
+        let boundary_hedges = crown.included_iter().collect::<Vec<_>>();
+        let sub_lmb =
+            graph.try_compatible_sub_lmb(&uv_subgraph, crown, &graph.loop_momentum_basis)?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production =
+            graph.generate_3d_expression_for_integrand(&[], &canonization, &options, None)?;
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact_expression(&production, &options, &pattern, true),
+        );
+        let source_denominator = |edge| FourDDenominator {
+            source_edge: edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish(),
+            mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+            full_expr: Atom::one(),
+        };
+        let denominators = uv_edges.map(source_denominator);
+        let mut opposite_denominators = denominators.clone();
+        opposite_denominators[0].momentum = -opposite_denominators[0].momentum.clone();
+        let physical_host_classes =
+            |denominators: &[FourDDenominator]| -> Result<BTreeSet<Vec<OrientationID>>> {
+                let source = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+                    &graph,
+                    denominators,
+                    uv_edges,
+                    boundary_hedges.iter().copied(),
+                    &sub_lmb,
+                    ExactUvSubLmbFrame::RetainedPhysicalCrown,
+                )?;
+                let (child, _, _, _) = graph.generate_3d_expression_for_4d_term(
+                    &source,
+                    &options,
+                    &Atom::one(),
+                    None,
+                )?;
+                child
+                    .expression
+                    .orientations
+                    .iter()
+                    .map(|child_orientation| {
+                        let candidates = localizer.source_selector_representatives(
+                            &graph,
+                            child_orientation,
+                            &source.contract_subgraph(),
+                        )?;
+                        assert!(
+                            !candidates.is_empty(),
+                            "every exact child residue must extend to a production map using only its physical graph-edge prefix; denominators={denominators:?}, child={:?}",
+                            child_orientation.data,
+                        );
+                        Ok(candidates)
+                    })
+                    .collect()
+            };
+
+        let ordinary_hosts = physical_host_classes(&denominators)?;
+        assert_eq!(
+            physical_host_classes(&opposite_denominators)?,
+            ordinary_hosts,
+            "D(Q) and D(-Q) must induce identical physical orientation constraints",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_unexpanded_cff_matches_ordinary_for_cross_loop_factorized_energy() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(
+            digraph exact_unexpanded_cross_loop_factorized_energy {
+                num = 1
+                edge [particle="scalar_1" num=1]
+                node [num=1]
+
+                ext0 [style=invis is_cut=0]
+                v2 -> ext0 [id=0]
+                ext0 -> v3
+                v0 -> v1 [id=1 lmb_id=0]
+                v0 -> v1 [id=2]
+                v3 -> v0 [id=3 lmb_id=1]
+                v1 -> v2 [id=4]
+                v2 -> v3 [id=5]
+            },
+            "scalars"
+        )?;
+        let numerator = GS.emr_mom(EdgeIndex(1), GS.cind(0))
+            * GS.emr_mom(EdgeIndex(3), GS.cind(0)).pow(2)
+            * GS.emr_mom(EdgeIndex(4), GS.cind(0))
+            * GS.emr_mom(EdgeIndex(5), GS.cind(0));
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &options,
+            Some(&numerator),
+        )?;
+        let cutset = CutSet::empty(graph.n_hedges());
+        let ordinary = graph.cff_from_production_expression(
+            &production,
+            &cutset,
+            &OrientationPattern::default(),
+        )?;
+        let cograph = graph.full_filter().subtract(&graph.initial_state_cut);
+        let denominators = Full4dCts::from_coefficient(&Atom::one(), &graph, &cograph)
+            .terms()?
+            .into_iter()
+            .next()
+            .expect("the unexpanded graph has one exact denominator term")
+            .denominators;
+        let (exact, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &numerator)?;
+
+        assert_eq!(
+            ordinary.energy_degree_bound_report.physical_parent_bounds,
+            exact.energy_degree_bound_report.physical_parent_bounds
+        );
+        assert_eq!(
+            ordinary
+                .energy_degree_bound_report
+                .assigned_cff_source_bounds,
+            exact.energy_degree_bound_report.assigned_cff_source_bounds,
+            "a one-occurrence exact source must preserve physical energy IDs"
+        );
+        let index = CutCFFIndex::new_all_none();
+        let ordinary_term = ordinary
+            .terms
+            .get(&index)
+            .expect("the ordinary uncut sector exists");
+        let exact_term = exact
+            .terms
+            .get(&index)
+            .expect("the exact uncut sector exists");
+        let ordinary_sum = ordinary_term
+            .orientations
+            .iter()
+            .map(|orientation| {
+                orientation.expression.clone()
+                    * numerator
+                        .replace_multiple(orientation.orientation.energy_replacements_gs(&graph))
+            })
+            .fold(Atom::Zero, |sum, term| sum + term)
+            * Atom::num(ordinary.production_prefactor_factor());
+        let exact_sum = exact_term
+            .orientations
+            .iter()
+            .map(|orientation| {
+                Ok(orientation.expression.clone()
+                    * exact_term.map_exact_source_numerator(&orientation.orientation)?)
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .fold(Atom::Zero, |sum, term| sum + term)
+            * Atom::num(exact.production_prefactor_factor());
+
+        let mass_squared = Atom::num(Rational::from((4, 9)));
+        let external_energy = Atom::num(Rational::from((5, 2)));
+        let external_edges = graph
+            .external_momentum_edge_order()
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let evaluate_arb = |mut expression: Atom| -> Result<Complex<F<ArbPrec>>> {
+            expression = expression
+                .replace(Atom::var(GS.numerator_sampling_scale))
+                .with(Atom::num(Rational::from((13, 10))))
+                .replace(function!(GS.tree_denom_wrapper, W_.x_))
+                .with(W_.x_)
+                .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                .with(W_.d_);
+            for edge in 0..graph.underlying.n_edges() {
+                let edge = EdgeIndex(edge);
+                expression = expression
+                    .replace(graph.underlying[edge].particle.mass_atom())
+                    .with(mass_squared.clone().sqrt());
+                if external_edges.contains(&edge) {
+                    expression = expression
+                        .replace(GS.emr_mom(edge, GS.cind(0)))
+                        .with(external_energy.clone());
+                    for spatial_index in 1..=3 {
+                        expression = expression
+                            .replace(GS.emr_mom(edge, GS.cind(spatial_index)))
+                            .with(Atom::Zero)
+                            .replace(GS.emr_vec_index(edge, GS.cind(spatial_index)))
+                            .with(Atom::Zero);
+                    }
+                } else {
+                    let spatial = match usize::from(edge) {
+                        1 => Atom::num(Rational::from((4, 3))),
+                        2 => Atom::num(Rational::from((-7, 12))),
+                        3..=5 => Atom::num(Rational::from((3, 4))),
+                        _ => Atom::Zero,
+                    };
+                    let on_shell_energy = (mass_squared.clone() + spatial.clone().pow(2)).sqrt();
+                    expression = expression
+                        .replace(GS.emr_mom(edge, GS.cind(1)))
+                        .with(spatial.clone())
+                        .replace(GS.emr_vec_index(edge, GS.cind(1)))
+                        .with(spatial)
+                        .replace(GS.ose(edge))
+                        .with(on_shell_energy.clone())
+                        .replace(cut_energy(edge))
+                        .with(on_shell_energy);
+                    for spatial_index in 2..=3 {
+                        expression = expression
+                            .replace(GS.emr_mom(edge, GS.cind(spatial_index)))
+                            .with(Atom::Zero)
+                            .replace(GS.emr_vec_index(edge, GS.cind(spatial_index)))
+                            .with(Atom::Zero);
+                    }
+                }
+            }
+            let parameters = [Atom::var(GS.pi)];
+            let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> =
+                expression.evaluator(&parameters).build().map_err(|error| {
+                    eyre::eyre!("failed to build source-identity evaluator: {error}")
+                })?;
+            let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
+                rational.map_coeff(&|coefficient| {
+                    Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
+                });
+            let zero = F(ArbPrec::default());
+            Ok(arb.evaluate_single(&[Complex::new(zero.clone().pi(), zero)]))
+        };
+        let ordinary_value = evaluate_arb(ordinary_sum)?;
+        let exact_value = evaluate_arb(exact_sum)?;
+        let distance = (ordinary_value.clone() - exact_value.clone()).norm().re;
+        let ordinary_norm = ordinary_value.clone().norm().re;
+        let exact_norm = exact_value.clone().norm().re;
+        let scale = if ordinary_norm > exact_norm {
+            ordinary_norm
+        } else {
+            exact_norm
+        };
+        let relative_distance = if scale.is_zero() {
+            distance
+        } else {
+            distance / scale
+        };
+        // The two independently assembled contour sums can lose precision through
+        // different, highly asymmetric cancellations, so keep a generous precision-scaled gate.
+        let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+        assert!(
+            relative_distance <= tolerance,
+            "source-preserving exact CFF differs from ordinary CFF: ordinary={ordinary_value:e}, exact={exact_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn triangle_affine_energy_identity_survives_production_mapping() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(
+            digraph diagnostic_triangle_affine_energy_identity {
+                num = 1
+                edge [particle="scalar_1" num=1]
+                node [num=1]
+
+                ext [style=invis]
+                v0;
+                v1;
+                v2;
+                ext -> v0 [id=0]
+                ext -> v1 [id=1]
+                v2 -> ext [id=2]
+                v0 -> v2 [id=3 lmb_id=0]
+                v1 -> v0 [id=4]
+                v2 -> v1 [id=5]
+            },
+            "scalars"
+        )?;
+        let q = GS.emr_mom(EdgeIndex(3), GS.cind(0));
+        let shifted = GS.emr_mom(EdgeIndex(4), GS.cind(0));
+        let external = GS.emr_mom(EdgeIndex(0), GS.cind(0));
+        let squared = q.clone().pow(2);
+        let affine = q * (shifted + external);
+        let build_sum = |numerator: &Atom| -> Result<Atom> {
+            let mut graph = graph.clone();
+            let options = graph.denominator_only_cff_3d_expression_options();
+            let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+            let production = graph.generate_3d_expression_for_integrand(
+                &[],
+                &canonization,
+                &options,
+                Some(numerator),
+            )?;
+            let cff = graph.cff_from_production_expression(
+                &production,
+                &CutSet::empty(graph.n_hedges()),
+                &OrientationPattern::default(),
+            )?;
+            let term = cff
+                .terms
+                .get(&CutCFFIndex::new_all_none())
+                .expect("the triangle has one uncut CFF sector");
+            Ok(term
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    orientation.expression.clone()
+                        * numerator.replace_multiple(
+                            orientation.orientation.energy_replacements_gs(&graph),
+                        )
+                })
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(cff.production_prefactor_factor()))
+        };
+        let evaluate_arb = |mut expression: Atom| -> Result<Complex<F<ArbPrec>>> {
+            expression = expression
+                .replace(function!(GS.tree_denom_wrapper, W_.x_))
+                .with(W_.x_)
+                .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                .with(W_.d_);
+            for (edge, energy) in [
+                (EdgeIndex(0), Atom::num(Rational::from((7, 10)))),
+                (EdgeIndex(1), Atom::num(Rational::from((-23, 100)))),
+                (EdgeIndex(2), Atom::num(Rational::from((47, 100)))),
+            ] {
+                expression = expression
+                    .replace(GS.emr_mom(edge, GS.cind(0)))
+                    .with(energy);
+            }
+            let mass_squared = Atom::num(1);
+            for (edge, spatial) in [
+                (EdgeIndex(3), [(31, 100), (-47, 100), (83, 100)]),
+                (EdgeIndex(4), [(20, 100), (-39, 100), (78, 100)]),
+                (EdgeIndex(5), [(24, 100), (-46, 100), (87, 100)]),
+            ] {
+                let energy = spatial
+                    .into_iter()
+                    .fold(mass_squared.clone(), |sum, value| {
+                        sum + Atom::num(Rational::from(value)).pow(2)
+                    })
+                    .sqrt();
+                expression = expression
+                    .replace(GS.ose(edge))
+                    .with(energy.clone())
+                    .replace(cut_energy(edge))
+                    .with(energy);
+            }
+            let parameters = [Atom::var(GS.pi)];
+            let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> = expression
+                .evaluator(&parameters)
+                .build()
+                .map_err(|error| eyre::eyre!("failed to build triangle evaluator: {error}"))?;
+            let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
+                rational.map_coeff(&|coefficient| {
+                    Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
+                });
+            let zero = F(ArbPrec::default());
+            let pi = zero.clone().pi();
+            Ok(arb.evaluate_single(&[Complex::new(pi, zero)]))
+        };
+        let squared_sum = build_sum(&squared)?;
+        let affine_sum = build_sum(&affine)?;
+        let squared_value = evaluate_arb(squared_sum.clone())?;
+        let affine_value = evaluate_arb(affine_sum.clone())?;
+        let distance = (squared_value.clone() - affine_value.clone()).norm().re;
+        let scale = {
+            let squared_norm = squared_value.clone().norm().re;
+            let affine_norm = affine_value.clone().norm().re;
+            if squared_norm > affine_norm {
+                squared_norm
+            } else {
+                affine_norm
+            }
+        };
+        let relative_distance = if scale.is_zero() {
+            distance
+        } else {
+            distance / scale
+        };
+        let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+        assert!(
+            relative_distance <= tolerance,
+            "GammaLoop's mapped triangle CFF violates Q3^0=Q4^0+Q0^0: squared={squared_value:e}, affine={affine_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+        );
+
+        let rational = |numerator: i64, denominator: i64| {
+            F::<ArbPrec>::from(&Rational::from((numerator, denominator)))
+        };
+        let loop_moms: LoopMomenta<F<ArbPrec>> = [ThreeMomentum::new(
+            rational(31, 100),
+            rational(-47, 100),
+            rational(83, 100),
+        )]
+        .into_iter()
+        .collect();
+        let external_moms: ExternalFourMomenta<F<ArbPrec>> = [
+            [
+                rational(7, 10),
+                rational(11, 100),
+                rational(-8, 100),
+                rational(5, 100),
+            ]
+            .into(),
+            [
+                rational(-23, 100),
+                rational(-4, 100),
+                rational(7, 100),
+                rational(-9, 100),
+            ]
+            .into(),
+            [
+                rational(47, 100),
+                rational(7, 100),
+                rational(-1, 100),
+                rational(-4, 100),
+            ]
+            .into(),
+        ]
+        .into_iter()
+        .collect();
+        let sample = MomentumSample {
+            sample: BareMomentumSample {
+                loop_moms,
+                dual_loop_moms: None,
+                loop_mom_cache_id: 0,
+                loop_mom_base_cache_id: 0,
+                external_moms,
+                external_mom_cache_id: 0,
+                external_mom_base_cache_id: 0,
+                jacobian: rational(1, 1),
+                orientation: None,
+                parameterization_branch: None,
+            },
+        };
+        let orientations = TiVec::<OrientationID, EdgeVec<Orientation>>::new();
+        let orientation_filter = SubSet::full(orientations.len());
+        let runtime_settings = RuntimeSettings::default();
+        let evaluate_stack = |expression: &Atom| -> Result<Complex<F<ArbPrec>>> {
+            let mut param_builder = graph.param_builder.clone();
+            let (mut evaluator, _) = EvaluatorStack::new_explicit_sum_with_timings(
+                std::slice::from_ref(expression),
+                &param_builder,
+                None,
+                &EvaluatorSettings::default(),
+            )?;
+            let input = <ArbPrec as GenericEvaluatorFloat>::get_parameters(
+                &mut param_builder,
+                (false, false),
+                &graph,
+                &sample,
+                &[],
+                &[],
+                None,
+                None,
+                None,
+            );
+            Ok(evaluator
+                .evaluate(
+                    input,
+                    SingleOrAllOrientations::All {
+                        all: &orientations,
+                        filter: &orientation_filter,
+                    },
+                    &runtime_settings,
+                    &mut EvaluationMetaData::new_empty(),
+                    false,
+                )?
+                .pop()
+                .expect("the triangle evaluator should return one value")
+                .unwrap_real())
+        };
+        let squared_stack_value = evaluate_stack(&squared_sum)?;
+        let affine_stack_value = evaluate_stack(&affine_sum)?;
+
+        for (comparison, left, right) in [
+            (
+                "squared direct vs production stack",
+                &squared_value,
+                &squared_stack_value,
+            ),
+            (
+                "affine direct vs production stack",
+                &affine_value,
+                &affine_stack_value,
+            ),
+            (
+                "squared vs affine production stack",
+                &squared_stack_value,
+                &affine_stack_value,
+            ),
+        ] {
+            let distance = (left.clone() - right.clone()).norm().re;
+            let left_norm = left.clone().norm().re;
+            let right_norm = right.clone().norm().re;
+            let scale = if left_norm > right_norm {
+                left_norm
+            } else {
+                right_norm
+            };
+            let relative_distance = if scale.is_zero() {
+                distance
+            } else {
+                distance / scale
+            };
+            assert!(
+                relative_distance <= tolerance,
+                "{comparison} failed: left={left:e}, right={right:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn indexed_residue_selection_tracks_axes_independent_of_raised_order() -> Result<()> {
+        let raised_group = crate::cff::esurface::RaisedEsurfaceGroup {
+            esurface_ids: vec![crate::cff::esurface::EsurfaceID::from(0)],
+            max_occurence: 2,
+        };
+        for selected_axis_count in 0usize..=3 {
+            let mut cutset = CutSet::empty(1);
+            if selected_axis_count >= 1 {
+                cutset.residue_selector.right_th_cut = Some(raised_group.clone());
+            }
+            if selected_axis_count >= 2 {
+                cutset.residue_selector.left_th_cut = Some(raised_group.clone());
+            }
+            if selected_axis_count >= 3 {
+                cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+                    raised_group: raised_group.clone(),
+                    cut_edge_alternatives: vec![vec![EdgeIndex(0)]],
+                });
+            }
+
+            let mut expression = ThreeDExpression::new_empty();
+            expression.surfaces.esurface_cache.push(esurface::Esurface {
+                energies: vec![EdgeIndex(0)],
+                external_shift: Vec::new(),
+                vertex_set: VertexSet::dummy(),
+            });
+            let residues = select_indexed_cff_residues(expression, &cutset)?;
+            assert_eq!(residues.len(), 1usize << selected_axis_count);
+            assert!(residues.iter().all(|(index, _)| {
+                let present_axes = [
+                    index.right_threshold_order,
+                    index.left_threshold_order,
+                    index.lu_cut_order,
+                ]
+                .into_iter()
+                .flatten()
+                .count();
+                present_axes == selected_axis_count
+            }));
+            if selected_axis_count != 0 {
+                assert!(
+                    residues.iter().any(|(index, _)| {
+                        [
+                            index.right_threshold_order,
+                            index.left_threshold_order,
+                            index.lu_cut_order,
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .any(|order| order == 2)
+                    }),
+                    "raised order two must retain the same selected-axis parity"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_cff_keeps_dotted_same_edge_occurrences() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_dotted {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> a [id=2]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+            b -> outgoing [id=3]
+        })?;
+        let edge = EdgeIndex::from(0);
+        let momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(edge))
+            .finish();
+        let mass_squared = graph.underlying[edge].particle.mass_atom().pow(2);
+        let denominators = [
+            FourDDenominator {
+                source_edge: edge,
+                momentum: momentum.clone(),
+                mass_squared: mass_squared.clone(),
+                full_expr: Atom::var(symbolica::symbol!("exact_cff_test::first")),
+            },
+            FourDDenominator {
+                source_edge: edge,
+                momentum,
+                mass_squared: mass_squared.clone(),
+                full_expr: Atom::var(symbolica::symbol!("exact_cff_test::second")),
+            },
+        ];
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let cutset = CutSet::empty(graph.n_hedges());
+
+        let (cff, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &Atom::one())?;
+        assert_eq!(cff.terms.len(), 1);
+        let on_shell_energy = (1..=3)
+            .fold(mass_squared, |norm_squared, spatial_index| {
+                norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
+            })
+            .sqrt();
+        // Ordinary CFF distributes the double-pole residue across orientations,
+        // so the complete explicit sum and its typed source-frame bridge are
+        // needed to obtain the contour with GammaLoop's historical -i measure factor.
+        let expected_orientation_sum =
+            -Atom::i() / (Atom::num(32) * Atom::var(GS.pi).pow(3) * on_shell_energy.pow(3));
+        let terms = &cff
+            .terms
+            .values()
+            .next()
+            .expect("the empty cutset has one CFF term")
+            .orientations;
+        let orientation_sum = terms
+            .iter()
+            .fold(Atom::zero(), |sum, term| sum + &term.expression)
+            .replace(GS.ose(edge))
+            .with(on_shell_energy);
+        assert!(
+            (orientation_sum * Atom::num(cff.production_prefactor_factor())
+                - expected_orientation_sum)
+                .together()
+                .is_zero()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_cff_uncancelled_powered_denominator_matches_lower_source() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_powered_identity {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+        })?;
+        let edge = EdgeIndex(0);
+        let momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(edge))
+            .finish();
+        let mass_squared = graph.underlying[edge].particle.mass_atom().pow(2);
+        let full_expr = GS.emr_mom(edge, GS.cind(0)).pow(2)
+            - (1..=3).fold(mass_squared.clone(), |norm_squared, spatial_index| {
+                norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
+            });
+        let denominator = FourDDenominator {
+            source_edge: edge,
+            momentum: momentum.clone(),
+            mass_squared: mass_squared.clone(),
+            full_expr: full_expr.clone(),
+        };
+        let spectator_edge = EdgeIndex(1);
+        let spectator_momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(spectator_edge))
+            .finish();
+        let spectator_mass_squared = graph.underlying[spectator_edge].particle.mass_atom().pow(2);
+        let spectator = FourDDenominator {
+            source_edge: spectator_edge,
+            momentum: spectator_momentum,
+            mass_squared: spectator_mass_squared.clone(),
+            full_expr: GS.emr_mom(spectator_edge, GS.cind(0)).pow(2)
+                - (1..=3).fold(spectator_mass_squared, |norm_squared, spatial_index| {
+                    norm_squared + GS.emr_mom(spectator_edge, GS.cind(spatial_index)).pow(2)
+                }),
+        };
+        let denominators = [spectator, denominator.clone(), denominator];
+        let retained_constant = Atom::var(symbolica::symbol!("exact_cff_test::retained_factor"));
+        let retained_factor = GS.emr_mom(edge, GS.cind(0)) + &retained_constant;
+        let numerator =
+            GS.den(usize::from(edge), momentum, mass_squared, full_expr) * &retained_factor;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let exact_terms = |cff: &CutCFF| -> Result<Vec<Atom>> {
+            let prefactor = Atom::num(cff.production_prefactor_factor());
+            cff.terms
+                .values()
+                .flat_map(|term| {
+                    term.orientations.iter().map(|orientation| {
+                        Ok(orientation.expression.clone()
+                            * term.map_exact_source_numerator(&orientation.orientation)?
+                            * &prefactor)
+                    })
+                })
+                .collect::<Result<Vec<_>>>()
+        };
+
+        let (powered, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &numerator)?;
+        let powered_terms = exact_terms(&powered)?;
+
+        // Re-spell the complete powered rational component as D(-Q). Its
+        // canonical exact graph must be identical, while the physical odd
+        // numerator remains Q^0+c rather than acquiring the denominator sign.
+        let mut reversed_denominators = denominators.clone();
+        for denominator in &mut reversed_denominators[1..] {
+            denominator.momentum = -denominator.momentum.clone();
+        }
+        let (reversed, _) = graph.cff_from_4d_denominators(
+            &reversed_denominators,
+            &cutset,
+            &options,
+            &numerator,
+        )?;
+        let reversed_terms = exact_terms(&reversed)?;
+        let (lower, _) = graph.cff_from_4d_denominators(
+            &denominators[..2],
+            &cutset,
+            &options,
+            &retained_factor,
+        )?;
+        let lower_terms = exact_terms(&lower)?;
+        let denominator_only = GS.den(
+            usize::from(edge),
+            denominators[1].momentum.clone(),
+            denominators[1].mass_squared.clone(),
+            denominators[1].full_expr.clone(),
+        );
+        let (powered_scalar, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &denominator_only)?;
+        let powered_scalar_terms = exact_terms(&powered_scalar)?;
+        let (lower_scalar, _) =
+            graph.cff_from_4d_denominators(&denominators[..2], &cutset, &options, &Atom::one())?;
+        let lower_scalar_terms = exact_terms(&lower_scalar)?;
+        let contract: SuBitGraph = graph.empty_subgraph();
+        let ordinary = graph.cff(
+            &contract,
+            &cutset,
+            &OrientationPattern::default(),
+            &options,
+            Some(&retained_factor),
+        )?;
+        let ordinary_prefactor = Atom::num(ordinary.production_prefactor_factor());
+        let ordinary_terms = ordinary
+            .terms
+            .values()
+            .flat_map(|term| {
+                term.orientations.iter().map(|orientation| {
+                    orientation.expression.clone()
+                        * retained_factor.replace_multiple(
+                            orientation.orientation.energy_replacements_gs(&graph),
+                        )
+                        * &ordinary_prefactor
+                })
+            })
+            .collect::<Vec<_>>();
+
+        // The same identity at the first nontrivial generalized-contact rank
+        // exercises the exact numerator mapper rather than only the linear
+        // residue handled by the ordinary repeated-pole path.
+        let mut quintic_denominators = vec![denominators[0].clone()];
+        quintic_denominators.extend((0..5).map(|_| denominators[1].clone()));
+        let retained_quartic = retained_factor.pow(4);
+        let quintic_numerator = GS.den(
+            usize::from(edge),
+            denominators[1].momentum.clone(),
+            denominators[1].mass_squared.clone(),
+            denominators[1].full_expr.clone(),
+        ) * &retained_quartic;
+        let (quintic, _) = graph.cff_from_4d_denominators(
+            &quintic_denominators,
+            &cutset,
+            &options,
+            &quintic_numerator,
+        )?;
+        let quintic_terms = exact_terms(&quintic)?;
+        let mut reversed_quintic_denominators = quintic_denominators.clone();
+        for denominator in &mut reversed_quintic_denominators[1..] {
+            denominator.momentum = -denominator.momentum.clone();
+        }
+        let (reversed_quintic, _) = graph.cff_from_4d_denominators(
+            &reversed_quintic_denominators,
+            &cutset,
+            &options,
+            &quintic_numerator,
+        )?;
+        let reversed_quintic_terms = exact_terms(&reversed_quintic)?;
+        let (quartic, _) = graph.cff_from_4d_denominators(
+            &quintic_denominators[..5],
+            &cutset,
+            &options,
+            &retained_quartic,
+        )?;
+        let quartic_terms = exact_terms(&quartic)?;
+
+        let fixed_point = |mut expression: Atom, spatial: &Atom, energy: &Atom, constant: &Atom| {
+            for source_edge in [edge, spectator_edge] {
+                expression = expression
+                    .replace(GS.emr_mom(source_edge, GS.cind(1)))
+                    .with(spatial.clone())
+                    .replace(GS.ose(source_edge))
+                    .with(energy.clone());
+                for spatial_index in 2..=3 {
+                    expression = expression
+                        .replace(GS.emr_mom(source_edge, GS.cind(spatial_index)))
+                        .with(Atom::Zero);
+                }
+            }
+            expression
+                .replace(retained_constant.clone())
+                .with(constant.clone())
+        };
+        let evaluate_arb = |expression: Atom| -> Result<Complex<F<ArbPrec>>> {
+            let parameters = [Atom::var(GS.pi)];
+            let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> = expression
+                .evaluator(&parameters)
+                .build()
+                .map_err(|error| eyre::eyre!("failed to build odd-routing oracle: {error}"))?;
+            let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
+                rational.map_coeff(&|coefficient| {
+                    Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
+                });
+            Ok(arb.evaluate_single(&[Complex::new(
+                F(ArbPrec::default()).pi(),
+                F(ArbPrec::default()),
+            )]))
+        };
+        // Production retains this component structure and evaluates every
+        // orientation separately.  The regression does the same in Arb so it
+        // also detects precision loss without first expanding the factorized
+        // numerator into one prohibitively large symbolic sum.
+        let evaluate_terms = |terms: &[Atom],
+                              unwrap_denominator: bool,
+                              spatial: &Atom,
+                              energy: &Atom,
+                              constant: &Atom|
+         -> Result<Complex<F<ArbPrec>>> {
+            let zero = F(ArbPrec::default());
+            terms
+                .iter()
+                .try_fold(Complex::new(zero.clone(), zero), |sum, expression| {
+                    let expression = if unwrap_denominator {
+                        expression
+                            .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                            .with(W_.d_)
+                    } else {
+                        expression.clone()
+                    };
+                    Ok(sum + evaluate_arb(fixed_point(expression, spatial, energy, constant))?)
+                })
+        };
+        let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+        let points = [
+            (Atom::Zero, Atom::one(), Atom::num(2)),
+            (
+                Atom::num(symbolica::domains::rational::Rational::from((3, 4))),
+                Atom::num(symbolica::domains::rational::Rational::from((5, 4))),
+                Atom::num(symbolica::domains::rational::Rational::from((7, 3))),
+            ),
+        ];
+        for (spatial, energy, constant) in points {
+            let powered_value = evaluate_terms(&powered_terms, true, &spatial, &energy, &constant)?;
+            let reversed_value =
+                evaluate_terms(&reversed_terms, true, &spatial, &energy, &constant)?;
+            let lower_value = evaluate_terms(&lower_terms, false, &spatial, &energy, &constant)?;
+            let powered_scalar_value =
+                evaluate_terms(&powered_scalar_terms, true, &spatial, &energy, &constant)?;
+            let lower_scalar_value =
+                evaluate_terms(&lower_scalar_terms, false, &spatial, &energy, &constant)?;
+            for (label, candidate, reference) in [
+                (
+                    "uncancelled D*(Q0+c)/D^3",
+                    powered_value.clone(),
+                    lower_value,
+                ),
+                (
+                    "uncancelled scalar D/D^3",
+                    powered_scalar_value,
+                    lower_scalar_value,
+                ),
+            ] {
+                let distance = (candidate.clone() - reference.clone()).norm().re;
+                let candidate_norm = candidate.clone().norm().re;
+                let reference_norm = reference.clone().norm().re;
+                let scale = if candidate_norm > reference_norm {
+                    candidate_norm
+                } else {
+                    reference_norm
+                };
+                let relative_distance = if scale.is_zero() {
+                    distance
+                } else {
+                    distance / scale
+                };
+                assert!(
+                    relative_distance <= tolerance,
+                    "{label} differs from its independently generated lower source at spatial={spatial}, c={constant}: candidate={candidate:e}, lower={reference:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+                );
+            }
+            let distance = (powered_value.clone() - reversed_value.clone()).norm().re;
+            let powered_norm = powered_value.clone().norm().re;
+            let reversed_norm = reversed_value.clone().norm().re;
+            let scale = if powered_norm > reversed_norm {
+                powered_norm
+            } else {
+                reversed_norm
+            };
+            let relative_distance = if scale.is_zero() {
+                distance
+            } else {
+                distance / scale
+            };
+            assert!(
+                relative_distance <= tolerance,
+                "globally reversed D(-Q) component changes odd physical Q0+c numerator at spatial={spatial}, c={constant}: powered={powered_value:e}, reversed={reversed_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+            );
+            let ordinary_value =
+                evaluate_terms(&ordinary_terms, false, &spatial, &energy, &constant)?;
+            let lower_value = evaluate_terms(&lower_terms, false, &spatial, &energy, &constant)?;
+            let normalization_distance = (lower_value.clone() - ordinary_value.clone()).norm().re;
+            let lower_norm = lower_value.clone().norm().re;
+            let ordinary_norm = ordinary_value.clone().norm().re;
+            let normalization_scale = if lower_norm > ordinary_norm {
+                lower_norm
+            } else {
+                ordinary_norm
+            };
+            let normalization_relative_distance = if normalization_scale.is_zero() {
+                normalization_distance
+            } else {
+                normalization_distance / normalization_scale
+            };
+            assert!(
+                normalization_relative_distance <= tolerance,
+                "exact and ordinary (Q0+c)/(D7*D8) CFF sums differ at spatial={spatial}, c={constant}: exact={lower_value:e}, ordinary={ordinary_value:e}, relative delta={normalization_relative_distance:e}, tolerance={tolerance:e}"
+            );
+
+            let quintic_value = evaluate_terms(&quintic_terms, true, &spatial, &energy, &constant)?;
+            let reversed_quintic_value =
+                evaluate_terms(&reversed_quintic_terms, true, &spatial, &energy, &constant)?;
+            let quartic_value =
+                evaluate_terms(&quartic_terms, false, &spatial, &energy, &constant)?;
+            for (label, candidate) in [
+                ("uncancelled", quintic_value),
+                ("globally reversed", reversed_quintic_value),
+            ] {
+                let distance = (candidate.clone() - quartic_value.clone()).norm().re;
+                let candidate_norm = candidate.clone().norm().re;
+                let quartic_norm = quartic_value.clone().norm().re;
+                let scale = if candidate_norm > quartic_norm {
+                    candidate_norm
+                } else {
+                    quartic_norm
+                };
+                let relative_distance = if scale.is_zero() {
+                    distance
+                } else {
+                    distance / scale
+                };
+                assert!(
+                    relative_distance <= tolerance,
+                    "{label} D*(Q0+c)^4/D^5 differs from (Q0+c)^4/D^4 at spatial={spatial}, c={constant}: candidate={candidate:e}, lower={quartic_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_cff_uncancelled_powered_denominator_matches_lower_lu_residues() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_powered_lu_identity {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> v1 [id=0]
+            v1 -> v2 [id=1 lmb_id=0]
+            v2 -> v3 [id=2]
+            v1 -> v3 [id=3]
+            v3 -> outgoing [id=4]
+        })?;
+        let edge = EdgeIndex(1);
+        let momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(edge))
+            .finish();
+        let mass_squared = graph.underlying[edge].particle.mass_atom().pow(2);
+        let full_expr = GS.emr_mom(edge, GS.cind(0)).pow(2)
+            - (1..=3).fold(mass_squared.clone(), |norm_squared, spatial_index| {
+                norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
+            });
+        let denominator = FourDDenominator {
+            source_edge: edge,
+            momentum: momentum.clone(),
+            mass_squared: mass_squared.clone(),
+            full_expr: full_expr.clone(),
+        };
+        let spectator_edge = EdgeIndex(3);
+        let spectator_mass_squared = graph.underlying[spectator_edge].particle.mass_atom().pow(2);
+        let spectator = FourDDenominator {
+            source_edge: spectator_edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(spectator_edge))
+                .finish(),
+            mass_squared: spectator_mass_squared.clone(),
+            full_expr: GS.emr_mom(spectator_edge, GS.cind(0)).pow(2)
+                - (1..=3).fold(spectator_mass_squared, |norm_squared, spatial_index| {
+                    norm_squared + GS.emr_mom(spectator_edge, GS.cind(spatial_index)).pow(2)
+                }),
+        };
+        let denominators = [spectator, denominator.clone(), denominator];
+        let retained_constant = Atom::var(symbolica::symbol!("exact_cff_test::lu_retained_factor"));
+        let retained_factor = GS.emr_mom(edge, GS.cind(0)) + &retained_constant;
+        let numerator =
+            GS.den(usize::from(edge), momentum, mass_squared, full_expr) * &retained_factor;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[EdgeIndex(2)],
+            &canonization,
+            &options,
+            Some(&retained_factor),
+        )?;
+        let mut lu_cut = graph
+            .determine_raised_esurfaces_from_expression(&production.expression)
+            .raised_groups
+            .into_iter()
+            .find(|group| {
+                group.esurface_ids.iter().any(|esurface_id| {
+                    !production.expression.surfaces.esurface_cache[*esurface_id]
+                        .external_shift
+                        .is_empty()
+                })
+            })
+            .expect("the lower production CFF contains an ordinary physical LU surface");
+        lu_cut.max_occurence = 2;
+        let mut cutset = CutSet::empty(graph.n_hedges());
+        cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            raised_group: lu_cut.clone(),
+            cut_edge_alternatives: lu_cut
+                .esurface_ids
+                .iter()
+                .map(|esurface_id| {
+                    production.expression.surfaces.esurface_cache[*esurface_id]
+                        .energies
+                        .clone()
+                })
+                .collect(),
+        });
+
+        let (powered, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &numerator)?;
+        let (lower, _) = graph.cff_from_4d_denominators(
+            &denominators[..2],
+            &cutset,
+            &options,
+            &retained_factor,
+        )?;
+        let mut contract: SuBitGraph = graph.empty_subgraph();
+        contract.add(graph[&EdgeIndex(2)].1);
+        let ordinary = graph.cff(
+            &contract,
+            &cutset,
+            &OrientationPattern::default(),
+            &options,
+            Some(&retained_factor),
+        )?;
+        assert_eq!(
+            powered.terms.keys().collect::<Vec<_>>(),
+            lower.terms.keys().collect::<Vec<_>>(),
+            "powered and lower exact sources must expose the same LU residues"
+        );
+        assert_eq!(
+            lower.terms.keys().collect::<Vec<_>>(),
+            ordinary.terms.keys().collect::<Vec<_>>(),
+            "exact and ordinary sources must expose the same LU residues"
+        );
+
+        let points = [
+            (
+                Atom::Zero,
+                Atom::one(),
+                Atom::num(3) / 4,
+                Atom::num(5) / 4,
+                Atom::num(7),
+                Atom::num(2),
+            ),
+            (
+                Atom::num(3) / 4,
+                Atom::num(5) / 4,
+                Atom::Zero,
+                Atom::one(),
+                Atom::num(11),
+                Atom::num(7) / 3,
+            ),
+        ];
+        for index in lower.terms.keys() {
+            let powered_term = powered.terms.get(index).expect("powered residue exists");
+            let powered_sum = powered_term
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    Ok(orientation.expression.clone()
+                        * powered_term.map_exact_source_numerator(&orientation.orientation)?)
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(powered.production_prefactor_factor());
+            let powered_sum = powered_sum
+                .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                .with(W_.d_);
+            let lower_term = lower.terms.get(index).expect("lower residue exists");
+            let lower_sum = lower_term
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    Ok(orientation.expression.clone()
+                        * lower_term.map_exact_source_numerator(&orientation.orientation)?)
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(lower.production_prefactor_factor());
+            let ordinary_sum = ordinary
+                .terms
+                .get(index)
+                .expect("ordinary residue exists")
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    orientation.expression.clone()
+                        * retained_factor.replace_multiple(
+                            orientation.orientation.energy_replacements_gs(&graph),
+                        )
+                })
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(ordinary.production_prefactor_factor());
+
+            for (q, eq, q3, e3, external_energy, constant) in &points {
+                let fixed_point = |mut expression: Atom| {
+                    for (source_edge, spatial, energy) in [(edge, q, eq), (spectator_edge, q3, e3)]
+                    {
+                        expression = expression
+                            .replace(GS.emr_mom(source_edge, GS.cind(1)))
+                            .with(spatial.clone())
+                            .replace(GS.ose(source_edge))
+                            .with(energy.clone());
+                        for spatial_index in 2..=3 {
+                            expression = expression
+                                .replace(GS.emr_mom(source_edge, GS.cind(spatial_index)))
+                                .with(Atom::Zero);
+                        }
+                    }
+                    for external_edge in [EdgeIndex(0), EdgeIndex(4)] {
+                        expression = expression
+                            .replace(GS.emr_mom(external_edge, GS.cind(0)))
+                            .with(external_energy.clone());
+                    }
+                    expression
+                        .replace(retained_constant.clone())
+                        .with(constant.clone())
+                };
+                let powered_value = fixed_point(powered_sum.clone());
+                let lower_value = fixed_point(lower_sum.clone());
+                let ordinary_value = fixed_point(ordinary_sum.clone());
+                let powered_difference = (powered_value - &lower_value).together();
+                assert!(
+                    powered_difference.is_zero(),
+                    "uncancelled powered and lower exact LU residues differ for index {index}: {powered_difference}"
+                );
+                let ordinary_difference = (ordinary_value - &lower_value).together();
+                assert!(
+                    ordinary_difference.is_zero(),
+                    "exact lower and ordinary LU residues differ for index {index}: {ordinary_difference}"
+                );
+                if index.lu_cut_order == Some(2) {
+                    assert!(
+                        lower_value.together().is_zero(),
+                        "the artificially raised second-order LU residue must vanish for the lower source"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_cff_alias_edges_share_physical_numerator_energy() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_alias_energy_identity {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> v1 [id=0]
+            v1 -> v2 [id=1 lmb_id=0]
+            v2 -> v3 [id=2]
+            v1 -> v3 [id=3]
+            v3 -> outgoing [id=4]
+        })?;
+        let alias_edges = [EdgeIndex(1), EdgeIndex(2)];
+        let spectator_edge = EdgeIndex(3);
+        let denominators = [spectator_edge, alias_edges[0], alias_edges[1]].map(|edge| {
+            let momentum = FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish();
+            let mass_squared = graph.underlying[edge].particle.mass_atom().pow(2);
+            FourDDenominator {
+                source_edge: edge,
+                momentum,
+                mass_squared: mass_squared.clone(),
+                full_expr: GS.emr_mom(edge, GS.cind(0)).pow(2)
+                    - (1..=3).fold(mass_squared, |norm_squared, spatial_index| {
+                        norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
+                    }),
+            }
+        });
+        let retained_constant =
+            Atom::var(symbolica::symbol!("exact_cff_test::alias_retained_factor"));
+        let numerator = (GS.emr_mom(alias_edges[0], GS.cind(0)) + &retained_constant)
+            * (GS.emr_mom(alias_edges[1], GS.cind(0)) + &retained_constant + 1);
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &options,
+            Some(&numerator),
+        )?;
+        let mut lu_cut = graph
+            .determine_raised_esurfaces_from_expression(&production.expression)
+            .raised_groups
+            .into_iter()
+            .find(|group| {
+                group.esurface_ids.iter().any(|esurface_id| {
+                    !production.expression.surfaces.esurface_cache[*esurface_id]
+                        .external_shift
+                        .is_empty()
+                })
+            })
+            .expect("the production CFF contains a physical LU surface");
+        lu_cut.max_occurence = 2;
+        let mut cutset = CutSet::empty(graph.n_hedges());
+        cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            raised_group: lu_cut.clone(),
+            cut_edge_alternatives: lu_cut
+                .esurface_ids
+                .iter()
+                .map(|esurface_id| {
+                    production.expression.surfaces.esurface_cache[*esurface_id]
+                        .energies
+                        .clone()
+                })
+                .collect(),
+        });
+
+        let (exact, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &numerator)?;
+        let contract: SuBitGraph = graph.empty_subgraph();
+        let ordinary = graph.cff(
+            &contract,
+            &cutset,
+            &OrientationPattern::default(),
+            &options,
+            Some(&numerator),
+        )?;
+        assert_eq!(
+            exact.terms.keys().collect::<Vec<_>>(),
+            ordinary.terms.keys().collect::<Vec<_>>(),
+            "exact and ordinary alias sources must expose the same LU residues"
+        );
+
+        let points = [
+            (
+                Atom::Zero,
+                Atom::one(),
+                Atom::num(3) / 4,
+                Atom::num(5) / 4,
+                Atom::num(7),
+                Atom::num(2),
+            ),
+            (
+                Atom::num(3) / 4,
+                Atom::num(5) / 4,
+                Atom::Zero,
+                Atom::one(),
+                Atom::num(11),
+                Atom::num(7) / 3,
+            ),
+        ];
+        for index in ordinary.terms.keys() {
+            let exact_term = exact.terms.get(index).expect("exact residue exists");
+            let exact_sum = exact_term
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    Ok(orientation.expression.clone()
+                        * exact_term.map_exact_source_numerator(&orientation.orientation)?)
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(exact.production_prefactor_factor());
+            let ordinary_sum = ordinary
+                .terms
+                .get(index)
+                .expect("ordinary residue exists")
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    orientation.expression.clone()
+                        * numerator.replace_multiple(
+                            orientation.orientation.energy_replacements_gs(&graph),
+                        )
+                })
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(ordinary.production_prefactor_factor());
+
+            for (alias_spatial, alias_energy, spectator_spatial, spectator_energy, external, c) in
+                &points
+            {
+                let fixed_point = |mut expression: Atom| {
+                    for edge in alias_edges {
+                        expression = expression
+                            .replace(GS.emr_mom(edge, GS.cind(1)))
+                            .with(alias_spatial.clone())
+                            .replace(GS.ose(edge))
+                            .with(alias_energy.clone());
+                    }
+                    expression = expression
+                        .replace(GS.emr_mom(spectator_edge, GS.cind(1)))
+                        .with(spectator_spatial.clone())
+                        .replace(GS.ose(spectator_edge))
+                        .with(spectator_energy.clone());
+                    for edge in [alias_edges[0], alias_edges[1], spectator_edge] {
+                        for spatial_index in 2..=3 {
+                            expression = expression
+                                .replace(GS.emr_mom(edge, GS.cind(spatial_index)))
+                                .with(Atom::Zero);
+                        }
+                    }
+                    for external_edge in [EdgeIndex(0), EdgeIndex(4)] {
+                        expression = expression
+                            .replace(GS.emr_mom(external_edge, GS.cind(0)))
+                            .with(external.clone());
+                    }
+                    expression
+                        .replace(retained_constant.clone())
+                        .with(c.clone())
+                };
+                let difference =
+                    (fixed_point(exact_sum.clone()) - fixed_point(ordinary_sum.clone())).together();
+                assert!(
+                    difference.is_zero(),
+                    "exact alias-edge and ordinary LU residues differ for index {index}: {difference}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_cff_cubic_uv_rewrite_matches_production_convention() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_cubic_uv_rewrite {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> v5 [id=0]
+            v0 -> v2 [id=1 lmb_id=0]
+            v3 -> v0 [id=2]
+            v0 -> v5 [id=3]
+            v2 -> v1 [id=4]
+            v1 -> v3 [id=5 lmb_id=1]
+            v1 -> v4 [id=6]
+            v2 -> v3 [id=7]
+            v4 -> outgoing [id=8]
+        })?;
+        let owner_edges = [EdgeIndex(4), EdgeIndex(5), EdgeIndex(7)];
+        assert_eq!(
+            owner_edges
+                .iter()
+                .map(|edge| &graph.loop_momentum_basis.edge_signatures[*edge])
+                .collect::<BTreeSet<_>>()
+                .len(),
+            owner_edges.len(),
+            "the exact UV owners must have genuinely different physical routings"
+        );
+
+        let carrier = EdgeIndex(5);
+        let momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(carrier))
+            .finish();
+        let mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
+        let full_expr = GS.emr_mom(carrier, GS.cind(0)).pow(2)
+            - (1..=3).fold(mass_squared.clone(), |norm_squared, spatial_index| {
+                norm_squared + GS.emr_mom(carrier, GS.cind(spatial_index)).pow(2)
+            });
+        let denominator_records = owner_edges
+            .into_iter()
+            .zip([1, 1, -1])
+            .map(|(source_edge, routing_sign)| FourDDenominator {
+                source_edge,
+                momentum: Atom::num(routing_sign) * &momentum,
+                mass_squared: mass_squared.clone(),
+                full_expr: full_expr.clone(),
+            })
+            .collect::<Vec<_>>();
+        let mut reference_orientation_sum: Option<Atom> = None;
+        let mut reference_scaled_quadratic_sum: Option<Atom> = None;
+        for denominators in denominator_records.iter().cloned().permutations(3) {
+            let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
+                &graph,
+                &denominators,
+                owner_edges,
+            )?;
+            let parsed = source.to_three_d_parsed_graph()?;
+            let validation = three_dimensional_reps::validate_parsed_graph(&parsed);
+            assert!(
+                validation.ok,
+                "the cubic UV source must remain momentum-balanced: {validation:?}"
+            );
+            let nodes = parsed
+                .internal_edges
+                .iter()
+                .flat_map(|edge| [edge.tail, edge.head])
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                parsed.internal_edges.len() + 1 - nodes.len(),
+                1,
+                "the cubic UV source must retain one topological loop"
+            );
+            assert_eq!(parsed.loop_names.len(), 1);
+            assert!(
+                parsed.external_edges.is_empty(),
+                "zero-denominator cograph components must not create causal surfaces"
+            );
+
+            let options = graph.denominator_only_cff_3d_expression_options();
+            let cutset = CutSet::empty(graph.n_hedges());
+            let (cff, _) = graph.cff_from_4d_denominators_in_uv_edges(
+                &denominators,
+                owner_edges,
+                &cutset,
+                &options,
+                &Atom::one(),
+                None,
+            )?;
+            assert_eq!(cff.terms.len(), 1);
+            let term = cff
+                .terms
+                .values()
+                .next()
+                .expect("the empty cutset has one exact CFF term");
+            let orientation_sum = term
+                .orientations
+                .iter()
+                .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
+                * Atom::num(cff.production_prefactor_factor());
+            let energy = (1..=3)
+                .fold(mass_squared.clone(), |norm_squared, spatial_index| {
+                    norm_squared + GS.emr_mom(carrier, GS.cind(spatial_index)).pow(2)
+                })
+                .sqrt();
+            // The raw mathematical q0 contour of (q0²-E²)^-3 is
+            // -3i/(128π³E⁵), including the spatial (2π)^-3 normalization.
+            // The ordinary 1/prod(-2E) factors and typed source-frame bridge
+            // together recover the signed dq0/(2πi) contour. GammaLoop's
+            // historical -i measure factor reverses the physical q0 contour
+            // above; this check retains that production convention.
+            let production_contour = Atom::num(3) * Atom::i()
+                / (Atom::num(128) * Atom::var(GS.pi).pow(3) * energy.pow(5));
+            let difference = (&orientation_sum - &production_contour).together();
+            assert!(
+                difference.is_zero(),
+                "the cubic exact UV CFF differs from the production convention: {difference}"
+            );
+            if let Some(reference) = &reference_orientation_sum {
+                let provenance_difference = (&orientation_sum - reference).together();
+                assert!(
+                    provenance_difference.is_zero(),
+                    "the bare cubic exact UV CFF depends on denominator-factor order: {provenance_difference}"
+                );
+            } else {
+                reference_orientation_sum = Some(orientation_sum.clone());
+            }
+
+            // Clear the common E^5 denominator on scalar CFF kernels before
+            // inserting any numerator. This also aligns lower-sector E^-3
+            // terms while retaining every mapped numerator factor.
+            let common_energy_denominator = energy.pow(5);
+            let scaled_orientation_sum = (&orientation_sum * &common_energy_denominator).together();
+            let quadratic_numerator = GS.emr_mom(carrier, GS.cind(0)).pow(2);
+            let (quadratic_cff, _) = graph.cff_from_4d_denominators_in_uv_edges(
+                &denominators,
+                owner_edges,
+                &cutset,
+                &options,
+                &quadratic_numerator,
+                None,
+            )?;
+            let scaled_quadratic_sum = quadratic_cff
+                .terms
+                .values()
+                .flat_map(|term| {
+                    term.orientations.iter().map(|orientation| {
+                        let scaled_kernel =
+                            (&orientation.expression * &common_energy_denominator).together();
+                        Ok(scaled_kernel
+                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(quadratic_cff.production_prefactor_factor());
+            let fixed_hard_energy = |owner: EdgeIndex| {
+                FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(GS.uv_momentum_provenance_tag(
+                        Atom::num(usize::from(owner) as i64).as_view(),
+                        false,
+                        momentum.as_view(),
+                    ))
+                    .add_arg(GS.cind(0))
+                    .finish()
+            };
+            let tagged_quadratic_numerator =
+                fixed_hard_energy(owner_edges[0]) * fixed_hard_energy(owner_edges[1]);
+            let (tagged_quadratic_cff, _) = graph.cff_from_4d_denominators_in_uv_edges(
+                &denominators,
+                owner_edges,
+                &cutset,
+                &options,
+                &tagged_quadratic_numerator,
+                None,
+            )?;
+            let scaled_tagged_quadratic_sum = tagged_quadratic_cff
+                .terms
+                .values()
+                .flat_map(|term| {
+                    term.orientations.iter().map(|orientation| {
+                        let scaled_kernel =
+                            (&orientation.expression * &common_energy_denominator).together();
+                        Ok(scaled_kernel
+                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(tagged_quadratic_cff.production_prefactor_factor());
+            // Normalize each factorized numerator route before subtraction;
+            // rational-polynomial normalization would expand its mapped factors.
+            let tagged_difference = (scaled_tagged_quadratic_sum.collect_factors()
+                - scaled_quadratic_sum.collect_factors())
+            .collect_factors();
+            assert!(
+                tagged_difference.is_zero(),
+                "two fixed provenance factors carrying the same hard Q must reproduce Q0^2: {tagged_difference}",
+            );
+            // The generalized CFF owns the lower-sector/contact realization of
+            // the powered pole. Keep this test on production invariants:
+            // tagged and untagged forms agree above, and permuting provenance
+            // owners cannot change the resulting Laurent functional below.
+            if let Some(reference) = &reference_scaled_quadratic_sum {
+                let provenance_difference = (scaled_quadratic_sum.collect_factors()
+                    - reference.collect_factors())
+                .collect_factors();
+                assert!(
+                    provenance_difference.is_zero(),
+                    "the q0^2 cubic exact UV CFF depends on denominator-factor order: {provenance_difference}"
+                );
+            } else {
+                reference_scaled_quadratic_sum = Some(scaled_quadratic_sum.clone());
+            }
+
+            let spatial_norm = (1..=3).fold(Atom::Zero, |norm_squared, spatial_index| {
+                norm_squared + GS.emr_mom(carrier, GS.cind(spatial_index)).pow(2)
+            });
+            let momentum_squared_numerator = &quadratic_numerator - &spatial_norm;
+            let (momentum_squared_cff, _) = graph.cff_from_4d_denominators_in_uv_edges(
+                &denominators,
+                owner_edges,
+                &cutset,
+                &options,
+                &momentum_squared_numerator,
+                None,
+            )?;
+            let scaled_momentum_squared_sum = momentum_squared_cff
+                .terms
+                .values()
+                .flat_map(|term| {
+                    term.orientations.iter().map(|orientation| {
+                        let scaled_kernel =
+                            (&orientation.expression * &common_energy_denominator).together();
+                        Ok(scaled_kernel
+                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(momentum_squared_cff.production_prefactor_factor());
+            let momentum_squared_reference =
+                &scaled_quadratic_sum - &spatial_norm * &scaled_orientation_sum;
+            // Normalize numeric signs within the local sums, including the
+            // common coefficients exposed by collection, without distributing
+            // products of retained numerator factors.
+            let momentum_squared_difference =
+                (scaled_momentum_squared_sum.expand_num().collect_factors()
+                    - momentum_squared_reference.expand_num().collect_factors())
+                .collect_factors()
+                .expand_num();
+            assert!(
+                momentum_squared_difference.is_zero(),
+                "the full momentum-square numerator must preserve CFF linearity between its temporal and spatial factors: {momentum_squared_difference}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_theta_equal_channel_temporal_numerators_are_owner_invariant() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_theta_equal_channel_numerator {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> c [id=1 lmb_id=1]
+            a -> d [id=2]
+            b -> c [id=3]
+            b -> d [id=4]
+        })?;
+        let q0 = FunctionBuilder::new(GS.emr_mom).add_arg(0).finish();
+        let q1 = FunctionBuilder::new(GS.emr_mom).add_arg(1).finish();
+        let momenta = [q0.clone(), q1.clone(), -&q0 - &q1, -&q1, &q0 + &q1];
+        let denominators = momenta
+            .into_iter()
+            .enumerate()
+            .map(|(owner, momentum)| FourDDenominator {
+                source_edge: EdgeIndex(owner),
+                momentum,
+                mass_squared: Atom::one(),
+                full_expr: Atom::one(),
+            })
+            .collect::<Vec<_>>();
+        let tagged_temporal = |owner: usize, hard: &Atom| {
+            FunctionBuilder::new(GS.emr_mom)
+                .add_arg(GS.uv_momentum_provenance_tag(
+                    Atom::num(owner as i64).as_view(),
+                    false,
+                    hard.as_view(),
+                ))
+                .add_arg(GS.cind(0))
+                .finish()
+        };
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let exact_cff = |graph: &mut Graph, numerator: &Atom| -> Result<CutCFF> {
+            Ok(graph
+                .cff_from_4d_denominators(&denominators, &cutset, &options, numerator)?
+                .0)
+        };
+        let exact_sum = |cff: &CutCFF| -> Result<Atom> {
+            Ok(cff
+                .terms
+                .values()
+                .flat_map(|term| {
+                    term.orientations.iter().map(|orientation| {
+                        Ok(orientation.expression.clone()
+                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(cff.production_prefactor_factor()))
+        };
+        let exact_unit_cff = exact_cff(&mut graph, &Atom::one())?;
+        let exact_unit = exact_sum(&exact_unit_cff)?;
+        let q1_squared = tagged_temporal(1, &q1).pow(2);
+        let q3_squared = tagged_temporal(3, &(-q1)).pow(2);
+        let q1_cff = exact_cff(&mut graph, &q1_squared)?;
+        let q3_cff = exact_cff(&mut graph, &q3_squared)?;
+        // Equal physical energies may have different independent CFF maps.
+        // Each original factor must still use its own retained base occurrence.
+        for (cff, owner, numerator) in [
+            (&q1_cff, EdgeIndex(1), &q1_squared),
+            (&q3_cff, EdgeIndex(3), &q3_squared),
+        ] {
+            assert_eq!(
+                cff.energy_degree_bound_report.physical_parent_bounds,
+                vec![(usize::from(owner), 2)],
+            );
+            for term in cff.terms.values() {
+                let planned = term.exact_source_numerator.as_ref().unwrap();
+                for orientation in &term.orientations {
+                    assert_eq!(
+                        term.map_exact_source_numerator(&orientation.orientation)?,
+                        planned.mapper.map_numerator(
+                            &orientation.orientation.loop_energy_map,
+                            &orientation.orientation.edge_energy_map,
+                            numerator,
+                        )?,
+                        "the original quadratic factor must use its own base sample",
+                    );
+                }
+            }
+        }
+        let empty: linnet::half_edge::subgraph::SuBitGraph = graph.empty_subgraph();
+        let ordinary = graph.cff(
+            &empty,
+            &cutset,
+            &OrientationPattern::default(),
+            &options,
+            Some(&Atom::one()),
+        )?;
+        let ordinary_unit = ordinary
+            .terms
+            .values()
+            .flat_map(|term| &term.orientations)
+            .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
+            * Atom::num(ordinary.production_prefactor_factor());
+        let mut fixed_unit_difference = &exact_unit - &ordinary_unit;
+        for (edge, x, energy) in [
+            (
+                EdgeIndex(0),
+                Atom::num(2) / Atom::num(3),
+                (Atom::num(13) / Atom::num(9)).sqrt(),
+            ),
+            (
+                EdgeIndex(1),
+                Atom::num(3) / Atom::num(4),
+                Atom::num(5) / Atom::num(4),
+            ),
+        ] {
+            fixed_unit_difference = fixed_unit_difference
+                .replace(GS.emr_mom(edge, GS.cind(1)))
+                .with(x)
+                .replace(GS.emr_mom(edge, GS.cind(2)))
+                .with(Atom::Zero)
+                .replace(GS.emr_mom(edge, GS.cind(3)))
+                .with(Atom::Zero)
+                .replace(GS.ose(edge))
+                .with(energy);
+        }
+        let combined_energy = (Atom::num(433) / Atom::num(144)).sqrt();
+        fixed_unit_difference = fixed_unit_difference
+            .replace(GS.ose(EdgeIndex(2)))
+            .with(combined_energy.clone())
+            .replace(GS.ose(EdgeIndex(3)))
+            .with(Atom::num(5) / Atom::num(4))
+            .replace(GS.ose(EdgeIndex(4)))
+            .with(combined_energy);
+        assert!(
+            fixed_unit_difference.together().is_zero(),
+            "the reconstructed and ordinary unit-numerator theta CFFs must agree: {fixed_unit_difference}",
+        );
+        for [q0x, q1x] in [
+            [Atom::num(2) / Atom::num(3), Atom::num(3) / Atom::num(4)],
+            [Atom::num(4) / Atom::num(5), Atom::num(5) / Atom::num(6)],
+        ] {
+            let q0_energy = (Atom::one() + q0x.clone().pow(2)).sqrt();
+            let q1_energy = (Atom::one() + q1x.clone().pow(2)).sqrt();
+            let fix = |mut expression: Atom| {
+                for (edge, x, energy) in [
+                    (EdgeIndex(0), q0x.clone(), q0_energy.clone()),
+                    (EdgeIndex(1), q1x.clone(), q1_energy.clone()),
+                ] {
+                    expression = expression
+                        .replace(GS.emr_mom(edge, GS.cind(1)))
+                        .with(x)
+                        .replace(GS.emr_mom(edge, GS.cind(2)))
+                        .with(Atom::Zero)
+                        .replace(GS.emr_mom(edge, GS.cind(3)))
+                        .with(Atom::Zero)
+                        .replace(GS.ose(edge))
+                        .with(energy);
+                }
+                expression
+            };
+            let mut sums = Vec::new();
+            for cff in [&q1_cff, &q3_cff] {
+                let mut sum = Atom::Zero;
+                for term in cff.terms.values() {
+                    for orientation in &term.orientations {
+                        let carrier = fix(orientation.expression.clone()).together();
+                        let numerator =
+                            fix(term.map_exact_source_numerator(&orientation.orientation)?)
+                                .together();
+                        // Preserve the production factorization at the symbolic oracle boundary.
+                        // Multiplying before applying the shell point can leave equivalent positive
+                        // radicals in the distinct forms `sqrt(x) / x` and `1 / sqrt(x)`, which
+                        // `together()` deliberately does not identify through a branch assumption.
+                        sum += carrier * numerator;
+                    }
+                }
+                sums.push(sum * Atom::num(cff.production_prefactor_factor()));
+            }
+            assert!(
+                !sums[0].together().is_zero(),
+                "the temporal theta contour must exercise a nonzero numerator contribution",
+            );
+            let difference = (&sums[0] - &sums[1]).together();
+            assert!(
+                difference.is_zero(),
+                "equal physical temporal numerators must agree after their complete independent residue sums: {difference}",
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_lu_cut_matches_ordinary_cff_per_residue() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_lu_cut_identity {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> v1 [id=0]
+            v1 -> v2 [id=1 lmb_id=0]
+            v1 -> v2 [id=2]
+            v2 -> outgoing [id=3]
+        })?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let denominators = [1, 2].map(|edge| {
+            let edge = EdgeIndex(edge);
+            FourDDenominator {
+                source_edge: edge,
+                momentum: FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(usize::from(edge))
+                    .finish(),
+                mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+                full_expr: Atom::one(),
+            }
+        });
+        let contract: SuBitGraph = graph.empty_subgraph();
+
+        for (expected_order, numerator) in [
+            (1, Atom::one()),
+            (1, GS.emr_mom(EdgeIndex(1), GS.cind(0)).pow(4)),
+        ] {
+            let production = graph.generate_3d_expression_for_integrand(
+                &[],
+                &canonization,
+                &options,
+                Some(&numerator),
+            )?;
+            let raised_groups = graph
+                .determine_raised_esurfaces_from_expression(&production.expression)
+                .raised_groups;
+            let lu_cut = raised_groups
+                .into_iter()
+                .find(|group| {
+                    group.max_occurence == expected_order
+                        && group.esurface_ids.iter().any(|esurface_id| {
+                            !production.expression.surfaces.esurface_cache[*esurface_id]
+                                .external_shift
+                                .is_empty()
+                        })
+                })
+                .expect("the production CFF contains the requested physical LU surface");
+            let mut cutset = CutSet::empty(graph.n_hedges());
+            cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+                raised_group: lu_cut.clone(),
+                cut_edge_alternatives: lu_cut
+                    .esurface_ids
+                    .iter()
+                    .map(|esurface_id| {
+                        production.expression.surfaces.esurface_cache[*esurface_id]
+                            .energies
+                            .clone()
+                    })
+                    .collect(),
+            });
+            let ordinary = graph.cff(
+                &contract,
+                &cutset,
+                &OrientationPattern::default(),
+                &options,
+                Some(&numerator),
+            )?;
+            let (exact, _) =
+                graph.cff_from_4d_denominators(&denominators, &cutset, &options, &numerator)?;
+            assert_eq!(
+                exact.terms.keys().collect::<Vec<_>>(),
+                ordinary.terms.keys().collect::<Vec<_>>()
+            );
+            for (index, ordinary_term) in &ordinary.terms {
+                let mut ordinary_sum = ordinary_term
+                    .orientations
+                    .iter()
+                    .map(|orientation| {
+                        orientation.expression.clone()
+                            * numerator.replace_multiple(
+                                orientation.orientation.energy_replacements_gs(&graph),
+                            )
+                    })
+                    .fold(Atom::Zero, |sum, term| sum + term)
+                    * Atom::num(ordinary.production_prefactor_factor());
+                for edge in [EdgeIndex(1), EdgeIndex(2)] {
+                    let on_shell_energy = (1..=3)
+                        .fold(
+                            graph.underlying[edge].particle.mass_atom().pow(2),
+                            |norm_squared, spatial_index| {
+                                norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
+                            },
+                        )
+                        .sqrt();
+                    ordinary_sum = ordinary_sum.replace(GS.ose(edge)).with(on_shell_energy);
+                }
+                let exact_term = exact
+                    .terms
+                    .get(index)
+                    .expect("exact and ordinary residue keys agree");
+                let mut exact_sum = exact_term
+                    .orientations
+                    .iter()
+                    .map(|orientation| {
+                        Ok(orientation.expression.clone()
+                            * exact_term.map_exact_source_numerator(&orientation.orientation)?)
+                    })
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .fold(Atom::Zero, |sum, term| sum + term)
+                    * Atom::num(exact.production_prefactor_factor());
+                for edge in [EdgeIndex(1), EdgeIndex(2)] {
+                    let on_shell_energy = (1..=3)
+                        .fold(
+                            graph.underlying[edge].particle.mass_atom().pow(2),
+                            |norm_squared, spatial_index| {
+                                norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
+                            },
+                        )
+                        .sqrt();
+                    exact_sum = exact_sum.replace(GS.ose(edge)).with(on_shell_energy);
+                }
+                let difference = (exact_sum.collect_factors() - ordinary_sum.collect_factors())
+                    .collect_factors();
+                assert!(
+                    difference.is_zero(),
+                    "exact and ordinary LU residues differ for maximum order {expected_order}, index {index}: {difference}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_uncut_cubic_one_loop_source_matches_ordinary_cff() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_uncut_cubic_one_loop {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            b -> c [id=1]
+            c -> a [id=2]
+        })?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let numerator = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2);
+        let cutset = CutSet::empty(graph.n_hedges());
+        let contract: SuBitGraph = graph.empty_subgraph();
+        let ordinary = graph.cff(
+            &contract,
+            &cutset,
+            &OrientationPattern::default(),
+            &options,
+            Some(&numerator),
+        )?;
+        let source_momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(EdgeIndex(0)))
+            .finish();
+        let denominators = [(EdgeIndex(0), 1), (EdgeIndex(1), -1), (EdgeIndex(2), -1)].map(
+            |(source_edge, sign)| FourDDenominator {
+                source_edge,
+                momentum: Atom::num(sign) * &source_momentum,
+                mass_squared: graph.underlying[source_edge].particle.mass_atom().pow(2),
+                full_expr: Atom::one(),
+            },
+        );
+        let (exact, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &numerator)?;
+        assert_eq!(
+            exact.terms.keys().collect::<Vec<_>>(),
+            ordinary.terms.keys().collect::<Vec<_>>()
+        );
+
+        let index = CutCFFIndex::new_all_none();
+        let ordinary_sum = ordinary
+            .terms
+            .get(&index)
+            .expect("the ordinary uncut source exists")
+            .orientations
+            .iter()
+            .map(|orientation| {
+                orientation.expression.clone()
+                    * numerator
+                        .replace_multiple(orientation.orientation.energy_replacements_gs(&graph))
+            })
+            .fold(Atom::Zero, |sum, term| sum + term)
+            * Atom::num(ordinary.production_prefactor_factor());
+        let exact_term = exact
+            .terms
+            .get(&index)
+            .expect("the exact uncut source exists");
+        let exact_sum = exact_term
+            .orientations
+            .iter()
+            .map(|orientation| {
+                Ok(orientation.expression.clone()
+                    * exact_term.map_exact_source_numerator(&orientation.orientation)?)
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .fold(Atom::Zero, |sum, term| sum + term)
+            * Atom::num(exact.production_prefactor_factor());
+
+        let evaluate_arb = |mut expression: Atom| -> Result<Complex<F<ArbPrec>>> {
+            for edge in 0..3 {
+                let edge = EdgeIndex(edge);
+                expression = expression
+                    .replace(GS.emr_mom(edge, GS.cind(1)))
+                    .with(Atom::num(Rational::from((3, 4))))
+                    .replace(GS.emr_mom(edge, GS.cind(2)))
+                    .with(Atom::Zero)
+                    .replace(GS.emr_mom(edge, GS.cind(3)))
+                    .with(Atom::Zero)
+                    .replace(GS.ose(edge))
+                    .with(Atom::num(Rational::from((5, 4))));
+            }
+            let parameters = [Atom::var(GS.pi)];
+            let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> =
+                expression.evaluator(&parameters).build().map_err(|error| {
+                    eyre::eyre!("failed to build cubic one-loop evaluator: {error}")
+                })?;
+            let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
+                rational.map_coeff(&|coefficient| {
+                    Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
+                });
+            Ok(arb.evaluate_single(&[Complex::new(
+                F(ArbPrec::default()).pi(),
+                F(ArbPrec::default()),
+            )]))
+        };
+        let ordinary_value = evaluate_arb(ordinary_sum)?;
+        let exact_value = evaluate_arb(exact_sum)?;
+        let distance = (exact_value.clone() - ordinary_value.clone()).norm().re;
+        let exact_norm = exact_value.clone().norm().re;
+        let ordinary_norm = ordinary_value.clone().norm().re;
+        let scale = if exact_norm > ordinary_norm {
+            exact_norm
+        } else {
+            ordinary_norm
+        };
+        let relative_distance = if scale.is_zero() {
+            distance
+        } else {
+            distance / scale
+        };
+        let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+        assert!(
+            relative_distance <= tolerance,
+            "energy-convergent D(Q)D(-Q)^2 source differs from ordinary CFF: exact={exact_value:e}, ordinary={ordinary_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_raised_lu_cut_matches_ordinary_cff_per_residue() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_raised_lu_cut_identity {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> v1 [id=0]
+            v1 -> v2 [id=1 lmb_id=0]
+            v2 -> v3 [id=2]
+            v1 -> v3 [id=3]
+            v3 -> outgoing [id=4]
+        })?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let numerator = GS.emr_mom(EdgeIndex(1), GS.cind(0)).pow(2);
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &options,
+            Some(&numerator),
+        )?;
+        let lu_cut = graph
+            .determine_raised_esurfaces_from_expression(&production.expression)
+            .raised_groups
+            .into_iter()
+            .find(|group| {
+                group.max_occurence > 1
+                    && group.esurface_ids.iter().any(|esurface_id| {
+                        !production.expression.surfaces.esurface_cache[*esurface_id]
+                            .external_shift
+                            .is_empty()
+                    })
+            })
+            .expect("the production CFF contains a physical raised LU surface");
+        let mut cutset = CutSet::empty(graph.n_hedges());
+        cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            raised_group: lu_cut.clone(),
+            cut_edge_alternatives: lu_cut
+                .esurface_ids
+                .iter()
+                .map(|esurface_id| {
+                    production.expression.surfaces.esurface_cache[*esurface_id]
+                        .energies
+                        .clone()
+                })
+                .collect(),
+        });
+        let contract: SuBitGraph = graph.empty_subgraph();
+        let ordinary = graph.cff(
+            &contract,
+            &cutset,
+            &OrientationPattern::default(),
+            &options,
+            Some(&numerator),
+        )?;
+        let denominators = [1, 2, 3].map(|edge| {
+            let edge = EdgeIndex(edge);
+            FourDDenominator {
+                source_edge: edge,
+                momentum: FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(usize::from(edge))
+                    .finish(),
+                mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+                full_expr: Atom::one(),
+            }
+        });
+        let (exact, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &numerator)?;
+        assert_eq!(
+            exact.terms.keys().collect::<Vec<_>>(),
+            ordinary.terms.keys().collect::<Vec<_>>()
+        );
+        for (index, ordinary_term) in &ordinary.terms {
+            let mut ordinary_sum = ordinary_term
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    orientation.expression.clone()
+                        * numerator.replace_multiple(
+                            orientation.orientation.energy_replacements_gs(&graph),
+                        )
+                })
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(ordinary.production_prefactor_factor());
+            for edge in [EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)] {
+                let on_shell_energy = (1..=3)
+                    .fold(
+                        graph.underlying[edge].particle.mass_atom().pow(2),
+                        |norm_squared, spatial_index| {
+                            norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
+                        },
+                    )
+                    .sqrt();
+                ordinary_sum = ordinary_sum.replace(GS.ose(edge)).with(on_shell_energy);
+            }
+            let exact_term = exact
+                .terms
+                .get(index)
+                .expect("exact and ordinary residue keys agree");
+            let exact_sum = exact_term
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    Ok(orientation.expression.clone()
+                        * exact_term.map_exact_source_numerator(&orientation.orientation)?)
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(exact.production_prefactor_factor());
+            let mut difference = exact_sum - ordinary_sum;
+            for edge in (0..graph.underlying.n_edges()).map(EdgeIndex) {
+                for spatial_index in 1..=3 {
+                    difference = difference
+                        .replace(GS.emr_mom(edge, GS.cind(spatial_index)))
+                        .with(Atom::Zero);
+                }
+                difference = difference.replace(GS.ose(edge)).with(Atom::one());
+            }
+            for external_edge in [EdgeIndex(0), EdgeIndex(4)] {
+                difference = difference
+                    .replace(GS.emr_mom(external_edge, GS.cind(0)))
+                    .with(Atom::num(7));
+            }
+            let difference = difference.together();
+            assert!(
+                difference.is_zero(),
+                "exact and ordinary raised LU residues differ for index {index}: {difference}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_cff_keeps_opposite_source_routing_without_a_sign_bridge() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_opposite_routing {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+        })?;
+        let momentum = FunctionBuilder::new(GS.emr_mom).add_arg(0).finish();
+        let mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
+        let denominators = [
+            FourDDenominator {
+                source_edge: EdgeIndex(0),
+                momentum: momentum.clone(),
+                mass_squared: mass_squared.clone(),
+                full_expr: Atom::var(symbolica::symbol!("exact_cff_test::positive_routing")),
+            },
+            FourDDenominator {
+                source_edge: EdgeIndex(1),
+                momentum: -momentum,
+                mass_squared: mass_squared.clone(),
+                full_expr: Atom::var(symbolica::symbol!("exact_cff_test::negative_routing")),
+            },
+        ];
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let cutset = CutSet::empty(graph.n_hedges());
+
+        let (cff, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &Atom::one())?;
+        assert_eq!(cff.terms.len(), 1);
+        let on_shell_energy = (1..=3)
+            .fold(mass_squared, |norm_squared, spatial_index| {
+                norm_squared + GS.emr_mom(EdgeIndex(0), GS.cind(spatial_index)).pow(2)
+            })
+            .sqrt();
+        let expected_orientation_sum =
+            -Atom::i() / (Atom::num(32) * Atom::var(GS.pi).pow(3) * on_shell_energy.pow(3));
+        let terms = &cff
+            .terms
+            .values()
+            .next()
+            .expect("the empty cutset has one CFF term")
+            .orientations;
+
+        let orientation_sum = terms
+            .iter()
+            .fold(Atom::zero(), |sum, term| sum + &term.expression)
+            .replace(GS.ose(EdgeIndex(0)))
+            .with(on_shell_energy.clone());
+        assert!(
+            (orientation_sum * Atom::num(cff.production_prefactor_factor())
+                - expected_orientation_sum)
+                .together()
+                .is_zero()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn exact_cff_separates_uv_topology_from_the_cograph() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_uv_cograph {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+            b -> c [id=4]
+            c -> d [id=2 lmb_id=1]
+            c -> d [id=3]
+        })?;
+        let mut denominators = Vec::new();
+        for edge in [EdgeIndex::from(0), EdgeIndex::from(1)] {
+            denominators.push(FourDDenominator {
+                source_edge: edge,
+                momentum: FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(usize::from(edge))
+                    .finish(),
+                mass_squared: Atom::var(GS.m_uv_expansion).pow(2),
+                full_expr: Atom::var(symbolica::symbol!("exact_cff_test::uv_full")),
+            });
+        }
+        for edge in [EdgeIndex::from(2), EdgeIndex::from(3)] {
+            denominators.push(FourDDenominator {
+                source_edge: edge,
+                momentum: FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(usize::from(edge))
+                    .finish(),
+                mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+                full_expr: Atom::var(symbolica::symbol!("exact_cff_test::cograph_full")),
+            });
+        }
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let cutset = CutSet::empty(graph.n_hedges());
+
+        let (cff, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &Atom::one())?;
+        assert!(cff.terms.values().any(|term| !term.orientations.is_empty()));
+        Ok(())
+    }
+
+    #[test]
+    fn exact_cff_lu_residue_factorizes_from_quadratic_cubic_spectator() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_lu_cubic_product {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+            b -> c [id=4]
+            c -> d [id=2 lmb_id=1]
+            c -> d [id=3]
+        })?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[EdgeIndex(4)],
+            &canonization,
+            &options,
+            Some(&Atom::one()),
+        )?;
+        let lu_surface = graph
+            .determine_raised_esurfaces_from_expression(&production.expression)
+            .raised_groups
+            .into_iter()
+            .find(|group| {
+                group.esurface_ids.iter().any(|surface_id| {
+                    production.expression.surfaces.esurface_cache[*surface_id]
+                        .energies
+                        .iter()
+                        .copied()
+                        .collect::<BTreeSet<_>>()
+                        == BTreeSet::from([EdgeIndex(0), EdgeIndex(1)])
+                })
+            })
+            .expect("the cograph bubble supplies an LU residue surface");
+        let mut lu_cutset = CutSet::empty(graph.n_hedges());
+        lu_cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            raised_group: lu_surface,
+            cut_edge_alternatives: vec![vec![EdgeIndex(0), EdgeIndex(1)]],
+        });
+
+        let cograph_denominators = [EdgeIndex(0), EdgeIndex(1)].map(|edge| FourDDenominator {
+            source_edge: edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish(),
+            mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+            full_expr: Atom::one(),
+        });
+        let uv_edge = EdgeIndex(2);
+        let uv_momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(uv_edge))
+            .finish();
+        let uv_mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
+        let uv_full_expr = GS.emr_mom(uv_edge, GS.cind(0)).pow(2)
+            - (1..=3).fold(uv_mass_squared.clone(), |norm_squared, spatial_index| {
+                norm_squared + GS.emr_mom(uv_edge, GS.cind(spatial_index)).pow(2)
+            });
+        let uv_denominators = [1, 1, -1].map(|sign| FourDDenominator {
+            source_edge: uv_edge,
+            momentum: Atom::num(sign) * &uv_momentum,
+            mass_squared: uv_mass_squared.clone(),
+            full_expr: uv_full_expr.clone(),
+        });
+        let quadratic_numerator = GS.emr_mom(uv_edge, GS.cind(0)).pow(2);
+        let combined_denominators = cograph_denominators
+            .iter()
+            .cloned()
+            .chain(uv_denominators.iter().cloned())
+            .collect::<Vec<_>>();
+
+        let combined_source =
+            GraphThreeDSource::from_exact_denominators(&graph, &combined_denominators)?;
+        let cograph_source =
+            GraphThreeDSource::from_exact_denominators(&graph, &cograph_denominators)?;
+        let uv_source = GraphThreeDSource::from_exact_denominators(&graph, &uv_denominators)?;
+        assert_eq!(
+            combined_source.active_loop_count(),
+            cograph_source.active_loop_count() + uv_source.active_loop_count(),
+            "the source phase must factor between the independent loop components",
+        );
+        let (combined, _) = graph.cff_from_4d_denominators(
+            &combined_denominators,
+            &lu_cutset,
+            &options,
+            &quadratic_numerator,
+        )?;
+        let (cograph, _) = graph.cff_from_4d_denominators(
+            &cograph_denominators,
+            &lu_cutset,
+            &options,
+            &Atom::one(),
+        )?;
+        let (uv, _) = graph.cff_from_4d_denominators(
+            &uv_denominators,
+            &CutSet::empty(graph.n_hedges()),
+            &options,
+            &quadratic_numerator,
+        )?;
+        let cff_sum = |cff: &CutCFF| -> Result<Atom> {
+            let term = cff
+                .terms
+                .values()
+                .next()
+                .expect("the exact source retains its requested residue sector");
+            Ok(term
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    Ok(orientation.expression.clone()
+                        * term.map_exact_source_numerator(&orientation.orientation)?)
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(cff.production_prefactor_factor()))
+        };
+        let combined_sum = cff_sum(&combined)?;
+        let cograph_sum = cff_sum(&cograph)?;
+        let uv_sum = cff_sum(&uv)?;
+
+        let empty_cutset = CutSet::empty(graph.n_hedges());
+        let (combined_uncut, _) = graph.cff_from_4d_denominators(
+            &combined_denominators,
+            &empty_cutset,
+            &options,
+            &quadratic_numerator,
+        )?;
+        let (cograph_uncut, _) = graph.cff_from_4d_denominators(
+            &cograph_denominators,
+            &empty_cutset,
+            &options,
+            &Atom::one(),
+        )?;
+        let combined_uncut_sum = cff_sum(&combined_uncut)?;
+        let cograph_uncut_sum = cff_sum(&cograph_uncut)?;
+        // Keep the spectator numerator factorized in both complete routes.
+        let uncut_difference = (combined_uncut_sum.collect_factors()
+            - (&cograph_uncut_sum * &uv_sum).collect_factors())
+        .collect_factors();
+        assert!(
+            uncut_difference.is_zero(),
+            "an uncut exact source must factorize between its independent rational components: difference={uncut_difference}, combined={combined_uncut_sum} (bridge={}), cograph={cograph_uncut_sum} (bridge={}), spectator={uv_sum} (bridge={})",
+            combined_uncut.production_prefactor_factor(),
+            cograph_uncut.production_prefactor_factor(),
+            uv.production_prefactor_factor(),
+        );
+        let difference = (combined_sum.collect_factors()
+            - (cograph_sum * uv_sum).collect_factors())
+        .collect_factors();
+        assert!(
+            difference.is_zero(),
+            "an LU residue in one exact component must factorize from a quadratic cubic spectator: {difference}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn selected_highest_pole_commutes_with_factorized_cubic_numerator() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph selected_cubic_repeated_channel {
+            num = 1
+            edge [particle="scalar_1" num=1]
+            node [num=1]
+
+            ext0 [style=invis is_cut=0]
+            v2 -> ext0 [id=0]
+            ext0 -> v3
+            v0 -> v1 [id=1 lmb_id=0]
+            v0 -> v1 [id=2]
+            v3 -> v0 [id=3 lmb_id=1]
+            v1 -> v2 [id=4]
+            v2 -> v3 [id=5]
+        }, "scalars")?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        // Keep the three temporal factors separate. Edges 3 and 4 are the
+        // repeated outer channel, so this supplies aggregate degree three
+        // without expanding the numerator.
+        let numerator =
+            GS.emr_mom(EdgeIndex(3), GS.cind(0)).pow(2) * GS.emr_mom(EdgeIndex(4), GS.cind(0));
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &options,
+            Some(&numerator),
+        )?;
+        let raised_group = graph
+            .determine_raised_esurfaces_from_expression(&production.expression)
+            .raised_groups
+            .into_iter()
+            .find(|group| {
+                group.max_occurence == 2
+                    && group.esurface_ids.iter().any(|surface_id| {
+                        !production.expression.surfaces.esurface_cache[*surface_id]
+                            .external_shift
+                            .is_empty()
+                    })
+            })
+            .expect("the repeated outer channel supplies a second-order LU surface");
+        let mut cutset = CutSet::empty(graph.n_hedges());
+        cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            cut_edge_alternatives: raised_group
+                .esurface_ids
+                .iter()
+                .map(|surface_id| {
+                    production.expression.surfaces.esurface_cache[*surface_id]
+                        .energies
+                        .clone()
+                })
+                .collect(),
+            raised_group,
+        });
+        let contracted = graph
+            .get_edge_subgraph(EdgeIndex(1))
+            .union(&graph.get_edge_subgraph(EdgeIndex(2)));
+        let contract_subgraph = contracted
+            .union(&graph.tree_edges)
+            .subtract(&graph.initial_state_cut);
+        let pattern = OrientationPattern::default();
+        let generalized = graph.cff(
+            &contract_subgraph,
+            &cutset,
+            &pattern,
+            &options,
+            Some(&numerator),
+        )?;
+        let ordinary = graph.cff(
+            &contract_subgraph,
+            &cutset,
+            &pattern,
+            &options,
+            Some(&Atom::one()),
+        )?;
+        let highest_pole = |cff: &CutCFF| {
+            let term = cff
+                .terms
+                .iter()
+                .find(|(index, _)| index.lu_cut_order == Some(2))
+                .expect("the selected CFF retains its maximum LU order")
+                .1;
+            term.orientations
+                .iter()
+                .map(|orientation| {
+                    &orientation.expression
+                        * numerator.replace_multiple(
+                            orientation.orientation.energy_replacements_gs(&graph),
+                        )
+                })
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(cff.production_prefactor_factor())
+        };
+        let difference = (highest_pole(&generalized).collect_factors()
+            - highest_pole(&ordinary).collect_factors())
+        .collect_factors();
+        assert!(
+            difference.is_zero(),
+            "the maximum-order LU residue must commute with its factorized cubic numerator: {difference}",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn selected_lower_pole_obeys_repeated_channel_polynomial_division() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph selected_cubic_repeated_channel_contact {
+            num = 1
+            edge [particle="scalar_1" num=1]
+            node [num=1]
+
+            ext0 [style=invis is_cut=0]
+            v2 -> ext0 [id=0]
+            ext0 -> v3
+            v0 -> v1 [id=1 lmb_id=0]
+            v0 -> v1 [id=2]
+            v3 -> v0 [id=3 lmb_id=1]
+            v1 -> v2 [id=4]
+            v2 -> v3 [id=5]
+        }, "scalars")?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let repeated_energy = GS.emr_mom(EdgeIndex(3), GS.cind(0));
+        let alias_energy = GS.emr_mom(EdgeIndex(4), GS.cind(0));
+        let numerator = repeated_energy.pow(2) * &alias_energy;
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &options,
+            Some(&numerator),
+        )?;
+        let raised_group = graph
+            .determine_raised_esurfaces_from_expression(&production.expression)
+            .raised_groups
+            .into_iter()
+            .find(|group| {
+                group.max_occurence == 2
+                    && group.esurface_ids.iter().any(|surface_id| {
+                        !production.expression.surfaces.esurface_cache[*surface_id]
+                            .external_shift
+                            .is_empty()
+                    })
+            })
+            .expect("the repeated outer channel supplies a second-order LU surface");
+        let mut cutset = CutSet::empty(graph.n_hedges());
+        cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            cut_edge_alternatives: raised_group
+                .esurface_ids
+                .iter()
+                .map(|surface_id| {
+                    production.expression.surfaces.esurface_cache[*surface_id]
+                        .energies
+                        .clone()
+                })
+                .collect(),
+            raised_group,
+        });
+        let contracted = graph
+            .get_edge_subgraph(EdgeIndex(1))
+            .union(&graph.get_edge_subgraph(EdgeIndex(2)));
+        let contract_subgraph = contracted
+            .union(&graph.tree_edges)
+            .subtract(&graph.initial_state_cut);
+        let pattern = OrientationPattern::default();
+        let generalized = graph.cff(
+            &contract_subgraph,
+            &cutset,
+            &pattern,
+            &options,
+            Some(&numerator),
+        )?;
+
+        // For the repeated channel D_3=D_4=D(q), polynomial division gives
+        //
+        //   q0^2 q0 / (D_3 D_4) = q0 / D_4 + E_q^2 q0 / (D_3 D_4).
+        //
+        // This test-only spelling is an exact lower-pole oracle. Production
+        // keeps the original three numerator factors untouched and relies on
+        // the generalized CFF to construct the same quotient and remainder.
+        let remainder_numerator = GS.ose(EdgeIndex(3)).pow(2) * &alias_energy;
+        let remainder = graph.cff(
+            &contract_subgraph,
+            &cutset,
+            &pattern,
+            &options,
+            Some(&remainder_numerator),
+        )?;
+        let mut contact_contract = contract_subgraph.clone();
+        contact_contract.add(graph[&EdgeIndex(3)].1);
+        let contact = graph.cff(
+            &contact_contract,
+            &cutset,
+            &pattern,
+            &options,
+            Some(&alias_energy),
+        )?;
+        let selected_lu1 = |cff: &CutCFF, mapped_numerator: &Atom| {
+            cff.terms
+                .iter()
+                .filter(|(index, _)| index.lu_cut_order == Some(1))
+                .flat_map(|(_, term)| {
+                    term.orientations.iter().map(|orientation| {
+                        &orientation.expression
+                            * mapped_numerator.replace_multiple(
+                                orientation.orientation.energy_replacements_gs(&graph),
+                            )
+                    })
+                })
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(cff.production_prefactor_factor())
+        };
+        let difference = (selected_lu1(&generalized, &numerator).collect_factors()
+            - (selected_lu1(&remainder, &remainder_numerator)
+                + selected_lu1(&contact, &alias_energy))
+            .collect_factors())
+        .replace(GS.ose(EdgeIndex(4)))
+        .with(GS.ose(EdgeIndex(3)))
+        .collect_factors();
+        assert!(
+            difference.is_zero(),
+            "the first-order LU residue must preserve exact polynomial division on a repeated channel: {difference}",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_raised_lu_residue_factorizes_from_quadratic_cubic_spectator() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_raised_lu_cubic_product {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> v1 [id=0]
+            v1 -> v2 [id=1 lmb_id=0]
+            v2 -> v3 [id=2]
+            v1 -> v3 [id=3]
+            v1 -> u [id=5 lmb_id=1]
+            u -> v1 [id=6]
+            v3 -> outgoing [id=4]
+        })?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let cograph_edge = EdgeIndex(1);
+        let cograph_numerator = GS.emr_mom(cograph_edge, GS.cind(0)).pow(2);
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[EdgeIndex(5), EdgeIndex(6)],
+            &canonization,
+            &options,
+            Some(&cograph_numerator),
+        )?;
+        let lu_surface = graph
+            .determine_raised_esurfaces_from_expression(&production.expression)
+            .raised_groups
+            .into_iter()
+            .find(|group| {
+                group.max_occurence == 2
+                    && group.esurface_ids.iter().any(|surface_id| {
+                        production.expression.surfaces.esurface_cache[*surface_id]
+                            .energies
+                            .iter()
+                            .copied()
+                            .collect::<BTreeSet<_>>()
+                            .is_subset(&BTreeSet::from([EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)]))
+                    })
+            })
+            .expect("the quadratic cograph supplies a second-order LU surface");
+        let mut lu_cutset = CutSet::empty(graph.n_hedges());
+        let physical_cut_support = production.expression.surfaces.esurface_cache
+            [lu_surface.esurface_ids[0]]
+            .energies
+            .clone();
+        lu_cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            // A raised physical Cutkosky cut has one cut support even when its
+            // two residue orders originate from distinct exact E-surfaces.
+            cut_edge_alternatives: vec![physical_cut_support; lu_surface.esurface_ids.len()],
+            raised_group: lu_surface,
+        });
+
+        let cograph_denominators =
+            [EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)].map(|edge| FourDDenominator {
+                source_edge: edge,
+                momentum: FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(usize::from(edge))
+                    .finish(),
+                mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+                full_expr: Atom::one(),
+            });
+        let uv_edge = EdgeIndex(5);
+        let uv_momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(uv_edge))
+            .finish();
+        let uv_mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
+        let uv_full_expr = GS.emr_mom(uv_edge, GS.cind(0)).pow(2)
+            - (1..=3).fold(uv_mass_squared.clone(), |norm_squared, spatial_index| {
+                norm_squared + GS.emr_mom(uv_edge, GS.cind(spatial_index)).pow(2)
+            });
+        // Match the UV-expanded self-energy provenance pattern D_2 D_3^2.
+        // The owner IDs retain cut support only; all three occurrences carry
+        // the same even rational denominator D(Q)=D(-Q).
+        let uv_denominators = [(EdgeIndex(5), 1), (EdgeIndex(6), -1), (EdgeIndex(6), -1)].map(
+            |(source_edge, sign)| FourDDenominator {
+                source_edge,
+                momentum: Atom::num(sign) * &uv_momentum,
+                mass_squared: uv_mass_squared.clone(),
+                full_expr: uv_full_expr.clone(),
+            },
+        );
+        let uv_numerator = GS.emr_mom(uv_edge, GS.cind(0)).pow(2);
+        let combined_numerator = &cograph_numerator * &uv_numerator;
+        let combined_denominators = cograph_denominators
+            .iter()
+            .cloned()
+            .chain(uv_denominators.iter().cloned())
+            .collect::<Vec<_>>();
+        let uv_edges = [EdgeIndex(5), EdgeIndex(6)];
+
+        let (combined, _) = graph.cff_from_4d_denominators_in_uv_edges(
+            &combined_denominators,
+            uv_edges,
+            &lu_cutset,
+            &options,
+            &combined_numerator,
+            None,
+        )?;
+        let (cograph, _) = graph.cff_from_4d_denominators(
+            &cograph_denominators,
+            &lu_cutset,
+            &options,
+            &cograph_numerator,
+        )?;
+        let (uv, _) = graph.cff_from_4d_denominators_in_uv_edges(
+            &uv_denominators,
+            uv_edges,
+            &CutSet::empty(graph.n_hedges()),
+            &options,
+            &uv_numerator,
+            None,
+        )?;
+        assert_eq!(
+            combined.terms.keys().collect::<BTreeSet<_>>(),
+            cograph.terms.keys().collect::<BTreeSet<_>>(),
+            "tensoring an uncut UV spectator must preserve every raised cograph residue order"
+        );
+        assert_eq!(
+            combined
+                .terms
+                .keys()
+                .map(|index| index.lu_cut_order)
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([Some(1), Some(2)])
+        );
+
+        let exact_sum = |cff: &CutCFF, index: &CutCFFIndex| -> Result<Atom> {
+            let term = cff
+                .terms
+                .get(index)
+                .expect("the requested exact-CFF residue sector exists");
+            Ok(term
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    Ok(orientation.expression.clone()
+                        * term.map_exact_source_numerator(&orientation.orientation)?)
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(cff.production_prefactor_factor()))
+        };
+        let ordinary_sum = |graph: &Graph, cff: &CutCFF, index: &CutCFFIndex, numerator: &Atom| {
+            cff.terms
+                .get(index)
+                .expect("the requested ordinary-CFF residue sector exists")
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    orientation.expression.clone()
+                        * numerator
+                            .replace_multiple(orientation.orientation.energy_replacements_gs(graph))
+                })
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(cff.production_prefactor_factor())
+        };
+        let uv_index = CutCFFIndex::new_all_none();
+        let uv_sum = exact_sum(&uv, &uv_index)?;
+        let graph_mass_squared = (0..graph.underlying.n_edges())
+            .map(|edge| {
+                graph.underlying[EdgeIndex(edge)]
+                    .particle
+                    .mass_atom()
+                    .pow(2)
+            })
+            .collect::<Vec<_>>();
+        let external_edges = graph
+            .external_momentum_edge_order()
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let representative_esurface_id = lu_cutset
+            .residue_selector
+            .lu
+            .as_ref()
+            .expect("the raised LU selector exists")
+            .raised_group
+            .esurface_ids[0];
+        let representative_esurface =
+            &production.expression.surfaces.esurface_cache[representative_esurface_id];
+        let rescale_star = Atom::one();
+        let cograph_spatial_momentum = Atom::num(Rational::from((3, 4)));
+        let uv_spatial_momentum = Atom::num(Rational::from((4, 3)));
+        let base_spatial_momentum = |edge: EdgeIndex| {
+            if uv_edges.contains(&edge) {
+                uv_spatial_momentum.clone()
+            } else {
+                cograph_spatial_momentum.clone()
+            }
+        };
+        let scaled_on_shell_energy = |edge: EdgeIndex, rescale: Atom| {
+            (graph_mass_squared[usize::from(edge)].clone()
+                + (base_spatial_momentum(edge) * rescale).pow(2))
+            .sqrt()
+        };
+        let root_energy_sum = representative_esurface
+            .energies
+            .iter()
+            .map(|edge| scaled_on_shell_energy(*edge, rescale_star.clone()))
+            .fold(Atom::Zero, |sum, energy| sum + energy);
+        let external_shift_coefficient = representative_esurface
+            .external_shift
+            .iter()
+            .map(|(_, coefficient)| *coefficient)
+            .sum::<i64>();
+        assert_ne!(
+            external_shift_coefficient, 0,
+            "the raised LU surface must have a nonzero external shift"
+        );
+        let external_energy = -root_energy_sum / Atom::num(external_shift_coefficient);
+        let rescale_expression = |mut expression: Atom| {
+            let rescale = Atom::var(GS.rescale);
+            expression = expression
+                .replace(Atom::var(GS.m_uv_expansion))
+                .with(Atom::one());
+            for edge in 0..graph_mass_squared.len() {
+                let edge = EdgeIndex(edge);
+                if external_edges.contains(&edge) {
+                    expression = expression
+                        .replace(GS.emr_mom(edge, GS.cind(0)))
+                        .with(external_energy.clone());
+                    for spatial_index in 1..=3 {
+                        expression = expression
+                            .replace(GS.emr_mom(edge, GS.cind(spatial_index)))
+                            .with(Atom::Zero);
+                    }
+                } else {
+                    let on_shell_energy = scaled_on_shell_energy(edge, rescale.clone());
+                    expression = expression
+                        .replace(GS.emr_mom(edge, GS.cind(1)))
+                        .with(base_spatial_momentum(edge) * &rescale)
+                        .replace(GS.ose(edge))
+                        .with(on_shell_energy.clone())
+                        .replace(cut_energy(edge))
+                        .with(on_shell_energy);
+                    for spatial_index in 2..=3 {
+                        expression = expression
+                            .replace(GS.emr_mom(edge, GS.cind(spatial_index)))
+                            .with(Atom::Zero);
+                    }
+                }
+            }
+            expression
+        };
+        let eta = rescale_expression(representative_esurface.to_atom(&[]));
+        assert!(
+            eta.replace(GS.rescale)
+                .with(rescale_star.clone())
+                .expand()
+                .is_zero(),
+            "the raised-LU spectator oracle must be evaluated at its selected radial root"
+        );
+        let value_and_t_derivative = |expression: Atom| -> Result<[Atom; 2]> {
+            let series = rescale_expression(expression)
+                .series(GS.rescale, rescale_star.clone(), 1)
+                .map_err(|error| eyre::eyre!("failed to build raised-LU t jet: {error}"))?;
+            Ok([
+                series.coefficient(Rational::from(0)),
+                series.coefficient(Rational::from(1)),
+            ])
+        };
+        let evaluate_arb = |expression: Atom| -> Result<Complex<F<ArbPrec>>> {
+            let parameters = [Atom::var(GS.pi)];
+            let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> =
+                expression.evaluator(&parameters).build().map_err(|error| {
+                    eyre::eyre!("failed to build raised-LU spectator evaluator: {error}")
+                })?;
+            let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
+                rational.map_coeff(&|coefficient| {
+                    Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
+                });
+            Ok(arb.evaluate_single(&[Complex::new(
+                F::<ArbPrec>::from(&Rational::from(0)).pi(),
+                F::<ArbPrec>::from(&Rational::from(0)),
+            )]))
+        };
+        // One eighth of ArbPrec's requested precision allows substantial and
+        // construction-dependent bit loss while still scaling with precision.
+        let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+        let mut failures = Vec::new();
+        for index in cograph.terms.keys() {
+            let combined_jet = value_and_t_derivative(exact_sum(&combined, index)?)?;
+            let factorized_jet = value_and_t_derivative(exact_sum(&cograph, index)? * &uv_sum)?;
+            for (jet_component, combined_expression, factorized_expression) in
+                ["value", "first t derivative"]
+                    .into_iter()
+                    .zip(combined_jet)
+                    .zip(factorized_jet)
+                    .map(|((component, combined), factorized)| (component, combined, factorized))
+            {
+                let combined_value = evaluate_arb(combined_expression)?;
+                let factorized_value = evaluate_arb(factorized_expression)?;
+                let distance = (combined_value.clone() - factorized_value.clone())
+                    .norm()
+                    .re;
+                let combined_norm = combined_value.clone().norm().re;
+                let factorized_norm = factorized_value.clone().norm().re;
+                let scale = if combined_norm > factorized_norm {
+                    combined_norm
+                } else {
+                    factorized_norm
+                };
+                let relative_distance = if scale.is_zero() {
+                    distance
+                } else {
+                    distance / scale
+                };
+                if !([
+                    &combined_value.re,
+                    &combined_value.im,
+                    &factorized_value.re,
+                    &factorized_value.im,
+                ]
+                .into_iter()
+                .all(symbolica::domains::float::SingleFloat::is_finite)
+                    && symbolica::domains::float::SingleFloat::is_finite(&relative_distance)
+                    && relative_distance <= tolerance)
+                {
+                    failures.push(format!(
+                        "raised LU residue {index} {jet_component} does not factorize from its quadratic cubic UV spectator: combined={combined_value:e}, factorized={factorized_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+                    ));
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "raised-LU cubic spectator factorization failures:\n{}",
+            failures.join("\n")
+        );
+
+        // The self-energy Taylor source contains a cubic dotted term. Isolate
+        // its numerator-denominator pinch without cancelling D(Q) before CFF
+        // generation: the retained factor raises one aliased outer energy by
+        // two and leaves the other two outer energies at rank one, matching
+        // the GL0 assignment induced by Q_UV slash (Q_UV dot Q_outer).
+        assert_eq!(
+            graph.loop_momentum_basis.edge_signatures[EdgeIndex(1)],
+            graph.loop_momentum_basis.edge_signatures[EdgeIndex(2)],
+            "the outer cograph must contain two owner-distinct edges with the same k routing"
+        );
+        let outer_numerator = [EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)]
+            .into_iter()
+            .map(|edge| GS.emr_mom(edge, GS.cind(0)) + Atom::one())
+            .fold(Atom::one(), |product, factor| product * factor);
+        let retained_dotted_factor =
+            Atom::num(2) * GS.emr_mom(cograph_edge, GS.cind(0)) * &outer_numerator;
+        let (exact_outer, _) = graph.cff_from_4d_denominators(
+            &cograph_denominators,
+            &lu_cutset,
+            &options,
+            &retained_dotted_factor,
+        )?;
+        let mut uv_contract: SuBitGraph = graph.empty_subgraph();
+        for edge in uv_edges {
+            uv_contract.add(graph[&edge].1);
+        }
+        let ordinary_outer = graph.cff(
+            &uv_contract,
+            &lu_cutset,
+            &OrientationPattern::default(),
+            &options,
+            Some(&retained_dotted_factor),
+        )?;
+        assert_eq!(
+            exact_outer.terms.keys().collect::<BTreeSet<_>>(),
+            ordinary_outer.terms.keys().collect::<BTreeSet<_>>(),
+            "exact and ordinary alias cographs must expose both raised LU orders"
+        );
+        failures.clear();
+        for index in ordinary_outer.terms.keys() {
+            let exact_jet = value_and_t_derivative(exact_sum(&exact_outer, index)?)?;
+            let ordinary_term = ordinary_outer
+                .terms
+                .get(index)
+                .expect("the ordinary alias-cograph residue exists");
+            let ordinary_sum = ordinary_term
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    orientation.expression.clone()
+                        * retained_dotted_factor.replace_multiple(
+                            orientation.orientation.energy_replacements_gs(&graph),
+                        )
+                })
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(ordinary_outer.production_prefactor_factor());
+            let ordinary_jet = value_and_t_derivative(ordinary_sum)?;
+            for (jet_component, exact_expression, ordinary_expression) in
+                ["value", "first t derivative"]
+                    .into_iter()
+                    .zip(exact_jet)
+                    .zip(ordinary_jet)
+                    .map(|((component, exact), ordinary)| (component, exact, ordinary))
+            {
+                let exact_value = evaluate_arb(exact_expression)?;
+                let ordinary_value = evaluate_arb(ordinary_expression)?;
+                let distance = (exact_value.clone() - ordinary_value.clone()).norm().re;
+                let exact_norm = exact_value.clone().norm().re;
+                let ordinary_norm = ordinary_value.clone().norm().re;
+                let scale = if exact_norm > ordinary_norm {
+                    exact_norm
+                } else {
+                    ordinary_norm
+                };
+                let relative_distance = if scale.is_zero() {
+                    distance
+                } else {
+                    distance / scale
+                };
+                if !([
+                    &exact_value.re,
+                    &exact_value.im,
+                    &ordinary_value.re,
+                    &ordinary_value.im,
+                ]
+                .into_iter()
+                .all(symbolica::domains::float::SingleFloat::is_finite)
+                    && symbolica::domains::float::SingleFloat::is_finite(&relative_distance)
+                    && relative_distance <= tolerance)
+                {
+                    failures.push(format!(
+                        "raised alias residue {index} {jet_component} differs between exact and ordinary cograph CFF: exact={exact_value:e}, ordinary={ordinary_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+                    ));
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "raised-alias exact-vs-ordinary failures:\n{}",
+            failures.join("\n")
+        );
+
+        let denominator_atom = GS.den(
+            usize::from(uv_edge),
+            uv_momentum.clone(),
+            uv_mass_squared.clone(),
+            uv_full_expr.clone(),
+        );
+        let dotted_numerator = &denominator_atom * &retained_dotted_factor;
+        // Keep the same component order as the UV-expanded GL0 sources: the
+        // UV component precedes the three-denominator outer cograph.
+        let lower_denominators = uv_denominators[..2]
+            .iter()
+            .cloned()
+            .chain(cograph_denominators.iter().cloned())
+            .collect::<Vec<_>>();
+        let dotted_denominators = uv_denominators
+            .iter()
+            .cloned()
+            .chain(cograph_denominators.iter().cloned())
+            .collect::<Vec<_>>();
+
+        // The linear self-energy source is odd in the UV loop momentum. Its
+        // temporal residue cancels between the two UV energy poles, whereas a
+        // spatial component survives the energy residue pointwise. Test both
+        // against the factorized exact source and the ordinary production CFF
+        // so that neither a shared exact-source continuation defect nor a
+        // spuriously vanishing temporal reference can hide a parity error.
+        let mut cograph_contract: SuBitGraph = graph.empty_subgraph();
+        for edge in [EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)] {
+            cograph_contract.add(graph[&edge].1);
+        }
+        failures.clear();
+        for (uv_component, odd_uv_numerator) in [
+            ("temporal", GS.emr_mom(uv_edge, GS.cind(0))),
+            ("spatial", GS.emr_mom(uv_edge, GS.cind(1))),
+        ] {
+            let odd_combined_numerator = &retained_dotted_factor * &odd_uv_numerator;
+            let (odd_uv_source, _) = graph.cff_from_4d_denominators_in_uv_edges(
+                &uv_denominators[..2],
+                uv_edges,
+                &CutSet::empty(graph.n_hedges()),
+                &options,
+                &odd_uv_numerator,
+                None,
+            )?;
+            let (odd_combined_source, _) = graph.cff_from_4d_denominators_in_uv_edges(
+                &lower_denominators,
+                uv_edges,
+                &lu_cutset,
+                &options,
+                &odd_combined_numerator,
+                None,
+            )?;
+            let ordinary_uv = graph.cff(
+                &cograph_contract,
+                &CutSet::empty(graph.n_hedges()),
+                &OrientationPattern::default(),
+                &options,
+                Some(&odd_uv_numerator),
+            )?;
+            let exact_uv_sum = exact_sum(&odd_uv_source, &uv_index)?;
+            let ordinary_uv_sum = ordinary_sum(&graph, &ordinary_uv, &uv_index, &odd_uv_numerator);
+            for index in exact_outer.terms.keys() {
+                let combined_jet = value_and_t_derivative(exact_sum(&odd_combined_source, index)?)?;
+                let exact_factorized_jet =
+                    value_and_t_derivative(exact_sum(&exact_outer, index)? * &exact_uv_sum)?;
+                let ordinary_factorized_jet = value_and_t_derivative(
+                    ordinary_sum(&graph, &ordinary_outer, index, &retained_dotted_factor)
+                        * &ordinary_uv_sum,
+                )?;
+                for (jet_component, combined_expression, exact_expression, ordinary_expression) in
+                    ["value", "first t derivative"]
+                        .into_iter()
+                        .zip(combined_jet)
+                        .zip(exact_factorized_jet)
+                        .zip(ordinary_factorized_jet)
+                        .map(|(((component, combined), exact), ordinary)| {
+                            (component, combined, exact, ordinary)
+                        })
+                {
+                    let combined_value = evaluate_arb(combined_expression)?;
+                    for (reference, reference_expression) in [
+                        ("factorized exact", exact_expression),
+                        ("factorized ordinary", ordinary_expression),
+                    ] {
+                        let reference_value = evaluate_arb(reference_expression)?;
+                        let distance = (combined_value.clone() - reference_value.clone()).norm().re;
+                        let combined_norm = combined_value.clone().norm().re;
+                        let reference_norm = reference_value.clone().norm().re;
+                        let scale = if combined_norm > reference_norm {
+                            combined_norm
+                        } else {
+                            reference_norm
+                        };
+                        let relative_distance = if scale.is_zero() {
+                            distance
+                        } else {
+                            distance / scale
+                        };
+                        if !([
+                            &combined_value.re,
+                            &combined_value.im,
+                            &reference_value.re,
+                            &reference_value.im,
+                        ]
+                        .into_iter()
+                        .all(symbolica::domains::float::SingleFloat::is_finite)
+                            && symbolica::domains::float::SingleFloat::is_finite(
+                                &relative_distance,
+                            )
+                            && relative_distance <= tolerance)
+                        {
+                            failures.push(format!(
+                                "raised LU residue {index} {jet_component} differs from its {reference} odd-UV-{uv_component} source: combined={combined_value:e}, reference={reference_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "raised-LU odd-UV-momentum factorization failures:\n{}",
+            failures.join("\n")
+        );
+
+        let (retained_source, _) = graph.cff_from_4d_denominators_in_uv_edges(
+            &lower_denominators,
+            uv_edges,
+            &lu_cutset,
+            &options,
+            &retained_dotted_factor,
+            None,
+        )?;
+        let (dotted_source, _) = graph.cff_from_4d_denominators_in_uv_edges(
+            &dotted_denominators,
+            uv_edges,
+            &lu_cutset,
+            &options,
+            &dotted_numerator,
+            None,
+        )?;
+        assert_eq!(
+            retained_source.terms.keys().collect::<BTreeSet<_>>(),
+            dotted_source.terms.keys().collect::<BTreeSet<_>>(),
+            "powered and lower exact sources must expose the same raised LU orders"
+        );
+        failures.clear();
+        for index in retained_source.terms.keys() {
+            let dotted_sum = exact_sum(&dotted_source, index)?
+                .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                .with(W_.d_);
+            let retained_sum = exact_sum(&retained_source, index)?;
+            let dotted_jet = value_and_t_derivative(dotted_sum)?;
+            let retained_jet = value_and_t_derivative(retained_sum)?;
+            for (jet_component, dotted_expression, retained_expression) in
+                ["value", "first t derivative"]
+                    .into_iter()
+                    .zip(dotted_jet)
+                    .zip(retained_jet)
+                    .map(|((component, dotted), retained)| (component, dotted, retained))
+            {
+                let dotted_value = evaluate_arb(dotted_expression)?;
+                let retained_value = evaluate_arb(retained_expression)?;
+                let distance = (dotted_value.clone() - retained_value.clone()).norm().re;
+                let dotted_norm = dotted_value.clone().norm().re;
+                let retained_norm = retained_value.clone().norm().re;
+                let scale = if dotted_norm > retained_norm {
+                    dotted_norm
+                } else {
+                    retained_norm
+                };
+                let relative_distance = if scale.is_zero() {
+                    distance
+                } else {
+                    distance / scale
+                };
+                if !([
+                    &dotted_value.re,
+                    &dotted_value.im,
+                    &retained_value.re,
+                    &retained_value.im,
+                ]
+                .into_iter()
+                .all(symbolica::domains::float::SingleFloat::is_finite)
+                    && symbolica::domains::float::SingleFloat::is_finite(&relative_distance)
+                    && relative_distance <= tolerance)
+                {
+                    failures.push(format!(
+                        "raised LU residue {index} {jet_component} differs between D_UV*F/D_UV^3 and F/D_UV^2: dotted={dotted_value:e}, lower={retained_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+                    ));
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "raised-LU powered-alias identity failures:\n{}",
+            failures.join("\n")
+        );
+
+        // Finally retain the genuinely cross-component numerator of the GL0
+        // cubic source. Its temporal and one spatial Minkowski component must
+        // equal the corresponding sum of factorized cograph and UV residues;
+        // testing the t jet makes the order-two Cutkosky derivative part of
+        // the oracle rather than checking only its value at the cut.
+        let cograph_temporal_numerator = GS.emr_mom(cograph_edge, GS.cind(0)) * &outer_numerator;
+        let cograph_spatial_numerator = GS.emr_mom(cograph_edge, GS.cind(1)) * &outer_numerator;
+        let uv_temporal_numerator = GS.emr_mom(uv_edge, GS.cind(0)).pow(2);
+        let uv_spatial_numerator =
+            GS.emr_mom(uv_edge, GS.cind(0)) * GS.emr_mom(uv_edge, GS.cind(1));
+        let cross_component_numerator = &cograph_temporal_numerator * &uv_temporal_numerator
+            - &cograph_spatial_numerator * &uv_spatial_numerator;
+        let (cross_component_source, _) = graph.cff_from_4d_denominators_in_uv_edges(
+            &dotted_denominators,
+            uv_edges,
+            &lu_cutset,
+            &options,
+            &cross_component_numerator,
+            None,
+        )?;
+        let (cograph_temporal, _) = graph.cff_from_4d_denominators(
+            &cograph_denominators,
+            &lu_cutset,
+            &options,
+            &cograph_temporal_numerator,
+        )?;
+        let (cograph_spatial, _) = graph.cff_from_4d_denominators(
+            &cograph_denominators,
+            &lu_cutset,
+            &options,
+            &cograph_spatial_numerator,
+        )?;
+        let (uv_temporal, _) = graph.cff_from_4d_denominators_in_uv_edges(
+            &uv_denominators,
+            uv_edges,
+            &CutSet::empty(graph.n_hedges()),
+            &options,
+            &uv_temporal_numerator,
+            None,
+        )?;
+        let (uv_spatial, _) = graph.cff_from_4d_denominators_in_uv_edges(
+            &uv_denominators,
+            uv_edges,
+            &CutSet::empty(graph.n_hedges()),
+            &options,
+            &uv_spatial_numerator,
+            None,
+        )?;
+        let uv_temporal_sum = exact_sum(&uv_temporal, &uv_index)?;
+        let uv_spatial_sum = exact_sum(&uv_spatial, &uv_index)?;
+        assert_eq!(
+            cross_component_source.terms.keys().collect::<BTreeSet<_>>(),
+            cograph_temporal.terms.keys().collect::<BTreeSet<_>>(),
+            "the cross-component source must preserve both raised cograph orders"
+        );
+        failures.clear();
+        for index in cograph_temporal.terms.keys() {
+            let combined_jet = value_and_t_derivative(exact_sum(&cross_component_source, index)?)?;
+            let factorized_jet = value_and_t_derivative(
+                exact_sum(&cograph_temporal, index)? * &uv_temporal_sum
+                    - exact_sum(&cograph_spatial, index)? * &uv_spatial_sum,
+            )?;
+            for (jet_component, combined_expression, factorized_expression) in
+                ["value", "first t derivative"]
+                    .into_iter()
+                    .zip(combined_jet)
+                    .zip(factorized_jet)
+                    .map(|((component, combined), factorized)| (component, combined, factorized))
+            {
+                let combined_value = evaluate_arb(combined_expression)?;
+                let factorized_value = evaluate_arb(factorized_expression)?;
+                let distance = (combined_value.clone() - factorized_value.clone())
+                    .norm()
+                    .re;
+                let combined_norm = combined_value.clone().norm().re;
+                let factorized_norm = factorized_value.clone().norm().re;
+                let scale = if combined_norm > factorized_norm {
+                    combined_norm
+                } else {
+                    factorized_norm
+                };
+                let relative_distance = if scale.is_zero() {
+                    distance
+                } else {
+                    distance / scale
+                };
+                if !([
+                    &combined_value.re,
+                    &combined_value.im,
+                    &factorized_value.re,
+                    &factorized_value.im,
+                ]
+                .into_iter()
+                .all(symbolica::domains::float::SingleFloat::is_finite)
+                    && symbolica::domains::float::SingleFloat::is_finite(&relative_distance)
+                    && relative_distance <= tolerance)
+                {
+                    failures.push(format!(
+                        "raised LU residue {index} {jet_component} does not factorize for Q_UV^0 (Q_UV^0 Q_outer^0-Q_UV^1 Q_outer^1): combined={combined_value:e}, factorized={factorized_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+                    ));
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "raised-LU cross-component factorization failures:\n{}",
+            failures.join("\n")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_cff_quartic_lu_component_factorizes_from_muv_triangle() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(
+            digraph exact_quartic_lu_muv_product {
+                node [num=1]
+
+                a -> b [id=0 lmb_id=0 particle=scalar_1]
+                a -> b [id=1 particle=scalar_2]
+                b -> c [id=4 particle=scalar_0]
+                c -> d [id=2 lmb_id=1 particle=scalar_0]
+                c -> d [id=3 particle=scalar_0]
+                c -> d [id=5 particle=scalar_0]
+            },
+            "scalars"
+        )?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[EdgeIndex(4)],
+            &canonization,
+            &options,
+            Some(&Atom::one()),
+        )?;
+        let lu_surface = graph
+            .determine_raised_esurfaces_from_expression(&production.expression)
+            .raised_groups
+            .into_iter()
+            .find(|group| {
+                group.esurface_ids.iter().any(|surface_id| {
+                    production.expression.surfaces.esurface_cache[*surface_id]
+                        .energies
+                        .iter()
+                        .copied()
+                        .collect::<BTreeSet<_>>()
+                        == BTreeSet::from([EdgeIndex(0), EdgeIndex(1)])
+                })
+            })
+            .expect("the nonrepeated cograph bubble supplies an LU residue surface");
+        let mut lu_cutset = CutSet::empty(graph.n_hedges());
+        lu_cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            raised_group: lu_surface,
+            cut_edge_alternatives: vec![vec![EdgeIndex(0), EdgeIndex(1)]],
+        });
+
+        let cograph_denominators = [EdgeIndex(0), EdgeIndex(1)].map(|edge| FourDDenominator {
+            source_edge: edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish(),
+            mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+            full_expr: Atom::one(),
+        });
+        let muv_mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
+        let muv_denominators =
+            [EdgeIndex(2), EdgeIndex(3), EdgeIndex(5)].map(|edge| FourDDenominator {
+                source_edge: edge,
+                momentum: FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(usize::from(edge))
+                    .finish(),
+                mass_squared: muv_mass_squared.clone(),
+                full_expr: Atom::one(),
+            });
+        let quartic_numerator = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(4);
+        let combined_denominators = cograph_denominators
+            .iter()
+            .cloned()
+            .chain(muv_denominators.iter().cloned())
+            .collect::<Vec<_>>();
+        let uv_edges = [EdgeIndex(2), EdgeIndex(3), EdgeIndex(5)];
+
+        let (combined, _) = graph.cff_from_4d_denominators_in_uv_edges(
+            &combined_denominators,
+            uv_edges,
+            &lu_cutset,
+            &options,
+            &quartic_numerator,
+            None,
+        )?;
+        let (cograph, _) = graph.cff_from_4d_denominators(
+            &cograph_denominators,
+            &lu_cutset,
+            &options,
+            &quartic_numerator,
+        )?;
+        let (muv, _) = graph.cff_from_4d_denominators_in_uv_edges(
+            &muv_denominators,
+            uv_edges,
+            &CutSet::empty(graph.n_hedges()),
+            &options,
+            &Atom::one(),
+            None,
+        )?;
+        let exact_sum = |cff: &CutCFF| -> Result<Atom> {
+            Ok(cff
+                .terms
+                .values()
+                .flat_map(|term| {
+                    term.orientations.iter().map(|orientation| {
+                        Ok(orientation.expression.clone()
+                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(cff.production_prefactor_factor()))
+        };
+        let combined_sum = exact_sum(&combined)?;
+        let isolated_product = exact_sum(&cograph)? * exact_sum(&muv)?;
+        let evaluate_arb = |expression: Atom| -> Result<Complex<F<ArbPrec>>> {
+            let mut parameters = vec![Atom::var(GS.pi), Atom::var(GS.m_uv_expansion)];
+            let zero = F::<ArbPrec>::from(&Rational::from(0));
+            let mut values = vec![
+                Complex::new(zero.clone().pi(), zero.clone()),
+                Complex::new_re(F::from(&Rational::from((7, 5)))),
+            ];
+            for edge in 0..graph.underlying.n_edges() {
+                let edge = EdgeIndex(edge);
+                parameters.extend([GS.ose(edge), cut_energy(edge)]);
+                let edge_value = F::from(&Rational::from((edge.0 as i64 + 2, 3)));
+                values.extend([
+                    Complex::new_re(edge_value.clone()),
+                    Complex::new_re(edge_value),
+                ]);
+                for component in 0..=3 {
+                    parameters.push(GS.emr_mom(edge, GS.cind(component)));
+                    values.push(Complex::new_re(F::from(&Rational::from((
+                        edge.0 as i64 + component as i64 + 1,
+                        component as i64 + 2,
+                    )))));
+                }
+            }
+            let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> =
+                expression.evaluator(&parameters).build().map_err(|error| {
+                    eyre::eyre!("failed to build mixed-component evaluator: {error}")
+                })?;
+            let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
+                rational.map_coeff(&|coefficient| {
+                    Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
+                });
+            Ok(arb.evaluate_single(&values))
+        };
+        let combined_value = evaluate_arb(combined_sum)?;
+        let isolated_value = evaluate_arb(isolated_product)?;
+        let distance = (combined_value.clone() - isolated_value.clone()).norm().re;
+        let combined_norm = combined_value.clone().norm().re;
+        let isolated_norm = isolated_value.clone().norm().re;
+        let scale = if combined_norm > isolated_norm {
+            combined_norm
+        } else {
+            isolated_norm
+        };
+        let relative_distance = distance / scale;
+        let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+        assert!(
+            relative_distance <= tolerance,
+            "a nonrepeated quartic LU component must factorize from its pure MUV triangle: combined={combined_value:e}, isolated={isolated_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn connected_parent_uv_limit_matches_uncorrected_child_times_outer() -> Result<()> {
+        test_initialise()?;
+        let check = |label: &str,
+                     mut graph: Graph,
+                     expected_loop_count: usize,
+                     selected_lu_support: Option<&[EdgeIndex]>|
+         -> Result<()> {
+            let uv_edges = [EdgeIndex(1), EdgeIndex(2)];
+            let mut uv_contract: SuBitGraph = graph.empty_subgraph();
+            for edge in uv_edges {
+                uv_contract.add(graph[&edge].1);
+            }
+            let uv_subgraph =
+                InternalSubGraph::cleaned_filter_optimist(uv_contract.clone(), graph.as_ref());
+            assert_eq!(graph.get_loop_number(), expected_loop_count);
+            assert_eq!(graph.n_loops(&uv_contract), 1);
+
+            let options = graph.denominator_only_cff_3d_expression_options();
+            let cutset = CutSet::empty(graph.n_hedges());
+            let pattern = OrientationPattern::default();
+            let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+            let root_contract = graph.empty_subgraph::<SuBitGraph>();
+            let root = graph.cff(&root_contract, &cutset, &pattern, &options, None)?;
+            let outer = graph.cff(&uv_contract, &cutset, &pattern, &options, None)?;
+
+            let crown = graph.dummy_stripped_external_flows_of(&uv_subgraph);
+            let child_lmb = graph.try_compatible_sub_lmb(
+                &uv_subgraph,
+                crown.clone(),
+                &graph.loop_momentum_basis,
+            )?;
+            assert_eq!(child_lmb.loop_edges.len(), 1);
+            let muv_mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
+            let child_denominators = uv_edges.map(|edge| FourDDenominator {
+                source_edge: edge,
+                momentum: FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(usize::from(edge))
+                    .finish(),
+                mass_squared: muv_mass_squared.clone(),
+                full_expr: Atom::one(),
+            });
+            let (child, _) = graph.cff_from_4d_denominators_in_uv_sub_lmb(
+                &child_denominators,
+                uv_edges,
+                crown.included_iter(),
+                &child_lmb,
+                ExactUvSubLmbFrame::RetainedPhysicalCrown,
+                &cutset,
+                &options,
+                &Atom::one(),
+                None,
+            )?;
+
+            let ordinary_raw_sum = |cff: &CutCFF| {
+                cff.terms
+                    .values()
+                    .flat_map(|term| &term.orientations)
+                    .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
+            };
+            let exact_raw_sum = |cff: &CutCFF| -> Result<Atom> {
+                Ok(cff
+                    .terms
+                    .values()
+                    .flat_map(|term| {
+                        term.orientations.iter().map(|orientation| {
+                            Ok(orientation.expression.clone()
+                                * term.map_exact_source_numerator(&orientation.orientation)?)
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .fold(Atom::Zero, |sum, term| sum + term))
+            };
+            let root_bridge = root.production_prefactor_factor();
+            let outer_bridge = outer.production_prefactor_factor();
+            let child_bridge = child.production_prefactor_factor();
+            let parent_raw = ordinary_raw_sum(&root);
+            let components_raw = ordinary_raw_sum(&outer) * exact_raw_sum(&child)?;
+
+            // The one-loop outer case has the parity opposite to GL24, while the
+            // two-loop outer case matches it. In both, the relative bridge converts
+            // separately generated raw child-times-outer data into the raw
+            // connected-parent contour frame. It is not also the production host
+            // factor: production consumes the root bridge on that connected frame,
+            // while the separate components consume their own bridges.
+            let relative_bridge = root_bridge * outer_bridge * child_bridge;
+            let connected_frame = components_raw.clone() * Atom::num(relative_bridge);
+            let parent = parent_raw.clone() * Atom::num(root_bridge);
+            let factorized = components_raw.clone() * Atom::num(outer_bridge * child_bridge);
+
+            let zero = F::<ArbPrec>::from(&Rational::from(0));
+            let one = F::<ArbPrec>::from(&Rational::from(1));
+            let muv_mass = F::<ArbPrec>::from(&Rational::from((7, 5)));
+            let outer_spatial = F::<ArbPrec>::from(&Rational::from((3, 7)));
+            let extra_outer_spatial = F::<ArbPrec>::from(&Rational::from((2, 5)));
+            let mut parameters = vec![Atom::var(GS.pi), Atom::var(GS.m_uv_expansion)];
+            let mut edge_parameters = Vec::new();
+            for edge in 0..graph.underlying.n_edges() {
+                let edge = EdgeIndex(edge);
+                parameters.extend([GS.ose(edge), cut_energy(edge), GS.emr_mom(edge, GS.cind(0))]);
+                for component in 1..=3 {
+                    parameters.push(GS.emr_mom(edge, GS.cind(component)));
+                }
+                edge_parameters.push(edge);
+            }
+            let values_at = |scale: &F<ArbPrec>| {
+                let child_spatial = [scale.clone(), outer_spatial.clone() - scale];
+                let mut values = vec![
+                    Complex::new(zero.clone().pi(), zero.clone()),
+                    Complex::new_re(muv_mass.clone()),
+                ];
+                for edge in &edge_parameters {
+                    let child_index = uv_edges.iter().position(|candidate| candidate == edge);
+                    let (energy, spatial) = if let Some(child_index) = child_index {
+                        let spatial = child_spatial[child_index].clone();
+                        (
+                            (&muv_mass * &muv_mass + &spatial * &spatial).sqrt(),
+                            spatial,
+                        )
+                    } else if let Some(spatial) = match (expected_loop_count, *edge) {
+                        (_, EdgeIndex(3)) => Some(outer_spatial.clone()),
+                        (2, EdgeIndex(4)) => Some(-&outer_spatial),
+                        (3, EdgeIndex(4)) => Some(&extra_outer_spatial - &outer_spatial),
+                        (3, EdgeIndex(5)) => Some(extra_outer_spatial.clone()),
+                        (3, EdgeIndex(6)) => Some(-&extra_outer_spatial),
+                        _ => None,
+                    } {
+                        ((&one + &spatial * &spatial).sqrt(), spatial)
+                    } else {
+                        (F::<ArbPrec>::from(&Rational::from(2)), zero.clone())
+                    };
+                    values.extend([
+                        Complex::new_re(energy.clone()),
+                        Complex::new_re(energy.clone()),
+                        Complex::new_re(energy),
+                    ]);
+                    for component in 1..=3 {
+                        values.push(Complex::new_re(if component == 1 {
+                            spatial.clone()
+                        } else {
+                            zero.clone()
+                        }));
+                    }
+                }
+                values
+            };
+            let evaluate_arb =
+                |expression: Atom, values: &[Complex<F<ArbPrec>>]| -> Result<Complex<F<ArbPrec>>> {
+                    let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> =
+                    expression.evaluator(&parameters).build().map_err(|error| {
+                        eyre::eyre!(
+                            "failed to build {label} connected-parent UV-bridge evaluator: {error}"
+                        )
+                    })?;
+                    let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
+                        rational.map_coeff(&|coefficient| {
+                            Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
+                        });
+                    Ok(arb.evaluate_single(values))
+                };
+            let scale = F::<ArbPrec>::from(&Rational::from(10).pow(45));
+            let uv_values = values_at(&scale);
+            let measure = &scale * &scale * &scale;
+            let parent_raw = evaluate_arb(parent_raw, &uv_values)? * &measure;
+            let connected_frame = evaluate_arb(connected_frame, &uv_values)? * &measure;
+            let parent = evaluate_arb(parent, &uv_values)? * &measure;
+            let factorized = evaluate_arb(factorized, &uv_values)? * &measure;
+            let raw_distance = (parent_raw.clone() - connected_frame.clone()).norm().re;
+            let parent_raw_norm = parent_raw.clone().norm().re;
+            let connected_frame_norm = connected_frame.clone().norm().re;
+            let raw_norm = if parent_raw_norm > connected_frame_norm {
+                parent_raw_norm
+            } else {
+                connected_frame_norm
+            };
+            let raw_relative_distance = if raw_norm.is_zero() {
+                raw_distance
+            } else {
+                raw_distance / raw_norm
+            };
+            let distance = (parent.clone() - factorized.clone()).norm().re;
+            let parent_norm = parent.clone().norm().re;
+            let factorized_norm = factorized.clone().norm().re;
+            let norm = if parent_norm > factorized_norm {
+                parent_norm
+            } else {
+                factorized_norm
+            };
+            let relative_distance = if norm.is_zero() {
+                distance
+            } else {
+                distance / norm.clone()
+            };
+            let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+            assert!(
+                raw_relative_distance <= tolerance,
+                "{label}: raw connected-parent UV frame differs from raw child times outer after one relative/root bridge: parent={parent_raw:e}, connected frame={connected_frame:e}, bridge={relative_bridge}, relative delta={raw_relative_distance:e}, tolerance={tolerance:e}",
+            );
+            assert!(
+                relative_distance <= tolerance,
+                "{label}: connected parent UV limit differs from its retained-crown exact child times reduced outer: parent={parent:e}, factorized={factorized:e}, standalone bridge ratio={relative_bridge}, relative delta={relative_distance:e}, tolerance={tolerance:e}",
+            );
+            if let Some(lu_support) = selected_lu_support {
+                let quartic_owner = EdgeIndex(3);
+                let outer_momentum_squared = GS.emr_mom(quartic_owner, GS.cind(0)).pow(2)
+                    - (1..=3)
+                        .map(|component| GS.emr_mom(quartic_owner, GS.cind(component)).pow(2))
+                        .fold(Atom::Zero, |sum, component| sum + component);
+                let quartic_numerator = outer_momentum_squared.pow(2);
+                // Keep the temporal quartic above only to exercise the same VariantLocal
+                // construction as GL24.  At a fixed selected residue, GL24's source map has
+                // already reduced that numerator to this outer spatial quartic; evaluating it
+                // directly here avoids turning this factorization check into a second residue
+                // map whose temporal sample would contain the child UV pole.
+                let fixed_selected_spatial_quartic = (1..=3)
+                    .map(|component| GS.emr_mom(quartic_owner, GS.cind(component)).pow(2))
+                    .fold(Atom::Zero, |sum, component| sum - component)
+                    .pow(2);
+                let root_generated = graph.generate_3d_expression_for_integrand(
+                    &[],
+                    &canonization,
+                    &options,
+                    Some(&quartic_numerator),
+                )?;
+                let target_support = lu_support.iter().copied().collect::<BTreeSet<_>>();
+                let lu_surface = graph
+                    .determine_raised_esurfaces_from_expression(&root_generated.expression)
+                    .raised_groups
+                    .into_iter()
+                    .find(|group| {
+                        group.esurface_ids.iter().any(|surface_id| {
+                            root_generated.expression.surfaces.esurface_cache[*surface_id]
+                                .energies
+                                .iter()
+                                .copied()
+                                .collect::<BTreeSet<_>>()
+                                .eq(&target_support)
+                        })
+                    })
+                    .ok_or_else(|| {
+                        eyre::eyre!(
+                            "{label}: no selected LU surface has physical support {target_support:?}"
+                        )
+                    })?;
+                let mut selected_cutset = CutSet::empty(graph.n_hedges());
+                selected_cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+                    raised_group: lu_surface,
+                    cut_edge_alternatives: vec![lu_support.to_vec()],
+                });
+                let variant_root = graph.cff(
+                    &root_contract,
+                    &selected_cutset,
+                    &pattern,
+                    &options,
+                    Some(&quartic_numerator),
+                )?;
+                let variant_outer = graph.cff(
+                    &uv_contract,
+                    &selected_cutset,
+                    &pattern,
+                    &options,
+                    Some(&quartic_numerator),
+                )?;
+                let fixed_order_one_raw_sum = |cff: &CutCFF| {
+                    cff.terms
+                        .iter()
+                        .filter(|(index, _)| index.lu_cut_order == Some(1))
+                        .flat_map(|(_, term)| {
+                            term.orientations.iter().map(|orientation| {
+                                orientation.expression.clone()
+                                    * fixed_selected_spatial_quartic.clone()
+                            })
+                        })
+                        .fold(Atom::Zero, |sum, term| sum + term)
+                };
+                let variant_parent_raw = fixed_order_one_raw_sum(&variant_root);
+                let variant_components_raw =
+                    fixed_order_one_raw_sum(&variant_outer) * exact_raw_sum(&child)?;
+                let variant_connected_frame =
+                    variant_components_raw.clone() * Atom::num(relative_bridge);
+                let variant_parent = variant_parent_raw.clone() * Atom::num(root_bridge);
+                let variant_factorized =
+                    variant_components_raw * Atom::num(outer_bridge * child_bridge);
+                let variant_parent_raw = evaluate_arb(variant_parent_raw, &uv_values)? * &measure;
+                let variant_connected_frame =
+                    evaluate_arb(variant_connected_frame, &uv_values)? * &measure;
+                let variant_parent = evaluate_arb(variant_parent, &uv_values)? * &measure;
+                let variant_factorized = evaluate_arb(variant_factorized, &uv_values)? * &measure;
+                let relative_delta = |left: &Complex<F<ArbPrec>>, right: &Complex<F<ArbPrec>>| {
+                    let distance = (left.clone() - right.clone()).norm().re;
+                    let left_norm = left.clone().norm().re;
+                    let right_norm = right.clone().norm().re;
+                    let scale = if left_norm > right_norm {
+                        left_norm
+                    } else {
+                        right_norm
+                    };
+                    if scale.is_zero() {
+                        distance
+                    } else {
+                        distance / scale
+                    }
+                };
+                let raw_delta = relative_delta(&variant_parent_raw, &variant_connected_frame);
+                let production_delta = relative_delta(&variant_parent, &variant_factorized);
+                assert!(
+                    raw_delta <= tolerance,
+                    "{label}: selected-LU quartic raw connected frame differs from child times reduced outer: parent={variant_parent_raw:e}, connected frame={variant_connected_frame:e}, relative delta={raw_delta:e}, tolerance={tolerance:e}",
+                );
+                assert!(
+                    production_delta <= tolerance,
+                    "{label}: selected-LU quartic connected-parent UV limit differs from independently bridged child times reduced outer: parent={variant_parent:e}, factorized={variant_factorized:e}, relative delta={production_delta:e}, tolerance={tolerance:e}",
+                );
+            }
+            Ok(())
+        };
+
+        check(
+            "opposite outer parity",
+            dot!(digraph connected_parent_uv_bridge {
+                edge [num=1 mass=1]
+                node [num=1]
+                incoming [style=invis]
+                outgoing [style=invis]
+
+                incoming -> a [id=0]
+                a -> u [id=1 lmb_id=0]
+                a -> u [id=2]
+                u -> b [id=3 lmb_id=1]
+                a -> b [id=4]
+                b -> outgoing [id=5]
+            })?,
+            2,
+            None,
+        )?;
+        check(
+            "GL24-matching outer parity",
+            dot!(digraph connected_parent_uv_bridge_three_loop {
+                edge [num=1 mass=1]
+                node [num=1]
+                incoming [style=invis]
+                outgoing [style=invis]
+
+                incoming -> a [id=0]
+                a -> u [id=1 lmb_id=0]
+                a -> u [id=2]
+                u -> b [id=3 lmb_id=1]
+                a -> b [id=4]
+                b -> c [id=5 lmb_id=2]
+                a -> c [id=6]
+                c -> outgoing [id=7]
+            })?,
+            3,
+            Some(&[EdgeIndex(5), EdgeIndex(6)]),
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn gl24_selected_quartic_residue_uses_the_reduced_outer_frame() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph gl24_selected_zero_sample {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            v0 -> v1 [id=0 is_cut=0]
+            v0 -> v3 [id=1 lmb_id=0]
+            v0 -> v5 [id=2]
+            v1 -> v2 [id=3 lmb_id=1]
+            v1 -> v3 [id=4]
+            v2 -> v4 [id=5 lmb_id=2]
+            v2 -> v4 [id=6]
+            v3 -> v5 [id=7]
+            v4 -> v5 [id=8 mass=2]
+        })?;
+        assert_eq!(graph.get_loop_number(), 3);
+        assert_eq!(graph.get_edges_in_initial_state_cut(), [EdgeIndex(0)]);
+
+        let uv_edges = [EdgeIndex(5), EdgeIndex(6)];
+        let mut uv_contract: SuBitGraph = graph.empty_subgraph();
+        for edge in uv_edges {
+            uv_contract.add(graph[&edge].1);
+        }
+        let production_contract = graph.tree_edges.subtract(&graph.initial_state_cut);
+        let production_contract_edges = graph.paired_edges(&production_contract);
+        let outer_contract = uv_contract.union(&production_contract);
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let quartic_owner = EdgeIndex(1);
+        let momentum_squared = GS.emr_mom(quartic_owner, GS.cind(0)).pow(2)
+            - (1..=3)
+                .map(|component| GS.emr_mom(quartic_owner, GS.cind(component)).pow(2))
+                .fold(Atom::Zero, |sum, component| sum + component);
+        let quartic_numerator = momentum_squared.pow(2);
+        let root_generated = graph.generate_3d_expression_for_integrand(
+            &production_contract_edges,
+            &canonization,
+            &options,
+            Some(&quartic_numerator),
+        )?;
+        let target_support = [EdgeIndex(3), EdgeIndex(4)]
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let lu_surface = graph
+            .determine_raised_esurfaces_from_expression(&root_generated.expression)
+            .raised_groups
+            .into_iter()
+            .find(|group| {
+                group.esurface_ids.iter().any(|surface_id| {
+                    root_generated.expression.surfaces.esurface_cache[*surface_id]
+                        .energies
+                        .iter()
+                        .copied()
+                        .collect::<BTreeSet<_>>()
+                        .eq(&target_support)
+                })
+            })
+            .ok_or_else(|| eyre::eyre!("GL24 q3/q4 LU surface was not generated"))?;
+        let mut cutset = CutSet::empty(graph.n_hedges());
+        cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            raised_group: lu_surface,
+            cut_edge_alternatives: vec![vec![EdgeIndex(3), EdgeIndex(4)]],
+        });
+        let pattern = OrientationPattern::default();
+        let root = graph.cff(
+            &production_contract,
+            &cutset,
+            &pattern,
+            &options,
+            Some(&quartic_numerator),
+        )?;
+        let outer = graph.cff(
+            &outer_contract,
+            &cutset,
+            &pattern,
+            &options,
+            Some(&quartic_numerator),
+        )?;
+        // Edge 0 remains the fixed initial-cut alias. A zero mapped energy
+        // on edge 1 leaves its spatial quartic, while nonzero samples retain
+        // the temporal terms. Compare their complete sum without prescribing
+        // interpolation nodes or causal-row ordering.
+        let mapped_order_one = |cff: &CutCFF| {
+            cff.terms
+                .iter()
+                .filter(|(index, _)| index.lu_cut_order == Some(1))
+                .flat_map(|(_, term)| &term.orientations)
+                .fold(Atom::Zero, |sum, orientation| {
+                    sum + &orientation.expression
+                        * quartic_numerator.replace_multiple(
+                            orientation.orientation.energy_replacements_gs(&graph),
+                        )
+                })
+        };
+        let root_raw = mapped_order_one(&root);
+        let outer_raw = mapped_order_one(&outer);
+        assert!(!root_raw.is_zero() && !outer_raw.is_zero());
+
+        let uv_subgraph =
+            InternalSubGraph::cleaned_filter_optimist(uv_contract.clone(), graph.as_ref());
+        let crown = graph.dummy_stripped_external_flows_of(&uv_subgraph);
+        let child_lmb = graph.try_compatible_sub_lmb(
+            &uv_subgraph,
+            crown.clone(),
+            &graph.loop_momentum_basis,
+        )?;
+        let muv_mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
+        let child_denominators = uv_edges.map(|edge| FourDDenominator {
+            source_edge: edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish(),
+            mass_squared: muv_mass_squared.clone(),
+            full_expr: Atom::one(),
+        });
+        let child_cutset = CutSet::empty(graph.n_hedges());
+        let (child, _) = graph.cff_from_4d_denominators_in_uv_sub_lmb(
+            &child_denominators,
+            uv_edges,
+            crown.included_iter(),
+            &child_lmb,
+            ExactUvSubLmbFrame::RetainedPhysicalCrown,
+            &child_cutset,
+            &options,
+            &Atom::one(),
+            None,
+        )?;
+        let exact_raw = |cff: &CutCFF| -> Result<Atom> {
+            Ok(cff
+                .terms
+                .values()
+                .flat_map(|term| {
+                    term.orientations.iter().map(|orientation| {
+                        Ok(orientation.expression.clone()
+                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term))
+        };
+        let child_raw = exact_raw(&child)?;
+        let components_raw = outer_raw * child_raw;
+        let root_production = root_raw.clone() * Atom::num(root.production_prefactor_factor());
+        let components_production = components_raw.clone()
+            * Atom::num(outer.production_prefactor_factor() * child.production_prefactor_factor());
+
+        let zero = F::<ArbPrec>::from(&Rational::from(0));
+        let one = F::<ArbPrec>::from(&Rational::from(1));
+        let muv_mass = F::<ArbPrec>::from(&Rational::from((7, 5)));
+        let k0 = F::<ArbPrec>::from(&Rational::from((3, 7)));
+        let k1 = F::<ArbPrec>::from(&Rational::from((2, 5)));
+        let mut parameters = vec![Atom::var(GS.pi), Atom::var(GS.m_uv_expansion)];
+        for edge in 0..graph.underlying.n_edges() {
+            let edge = EdgeIndex(edge);
+            parameters.extend([GS.ose(edge), cut_energy(edge), GS.emr_mom(edge, GS.cind(0))]);
+            for component in 1..=3 {
+                parameters.push(GS.emr_mom(edge, GS.cind(component)));
+            }
+        }
+        let values_at = |scale: &F<ArbPrec>| {
+            let mut values = vec![
+                Complex::new(zero.clone().pi(), zero.clone()),
+                Complex::new_re(muv_mass.clone()),
+            ];
+            for edge in 0..graph.underlying.n_edges() {
+                let edge = EdgeIndex(edge);
+                let spatial = match edge {
+                    EdgeIndex(1) => k0.clone(),
+                    EdgeIndex(2) => -&k0,
+                    EdgeIndex(3) | EdgeIndex(8) => k1.clone(),
+                    EdgeIndex(4) => -&k1,
+                    EdgeIndex(5) => scale.clone(),
+                    EdgeIndex(6) => &k1 - scale,
+                    EdgeIndex(7) => &k0 - &k1,
+                    _ => zero.clone(),
+                };
+                let mass = match edge {
+                    EdgeIndex(5) | EdgeIndex(6) => muv_mass.clone(),
+                    EdgeIndex(8) => F::<ArbPrec>::from(&Rational::from(2)),
+                    _ => one.clone(),
+                };
+                let energy = if edge == EdgeIndex(0) {
+                    F::<ArbPrec>::from(&Rational::from(2))
+                } else {
+                    (&mass * &mass + &spatial * &spatial).sqrt()
+                };
+                values.extend([
+                    Complex::new_re(energy.clone()),
+                    Complex::new_re(energy.clone()),
+                    Complex::new_re(energy),
+                ]);
+                for component in 1..=3 {
+                    values.push(Complex::new_re(if component == 1 {
+                        spatial.clone()
+                    } else {
+                        zero.clone()
+                    }));
+                }
+            }
+            values
+        };
+        let evaluate_arb =
+            |expression: Atom, values: &[Complex<F<ArbPrec>>]| -> Result<Complex<F<ArbPrec>>> {
+                let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> =
+                    expression.evaluator(&parameters).build()?;
+                let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
+                    rational.map_coeff(&|coefficient| {
+                        Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
+                    });
+                Ok(arb.evaluate_single(values))
+            };
+        let scale = F::<ArbPrec>::from(&Rational::from(10).pow(45));
+        let values = values_at(&scale);
+        let measure = &scale * &scale * &scale;
+        let root_raw = evaluate_arb(root_raw, &values)? * &measure;
+        let components_raw = evaluate_arb(components_raw, &values)? * &measure;
+        let root_production = evaluate_arb(root_production, &values)? * &measure;
+        let components_production = evaluate_arb(components_production, &values)? * &measure;
+        assert!(
+            !components_production.clone().norm().re.is_zero(),
+            "the factorized GL24 quartic residue must provide a nonzero UV-limit oracle"
+        );
+        let relative_delta = |left: &Complex<F<ArbPrec>>, right: &Complex<F<ArbPrec>>| {
+            let distance = (left.clone() - right.clone()).norm().re;
+            let left_norm = left.clone().norm().re;
+            let right_norm = right.clone().norm().re;
+            let norm = if left_norm > right_norm {
+                left_norm
+            } else {
+                right_norm
+            };
+            if norm.is_zero() {
+                distance
+            } else {
+                distance / norm
+            }
+        };
+        let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+        let relative_bridge = root.production_prefactor_factor()
+            * outer.production_prefactor_factor()
+            * child.production_prefactor_factor();
+        let raw_delta = relative_delta(
+            &root_raw,
+            &(&components_raw * F::<ArbPrec>::from(&Rational::from(relative_bridge))),
+        );
+        let production_delta = relative_delta(&root_production, &components_production);
+        assert!(
+            raw_delta <= tolerance,
+            "GL24 complete selected quartic residue does not carry the relative parent/outer/child frame: root={root_raw:e}, child*outer={components_raw:e}, relative delta={raw_delta:e}, tolerance={tolerance:e}",
+        );
+        assert!(
+            production_delta <= tolerance,
+            "GL24 complete selected quartic residue differs from child times reduced outer: root={root_production:e}, child*outer={components_production:e}, relative delta={production_delta:e}, tolerance={tolerance:e}",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_original_source_matches_production_cff_after_projection() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_root {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> a [id=2]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+            b -> outgoing [id=3]
+        })?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let contract: SuBitGraph = graph.empty_subgraph();
+        let ordinary = graph.cff(
+            &contract,
+            &cutset,
+            &OrientationPattern::default(),
+            &options,
+            None,
+        )?;
+        let denominators = [EdgeIndex::from(0), EdgeIndex::from(1)].map(|edge| FourDDenominator {
+            source_edge: edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish(),
+            mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+            full_expr: Atom::one(),
+        });
+        let (exact, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &Atom::one())?;
+        let ordinary_sum = ordinary
+            .terms
+            .values()
+            .flat_map(|term| &term.orientations)
+            .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
+            * Atom::num(ordinary.production_prefactor_factor());
+        let exact_sum = exact
+            .terms
+            .values()
+            .flat_map(|term| &term.orientations)
+            .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
+            * Atom::num(exact.production_prefactor_factor());
+        // The ordinary route keeps its inverse-energy product in OSE notation,
+        // while an exact 4D source derives square roots from each literal
+        // denominator. Compare them at two exact rational on-shell points.
+        // This avoids Symbolica's polynomial divider, which is not robust for
+        // function-valued square-root indeterminates, without introducing any
+        // floating-point tolerance.
+        let rational =
+            |numerator: i64, denominator: i64| Atom::num(numerator) / Atom::num(denominator);
+        for (spatial_0, energy_0, spatial_1, energy_1, external_energy) in [
+            (
+                Atom::Zero,
+                Atom::one(),
+                Atom::Zero,
+                Atom::one(),
+                rational(1, 3),
+            ),
+            (
+                rational(3, 4),
+                rational(5, 4),
+                rational(4, 3),
+                rational(5, 3),
+                rational(2, 5),
+            ),
+        ] {
+            let at_point = |mut expression: Atom| {
+                for (edge, spatial, energy) in [
+                    (EdgeIndex(0), spatial_0.clone(), energy_0.clone()),
+                    (EdgeIndex(1), spatial_1.clone(), energy_1.clone()),
+                ] {
+                    expression = expression
+                        .replace(GS.ose(edge))
+                        .with(energy)
+                        .replace(GS.emr_mom(edge, GS.cind(1)))
+                        .with(spatial);
+                    for spatial_index in 2..=3 {
+                        expression = expression
+                            .replace(GS.emr_mom(edge, GS.cind(spatial_index)))
+                            .with(Atom::Zero);
+                    }
+                }
+                expression
+                    .replace(GS.emr_mom(EdgeIndex(3), GS.cind(0)))
+                    .with(external_energy.clone())
+                    .expand()
+            };
+            let difference =
+                (at_point(exact_sum.clone()) - at_point(ordinary_sum.clone())).expand();
+            assert!(
+                difference.is_zero(),
+                "source-local canonical orientations must reproduce the ordinary CFF at exact on-shell points: {difference}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_nonliteral_physical_mass_alias_keeps_repeated_frame_and_arb_value() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(
+            digraph exact_nonliteral_physical_mass_alias {
+                node [num=1]
+                a -> b [id=0 lmb_id=0 particle=scalar_1]
+                a -> b [id=1 particle=scalar_1]
+            },
+            "scalars"
+        )?;
+        let edge = EdgeIndex(0);
+        let momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(edge))
+            .finish();
+        let mass_squared = graph.underlying[edge].particle.mass_atom().pow(2);
+        let numerator = GS.emr_mom(edge, GS.cind(0)).pow(2)
+            - (1..=3).fold(mass_squared.clone(), |norm_squared, spatial_index| {
+                norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
+            });
+        let literal = [EdgeIndex(0), EdgeIndex(1)].map(|source_edge| FourDDenominator {
+            source_edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(source_edge))
+                .finish(),
+            mass_squared: graph.underlying[source_edge].particle.mass_atom().pow(2),
+            full_expr: Atom::one(),
+        });
+        let mut nonliteral = literal.clone();
+        nonliteral[1].momentum = -momentum;
+
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let (literal_cff, _) =
+            graph.cff_from_4d_denominators(&literal, &cutset, &options, &numerator)?;
+        let (nonliteral_cff, _) =
+            graph.cff_from_4d_denominators(&nonliteral, &cutset, &options, &numerator)?;
+        let exact_sum = |cff: &CutCFF| -> Result<Atom> {
+            Ok(cff
+                .terms
+                .values()
+                .flat_map(|term| {
+                    term.orientations.iter().map(|orientation| {
+                        Ok(orientation.expression.clone()
+                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(cff.production_prefactor_factor()))
+        };
+        let fixed_point = |mut expression: Atom| {
+            expression = expression
+                .replace(graph.underlying[edge].particle.mass_atom())
+                .with(Atom::one());
+            for (source_edge, spatial) in [
+                (EdgeIndex(0), Atom::num(Rational::from((3, 4)))),
+                (EdgeIndex(1), Atom::num(Rational::from((-3, 4)))),
+            ] {
+                expression = expression
+                    .replace(GS.emr_mom(source_edge, GS.cind(1)))
+                    .with(spatial)
+                    .replace(GS.ose(source_edge))
+                    .with(Atom::num(Rational::from((5, 4))));
+                for spatial_index in 2..=3 {
+                    expression = expression
+                        .replace(GS.emr_mom(source_edge, GS.cind(spatial_index)))
+                        .with(Atom::Zero);
+                }
+            }
+            expression
+        };
+        let evaluate_arb = |expression: Atom| -> Result<Complex<F<ArbPrec>>> {
+            let parameters = [Atom::var(GS.pi)];
+            let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> = expression
+                .evaluator(&parameters)
+                .build()
+                .map_err(|error| eyre::eyre!("failed to build Q-spelling evaluator: {error}"))?;
+            let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
+                rational.map_coeff(&|coefficient| {
+                    Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
+                });
+            let zero = F(ArbPrec::default());
+            Ok(arb.evaluate_single(&[Complex::new(zero.clone().pi(), zero)]))
+        };
+        let literal_value = evaluate_arb(fixed_point(exact_sum(&literal_cff)?))?;
+        let nonliteral_value = evaluate_arb(fixed_point(exact_sum(&nonliteral_cff)?))?;
+        assert!(!literal_value.clone().norm().re.is_zero());
+        let distance = (literal_value.clone() - nonliteral_value.clone()).norm().re;
+        let literal_norm = literal_value.clone().norm().re;
+        let nonliteral_norm = nonliteral_value.clone().norm().re;
+        let scale = if literal_norm > nonliteral_norm {
+            literal_norm
+        } else {
+            nonliteral_norm
+        };
+        let relative_distance = distance / scale;
+        let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+        assert!(
+            relative_distance <= tolerance,
+            "Q(1) and algebraically equivalent -Q(0) sources differ: literal={literal_value:e}, nonliteral={nonliteral_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_two_loop_source_matches_the_signed_theta_contour() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_two_loop_prefactor {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1 lmb_id=1]
+            b -> a [id=2]
+        })?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let contract: SuBitGraph = graph.empty_subgraph();
+        let ordinary = graph.cff(
+            &contract,
+            &cutset,
+            &OrientationPattern::default(),
+            &options,
+            None,
+        )?;
+        let denominators = [0, 1, 2].map(|edge| {
+            let edge = EdgeIndex::from(edge);
+            FourDDenominator {
+                source_edge: edge,
+                momentum: FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(usize::from(edge))
+                    .finish(),
+                mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+                full_expr: Atom::one(),
+            }
+        });
+        let (exact, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &Atom::one())?;
+
+        for (route, cff) in [("ordinary", ordinary), ("exact", exact)] {
+            let mut actual = cff
+                .terms
+                .values()
+                .flat_map(|term| &term.orientations)
+                .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
+                * Atom::num(cff.production_prefactor_factor())
+                * (Atom::num(2) * Atom::var(GS.pi)).pow(6)
+                / (-Atom::i()).pow(2);
+            for edge in (0..3).map(EdgeIndex) {
+                actual = actual.replace(GS.ose(edge)).with(1);
+                for component in 1..=3 {
+                    actual = actual.replace(GS.emr_mom(edge, GS.cind(component))).with(0);
+                }
+            }
+            // The unit-energy Euclidean theta integral is 1/12; two Wick
+            // rotations and three Minkowski denominators give the signed -1/12.
+            assert!(
+                (actual + Atom::one() / Atom::num(12)).together().is_zero(),
+                "the complete {route} two-loop contour must equal its independent integral"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn unused_rank_capacity_preserves_complete_one_loop_cff() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph production_rank_capacity_conversion {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+        })?;
+        let ordinary_options = graph.denominator_only_cff_3d_expression_options();
+        let mut generalized_options = ordinary_options.clone();
+        generalized_options.energy_degree_bounds = Some(vec![(0, 2)]);
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let ordinary_generated = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &ordinary_options,
+            None,
+        )?;
+        let generalized_generated = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &generalized_options,
+            None,
+        )?;
+        let cutset = CutSet::empty(graph.n_hedges());
+        let pattern = OrientationPattern::default();
+        let ordinary =
+            graph.cff_from_production_expression(&ordinary_generated, &cutset, &pattern)?;
+        let generalized =
+            graph.cff_from_production_expression(&generalized_generated, &cutset, &pattern)?;
+        let raw_sum = |cff: &CutCFF| {
+            cff.terms
+                .values()
+                .flat_map(|term| &term.orientations)
+                .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
+        };
+        let common_energy = Atom::var(symbolica::symbol!(
+            "cff_test::production_rank_capacity_energy"
+        ));
+        let specialize_equal_energies = |expression: Atom| {
+            expression
+                .replace(GS.ose(EdgeIndex(0)))
+                .with(common_energy.clone())
+                .replace(GS.ose(EdgeIndex(1)))
+                .with(common_energy.clone())
+        };
+        let ordinary_value = specialize_equal_energies(raw_sum(&ordinary))
+            * Atom::num(ordinary.production_prefactor_factor());
+        let generalized_typed_value = specialize_equal_energies(raw_sum(&generalized))
+            * Atom::num(generalized.production_prefactor_factor());
+
+        assert!(
+            (ordinary_value - generalized_typed_value)
+                .together()
+                .is_zero(),
+            "declaring unused rank-two capacity must not change a scalar rational CFF",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn unused_rank_capacity_preserves_complete_two_loop_cff() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph two_loop_rank_capacity_conversion {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1 lmb_id=1]
+            a -> b [id=2]
+        })?;
+        let ordinary_options = graph.denominator_only_cff_3d_expression_options();
+        let mut generalized_options = ordinary_options.clone();
+        generalized_options.energy_degree_bounds = Some(vec![(0, 2)]);
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let ordinary_generated = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &ordinary_options,
+            None,
+        )?;
+        let generalized_generated = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &generalized_options,
+            None,
+        )?;
+        let cutset = CutSet::empty(graph.n_hedges());
+        let pattern = OrientationPattern::default();
+        let ordinary =
+            graph.cff_from_production_expression(&ordinary_generated, &cutset, &pattern)?;
+        let generalized =
+            graph.cff_from_production_expression(&generalized_generated, &cutset, &pattern)?;
+        let raw_sum = |cff: &CutCFF| {
+            cff.terms
+                .values()
+                .flat_map(|term| &term.orientations)
+                .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
+        };
+        let specialize = |mut expression: Atom| {
+            for (edge, energy) in [(0, 2), (1, 3), (2, 5)] {
+                expression = expression
+                    .replace(GS.ose(EdgeIndex(edge)))
+                    .with(Atom::num(energy));
+            }
+            expression
+        };
+        let ordinary_value =
+            specialize(raw_sum(&ordinary)) * Atom::num(ordinary.production_prefactor_factor());
+        let generalized_raw = specialize(raw_sum(&generalized));
+        let typed_value = &generalized_raw * Atom::num(generalized.production_prefactor_factor());
+        assert!(
+            (ordinary_value - typed_value).together().is_zero(),
+            "unused rank capacity must preserve the scalar two-loop CFF",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_cff_powered_rational_identities_match_at_arb_precision() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_powered_rational_identities {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> a [id=0]
+            a -> x [id=1 lmb_id=0]
+            x -> y [id=2]
+            b -> y [id=3]
+            a -> b [id=4]
+            b -> outgoing [id=5]
+        })?;
+        let repeated_edges = [EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)];
+        let spectator_edge = EdgeIndex(4);
+        let carrier = repeated_edges[0];
+        let carrier_momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(carrier))
+            .finish();
+        let mass_squared = graph.underlying[carrier].particle.mass_atom().pow(2);
+        let full_expr = GS.emr_mom(carrier, GS.cind(0)).pow(2)
+            - (1..=3).fold(mass_squared.clone(), |norm_squared, spatial_index| {
+                norm_squared + GS.emr_mom(carrier, GS.cind(spatial_index)).pow(2)
+            });
+        let repeated_denominators = repeated_edges
+            .into_iter()
+            .zip([1, 1, -1])
+            .map(|(source_edge, routing_sign)| FourDDenominator {
+                source_edge,
+                momentum: Atom::num(routing_sign) * &carrier_momentum,
+                mass_squared: mass_squared.clone(),
+                full_expr: full_expr.clone(),
+            })
+            .collect::<Vec<_>>();
+        let spectator_mass_squared = graph.underlying[spectator_edge].particle.mass_atom().pow(2);
+        let spectator = FourDDenominator {
+            source_edge: spectator_edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(spectator_edge))
+                .finish(),
+            mass_squared: spectator_mass_squared.clone(),
+            full_expr: GS.emr_mom(spectator_edge, GS.cind(0)).pow(2)
+                - (1..=3).fold(spectator_mass_squared, |norm_squared, spatial_index| {
+                    norm_squared + GS.emr_mom(spectator_edge, GS.cind(spatial_index)).pow(2)
+                }),
+        };
+        let powered_denominators = std::iter::once(spectator.clone())
+            .chain(repeated_denominators.iter().cloned())
+            .collect::<Vec<_>>();
+        let lower_denominators = [
+            std::iter::once(spectator.clone())
+                .chain([
+                    repeated_denominators[0].clone(),
+                    repeated_denominators[2].clone(),
+                ])
+                .collect::<Vec<_>>(),
+            std::iter::once(spectator)
+                .chain([repeated_denominators[2].clone()])
+                .collect::<Vec<_>>(),
+        ];
+        assert_eq!(
+            powered_denominators
+                .iter()
+                .skip(1)
+                .map(|denominator| denominator.source_edge)
+                .collect::<BTreeSet<_>>()
+                .len(),
+            3,
+            "the cubic denominator must retain three distinct provenance owners"
+        );
+        assert_eq!(
+            repeated_denominators[2].momentum,
+            -carrier_momentum.clone(),
+            "one occurrence must exercise the even D(-Q) denominator routing"
+        );
+
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let mut production_options = options.clone();
+        production_options.energy_degree_bounds = None;
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production_contract_edges =
+            graph.paired_edges(&graph.tree_edges.subtract(&graph.initial_state_cut));
+        let production = graph.generate_3d_expression_for_integrand(
+            &production_contract_edges,
+            &canonization,
+            &production_options,
+            None,
+        )?;
+        let lu_surface = graph
+            .determine_raised_esurfaces_from_expression(&production.expression)
+            .raised_groups
+            .into_iter()
+            .find(|group| {
+                group.esurface_ids.iter().any(|esurface_id| {
+                    !production.expression.surfaces.esurface_cache[*esurface_id]
+                        .external_shift
+                        .is_empty()
+                })
+            })
+            .expect("the dotted bubble contains an external-shift LU surface");
+        assert!(lu_surface.esurface_ids.iter().all(|esurface_id| {
+            let alternative = &production.expression.surfaces.esurface_cache[*esurface_id].energies;
+            alternative.contains(&spectator_edge)
+                && alternative.iter().any(|edge| repeated_edges.contains(edge))
+        }));
+
+        let uncut = CutSet::empty(graph.n_hedges());
+        let exact_sum = |graph: &mut Graph,
+                         denominators: &[FourDDenominator],
+                         numerator: &Atom|
+         -> Result<Atom> {
+            let (cff, _) =
+                graph.cff_from_4d_denominators(denominators, &uncut, &options, numerator)?;
+            let prefactor = Atom::num(cff.production_prefactor_factor());
+            let mut sum = Atom::Zero;
+            for term in cff.terms.values() {
+                for orientation in &term.orientations {
+                    sum += &orientation.expression
+                        * term.map_exact_source_numerator(&orientation.orientation)?;
+                }
+            }
+            Ok(sum.replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_)).with(W_.d_) * prefactor)
+        };
+        let graph_mass_squared = (0..graph.underlying.n_edges())
+            .map(|edge| {
+                graph.underlying[EdgeIndex(edge)]
+                    .particle
+                    .mass_atom()
+                    .pow(2)
+            })
+            .collect::<Vec<_>>();
+        let external_edges = graph
+            .external_momentum_edge_order()
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let representative_esurface =
+            &production.expression.surfaces.esurface_cache[lu_surface.esurface_ids[0]];
+        let rescale_star = Atom::num(Rational::from((3, 4)));
+        let external_spatial_momentum = Atom::num(Rational::from((25, 12)));
+        let scaled_spatial_momentum = |edge: EdgeIndex, rescale: Atom| {
+            if edge == spectator_edge {
+                &external_spatial_momentum - rescale
+            } else {
+                rescale
+            }
+        };
+        let scaled_on_shell_energy = |edge: EdgeIndex, rescale: Atom| {
+            (graph_mass_squared[usize::from(edge)].clone()
+                + scaled_spatial_momentum(edge, rescale).pow(2))
+            .sqrt()
+        };
+        let root_energy_sum = representative_esurface
+            .energies
+            .iter()
+            .map(|edge| scaled_on_shell_energy(*edge, rescale_star.clone()))
+            .fold(Atom::Zero, |sum, energy| sum + energy);
+        let external_shift_coefficient = representative_esurface
+            .external_shift
+            .iter()
+            .map(|(_, coefficient)| *coefficient)
+            .sum::<i64>();
+        assert_ne!(
+            external_shift_coefficient, 0,
+            "the selected LU surface must have a nonzero net external shift"
+        );
+        let external_energy = -root_energy_sum / Atom::num(external_shift_coefficient);
+        let rescale_expression = |mut expression: Atom| {
+            let rescale = Atom::var(GS.rescale);
+            for edge in 0..graph_mass_squared.len() {
+                let edge = EdgeIndex(edge);
+                if external_edges.contains(&edge) {
+                    expression = expression
+                        .replace(GS.emr_mom(edge, GS.cind(0)))
+                        .with(external_energy.clone())
+                        .replace(GS.emr_mom(edge, GS.cind(1)))
+                        .with(external_spatial_momentum.clone());
+                } else {
+                    expression = expression
+                        .replace(GS.emr_mom(edge, GS.cind(1)))
+                        .with(scaled_spatial_momentum(edge, rescale.clone()))
+                        .replace(GS.ose(edge))
+                        .with(scaled_on_shell_energy(edge, rescale.clone()))
+                        .replace(cut_energy(edge))
+                        .with(scaled_on_shell_energy(edge, rescale.clone()));
+                }
+                for spatial_index in 2..=3 {
+                    expression = expression
+                        .replace(GS.emr_mom(edge, GS.cind(spatial_index)))
+                        .with(Atom::Zero);
+                }
+            }
+            expression
+        };
+        let eta = rescale_expression(representative_esurface.to_atom(&[]));
+        assert!(
+            eta.replace(GS.rescale)
+                .with(rescale_star.clone())
+                .expand()
+                .is_zero(),
+            "the exact test point must lie on the selected LU surface"
+        );
+        let raised_laurent_residue = |expression: Atom| -> Result<Atom> {
+            // After fixing the physical data, the radial Laurent coefficient
+            // supplies the same t derivatives as raised-cut pass two without
+            // expanding numerator products or assigning raw channels.
+            Ok(rescale_expression(expression)
+                .series(GS.rescale, rescale_star.clone(), 0)
+                .map_err(|error| eyre::eyre!("failed to expand selected LU residue: {error}"))?
+                .coefficient(Rational::from(-1)))
+        };
+        let evaluate_arb = |mut expression: Atom| -> Result<Complex<F<ArbPrec>>> {
+            for (edge, mass_squared) in graph_mass_squared.iter().enumerate() {
+                let edge = EdgeIndex(edge);
+                let on_shell_energy = (1..=3)
+                    .fold(mass_squared.clone(), |norm_squared, spatial_index| {
+                        norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
+                    })
+                    .sqrt();
+                expression = expression.replace(GS.ose(edge)).with(on_shell_energy);
+            }
+            let mut parameters = vec![Atom::var(GS.pi)];
+            parameters.extend(
+                (0..graph_mass_squared.len())
+                    .flat_map(|edge| (0..=3).map(move |component| (edge, component)))
+                    .map(|(edge, component)| GS.emr_mom(EdgeIndex(edge), GS.cind(component))),
+            );
+            let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> = expression
+                .evaluator(&parameters)
+                .build()
+                .map_err(|error| eyre::eyre!("failed to build exact-CFF evaluator: {error}"))?;
+            let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
+                rational.map_coeff(&|coefficient| {
+                    Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
+                });
+            let zero = F(ArbPrec::default());
+            let values = parameters
+                .iter()
+                .enumerate()
+                .map(|(index, _)| {
+                    if index == 0 {
+                        Complex::new(zero.clone().pi(), zero.clone())
+                    } else {
+                        Complex::new(
+                            F::<ArbPrec>::from(&Rational::from((170 + 37 * index as i64, 1000))),
+                            zero.clone(),
+                        )
+                    }
+                })
+                .collect::<Vec<_>>();
+            Ok(arb.evaluate_single(&values))
+        };
+        // One eighth of ArbPrec's requested precision allows substantial and
+        // construction-dependent bit loss while still scaling with precision.
+        let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+        let mut failures = Vec::new();
+        for (power, lower) in [1_i64, 2].into_iter().zip(&lower_denominators) {
+            let denominator_numerator = GS
+                .den(
+                    usize::from(carrier),
+                    &carrier_momentum,
+                    &mass_squared,
+                    &full_expr,
+                )
+                .pow(power);
+            let powered_uncut =
+                exact_sum(&mut graph, &powered_denominators, &denominator_numerator)?;
+            let lower_uncut = exact_sum(&mut graph, lower, &Atom::one())?;
+            let comparisons = [
+                (
+                    "uncut rational function",
+                    powered_uncut.clone(),
+                    lower_uncut.clone(),
+                ),
+                (
+                    "selected LU Laurent residue",
+                    raised_laurent_residue(powered_uncut)?,
+                    raised_laurent_residue(lower_uncut)?,
+                ),
+            ];
+            for (comparison, powered_expression, lower_expression) in comparisons {
+                let powered_value = evaluate_arb(powered_expression)?;
+                let lower_value = evaluate_arb(lower_expression)?;
+                assert!(
+                    [
+                        &powered_value.re,
+                        &powered_value.im,
+                        &lower_value.re,
+                        &lower_value.im
+                    ]
+                    .into_iter()
+                    .all(symbolica::domains::float::SingleFloat::is_finite),
+                    "{comparison} must evaluate to finite Arb values: powered={powered_value:e}, lower={lower_value:e}"
+                );
+                assert!(
+                    !lower_value.clone().norm().re.is_zero(),
+                    "{comparison} must provide a nonzero identity oracle"
+                );
+                let distance = (powered_value.clone() - lower_value.clone()).norm().re;
+                let powered_norm = powered_value.norm().re;
+                let lower_norm = lower_value.norm().re;
+                let scale = if powered_norm > lower_norm {
+                    powered_norm
+                } else {
+                    lower_norm
+                };
+                let relative_distance = if scale.is_zero() {
+                    distance.clone()
+                } else {
+                    distance.clone() / scale
+                };
+                if !(symbolica::domains::float::SingleFloat::is_finite(&relative_distance)
+                    && relative_distance <= tolerance)
+                {
+                    failures.push(format!(
+                        "D(Q)^{power}/D(Q)^3 differs from 1/D(Q)^{} for {comparison}: powered={powered_value:e}, lower={lower_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}",
+                        3 - power
+                    ));
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "exact-CFF powered rational identity failures:\n{}",
+            failures.join("\n")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ordinary_terminal_sources_match_signed_contours() -> Result<()> {
+        test_initialise()?;
+        let tadpole: Graph = dot!(digraph ordinary_unit_tadpole {
+                edge [particle="scalar_1" num=1]
+                node [num=1]
+                incoming [style=invis]
+                outgoing [style=invis]
+                a -> a [id=0 lmb_id=0]
+                incoming -> a [id=1]
+                a -> outgoing [id=2]
+            }, "scalars")?;
+        let attached: Graph = dot!(digraph ordinary_attached_tadpole_bubble {
+                edge [particle="scalar_1" num=1]
+                node [num=1]
+                incoming [style=invis]
+                outgoing [style=invis]
+                a -> a [id=0 lmb_id=0]
+                a -> b [id=1 lmb_id=1]
+                a -> b [id=2 particle="scalar_2"]
+                incoming -> a [id=3]
+                a -> outgoing [id=4]
+            }, "scalars")?;
+        let mut failures = Vec::new();
+        for (label, mut graph, energies) in [
+            ("unit tadpole", tadpole, vec![2_i64]),
+            (
+                "attached tadpole and nonrepeated bubble",
+                attached,
+                vec![2, 3, 5],
+            ),
+        ] {
+            let parsed = graph.to_three_d_parsed_graph()?;
+            assert!(repeated_groups(&parsed).is_empty());
+            let loop_count = graph.get_loop_number();
+            assert_eq!(loop_count, if energies.len() == 1 { 1 } else { 2 });
+            // For J = integral dq0/(2*pi*i), closing Below gives minus the
+            // positive-pole residue. The unit numerator converges in each
+            // energy: the tadpole has degree -2 and the bubble degree -4.
+            let et = Atom::num(energies[0]);
+            let mut contour = -Atom::one() / (Atom::num(2) * et);
+            if energies.len() == 3 {
+                let eb = Atom::num(energies[1]);
+                let ec = Atom::num(energies[2]);
+                let bubble: Atom = -(Atom::one()
+                    / (Atom::num(2) * &eb * (eb.clone().pow(2) - ec.clone().pow(2)))
+                    + Atom::one() / (Atom::num(2) * &ec * (ec.clone().pow(2) - eb.clone().pow(2))));
+                contour *= bubble;
+            }
+            let contour = contour.together();
+            for context in [
+                three_dimensional_reps::CffGenerationContext::Standalone,
+                three_dimensional_reps::CffGenerationContext::EmbeddedCffFactor,
+            ] {
+                let mut options = graph.denominator_only_cff_3d_expression_options();
+                options.cff_generation_context = context;
+                let raw = three_dimensional_reps::generate_3d_expression(&graph, &options)?;
+                let raw_bridge = CutCFF::gamma_loop_prefactor_conversion(&raw).product(
+                    CffGlobalPrefactorSign::from_exponent(
+                        parsed.denominator_internal_edge_ids().len(),
+                    ),
+                );
+                let mut raw_signed = raw
+                    .expression
+                    .orientations
+                    .iter()
+                    .fold(Atom::zero(), |sum, orientation| sum + orientation.to_atom())
+                    .replace_multiple(raw.expression.surfaces.get_all_replacements(&[]))
+                    * Atom::num(raw_bridge.factor());
+                let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+                let production = graph.generate_3d_expression_for_integrand(
+                    &[],
+                    &canonization,
+                    &options,
+                    Some(&Atom::one()),
+                )?;
+                let cff = graph.cff_from_production_expression(
+                    &production,
+                    &CutSet::empty(graph.n_hedges()),
+                    &OrientationPattern::default(),
+                )?;
+                let term_sum = cff
+                    .terms
+                    .values()
+                    .flat_map(|term| &term.orientations)
+                    .fold(Atom::zero(), |sum, term| sum + &term.expression)
+                    * Atom::num(cff.production_prefactor_factor());
+                let selector_sum = cff
+                    .expression_with_selectors()
+                    .iter()
+                    .fold(Atom::zero(), |sum, (_, term)| sum + term)
+                    .replace(function!(OrientationID::symbol(), W_.a_))
+                    .with(Atom::one());
+                assert!(
+                    (selector_sum - &term_sum).together().is_zero(),
+                    "production selector summation must not introduce an undocumented average"
+                );
+                let mut gamma_signed = term_sum
+                    * (Atom::num(2) * Atom::var(GS.pi)).pow(3 * loop_count as i64)
+                    / (-Atom::i()).pow(loop_count as i64);
+                for (edge, energy) in energies.iter().enumerate() {
+                    raw_signed = raw_signed
+                        .replace(three_dimensional_reps::symbols::ose_atom_from_index(
+                            EdgeIndex(edge),
+                        ))
+                        .with(Atom::num(*energy));
+                    gamma_signed = gamma_signed
+                        .replace(GS.ose(EdgeIndex(edge)))
+                        .with(Atom::num(*energy));
+                }
+                let raw_signed = raw_signed.together();
+                let gamma_signed = gamma_signed.together();
+                assert!(
+                    (raw_signed.clone() - &gamma_signed).is_zero(),
+                    "{label} {context:?}: raw bridge {raw_signed} differs from full GammaLoop bridge {gamma_signed}"
+                );
+                if !(gamma_signed.clone() - &contour).is_zero() {
+                    failures.push(format!(
+                        "{label} {context:?}: signed CFF={gamma_signed}, exact contour={contour}"
+                    ));
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "ordinary terminal contour mismatches:\n{}",
+            failures.join("\n")
+        );
+        Ok(())
     }
 }

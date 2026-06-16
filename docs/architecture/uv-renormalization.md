@@ -70,6 +70,39 @@ The projections are used as follows:
 The last distinction is essential: changing terminal output policy must not
 remove the finite addback required when assembling an integrable 3D expression.
 
+Vacuum masses carry hard weight within the component on which a Taylor
+operation acts. The four-dimensional route uses `mUV -> mUV/t` in its
+inverse-hard expansion; direct three-dimensional Taylor expansion uses
+`mUV -> lambda*mUV` with its forward hard scale. The auxiliary on-shell-energy
+deformation mass retains its separate role in the propagator rewrite.
+
+A localized integrated contribution keeps its finite coefficient in the active
+expression. Its mass dependence scales when the current Taylor subgraph
+contains the coefficient's integrated owner, and stays fixed when the owner is
+disjoint. A later enclosing Taylor operation can therefore scale a coefficient
+that an earlier disjoint operation left fixed. Only the separate normalized
+localization kernel remains frozen outside all later Taylor operations.
+
+The direct route retains this distinction with a transient one-argument
+`mUV(owner)` application of the existing vacuum-mass symbol. Each connected
+integrated coefficient is tagged before coefficients are multiplied. The owner
+uses the existing subgraph encoding: Taylor expansion scales the entire mass
+application for a contained owner, leaves a disjoint owner unchanged, and
+rejects partial overlaps. `DirectSector::combine` restores physical `mUV` on
+output copies; stored sectors retain their owners for further forest steps.
+This introduces no helper, type or symbol. Four-dimensional disconnected
+composition already applies the Taylor operations to their own components, so
+its runtime and `IntegratedCts` are unchanged.
+
+Consumed loop measures are recorded separately. Writing
+`s = uvIntegratedLoopScale`, `IntegratedCts` projects a coefficient `C` whose
+integration consumed `r` loops as `C(mUV) * s^(4*r)`. The enclosing
+four-dimensional Taylor operation transforms `s -> s*t`, supplying
+`t^(4*r)` to compensate consumed loop measures without cancelling the
+coefficient's mass rescaling. Integration and physical projection set `s = 1`.
+The active denominator rewrite introduces the unscaled vacuum mass for the
+enclosing propagator basis.
+
 ## Disconnected Composition
 
 Disconnected composition depends on which object is being combined.
@@ -92,7 +125,21 @@ the component nodes, selects each component's own pole or finite projection,
 and only then multiplies them. This also handles mixed prescriptions without
 storing scheme-specific variants of the aggregate.
 
-### Three-dimensional local terms
+### Direct three-dimensional local terms
+
+Both direct local-3D representations perform the complete loop-energy
+integration first and apply every UV Taylor operator to the resulting
+complete/global CFF expression. They therefore share exactly the same local
+Taylor-transformed CFF bodies. If the generalized residue map is
+`{ k -> C_k }`, the orientation-parametric form is represented as
+`sum_k sigma(k) C_k`, where `sigma(k)` selects the complete residue-map key
+(loop map, edge map, numerator sampling map, and physical direction metadata).
+The Taylor operators treat `sigma(k)` as opaque. The sparse implementation
+therefore applies them branchwise without expanding the factorized numerator.
+`explicit_orientation_sum_only=true` merely replaces every `sigma(k)` by one
+and explicitly sums the same bodies. Neither direct form
+uses the exact-source reconstruction or minimax dispatch of completed local-4D
+Taylor terms.
 
 Cut CFF structures need not factorize over disconnected components. Multiplying
 complete per-component local results would also multiply the common root and
@@ -108,6 +155,13 @@ their common root. At a union it:
 
 The construction operates over an arbitrary number of components and is not
 special-cased for a two-component spectacles graph.
+
+The projected local-4D route is separate: it completes the Taylor expansion in
+four dimensions, reconstructs the exact source occurrence graph, performs the
+factorized minimax EMR dispatch needed for derivative-created occurrences, and
+only then projects that completed term to CFF. That reconstruction machinery is
+exclusive to projected local4D and is not a replacement for the direct replay
+above.
 
 ## Marker Representation
 
