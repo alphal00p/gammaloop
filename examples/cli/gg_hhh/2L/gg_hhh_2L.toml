@@ -22,11 +22,11 @@ commands = [
     "remove processes",
     """generate amp g g > h h h | g h t t~ QED==3 [{2}]
            --veto-vertex-interactions V_6 V_9 V_36 V_37
-           --number-of-fermion-loops 1 1
+           --number-of-anticommutating-loops 1 1
            --only-diagrams
            --numerator-grouping only_detect_zeroes
            --select-graphs GL303
-           --global-prefactor-projector '1𝑖 * gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
+           --global-prefactor-projector 'gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
                                            * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
                                            * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
            -p gg_hhh

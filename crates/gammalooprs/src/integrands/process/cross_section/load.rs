@@ -13,7 +13,7 @@
 #![allow(dead_code)]
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     fs,
     io::Cursor,
     path::{Path, PathBuf},
@@ -176,7 +176,13 @@ fn apply_fn_map_entries(
         .add_aliases([(parse_lit!(gammalooprs::x), Atom::Zero)])
         .map_err(|e| eyre!(e))?;
 
-    for (lhs, rhs, tags, args) in parsed_entries {
+    // Graph and evaluator archives can share definitions. Register exact
+    // duplicates once; different bodies still trigger Symbolica's conflict check.
+    let mut seen = HashSet::new();
+    for (lhs, rhs, tags, args) in parsed_entries
+        .into_iter()
+        .filter(|entry| seen.insert(entry.clone()))
+    {
         if let AtomView::Var(_) = lhs.as_view() {
             if let Ok(value) = Complex::<Rational>::try_from(rhs.as_view()) {
                 fn_map

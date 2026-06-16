@@ -439,9 +439,13 @@
       "crates/linnest/typst/examples/map-style.typ"
       "tests/resources/graphs/epemttbar.dot"
     ];
-    # Unit and integration tests embed these shared graph fixtures with include_str!.
+    # Unit and integration tests embed these graph fixtures and snapshots with include_str!.
     "gammaloop-api" = ["tests/resources/graphs"];
     gammalooprs = ["tests/resources/graphs"];
+    "gammaloop-integration-tests" = [
+      "tests/resources/graphs"
+      "tests/tests/snapshots/test_evaluation_api__gl20_multichannel_local_inspect_events.snap"
+    ];
   };
 
   workspacePackageExtraSourceRoots.runtimeTest = {
