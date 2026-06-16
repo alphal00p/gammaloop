@@ -2,7 +2,7 @@ use std::{env, path::PathBuf};
 use walkdir::WalkDir;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("cargo:rerun-if-env-changed=EXTRA_MACOS_LIBS_FOR_GNU_GCC");
+    emit_macos_gcc_runtime_link();
 
     #[cfg(feature = "python_api")]
     pyo3_build_config::add_extension_module_link_args();
@@ -11,13 +11,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     println!("cargo:rustc-link-search=./python/gammaloop/dependencies/fjcore");
     //     println!("cargo:rustc-link-lib=stdc++");
     // }
-    #[cfg(target_os = "macos")]
-    if std::env::var_os("EXTRA_MACOS_LIBS_FOR_GNU_GCC").is_some() {
-        println!("cargo:rustc-link-lib=gcc_s");
-        println!("cargo:rustc-link-lib=gcc");
-        println!("cargo:rustc-link-lib=gfortran");
-    }
-
     // models at: $CARGO_MANIFEST_DIR/../../assets/models
     let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let models_dir = manifest.join("../../assets/models");
@@ -33,4 +26,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+fn emit_macos_gcc_runtime_link() {
+    println!("cargo:rerun-if-env-changed=EXTRA_MACOS_LIBS_FOR_GNU_GCC");
+
+    if std::env::var_os("EXTRA_MACOS_LIBS_FOR_GNU_GCC").is_none() {
+        return;
+    }
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
+        return;
+    }
+
+    let lib_dir = "/opt/local/lib/libgcc";
+    println!("cargo:rustc-link-search=native={lib_dir}");
+    println!("cargo:rustc-link-lib=dylib=gcc_s.1.1");
+    println!("cargo:rustc-link-arg=-lgcc_s.1.1");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{lib_dir}");
 }

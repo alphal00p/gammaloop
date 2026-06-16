@@ -39,6 +39,7 @@ crates/gammaloop-api/python/gammaloop/libgammaloop_api*
 *.sw*
 integration_workspace_*
 
+examples/*/*/*_workspace/
 gammaloop_state_integration_workspace/
 result/
 examples/amplitude_computation/GL_*
@@ -106,6 +107,11 @@ pip-delete-this-directory.txt
 
 # GammaLoop test outputs
 TEST_OUTPUT*/
+
+# Local benchmark outputs
+/examples/cli/bench/__pycache__/
+/examples/cli/bench/outputs/*
+!/examples/cli/bench/outputs/.gitkeep
 
 
 # Local scratch and ad-hoc workspaces
