@@ -11,7 +11,7 @@ use symbolica::{
 
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
-use std::sync::{Once, OnceLock};
+use std::sync::OnceLock;
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, VakintError};
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Momentum, VakintSettings};
 
@@ -101,9 +101,9 @@ impl TestVakint {
 }
 
 pub fn get_vakint(mut vakint_settings: VakintSettings) -> TestVakint {
-    if evaluation_requires_pysecdec(&vakint_settings.evaluation_order)
-        && !pysecdec_available(&vakint_settings.python_exe_path)
-    {
+    // Automatic tests must never select the numerical backend merely because
+    // it happens to be installed on the machine.
+    if !pysecdec_tests_enabled() {
         vakint_settings
             .evaluation_order
             .0
@@ -119,22 +119,19 @@ pub fn get_vakint(mut vakint_settings: VakintSettings) -> TestVakint {
     }
 }
 
+fn pysecdec_tests_enabled() -> bool {
+    std::env::var("RUN_PYSECDEC_TESTS").is_ok_and(|value| {
+        let value = value.trim();
+        value == "1" || value.eq_ignore_ascii_case("true")
+    })
+}
+
 #[allow(dead_code)]
-pub fn should_skip_pysecdec_tests() -> bool {
-    static WARNED: Once = Once::new();
-    let skip = match std::env::var("RUN_PYSECDEC_TESTS") {
-        Ok(value) => {
-            let trimmed = value.trim();
-            !(trimmed.is_empty() || trimmed == "1" || trimmed.eq_ignore_ascii_case("true"))
-        }
-        Err(_) => true,
-    };
-    if skip {
-        WARNED.call_once(|| {
-            eprintln!("Skipping PySecDec tests because RUN_PYSECDEC_TESTS is not set.");
-        });
-    }
-    skip
+pub fn require_pysecdec_tests() {
+    assert!(
+        pysecdec_tests_enabled(),
+        "PySecDec validation is manual only: set RUN_PYSECDEC_TESTS=1 and explicitly select the ignored tests"
+    );
 }
 
 fn pysecdec_available(python_exe: &str) -> bool {
@@ -271,13 +268,15 @@ pub fn compare_two_evaluations(
     let mut mod_evaluation_order_a = evaluation_orders.0.0.clone();
     let mut mod_evaluation_order_b = evaluation_orders.1.0.clone();
     for eval_order in [&mut mod_evaluation_order_a, &mut mod_evaluation_order_b] {
-        eval_order.adjust(
-            Some(quiet),
-            rel_threshold * 1.0e-2,
-            &numerical_masses,
-            &HashMap::default(),
-            &numerical_external_momenta,
-        );
+        eval_order
+            .adjust(
+                Some(quiet),
+                rel_threshold * 1.0e-2,
+                &numerical_masses,
+                &HashMap::default(),
+                &numerical_external_momenta,
+            )
+            .unwrap();
     }
 
     // First perform the first evaluation type
@@ -290,12 +289,14 @@ pub fn compare_two_evaluations(
         evaluation_order: mod_evaluation_order_a.clone(),
         ..vakint_default_settings
     };
-    if (evaluation_requires_pysecdec(&mod_evaluation_order_a)
-        || evaluation_requires_pysecdec(&mod_evaluation_order_b))
-        && !pysecdec_available(&python_exe)
+    if evaluation_requires_pysecdec(&mod_evaluation_order_a)
+        || evaluation_requires_pysecdec(&mod_evaluation_order_b)
     {
-        eprintln!("Skipping test: PySecDec not available.");
-        return;
+        require_pysecdec_tests();
+        assert!(
+            pysecdec_available(&python_exe),
+            "Manual PySecDec validation requires pySecDec in interpreter {python_exe}"
+        );
     }
     let mut vakint = get_vakint(vakint_analytic_settings);
 
@@ -519,13 +520,15 @@ pub fn compare_vakint_evaluation_vs_reference(
     let python_exe = vakint_default_settings.python_exe_path.clone();
     // Adjust evaluation method options
     let mut mod_evaluation_order = evaluation_order.clone();
-    mod_evaluation_order.adjust(
-        None,
-        10.0_f64.powi(-(prec as i32)),
-        &numerical_masses,
-        &HashMap::default(),
-        &numerical_external_momenta,
-    );
+    mod_evaluation_order
+        .adjust(
+            None,
+            10.0_f64.powi(-(prec as i32)),
+            &numerical_masses,
+            &HashMap::default(),
+            &numerical_external_momenta,
+        )
+        .unwrap();
 
     // First perform Vakint evaluation
     let mut vakint_settings = VakintSettings {
@@ -538,9 +541,12 @@ pub fn compare_vakint_evaluation_vs_reference(
         ..vakint_default_settings
     };
 
-    if evaluation_requires_pysecdec(&mod_evaluation_order) && !pysecdec_available(&python_exe) {
-        eprintln!("Skipping test: PySecDec not available.");
-        return;
+    if evaluation_requires_pysecdec(&mod_evaluation_order) {
+        require_pysecdec_tests();
+        assert!(
+            pysecdec_available(&python_exe),
+            "Manual PySecDec validation requires pySecDec in interpreter {python_exe}"
+        );
     }
 
     let mut vakint = get_vakint(vakint_settings);

@@ -56,7 +56,6 @@ use crate::{
         export::UVForestNodeExpression,
         forest::ParametricIntegrands,
         marker::UvMarker,
-        settings::VakintSettings,
     },
 };
 use color_eyre::Result;
@@ -182,14 +181,14 @@ impl Wood {
             ));
         }
 
-        Self::from_spinneys(spinneys, graph, cuts, &settings.vakint)
+        Self::from_spinneys(spinneys, graph, cuts, settings)
     }
 
     pub(crate) fn from_spinneys<I: IntoIterator<Item = Spinney>>(
         s: I,
         graph: &Graph,
         cuts: CutStructure,
-        vakint_settings: &VakintSettings,
+        settings: &UVgenerationSettings,
     ) -> Self {
         let mut max_loops = 0;
         let mut spinneys = BTreeMap::new();
@@ -199,7 +198,9 @@ impl Wood {
         }
         let empty = Spinney::empty(graph);
         spinneys.entry(empty.filter().clone()).or_insert(empty);
-        let mut vakint_settings = vakint_settings.true_settings();
+        let mut vakint_settings = settings.vakint.true_settings();
+        vakint_settings.project_onto_tensor_integrals =
+            settings.project_integrated_uv_cts_onto_tensor_integrals;
         // Retain enough positive epsilon powers for finite terms formed when disconnected
         // integrated counterterms are multiplied.
         vakint_settings.number_of_terms_in_epsilon_expansion = max_loops as i64 + 1;

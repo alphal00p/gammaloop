@@ -110,7 +110,8 @@ fn main() {
         &params,
         &HashMap::default(),
         None,
-    );
+    )
+    .unwrap();
     println!("Partial eval:\n{}\n", numerical_partial_eval);
 
     let externals = vakint.externals_from_f64(
