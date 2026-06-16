@@ -13,7 +13,7 @@ use linnet::{
         involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
         subgraph::{
             HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike,
-            SubSetOps, subset::SubSet,
+            SubSetOps,
         },
     },
     parser::DotGraph,
@@ -527,17 +527,11 @@ impl Graph {
         None
     }
 
-    pub(crate) fn get_initial_state_tree(&self) -> (SuBitGraph, Vec<EdgeIndex>) {
-        let mut tree_like_edges = Vec::new();
-        let full_graph = self.underlying.full_filter();
-        let full_is_cut = self
-            .initial_state_cut
-            .left
-            .union(&self.initial_state_cut.right);
-
-        let full_graph_without_initial_state_cut = full_graph.subtract(&full_is_cut);
-
-        let mut result: SubSet<Hedge> = self.underlying.empty_subgraph();
+    pub(crate) fn get_initial_state_tree(&self) -> SuBitGraph {
+        let full_is_cut = self.initial_state_cut.as_subgraph();
+        let full_graph_without_initial_state_cut =
+            self.underlying.full_filter().subtract(&full_is_cut);
+        let mut result: SuBitGraph = self.underlying.empty_subgraph();
 
         for (pair, edge_id, _) in self
             .underlying
@@ -545,28 +539,19 @@ impl Graph {
         {
             if let HedgePair::Paired { source, sink } = pair {
                 let loop_signature = &self.loop_momentum_basis.edge_signatures[edge_id];
-                let is_tree_like = loop_signature.internal.iter().all(|sign| sign.is_zero());
-                if is_tree_like {
-                    tree_like_edges.push(edge_id);
-                    let source_node = self.underlying.node_id(source);
-                    let sink_node = self.underlying.node_id(sink);
-
-                    let source_connects_initial_state =
-                        self.underlying.iter_crown(source_node).any(|hedge| {
-                            let mut single_hedge_subgraph: SubSet<Hedge> =
-                                self.underlying.empty_subgraph();
-
-                            single_hedge_subgraph.add(hedge);
-
-                            single_hedge_subgraph.intersects(&full_is_cut)
+                if loop_signature.internal.iter().all(|sign| sign.is_zero()) {
+                    // A fixed-momentum bridge can also join two internal loop components.
+                    // Amputate only an endpoint attached to the initial-state cut.
+                    let initial_state_node = [source, sink]
+                        .into_iter()
+                        .map(|hedge| self.underlying.node_id(hedge))
+                        .find(|node| {
+                            self.underlying
+                                .iter_crown(*node)
+                                .any(|hedge| full_is_cut.includes(&hedge))
                         });
-
-                    if source_connects_initial_state {
-                        for hedge in self.underlying.iter_crown(source_node) {
-                            result.add(hedge);
-                        }
-                    } else {
-                        for hedge in self.underlying.iter_crown(sink_node) {
+                    if let Some(node) = initial_state_node {
+                        for hedge in self.underlying.iter_crown(node) {
                             result.add(hedge);
                         }
                     }
@@ -574,7 +559,7 @@ impl Graph {
             }
         }
 
-        (result, tree_like_edges)
+        result
     }
 
     pub(crate) fn get_raised_edge_groups(&self) -> Vec<Vec<EdgeIndex>> {

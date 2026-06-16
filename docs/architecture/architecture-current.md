@@ -68,6 +68,14 @@ Infrastructure
 
 The command model is stateful by design: commands mutate a long-lived `State` that can be saved and resumed.
 
+Generation preserves the original forward sides by default. The optional
+`--symmetrize-left-right-states` CP optimization remains a user assertion about
+the selected theory, process and coupling point, with warnings at generation
+and runtime warm-up. Models declare covariant cut multiplets, and generated
+integrands retain their physical event representatives. Regenerate saved
+processes and integrands after the phase/model changes; see
+[the generation options and generated-state contract](phase-conventions.md#generation-options-and-generated-states).
+
 ### 3. Domain Core (gammalooprs)
 - Root module wiring: `crates/gammalooprs/src/lib.rs`.
 - Model and parameters: `crates/gammalooprs/src/model/mod.rs`.
@@ -268,8 +276,9 @@ localizing factor remains inert under subsequent Taylor operations.
 The shared CFF core also returns its connected-loop and pure
 duplicate-denominator global sign as typed metadata. GammaLoop consumes that
 bridge exactly once for root, reduced, and exact production CFF sources,
-cancelling the shared-core-local uniform convention and retaining GammaLoop's
-established complete-integrand convention.
+cancelling the shared-core-local uniform convention before the physical
+Minkowski measure `i^L/(2*pi)^(3L)` is applied. Integrated UV addbacks use the
+same convention, with additional Vakint normalization `1`.
 The NLO acceptance layer independently generates orientation-local direct 3D,
 explicit-sum direct 3D, and projected local 4D with local and integrated UV and
 threshold counterterms. It compares complete GL0/GL2 values at a common native-
@@ -284,21 +293,36 @@ Direct-photon benchmarks use the off-shell spin projector `-g^(mu nu)` and no
 picobarn conversion. The inclusive lepton-process targets instead use the
 Eq. (7.1) normalization `2(4 pi alpha)/(3 Ecm^3)` and the conversion to picobarns;
 individual lepton-process graph components are not assigned the unconverted
-published photon targets. Existing signed-component and magnitude tests retain
-the current phase conventions. Resolving the overall phase and the unfinished
-right-hand-side cut conjugation is separate work. Current validation results
-and measured timings belong in the accompanying test evidence and PR.
+published photon targets. Acceptances require positive real LO and the signed
+real NLO correction, checking the imaginary component separately. Diagram
+contributions can have either real sign. Current validation results and
+measured timings belong in the accompanying test evidence and PR.
+
+The raw forward graph already contains inverse-process UFO vertices with their
+Hermitian-partner spin structures and couplings. An additional RHS numerator
+adjoint would conjugate those structures a second time. Marking vertices and
+virtual propagators, together with the reversed RHS virtual contours, instead
+gives `(-1)^C_R`, with boundary hairs retained in the RHS component count. The
+complete LU residue factor is `2*pi*i*(-1)^C_R`, hence `-2*pi*i` for connected
+RHS, while retaining the cut propagator numerators exactly once. Bare, local
+and integrated UV, and threshold branches use this same cut-group factor.
+Runtime subtracts threshold helpers with left `-i*pi` and right `+i*pi`
+integrated coefficients; iterated terms use their product. See
+[phase conventions and the independent conjugation audit](phase-conventions.md)
+for the cut-line `i` cancellation, intrinsic complex CKM phases, and the
+unsupported complex-mass-scheme boundary. There are no conjugation modes.
 
 The scalar local-equivalence matrix is generated from the scalar model rather
-than from hand-built graph data. Its unit-numerator lanes remain unchanged after
-generation, companion probes use only Feynman-rule-local edge factors, and
+than from hand-built graph data. Its lanes without an additional numerator
+retain the full UFO Feynman rules; companion probes use only Feynman-rule-local edge factors, and
 there is no graph-specific production branch. The matrix enables local UV,
 integrated UV and threshold counterterms while comparing all three local-UV
 routes, including native-Arb checks. `just test_LU_scalar_xs` includes the slow
 cases, uses release compilation by default and stops on the first failure.
 Nonzero route comparisons require finite values and precision-scaled relative
 agreement. Only an independent exact source-zero certificate permits the
-separate absolute bound; small magnitude alone does not qualify. The curated suite includes the six base scalar graphs GL00, GL02,
+separate absolute bound; small magnitude alone does not qualify. The curated
+suite includes the six base scalar graphs GL00, GL02,
 GL04, GL08, GL09 and GL24. Each profiles direct local3D separately for every
 complete residue-map key and projected local4D after the complete residue sum.
 
@@ -475,6 +499,17 @@ Each event carries:
 
 Observable-specific entry reweighting remains internal to the observable
 runtime; it is not stored on the event.
+
+For physical W/Z final states, generation includes the model-declared covariant
+vector, Goldstone and ghost cut states. Event construction preserves their
+momenta and maps their PDGs to the requested physical vector before selectors
+or observables run. The same event receives its bare, UV and threshold weights,
+so measurement functions respect the complete gauge sum. The representative
+map is persisted with each cross-section graph term. Ambiguous requests mixing
+an explicit unphysical state with its physical-vector sector are rejected;
+separate diagnostic requests retain their original PDGs. See the
+[electroweak gauge contract](sm-conventions-audit.md#electroweak-virtual-and-cut-state-gauge-contract)
+for the required graph completeness and treatment of intentional subsets.
 
 `additional_weights` is a generic `BTreeMap` keyed by lightweight identifiers
 such as:

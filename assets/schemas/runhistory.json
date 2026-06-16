@@ -5051,7 +5051,8 @@
             "minimum": 0
           }
         },
-        "number_of_factorized_loop_subtopologies": {
+        "number_of_anticommutating_loops": {
+          "description": "Number of closed anticommutating (fermion or ghost) loops; negative disables",
           "type": [
             "array",
             "null"
@@ -5061,8 +5062,7 @@
             "format": "int32"
           }
         },
-        "number_of_fermion_loops": {
-          "description": "Number of closed fermion loops; negative disables",
+        "number_of_factorized_loop_subtopologies": {
           "type": [
             "array",
             "null"
@@ -5139,6 +5139,7 @@
           ]
         },
         "symmetrize_left_right_states": {
+          "description": "Optional CP-based left/right graph identification; requires CP symmetry.",
           "type": [
             "boolean",
             "null"

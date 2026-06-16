@@ -66,6 +66,7 @@ coordinate_system = "spherical"
 mapping = "linear"
 
 [default_runtime_settings.integrator]
+integrated_phase = "imag"
 seed = 42
 n_increase = 0
 n_start = 10000

@@ -287,7 +287,6 @@ impl<'a> ComparableExpr<'a> {
             .simplify_metrics()
             .to_dots()
             .simplify_color()
-            .expand_num()
     }
 }
 
@@ -301,12 +300,13 @@ mod tests {
     #[test]
     fn compare_canonicalizes_contracted_uv_indices() {
         crate::initialisation::test_initialise().unwrap();
+        let spectator = symbolica::parse!("2*(compare_a+compare_b)*(compare_c+compare_d)");
         let expression = |topology| {
             let contracted = mink!(4, Atom::from(Aind::UVTerm(topology, 2)));
             let fixed = mink!(4, Atom::from(Aind::Edge(2, 1)));
             let start = bis!(4, Atom::from(Aind::Hedge(0, 0)));
             let end = bis!(4, Atom::from(Aind::Hedge(1, 0)));
-            let common = Atom::var(symbol!("compare_common_factor"));
+            let common = &spectator * Atom::var(symbol!("compare_common_factor"));
             let term = |index: Atom| {
                 common.clone()
                     * chain!(start.clone(), end.clone(), gamma!(index.clone()))
@@ -320,6 +320,15 @@ mod tests {
         let hedge = ComparableExpr::new(&hedge);
 
         assert_ne!(legacy.normalized(), hedge.normalized());
+        for expression in [&legacy, &hedge] {
+            assert!(
+                expression
+                    .normalized()
+                    .pattern_match(&spectator.to_pattern(), None, None)
+                    .next()
+                    .is_some()
+            );
+        }
         assert!(legacy.equivalent_to(&hedge));
     }
 }

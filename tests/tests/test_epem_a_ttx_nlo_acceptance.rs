@@ -45,9 +45,10 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
 
     // The published absolute values are for gamma* -> t t~, whereas this
     // acceptance computes e+ e- -> gamma* -> t t~. A direct off-shell
-    // gamma* run would have to generate the summed Feynman-gauge vector
-    // projector -g^{mu nu}; here the valid external-lepton spin sums and
-    // common photon factors cancel only in the inclusive NLO/LO ratio.
+    // gamma* run uses the summed Feynman-gauge vector projector -g^{mu nu}.
+    // Eq. (7.1) below closes that current with the external-lepton spin sums
+    // and photon propagators, fixing the absolute LO and signed NLO values;
+    // these common physical factors also cancel in the inclusive NLO/LO ratio.
     const PUBLISHED_GAMMA_STAR_LO: f64 = 2.876302;
     const PUBLISHED_GAMMA_STAR_NLO: f64 = 0.201520;
     const PUBLISHED_NLO_OVER_LO: f64 = PUBLISHED_GAMMA_STAR_NLO / PUBLISHED_GAMMA_STAR_LO;
@@ -85,7 +86,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
         uv.renormalization_prescription.massless_power_divergent = ApproximationType::MUV;
         uv.renormalization_prescription.overrides.clear();
         uv.vakint.normalization = "MSbar".to_string();
-        uv.vakint.additional_normalization = "-1".to_string();
+        uv.vakint.additional_normalization = "1".to_string();
         uv.vakint.form_exe_path = which("form")?.display().to_string();
     }
     cli.default_runtime_settings
@@ -112,7 +113,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
                 r#"generate xs e+ e- > t t~ | e+ e- t t~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{{{2}}}} QCD=1]
                     --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                     --symmetrize-left-right-states true
-                    -p {process} -i NLO --global-prefactor-num "1𝑖" --only-diagrams"#,
+                    -p {process} -i NLO --only-diagrams"#,
             ))?;
         cli.run_command(&format!("generate existing -p {process} -i NLO"))?;
 
@@ -168,6 +169,16 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
         2.0 * (4.0 * PI * alpha_qed) / (3.0 * E_CM.powi(3)) * GEV_SQUARED_TO_PICOBARN;
     let published_lo_pb = PUBLISHED_GAMMA_STAR_LO * gamma_star_to_epem_pb;
     let published_nlo_pb = PUBLISHED_GAMMA_STAR_NLO * gamma_star_to_epem_pb;
+    let mass_squared_over_s = model_parameters.data["MT"].0.0.powi(2) / E_CM.powi(2);
+    let analytic_lo_pb = 4.0 * PI * alpha_qed.powi(2) * 3.0 * (2.0 / 3.0_f64).powi(2)
+        / (3.0 * E_CM.powi(2))
+        * (1.0 - 4.0 * mass_squared_over_s).sqrt()
+        * (1.0 + 2.0 * mass_squared_over_s)
+        * GEV_SQUARED_TO_PICOBARN;
+    assert!(
+        (published_lo_pb - analytic_lo_pb).abs() <= 5.0e-5 * analytic_lo_pb,
+        "the published LO conversion disagrees with the massive tree oracle: published={published_lo_pb:e} pb, analytic={analytic_lo_pb:e} pb",
+    );
 
     // Keep this representation in a separate process. Integrand generation
     // annotates the processed graph, so regenerating the orientation-local
@@ -181,7 +192,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
         r#"generate xs e+ e- > t t~ | e+ e- t t~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{{{2}}}} QCD=1]
             --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
             --symmetrize-left-right-states true
-            -p {EXPLICIT_3D_PROCESS} -i NLO --global-prefactor-num "1𝑖" --only-diagrams"#,
+            -p {EXPLICIT_3D_PROCESS} -i NLO --only-diagrams"#,
     ))?;
     cli.run_command(&format!(
         "generate existing -p {EXPLICIT_3D_PROCESS} -i NLO"
@@ -201,7 +212,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
             r#"generate xs e+ e- > t t~ | e+ e- t t~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{{{2}}}} QCD=1]
                 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                 --symmetrize-left-right-states true
-                -p {process} -i NLO --global-prefactor-num "1𝑖" --only-diagrams"#,
+                -p {process} -i NLO --only-diagrams"#,
         ))?;
         cli.run_command(&format!("generate existing -p {process} -i NLO"))?;
 
@@ -361,7 +372,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
         ))?;
     }
 
-    // A cheap f64 probe selects the integrated phase. Route equivalence itself
+    // A cheap f64 probe certifies the physical real phase. Route equivalence itself
     // is checked below in Arb so that precision-escalation losses remain visible.
     let (_, nlo_probe) = Inspect {
         process: Some(ProcessRef::Unqualified(EXPLICIT_3D_PROCESS.to_string())),
@@ -374,19 +385,10 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
     assert!(
         nlo_probe.re.is_finite()
             && nlo_probe.im.is_finite()
-            && nlo_probe.re.abs().max(nlo_probe.im.abs()) > 0.0,
-        "the explicit-local-3D NLO pointwise probe must be finite and nonzero, got {nlo_probe:e}",
+            && nlo_probe.re.abs() > 0.0
+            && nlo_probe.im.abs() <= 1.0e-8 * nlo_probe.re.abs(),
+        "the NLO probe must be finite, nonzero and real, got {nlo_probe:e}",
     );
-    assert!(
-        nlo_probe.re.abs().min(nlo_probe.im.abs())
-            <= 1.0e-8 * nlo_probe.re.abs().max(nlo_probe.im.abs()),
-        "the explicit-local-3D NLO probe is not phase-pure enough for a magnitude acceptance: {nlo_probe:e}",
-    );
-    let nlo_phase = if nlo_probe.re.abs() >= nlo_probe.im.abs() {
-        "real"
-    } else {
-        "imag"
-    };
 
     let points = Array2::from_shape_vec(
         (2, 6),
@@ -486,22 +488,13 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
     assert!(
         lo_probe.re.is_finite()
             && lo_probe.im.is_finite()
-            && lo_probe.re.abs().max(lo_probe.im.abs()) > 0.0,
-        "the LO phase probe must be finite and nonzero, got {lo_probe:e}",
+            && lo_probe.re > 0.0
+            && lo_probe.im.abs() <= 1.0e-12 * lo_probe.re,
+        "the LO probe must be positive and real, got {lo_probe:e}",
     );
-    assert!(
-        lo_probe.re.abs().min(lo_probe.im.abs())
-            <= 1.0e-8 * lo_probe.re.abs().max(lo_probe.im.abs()),
-        "the LO probe is not phase-pure enough for a magnitude acceptance: {lo_probe:e}",
-    );
-    let lo_phase = if lo_probe.re.abs() >= lo_probe.im.abs() {
-        "real"
-    } else {
-        "imag"
-    };
     cli.run_command(&format!(
         r#"set process -p {LO_PROCESS} -i {LO} kv
-                integrator.integrated_phase="{lo_phase}"
+                integrator.integrated_phase="real"
                 integrator.min_samples_for_update=5000
                 integrator.n_start=5000
                 integrator.n_increase=5000
@@ -528,9 +521,17 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
     let lo_estimate = lo_output
         .single_slot_integral()
         .ok_or_else(|| eyre!("expected one LO integration slot"))?;
-    let lo_value = lo_estimate.result.re.0.hypot(lo_estimate.result.im.0);
-    let lo_error = lo_estimate.error.re.0.hypot(lo_estimate.error.im.0);
-    assert!(lo_value > 0.0, "expected a nonzero LO cross-section");
+    let lo_value = lo_estimate.result.re.0;
+    let lo_error = lo_estimate.error.re.0.abs();
+    assert!(
+        lo_estimate.result.im.0.abs()
+            <= 3.0 * lo_estimate.error.im.0.abs() + 1.0e-12 * published_lo_pb
+            && lo_estimate.error.im.0.abs() <= 0.05 * published_lo_pb,
+        "LO must have a vanishing imaginary component: {:e} ± {:e}",
+        lo_estimate.result,
+        lo_estimate.error,
+    );
+    assert!(lo_value > 0.0, "expected a positive LO cross-section");
     assert!(
         lo_error / lo_value <= 0.05,
         "LO uncertainty is too large for the normalization acceptance: {lo_value:e} ± {lo_error:e}",
@@ -539,7 +540,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
     let lo_absolute_tolerance = (3.0 * lo_error).max(0.05 * published_lo_pb);
     assert!(
         lo_absolute_delta <= lo_absolute_tolerance,
-        "LO absolute normalization mismatch: |LO|={lo_value:e} ± {lo_error:e} pb, converted published value={published_lo_pb:e} pb, |delta|={lo_absolute_delta:e}, tolerance={lo_absolute_tolerance:e}",
+        "LO absolute normalization mismatch: LO={lo_value:e} ± {lo_error:e} pb, converted published value={published_lo_pb:e} pb, |delta|={lo_absolute_delta:e}, tolerance={lo_absolute_tolerance:e}",
     );
 
     // The Arb checks establish route equivalence locally, so only the explicit
@@ -551,7 +552,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
             sampling.lmb_multichanneling=true
             sampling.lmb_channels="summed"
             sampling.lmb_channel_weight="ose"
-            integrator.integrated_phase="{nlo_phase}"
+            integrator.integrated_phase="real"
             integrator.min_samples_for_update=10000
             integrator.n_start=10000
             integrator.n_increase=10000
@@ -577,8 +578,20 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
     let nlo_estimate = nlo_output
         .single_slot_integral()
         .ok_or_else(|| eyre!("expected one explicit-local-3D NLO integration slot"))?;
-    let nlo_value = nlo_estimate.result.re.0.hypot(nlo_estimate.result.im.0);
-    let nlo_error = nlo_estimate.error.re.0.hypot(nlo_estimate.error.im.0);
+    assert!(
+        nlo_estimate.result.im.0.abs()
+            <= 3.0 * nlo_estimate.error.im.0.abs() + 1.0e-12 * published_nlo_pb
+            && nlo_estimate.error.im.0.abs() <= 0.15 * published_nlo_pb,
+        "NLO must have a vanishing imaginary component: {:e} ± {:e}",
+        nlo_estimate.result,
+        nlo_estimate.error,
+    );
+    let nlo_value = nlo_estimate.result.re.0;
+    let nlo_error = nlo_estimate.error.re.0.abs();
+    assert!(
+        nlo_value > 0.0,
+        "expected a positive inclusive NLO correction"
+    );
     let nlo_relative_error = nlo_error / nlo_value;
     assert!(
         nlo_relative_error.is_finite() && nlo_relative_error <= 0.15,
@@ -591,7 +604,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
     let delta = (nlo_value - expected_nlo).abs();
     assert!(
         combined_error.is_finite() && delta <= 3.0 * combined_error,
-        "explicit-local-3D inclusive NLO normalization mismatch: |NLO|={nlo_value:e} ± {nlo_error:e}, published-ratio*LO={expected_nlo:e} ± {:e}, |delta|={delta:e}, delta/sigma={:e}",
+        "explicit-local-3D inclusive NLO normalization mismatch: NLO={nlo_value:e} ± {nlo_error:e}, published-ratio*LO={expected_nlo:e} ± {:e}, |delta|={delta:e}, delta/sigma={:e}",
         PUBLISHED_NLO_OVER_LO * lo_error,
         delta / combined_error,
     );
@@ -599,7 +612,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
     let absolute_tolerance = (3.0 * nlo_error).max(0.05 * published_nlo_pb);
     assert!(
         absolute_delta <= absolute_tolerance,
-        "explicit-local-3D absolute NLO normalization mismatch: |NLO|={nlo_value:e} ± {nlo_error:e} pb, converted published value={published_nlo_pb:e} pb, |delta|={absolute_delta:e}, tolerance={absolute_tolerance:e}",
+        "explicit-local-3D absolute NLO normalization mismatch: NLO={nlo_value:e} ± {nlo_error:e} pb, converted published value={published_nlo_pb:e} pb, |delta|={absolute_delta:e}, tolerance={absolute_tolerance:e}",
     );
 
     clean_test(&test_root);

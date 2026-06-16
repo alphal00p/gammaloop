@@ -61,6 +61,422 @@ use crate::numerator::GlobalPrefactor;
 use crate::processes::ProcessDefinition;
 use crate::utils::load_generic_model;
 
+#[test]
+fn closed_anticommutating_loop_counts() {
+    let model = load_generic_model("sm");
+    let process = dis_options_impl(&[], &[], 0, 0, 0);
+    for (name, edges, expected) in [
+        ("ghost", vec![(0, 1, 9000005), (1, 0, 9000005)], 1),
+        ("antighost", vec![(0, 1, -9000005), (1, 0, -9000005)], 1),
+        ("ghost self-loop", vec![(0, 0, 9000005)], 1),
+        ("Dirac", vec![(0, 1, 5), (1, 0, 5)], 1),
+        ("anti-Dirac", vec![(0, 1, -5), (1, 0, -5)], 1),
+        (
+            "open ghost chain",
+            vec![(0, 1, 9000005), (1, 2, 9000005)],
+            0,
+        ),
+        ("gluon cycle", vec![(0, 1, 21), (1, 0, 21)], 0),
+        (
+            "ghost and Dirac loops joined by a gluon",
+            vec![
+                (0, 1, 9000005),
+                (1, 0, 9000005),
+                (1, 2, 21),
+                (2, 3, 5),
+                (3, 2, 5),
+            ],
+            2,
+        ),
+        (
+            "two ghost loops joined by a gluon",
+            vec![
+                (0, 1, 9000005),
+                (1, 0, 9000005),
+                (1, 2, 21),
+                (2, 3, 9000005),
+                (3, 2, 9000005),
+            ],
+            2,
+        ),
+    ] {
+        let mut graph = SymbolicaGraph::new();
+        let last_node = edges.iter().flat_map(|(a, b, _)| [*a, *b]).max().unwrap();
+        for _ in 0..=last_node {
+            // Only edge statistics participates in this topology count.
+            graph.add_node(NodeColorWithVertexRule {
+                external_tag: 0,
+                vertex_rule: model.get_vertex_rule("V_35"),
+            });
+        }
+        for (a, b, pdg) in edges {
+            graph.add_edge(a, b, true, EdgeColor { pdg }).unwrap();
+        }
+        assert_eq!(
+            process
+                .count_closed_anticommutating_loops(&graph, &model)
+                .unwrap(),
+            expected,
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn open_ghost_chain_exchange_has_grassmann_sign() {
+    let model = load_generic_model("sm");
+    let process = ProcessDefinition {
+        initial_pdgs: vec![9000005, 9000005],
+        final_pdgs_lists: vec![vec![9000005, 9000005]],
+        ..Default::default()
+    };
+    let mut signs = Vec::new();
+    for outgoing in [[2, 3], [3, 2]] {
+        let mut graph = SymbolicaGraph::new();
+        for external_tag in [1, 2, 3, 4, 0, 0] {
+            // This flow/ordering certificate reads edge species and external tags only.
+            graph.add_node(NodeColorWithVertexRule {
+                external_tag,
+                vertex_rule: model.get_vertex_rule("V_35"),
+            });
+        }
+        for (a, b, pdg) in [
+            (0, 4, 9000005),
+            (4, outgoing[0], 9000005),
+            (1, 5, 9000005),
+            (5, outgoing[1], 9000005),
+            (4, 5, 21),
+        ] {
+            graph.add_edge(a, b, true, EdgeColor { pdg }).unwrap();
+        }
+        signs.push(process.normalize_flows(&graph, &model).unwrap().1);
+    }
+    assert_ne!(
+        signs[0], signs[1],
+        "exchanging two identical external ghosts must reverse the sign"
+    );
+}
+
+#[test]
+fn generated_ghost_loop_has_one_statistics_minus() {
+    use super::diagram_generator::evaluate_overall_factor;
+
+    let model = load_generic_model("sm");
+    let process = ProcessDefinition {
+        initial_pdgs: vec![21],
+        final_pdgs_lists: vec![vec![21]],
+        amplitude_filters: FeynGenFilters(vec![
+            FeynGenFilter::VertexAllow(vec!["V_35".into()]),
+            // The public filter counts both fermion and ghost loops.
+            FeynGenFilter::AnticommutatingLoopCountRange((1, 1)),
+        ]),
+        ..Default::default()
+    };
+    let settings = GlobalSettings {
+        n_cores: Parallelisation {
+            feyngen: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let graphs = process.generate(&model, &settings).unwrap();
+    let [graph] = graphs.as_slice() else {
+        panic!("expected exactly one ghost vacuum-polarization graph");
+    };
+    assert_eq!(graph.get_loop_number(), 1);
+    assert_eq!(
+        evaluate_overall_factor(graph.overall_factor.as_view()),
+        Atom::num(-1)
+    );
+    let mut process = process;
+    process.amplitude_filters.0[1] = FeynGenFilter::AnticommutatingLoopCountRange((0, 0));
+    assert!(process.generate(&model, &settings).unwrap().is_empty());
+}
+
+#[test]
+fn cp_symmetrization_is_an_explicit_serialized_opt_in() -> color_eyre::Result<()> {
+    let mut definition = serde_json::to_value(ProcessDefinition::default())?;
+    assert!(
+        !serde_json::from_value::<ProcessDefinition>(definition.clone())?
+            .symmetrize_left_right_states
+    );
+    for enabled in [false, true] {
+        definition["symmetrize_left_right_states"] = serde_json::json!(enabled);
+        let process = serde_json::from_value::<ProcessDefinition>(definition.clone())?;
+        assert_eq!(process.symmetrize_left_right_states, enabled);
+        assert_eq!(
+            serde_json::to_value(process)?["symmetrize_left_right_states"],
+            enabled
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn cp_symmetrization_groups_mirrored_real_scalar_forward_graphs() {
+    let model = load_generic_model("scalars");
+    // Sew a cubic scalar box to a quartic Born vertex. The external neighbors
+    // have valences three and four, so a side-preserving permutation cannot
+    // identify its mirror. The real scalar theory permits CP.
+    let mut graphs = Vec::new();
+    for mirrored in [false, true] {
+        let mut graph = SymbolicaGraph::new();
+        for (node, external_tag) in [
+            0,
+            0,
+            0,
+            0,
+            0,
+            if mirrored { 2 } else { 1 },
+            if mirrored { 1 } else { 2 },
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            graph.add_node(NodeColorWithVertexRule {
+                external_tag,
+                vertex_rule: model.get_vertex_rule(if node == 4 {
+                    "V_4_SCALAR_0000"
+                } else {
+                    "V_3_SCALAR_000"
+                }),
+            });
+        }
+        for (source, sink) in [
+            (5, 0),
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 0),
+            (1, 4),
+            (2, 4),
+            (3, 4),
+            (4, 6),
+        ] {
+            let (source, sink) = if mirrored {
+                (sink, source)
+            } else {
+                (source, sink)
+            };
+            graph
+                .add_edge(source, sink, true, EdgeColor { pdg: 1000 })
+                .unwrap();
+        }
+        graphs.push(graph);
+    }
+    for enabled in [false, true] {
+        let process = ProcessDefinition {
+            generation_type: GenerationType::CrossSection,
+            initial_pdgs: vec![1000],
+            final_pdgs_lists: vec![vec![1000, 1000, 1000]],
+            loop_count_range: (3, 3),
+            symmetrize_left_right_states: enabled,
+            ..Default::default()
+        };
+        let colors = if enabled {
+            [(1, -2001), (2, -3001)].into_iter().collect()
+        } else {
+            HashMap::default()
+        };
+        let canonical = graphs
+            .iter()
+            .map(|graph| {
+                let (_, sorted) = process
+                    .canonicalize_edge_and_vertex_ordering(
+                        &model,
+                        graph,
+                        &colors,
+                        &process.numerator_grouping,
+                        enabled.then_some((false, true)),
+                    )
+                    .unwrap();
+                // As in generation, the second pass fixes vertex order after the
+                // external assignment has been selected.
+                process
+                    .canonicalize_edge_and_vertex_ordering(
+                        &model,
+                        &sorted,
+                        &colors,
+                        &process.numerator_grouping,
+                        None,
+                    )
+                    .unwrap()
+                    .0
+            })
+            .collect_vec();
+        assert_eq!(canonical[0] == canonical[1], enabled);
+    }
+}
+
+#[test]
+fn complex_ckm_generation_preserves_named_and_inline_couplings() -> color_eyre::Result<()> {
+    use crate::{
+        model::{CouplingName, InputParamCard, ParameterType},
+        utils::F,
+    };
+
+    for inline in [false, true] {
+        let mut model = load_generic_model("sm");
+        // UFO-real inputs remain real. Their derived CKM value can nevertheless
+        // be complex; ordinary Feynman i factors are not intrinsic parameters.
+        // The JSON defaults to diagonal CKM, so set every independent input.
+        InputParamCard::<F<f64>>::from_str(
+            "lamWS = [0.2253, 0.0]\nAWS = [0.808, 0.0]\nrhoWS = [0.132, 0.0]\netaWS = [0.341, 0.0]"
+                .into(),
+            "toml",
+        )?
+        .apply_to_model(&mut model)?;
+        let ckm = model.get_parameter("CKM1x3");
+        assert_eq!(ckm.parameter_type, ParameterType::Imaginary);
+        assert!(ckm.value.unwrap().re.0 > 0.0);
+        assert!(ckm.value.unwrap().im.0 < 0.0);
+        if inline {
+            let symbol = Atom::from(ckm.name.0);
+            let expression = ckm.expression.as_ref().unwrap().clone();
+            for name in ["GC_43", "GC_102"] {
+                let name = CouplingName(model.get_coupling(name).name);
+                let coupling = model.couplings.get_mut(&name).unwrap();
+                coupling.expression = coupling
+                    .expression
+                    .replace(symbol.to_pattern())
+                    .with(expression.to_pattern());
+            }
+            // Coupling aliases and inline expressions retain their full physical
+            // values. No CP decision is inferred from a scalar coefficient.
+            model.recompute_dependents()?;
+        }
+        // The unrelated leptonic coupling retains its ordinary imaginary factor.
+        assert_ne!(model.get_coupling("GC_40").value.unwrap().im, 0.0);
+        let mut process = ProcessDefinition {
+            generation_type: GenerationType::CrossSection,
+            initial_pdgs: vec![24],
+            final_pdgs_lists: vec![vec![2, -5]],
+            loop_count_range: (1, 1),
+            cross_section_filters: FeynGenFilters(vec![FeynGenFilter::VertexAllow(vec![
+                "V_95".into(),
+                "V_125".into(),
+            ])]),
+            ..Default::default()
+        };
+        let settings = GlobalSettings {
+            n_cores: Parallelisation {
+                feyngen: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        for symmetrize in [false, true] {
+            // Acceptance certifies the opt-in contract, not CP validity of
+            // this complex coupling point or a physical optimized rate.
+            process.symmetrize_left_right_states = symmetrize;
+            assert_eq!(process.generate(&model, &settings)?.len(), 1);
+        }
+        let left = model.get_coupling("GC_43").value.unwrap();
+        let right = model.get_coupling("GC_102").value.unwrap();
+        assert_ne!(left.re, 0.0);
+        assert_eq!(left.re, -right.re);
+        assert_eq!(left.im, right.im);
+    }
+    Ok(())
+}
+
+#[test]
+fn complex_ckm_updates_preserve_direct_integrand_warm_up() -> color_eyre::Result<()> {
+    use crate::{
+        integrands::process::ProcessIntegrand,
+        model::{CouplingName, InputParamCard},
+        processes::Process,
+        settings::RuntimeSettings,
+        utils::F,
+    };
+
+    test_initialise()?;
+    let pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
+    for (inline, symmetrize) in [(false, false), (false, true), (true, false), (true, true)] {
+        let mut model = load_generic_model("sm");
+        InputParamCard::<F<f64>>::from_str(
+            "lamWS = [0.2253, 0.0]\nAWS = [0.808, 0.0]\nrhoWS = [0.132, 0.0]\netaWS = [0.0, 0.0]"
+                .into(),
+            "toml",
+        )?
+        .apply_to_model(&mut model)?;
+        assert!(model.get_parameter("CKM1x3").value.unwrap().re.0 > 0.0);
+        assert_eq!(model.get_parameter("CKM1x3").value.unwrap().im.0, 0.0);
+        if inline {
+            let ckm = model.get_parameter("CKM1x3");
+            let symbol = Atom::from(ckm.name.0);
+            let expression = ckm.expression.as_ref().unwrap().clone();
+            for name in ["GC_43", "GC_102"] {
+                let name = CouplingName(model.get_coupling(name).name);
+                let coupling = model.couplings.get_mut(&name).unwrap();
+                coupling.expression = coupling
+                    .expression
+                    .replace(symbol.to_pattern())
+                    .with(expression.to_pattern());
+            }
+            model.recompute_dependents()?;
+        }
+
+        let definition = ProcessDefinition {
+            generation_type: GenerationType::CrossSection,
+            initial_pdgs: vec![24],
+            final_pdgs_lists: vec![vec![2, -5]],
+            loop_count_range: (1, 1),
+            symmetrize_left_right_states: symmetrize,
+            cross_section_filters: FeynGenFilters(vec![FeynGenFilter::VertexAllow(vec![
+                "V_95".into(),
+                "V_125".into(),
+            ])]),
+            ..Default::default()
+        };
+        let mut settings = GlobalSettings::default();
+        settings.n_cores.feyngen = 1;
+        settings.generation.evaluator.compile = false;
+        settings.generation.uv.subtract_uv = false;
+        settings.generation.uv.generate_integrated = false;
+        settings.generation.threshold_subtraction.enable_thresholds = false;
+        let mass = model.get_parameter("MW").value.unwrap().re.0;
+        let runtime: RuntimeSettings = toml::from_str(&format!(
+            r#"
+            [kinematics]
+            e_cm = {mass}
+            [kinematics.externals]
+            type = "constant"
+            [kinematics.externals.data]
+            momenta = [[{mass}, 0.0, 0.0, 0.0]]
+            helicities = [0]
+        "#
+        ))?;
+        let graphs = definition.generate(&model, &settings)?;
+        assert_eq!(graphs.len(), 1);
+        let mut process = Process::from_graph_list(
+            "runtime_complex_ckm".into(),
+            "default".into(),
+            graphs,
+            GenerationType::CrossSection,
+            Some(definition),
+            None,
+            &model,
+        )?;
+        process.preprocess(&model, &settings, &(&runtime).into(), &pool)?;
+        process.generate_integrands(&model, &settings, (&runtime).into(), &pool)?;
+        let integrand = process.get_integrand_mut("default")?;
+        let ProcessIntegrand::CrossSection(cross_section) = &*integrand else {
+            unreachable!();
+        };
+        assert_eq!(cross_section.data.symmetrize_left_right_states, symmetrize);
+        integrand.warm_up(&model)?;
+        InputParamCard::<F<f64>>::from_str("etaWS = [0.341, 0.0]".into(), "toml")?
+            .apply_to_model(&mut model)?;
+        assert!(model.get_parameter("CKM1x3").value.unwrap().im.0 < 0.0);
+        assert_ne!(model.get_coupling("GC_43").value.unwrap().re, 0.0);
+        // Updating the coupling point must not turn the user's CP assumption
+        // into an automatic rejection. No CP-violating rate is certified here.
+        integrand.warm_up(&model)?;
+    }
+    Ok(())
+}
+
 fn manual_lib<C: Into<Coefficient>>(
     loop_momenta: Vec<Vec<C>>,
     pol_v: Vec<(isize, Vec<C>, Vec<C>)>,
@@ -316,9 +732,8 @@ fn gl_11_vs_gl_12() {
         numerator_color_simplified_11.canonize(Aind::Dummy)
     );
 
-    let r = (numerator_color_simplified_11.canonize(Aind::Dummy)
-        / &numerator_color_simplified_12.canonize(Aind::Dummy))
-        .expand();
+    let r = numerator_color_simplified_11.canonize(Aind::Dummy)
+        / &numerator_color_simplified_12.canonize(Aind::Dummy);
 
     println!("ratio:{r}");
 
@@ -365,7 +780,7 @@ fn gl_11_vs_gl_12() {
 
     if let Some(a) = pn_11.compare_with_scalar_rescaling(&pn_12) {
         println!("{}", a);
-        println!("Expanded: {}", a.expand());
+        println!("Ratio: {}", a);
     }
 }
 

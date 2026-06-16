@@ -59,6 +59,19 @@ class UFOBaseClass(object):
 
 
 
+all_propagators = []
+
+
+class Propagator(UFOBaseClass):
+    """Complete propagator factors, including the Feynman-rule i."""
+
+    require_args = ["name", "numerator", "denominator"]
+
+    def __init__(self, name, numerator, denominator):
+        UFOBaseClass.__init__(self, name, numerator, denominator)
+        all_propagators.append(self)
+
+
 all_particles = []
 
     

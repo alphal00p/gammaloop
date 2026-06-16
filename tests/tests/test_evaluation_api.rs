@@ -541,7 +541,7 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
             .iter()
             .find(|graph| graph.is_master)
             .map(|graph| graph.name.as_str()),
-        Some("GL20"),
+        Some("GL38"),
     );
     let active_channel_bases = group
         .loop_momentum_bases
@@ -551,10 +551,11 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
         .collect::<BTreeSet<_>>();
     assert!(
         active_channel_bases.len() > 1,
-        "GL20 snapshot fixture must exercise explicit LMB multichanneling"
+        "GL38 snapshot fixture must exercise explicit LMB multichanneling"
     );
 
-    // This is the former GL20 high-weight point. It exercises every summed LMB channel and all
+    // This is the former GL20 high-weight point, now on the same topology labeled GL38.
+    // The edge relabeling preserves all directed momenta. It exercises every summed LMB channel and all
     // generated cuts while remaining finite after physical Cutkosky surfaces are excluded from
     // threshold subtraction.
     let point = vec![
@@ -623,7 +624,7 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
 
     assert_eq!(
         represented_channels, active_channel_bases,
-        "the snapshot must include events from every active GL20 LMB channel"
+        "the snapshot must include events from every active GL38 LMB channel"
     );
     assert_eq!(
         metadata.generated_event_count,
@@ -638,7 +639,7 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
     let mut snapshot = serde_json::json!({
         "process": info.process_name,
         "integrand": info.integrand_name,
-        "graph": "GL20",
+        "graph": "GL38",
         "point": point,
         "integrand_result": evaluation.integrand_result,
         "parameterization_jacobian": evaluation.parameterization_jacobian,
@@ -650,7 +651,8 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
         },
         "event_groups": event_groups,
     });
-    // Retain the signed absorptive weights in the reference for this source convention.
+    // Retain signed absorptive weights: the corrected left/right threshold prescription
+    // flips cut 2 imaginary parts while the three-loop graph normalization stays fixed.
     // Edge relabeling can change CFF discovery and event enumeration; physical cut IDs
     // and every numerical event payload retain their meaning. Compare the saved
     // payload by channel basis and cut, allowing enumeration and roundoff to vary.

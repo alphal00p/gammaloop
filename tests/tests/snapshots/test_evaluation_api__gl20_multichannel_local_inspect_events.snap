@@ -1,6 +1,6 @@
 ---
 source: tests/tests/test_evaluation_api.rs
-assertion_line: 648
+assertion_line: 651
 expression: snapshot
 ---
 {
@@ -27,8 +27,8 @@ expression: snapshot
           "graph_id": 0,
           "lmb_channel_edge_ids": [
             6,
-            9,
-            11
+            8,
+            9
           ],
           "lmb_channel_id": 0,
           "orientation_id": null,
@@ -112,105 +112,6 @@ expression: snapshot
             "re": 48343061735986340000000000000.0
           },
           "original": {
-            "im": -0.000000000000000000000000000000000000000000000000006183359654341411,
-            "re": 0.00000000000000000000000000000008052533818308001
-          },
-          "threshold_counterterm:0": {
-            "im": -0.0000000000000000000000000000000008242917026624966,
-            "re": -0.00000000000000000000000000000001592756943846231
-          }
-        },
-        "cut_info": {
-          "cut_id": 2,
-          "graph_group_id": 0,
-          "graph_id": 0,
-          "lmb_channel_edge_ids": [
-            6,
-            9,
-            11
-          ],
-          "lmb_channel_id": 0,
-          "orientation_id": null,
-          "particle_pdgs": [
-            [
-              -11,
-              11
-            ],
-            [
-              25,
-              6,
-              -6
-            ]
-          ]
-        },
-        "event_group_index": 0,
-        "event_index": 1,
-        "incoming_momenta": [
-          {
-            "spatial": {
-              "px": 0.0,
-              "py": 0.0,
-              "pz": 500.0
-            },
-            "temporal": {
-              "value": 500.0
-            }
-          },
-          {
-            "spatial": {
-              "px": 0.0,
-              "py": 0.0,
-              "pz": -500.0
-            },
-            "temporal": {
-              "value": 500.0
-            }
-          }
-        ],
-        "outgoing_momenta": [
-          {
-            "spatial": {
-              "px": -312.7963433365816,
-              "py": 53.07032494049456,
-              "pz": -105.62955861187808
-            },
-            "temporal": {
-              "value": 356.98825673482105
-            }
-          },
-          {
-            "spatial": {
-              "px": -56.754941015125205,
-              "py": -13.991163377118282,
-              "pz": -71.97579259572652
-            },
-            "temporal": {
-              "value": 196.28140691888927
-            }
-          },
-          {
-            "spatial": {
-              "px": 369.5512843517068,
-              "py": -39.079161563376275,
-              "pz": 177.6053512076046
-            },
-            "temporal": {
-              "value": 446.7303363462897
-            }
-          }
-        ],
-        "weight": {
-          "im": -0.00003984878467027436,
-          "re": 0.0031228539224280216
-        }
-      },
-      {
-        "additional_weights": {
-          "full multiplicative factor": {
-            "im": 0.0,
-            "re": 48343061735986340000000000000.0
-          },
-          "original": {
             "im": 0.00000000000000000000000000000000000000000000000001346187136274745,
             "re": 0.0000000000000000000000000000004060161333505399
           },
@@ -225,8 +126,8 @@ expression: snapshot
           "graph_id": 0,
           "lmb_channel_edge_ids": [
             6,
-            9,
-            11
+            8,
+            9
           ],
           "lmb_channel_id": 0,
           "orientation_id": null,
@@ -244,7 +145,7 @@ expression: snapshot
           ]
         },
         "event_group_index": 0,
-        "event_index": 2,
+        "event_index": 1,
         "incoming_momenta": [
           {
             "spatial": {
@@ -321,6 +222,105 @@ expression: snapshot
             "re": 48343061735986340000000000000.0
           },
           "original": {
+            "im": -0.000000000000000000000000000000000000000000000000006183359654341411,
+            "re": 0.00000000000000000000000000000008052533818308001
+          },
+          "threshold_counterterm:0": {
+            "im": 0.0000000000000000000000000000000008242917026624976,
+            "re": -0.00000000000000000000000000000001592756943846231
+          }
+        },
+        "cut_info": {
+          "cut_id": 2,
+          "graph_group_id": 0,
+          "graph_id": 0,
+          "lmb_channel_edge_ids": [
+            6,
+            8,
+            9
+          ],
+          "lmb_channel_id": 0,
+          "orientation_id": null,
+          "particle_pdgs": [
+            [
+              -11,
+              11
+            ],
+            [
+              25,
+              6,
+              -6
+            ]
+          ]
+        },
+        "event_group_index": 0,
+        "event_index": 2,
+        "incoming_momenta": [
+          {
+            "spatial": {
+              "px": 0.0,
+              "py": 0.0,
+              "pz": 500.0
+            },
+            "temporal": {
+              "value": 500.0
+            }
+          },
+          {
+            "spatial": {
+              "px": 0.0,
+              "py": 0.0,
+              "pz": -500.0
+            },
+            "temporal": {
+              "value": 500.0
+            }
+          }
+        ],
+        "outgoing_momenta": [
+          {
+            "spatial": {
+              "px": -312.7963433365816,
+              "py": 53.07032494049456,
+              "pz": -105.62955861187808
+            },
+            "temporal": {
+              "value": 356.98825673482105
+            }
+          },
+          {
+            "spatial": {
+              "px": -56.754941015125205,
+              "py": -13.991163377118282,
+              "pz": -71.97579259572652
+            },
+            "temporal": {
+              "value": 196.28140691888927
+            }
+          },
+          {
+            "spatial": {
+              "px": 369.5512843517068,
+              "py": -39.079161563376275,
+              "pz": 177.6053512076046
+            },
+            "temporal": {
+              "value": 446.7303363462897
+            }
+          }
+        ],
+        "weight": {
+          "im": 0.00003984878467027441,
+          "re": 0.0031228539224280216
+        }
+      },
+      {
+        "additional_weights": {
+          "full multiplicative factor": {
+            "im": 0.0,
+            "re": 48343061735986340000000000000.0
+          },
+          "original": {
             "im": 0.00000000000000000000000000000000000000000000000003764215670507701,
             "re": 0.000000000000000000000000000000045196400764777174
           },
@@ -335,8 +335,8 @@ expression: snapshot
           "graph_id": 0,
           "lmb_channel_edge_ids": [
             6,
-            9,
-            11
+            8,
+            9
           ],
           "lmb_channel_id": 0,
           "orientation_id": null,
@@ -445,8 +445,8 @@ expression: snapshot
           "graph_id": 0,
           "lmb_channel_edge_ids": [
             4,
-            9,
-            11
+            8,
+            9
           ],
           "lmb_channel_id": 1,
           "orientation_id": null,
@@ -530,105 +530,6 @@ expression: snapshot
             "re": 48343061735986340000000000000.0
           },
           "original": {
-            "im": -0.000000000000000000000000000000000000000000000000008180968736856777,
-            "re": 0.00000000000000000000000000000011192430906180802
-          },
-          "threshold_counterterm:0": {
-            "im": -0.0000000000000000000000000000000050204496001612036,
-            "re": -0.000000000000000000000000000000023425138094839674
-          }
-        },
-        "cut_info": {
-          "cut_id": 2,
-          "graph_group_id": 0,
-          "graph_id": 0,
-          "lmb_channel_edge_ids": [
-            4,
-            9,
-            11
-          ],
-          "lmb_channel_id": 1,
-          "orientation_id": null,
-          "particle_pdgs": [
-            [
-              -11,
-              11
-            ],
-            [
-              25,
-              6,
-              -6
-            ]
-          ]
-        },
-        "event_group_index": 0,
-        "event_index": 5,
-        "incoming_momenta": [
-          {
-            "spatial": {
-              "px": 0.0,
-              "py": 0.0,
-              "pz": 500.0
-            },
-            "temporal": {
-              "value": 500.0
-            }
-          },
-          {
-            "spatial": {
-              "px": 0.0,
-              "py": 0.0,
-              "pz": -500.0
-            },
-            "temporal": {
-              "value": 500.0
-            }
-          }
-        ],
-        "outgoing_momenta": [
-          {
-            "spatial": {
-              "px": -299.15663460743366,
-              "py": 52.04414739886881,
-              "pz": -98.17629936432051
-            },
-            "temporal": {
-              "value": 342.73440309515684
-            }
-          },
-          {
-            "spatial": {
-              "px": -74.9659747073394,
-              "py": -12.481579189771493,
-              "pz": -81.62601829943846
-            },
-            "temporal": {
-              "value": 205.83365625259697
-            }
-          },
-          {
-            "spatial": {
-              "px": 374.12260931477306,
-              "py": -39.562568209097314,
-              "pz": 179.80231766375897
-            },
-            "temporal": {
-              "value": 451.4319406522461
-            }
-          }
-        ],
-        "weight": {
-          "im": -0.00024270390496300095,
-          "re": 0.004278320885639761
-        }
-      },
-      {
-        "additional_weights": {
-          "full multiplicative factor": {
-            "im": 0.0,
-            "re": 48343061735986340000000000000.0
-          },
-          "original": {
             "im": 0.00000000000000000000000000000000000000000000000006136068596766832,
             "re": 0.000000000000000000000000000000564450340973455
           },
@@ -643,8 +544,8 @@ expression: snapshot
           "graph_id": 0,
           "lmb_channel_edge_ids": [
             4,
-            9,
-            11
+            8,
+            9
           ],
           "lmb_channel_id": 1,
           "orientation_id": null,
@@ -662,7 +563,7 @@ expression: snapshot
           ]
         },
         "event_group_index": 0,
-        "event_index": 6,
+        "event_index": 5,
         "incoming_momenta": [
           {
             "spatial": {
@@ -739,6 +640,105 @@ expression: snapshot
             "re": 48343061735986340000000000000.0
           },
           "original": {
+            "im": -0.000000000000000000000000000000000000000000000000008180968736856777,
+            "re": 0.00000000000000000000000000000011192430906180802
+          },
+          "threshold_counterterm:0": {
+            "im": 0.0000000000000000000000000000000050204496001612036,
+            "re": -0.000000000000000000000000000000023425138094839674
+          }
+        },
+        "cut_info": {
+          "cut_id": 2,
+          "graph_group_id": 0,
+          "graph_id": 0,
+          "lmb_channel_edge_ids": [
+            4,
+            8,
+            9
+          ],
+          "lmb_channel_id": 1,
+          "orientation_id": null,
+          "particle_pdgs": [
+            [
+              -11,
+              11
+            ],
+            [
+              25,
+              6,
+              -6
+            ]
+          ]
+        },
+        "event_group_index": 0,
+        "event_index": 6,
+        "incoming_momenta": [
+          {
+            "spatial": {
+              "px": 0.0,
+              "py": 0.0,
+              "pz": 500.0
+            },
+            "temporal": {
+              "value": 500.0
+            }
+          },
+          {
+            "spatial": {
+              "px": 0.0,
+              "py": 0.0,
+              "pz": -500.0
+            },
+            "temporal": {
+              "value": 500.0
+            }
+          }
+        ],
+        "outgoing_momenta": [
+          {
+            "spatial": {
+              "px": -299.15663460743366,
+              "py": 52.04414739886881,
+              "pz": -98.17629936432051
+            },
+            "temporal": {
+              "value": 342.73440309515684
+            }
+          },
+          {
+            "spatial": {
+              "px": -74.9659747073394,
+              "py": -12.481579189771493,
+              "pz": -81.62601829943846
+            },
+            "temporal": {
+              "value": 205.83365625259697
+            }
+          },
+          {
+            "spatial": {
+              "px": 374.12260931477306,
+              "py": -39.562568209097314,
+              "pz": 179.80231766375897
+            },
+            "temporal": {
+              "value": 451.4319406522461
+            }
+          }
+        ],
+        "weight": {
+          "im": 0.00024270390496300095,
+          "re": 0.004278320885639761
+        }
+      },
+      {
+        "additional_weights": {
+          "full multiplicative factor": {
+            "im": 0.0,
+            "re": 48343061735986340000000000000.0
+          },
+          "original": {
             "im": -0.00000000000000000000000000000000000000000000000005364985628754654,
             "re": 0.00000000000000000000000000000007907410511877888
           },
@@ -753,8 +753,8 @@ expression: snapshot
           "graph_id": 0,
           "lmb_channel_edge_ids": [
             4,
-            9,
-            11
+            8,
+            9
           ],
           "lmb_channel_id": 1,
           "orientation_id": null,
@@ -864,7 +864,7 @@ expression: snapshot
           "lmb_channel_edge_ids": [
             6,
             7,
-            11
+            9
           ],
           "lmb_channel_id": 2,
           "orientation_id": null,
@@ -948,105 +948,6 @@ expression: snapshot
             "re": 48343061735986340000000000000.0
           },
           "original": {
-            "im": 0.000000000000000000000000000000000000000000000000008220338794985165,
-            "re": 0.0000000000000000000000000000001137925904035533
-          },
-          "threshold_counterterm:0": {
-            "im": -0.0000000000000000000000000000000028133090305499653,
-            "re": -0.00000000000000000000000000000002307367550076451
-          }
-        },
-        "cut_info": {
-          "cut_id": 2,
-          "graph_group_id": 0,
-          "graph_id": 0,
-          "lmb_channel_edge_ids": [
-            6,
-            7,
-            11
-          ],
-          "lmb_channel_id": 2,
-          "orientation_id": null,
-          "particle_pdgs": [
-            [
-              -11,
-              11
-            ],
-            [
-              25,
-              6,
-              -6
-            ]
-          ]
-        },
-        "event_group_index": 0,
-        "event_index": 9,
-        "incoming_momenta": [
-          {
-            "spatial": {
-              "px": 0.0,
-              "py": 0.0,
-              "pz": 500.0
-            },
-            "temporal": {
-              "value": 500.0
-            }
-          },
-          {
-            "spatial": {
-              "px": 0.0,
-              "py": 0.0,
-              "pz": -500.0
-            },
-            "temporal": {
-              "value": 500.0
-            }
-          }
-        ],
-        "outgoing_momenta": [
-          {
-            "spatial": {
-              "px": -310.5921902327243,
-              "py": 54.03358595279417,
-              "pz": -101.9291846511173
-            },
-            "temporal": {
-              "value": 354.1210184783168
-            }
-          },
-          {
-            "spatial": {
-              "px": -59.653345878014775,
-              "py": -14.705674840691383,
-              "pz": -75.65150758262412
-            },
-            "temporal": {
-              "value": 198.56215436604742
-            }
-          },
-          {
-            "spatial": {
-              "px": 370.24553611073907,
-              "py": -39.32791111210278,
-              "pz": 177.58069223374142
-            },
-            "temporal": {
-              "value": 447.3168271556357
-            }
-          }
-        ],
-        "weight": {
-          "im": -0.00013600397214628482,
-          "re": 0.004385630103767209
-        }
-      },
-      {
-        "additional_weights": {
-          "full multiplicative factor": {
-            "im": 0.0,
-            "re": 48343061735986340000000000000.0
-          },
-          "original": {
             "im": -0.000000000000000000000000000000000000000000000000003532069061584484,
             "re": 0.00000000000000000000000000000057617438887278885
           },
@@ -1062,7 +963,7 @@ expression: snapshot
           "lmb_channel_edge_ids": [
             6,
             7,
-            11
+            9
           ],
           "lmb_channel_id": 2,
           "orientation_id": null,
@@ -1080,7 +981,7 @@ expression: snapshot
           ]
         },
         "event_group_index": 0,
-        "event_index": 10,
+        "event_index": 9,
         "incoming_momenta": [
           {
             "spatial": {
@@ -1157,6 +1058,105 @@ expression: snapshot
             "re": 48343061735986340000000000000.0
           },
           "original": {
+            "im": 0.000000000000000000000000000000000000000000000000008220338794985165,
+            "re": 0.0000000000000000000000000000001137925904035533
+          },
+          "threshold_counterterm:0": {
+            "im": 0.0000000000000000000000000000000028133090305499653,
+            "re": -0.00000000000000000000000000000002307367550076451
+          }
+        },
+        "cut_info": {
+          "cut_id": 2,
+          "graph_group_id": 0,
+          "graph_id": 0,
+          "lmb_channel_edge_ids": [
+            6,
+            7,
+            9
+          ],
+          "lmb_channel_id": 2,
+          "orientation_id": null,
+          "particle_pdgs": [
+            [
+              -11,
+              11
+            ],
+            [
+              25,
+              6,
+              -6
+            ]
+          ]
+        },
+        "event_group_index": 0,
+        "event_index": 10,
+        "incoming_momenta": [
+          {
+            "spatial": {
+              "px": 0.0,
+              "py": 0.0,
+              "pz": 500.0
+            },
+            "temporal": {
+              "value": 500.0
+            }
+          },
+          {
+            "spatial": {
+              "px": 0.0,
+              "py": 0.0,
+              "pz": -500.0
+            },
+            "temporal": {
+              "value": 500.0
+            }
+          }
+        ],
+        "outgoing_momenta": [
+          {
+            "spatial": {
+              "px": -310.5921902327243,
+              "py": 54.03358595279417,
+              "pz": -101.9291846511173
+            },
+            "temporal": {
+              "value": 354.1210184783168
+            }
+          },
+          {
+            "spatial": {
+              "px": -59.653345878014775,
+              "py": -14.705674840691383,
+              "pz": -75.65150758262412
+            },
+            "temporal": {
+              "value": 198.56215436604742
+            }
+          },
+          {
+            "spatial": {
+              "px": 370.24553611073907,
+              "py": -39.32791111210278,
+              "pz": 177.58069223374142
+            },
+            "temporal": {
+              "value": 447.3168271556357
+            }
+          }
+        ],
+        "weight": {
+          "im": 0.00013600397214628482,
+          "re": 0.004385630103767209
+        }
+      },
+      {
+        "additional_weights": {
+          "full multiplicative factor": {
+            "im": 0.0,
+            "re": 48343061735986340000000000000.0
+          },
+          "original": {
             "im": -0.000000000000000000000000000000000000000000000000008979832487518578,
             "re": 0.00000000000000000000000000000006811237997102661
           },
@@ -1172,7 +1172,7 @@ expression: snapshot
           "lmb_channel_edge_ids": [
             6,
             7,
-            11
+            9
           ],
           "lmb_channel_id": 2,
           "orientation_id": null,
@@ -1282,7 +1282,7 @@ expression: snapshot
           "lmb_channel_edge_ids": [
             4,
             7,
-            11
+            9
           ],
           "lmb_channel_id": 3,
           "orientation_id": null,
@@ -1366,105 +1366,6 @@ expression: snapshot
             "re": 48343061735986340000000000000.0
           },
           "original": {
-            "im": -0.000000000000000000000000000000000000000000000000012054607722006927,
-            "re": 0.00000000000000000000000000000015758780366963029
-          },
-          "threshold_counterterm:0": {
-            "im": -0.000000000000000000000000000000014468972480940083,
-            "re": -0.000000000000000000000000000000033100214978029785
-          }
-        },
-        "cut_info": {
-          "cut_id": 2,
-          "graph_group_id": 0,
-          "graph_id": 0,
-          "lmb_channel_edge_ids": [
-            4,
-            7,
-            11
-          ],
-          "lmb_channel_id": 3,
-          "orientation_id": null,
-          "particle_pdgs": [
-            [
-              -11,
-              11
-            ],
-            [
-              25,
-              6,
-              -6
-            ]
-          ]
-        },
-        "event_group_index": 0,
-        "event_index": 13,
-        "incoming_momenta": [
-          {
-            "spatial": {
-              "px": 0.0,
-              "py": 0.0,
-              "pz": 500.0
-            },
-            "temporal": {
-              "value": 500.0
-            }
-          },
-          {
-            "spatial": {
-              "px": 0.0,
-              "py": 0.0,
-              "pz": -500.0
-            },
-            "temporal": {
-              "value": 500.0
-            }
-          }
-        ],
-        "outgoing_momenta": [
-          {
-            "spatial": {
-              "px": -296.0463027749634,
-              "py": 52.93611940479971,
-              "pz": -93.98763626743526
-            },
-            "temporal": {
-              "value": 338.97540013326073
-            }
-          },
-          {
-            "spatial": {
-              "px": -78.79845328095966,
-              "py": -13.119673805315266,
-              "pz": -85.79897766405414
-            },
-            "temporal": {
-              "value": 208.97795732666717
-            }
-          },
-          {
-            "spatial": {
-              "px": 374.8447560559231,
-              "py": -39.816445599484446,
-              "pz": 179.7866139314894
-            },
-            "temporal": {
-              "value": 452.046642540072
-            }
-          }
-        ],
-        "weight": {
-          "im": -0.0006994744299023737,
-          "re": 0.006018111185482118
-        }
-      },
-      {
-        "additional_weights": {
-          "full multiplicative factor": {
-            "im": 0.0,
-            "re": 48343061735986340000000000000.0
-          },
-          "original": {
             "im": -0.00000000000000000000000000000000000000000000000018826990683186547,
             "re": 0.0000000000000000000000000000008012414070518315
           },
@@ -1480,7 +1381,7 @@ expression: snapshot
           "lmb_channel_edge_ids": [
             4,
             7,
-            11
+            9
           ],
           "lmb_channel_id": 3,
           "orientation_id": null,
@@ -1498,7 +1399,7 @@ expression: snapshot
           ]
         },
         "event_group_index": 0,
-        "event_index": 14,
+        "event_index": 13,
         "incoming_momenta": [
           {
             "spatial": {
@@ -1575,6 +1476,105 @@ expression: snapshot
             "re": 48343061735986340000000000000.0
           },
           "original": {
+            "im": -0.000000000000000000000000000000000000000000000000012054607722006927,
+            "re": 0.00000000000000000000000000000015758780366963029
+          },
+          "threshold_counterterm:0": {
+            "im": 0.000000000000000000000000000000014468972480940083,
+            "re": -0.000000000000000000000000000000033100214978029785
+          }
+        },
+        "cut_info": {
+          "cut_id": 2,
+          "graph_group_id": 0,
+          "graph_id": 0,
+          "lmb_channel_edge_ids": [
+            4,
+            7,
+            9
+          ],
+          "lmb_channel_id": 3,
+          "orientation_id": null,
+          "particle_pdgs": [
+            [
+              -11,
+              11
+            ],
+            [
+              25,
+              6,
+              -6
+            ]
+          ]
+        },
+        "event_group_index": 0,
+        "event_index": 14,
+        "incoming_momenta": [
+          {
+            "spatial": {
+              "px": 0.0,
+              "py": 0.0,
+              "pz": 500.0
+            },
+            "temporal": {
+              "value": 500.0
+            }
+          },
+          {
+            "spatial": {
+              "px": 0.0,
+              "py": 0.0,
+              "pz": -500.0
+            },
+            "temporal": {
+              "value": 500.0
+            }
+          }
+        ],
+        "outgoing_momenta": [
+          {
+            "spatial": {
+              "px": -296.0463027749634,
+              "py": 52.93611940479971,
+              "pz": -93.98763626743526
+            },
+            "temporal": {
+              "value": 338.97540013326073
+            }
+          },
+          {
+            "spatial": {
+              "px": -78.79845328095966,
+              "py": -13.119673805315266,
+              "pz": -85.79897766405414
+            },
+            "temporal": {
+              "value": 208.97795732666717
+            }
+          },
+          {
+            "spatial": {
+              "px": 374.8447560559231,
+              "py": -39.816445599484446,
+              "pz": 179.7866139314894
+            },
+            "temporal": {
+              "value": 452.046642540072
+            }
+          }
+        ],
+        "weight": {
+          "im": 0.0006994744299023737,
+          "re": 0.006018111185482118
+        }
+      },
+      {
+        "additional_weights": {
+          "full multiplicative factor": {
+            "im": 0.0,
+            "re": 48343061735986340000000000000.0
+          },
+          "original": {
             "im": 0.00000000000000000000000000000000000000000000000007664646706372641,
             "re": 0.00000000000000000000000000000012026135462702628
           },
@@ -1590,7 +1590,7 @@ expression: snapshot
           "lmb_channel_edge_ids": [
             4,
             7,
-            11
+            9
           ],
           "lmb_channel_id": 3,
           "orientation_id": null,
@@ -1680,10 +1680,10 @@ expression: snapshot
       }
     ]
   ],
-  "graph": "GL20",
+  "graph": "GL38",
   "integrand": "NLO",
   "integrand_result": {
-    "im": -0.000000000000000000000000000004502592811820878,
+    "im": 0.000000000000000000000000000004502592811820878,
     "re": -0.000000000000000000000000000014716101189714316
   },
   "integrator_weight": 1.0,
