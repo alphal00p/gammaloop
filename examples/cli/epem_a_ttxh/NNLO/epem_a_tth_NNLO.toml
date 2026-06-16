@@ -13,18 +13,17 @@ name = "generate_diagrams"
 #      --select-graphs GL30
 # --loop-momentum-bases GL26=2,4,11
 #	  --select-graphs GL06
-#      --global-prefactor-num "1𝑖"
+# Historical --global-prefactor-num "1𝑖" is superseded by the physical LU convention.
 commands = [
   "import model sm-default.json",
   "set global kv global.n_cores.feyngen=10",
 
   "remove processes",
-  #    --global-prefactor-num "-1" 
+  # Historical --global-prefactor-num "-1" is likewise unnecessary.
   """generate xs e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states true
       -p epem_a_tth -i NNLO
-      --global-prefactor-num "1𝑖"
       --only-diagrams""",
   #"select -p epem_a_tth -i NNLO --amplitude-graphs --without-raised-propagator-signatures ANY_RAISING --without-raised-cuts-signatures ANY_RAISING",
   "select -p epem_a_tth -i NNLO --amplitude-graphs --without-raised-propagator-signatures ANY_RAISING --without-raised-cuts-signatures ANY_RAISING --without-graph-names GL168 GL568 GL592 GL648 GL672 GL673 GL677",

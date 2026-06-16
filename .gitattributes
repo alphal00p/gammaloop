@@ -1,2 +1,3 @@
+# Compiled documents are binary artifacts; their Typst sources carry the text diff.
 *.pdf binary
 crates/linnet-py/vendor/typst-packages/** -whitespace
