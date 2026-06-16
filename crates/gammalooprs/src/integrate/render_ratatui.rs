@@ -20,7 +20,8 @@ use super::{
     display::{StyledText, TextColor, TextStyle},
     status_update::{
         ComponentKind, ContributionKind, ContributionSortMode, MainResultsRow,
-        MainResultsRowGroupKind, MainTableSlotCells, StatisticsMixSegment, StatisticsScope,
+        MainResultsRowGroupKind, MainTableSlotCells, StatisticsMedianEntry, StatisticsMixSegment,
+        StatisticsScope,
     },
 };
 
@@ -1446,12 +1447,14 @@ impl RatatuiDashboardState {
             layout[1],
             &statistics.timing_title(statistics_scope),
             &statistics.timing_mix_segments(statistics_scope),
+            None,
         );
         self.draw_mix_panel(
             frame,
             layout[2],
             &statistics.precision_title(statistics_scope),
             &statistics.precision_mix_segments(statistics_scope),
+            Some(&statistics.numerical_stability_median_entries(statistics_scope)),
         );
     }
 
@@ -1905,8 +1908,10 @@ impl RatatuiDashboardState {
             Span::raw(" 1/2/3 or <- ->  "),
             Span::styled("Integrand", label_style()),
             Span::raw(" [ / ]  "),
+            Span::styled("Scope", label_style()),
+            Span::raw(" i  "),
             Span::styled("Bins", label_style()),
-            Span::raw(" j/k  "),
+            Span::raw(" j/k or Up/Down  "),
             Span::styled("Metrics", label_style()),
             Span::raw(" r c w  "),
             Span::styled("Phase", label_style()),
@@ -1921,7 +1926,7 @@ impl RatatuiDashboardState {
             Span::styled("Y-axis", label_style()),
             Span::raw(format!(" , . 0 (±{}σ)  ", self.chart_y_sigma_span)),
             Span::styled("Help", label_style()),
-            Span::raw(" ?  "),
+            Span::raw(" ?/Esc  "),
             Span::styled("Abort", label_style()),
             Span::raw(format!(" x / Ctrl-C   training {phase}")),
         ]))
@@ -1964,17 +1969,30 @@ impl RatatuiDashboardState {
         area: Rect,
         title: &StyledText,
         segments: &[StatisticsMixSegment],
+        median_entries: Option<&[StatisticsMedianEntry]>,
     ) {
         let block = titled_block_styled(title);
+        let has_median_line = median_entries.is_some_and(|entries| !entries.is_empty());
         let inner = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Length(1),
-            ])
+            .constraints(if has_median_line {
+                vec![
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                ]
+            } else {
+                vec![
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                ]
+            })
             .split(block.inner(area));
         frame.render_widget(block, area);
         frame.render_widget(Paragraph::new(""), inner[0]);
@@ -2014,7 +2032,16 @@ impl RatatuiDashboardState {
                 );
             }
         }
-        frame.render_widget(Paragraph::new(""), inner[4]);
+        if let Some(entries) = median_entries.filter(|entries| !entries.is_empty()) {
+            frame.render_widget(
+                Paragraph::new(numerical_stability_median_line(entries))
+                    .alignment(Alignment::Center),
+                inner[4],
+            );
+            frame.render_widget(Paragraph::new(""), inner[5]);
+        } else {
+            frame.render_widget(Paragraph::new(""), inner[4]);
+        }
     }
 
     fn discrete_rows(&self) -> Vec<DiscreteRowRef<'_>> {
@@ -2389,6 +2416,22 @@ fn abbreviate_count(value: usize) -> String {
     super::display::format_abbreviated_count(value)
 }
 
+fn numerical_stability_median_line(entries: &[StatisticsMedianEntry]) -> Line<'static> {
+    let mut spans = vec![Span::raw("stability: ")];
+    for (index, entry) in entries.iter().enumerate() {
+        if index > 0 {
+            spans.push(Span::raw("   "));
+        }
+        spans.extend(spans_from_styled_text(&entry.label));
+        spans.push(Span::raw(": "));
+        spans.extend(spans_from_styled_text(&entry.value));
+        spans.push(Span::raw(" ("));
+        spans.extend(spans_from_styled_text(&entry.processed_percentage));
+        spans.push(Span::raw(")"));
+    }
+    Line::from(spans)
+}
+
 fn mix_bar_line(segments: &[StatisticsMixSegment], width: usize) -> Line<'static> {
     let bar_width = width.max(8);
     let mut spans = Vec::new();
@@ -2473,4 +2516,42 @@ fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
         ])
         .split(popup_layout[1])[1]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn plain_line(line: Line<'static>) -> String {
+        line.spans
+            .into_iter()
+            .map(|span| span.content.into_owned())
+            .collect::<String>()
+    }
+
+    #[test]
+    fn numerical_stability_line_shows_processed_percentages() {
+        let line = numerical_stability_median_line(&[
+            StatisticsMedianEntry {
+                label: StyledText::plain("f64"),
+                value: StyledText::plain("2.4e-16"),
+                processed_percentage: StyledText::plain("12.34%"),
+            },
+            StatisticsMedianEntry {
+                label: StyledText::plain("f128"),
+                value: StyledText::plain("1.3e-26"),
+                processed_percentage: StyledText::plain("1.23e-3%"),
+            },
+            StatisticsMedianEntry {
+                label: StyledText::plain("arb"),
+                value: StyledText::plain("N/A"),
+                processed_percentage: StyledText::plain("0.00%"),
+            },
+        ]);
+
+        assert_eq!(
+            plain_line(line),
+            "stability: f64: 2.4e-16 (12.34%)   f128: 1.3e-26 (1.23e-3%)   arb: N/A (0.00%)"
+        );
+    }
 }

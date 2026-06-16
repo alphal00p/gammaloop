@@ -999,15 +999,7 @@ impl Integrate {
 
     fn default_workspace_path(&self, global_cli_settings: &CLISettings) -> PathBuf {
         if global_cli_settings.session.read_only_state {
-            let workspace_name = global_cli_settings
-                .state
-                .name
-                .as_deref()
-                .map(str::trim)
-                .filter(|name| !name.is_empty())
-                .map(|name| format!("integration_workspace_{name}"))
-                .unwrap_or_else(|| "integration_workspace".to_string());
-            PathBuf::from(".").join(workspace_name)
+            global_cli_settings.cwd_output_path_with_state_name("integration_workspace")
         } else {
             global_cli_settings
                 .state

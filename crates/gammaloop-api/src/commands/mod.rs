@@ -8,13 +8,14 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    completion::CompletionArgExt,
-    state::{CommandHistory, ProcessRef, RunHistory, State},
+    state::{CommandHistory, RunHistory, State},
     CLISettings,
 };
 use symbolica::atom::Atom;
 pub mod approach;
 pub use approach::Approach;
+pub mod bench;
+pub use bench::Bench;
 pub mod commands_block;
 pub use commands_block::StartCommandsBlock;
 pub mod display;
@@ -128,31 +129,7 @@ pub enum Commands {
     Renormalize(Renormalize),
 
     /// Benchmark raw integrand evaluation speed
-    Bench {
-        /// Number of random samples to evaluate
-        #[arg(short = 's', long, value_name = "SAMPLES")]
-        samples: usize,
-        /// Process reference: #<id>, name:<name>, or <id>/<name>
-        #[arg(
-            short = 'p',
-            long = "process",
-            value_name = "PROCESS",
-            completion_process_selector(crate::completion::SelectorKind::Any)
-        )]
-        process: ProcessRef,
-
-        /// The integrand name to benchmark
-        #[arg(
-            short = 'i',
-            long = "integrand-name",
-            value_name = "NAME",
-            completion_integrand_selector(crate::completion::SelectorKind::Any)
-        )]
-        integrand_name: String,
-        /// Number of cores to parallelize over
-        #[arg(short = 'c', long)]
-        n_cores: usize,
-    },
+    Bench(Bench),
     #[clap(subcommand)]
     Profile(Profile),
 
@@ -198,19 +175,25 @@ impl Commands {
                 return Ok(CommandExecution::break_with(s));
             }
             Commands::Inspect(inspect) => {
+                if let Some(path) = &inspect.json_output {
+                    global_cli_settings.ensure_write_target_outside_active_state(
+                        path,
+                        "write inspect JSON output",
+                    )?;
+                }
                 let _ = inspect.run(state)?;
             }
             Commands::Approach(approach) => {
                 let _ = approach.run(state, global_cli_settings)?;
             }
-            Commands::Bench {
-                samples,
-                process,
-                integrand_name,
-                n_cores,
-            } => {
-                let process_id = process.resolve(&state.process_list)?;
-                state.bench(samples, process_id, integrand_name, n_cores)?;
+            Commands::Bench(bench) => {
+                if let Some(path) = &bench.json_output {
+                    global_cli_settings.ensure_write_target_outside_active_state(
+                        path,
+                        "write benchmark JSON output",
+                    )?;
+                }
+                bench.run(state)?;
             }
             Commands::Import(s) => s.run(state, global_cli_settings)?,
             Commands::Save(s) => s.run(
@@ -306,7 +289,9 @@ impl Commands {
 
 #[cfg(test)]
 mod tests {
-    use super::Commands;
+    use std::path::PathBuf;
+
+    use super::{Bench, Commands, Inspect};
     use crate::{
         commands::generate::{Generate, GenerateCmd, ProcessArgs},
         state::{ProcessRef, RunHistory, State},
@@ -468,5 +453,66 @@ mod tests {
         .unwrap_err();
 
         assert!(format!("{err:?}").contains("--read-only-state"));
+    }
+
+    #[test]
+    fn inspect_rejects_json_output_inside_read_only_state_before_integrand_lookup() {
+        let mut state = State::new_test();
+        let mut run_history = RunHistory::default();
+        let mut cli_settings = CLISettings::default();
+        let mut runtime_settings = RuntimeSettings::default();
+        cli_settings.state.folder = PathBuf::from("/tmp/read_only_state");
+        cli_settings.session.read_only_state = true;
+
+        let err = Commands::Inspect(Inspect {
+            point: vec![0.1, 0.2],
+            json_output: Some(PathBuf::from("/tmp/read_only_state/inspect.json")),
+            ..Inspect::default()
+        })
+        .run(
+            &mut state,
+            &mut run_history,
+            &mut cli_settings,
+            &mut runtime_settings,
+        )
+        .unwrap_err();
+
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("Cannot write inspect JSON output"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("--read-only-state"), "{rendered}");
+    }
+
+    #[test]
+    fn bench_rejects_json_output_inside_read_only_state_before_integrand_lookup() {
+        let mut state = State::new_test();
+        let mut run_history = RunHistory::default();
+        let mut cli_settings = CLISettings::default();
+        let mut runtime_settings = RuntimeSettings::default();
+        cli_settings.state.folder = PathBuf::from("/tmp/read_only_state");
+        cli_settings.session.read_only_state = true;
+
+        let err = Commands::Bench(Bench {
+            point: vec![0.1, 0.2],
+            duration: "1ms".to_string(),
+            json_output: Some(PathBuf::from("/tmp/read_only_state/bench.json")),
+            ..Bench::default()
+        })
+        .run(
+            &mut state,
+            &mut run_history,
+            &mut cli_settings,
+            &mut runtime_settings,
+        )
+        .unwrap_err();
+
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("Cannot write benchmark JSON output"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("--read-only-state"), "{rendered}");
     }
 }

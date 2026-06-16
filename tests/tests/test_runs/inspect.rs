@@ -1,5 +1,10 @@
 use super::utils::*;
 use super::*;
+use std::fs;
+
+use gammalooprs::settings::runtime::{
+    RotationSetting, StabilityLevelSetting, StabilityRecordingSettings,
+};
 
 #[test]
 fn inspect_x_space_reports_invalid_coordinate_count_cleanly() -> Result<()> {
@@ -26,6 +31,119 @@ fn inspect_x_space_reports_invalid_coordinate_count_cleanly() -> Result<()> {
         rendered.contains("Expected 3 x-space coordinates for this integrand selection, got 2."),
         "{rendered}"
     );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn bench_cli_profiles_fixed_scalar_triangle_point_and_restores_settings() -> Result<()> {
+    let mut cli = setup_scalar_topologies_cli("bench_cli_fixed_scalar_triangle")?;
+    let point = default_xspace_point_for(&cli, "triangle", "scalar_tri")?;
+    let point_arg = point.iter().map(|entry| format!("{entry:.17e}")).join(" ");
+    let normal_json_path = cli.cli_settings.state.folder.join("inspect_normal.json");
+    let bench_json_path = cli.cli_settings.state.folder.join("bench.json");
+
+    cli.run_command(&format!(
+        "inspect -p triangle -i scalar_tri -x {point_arg} --json-output {}",
+        normal_json_path.display()
+    ))?;
+    let normal_json: serde_json::Value = serde_json::from_slice(&fs::read(&normal_json_path)?)?;
+    assert!(normal_json.get("evaluation").is_some(), "{normal_json:#}");
+
+    let process_ref = ProcessRef::Unqualified("triangle".to_string());
+    let integrand_ref = "scalar_tri".to_string();
+    let (process_id, integrand_name) =
+        cli.find_integrand_ref(Some(&process_ref), Some(&integrand_ref))?;
+    let original_settings = {
+        let integrand = cli
+            .process_list
+            .get_integrand_mut(process_id, &integrand_name)?;
+        let settings = integrand.get_mut_settings();
+        settings.general.enable_cache = true;
+        settings.general.debug_cache = true;
+        settings.general.generate_events = true;
+        settings.general.store_additional_weights_in_event = true;
+        settings.stability.rotation_axis = vec![RotationSetting::Pi2X {}];
+        settings.stability.levels = vec![
+            StabilityLevelSetting::default_double(),
+            StabilityLevelSetting::default_quad(),
+            StabilityLevelSetting::default_arb(),
+        ];
+        settings.stability.recording = Some(StabilityRecordingSettings {
+            record_rotated_results: true,
+            record_all_stability_levels: true,
+            record_loop_momenta_escalation: true,
+        });
+        settings.clone()
+    };
+
+    cli.run_command(&format!(
+        "bench -p triangle -i scalar_tri -x {point_arg} --duration 0.001 --n-batches 2 --minimal-integrand --json-output {}",
+        bench_json_path.display()
+    ))?;
+    let bench_json: serde_json::Value = serde_json::from_slice(&fs::read(&bench_json_path)?)?;
+    assert_eq!(bench_json["n_batches"], 2);
+    assert_eq!(bench_json["minimal_integrand"], true);
+    let summary = bench_json["summary"]
+        .as_array()
+        .expect("bench JSON should contain summary rows");
+    assert!(
+        summary
+            .iter()
+            .any(|row| row["category"].as_str() == Some("Total")),
+        "{bench_json:#}"
+    );
+    let restored_settings = cli
+        .process_list
+        .get_integrand_mut(process_id, &integrand_name)?
+        .get_settings()
+        .clone();
+    assert_eq!(restored_settings, original_settings);
+
+    let value = inspect_xspace_process(&mut cli, "triangle", "scalar_tri", &point)?;
+    assert!(value.re.is_finite() && value.im.is_finite());
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn integrate_writes_numerical_stability_histograms_for_scalar_triangle() -> Result<()> {
+    let mut cli = setup_scalar_topologies_cli("integrate_numerical_stability_histograms")?;
+    cli.run_command(
+        "set process -p triangle -i scalar_tri kv integrator.n_start=2 integrator.min_samples_for_update=2 integrator.n_max=2 integrator.n_increase=0",
+    )?;
+
+    let workspace = get_tests_workspace_path()
+        .join("integrate_numerical_stability_histograms")
+        .join("integration_workspace");
+    Integrate {
+        process: vec![ProcessRef::Unqualified("triangle".to_string())],
+        integrand_name: vec!["scalar_tri".to_string()],
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let stability_dir = workspace.join("numerical_stability");
+    assert!(stability_dir.join("global.json").exists());
+    assert!(stability_dir.join("global.hwu").exists());
+    assert!(stability_dir.join("triangle@scalar_tri.json").exists());
+    assert!(stability_dir.join("triangle@scalar_tri.hwu").exists());
+
+    let global_bundle = gammalooprs::observables::ObservableSnapshotBundle::from_json_file(
+        stability_dir.join("global.json"),
+    )?;
+    for key in ["Double", "Quad", "ArbPrec"] {
+        assert!(
+            global_bundle.histograms.contains_key(key),
+            "missing numerical stability histogram {key}"
+        );
+    }
 
     clean_test(&cli.cli_settings.state.folder);
     Ok(())

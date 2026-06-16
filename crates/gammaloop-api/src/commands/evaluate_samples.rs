@@ -83,7 +83,7 @@ impl<'a> EvaluateSamples<'a> {
                     }
                 }
 
-                let samples = if self.momentum_space {
+                let raw_batch = if self.momentum_space {
                     let inputs = build_momentum_inputs(
                         integrand,
                         &self.points,
@@ -92,9 +92,11 @@ impl<'a> EvaluateSamples<'a> {
                         &graph_names,
                         &orientations,
                     )?;
-                    integrand
-                        .evaluate_momentum_configurations_raw(&model, &inputs, self.use_arb_prec)?
-                        .samples
+                    integrand.evaluate_momentum_configurations_raw(
+                        &model,
+                        &inputs,
+                        self.use_arb_prec,
+                    )?
                 } else {
                     let samples = build_havana_samples(
                         integrand,
@@ -102,36 +104,38 @@ impl<'a> EvaluateSamples<'a> {
                         &integrator_weights,
                         self.discrete_dims.as_ref(),
                     )?;
-                    integrand
-                        .evaluate_samples_raw(
-                            &model,
-                            &samples,
-                            1,
-                            self.use_arb_prec,
-                            false,
-                            Complex::new_zero(),
-                        )?
-                        .samples
+                    integrand.evaluate_samples_raw(
+                        &model,
+                        &samples,
+                        1,
+                        self.use_arb_prec,
+                        false,
+                        Complex::new_zero(),
+                    )?
                 };
 
                 let observables = integrand
                     .observable_snapshot_bundle()
                     .unwrap_or_else(ObservableSnapshotBundle::default);
 
-                Ok((samples, observables))
+                Ok((raw_batch, observables))
             },
         );
 
-        let (samples, observables) = run_result?;
+        let (raw_batch, observables) = run_result?;
+        let numerical_stability =
+            (!self.minimal_output).then(|| raw_batch.statistics.numerical_stability_snapshot());
 
         Ok(BatchSampleEvaluationResult {
-            samples: samples
+            samples: raw_batch
+                .samples
                 .into_iter()
                 .map(|evaluation| SampleEvaluationResult {
                     evaluation: evaluation.into_output(self.minimal_output),
                 })
                 .collect(),
             observables,
+            numerical_stability,
         })
     }
 }

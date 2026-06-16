@@ -66,6 +66,11 @@ impl Evaluate {
         global_cli_settings: &CLISettings,
         default_runtime_settings: &RuntimeSettings,
     ) -> Result<Atom> {
+        if let Some(path) = &self.result_path {
+            global_cli_settings
+                .ensure_write_target_outside_active_state(path, "write evaluation result")?;
+        }
+
         let (process_id, integrand_name) =
             state.find_integrand_ref(self.process.as_ref(), self.graphs_group_name.as_ref())?;
 
@@ -177,5 +182,36 @@ impl Evaluate {
         }
 
         Ok(full_evaluation)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Evaluate;
+    use crate::{state::State, CLISettings};
+    use gammalooprs::settings::RuntimeSettings;
+    use std::path::PathBuf;
+
+    #[test]
+    fn evaluate_rejects_result_path_inside_read_only_state() {
+        let mut cli_settings = CLISettings::default();
+        cli_settings.state.folder = PathBuf::from("/tmp/read_only_state");
+        cli_settings.session.read_only_state = true;
+
+        let err = Evaluate {
+            process: None,
+            graphs_group_name: None,
+            result_path: Some(PathBuf::from("/tmp/read_only_state/result.toml")),
+            numerical: false,
+            number_of_terms_in_epsilon_expansion: None,
+        }
+        .run(
+            &mut State::new_test(),
+            &cli_settings,
+            &RuntimeSettings::default(),
+        )
+        .unwrap_err();
+
+        assert!(format!("{err:?}").contains("--read-only-state"));
     }
 }

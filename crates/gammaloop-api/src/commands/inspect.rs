@@ -1,4 +1,7 @@
+use std::{fs, path::PathBuf};
+
 use clap::Args;
+use color_eyre::eyre::Context;
 use colored::Colorize;
 use ndarray::Array2;
 use schemars::JsonSchema;
@@ -75,6 +78,11 @@ pub struct Inspect {
         conflicts_with = "discrete_dim"
     )]
     pub orientation_id: Option<usize>,
+
+    /// Write the inspection result as pretty JSON to this path.
+    #[arg(long = "json-output", value_name = "PATH")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub json_output: Option<PathBuf>,
 }
 
 impl Inspect {
@@ -165,6 +173,7 @@ impl Inspect {
                     .map(|orientation| vec![Some(orientation)]),
             },
         )?;
+        self.write_json_output(&result.sample)?;
         let evaluation = &result.sample.evaluation;
 
         let raw_result = evaluation.integrand_result;
@@ -214,5 +223,27 @@ impl Inspect {
         }
 
         Ok((jacobian, displayed_result.map(|entry| entry.0)))
+    }
+
+    fn write_json_output<T: Serialize>(&self, value: &T) -> Result<()> {
+        let Some(path) = self.json_output.as_deref() else {
+            return Ok(());
+        };
+        let path = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            std::env::current_dir()?.join(path)
+        };
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Could not create {}", parent.display()))?;
+        }
+        fs::write(&path, serde_json::to_vec_pretty(value)?)
+            .with_context(|| format!("Could not write inspect JSON output {}", path.display()))?;
+        info!(
+            "Wrote inspect JSON output to {}",
+            path.display().to_string().green()
+        );
+        Ok(())
     }
 }

@@ -219,7 +219,7 @@ impl Profile {
     pub fn run(
         &self,
         state: &mut State,
-        _global_cli_settings: &CLISettings,
+        global_cli_settings: &CLISettings,
     ) -> Result<ProfileResult> {
         match self {
             Profile::UltraViolet(UltraVioletProfile {
@@ -352,6 +352,8 @@ impl Profile {
                 }
 
                 if let Some(file) = output_file {
+                    global_cli_settings
+                        .ensure_write_target_outside_active_state(file, "write profile output")?;
                     profile_res.write_profile_data(file)?
                 }
 
