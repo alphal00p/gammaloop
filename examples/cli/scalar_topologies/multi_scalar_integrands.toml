@@ -9,6 +9,8 @@ commands = [
   #"run integrate_box_below_threshold",  
   #"run integrate_box_above_threshold",
   #"run integrate_triangle_and_box_below_threshold",
+  #"run uv_profile_sunrise_2loop_dod2",
+  #"run integrate_sunrise_2loop_dod2_muv_independence",
   "run integrate_box_above_and_below_threshold",
   "quit -n"
 ]
@@ -30,10 +32,24 @@ commands = [
 	"generate",
     "duplicate integrand -p triangle -i scalar_tri_below_thres --output_process_name triangle --output_integrand_name scalar_tri_above_thres",
     "duplicate integrand -p box -i scalar_box_below_thres --output_process_name box --output_integrand_name scalar_box_above_thres",
+
+    "set global kv global.generation.uv.generate_integrated=true",
+    "import graphs ./examples/cli/scalar_topologies/sunrise_2loop_dod2.dot -p sunrise_2loop_dod2 -i scalar_sunrise_below_thres",
+    "generate existing -p sunrise_2loop_dod2 -i scalar_sunrise_below_thres",
+    "set global kv global.generation.uv.generate_integrated=false",
+    "import graphs ./examples/cli/scalar_topologies/sunrise_2loop_dod2.dot -p sunrise_2loop_dod2_no_integrated_UV -i scalar_sunrise_below_thres",
+    "generate existing -p sunrise_2loop_dod2_no_integrated_UV -i scalar_sunrise_below_thres",
+    "duplicate integrand -p sunrise_2loop_dod2 -i scalar_sunrise_below_thres --output_process_name sunrise_2loop_dod2 --output_integrand_name scalar_sunrise_below_thres_muv3",
+    "duplicate integrand -p sunrise_2loop_dod2_no_integrated_UV -i scalar_sunrise_below_thres --output_process_name sunrise_2loop_dod2_no_integrated_UV --output_integrand_name scalar_sunrise_below_thres_muv3",
     "save dot",
     "save standalone",
 
+    "set model mass_scalar_1=1.0",
     "set model mass_scalar_2=2.0",
+
+	"set process kv general.mu_r=3.0 general.m_uv=7.0",
+	"set process -p sunrise_2loop_dod2 -i scalar_sunrise_below_thres_muv3 kv general.m_uv=3.0",
+	"set process -p sunrise_2loop_dod2_no_integrated_UV -i scalar_sunrise_below_thres_muv3 kv general.m_uv=3.0",
 
     """set process -p triangle -i scalar_tri_below_thres string '
 [kinematics.externals]
@@ -103,6 +119,36 @@ helicities = [
     0,
 	0,
 	0,
+	0,
+]
+    '""",
+
+	"""set process -p sunrise_2loop_dod2 string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [1.0, 0.0, 0.0,  0.0],
+    "dependent"
+]
+helicities = [
+    0,
+	0,
+]
+    '""",
+
+	"""set process -p sunrise_2loop_dod2_no_integrated_UV string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [1.0, 0.0, 0.0,  0.0],
+    "dependent"
+]
+helicities = [
+    0,
 	0,
 ]
     '""",
@@ -283,6 +329,56 @@ commands = [
 				 --show-phase both
 				 --show-max-weight-info
 				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+                 --restart
+	    """,
+]
+
+[[command_blocks]]
+name = "uv_profile_sunrise_2loop_dod2"
+commands = [
+    "profile ultra-violet -p sunrise_2loop_dod2 -i scalar_sunrise_below_thres --n-points 100 --min-scaling 4 --max-scaling 5 --per-orientation",
+    "profile ultra-violet -p sunrise_2loop_dod2_no_integrated_UV -i scalar_sunrise_below_thres --n-points 100 --min-scaling 4 --max-scaling 5 --per-orientation",
+]
+
+[[command_blocks]]
+name = "integrate_sunrise_2loop_dod2_muv_independence"
+commands = [
+
+	"""set process -p sunrise_2loop_dod2 string '
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "monte_carlo"
+    lmb_multichanneling = false
+    lmb_channels = "summed"
+    coordinate_system = "spherical"
+    mapping = "linear"
+    b = 1.0
+    '""",
+
+	"""set process -p sunrise_2loop_dod2_no_integrated_UV string '
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "monte_carlo"
+    lmb_multichanneling = false
+    lmb_channels = "summed"
+    coordinate_system = "spherical"
+    mapping = "linear"
+    b = 1.0
+    '""",
+
+    "set process -p sunrise_2loop_dod2 kv integrator.target_relative_accuracy=0.005 integrator.target_absolute_accuracy=1.0e-8",
+    "set process -p sunrise_2loop_dod2 kv integrator.n_increase=0 integrator.n_start=200000 integrator.n_max=200000 integrator.seed=1337",
+    "set process -p sunrise_2loop_dod2_no_integrated_UV kv integrator.target_relative_accuracy=0.005 integrator.target_absolute_accuracy=1.0e-8",
+    "set process -p sunrise_2loop_dod2_no_integrated_UV kv integrator.n_increase=0 integrator.n_start=200000 integrator.n_max=200000 integrator.seed=1337",
+
+	"""integrate -p sunrise_2loop_dod2 -i scalar_sunrise_below_thres
+                 -p sunrise_2loop_dod2 -i scalar_sunrise_below_thres_muv3
+                 -p sunrise_2loop_dod2_no_integrated_UV -i scalar_sunrise_below_thres
+                 -p sunrise_2loop_dod2_no_integrated_UV -i scalar_sunrise_below_thres_muv3
+                 --n-cores 1
+				 --batch-size 10000
+				 --show-phase both
 				 --show-discrete-contributions-sum
                  --restart
     """,
