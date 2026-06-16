@@ -498,6 +498,10 @@ pub struct UVgenerationSettings {
     /// Dimensional representation used for the final locally subtracted integrand.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub final_integrand: FinalIntegrandDimension,
+    /// Construct local counterterms by Taylor-expanding 4D integrands before CFF projection.
+    /// Requires an explicit sum over all generated orientations.
+    #[serde(skip_serializing_if = "is_false")]
+    pub local_uv_cts_from_expanded_4d_integrands: bool,
     /// Insert explicit marker functions around generated ultraviolet counterterms.
     #[serde(skip_serializing_if = "is_false")]
     pub add_marker: bool,
@@ -525,6 +529,7 @@ impl Default for UVgenerationSettings {
             generate_integrated: true,
             subtract_uv: true,
             final_integrand: FinalIntegrandDimension::default(),
+            local_uv_cts_from_expanded_4d_integrands: false,
             inner_products: true,
             orchestrator: UVOrchestrator::default(),
             add_marker: false,

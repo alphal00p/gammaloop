@@ -1,6 +1,8 @@
 use std::{cell::RefCell, collections::BTreeSet, ops::Deref};
 
 use ahash::{AHashMap, AHashSet};
+use color_eyre::Result;
+use eyre::eyre;
 use idenso::shorthands::schoonschip::Schoonschip;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
@@ -275,6 +277,20 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     }
 
     fn compute_dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> i32;
+
+    /// Degree of divergence of the simultaneous loop-energy integrations.
+    ///
+    /// The existing UV DOD already contains the numerator and denominator
+    /// scaling. Replacing the four-dimensional measure by one energy measure
+    /// per loop therefore amounts to subtracting three powers per loop.
+    fn compute_energy_dod<E, V, H, S>(&self, subgraph: &S) -> i32
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+        S: SubGraphLike<Base = SuBitGraph> + SubSetOps,
+    {
+        self.compute_dod(subgraph) - 3 * self.n_loops(subgraph) as i32
+    }
+
     fn local_dod<S: SubGraphLike>(&self, subgraph: &S) -> i32;
 
     fn spinneys<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
@@ -330,6 +346,63 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
 impl AsRef<HedgeGraph<Edge, Vertex, HedgeData>> for Graph {
     fn as_ref(&self) -> &HedgeGraph<Edge, Vertex, HedgeData> {
         &self.underlying
+    }
+}
+
+impl Graph {
+    /// Reject source integrals whose loop-energy contours do not vanish at
+    /// infinity. Check the existing unpruned cycle-union inventory so this
+    /// source-level contract does not depend on UV-spinney pruning.
+    pub(crate) fn ensure_energy_convergent_cycles<S>(&self, domain: &S) -> Result<()>
+    where
+        S: SubGraphLike<Base = SuBitGraph>,
+    {
+        let numerator = self.production_numerator_atom_for_full_3d_expression();
+        if numerator.is_zero() {
+            return Ok(());
+        }
+        let mut failures = self
+            .all_cycle_unions(domain)
+            .into_iter()
+            .filter(|cycle| !cycle.is_empty())
+            .filter_map(|cycle| {
+                let loop_count = self.n_loops(&cycle.filter);
+                // `compute_dod` deliberately covers only the edge and vertex
+                // rules used by UV classification. Source convergence instead
+                // sees the complete factorized production numerator, including
+                // graph-global factors and momentum dependence stored outside
+                // this cycle. The production helper excludes initial-cut
+                // factors without changing UV DOD semantics or expanding the
+                // numerator.
+                let lmb = self.lmb_of(&cycle.filter);
+                let integrand = &numerator / self.denominator(&cycle.filter, |_| 1);
+                let four_d_dod = self
+                    .uv_rescaled(cycle.filter.included(), loop_count, &lmb, &lmb, &integrand)
+                    .trailing_exponent();
+                // The rescaled source already contains the four-dimensional
+                // loop measure; retain one energy measure per loop instead.
+                let energy_dod = four_d_dod - 3 * loop_count as i32;
+                (energy_dod >= 0)
+                    .then(|| (cycle.string_label(), loop_count, four_d_dod, energy_dod))
+            })
+            .collect::<Vec<_>>();
+        failures.sort();
+
+        if failures.is_empty() {
+            return Ok(());
+        }
+
+        let details = failures
+            .into_iter()
+            .map(|(cycle, loop_count, four_d_dod, energy_dod)| {
+                format!("cycle {cycle}: L={loop_count}, DOD_4D={four_d_dod}, DOD_E={energy_dod}")
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        Err(eyre!(
+            "graph `{}` contains a loop-energy nonconvergent integral ({details}); expected DOD_E < 0 for every cycle union",
+            self.name,
+        ))
     }
 }
 
@@ -420,7 +493,7 @@ impl UltravioletGraph for Graph {
             .unwrap()
             / self.denominator(subgraph, |_| 1);
         let nloops: usize = self.n_loops(subgraph);
-        self.uv_rescaled(subgraph.included(), nloops, &lmb, &integrand)
+        self.uv_rescaled(subgraph.included(), nloops, &lmb, &lmb, &integrand)
             .trailing_exponent()
     }
 

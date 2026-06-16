@@ -866,7 +866,7 @@ mod tests {
     use super::*;
     use crate::{
         cff::{
-            cff_graph::VertexSet,
+            VertexSet,
             esurface::{Esurface, EsurfaceExistence, EsurfaceID},
         },
         dot,

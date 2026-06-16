@@ -31,7 +31,10 @@ use crate::{
     integrands::process::ProcessIntegrand,
     numerator::GlobalPrefactor,
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
-    uv::export::{UVForestExportSettings, sanitize_file_component},
+    uv::{
+        approx::OrientationProjection,
+        export::{UVForestExportSettings, sanitize_file_component},
+    },
 };
 use eyre::{Context, eyre};
 
@@ -879,8 +882,67 @@ impl Process {
         })?;
 
         for &graph_id in graph_ids {
-            let export =
-                integrand.export_uv_forest_graph(graph_id, generation_settings, settings)?;
+            let source = if settings.computed {
+                let (graph, expression) = match &self.collection {
+                    ProcessCollection::Amplitudes(amplitudes) => {
+                        let source = amplitudes[&resolved.canonical_name]
+                            .graphs
+                            .get(graph_id)
+                            .ok_or_else(|| eyre!("Missing source amplitude graph {graph_id}"))?;
+                        (&source.graph, source.derived_data.cff_expression.as_ref())
+                    }
+                    ProcessCollection::CrossSections(cross_sections) => {
+                        let source = cross_sections[&resolved.canonical_name]
+                            .supergraphs
+                            .get(graph_id)
+                            .ok_or_else(|| {
+                                eyre!("Missing source cross-section graph {graph_id}")
+                            })?;
+                        (
+                            &source.graph,
+                            source.derived_data.global_cff_expression.as_ref(),
+                        )
+                    }
+                };
+                // Generation and persistent selection preserve graph order;
+                // reject stale runtime metadata instead of pairing a different
+                // graph with this stored production residue map.
+                if integrand.graph_name_by_id(graph_id) != Some(graph.name.as_str()) {
+                    return Err(eyre!(
+                        "Source/runtime graph mismatch for computed UV forest export at id {graph_id}"
+                    ));
+                }
+                Some((
+                    graph,
+                    expression.ok_or_else(|| {
+                        eyre!(
+                            "Graph {} has no stored production CFF for computed UV forest export",
+                            graph.name
+                        )
+                    })?,
+                ))
+            } else {
+                None
+            };
+            let cff_options = source
+                .map(|(graph, _)| graph.production_cff_3d_expression_options(generation_settings))
+                .transpose()?;
+            let orientation = source
+                .zip(cff_options.as_ref())
+                .map(|((_, expression), options)| {
+                    OrientationProjection::exact_expression(
+                        expression,
+                        options,
+                        &generation_settings.orientation_pattern,
+                        generation_settings.explicit_orientation_sum_only,
+                    )
+                });
+            let export = integrand.export_uv_forest_graph(
+                graph_id,
+                orientation,
+                generation_settings,
+                settings,
+            )?;
             let graph_name = sanitize_file_component(&export.graph_name);
             let forest_path = integrand_path.join(format!("{graph_name}.forest.dot"));
             let mut forest_file = create_overwriting_file(&forest_path, "UV forest")?;
@@ -1232,6 +1294,7 @@ mod tests {
     };
 
     use crate::{GammaLoopContextContainer, utils::load_generic_model};
+    use symbolica::atom::{Atom, AtomCore};
 
     fn fresh_temp_dir(name: &str) -> PathBuf {
         let unique = SystemTime::now()
@@ -1260,6 +1323,476 @@ mod tests {
 
         assert_eq!(dirs, vec![saved_dir]);
         fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn computed_uv_forest_process_export_uses_stored_sources_in_all_routes()
+    -> color_eyre::Result<()> {
+        use crate::{
+            feyngen::GenerationType,
+            graph::{Graph, GroupId},
+            initialisation::test_initialise,
+            processes::{
+                GraphGroupSelectionSpec, Process, ProcessCollection, ProcessDefinition, ProcessList,
+            },
+            settings::{GlobalSettings, RuntimeSettings},
+            uv::{
+                UVOrchestrator, export::UVForestExportSettings, settings::FinalIntegrandDimension,
+            },
+        };
+        use std::collections::{BTreeMap, BTreeSet};
+
+        test_initialise()?;
+        let model = load_generic_model("scalars");
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
+        let runtime = RuntimeSettings::default();
+        let directory = fresh_temp_dir("computed-uv-process-export");
+        for (kind, folder, source) in [
+            (
+                GenerationType::Amplitude,
+                "amplitudes",
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../tests/resources/graphs/scalar_bubble.dot"
+                )),
+            ),
+            (
+                GenerationType::CrossSection,
+                "cross_sections",
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../tests/resources/graphs/mass_approach_scalar_self_energy.dot"
+                )),
+            ),
+        ] {
+            for orchestrator in [UVOrchestrator::LegacyDagForest, UVOrchestrator::HedgePoset] {
+                for (mode, explicit_sum, projected) in [
+                    ("direct_keyed", false, false),
+                    ("direct_summed", true, false),
+                    ("projected_summed", true, true),
+                ] {
+                    // Keep the fixture's physical graph and all default subtraction
+                    // terms; only the three requested CFF/UV routes differ.
+                    let mut graphs = Graph::from_string(source, &model)?;
+                    let exercise_selection = kind == GenerationType::CrossSection
+                        && orchestrator == UVOrchestrator::HedgePoset
+                        && mode == "direct_keyed";
+                    if !exercise_selection {
+                        graphs.truncate(1);
+                    }
+                    let mut graph_name = graphs[0].name.clone();
+                    let definition = ProcessDefinition::from_graph_list(&graphs, kind, &model)?;
+                    let process = Process::from_graph_list(
+                        "export_fixture".into(),
+                        "default".into(),
+                        graphs,
+                        kind,
+                        Some(definition),
+                        None,
+                        &model,
+                    )?;
+                    let mut processes = ProcessList {
+                        processes: vec![process],
+                    };
+                    let mut settings = GlobalSettings::default();
+                    settings.generation.uv.orchestrator = orchestrator;
+                    settings.generation.explicit_orientation_sum_only = explicit_sum;
+                    settings
+                        .generation
+                        .uv
+                        .local_uv_cts_from_expanded_4d_integrands = projected;
+                    assert_eq!(
+                        settings.generation.uv.final_integrand,
+                        FinalIntegrandDimension::ThreeD
+                    );
+                    assert!(settings.generation.uv.subtract_uv);
+                    assert!(settings.generation.uv.generate_integrated);
+                    assert!(settings.generation.uv.softct);
+                    assert!(settings.generation.threshold_subtraction.enable_thresholds);
+                    assert!(!settings.generation.evaluator.store_atom);
+                    processes.preprocess(&model, &settings, &(&runtime).into(), &pool)?;
+                    processes.generate_integrands(&model, &settings, (&runtime).into(), &pool)?;
+                    // Record both physical cut inventories before selection, so
+                    // removal/reindexing cannot silently redefine the expected output.
+                    let expected_by_graph: Vec<Vec<BTreeSet<String>>> = match processes.processes[0]
+                        .get_integrand("default")?
+                        .require_generated()?
+                    {
+                        crate::integrands::process::ProcessIntegrand::Amplitude(_) => {
+                            vec![vec![["all_none".to_string()].into_iter().collect()]]
+                        }
+                        crate::integrands::process::ProcessIntegrand::CrossSection(integrand) => {
+                            integrand
+                                .data
+                                .graph_terms
+                                .iter()
+                                .map(|term| {
+                                    term.cut_group_data
+                                        .cut_groups
+                                        .iter()
+                                        .map(|cuts| {
+                                            crate::graph::cuts::ResidueSelector {
+                                                lu: Some(
+                                                    cuts.lu_cut_selection(&term.graph, &term.cuts),
+                                                ),
+                                                left_th_cut: None,
+                                                right_th_cut: None,
+                                            }
+                                            .generate_allowed_keys()
+                                            .into_iter()
+                                            .map(|key| {
+                                                format!("lu_cut_{}", key.lu_cut_order.unwrap())
+                                            })
+                                            .collect()
+                                        })
+                                        .collect()
+                                })
+                                .collect()
+                        }
+                    };
+                    assert!(!expected_by_graph.is_empty());
+                    let case_dir = directory.join(format!("{folder}-{orchestrator}-{mode}"));
+                    let source_expression =
+                        |graph: &Graph,
+                         source: &three_dimensional_reps::GeneratedThreeDExpression<
+                            crate::cff::esurface::Esurface,
+                            crate::cff::hsurface::Hsurface,
+                        >|
+                         -> eyre::Result<Atom> {
+                            let expressions = graph
+                                .cff_from_production_expression(
+                                    source,
+                                    &crate::graph::cuts::CutSet::empty(graph.n_hedges()),
+                                    &crate::settings::global::OrientationPattern::default(),
+                                )?
+                                .expression_with_selectors();
+                            Ok(expressions
+                                .iter()
+                                .fold(Atom::Zero, |sum, (_, atom)| sum + atom))
+                        };
+                    let mut production_expression: Option<Atom> = None;
+                    let mut expected_exported_expressions: Option<BTreeMap<(usize, String), Atom>> =
+                        None;
+                    for phase in ["generated", "loaded", "selected"] {
+                        if phase == "selected" {
+                            if !exercise_selection {
+                                continue;
+                            }
+                            // Exercise the same persistent selection owner as the CLI,
+                            // after save/load, removing graph 0 and compacting graph 1.
+                            let ProcessCollection::CrossSections(cross_sections) =
+                                &mut processes.processes[0].collection
+                            else {
+                                unreachable!();
+                            };
+                            let cross_section = cross_sections.get_mut("default").unwrap();
+                            let retained = &cross_section.supergraphs[1];
+                            let removed_name = graph_name.clone();
+                            graph_name = retained.graph.name.clone();
+                            assert_ne!(graph_name, removed_name);
+                            let expected_cuts = retained
+                                .cuts
+                                .iter()
+                                .map(|cut| cut.cut.clone())
+                                .collect::<BTreeSet<_>>();
+                            let expected_numerator = retained
+                                .graph
+                                .production_numerator_atom_for_full_3d_expression();
+                            expected_exported_expressions = None;
+                            production_expression = Some(source_expression(
+                                &retained.graph,
+                                retained
+                                    .derived_data
+                                    .global_cff_expression
+                                    .as_ref()
+                                    .unwrap(),
+                            )?);
+                            let plan = cross_section.plan_graph_group_selection(
+                                &GraphGroupSelectionSpec::from_master_graph_names(vec![
+                                    graph_name.clone(),
+                                ]),
+                            )?;
+                            assert_eq!(plan.retained_group_ids(), &[GroupId(1)]);
+                            assert_eq!(plan.new_group_id_for_old(GroupId(1)), Some(GroupId(0)));
+                            assert_eq!(plan.report().removed_graphs, vec![removed_name.clone()]);
+                            cross_section.apply_graph_group_selection(&plan)?;
+                            let retained = &cross_section.supergraphs[0];
+                            assert!(
+                                (retained
+                                    .graph
+                                    .production_numerator_atom_for_full_3d_expression()
+                                    - expected_numerator)
+                                    .collect_factors()
+                                    .is_zero(),
+                                "persistent selection changed the retained physical numerator"
+                            );
+                            assert!(
+                                processes.processes[0]
+                                    .get_integrand("default")?
+                                    .require_generated()
+                                    .is_err()
+                            );
+                            // Match normal regeneration: preprocess the retained source
+                            // and then rebuild the runtime integrand with identical settings.
+                            processes.preprocess(&model, &settings, &(&runtime).into(), &pool)?;
+                            processes.generate_integrands(
+                                &model,
+                                &settings,
+                                (&runtime).into(),
+                                &pool,
+                            )?;
+                            assert_eq!(
+                                processes.processes[0]
+                                    .get_integrand("default")?
+                                    .require_generated()?
+                                    .graph_name_by_id(1),
+                                None,
+                            );
+                            let crate::integrands::process::ProcessIntegrand::CrossSection(
+                                integrand,
+                            ) = processes.processes[0]
+                                .get_integrand("default")?
+                                .require_generated()?
+                            else {
+                                unreachable!();
+                            };
+                            let term = &integrand.data.graph_terms[0];
+                            assert_eq!(
+                                term.cuts
+                                    .iter()
+                                    .map(|cut| cut.cut.clone())
+                                    .collect::<BTreeSet<_>>(),
+                                expected_cuts,
+                                "selection/regeneration changed the retained physical cuts"
+                            );
+                        }
+                        let expected_residues =
+                            &expected_by_graph[usize::from(phase == "selected")];
+                        assert!(!expected_residues.is_empty());
+                        let process = &processes.processes[0];
+                        let (source_graph, production) = match &process.collection {
+                            ProcessCollection::Amplitudes(amplitudes) => {
+                                let graph = &amplitudes["default"].graphs[0];
+                                (
+                                    &graph.graph,
+                                    graph.derived_data.cff_expression.as_ref().unwrap(),
+                                )
+                            }
+                            ProcessCollection::CrossSections(cross_sections) => {
+                                let graph = &cross_sections["default"].supergraphs[0];
+                                (
+                                    &graph.graph,
+                                    graph.derived_data.global_cff_expression.as_ref().unwrap(),
+                                )
+                            }
+                        };
+                        assert_eq!(source_graph.name, graph_name);
+                        assert_eq!(
+                            process
+                                .get_integrand("default")?
+                                .require_generated()?
+                                .graph_name_by_id(0),
+                            Some(graph_name.as_str())
+                        );
+                        assert!(!production.expression.orientations.is_empty());
+                        // Persistence retains the complete consumed expression, including
+                        // surface references, energy factors, and convention prefactors;
+                        // transient degree reports and internal cache/tree layout do not
+                        // affect this contract.
+                        // Selection/regeneration must also retain the old graph 1 source.
+                        let expression = source_expression(source_graph, production)?;
+                        if let Some(expected) = &production_expression {
+                            assert!(
+                                (&expression - expected).expand().together().is_zero(),
+                                "stored production CFF changed after {phase}"
+                            );
+                        } else {
+                            production_expression = Some(expression);
+                        }
+                        let export_dir = case_dir.join(phase);
+                        processes.export_uv_forests(
+                            &export_dir,
+                            0,
+                            "default",
+                            &[0],
+                            &UVForestExportSettings { computed: true },
+                        )?;
+                        let graph_dir = export_dir
+                            .join("processes")
+                            .join(folder)
+                            .join("export_fixture/default");
+                        assert!(graph_dir.join(format!("{graph_name}.forest.dot")).is_file());
+                        assert_eq!(
+                            fs::read_dir(&graph_dir)?
+                                .map(|entry| entry
+                                    .map(|entry| entry.file_name().to_string_lossy().into_owned()))
+                                .collect::<std::io::Result<Vec<_>>>()?
+                                .into_iter()
+                                .filter(|name| name.ends_with(".forest.dot"))
+                                .collect::<BTreeSet<_>>(),
+                            BTreeSet::from([format!("{graph_name}.forest.dot")]),
+                            "computed export retained a removed graph",
+                        );
+                        let mut exported_expressions = BTreeMap::<(usize, String), Atom>::new();
+                        let mut forest_indices = BTreeSet::new();
+                        for forest in fs::read_dir(graph_dir.join(format!("{graph_name}_nodes")))? {
+                            let forest = forest?;
+                            let forest_index = forest
+                                .file_name()
+                                .to_string_lossy()
+                                .strip_prefix("forest_")
+                                .unwrap()
+                                .parse::<usize>()?;
+                            assert!(forest_indices.insert(forest_index));
+                            let expected = &expected_residues[forest_index];
+                            let mut actual = BTreeSet::new();
+                            for node in fs::read_dir(forest.path())? {
+                                let node = node?;
+                                let file = node.file_name();
+                                let file = file.to_string_lossy();
+                                let residue = expected
+                                    .iter()
+                                    .find(|residue| file.ends_with(&format!("_{residue}.dot")))
+                                    .expect(
+                                        "exported residue must belong to this complete physical cut",
+                                    );
+                                actual.insert(residue.clone());
+                                let node_dot = fs::read_to_string(node.path())?;
+                                assert!(node_dot.contains("forest_residue_index"));
+                                for exported in Graph::from_string(&node_dot, &model)? {
+                                    *exported_expressions
+                                        .entry((forest_index, residue.clone()))
+                                        .or_insert(Atom::Zero) += exported.global_prefactor.num;
+                                }
+                            }
+                            assert_eq!(&actual, expected, "a physical cut lost a residue order");
+                        }
+                        assert_eq!(
+                            forest_indices,
+                            (0..expected_residues.len()).collect::<BTreeSet<_>>()
+                        );
+                        assert!(
+                            exported_expressions
+                                .values()
+                                .any(|expression| !expression.is_zero()),
+                            "{folder}/{orchestrator}/{mode}: the computed export has no nonzero value"
+                        );
+                        // Persistence preserves complete exported values for every
+                        // physical cut and residue, independently of how terms are
+                        // grouped into nodes or numbered in the forest traversal.
+                        if let Some(expected) = &expected_exported_expressions {
+                            assert_eq!(
+                                exported_expressions.keys().collect::<BTreeSet<_>>(),
+                                expected.keys().collect::<BTreeSet<_>>()
+                            );
+                            for (key, expression) in &exported_expressions {
+                                assert!(
+                                    (expression.collect_factors()
+                                        - expected[key].collect_factors())
+                                    .collect_factors()
+                                    .is_zero(),
+                                    "{folder}/{orchestrator}/{mode}: exported residue {key:?} changed after {phase}"
+                                );
+                            }
+                        } else {
+                            expected_exported_expressions = Some(exported_expressions);
+                        }
+                        if phase == "generated" {
+                            let saved = case_dir.join("saved");
+                            processes.processes[0].save(&saved, true)?;
+                            let mut symbols = Vec::new();
+                            symbolica::state::State::export(&mut symbols)?;
+                            let state_map = symbolica::state::State::import(
+                                &mut std::io::Cursor::new(symbols),
+                                None,
+                            )?;
+                            let context = GammaLoopContextContainer {
+                                model: &model,
+                                state_map: &state_map,
+                            };
+                            let path = saved.join(folder).join("export_fixture");
+                            processes.processes[0] = match kind {
+                                GenerationType::Amplitude => {
+                                    Process::load_amplitude(path, context)?
+                                }
+                                GenerationType::CrossSection => {
+                                    Process::load_cross_section(path, context)?
+                                }
+                            };
+                        }
+                    }
+                    // The public lookup must reject an ID/source mismatch rather
+                    // than pairing a runtime graph with a different stored CFF.
+                    let source_graph = match &mut processes.processes[0].collection {
+                        ProcessCollection::Amplitudes(amplitudes) => {
+                            &mut amplitudes.get_mut("default").unwrap().graphs[0].graph
+                        }
+                        ProcessCollection::CrossSections(cross_sections) => {
+                            &mut cross_sections.get_mut("default").unwrap().supergraphs[0].graph
+                        }
+                    };
+                    source_graph.name.push_str("_mismatch");
+                    let error = processes
+                        .export_uv_forests(
+                            case_dir.join("mismatch"),
+                            0,
+                            "default",
+                            &[0],
+                            &UVForestExportSettings { computed: true },
+                        )
+                        .unwrap_err();
+                    assert!(format!("{error:#}").contains("Source/runtime graph mismatch"));
+                    let source = match &mut processes.processes[0].collection {
+                        ProcessCollection::Amplitudes(amplitudes) => {
+                            let graph = &mut amplitudes.get_mut("default").unwrap().graphs[0];
+                            graph.graph.name = graph_name.clone();
+                            &mut graph.derived_data.cff_expression
+                        }
+                        ProcessCollection::CrossSections(cross_sections) => {
+                            let graph =
+                                &mut cross_sections.get_mut("default").unwrap().supergraphs[0];
+                            graph.graph.name = graph_name.clone();
+                            &mut graph.derived_data.global_cff_expression
+                        }
+                    };
+                    *source = None;
+                    let topology_dir = case_dir.join("topology_without_source");
+                    processes.export_uv_forests(
+                        &topology_dir,
+                        0,
+                        "default",
+                        &[0],
+                        &UVForestExportSettings { computed: false },
+                    )?;
+                    let topology_graph_dir = topology_dir
+                        .join("processes")
+                        .join(folder)
+                        .join("export_fixture/default");
+                    assert!(
+                        topology_graph_dir
+                            .join(format!("{graph_name}.forest.dot"))
+                            .is_file()
+                    );
+                    assert!(
+                        !topology_graph_dir
+                            .join(format!("{graph_name}_nodes"))
+                            .exists()
+                    );
+                    let error = processes
+                        .export_uv_forests(
+                            case_dir.join("missing_source"),
+                            0,
+                            "default",
+                            &[0],
+                            &UVForestExportSettings { computed: true },
+                        )
+                        .unwrap_err();
+                    assert!(format!("{error:#}").contains("has no stored production CFF"));
+                }
+            }
+        }
+        fs::remove_dir_all(directory)?;
+        Ok(())
     }
 
     mod failing {

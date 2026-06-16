@@ -453,7 +453,7 @@ mod test {
         processes::{Amplitude, AmplitudeGraph, DotExportSettings},
         settings::{
             GlobalSettings, RuntimeSettings,
-            global::{GenerationSettings, OrientationPattern},
+            global::GenerationSettings,
             runtime::{LockedRuntimeSettings, kinematic::KinematicsSettings},
         },
         uv::UltravioletGraph,
@@ -479,7 +479,7 @@ mod test {
 
         // let model = crate::utils::load_generic_model("sm");
 
-        graph.generate_cff(&OrientationPattern::default()).unwrap();
+        graph.generate_cff(&GenerationSettings::default()).unwrap();
         graph
             .build_integrands(&GenerationSettings::default(), vk)
             .unwrap();

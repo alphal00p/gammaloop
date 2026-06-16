@@ -439,9 +439,9 @@
       "crates/linnest/typst/examples/map-style.typ"
       "tests/resources/graphs/epemttbar.dot"
     ];
-    gammalooprs = [
-      "tests/resources/graphs/scalar/dod2_bubble.dot"
-    ];
+    # Unit and integration tests embed these shared graph fixtures with include_str!.
+    "gammaloop-api" = ["tests/resources/graphs"];
+    gammalooprs = ["tests/resources/graphs"];
   };
 
   workspacePackageExtraSourceRoots.runtimeTest = {
