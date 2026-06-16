@@ -91,12 +91,21 @@ impl IntegratedUvCaseResult {
     }
 }
 
-fn set_fast_deterministic_integrator(cli: &mut CLIState) -> Result<()> {
-    cli.run_command(
+fn set_fast_deterministic_integrator(
+    cli: &mut CLIState,
+    case: &IntegratedUvCase<'_>,
+) -> Result<()> {
+    let (n_start, n_max) = if case.test_name == "sunrise_scalar_1" {
+        (250000, 1000000)
+    } else {
+        (50000, 200000)
+    };
+
+    cli.run_command(&format!(
         "set process kv integrator.target_relative_accuracy=0.001 \
-         integrator.n_increase=0 integrator.n_start=50000 \
-         integrator.n_max=200000 integrator.seed=1337",
-    )
+         integrator.n_increase=0 integrator.n_start={n_start} \
+         integrator.n_max={n_max} integrator.seed=1337",
+    ))
 }
 
 fn no_integrated_process_name(process: &str) -> String {
@@ -241,7 +250,7 @@ fn run_integrated_uv_integration(
     cli: &mut CLIState,
     case: &IntegratedUvCase<'_>,
 ) -> Result<IntegratedUvResults> {
-    set_fast_deterministic_integrator(cli)?;
+    set_fast_deterministic_integrator(cli, case)?;
     let no_integrated_process = no_integrated_process_name(case.process);
     let has_no_integrated =
         process_integrand_exists(cli, &no_integrated_process, case.integrand_name);
@@ -404,8 +413,8 @@ fn integrated_uv_profile_passes(
         process: Some(ProcessRef::Unqualified(process.to_string())),
         integrand_name: Some(integrand_name.to_string()),
         min_scale_exponent: 4.0,
-        max_scale_exponent: 5.0,
-        n_points: 100,
+        max_scale_exponent: 8.0,
+        n_points: 17,
         per_orientation: true,
         ..Default::default()
     })
@@ -788,6 +797,48 @@ fn dod2_bubble_uv() {
         },
         min_change_sigma: Some(5.0),
         min_mu_r_change_sigma: Some(5.0),
+    });
+}
+
+#[test]
+fn se1l_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "uv/se1l",
+        test_name: "se1l",
+        process: "se1l",
+        integrand_name: "se1l",
+        original_m_uv: 20.0,
+        shifted_m_uv: 7.0,
+        original_mu_r: 20.0,
+        shifted_mu_r: 19000.0,
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets {
+            no_integrated: Some(Complex::new(F(-16932.936021390098), F(-13238.904716706178))),
+            integrated: Some(Complex::new(F(-17852.22360006917), F(-13238.904716706178))),
+        },
+        min_change_sigma: Some(5.0),
+        min_mu_r_change_sigma: Some(5.0),
+    });
+}
+
+#[test]
+fn sunrise_scalar_1_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "uv/sunrise_scalar_1",
+        test_name: "sunrise_scalar_1",
+        process: "sunrise_scalar_1",
+        integrand_name: "scalar_sunrise",
+        original_m_uv: 20.0,
+        shifted_m_uv: 19.0,
+        original_mu_r: 3.0,
+        shifted_mu_r: 19000.0,
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets {
+            no_integrated: Some(Complex::new(F(0.0), F(0.0923237056143842))),
+            integrated: Some(Complex::new(F(0.0), F(-0.4579696434253027))),
+        },
+        min_change_sigma: Some(3.0),
+        min_mu_r_change_sigma: Some(3.0),
     });
 }
 
