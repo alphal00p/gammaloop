@@ -2,6 +2,7 @@
 #![allow(unused_variables)]
 
 use std::{
+    collections::BTreeSet,
     env, fs,
     ops::{ControlFlow, Deref, DerefMut},
     path::{Path, PathBuf},
@@ -10,12 +11,20 @@ use std::{
 
 use color_eyre::Result;
 use gammaloop_api::{
-    CLISettings, OneShot, StateLoadOption,
+    CLISettings, OneShot, StateAccessMode, StateLoadOption,
     state::{CommandHistory, CommandsBlock, RunHistory},
 };
 use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_workspace_path};
-use gammalooprs::{processes::ProcessCollection, settings::RuntimeSettings};
+use gammalooprs::{
+    feyngen::GenerationType,
+    graph::Graph,
+    processes::{CrossSection, ProcessCollection, ProcessDefinition},
+    settings::{RuntimeSettings, global::GenerationSettings},
+};
+use schemars::{JsonSchema, schema_for};
+use serde_json::Value as JsonValue;
 use serial_test::serial;
+use toml::Value as TomlValue;
 
 static TEMPLATE_CLI: OnceLock<Mutex<CLIState>> = OnceLock::new();
 
@@ -242,6 +251,117 @@ fn nested_run_records_executed_commands_once() -> Result<()> {
 
     assert_eq!(cli.cli_settings.global.display_directive, "warn");
     assert_eq!(history_strings(&cli.run_history), vec!["run outer"]);
+    Ok(())
+}
+
+fn run_command_block_substitutes_define_variables() -> Result<()> {
+    let mut cli = new_cli("run_command_block_substitutes_define_variables")?;
+    cli.run_history.command_blocks = vec![block(
+        "set_display",
+        &["set global kv global.display_directive=$(level)"],
+    )];
+
+    cli.run_command("run set_display -D level=warn")?;
+
+    assert_eq!(cli.cli_settings.global.display_directive, "warn");
+    assert_eq!(
+        history_strings(&cli.run_history),
+        vec!["run set_display -D level=warn"]
+    );
+    cli.save_state()?;
+    let persisted = fs::read_to_string(cli.cli_settings.state.folder.join("run.toml"))?;
+    assert!(persisted.contains("run set_display -D level=warn"));
+    Ok(())
+}
+
+fn run_command_block_uses_placeholder_defaults() -> Result<()> {
+    let mut cli = new_cli("run_command_block_uses_placeholder_defaults")?;
+    cli.run_history.command_blocks = vec![block(
+        "set_display",
+        &["set global kv global.display_directive=$(level:warn)"],
+    )];
+
+    cli.run_command("run set_display")?;
+    assert_eq!(cli.cli_settings.global.display_directive, "warn");
+
+    cli.run_command("run set_display -D level=error")?;
+    assert_eq!(cli.cli_settings.global.display_directive, "error");
+    Ok(())
+}
+
+fn run_command_blocks_share_define_environment_and_allow_unused_keys() -> Result<()> {
+    let mut cli = new_cli("run_command_blocks_share_define_environment_and_allow_unused_keys")?;
+    cli.run_history.command_blocks = vec![
+        block(
+            "set_display",
+            &["set global kv global.display_directive=$(display)"],
+        ),
+        block(
+            "set_logfile",
+            &["set global kv global.logfile_directive=$(logfile)"],
+        ),
+    ];
+
+    cli.run_command("run set_display set_logfile -D display=warn -D logfile=error -D unused=ok")?;
+
+    assert_eq!(cli.cli_settings.global.display_directive, "warn");
+    assert_eq!(cli.cli_settings.global.logfile_directive, "error");
+    assert_eq!(
+        history_strings(&cli.run_history),
+        vec!["run set_display set_logfile -D display=warn -D logfile=error -D unused=ok"]
+    );
+    Ok(())
+}
+
+fn nested_run_inherits_and_can_override_define_environment() -> Result<()> {
+    let mut cli = new_cli("nested_run_inherits_and_can_override_define_environment")?;
+    cli.run_history.command_blocks = vec![
+        block(
+            "inner",
+            &["set global kv global.display_directive=$(level)"],
+        ),
+        block("outer_inherit", &["run inner"]),
+        block("outer_override", &["run inner -D level=error"]),
+    ];
+
+    cli.run_command("run outer_inherit -D level=warn")?;
+    assert_eq!(cli.cli_settings.global.display_directive, "warn");
+
+    cli.run_command("run outer_override -D level=warn")?;
+    assert_eq!(cli.cli_settings.global.display_directive, "error");
+    Ok(())
+}
+
+fn run_define_placeholders_are_prevalidated_before_execution() -> Result<()> {
+    let mut cli = new_cli("run_define_placeholders_are_prevalidated_before_execution")?;
+    let original_display = cli.cli_settings.global.display_directive.clone();
+    cli.run_history.command_blocks = vec![
+        block("first", &["set global kv global.display_directive=warn"]),
+        block(
+            "broken",
+            &["set global kv global.display_directive=$(level)"],
+        ),
+    ];
+
+    let err = cli.run_command("run first broken").unwrap_err();
+    let error_text = format!("{err:?}");
+
+    assert!(error_text.contains("Missing command-block variable 'level'"));
+    assert_eq!(cli.cli_settings.global.display_directive, original_display);
+    assert!(cli.run_history.commands.is_empty());
+    Ok(())
+}
+
+fn run_inline_commands_can_use_define_variables() -> Result<()> {
+    let mut cli = new_cli("run_inline_commands_can_use_define_variables")?;
+
+    cli.run_command("run -D level=warn -c 'set global kv global.display_directive=$(level)'")?;
+
+    assert_eq!(cli.cli_settings.global.display_directive, "warn");
+    assert_eq!(
+        history_strings(&cli.run_history),
+        vec!["run -D level=warn -c 'set global kv global.display_directive=$(level)'"]
+    );
     Ok(())
 }
 
@@ -534,6 +654,34 @@ fn boot_mismatch_uses_conflicting_boot_blocks_read_only() -> Result<()> {
 
 #[test]
 #[serial]
+fn state_load_option_read_only_sets_loaded_state_access_mode() -> Result<()> {
+    let test_name = "state_load_option_read_only_sets_loaded_state_access_mode";
+    let mut cli = new_cli(test_name)?;
+
+    cli.run_history.commands.push(command("quit -n"));
+    cli.save_state()?;
+
+    let loaded = StateLoadOption::read_only(cli.cli_settings.state.folder.clone()).load()?;
+
+    assert_eq!(loaded.state_access_mode(), StateAccessMode::ReadOnly);
+    assert!(loaded.is_read_only_state());
+    assert_eq!(
+        loaded.active_state_folder(),
+        cli.cli_settings.state.folder.as_path()
+    );
+    assert!(
+        loaded
+            .ensure_write_target_allowed(
+                &cli.cli_settings.state.folder.join("nested"),
+                "write test artifact",
+            )
+            .is_err()
+    );
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn state_load_option_clean_state_removes_saved_state_before_load() -> Result<()> {
     let test_name = "state_load_option_clean_state_removes_saved_state_before_load";
     let mut cli = new_cli(test_name)?;
@@ -691,6 +839,209 @@ fn save_state_writes_global_settings_file() -> Result<()> {
     Ok(())
 }
 
+#[test]
+#[serial]
+fn save_state_writes_exhaustive_default_settings_files() -> Result<()> {
+    let mut cli = new_cli("save_state_writes_exhaustive_default_settings_files")?;
+
+    cli.save_state()?;
+
+    assert_settings_file_contains_schema_paths::<CLISettings>(
+        &cli.cli_settings.state.folder.join("global_settings.toml"),
+    )?;
+    assert_settings_file_contains_schema_paths::<RuntimeSettings>(
+        &cli.cli_settings
+            .state
+            .folder
+            .join("default_runtime_settings.toml"),
+    )?;
+
+    Ok(())
+}
+
+fn assert_settings_file_contains_schema_paths<T: JsonSchema>(path: &Path) -> Result<()> {
+    let contents = fs::read_to_string(path)?;
+    let value: TomlValue = toml::from_str(&contents)?;
+    let actual_paths = toml_paths(&value);
+    let schema = serde_json::to_value(schema_for!(T))?;
+    let mut expected_paths = BTreeSet::new();
+    collect_schema_visible_paths(
+        &schema,
+        &schema,
+        &mut Vec::new(),
+        &mut expected_paths,
+        &mut Vec::new(),
+    );
+
+    let missing = expected_paths
+        .difference(&actual_paths)
+        .cloned()
+        .collect::<Vec<_>>();
+    let missing_preview = missing
+        .iter()
+        .take(80)
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let omitted_count = missing.len().saturating_sub(80);
+    let omitted_message = if omitted_count == 0 {
+        String::new()
+    } else {
+        format!("\n... and {omitted_count} more")
+    };
+
+    assert!(
+        missing.is_empty(),
+        "{} is missing schema-backed default setting paths:\n{}{omitted_message}",
+        path.display(),
+        missing_preview
+    );
+
+    Ok(())
+}
+
+fn toml_paths(value: &TomlValue) -> BTreeSet<String> {
+    let mut paths = BTreeSet::new();
+    collect_toml_paths(value, &mut Vec::new(), &mut paths);
+    paths
+}
+
+fn collect_toml_paths(value: &TomlValue, path: &mut Vec<String>, paths: &mut BTreeSet<String>) {
+    if !path.is_empty() {
+        paths.insert(path.join("."));
+    }
+
+    match value {
+        TomlValue::Table(table) => {
+            for (key, value) in table {
+                path.push(key.clone());
+                collect_toml_paths(value, path, paths);
+                path.pop();
+            }
+        }
+        TomlValue::Array(items) => {
+            for item in items {
+                if matches!(item, TomlValue::Table(_) | TomlValue::Array(_)) {
+                    collect_toml_paths(item, path, paths);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_schema_visible_paths(
+    schema_root: &JsonValue,
+    node: &JsonValue,
+    path: &mut Vec<String>,
+    paths: &mut BTreeSet<String>,
+    ref_stack: &mut Vec<String>,
+) {
+    if let Some(reference) = node.get("$ref").and_then(JsonValue::as_str) {
+        if ref_stack.iter().any(|existing| existing == reference) {
+            if !path.is_empty() {
+                paths.insert(path.join("."));
+            }
+            return;
+        }
+        let Some(resolved) = schema_ref_target(schema_root, reference) else {
+            return;
+        };
+        ref_stack.push(reference.to_string());
+        collect_schema_visible_paths(schema_root, resolved, path, paths, ref_stack);
+        ref_stack.pop();
+        return;
+    }
+
+    if schema_is_nullable(schema_root, node, &mut Vec::new()) {
+        // TOML has no native null value, so default `None` fields cannot be
+        // exhaustively represented without a field-specific sentinel encoding.
+        return;
+    }
+
+    if let Some(properties) = node.get("properties").and_then(JsonValue::as_object) {
+        for (key, child) in properties {
+            path.push(key.clone());
+            collect_schema_visible_paths(schema_root, child, path, paths, ref_stack);
+            path.pop();
+        }
+        return;
+    }
+
+    if schema_has_keyword_variants(node) {
+        for keyword in ["allOf", "anyOf", "oneOf"] {
+            let Some(variants) = node.get(keyword).and_then(JsonValue::as_array) else {
+                continue;
+            };
+            for variant in variants {
+                collect_schema_visible_paths(schema_root, variant, path, paths, ref_stack);
+            }
+        }
+        return;
+    }
+
+    if !path.is_empty() {
+        paths.insert(path.join("."));
+    }
+}
+
+fn schema_ref_target<'a>(schema_root: &'a JsonValue, reference: &str) -> Option<&'a JsonValue> {
+    schema_root.pointer(reference.strip_prefix('#')?)
+}
+
+fn schema_is_nullable(
+    schema_root: &JsonValue,
+    node: &JsonValue,
+    ref_stack: &mut Vec<String>,
+) -> bool {
+    if let Some(reference) = node.get("$ref").and_then(JsonValue::as_str) {
+        if ref_stack.iter().any(|existing| existing == reference) {
+            return false;
+        }
+        let Some(resolved) = schema_ref_target(schema_root, reference) else {
+            return false;
+        };
+        ref_stack.push(reference.to_string());
+        let nullable = schema_is_nullable(schema_root, resolved, ref_stack);
+        ref_stack.pop();
+        return nullable;
+    }
+
+    if schema_type_names(node).any(|type_name| type_name == "null") {
+        return true;
+    }
+
+    ["allOf", "anyOf", "oneOf"].iter().any(|keyword| {
+        node.get(keyword)
+            .and_then(JsonValue::as_array)
+            .is_some_and(|variants| {
+                variants
+                    .iter()
+                    .any(|variant| schema_is_nullable(schema_root, variant, ref_stack))
+            })
+    })
+}
+
+fn schema_type_names(node: &JsonValue) -> impl Iterator<Item = &str> {
+    node.get("type")
+        .into_iter()
+        .flat_map(|type_value| match type_value {
+            JsonValue::String(type_name) => vec![type_name.as_str()],
+            JsonValue::Array(type_names) => {
+                type_names.iter().filter_map(JsonValue::as_str).collect()
+            }
+            _ => Vec::new(),
+        })
+}
+
+fn schema_has_keyword_variants(node: &JsonValue) -> bool {
+    ["allOf", "anyOf", "oneOf"].iter().any(|keyword| {
+        node.get(keyword)
+            .and_then(JsonValue::as_array)
+            .is_some_and(|variants| !variants.is_empty())
+    })
+}
+
 fn import_graphs_relative_path_prefers_active_state_root_parent() -> Result<()> {
     let root = cli_state_path("import_graphs_relative_path_prefers_active_state_root_parent");
     clean_test(&root);
@@ -750,6 +1101,58 @@ fn import_graphs_relative_path_reports_lookup_locations() -> Result<()> {
     assert!(error_text.contains("Could not find graph file"));
     assert!(error_text.contains(&root.join(missing_name).display().to_string()));
     assert!(error_text.contains(&cwd.join(missing_name).display().to_string()));
+    Ok(())
+}
+
+fn import_graphs_inline_dot_process_spec_filters_cutkosky_cuts() -> Result<()> {
+    const PROCESS_SPEC: &str =
+        "e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]";
+    const DOT: &str = include_str!("../resources/graphs/benchmark_epem_a_tth_NNLO_graph.dot");
+
+    let root = cli_state_path("import_graphs_inline_dot_process_spec_filters_cutkosky_cuts");
+    clean_test(&root);
+    let mut cli = get_test_cli(None, root.join("state"), None, true)?;
+    cli.run_command("import model sm-default.json")?;
+
+    let graphs = Graph::from_string(DOT, &cli.state.model)?;
+    let inferred_definition = ProcessDefinition::from_graph_list(
+        &graphs,
+        GenerationType::CrossSection,
+        &cli.state.model,
+    )?;
+    let all_cuts_cross_section =
+        CrossSection::from_graph_list("all_cuts".to_string(), graphs.clone(), &cli.state.model)?;
+    let all_cut_count = all_cuts_cross_section.supergraphs[0].cutkosky_cut_count_for_process(
+        &cli.state.model,
+        &inferred_definition,
+        &GenerationSettings::default(),
+    )?;
+    assert_eq!(all_cut_count.candidate_st_cuts, 27);
+    assert_eq!(all_cut_count.multi_edge_candidate_cuts, 25);
+    assert_eq!(all_cut_count.process_compatible_cuts, 25);
+
+    cli.run_command(&format!(
+        "import graphs --inline-dot \"\"\"{DOT}\"\"\" --process-spec '{PROCESS_SPEC}' -p epem_a_tth -i NNLO -o"
+    ))?;
+
+    assert_eq!(cli.state.process_list.processes.len(), 1);
+    let process = &cli.state.process_list.processes[0];
+    assert_eq!(process.definition.folder_name, "epem_a_tth");
+    let ProcessCollection::CrossSections(cross_sections) = &process.collection else {
+        panic!("imported NNLO graph should create a cross-section process");
+    };
+    let cross_section = cross_sections
+        .get("NNLO")
+        .expect("imported cross section should use requested integrand name");
+    let process_cut_count = cross_section.supergraphs[0].cutkosky_cut_count_for_process(
+        &cli.state.model,
+        &process.definition,
+        &GenerationSettings::default(),
+    )?;
+    assert_eq!(process_cut_count.candidate_st_cuts, 27);
+    assert_eq!(process_cut_count.multi_edge_candidate_cuts, 25);
+    assert_eq!(process_cut_count.process_compatible_cuts, 9);
+    assert_eq!(process_cut_count.selected_cuts, 9);
     Ok(())
 }
 
@@ -848,6 +1251,12 @@ fn cli_stateful_workflow_behaviors() -> Result<()> {
     run_prevalidation_is_all_or_nothing_for_inline_commands()?;
     run_prevalidation_is_all_or_nothing_for_nested_block_failures()?;
     nested_run_records_executed_commands_once()?;
+    run_command_block_substitutes_define_variables()?;
+    run_command_block_uses_placeholder_defaults()?;
+    run_command_blocks_share_define_environment_and_allow_unused_keys()?;
+    nested_run_inherits_and_can_override_define_environment()?;
+    run_define_placeholders_are_prevalidated_before_execution()?;
+    run_inline_commands_can_use_define_variables()?;
     boot_run_history_merges_blocks_and_persists_commands_once()?;
     boot_run_history_rejects_conflicting_block_redefinitions()?;
     boot_run_history_allows_conflicting_redefinitions_after_confirmation()?;
@@ -867,6 +1276,7 @@ fn cli_stateful_workflow_behaviors() -> Result<()> {
     import_graphs_relative_path_prefers_active_state_root_parent()?;
     import_graphs_relative_path_falls_back_to_current_working_directory()?;
     import_graphs_relative_path_reports_lookup_locations()?;
+    import_graphs_inline_dot_process_spec_filters_cutkosky_cuts()?;
     remove_processes_with_process_selector_removes_only_that_process()?;
     remove_processes_with_integrand_selector_removes_only_that_integrand()?;
     remove_processes_without_integrand_selector_drops_the_selected_process()?;
@@ -916,6 +1326,40 @@ commands = ["no_such_command"]
 
     assert!(error_text.contains("command block 'demo' command #1"));
     assert!(error_text.contains("no_such_command"));
+}
+
+#[test]
+#[serial]
+fn run_history_load_accepts_command_block_templates_that_need_late_parsing() {
+    let run_card_path = run_card_path(
+        "run_history_load_accepts_command_block_templates_that_need_late_parsing.toml",
+    );
+    if let Some(parent) = run_card_path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(
+        &run_card_path,
+        r#"
+[[command_blocks]]
+name = "bench_template"
+commands = ["inspect -p box -i default -x 0.1 0.2 --bench $(samples)"]
+"#,
+    )
+    .unwrap();
+
+    let run_history = RunHistory::load(&run_card_path).unwrap();
+
+    assert_eq!(
+        run_history.command_blocks[0].commands[0].raw_string(),
+        Some("inspect -p box -i default -x 0.1 0.2 --bench $(samples)")
+    );
+    assert_eq!(
+        run_history
+            .command_block_placeholder_names("bench_template")
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec!["samples".to_string()]
+    );
 }
 
 #[test]

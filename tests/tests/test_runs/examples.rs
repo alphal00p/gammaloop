@@ -15,15 +15,35 @@ fn is_ignored_old_card(path: &Path) -> bool {
         .is_some_and(|name| name.starts_with("OLD_"))
 }
 
+fn is_non_run_card_toml(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == "bench_config.toml")
+}
+
+fn is_generated_bench_output_dir(path: &Path) -> bool {
+    path.components()
+        .filter_map(|component| component.as_os_str().to_str())
+        .collect::<Vec<_>>()
+        .windows(4)
+        .any(|window| {
+            window[0] == "examples"
+                && window[1] == "cli"
+                && window[2] == "bench"
+                && window[3] == "outputs"
+        })
+}
+
 fn discover_toml_cards(root: &Path, cards: &mut Vec<PathBuf>) -> Result<()> {
     for entry in fs::read_dir(root)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            if !is_generated_state_dir(&path) {
+            if !is_generated_state_dir(&path) && !is_generated_bench_output_dir(&path) {
                 discover_toml_cards(&path, cards)?;
             }
         } else if !is_ignored_old_card(&path)
+            && !is_non_run_card_toml(&path)
             && path.extension().and_then(|extension| extension.to_str()) == Some("toml")
         {
             cards.push(path);

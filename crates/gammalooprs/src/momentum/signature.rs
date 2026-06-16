@@ -55,6 +55,10 @@ pub struct LoopExtSignature {
 }
 
 impl LoopExtSignature {
+    pub fn is_loop_dependent(&self) -> bool {
+        self.internal.0.iter().any(|sign| sign.is_sign())
+    }
+
     pub(crate) fn swap_loops(&mut self, i: LoopIndex, j: LoopIndex) {
         // println!("i{i},j{j}");÷
         if !self.internal.is_empty() {

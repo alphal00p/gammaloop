@@ -1,0 +1,27 @@
+digraph H2 {
+    label = "H.2_no_num";
+    num = "1";
+    overall_factor = "1";
+    overall_factor_evaluated = "1";
+    projector = "1";
+
+    edge [num = "1"];
+    node [num = "1"];
+
+    exte0 [style=invis];
+    exte0 -> 0:0 [id=0 dir=none is_cut="1" particle="a"];
+    exte1 [style=invis];
+    1:1 -> exte1 [id=1 dir=none is_cut="1" particle="a"];
+
+    0 -> 1 [id=2 particle="t" lmb_id=0];
+    1 -> 2 [id=3 particle="t"];
+    2 -> 3 [id=4 particle="t"];
+    3 -> 0 [id=5 particle="t"];
+    2 -> 4 [id=6 particle="g" lmb_id=1];
+    4 -> 6 [id=7 particle="g" lmb_id=2];
+    6 -> 7 [id=8 particle="g" lmb_id=3];
+    7 -> 6 [id=9 particle="g"]
+    7 -> 5 [id=10 particle="g"];
+    5 -> 4 [id=11 particle="g"];
+    5 -> 3 [id=12 particle="g"];
+}

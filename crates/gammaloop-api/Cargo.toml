@@ -62,11 +62,11 @@ spenso = { workspace = true, features = ["shadowing"] }
 # symbolica = { version = "0.18.0", default-features = false }
 sysinfo = { workspace = true }
 tabled = { workspace = true, features = ["ansi"] }
+three-dimensional-reps = { workspace = true, features = ["diagnostics", "display"] }
 thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 tracing-indicatif = { workspace = true }
-
 unicode-width = "0.2.2"
 walkdir = { workspace = true }
 gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }

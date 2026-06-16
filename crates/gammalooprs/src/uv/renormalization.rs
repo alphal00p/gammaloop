@@ -15,13 +15,6 @@ pub struct RenormalizationPart {
 }
 
 impl RenormalizationPart {
-    pub(crate) fn legacy(expression: Atom) -> Self {
-        Self {
-            expression,
-            stats: RenormalizationStats::default(),
-        }
-    }
-
     pub(crate) fn new(expression: Atom, kernel_hits: usize, forest_node_count: usize) -> Self {
         Self {
             expression,

@@ -588,7 +588,7 @@ mod tests {
         graph::{Graph, LoopMomentumBasis, parse::IntoGraph},
         momentum::signature::LoopExtSignature,
         settings::{
-            RuntimeSettings,
+            GlobalSettings, RuntimeSettings,
             global::{
                 CompilationMode, CompilationOptimizationLevel, GammaloopCompileOptions,
                 GenerationSettings, TropicalSubgraphTableSettings,
@@ -643,19 +643,22 @@ mod tests {
             amplitude
                 .preprocess(
                     &model,
-                    &GenerationSettings {
-                        compile: GammaloopCompileOptions {
-                            compilation_mode: CompilationMode::Cpp,
-                            fast_math: false,
-                            optimization_level: CompilationOptimizationLevel::O0,
-                            unsafe_math: false,
-                            compiler: crate::settings::global::default_external_compiler()
-                                .to_owned(),
-                            custom: Vec::new(),
-                        },
-                        tropical_subgraph_table: TropicalSubgraphTableSettings {
-                            panic_on_fail: false,
-                            target_omega: 1.0,
+                    &GlobalSettings {
+                        generation: GenerationSettings {
+                            compile: GammaloopCompileOptions {
+                                compilation_mode: CompilationMode::Cpp,
+                                fast_math: false,
+                                optimization_level: CompilationOptimizationLevel::O0,
+                                unsafe_math: false,
+                                compiler: crate::settings::global::default_external_compiler()
+                                    .to_owned(),
+                                custom: Vec::new(),
+                            },
+                            tropical_subgraph_table: TropicalSubgraphTableSettings {
+                                panic_on_fail: false,
+                                target_omega: 1.0,
+                                ..Default::default()
+                            },
                             ..Default::default()
                         },
                         ..Default::default()

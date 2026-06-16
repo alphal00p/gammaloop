@@ -169,13 +169,13 @@ fn collect_log_difference_samples<T: FloatLike>(
         }
 
         let difference_magnitude = (&pair[1].1 - &pair[0].1).abs();
-        if !difference_magnitude.positive()
-            || difference_magnitude.is_nan()
-            || difference_magnitude.is_infinite()
-        {
+        if difference_magnitude.is_nan() || difference_magnitude.is_infinite() {
             return Err(eyre!(
-                "adjacent y differences must stay finite and non-zero after dropping the constant term"
+                "adjacent y differences must stay finite after dropping the constant term"
             ));
+        }
+        if difference_magnitude.less_than_epsilon() {
+            continue;
         }
 
         let log_difference = difference_magnitude.log10();
@@ -190,7 +190,7 @@ fn collect_log_difference_samples<T: FloatLike>(
 
     if transformed.len() < 2 {
         return Err(eyre!(
-            "need at least 2 adjacent log-difference samples for linear regression"
+            "need at least 2 non-zero adjacent log-difference samples for linear regression"
         ));
     }
 

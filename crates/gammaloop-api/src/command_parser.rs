@@ -4,7 +4,8 @@ pub enum CommandLineParseError {
 }
 
 pub fn split_command_line(input: &str) -> Result<Vec<String>, CommandLineParseError> {
-    let normalized = escape_process_ref_hash_ids(input);
+    let normalized = normalize_triple_quoted_blocks(input)?;
+    let normalized = escape_process_ref_hash_ids(&normalized);
     shlex::split(&normalized).ok_or(CommandLineParseError::IncompleteShellSyntax)
 }
 
@@ -36,21 +37,25 @@ pub fn split_command_list(input: &str) -> Result<Vec<String>, CommandLineParseEr
         Unquoted,
         SingleQuoted,
         DoubleQuoted,
+        TripleDoubleQuoted,
     }
 
     let mut parts = Vec::new();
     let mut current = String::new();
-    let chars = input.chars().peekable();
+    let chars = input.chars().collect::<Vec<_>>();
     let mut mode = Mode::Unquoted;
     let mut unquoted_escape = false;
     let mut double_quoted_escape = false;
 
-    for ch in chars {
+    let mut index = 0usize;
+    while index < chars.len() {
+        let ch = chars[index];
         match mode {
             Mode::Unquoted => {
                 if unquoted_escape {
                     current.push(ch);
                     unquoted_escape = false;
+                    index += 1;
                     continue;
                 }
 
@@ -62,6 +67,14 @@ pub fn split_command_list(input: &str) -> Result<Vec<String>, CommandLineParseEr
                     '\'' => {
                         current.push(ch);
                         mode = Mode::SingleQuoted;
+                    }
+                    '"' if index + 2 < chars.len()
+                        && chars[index + 1] == '"'
+                        && chars[index + 2] == '"' =>
+                    {
+                        current.push_str("\"\"\"");
+                        mode = Mode::TripleDoubleQuoted;
+                        index += 2;
                     }
                     '"' => {
                         current.push(ch);
@@ -95,7 +108,21 @@ pub fn split_command_list(input: &str) -> Result<Vec<String>, CommandLineParseEr
                     _ => {}
                 }
             }
+            Mode::TripleDoubleQuoted => {
+                if ch == '"'
+                    && index + 2 < chars.len()
+                    && chars[index + 1] == '"'
+                    && chars[index + 2] == '"'
+                {
+                    current.push_str("\"\"\"");
+                    mode = Mode::Unquoted;
+                    index += 2;
+                } else {
+                    current.push(ch);
+                }
+            }
         }
+        index += 1;
     }
 
     if unquoted_escape || double_quoted_escape || mode != Mode::Unquoted {
@@ -108,6 +135,100 @@ pub fn split_command_list(input: &str) -> Result<Vec<String>, CommandLineParseEr
     }
 
     Ok(parts)
+}
+
+fn normalize_triple_quoted_blocks(input: &str) -> Result<String, CommandLineParseError> {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Mode {
+        Unquoted,
+        SingleQuoted,
+        DoubleQuoted,
+    }
+
+    let mut normalized = String::with_capacity(input.len());
+    let mut chars = input.char_indices().peekable();
+    let mut mode = Mode::Unquoted;
+    let mut unquoted_escape = false;
+    let mut double_quoted_escape = false;
+
+    while let Some((index, ch)) = chars.next() {
+        match mode {
+            Mode::Unquoted => {
+                if unquoted_escape {
+                    normalized.push(ch);
+                    unquoted_escape = false;
+                    continue;
+                }
+
+                if input[index..].starts_with("\"\"\"") {
+                    chars.next();
+                    chars.next();
+                    normalized.push('\'');
+
+                    let mut closed = false;
+                    while let Some((inner_index, inner_ch)) = chars.next() {
+                        if input[inner_index..].starts_with("\"\"\"") {
+                            chars.next();
+                            chars.next();
+                            normalized.push('\'');
+                            closed = true;
+                            break;
+                        }
+                        push_shell_single_quoted_char(&mut normalized, inner_ch);
+                    }
+
+                    if !closed {
+                        return Err(CommandLineParseError::IncompleteShellSyntax);
+                    }
+                    continue;
+                }
+
+                match ch {
+                    '\\' => {
+                        normalized.push(ch);
+                        unquoted_escape = true;
+                    }
+                    '\'' => {
+                        normalized.push(ch);
+                        mode = Mode::SingleQuoted;
+                    }
+                    '"' => {
+                        normalized.push(ch);
+                        mode = Mode::DoubleQuoted;
+                    }
+                    _ => normalized.push(ch),
+                }
+            }
+            Mode::SingleQuoted => {
+                normalized.push(ch);
+                if ch == '\'' {
+                    mode = Mode::Unquoted;
+                }
+            }
+            Mode::DoubleQuoted => {
+                normalized.push(ch);
+                if double_quoted_escape {
+                    double_quoted_escape = false;
+                    continue;
+                }
+                match ch {
+                    '\\' => double_quoted_escape = true,
+                    '"' => mode = Mode::Unquoted,
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    Ok(normalized)
+}
+
+fn push_shell_single_quoted_char(output: &mut String, ch: char) {
+    if ch == '\'' {
+        output.push_str("'\\''");
+    } else {
+        output.push(ch);
+    }
 }
 
 fn escape_process_ref_hash_ids(input: &str) -> String {
@@ -253,6 +374,37 @@ mod test {
     }
 
     #[test]
+    fn split_supports_multiline_triple_quoted_values() {
+        let line =
+            "import graphs --inline-dot \"\"\"digraph g {\n  a -> b [particle=\"e+\"];\n}\"\"\"";
+        let parts = split_command_line(line).unwrap();
+        assert_eq!(
+            parts,
+            vec![
+                "import",
+                "graphs",
+                "--inline-dot",
+                "digraph g {\n  a -> b [particle=\"e+\"];\n}"
+            ]
+        );
+    }
+
+    #[test]
+    fn split_escapes_single_quotes_inside_triple_quoted_values() {
+        let line = "import graphs --inline-dot \"\"\"digraph g {\n  label = 'x';\n}\"\"\"";
+        let parts = split_command_line(line).unwrap();
+        assert_eq!(
+            parts,
+            vec![
+                "import",
+                "graphs",
+                "--inline-dot",
+                "digraph g {\n  label = 'x';\n}"
+            ]
+        );
+    }
+
+    #[test]
     fn split_command_list_handles_top_level_semicolons() {
         let parts = split_command_list("display processes; display settings global ;display model")
             .unwrap();
@@ -277,6 +429,22 @@ mod test {
             vec![
                 "set process -p foo string 'a; b'",
                 "run block_a -c \"display settings global; display model -a\"",
+            ]
+        );
+    }
+
+    #[test]
+    fn split_command_list_preserves_triple_quoted_semicolons() {
+        let parts = split_command_list(
+            "display processes; import graphs --inline-dot \"\"\"digraph g {\n  a -> b;\n}\"\"\"; display model",
+        )
+        .unwrap();
+        assert_eq!(
+            parts,
+            vec![
+                "display processes",
+                "import graphs --inline-dot \"\"\"digraph g {\n  a -> b;\n}\"\"\"",
+                "display model",
             ]
         );
     }

@@ -10,7 +10,7 @@ use std::{
         Arc, Mutex,
     },
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use clap::Args;
@@ -25,7 +25,6 @@ use linnet::half_edge::subgraph::SubGraphLike;
 use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use symbolica::numerical_integration::Sample;
 use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use toml::Value as TomlValue;
 use tracing::{debug, info, info_span, Span};
@@ -36,7 +35,7 @@ use gammalooprs::{
     feyngen::GenerationType,
     graph::Graph,
     initialisation::initialise,
-    integrands::{process::ProcessIntegrand, HasIntegrand},
+    integrands::process::ProcessIntegrand,
     is_interrupt_requested,
     model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
     processes::{
@@ -60,6 +59,7 @@ use gammalooprs::{
 
 use crate::{
     command_parser::{normalize_clap_args, split_command_line},
+    command_template::{contains_placeholder, placeholder_specs, PlaceholderSpec},
     commands::{save::SaveState, Commands},
     integrand_info::{collect_integrand_info, IntegrandInfo},
     model_parameters::{external_model_parameter_type, validate_model_parameter_type},
@@ -641,6 +641,16 @@ pub enum ProcessRef {
     Unqualified(String),
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct GraphImportOptions {
+    pub process_name: Option<String>,
+    pub process_id: Option<usize>,
+    pub process_definition: Option<ProcessDefinition>,
+    pub integrand_name: Option<String>,
+    pub overwrite: bool,
+    pub append: bool,
+}
+
 impl Serialize for ProcessRef {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -962,6 +972,14 @@ impl Serialize for CommandHistory {
     where
         S: serde::Serializer,
     {
+        if self.is_template() {
+            return self
+                .raw_string
+                .as_deref()
+                .unwrap_or("__command_template")
+                .serialize(serializer);
+        }
+
         if get_serialize_commands_as_strings() {
             if let Some(ref raw_string) = self.raw_string {
                 raw_string.serialize(serializer)
@@ -1057,6 +1075,26 @@ impl CommandHistory {
         }
     }
 
+    pub fn new_template(raw_string: String) -> Self {
+        Self::new_with_raw(Commands::CommandTemplate, raw_string)
+    }
+
+    pub fn is_template(&self) -> bool {
+        matches!(self.command, Commands::CommandTemplate)
+    }
+
+    pub fn raw_string(&self) -> Option<&str> {
+        self.raw_string.as_deref()
+    }
+
+    pub fn semantically_eq(&self, other: &Self) -> bool {
+        match (self.is_template(), other.is_template()) {
+            (true, true) => self.raw_string == other.raw_string,
+            (false, false) => self.command == other.command,
+            _ => false,
+        }
+    }
+
     /// Create a CommandHistory from a command (alias for new)
     pub fn from_command(command: Commands) -> Self {
         Self::new(command)
@@ -1067,9 +1105,7 @@ impl CommandHistory {
     /// This function attempts to parse the raw string using clap, and if successful,
     /// creates a CommandHistory with both the parsed command and the original string.
     pub fn from_raw_string(raw_string: &str) -> Result<Self, clap::Error> {
-        use crate::Repl;
         use clap::error::ErrorKind;
-        use clap::Parser;
 
         let args = split_command_line(raw_string)
             .map(normalize_clap_args)
@@ -1079,11 +1115,23 @@ impl CommandHistory {
                     "Could not parse command: unmatched quotes or trailing escape",
                 )
             })?;
+
+        match Self::from_args_and_raw(args, raw_string.to_string()) {
+            Ok(command) => Ok(command),
+            Err(_) if contains_placeholder(raw_string) => Ok(Self::new_template(raw_string.into())),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub fn from_args_and_raw(args: Vec<String>, raw_string: String) -> Result<Self, clap::Error> {
+        use crate::Repl;
+        use clap::Parser;
+
         let cli = Repl::try_parse_from(
             std::iter::once("gammaloop").chain(args.iter().map(String::as_str)),
         )?;
 
-        Ok(Self::new_with_raw(cli.command, raw_string.into()))
+        Ok(Self::new_with_raw(cli.command, raw_string))
     }
 }
 
@@ -1134,7 +1182,7 @@ impl CommandsBlock {
                 .commands
                 .iter()
                 .zip(other.commands.iter())
-                .all(|(left, right)| left.command == right.command)
+                .all(|(left, right)| left.semantically_eq(right))
     }
 }
 
@@ -1197,6 +1245,57 @@ impl RunHistory {
 
     pub fn command_block(&self, name: &str) -> Option<&CommandsBlock> {
         self.command_blocks.iter().find(|block| block.name == name)
+    }
+
+    pub fn command_block_placeholder_names(&self, name: &str) -> BTreeSet<String> {
+        self.command_block_placeholder_specs(name)
+            .into_iter()
+            .map(|spec| spec.name)
+            .collect()
+    }
+
+    pub fn command_block_placeholder_specs(&self, name: &str) -> BTreeSet<PlaceholderSpec> {
+        let mut placeholders = BTreeSet::new();
+        let mut visited = HashSet::new();
+        self.collect_command_block_placeholder_specs(name, &mut visited, &mut placeholders);
+        placeholders
+    }
+
+    fn collect_command_block_placeholder_specs(
+        &self,
+        name: &str,
+        visited: &mut HashSet<String>,
+        placeholders: &mut BTreeSet<PlaceholderSpec>,
+    ) {
+        if !visited.insert(name.to_string()) {
+            return;
+        }
+
+        let Some(block) = self.command_block(name) else {
+            return;
+        };
+
+        for command in &block.commands {
+            if let Some(raw) = command.raw_string() {
+                placeholders.extend(placeholder_specs(raw));
+            }
+            let Commands::Run(run) = &command.command else {
+                continue;
+            };
+            for nested_name in run.selected_block_names() {
+                let mut nested_placeholders = BTreeSet::new();
+                self.collect_command_block_placeholder_specs(
+                    nested_name,
+                    visited,
+                    &mut nested_placeholders,
+                );
+                for defined in &run.defines {
+                    nested_placeholders.retain(|spec| spec.name.as_str() != defined.key.as_str());
+                }
+                placeholders.extend(nested_placeholders);
+            }
+        }
+        visited.remove(name);
     }
 
     pub fn select_command_blocks(
@@ -1298,9 +1397,9 @@ impl RunHistory {
 
     pub(crate) fn filtered_for_save(&self) -> Self {
         let mut filtered = self.clone();
-        filtered
-            .commands
-            .retain(|command_history| should_persist_command(&command_history.command));
+        filtered.commands.retain(|command_history| {
+            command_history.is_template() || should_persist_command(&command_history.command)
+        });
         filtered
     }
 
@@ -2597,7 +2696,7 @@ impl State {
                                     process_id,
                                     a.preprocess(
                                         &state.model,
-                                        &global_settings.generation,
+                                        global_settings,
                                         &runtime_default,
                                         generation_pool,
                                     )?,
@@ -2633,7 +2732,7 @@ impl State {
                                     cs.preprocess(
                                         &state.model,
                                         &p.definition,
-                                        &global_settings.generation,
+                                        global_settings,
                                         runtime_default,
                                         generation_pool,
                                     )?,
@@ -2834,24 +2933,25 @@ impl State {
         Ok(())
     }
 
-    pub fn import_graphs(
-        &mut self,
-        graphs: Vec<Graph>,
-        process_name: Option<String>,
-        process_id: Option<usize>,
-        integrand_name: Option<String>,
-        overwrite: bool,
-        append: bool,
-    ) -> Result<()> {
-        let generation_type = if graphs.iter().all(|g| g.initial_state_cut.nedges(g) == 0) {
-            GenerationType::Amplitude
-        } else if graphs.iter().all(|g| g.initial_state_cut.nedges(g) > 0) {
-            GenerationType::CrossSection
-        } else {
-            return Err(eyre!(
-                "Mix of amplitude and cross section graphs in the same file is not supported"
-            ));
-        };
+    pub fn import_graphs(&mut self, graphs: Vec<Graph>, options: GraphImportOptions) -> Result<()> {
+        let GraphImportOptions {
+            process_name,
+            process_id,
+            process_definition,
+            integrand_name,
+            overwrite,
+            append,
+        } = options;
+        let generation_type = Self::infer_graph_list_generation_type(&graphs)?;
+        if let Some(definition) = &process_definition {
+            if definition.generation_type != generation_type {
+                return Err(eyre!(
+                    "--process-spec describes a {} process, but the imported graph list is {}",
+                    definition.generation_type,
+                    generation_type
+                ));
+            }
+        }
 
         let integrand_base_name = integrand_name.clone().unwrap_or("default".to_string());
         let process = if let Some(proc_id) = process_id {
@@ -2880,8 +2980,13 @@ impl State {
             {
                 Some(existing_proc)
             } else {
-                let process_defintion =
-                    ProcessDefinition::from_graph_list(&graphs, generation_type, &self.model)?;
+                let mut process_defintion = match process_definition.clone() {
+                    Some(definition) => definition,
+                    None => {
+                        ProcessDefinition::from_graph_list(&graphs, generation_type, &self.model)?
+                    }
+                };
+                process_defintion.process_id = self.process_list.processes.len();
                 let process = Process::from_graph_list(
                     p_name,
                     integrand_base_name.clone(),
@@ -2898,6 +3003,17 @@ impl State {
             }
         };
         if let Some(p) = process {
+            if let Some(mut imported_definition) = process_definition {
+                imported_definition.folder_name = p.definition.folder_name.clone();
+                imported_definition.process_id = p.definition.process_id;
+                if imported_definition != p.definition {
+                    return Err(eyre!(
+                        "--process-spec does not match existing process '{}'. Import the graphs into a new process or use the same process specification that created this process.",
+                        p.definition.folder_name
+                    ));
+                }
+            }
+
             let existing_names = p.get_integrand_names();
             let integrand_name = if existing_names.contains(&integrand_base_name.as_str()) {
                 if append {
@@ -2941,49 +3057,16 @@ impl State {
         Ok(())
     }
 
-    pub fn bench(
-        &mut self,
-        samples: usize,
-        process_id: usize,
-        integrand_name: String,
-        _n_cores: usize,
-    ) -> Result<()> {
-        let integrand = self
-            .process_list
-            .get_integrand_mut(process_id, integrand_name)?;
-        let name = integrand.name();
-
-        info!(
-            "\nBenchmarking runtime of integrand '{}' over {} samples...\n",
-            name.green(),
-            samples.to_string().blue()
-        );
-
-        let now = Instant::now();
-        for _ in 0..samples {
-            let _ = integrand.evaluate_sample(
-                &Sample::Continuous(
-                    F(1.),
-                    (0..integrand.get_n_dim())
-                        .map(|_| F(rand::random::<f64>()))
-                        .collect(),
-                ),
-                &self.model,
-                F(1.),
-                1,
-                false,
-                Complex::new_zero(),
-            );
+    pub(crate) fn infer_graph_list_generation_type(graphs: &[Graph]) -> Result<GenerationType> {
+        if graphs.iter().all(|g| g.initial_state_cut.nedges(g) == 0) {
+            Ok(GenerationType::Amplitude)
+        } else if graphs.iter().all(|g| g.initial_state_cut.nedges(g) > 0) {
+            Ok(GenerationType::CrossSection)
+        } else {
+            Err(eyre!(
+                "Mix of amplitude and cross section graphs in the same file is not supported"
+            ))
         }
-        let total_time = now.elapsed().as_secs_f64();
-        info!(
-            "\n> Total time: {} s for {} samples, {} ms per sample\n",
-            format!("{:.1}", total_time).blue(),
-            format!("{}", samples).blue(),
-            format!("{:.5}", total_time * 1000. / (samples as f64)).green(),
-        );
-
-        Ok(())
     }
 
     pub fn new(log_dir: impl AsRef<Path>, log_file_name: Option<String>) -> Self {
@@ -3046,6 +3129,19 @@ impl State {
         run_state_migration_checks(&manifest, &save_path)?;
         debug!("Loading state manifest version {}", manifest.version);
 
+        // Import Symbolica before loading the model so saved UFO symbols do not
+        // collide with the model's non-exportable custom print callbacks during
+        // reload. This intentionally keeps imported UFO symbols with plain
+        // Symbolica formatting in restored states.
+        symbolica::GLOBAL_SETTINGS
+            .initialize_tracing
+            .store(false, Ordering::Relaxed);
+        let state = symbolica::state::State::import(
+            &mut fs::File::open(save_path.join("symbolica_state.bin"))
+                .context("Trying to open symbolica state binary")?,
+            None,
+        )?;
+
         let mut model = if let Some(model_path) = &model_path {
             info!("Loading model from {}", model_path.display());
             Model::from_file(model_path)?
@@ -3068,12 +3164,6 @@ impl State {
         } else {
             InputParamCard::default_from_model(&model)
         };
-
-        let state = symbolica::state::State::import(
-            &mut fs::File::open(save_path.join("symbolica_state.bin"))
-                .context("Trying to open symbolica state binary")?,
-            None,
-        )?;
 
         let context: GammaLoopContextContainer<'_> = GammaLoopContextContainer {
             state_map: &state,
@@ -3271,11 +3361,14 @@ mod tests {
         state
             .import_graphs(
                 graphs,
-                Some("scalar_bubble".to_string()),
-                None,
-                Some("default".to_string()),
-                false,
-                false,
+                GraphImportOptions {
+                    process_name: Some("scalar_bubble".to_string()),
+                    process_id: None,
+                    process_definition: None,
+                    integrand_name: Some("default".to_string()),
+                    overwrite: false,
+                    append: false,
+                },
             )
             .expect("graph import should succeed");
 
@@ -3420,11 +3513,14 @@ mod tests {
         state
             .import_graphs(
                 graphs,
-                Some("scalar_bubble".to_string()),
-                None,
-                Some("default".to_string()),
-                false,
-                false,
+                GraphImportOptions {
+                    process_name: Some("scalar_bubble".to_string()),
+                    process_id: None,
+                    process_definition: None,
+                    integrand_name: Some("default".to_string()),
+                    overwrite: false,
+                    append: false,
+                },
             )
             .expect("graph import should succeed");
         state
@@ -3818,6 +3914,7 @@ b = 1.0
         run_history.push_with_raw(
             Commands::Run(Run {
                 block_names: vec!["block_a".to_string()],
+                defines: Vec::new(),
                 commands: None,
             }),
             Some("run block_a".to_string()),

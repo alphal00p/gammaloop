@@ -1,30 +1,21 @@
-use crate::cff::cff_graph::VertexSet;
+use crate::cff::VertexSet;
 use crate::utils::{cut_energy, external_energy_atom_from_index, ose_atom_from_index};
 use bincode_trait_derive::{Decode, Encode};
-
-use derive_more::{From, Into};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
-use symbolica::parse;
 use tracing::warn;
 use typed_index_collections::TiVec;
 
-use crate::graph::LoopMomentumBasis;
-use crate::momentum::SignOrZero;
-
 use super::esurface::Esurface;
 use super::esurface::ExternalShift;
+pub use super::surface::HsurfaceID;
 
-#[derive(
-    From, Into, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Encode, Decode, Hash,
-)]
-pub struct HsurfaceID(usize);
 pub type HsurfaceCollection = TiVec<HsurfaceID, Hsurface>;
 pub type HsurfaceCache<T> = TiVec<HsurfaceID, T>;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode)]
 /// H-surface of the supergraph, is most likely E-surface of the amplitude, kind of badly named.
 pub struct Hsurface {
     pub positive_energies: Vec<EdgeIndex>,
@@ -37,35 +28,12 @@ impl PartialEq for Hsurface {
     fn eq(&self, other: &Self) -> bool {
         self.positive_energies == other.positive_energies
             && self.negative_energies == other.negative_energies
+            && self.external_shift == other.external_shift
     }
 }
 
 impl Hsurface {
     pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
-        self.to_atom_impl(cut_edges, external_energy_atom_from_index)
-    }
-
-    pub(crate) fn to_atom_in_lmb(&self, cut_edges: &[EdgeIndex], lmb: &LoopMomentumBasis) -> Atom {
-        self.to_atom_impl(cut_edges, |edge| {
-            lmb.edge_signatures[edge].external.iter_enumerated().fold(
-                Atom::Zero,
-                |sum, (external_index, sign)| {
-                    let atom = external_energy_atom_from_index(lmb.ext_edges[external_index]);
-                    match sign {
-                        SignOrZero::Zero => sum,
-                        SignOrZero::Plus => sum + atom,
-                        SignOrZero::Minus => sum - atom,
-                    }
-                },
-            )
-        })
-    }
-
-    fn to_atom_impl(
-        &self,
-        cut_edges: &[EdgeIndex],
-        external_shift_atom: impl Fn(EdgeIndex) -> Atom,
-    ) -> Atom {
         let (symbolic_positive_energies, symbolic_negative_energies) =
             [&self.positive_energies, &self.negative_energies]
                 .iter()
@@ -88,7 +56,7 @@ impl Hsurface {
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                Atom::num(*sign) * external_shift_atom(*i) + &sum
+                Atom::num(*sign) * external_energy_atom_from_index(*i) + &sum
             });
 
         let symbolic_sum_positive_energies = symbolic_positive_energies
@@ -156,25 +124,15 @@ impl Hsurface {
     }
 }
 
-impl From<HsurfaceID> for Atom {
-    fn from(value: HsurfaceID) -> Self {
-        parse!(&format!("H({})", Into::<usize>::into(value)))
-    }
-}
-
 #[cfg(test)]
 mod tests {
 
     use linnet::half_edge::involution::EdgeIndex;
-    use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
     use symbolica::atom::{Atom, AtomCore};
 
     use symbolica::parse;
 
-    use crate::cff::{cff_graph::VertexSet, esurface::Esurface};
-    use crate::graph::LoopMomentumBasis;
-    use crate::momentum::signature::LoopExtSignature;
-    use crate::utils::{external_energy_atom_from_index, test_utils::dummy_hedge_graph};
+    use crate::cff::{VertexSet, esurface::Esurface};
 
     use super::Hsurface;
 
@@ -204,36 +162,6 @@ mod tests {
                 .equality_under_energy_conservation(&other, &[&constraint])
                 .unwrap()
         );
-    }
-
-    #[test]
-    fn to_atom_in_lmb_uses_canonical_external_edges_not_carrier_edges() {
-        let dummy_graph = dummy_hedge_graph(9);
-        let mut edge_signatures = dummy_graph
-            .new_edgevec_from_iter(
-                (0..9).map(|_| LoopExtSignature::from((Vec::<isize>::new(), vec![0, 0]))),
-            )
-            .unwrap();
-        edge_signatures[EdgeIndex::from(8)] =
-            LoopExtSignature::from((Vec::<isize>::new(), vec![0, 1]));
-        let lmb = LoopMomentumBasis {
-            tree: SuBitGraph::empty(0),
-            loop_edges: vec![].into(),
-            ext_edges: vec![EdgeIndex::from(2), EdgeIndex::from(6)].into(),
-            edge_signatures,
-        };
-        let hsurface = Hsurface {
-            positive_energies: vec![],
-            negative_energies: vec![],
-            external_shift: vec![(EdgeIndex::from(8), -1)],
-            vertex_set: VertexSet::dummy(),
-        };
-
-        let atom = hsurface.to_atom_in_lmb(&[], &lmb).expand();
-        let expected =
-            (Atom::num(-1) * external_energy_atom_from_index(EdgeIndex::from(6))).expand();
-
-        assert_eq!(atom.to_canonical_string(), expected.to_canonical_string());
     }
 
     mod failing {

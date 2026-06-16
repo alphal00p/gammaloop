@@ -115,7 +115,7 @@ fn t_ta() {
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    graph.generate_cff();
+    graph.build_cff_expression_for_tests();
 
     graph.bare_graph.verify_external_edge_order().unwrap();
 
@@ -136,7 +136,7 @@ fn tree_ta_ta_1() {
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    graph.generate_cff();
+    graph.build_cff_expression_for_tests();
 
     graph.bare_graph.verify_external_edge_order().unwrap();
 
@@ -366,7 +366,7 @@ fn tree_h_ttxaah_1() {
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    graph.generate_cff();
+    graph.build_cff_expression_for_tests();
 
     // for (i, s) in graph.bare_graph.external_slots().iter().enumerate() {
     //     println!("{i}:{}", s);
@@ -418,7 +418,7 @@ fn tree_hh_ttxaa_1() {
 
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
-    graph.generate_cff();
+    graph.build_cff_expression_for_tests();
 
     for (i, s) in graph.bare_graph.external_slots().iter().enumerate() {
         println!("{i}:{}", s);
@@ -1043,7 +1043,7 @@ mod failing {
             colorless: Atom::num(1),
         };
 
-        graph.generate_cff();
+        graph.build_cff_expression_for_tests();
         let mut graph =
             graph.process_numerator(&model, contraction_settings, export_path, &export_settings);
 

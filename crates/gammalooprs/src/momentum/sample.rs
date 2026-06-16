@@ -305,6 +305,12 @@ impl SubspaceData {
         })
     }
 
+    pub(crate) fn loop_signature_depends_on_subspace(&self, signature: &LoopSignature) -> bool {
+        signature
+            .iter_enumerated()
+            .any(|(loop_index, sign)| self.lmb_indices.contains(&loop_index) && sign.is_sign())
+    }
+
     pub(crate) fn iter_lmb_indices<'a>(&'a self) -> impl Iterator<Item = LoopIndex> + 'a {
         self.lmb_indices.iter().copied()
     }

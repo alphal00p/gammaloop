@@ -1,0 +1,29 @@
+digraph I2 {
+    label = "I.2";
+    num = "1";
+    overall_factor = "1";
+    overall_factor_evaluated = "1";
+    projector = "ϵ(0,spenso::mink(4,hedge(0)))*ϵbar(0,spenso::mink(4,hedge(1)))";
+
+    exte0 [style=invis];
+    exte0 -> 0:0 [id=0 dir=none is_cut="1" particle="a"];
+    exte1 [style=invis];
+    1:1 -> exte1 [id=1 dir=none is_cut="1" particle="a"];
+
+    0   -> 2     [id=2 particle="t" lmb_id=0];
+    2   -> H2out [id=3 particle="t"];
+    H2out   -> 3 [id=4 particle="t"];
+    3   -> 4     [id=5 particle="t"];
+    4   -> H2in  [id=6 particle="t"];
+    H2in -> 5    [id=7 particle="t"];
+    5   -> 1     [id=8 particle="t"];
+    1   -> 6     [id=9 particle="t"];
+    6   -> 7     [id=10 particle="t"];
+    7   -> 0     [id=11 particle="t"];
+
+	2	-> 5	 [id=12 particle="H" lmb_id=1];
+	H2out -> H2in [id=13 particle="H" lmb_id=2];
+
+	3	-> 7	 [id=14 particle="g" lmb_id=3];
+	4	-> 6	 [id=15 particle="g" lmb_id=4];
+}

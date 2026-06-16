@@ -2001,6 +2001,13 @@ pub struct HistogramSnapshot {
     pub statistics: HistogramStatisticsSnapshot,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum HistogramMedianPosition {
+    Underflow,
+    InRange(f64),
+    Overflow,
+}
+
 impl HistogramSnapshot {
     pub fn to_json_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let writer = BufWriter::new(File::create(path.as_ref())?);
@@ -2131,6 +2138,45 @@ impl HistogramSnapshot {
         let mut scaled = self.clone();
         scaled.rescale(factor);
         scaled
+    }
+
+    pub fn approximate_weighted_median_position(&self) -> Option<HistogramMedianPosition> {
+        if self.kind != HistogramSnapshotKind::Continuous {
+            return None;
+        }
+
+        let positive_weight = |bin: &HistogramBinSnapshot| bin.sum_weights.max(0.0);
+        let total_weight = positive_weight(&self.underflow_bin)
+            + self.bins.iter().map(positive_weight).sum::<f64>()
+            + positive_weight(&self.overflow_bin);
+        if total_weight <= 0.0 {
+            return None;
+        }
+
+        let target = 0.5 * total_weight;
+        let mut cumulative = positive_weight(&self.underflow_bin);
+        if cumulative >= target {
+            return Some(HistogramMedianPosition::Underflow);
+        }
+
+        for bin in &self.bins {
+            cumulative += positive_weight(bin);
+            if cumulative >= target {
+                let x_min = bin.x_min.or(self.x_min)?;
+                let x_max = bin.x_max.or(self.x_max)?;
+                return Some(HistogramMedianPosition::InRange(0.5 * (x_min + x_max)));
+            }
+        }
+
+        Some(HistogramMedianPosition::Overflow)
+    }
+
+    pub fn approximate_weighted_median(&self) -> Option<f64> {
+        match self.approximate_weighted_median_position()? {
+            HistogramMedianPosition::Underflow => self.x_min,
+            HistogramMedianPosition::InRange(value) => Some(value),
+            HistogramMedianPosition::Overflow => self.x_max,
+        }
     }
 
     pub fn change_bin_ordering(&mut self, ordering: DiscreteBinOrdering) -> Result<()> {
