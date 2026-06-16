@@ -27,7 +27,7 @@ mod slow {
             .model
             .apply_param_card(&cli.state.model_parameters)?;
 
-        let target = Complex::new(F(-1.22898408452706e-13), F(-3.94362534040412e-13));
+        let target = Complex::new(F(1.22898408452706e-13), F(3.94362534040412e-13));
 
         let integrate = Integrate {
             process: vec![],
@@ -307,10 +307,10 @@ mod slow {
             amplitude: "1l_eu".into(),
             generation_time: Some(Duration::from_secs(7)),
             inspect_point: vec![0.123, 0.3242, 0.4233],
-            inspect_target: Some(Complex::new(-4.236544183136417e-12, -3.710728958614226e-12)),
+            inspect_target: Some(Complex::new(4.236544183136417e-12, 3.710728958614226e-12)),
             integrated_target: Some(Complex::new(
-                F(-1.22898408452706e-13),
-                F(-3.94362534040412e-13),
+                F(1.22898408452706e-13),
+                F(3.94362534040412e-13),
             )),
             nvar_bench: None,
             sample_time: Some(Duration::from_micros(61)),
@@ -324,10 +324,10 @@ mod slow {
                 .into_owned(),
             amplitude: "1l_phys".into(),
             inspect_point: vec![0.1, 0.2, 0.3],
-            inspect_target: Some(Complex::new(4.660217572648287e-10, -6.496141401696065e-10)),
+            inspect_target: Some(Complex::new(-4.660217572648287e-10, 6.496141401696065e-10)),
             integrated_target: Some(Complex::new(
-                F(-9.277_595_006_874_547e-11),
-                F(-3.683_945_762_498_705_4e-11),
+                F(9.277_595_006_874_547e-11),
+                F(3.683_945_762_498_705_4e-11),
             )),
             generation_time: Some(Duration::from_secs(7)),
             nvar_bench: None,
@@ -408,7 +408,7 @@ mod failing {
         println!("Inspect result: {inspect:.16e}");
 
         // The old test at a very bad value of e_cm, so I created a new value using the example card in the old main
-        assert_snapshot!(format!("{inspect:.8e}"),@"(-4.236544183136419e-12+-3.710728958614228e-12i)");
+        assert_snapshot!(format!("{inspect:.8e}"),@"(4.236544183136419e-12+3.710728958614228e-12i)");
 
         clean_test(&cli.cli_settings.state.folder);
 
@@ -432,7 +432,7 @@ mod failing {
         }
         .run(&mut cli)?;
 
-        let target = Complex::new(-2.827365545920272e-10, -5.127347264133554e-10);
+        let target = Complex::new(2.827365545920272e-10, 5.127347264133554e-10);
         assert_eq!(inspect, target);
 
         Ok(())

@@ -15,7 +15,7 @@ const INSPECT_POINT: [f64; 3] = [
 ];
 
 fn bubble_no_integrated_inspect_f64_target() -> Complex<f64> {
-    Complex::new(0., 1.580_657_072_640_913e-3)
+    Complex::new(0., -1.580_657_072_640_913e-3)
 }
 
 fn bubble_integrated_inspect_f64_target() -> Result<Complex<f64>> {
@@ -54,9 +54,9 @@ where
     };
     let pi = F(one.0.PI());
     let jacobian = &four * &pi * &radius_squared / ((&one - &x) * (&one - &x));
-    // Scalar coupling i, symmetry factor 1/2 and p0=1 multiply the elementary
-    // positive-pole bubble and vacuum contours by i/(16*pi^3).
-    let imaginary = jacobian / (sixteen * &pi * &pi * &pi)
+    // Two scalar vertices -i and two propagator numerators i give unit phase.
+    // The clockwise energy contour and symmetry factor 1/2 give -i/(16*pi^3).
+    let imaginary = -jacobian / (sixteen * &pi * &pi * &pi)
         * (&one / (eight * &w_uv * &w_uv * &w_uv) - &one / (four * &w * &w * (two * &w + sign)));
     Ok(Complex::new(decimal_scalar("0")?, imaginary))
 }
@@ -86,12 +86,12 @@ where
     let scale = decimal_scalar::<T>(&localization_scale.to_string())?;
     let radial_denominator = &radius_squared + &scale * &scale;
     // rho=L/[pi^2 (r^2+L^2)^2] integrates to one in d^3k. The complete
-    // MS-bar finite addback i*log(m_uv^2/mu_r^2)/(32*pi^2) is included once
+    // MS-bar finite addback -i*log(m_uv^2/mu_r^2)/(32*pi^2) is included once
     // in the complete orientation sum, independently of its chosen host.
     let density = scale / (&pi_squared * &radial_denominator * &radial_denominator);
     let jacobian = four * &pi * radius_squared / ((&one - &x) * (&one - &x));
     let finite = ((&m_uv * &m_uv) / (&mu_r * &mu_r)).log() / (thirty_two * pi_squared);
-    expected.im += finite * density * jacobian;
+    expected.im -= finite * density * jacobian;
     Ok(expected)
 }
 
@@ -106,11 +106,11 @@ fn bubble_integrated_inspect_quad_target() -> Result<Complex<F<f128>>> {
 }
 
 fn bubble_integrated_target() -> Complex<F<f64>> {
-    Complex::new(F(0.0), F(-2.7029875684552542e-3))
+    Complex::new(F(0.0), F(2.7029875684552542e-3))
 }
 
 fn bubble_no_integrated_target() -> Complex<F<f64>> {
-    Complex::new(F(0.0), F(-1.471664021721597e-2))
+    Complex::new(F(0.0), F(1.471664021721597e-2))
 }
 
 fn bubble_runtime_block(process: &str, integrand: &str) -> String {
@@ -119,6 +119,9 @@ fn bubble_runtime_block(process: &str, integrand: &str) -> String {
 [general]
 mu_r = 3.0
 m_uv = 20.0
+
+[integrator]
+integrated_phase = "imag"
 
 [kinematics.externals]
 type = "constant"

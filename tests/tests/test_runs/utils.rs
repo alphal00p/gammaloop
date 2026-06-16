@@ -271,7 +271,7 @@ disable_threshold_subtraction = false
                 --numerator-grouping only_detect_zeroes
                 --select-graphs GL15
                 --loop-momentum-bases GL15=8
-                --global-prefactor-projector '1𝑖 * gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
+                --global-prefactor-projector 'gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
                                                 * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
                                                 * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
                 -p gg_hhh

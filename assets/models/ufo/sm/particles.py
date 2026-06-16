@@ -7,6 +7,7 @@ from __future__ import division
 from __future__ import absolute_import
 from .object_library import all_particles, Particle
 from . import parameters as Param
+from . import propagators as Prop
 
 a = Particle(pdg_code=22,
              name='a',
@@ -51,6 +52,12 @@ W__plus__ = Particle(pdg_code=24,
                      Y=0)
 
 W__minus__ = W__plus__.anti()
+
+# Bind after constructing the antiparticle: Particle.anti() negates additional
+# quantum-number attributes, whereas these are explicit propagator objects.
+Z.propagator = Prop.Z
+W__plus__.propagator = Prop.Wplus
+W__minus__.propagator = Prop.Wminus
 
 g = Particle(pdg_code=21,
              name='g',

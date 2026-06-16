@@ -1580,7 +1580,7 @@ mod slow {
         .run(&mut cli)
         .unwrap();
 
-        let target = Complex::new(2.3159767780905335e-1, -1.8547720156633686e-4);
+        let target = Complex::new(-2.3159767780905335e-1, 1.8547720156633686e-4);
         assert_eq!(inspect, target);
         Ok(())
     }
