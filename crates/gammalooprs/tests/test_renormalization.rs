@@ -465,7 +465,7 @@ fn finite_part_ghost_2loop() {
     //p1.p1*i_*gs^4*CA^2*rat( - 1/16*ep^-2 + 1/32*ep^-1)
     let a = amp.graphs[1].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖+-1𝑖/2*ε)*1/16*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/2*ε+1𝑖)*1/16*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     ); //-1 * target
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[1], a, &new_settings);
     insta::assert_snapshot!(
