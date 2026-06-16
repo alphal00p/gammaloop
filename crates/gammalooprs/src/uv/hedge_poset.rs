@@ -39,6 +39,7 @@ use crate::{
             local_3d::{Local3DApproximation, Local3DCts, Localizer},
             local_4d::{self, Full4DCts, Local4dCts},
         },
+        export::UVForestNodeExpression,
         forest::ParametricIntegrands,
         marker::UvMarker,
         settings::VakintSettings,
@@ -1060,7 +1061,41 @@ impl Forests {
         Ok(expressions)
     }
 
-    // pub fn local_subtract(
+    pub(crate) fn export_node_expressions(
+        &self,
+        forest_index: usize,
+        post_process: &mut impl FnMut(Atom) -> Atom,
+    ) -> Result<Vec<UVForestNodeExpression>> {
+        let (cut_compatible_forest_subset, cutset) = self
+            .cuts
+            .first()
+            .ok_or_else(|| eyre!("No cuts in hedge-poset forest export"))?;
+        let mut terms = Vec::new();
+        for (node_index, nidx) in self
+            .compatible_topological_order(cut_compatible_forest_subset)?
+            .into_iter()
+            .enumerate()
+        {
+            let operation = &self.graph[nidx];
+            let computed = self.compute_store.require(operation)?;
+            let final_integrands = &computed.cut(operation, cutset)?.final_integrands;
+            let node_key = operation.to_string();
+            for (term_index, (&residue_index, numerator)) in final_integrands.iter().enumerate() {
+                terms.push(UVForestNodeExpression {
+                    forest_index,
+                    node_index,
+                    node_key: node_key.clone(),
+                    term_index,
+                    residue_index,
+                    numerator: post_process(numerator.clone()),
+                });
+            }
+        }
+
+        Ok(terms)
+    }
+
+    // pub fn compute(
     //     &mut self,
     //     graph: &mut Graph,
     //     wood: &Wood,
