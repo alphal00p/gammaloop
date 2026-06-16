@@ -398,6 +398,7 @@ impl VakintSettings {
             },
             //Custom("1".to_string()),
             number_of_terms_in_epsilon_expansion: 5,
+            project_onto_tensor_integrals: true,
             // ..Default::default()
         }
     }
@@ -458,6 +459,9 @@ pub struct UVgenerationSettings {
     pub softct: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub generate_integrated: bool,
+    /// Reduce universal tensor kernels; false sends each complete numerator to Vakint.
+    #[serde(skip_serializing_if = "is_true")]
+    pub project_integrated_uv_cts_onto_tensor_integrals: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub subtract_uv: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -483,6 +487,7 @@ impl Default for UVgenerationSettings {
         UVgenerationSettings {
             softct: true,
             generate_integrated: true,
+            project_integrated_uv_cts_onto_tensor_integrals: true,
             subtract_uv: true,
             final_integrand: FinalIntegrandDimension::default(),
             local_uv_cts_from_expanded_4d_integrands: false,
@@ -556,6 +561,36 @@ mod tests {
 
     fn pdg_set(values: impl IntoIterator<Item = isize>) -> BTreeSet<isize> {
         values.into_iter().collect()
+    }
+
+    #[test]
+    fn tensor_integral_projection_mode_roundtrips_with_visible_defaults() {
+        use crate::utils::serde_utils::ShowDefaultsGuard;
+
+        let defaults: UVgenerationSettings = toml::from_str("").unwrap();
+        assert!(defaults.project_integrated_uv_cts_onto_tensor_integrals);
+        let guard = ShowDefaultsGuard::new(false);
+        assert!(
+            !toml::to_string(&defaults)
+                .unwrap()
+                .contains("project_integrated_uv_cts_onto_tensor_integrals")
+        );
+        let monolithic: UVgenerationSettings =
+            toml::from_str("project_integrated_uv_cts_onto_tensor_integrals = false").unwrap();
+        let serialized = toml::to_string(&monolithic).unwrap();
+        assert!(serialized.contains("project_integrated_uv_cts_onto_tensor_integrals = false"));
+        assert!(
+            !toml::from_str::<UVgenerationSettings>(&serialized)
+                .unwrap()
+                .project_integrated_uv_cts_onto_tensor_integrals
+        );
+        drop(guard);
+        let _guard = ShowDefaultsGuard::new(true);
+        assert!(
+            toml::to_string(&defaults)
+                .unwrap()
+                .contains("project_integrated_uv_cts_onto_tensor_integrals = true")
+        );
     }
 
     #[test]

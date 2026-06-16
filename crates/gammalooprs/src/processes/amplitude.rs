@@ -1097,7 +1097,7 @@ impl AmplitudeGraph {
                 &HashMap::default(),
                 &complex_params_vakint,
                 &HashMap::default(),
-            );
+            )?;
         }
 
         let mut num = self

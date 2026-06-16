@@ -137,6 +137,8 @@ fn legacy_renormalization_part(
     settings: &UVgenerationSettings,
 ) -> Result<RenormalizationPart> {
     let mut vk_settings = settings.vakint.true_settings();
+    vk_settings.project_onto_tensor_integrals =
+        settings.project_integrated_uv_cts_onto_tensor_integrals;
     let wood = graph.wood_with_settings(&graph.no_dummy(), settings, &graph.loop_momentum_basis);
     // MUV renormalization extracts the finite term, so retain one term beyond
     // the maximal pole order, as in the other forest integration paths.
@@ -224,6 +226,13 @@ impl IntegrandMapComparison<'_> {
             .checked_zip(self.hedge, |key, legacy_expr, hedge_expr| {
                 if !ComparableExpr::new(legacy_expr).equivalent_to(&ComparableExpr::new(hedge_expr))
                 {
+                    crate::debug_tags!(#uv, #compare, #mismatch;
+                        cut_index = self.cut_index,
+                        residue = ?key,
+                        file.legacy = legacy_expr.to_canonical_string(),
+                        file.hedge = hedge_expr.to_canonical_string(),
+                        "UV orchestrator expressions differ at the shared residue boundary"
+                    );
                     return Err(eyre!(
                         "UV orchestrator compare mismatch at cut {} residue {:?}",
                         self.cut_index,

@@ -319,7 +319,7 @@ impl MATAD {
 }
 
 impl Vakint {
-    pub fn matad_evaluate(
+    pub(super) fn matad_evaluate(
         &self,
         settings: &VakintSettings,
         input_numerator: AtomView,
@@ -383,7 +383,7 @@ impl Vakint {
             }
         };
 
-        let mut numerator = Vakint::convert_to_dot_notation(input_numerator);
+        let mut numerator = Vakint::convert_to_dot_notation(settings, input_numerator)?;
 
         // println!("Numerator before processing: {}", numerator);
         numerator = numerator.replace_multiple(&[
@@ -629,8 +629,8 @@ impl Vakint {
             format!(
                 "(
                     (1𝑖*(𝜋^((4-2*{eps})/2)))\
-                  * (exp(-EulerGamma))^({eps})\
-                  * (exp(-logmUVmu-log_mu_sq))^({eps})\
+                  * exp(-({eps})*EulerGamma)\
+                  * exp(-({eps})*(logmUVmu+log_mu_sq))\
                  )^{n_loops}",
                 eps = settings.epsilon_symbol,
                 n_loops = integral.n_loops
