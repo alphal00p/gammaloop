@@ -51,6 +51,8 @@ impl CutWoods {
             let wood = Wood::from_spinneys(spinneys, graph);
 
             let mut lvk_settings = settings.vakint.true_settings();
+            lvk_settings.project_onto_tensor_integrals =
+                settings.project_integrated_uv_cts_onto_tensor_integrals;
             // Keep the legacy wood path aligned with the hedge-poset path:
             // the downstream integrand builder extracts the epsilon^0 term, so
             // Vakint must provide one term beyond the maximal pole order.

@@ -5529,6 +5529,10 @@
         "orchestrator": {
           "$ref": "#/$defs/UVOrchestrator"
         },
+        "project_integrated_uv_cts_onto_tensor_integrals": {
+          "description": "Reduce universal tensor kernels; false sends each complete numerator to Vakint.",
+          "type": "boolean"
+        },
         "renormalization_prescription": {
           "$ref": "#/$defs/RenormalizationPrescriptionSettings"
         },
