@@ -329,6 +329,12 @@ pub struct SessionSettings {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StateAccessMode {
+    ReadWrite,
+    ReadOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ReadOnlyStateOrigin {
     UserRequested,
     BootSettingsMismatch,
@@ -350,6 +356,14 @@ impl SessionSettings {
     pub(crate) fn is_read_only_due_to_boot_settings_mismatch(&self) -> bool {
         self.read_only_state
             && self.read_only_state_origin == Some(ReadOnlyStateOrigin::BootSettingsMismatch)
+    }
+
+    pub fn state_access_mode(&self) -> StateAccessMode {
+        if self.read_only_state {
+            StateAccessMode::ReadOnly
+        } else {
+            StateAccessMode::ReadWrite
+        }
     }
 }
 
@@ -455,9 +469,55 @@ impl CLISettings {
             self.state.folder.display()
         ))
     }
+
+    pub(crate) fn write_target_lies_within_active_state(&self, target: &Path) -> Result<bool> {
+        path_lies_within(&self.state.folder, target)
+    }
+
+    pub(crate) fn cwd_output_path_with_state_name(&self, base_name: &str) -> PathBuf {
+        let mut name = base_name.to_string();
+        if let Some(state_name) = self
+            .state
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|state_name| !state_name.is_empty())
+            .map(path_safe_suffix)
+        {
+            name.push('_');
+            name.push_str(&state_name);
+        }
+        PathBuf::from(".").join(name)
+    }
+
+    pub(crate) fn default_active_state_output_path(&self, read_only_base_name: &str) -> PathBuf {
+        if self.session.read_only_state {
+            self.cwd_output_path_with_state_name(read_only_base_name)
+        } else {
+            self.state.folder.clone()
+        }
+    }
 }
 
 impl SmartSerde for CLISettings {}
+
+fn path_safe_suffix(value: &str) -> String {
+    let suffix = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    if suffix.is_empty() {
+        "state".to_string()
+    } else {
+        suffix
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct StateLoadOption {
@@ -493,6 +553,23 @@ impl LoadedState {
             &mut self.session_state,
         )
     }
+
+    pub fn state_access_mode(&self) -> StateAccessMode {
+        self.cli_settings.session.state_access_mode()
+    }
+
+    pub fn is_read_only_state(&self) -> bool {
+        self.state_access_mode() == StateAccessMode::ReadOnly
+    }
+
+    pub fn active_state_folder(&self) -> &Path {
+        &self.cli_settings.state.folder
+    }
+
+    pub fn ensure_write_target_allowed(&self, target: &Path, operation: &str) -> Result<()> {
+        self.cli_settings
+            .ensure_write_target_outside_active_state(target, operation)
+    }
 }
 
 pub struct Parsed {
@@ -502,6 +579,19 @@ pub struct Parsed {
 }
 
 impl StateLoadOption {
+    pub fn read_only(state_folder: impl Into<PathBuf>) -> Self {
+        Self {
+            state_folder: Some(state_folder.into()),
+            read_only_state: true,
+            ..Self::default()
+        }
+    }
+
+    pub fn with_read_only_state(mut self, read_only_state: bool) -> Self {
+        self.read_only_state = read_only_state;
+        self
+    }
+
     fn into_oneshot(self) -> OneShot {
         let state_folder_explicitly_set = self.state_folder.is_some();
         OneShot {
@@ -1274,6 +1364,7 @@ impl OneShot {
                 mut default_runtime_settings,
                 mut session_state,
                 state_load_summary,
+                ..
             },
             boot_exit,
         ) = self.bootstrap_session()?;
