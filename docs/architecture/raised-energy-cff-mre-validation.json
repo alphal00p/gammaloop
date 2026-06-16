@@ -1,0 +1,582 @@
+{
+  "status": "PASS",
+  "scope": "Two standalone positive controls and one reproduced import defect; excluded from all workspace gate/runtime totals.",
+  "executed_revision": "a3af927afc633c6e6c2474d3f03fa02e0242eaa4",
+  "observed_c7_revision": "6d7a9220129c0fac37bdc0e04ebefccb1688c7be",
+  "source_equivalence": {
+    "executed_revision": "a3af927afc633c6e6c2474d3f03fa02e0242eaa4",
+    "observed_c7_revision": "6d7a9220129c0fac37bdc0e04ebefccb1688c7be",
+    "package_path": "tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre",
+    "executed_package_tree": "b917afeca167a3b114c6f8bc0d22be24dc888292",
+    "observed_package_tree": "b917afeca167a3b114c6f8bc0d22be24dc888292",
+    "executed_cargo_config_tree": "55e9a290aca3d052e36c88b794b2cd6a74ef4477",
+    "observed_cargo_config_tree": "55e9a290aca3d052e36c88b794b2cd6a74ef4477",
+    "files": {
+      "Cargo.toml": {
+        "executed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "40ed24b0e28274015b1f85a5c2c181cd2ef6ec2d",
+          "bytes": 3868
+        },
+        "observed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "40ed24b0e28274015b1f85a5c2c181cd2ef6ec2d",
+          "bytes": 3868
+        }
+      },
+      "Cargo.lock": {
+        "executed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "52d4e9109040a5380bf51a3bf16312edeb6b47ba",
+          "bytes": 151252
+        },
+        "observed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "52d4e9109040a5380bf51a3bf16312edeb6b47ba",
+          "bytes": 151252
+        }
+      },
+      ".cargo/config.toml": {
+        "executed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "0190f8e3c0fd43ad207e036b8896264647313891",
+          "bytes": 624
+        },
+        "observed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "0190f8e3c0fd43ad207e036b8896264647313891",
+          "bytes": 624
+        }
+      },
+      "rust-toolchain": {
+        "executed": null,
+        "observed": null
+      },
+      "rust-toolchain.toml": {
+        "executed": null,
+        "observed": null
+      },
+      "tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/Cargo.toml": {
+        "executed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "2ee53dcc3d10897132b1ba14477b62f57d68e9f6",
+          "bytes": 674
+        },
+        "observed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "2ee53dcc3d10897132b1ba14477b62f57d68e9f6",
+          "bytes": 674
+        }
+      },
+      "tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/Cargo.lock": {
+        "executed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "3306d94d4d78234570a9413151af036ba88cb19b",
+          "bytes": 27479
+        },
+        "observed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "3306d94d4d78234570a9413151af036ba88cb19b",
+          "bytes": 27479
+        }
+      }
+    },
+    "scope": "Exact tracked package, manifests, lockfiles, Cargo configuration and toolchain-file identity only; original runtime/binary/environment receipts remain at the executed revision.",
+    "identical": true,
+    "claim": "Source-equivalent standalone package; no additional execution"
+  },
+  "positive_controls": 2,
+  "control_assertions": {
+    "control": 39,
+    "abstract-control": 4
+  },
+  "reproduced_import_defects": 1,
+  "workspace_tests_added_to_totals": 0,
+  "large_evaluator_panic_reproduced": false,
+  "stages": [
+    {
+      "stage": "check",
+      "argv": [
+        "cargo",
+        "check",
+        "--manifest-path",
+        "tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/Cargo.toml",
+        "--target-dir",
+        "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target",
+        "--locked",
+        "--all-targets",
+        "--profile",
+        "dev-optim"
+      ],
+      "exit_code": 0,
+      "result": "/tmp/raised-stack-latest-review-20260914/c7-results/mre-check/result.json",
+      "result_sha256": "5cfcb30e54db391e205d0df341fdf993927246f7f1ea5e075037ad33d95c2c59",
+      "output_sha256": "8f919a010438efd996b2c59e2c106eaaf91d931b3e8a3458d519462972156723",
+      "elapsed_seconds": 42.09853260801174,
+      "classification": "build_gate",
+      "result_sha256_verified": true,
+      "output_sha256_verified": true,
+      "full_tracked_source_guard_verified": true
+    },
+    {
+      "stage": "build",
+      "argv": [
+        "cargo",
+        "build",
+        "--manifest-path",
+        "tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/Cargo.toml",
+        "--target-dir",
+        "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target",
+        "--locked",
+        "--all-targets",
+        "--profile",
+        "dev-optim"
+      ],
+      "exit_code": 0,
+      "result": "/tmp/raised-stack-latest-review-20260914/c7-results/mre-build/result.json",
+      "result_sha256": "a6333b267e0a0529ab76f1d8a72bd972bb3568072074f5f1cadc661d54415112",
+      "output_sha256": "70708d4b368ce895f18b8ba994d4abf49d073d2a389863e928d54d38a3b1e8fe",
+      "elapsed_seconds": 315.153739094967,
+      "classification": "build_gate",
+      "result_sha256_verified": true,
+      "output_sha256_verified": true,
+      "full_tracked_source_guard_verified": true
+    },
+    {
+      "stage": "clippy",
+      "argv": [
+        "cargo",
+        "clippy",
+        "--manifest-path",
+        "tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/Cargo.toml",
+        "--target-dir",
+        "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target",
+        "--locked",
+        "--all-targets",
+        "--profile",
+        "dev-optim",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "result": "/tmp/raised-stack-latest-review-20260914/c7-results/mre-clippy/result.json",
+      "result_sha256": "25334ae9d988694f1568dfb4640bba08b944d72c2f83ff96a5362d2fd07d68d6",
+      "output_sha256": "c49c06890189c874b7ce6a565f7cb9adf7ddba0d6b2dafa11fd92be3cb6df988",
+      "elapsed_seconds": 0.9783382080495358,
+      "classification": "build_gate",
+      "result_sha256_verified": true,
+      "output_sha256_verified": true,
+      "full_tracked_source_guard_verified": true
+    },
+    {
+      "stage": "control",
+      "argv": [
+        "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/symbolica-evaluator-mre",
+        "--control"
+      ],
+      "exit_code": 0,
+      "result": "/tmp/raised-stack-latest-review-20260914/c7-results/mre-control/result.json",
+      "result_sha256": "f48b907210faa2f50366643f318e0379f095dd660b14415d8316257e75548e2d",
+      "output_sha256": "c3f3e894362b4106e1217bfb30142bf16872a7b9a2de69347e9ba74a2e1c4aa3",
+      "elapsed_seconds": 0.4976442769402638,
+      "binary": {
+        "path": "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/symbolica-evaluator-mre",
+        "sha256": "23506b05533fe152953f5a5f8b6414e2e92762b93f84a8b3486c63e2c245daad",
+        "bytes": 357235680,
+        "mtime_ns": 1789381314951543221
+      },
+      "classification": "positive_control",
+      "asserted_value": 39,
+      "value_evidence": "Pinned numeric assert_eq! completed before the control_passed event; the numeric value is not printed.",
+      "events": [
+        {
+          "stage": "start",
+          "elapsed_seconds": 0.000138481,
+          "pid": 858986,
+          "rss_bytes": 3178496,
+          "vmhwm_bytes": 3178496
+        },
+        {
+          "stage": "context_import_start",
+          "elapsed_seconds": 0.000340681,
+          "pid": 858986,
+          "rss_bytes": 3321856,
+          "vmhwm_bytes": 3321856
+        },
+        {
+          "stage": "context_ready",
+          "elapsed_seconds": 0.00240045,
+          "pid": 858986,
+          "rss_bytes": 4448256,
+          "vmhwm_bytes": 4448256
+        },
+        {
+          "stage": "scalar_import_start",
+          "elapsed_seconds": 0.00244309,
+          "pid": 858986,
+          "rss_bytes": 4448256,
+          "vmhwm_bytes": 4448256
+        },
+        {
+          "stage": "scalar_import_done",
+          "elapsed_seconds": 0.00250182,
+          "pid": 858986,
+          "rss_bytes": 4452352,
+          "vmhwm_bytes": 4452352
+        },
+        {
+          "stage": "symbolica_build_start",
+          "elapsed_seconds": 0.00258197,
+          "pid": 858986,
+          "rss_bytes": 4464640,
+          "vmhwm_bytes": 4464640
+        },
+        {
+          "stage": "symbolica_build_done",
+          "elapsed_seconds": 0.003498564,
+          "pid": 858986,
+          "rss_bytes": 4947968,
+          "vmhwm_bytes": 4947968
+        },
+        {
+          "stage": "control_passed",
+          "elapsed_seconds": 0.003604674,
+          "pid": 858986,
+          "rss_bytes": 4972544,
+          "vmhwm_bytes": 4972544
+        }
+      ],
+      "result_sha256_verified": true,
+      "output_sha256_verified": true,
+      "full_tracked_source_guard_verified": true
+    },
+    {
+      "stage": "abstract-control",
+      "argv": [
+        "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/symbolica-evaluator-mre",
+        "--abstract-parameters",
+        "--control"
+      ],
+      "exit_code": 0,
+      "result": "/tmp/raised-stack-latest-review-20260914/c7-results/mre-abstract-control/result.json",
+      "result_sha256": "88e13a422634631cc1ef5abd56adbe56889fd078197d6174e9cff8b4c3ccf59c",
+      "output_sha256": "456538e18780c57a1de3534336828bb505412cfbfe5c4c44913dc92fab62d2fc",
+      "elapsed_seconds": 0.5007117900531739,
+      "binary": {
+        "path": "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/symbolica-evaluator-mre",
+        "sha256": "23506b05533fe152953f5a5f8b6414e2e92762b93f84a8b3486c63e2c245daad",
+        "bytes": 357235680,
+        "mtime_ns": 1789381314951543221
+      },
+      "classification": "positive_control",
+      "asserted_value": 4,
+      "value_evidence": "Pinned numeric assert_eq! completed before the control_passed event; the numeric value is not printed.",
+      "events": [
+        {
+          "stage": "start",
+          "elapsed_seconds": 6.057e-05,
+          "pid": 859030,
+          "rss_bytes": 3424256,
+          "vmhwm_bytes": 3424256
+        },
+        {
+          "stage": "scalar_import_start",
+          "elapsed_seconds": 0.000152851,
+          "pid": 859030,
+          "rss_bytes": 3518464,
+          "vmhwm_bytes": 3518464
+        },
+        {
+          "stage": "scalar_import_done",
+          "elapsed_seconds": 0.000775463,
+          "pid": 859030,
+          "rss_bytes": 4894720,
+          "vmhwm_bytes": 4894720
+        },
+        {
+          "stage": "abstract_parameters_start",
+          "elapsed_seconds": 0.000821754,
+          "pid": 859030,
+          "rss_bytes": 4894720,
+          "vmhwm_bytes": 4894720
+        },
+        {
+          "stage": "abstract_parameters_ready",
+          "elapsed_seconds": 0.000889374,
+          "pid": 859030,
+          "rss_bytes": 4902912,
+          "vmhwm_bytes": 4902912
+        },
+        {
+          "stage": "symbolica_build_start",
+          "elapsed_seconds": 0.000956314,
+          "pid": 859030,
+          "rss_bytes": 4902912,
+          "vmhwm_bytes": 4902912
+        },
+        {
+          "stage": "symbolica_build_done",
+          "elapsed_seconds": 0.001071004,
+          "pid": 859030,
+          "rss_bytes": 4993024,
+          "vmhwm_bytes": 4993024
+        },
+        {
+          "stage": "control_passed",
+          "elapsed_seconds": 0.001131525,
+          "pid": 859030,
+          "rss_bytes": 5005312,
+          "vmhwm_bytes": 5005312
+        }
+      ],
+      "result_sha256_verified": true,
+      "output_sha256_verified": true,
+      "full_tracked_source_guard_verified": true
+    },
+    {
+      "stage": "import-write",
+      "argv": [
+        "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/examples/import_remap",
+        "write",
+        "/tmp/raised-stack-latest-review-20260914/mre-tiny.symbolica"
+      ],
+      "exit_code": 0,
+      "result": "/tmp/raised-stack-latest-review-20260914/c7-results/mre-import-write/result.json",
+      "result_sha256": "d4d821be1cb21c213bfd99f89f491790ebda9390d103af0df0c5287fd532cf1e",
+      "output_sha256": "499852207a2ee7346c3c8faee9f12ace4c68104b277e20379c2adbdfbdbdb7c2",
+      "elapsed_seconds": 0.4947187650250271,
+      "binary": {
+        "path": "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/examples/import_remap",
+        "sha256": "8a2115bd78bf613650d6721bd56b399d7cfcd62adaf0a540ce4eef0abcc3eec6",
+        "bytes": 353439320,
+        "mtime_ns": 1789381312233534779
+      },
+      "classification": "diagnostic_input_creation",
+      "expression": "f(x,y)",
+      "result_sha256_verified": true,
+      "output_sha256_verified": true,
+      "full_tracked_source_guard_verified": true
+    },
+    {
+      "stage": "import-read",
+      "argv": [
+        "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/examples/import_remap",
+        "read",
+        "/tmp/raised-stack-latest-review-20260914/mre-tiny.symbolica"
+      ],
+      "exit_code": 101,
+      "result": "/tmp/raised-stack-latest-review-20260914/c7-results/mre-import-read/result.json",
+      "result_sha256": "1587b2056dbd303dd98fc2eb3d6e7ee82a368dfc0df8577a8972ef7f1f207a3b",
+      "output_sha256": "3b66e5c88004fe3c268d1ac210651de91750c741ea4903cba489ff0fa3c3e6a6",
+      "elapsed_seconds": 0.4930532679427415,
+      "binary": {
+        "path": "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/examples/import_remap",
+        "sha256": "8a2115bd78bf613650d6721bd56b399d7cfcd62adaf0a540ce4eef0abcc3eec6",
+        "bytes": 353439320,
+        "mtime_ns": 1789381312233534779
+      },
+      "classification": "reproduced_upstream_import_diagnostic",
+      "imported": "f(y,x)",
+      "expected": "f(x,y)",
+      "assertion": "Argument identities changed during import",
+      "large_evaluator_panic_reproduced": false,
+      "result_sha256_verified": true,
+      "output_sha256_verified": true,
+      "full_tracked_source_guard_verified": true
+    }
+  ],
+  "immutable_source_files": {
+    "tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/Cargo.toml": {
+      "git_blob": "2ee53dcc3d10897132b1ba14477b62f57d68e9f6",
+      "sha256": "9397516ee06bb5d183f059bde1c774de216e9d5b5b5a2b39444a65426e3cc366",
+      "bytes": 674
+    },
+    "tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/Cargo.lock": {
+      "git_blob": "3306d94d4d78234570a9413151af036ba88cb19b",
+      "sha256": "3edcc8955c7c77e03bfbaaca11ab9559cbab47c424fa520047ea796920fb1ce8",
+      "bytes": 27479
+    },
+    "tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/src/main.rs": {
+      "git_blob": "c5f054d731c759b27c253b3ce5fea9b37da469f3",
+      "sha256": "89aecfb0c23b2daec024d3be2abf995465753a3a53b4ca093705e3ea03cd5965",
+      "bytes": 11857
+    },
+    "tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/examples/import_remap.rs": {
+      "git_blob": "29a4eb665b2ba32788ef6fd5622fca284e4345d7",
+      "sha256": "7ed2e0791dd8ee9dfde141f40cf475035fa4ffd004fd964ef1b8907901565f99",
+      "bytes": 1360
+    }
+  },
+  "recorded_binary_provenance": [
+    {
+      "path": "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/symbolica-evaluator-mre",
+      "sha256": "23506b05533fe152953f5a5f8b6414e2e92762b93f84a8b3486c63e2c245daad",
+      "bytes": 357235680,
+      "mtime_ns": 1789381314951543221
+    },
+    {
+      "path": "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/symbolica-evaluator-mre",
+      "sha256": "23506b05533fe152953f5a5f8b6414e2e92762b93f84a8b3486c63e2c245daad",
+      "bytes": 357235680,
+      "mtime_ns": 1789381314951543221
+    },
+    {
+      "path": "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/examples/import_remap",
+      "sha256": "8a2115bd78bf613650d6721bd56b399d7cfcd62adaf0a540ce4eef0abcc3eec6",
+      "bytes": 353439320,
+      "mtime_ns": 1789381312233534779
+    },
+    {
+      "path": "/common/dev/gammaloop/higher-power-energies-review/tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/target/dev-optim/examples/import_remap",
+      "sha256": "8a2115bd78bf613650d6721bd56b399d7cfcd62adaf0a540ce4eef0abcc3eec6",
+      "bytes": 353439320,
+      "mtime_ns": 1789381312233534779
+    }
+  ],
+  "binary_hashes_recomputed": false,
+  "tiny_input_provenance": {
+    "path": "/tmp/raised-stack-latest-review-20260914/mre-tiny.symbolica",
+    "sha256": "630e1b3c5a67d8536bb3e604f39af259f6e267429bf6a823e175b79f6acd19d3",
+    "bytes": 2480
+  },
+  "tiny_input_read_or_decoded": false,
+  "pinned_formatting": {
+    "status": "PASS",
+    "executed_revision": "bbb8ff1db499a78b3b25c41f774c9a034acb5b4d",
+    "observed_c7_revision": "6d7a9220129c0fac37bdc0e04ebefccb1688c7be",
+    "result": "/tmp/raised-stack-latest-review-20260914/c7-results/mre-fmt-current/result.json",
+    "result_sha256": "792986cbc3717c7d4760b3d272e149fc2a606abd4dd6932e366fb7e71e5b4665",
+    "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "elapsed_seconds": 0.4786571739241481,
+    "argv": [
+      "cargo",
+      "fmt",
+      "--manifest-path",
+      "tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/Cargo.toml",
+      "--all",
+      "--",
+      "--check"
+    ],
+    "full_tracked_source_guard_verified": true,
+    "executed_package_tree": "b917afeca167a3b114c6f8bc0d22be24dc888292",
+    "observed_package_tree": "b917afeca167a3b114c6f8bc0d22be24dc888292",
+    "executed_cargo_config_tree": "55e9a290aca3d052e36c88b794b2cd6a74ef4477",
+    "observed_cargo_config_tree": "55e9a290aca3d052e36c88b794b2cd6a74ef4477",
+    "files": {
+      "Cargo.toml": {
+        "executed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "40ed24b0e28274015b1f85a5c2c181cd2ef6ec2d",
+          "bytes": 3868
+        },
+        "observed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "40ed24b0e28274015b1f85a5c2c181cd2ef6ec2d",
+          "bytes": 3868
+        }
+      },
+      "Cargo.lock": {
+        "executed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "52d4e9109040a5380bf51a3bf16312edeb6b47ba",
+          "bytes": 151252
+        },
+        "observed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "52d4e9109040a5380bf51a3bf16312edeb6b47ba",
+          "bytes": 151252
+        }
+      },
+      ".cargo/config.toml": {
+        "executed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "0190f8e3c0fd43ad207e036b8896264647313891",
+          "bytes": 624
+        },
+        "observed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "0190f8e3c0fd43ad207e036b8896264647313891",
+          "bytes": 624
+        }
+      },
+      "rust-toolchain": {
+        "executed": null,
+        "observed": null
+      },
+      "rust-toolchain.toml": {
+        "executed": null,
+        "observed": null
+      },
+      "tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/Cargo.toml": {
+        "executed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "2ee53dcc3d10897132b1ba14477b62f57d68e9f6",
+          "bytes": 674
+        },
+        "observed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "2ee53dcc3d10897132b1ba14477b62f57d68e9f6",
+          "bytes": 674
+        }
+      },
+      "tests/artifacts/aa_aa_uv_slowdown/symbolica_evaluator_mre/Cargo.lock": {
+        "executed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "3306d94d4d78234570a9413151af036ba88cb19b",
+          "bytes": 27479
+        },
+        "observed": {
+          "mode": "100644",
+          "kind": "blob",
+          "git_blob": "3306d94d4d78234570a9413151af036ba88cb19b",
+          "bytes": 27479
+        }
+      }
+    },
+    "source_equivalent": true,
+    "adds_runtime_execution": false
+  },
+  "formatting_scope": "The original unpinned formatting receipt has no revision, time or source guard and is not a fresh pinned MRE gate. The separate pinned formatting record, when present, carries its own revision and source guards.",
+  "input_sha256": {
+    "c7-results/mre-validation.json": "29f49a3c55a964b8025637700686f6a43d789e3fb59068172aaac3652a8ba06f",
+    "mre-validation-plan.json": "0d573e8345fc09f46276054f3d9f2eb7e4fcb1b53326cd9b48fb5a14c0b037cb",
+    "execute-mre-validation.py": "81e64edfe2582d1b63561fea98087dfa2d7faf159e56056048e891298fc79c68",
+    "corrected-stack.json": "277179ea8e66dc68abbd84ec34519ce72eb0cd40d5a750699905241b21648a2a",
+    "c7-results/mre-check/result.json": "5cfcb30e54db391e205d0df341fdf993927246f7f1ea5e075037ad33d95c2c59",
+    "c7-results/mre-check/output.log": "8f919a010438efd996b2c59e2c106eaaf91d931b3e8a3458d519462972156723",
+    "c7-results/mre-build/result.json": "a6333b267e0a0529ab76f1d8a72bd972bb3568072074f5f1cadc661d54415112",
+    "c7-results/mre-build/output.log": "70708d4b368ce895f18b8ba994d4abf49d073d2a389863e928d54d38a3b1e8fe",
+    "c7-results/mre-clippy/result.json": "25334ae9d988694f1568dfb4640bba08b944d72c2f83ff96a5362d2fd07d68d6",
+    "c7-results/mre-clippy/output.log": "c49c06890189c874b7ce6a565f7cb9adf7ddba0d6b2dafa11fd92be3cb6df988",
+    "c7-results/mre-control/result.json": "f48b907210faa2f50366643f318e0379f095dd660b14415d8316257e75548e2d",
+    "c7-results/mre-control/output.log": "c3f3e894362b4106e1217bfb30142bf16872a7b9a2de69347e9ba74a2e1c4aa3",
+    "c7-results/mre-abstract-control/result.json": "88e13a422634631cc1ef5abd56adbe56889fd078197d6174e9cff8b4c3ccf59c",
+    "c7-results/mre-abstract-control/output.log": "456538e18780c57a1de3534336828bb505412cfbfe5c4c44913dc92fab62d2fc",
+    "c7-results/mre-import-write/result.json": "d4d821be1cb21c213bfd99f89f491790ebda9390d103af0df0c5287fd532cf1e",
+    "c7-results/mre-import-write/output.log": "499852207a2ee7346c3c8faee9f12ace4c68104b277e20379c2adbdfbdbdb7c2",
+    "c7-results/mre-import-read/result.json": "1587b2056dbd303dd98fc2eb3d6e7ee82a368dfc0df8577a8972ef7f1f207a3b",
+    "c7-results/mre-import-read/output.log": "3b66e5c88004fe3c268d1ac210651de91750c741ea4903cba489ff0fa3c3e6a6",
+    "c7-results/mre-fmt-current/result.json": "792986cbc3717c7d4760b3d272e149fc2a606abd4dd6932e366fb7e71e5b4665",
+    "c7-results/mre-fmt-current/output.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "archive": "raised-energy-cff-reviewed-evidence.tar.gz",
+  "archive_bytes": 2682047,
+  "archive_sha256": "72f57e57633208bde168e909ff883be0326f3a5e68d52a7a887f3803569ebb7c",
+  "manifest_sha256": "1f0db877d3ad8fda176c9cc5ca6c49e33aad263f84b74a2c4620b34a7f4eaed7",
+  "payload_bytes": 22718521,
+  "payload_files": 818,
+  "status": "PACKAGED",
+  "validation_claim": "File identity, allowlist, content screening and deterministic archive checks only; not test-suite certification."
+}
