@@ -164,6 +164,10 @@ pub enum Commands {
     },
     #[command(name = "!")]
     Shell(Shell),
+
+    #[doc(hidden)]
+    #[command(name = "__command_template", hide = true)]
+    CommandTemplate,
 }
 
 impl FromStr for Commands {
@@ -281,6 +285,11 @@ impl Commands {
             }
             Commands::Shell(s) => {
                 s.run()?;
+            }
+            Commands::CommandTemplate => {
+                return Err(Report::msg(
+                    "Command templates can only be executed through `run` with `-D/--define` variables",
+                ));
             }
         }
         Ok(CommandExecution::continue_without_output())
