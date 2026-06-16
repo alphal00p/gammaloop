@@ -2205,6 +2205,7 @@ mod tests {
                     evaluator_spenso_time: Duration::from_secs(1),
                     evaluator_symbolica_time: Duration::from_secs(1),
                     evaluator_compile_time: Duration::from_secs(1),
+                    ..GraphGenerationStats::default()
                 },
             },
             GeneratedGraphReport {
@@ -2217,6 +2218,7 @@ mod tests {
                     evaluator_spenso_time: Duration::from_secs(2),
                     evaluator_symbolica_time: Duration::ZERO,
                     evaluator_compile_time: Duration::from_secs(3),
+                    ..GraphGenerationStats::default()
                 },
             },
         ];

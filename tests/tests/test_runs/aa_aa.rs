@@ -438,7 +438,7 @@ mod important {
             assert_complex_approx_eq(
                 assembly_result,
                 symjit_result,
-                &format!("{context}: assembly vs symjit inspect"),
+                format!("{context}: assembly vs symjit inspect"),
             );
         }
 

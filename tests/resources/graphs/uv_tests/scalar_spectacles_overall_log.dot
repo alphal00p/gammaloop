@@ -1,0 +1,17 @@
+digraph scalar_spectacles_overall_log {
+    num = "-1𝑖/2"
+    node [num = "1"]
+    edge [particle = scalar_1]
+
+    e [style = invis]
+
+    e -> A:0 [id = 6]
+    D:1 -> e [id = 7]
+
+    A -> B [id = 0]
+    A -> B [id = 1]
+    B -> C [id = 2]
+    C -> D [id = 3]
+    C -> D [id = 4]
+    D -> A [id = 5]
+}
