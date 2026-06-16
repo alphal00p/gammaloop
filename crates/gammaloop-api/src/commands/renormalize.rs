@@ -57,6 +57,10 @@ pub struct Renormalize {
 
 impl Renormalize {
     pub fn run(&self, state: &mut State, global_cli_settings: &CLISettings) -> Result<Vec<Atom>> {
+        if let Some(path) = &self.result_path {
+            global_cli_settings
+                .ensure_write_target_outside_active_state(path, "write renormalization results")?;
+        }
         let (process_id, _) =
             state.find_integrand_ref(self.process.as_ref(), self.integrand_name.as_ref())?;
         let amplitude = state

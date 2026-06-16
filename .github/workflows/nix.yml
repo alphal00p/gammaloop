@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - codex/raised-energy-cff-reviewed
   push:
     branches:
       - main

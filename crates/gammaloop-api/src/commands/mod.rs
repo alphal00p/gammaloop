@@ -8,13 +8,14 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    completion::CompletionArgExt,
-    state::{CommandHistory, ProcessRef, RunHistory, State},
+    state::{CommandHistory, RunHistory, State},
     CLISettings,
 };
 use symbolica::atom::Atom;
 pub mod approach;
 pub use approach::Approach;
+pub mod bench;
+pub use bench::Bench;
 pub mod commands_block;
 pub use commands_block::StartCommandsBlock;
 pub mod display;
@@ -39,6 +40,8 @@ pub mod set;
 pub mod shell;
 pub use set::Set;
 pub use shell::Shell;
+pub mod threedreps;
+pub use threedreps::ThreeDRep;
 pub mod run;
 pub use run::Run;
 pub mod evaluate;
@@ -128,33 +131,13 @@ pub enum Commands {
     Renormalize(Renormalize),
 
     /// Benchmark raw integrand evaluation speed
-    Bench {
-        /// Number of random samples to evaluate
-        #[arg(short = 's', long, value_name = "SAMPLES")]
-        samples: usize,
-        /// Process reference: #<id>, name:<name>, or <id>/<name>
-        #[arg(
-            short = 'p',
-            long = "process",
-            value_name = "PROCESS",
-            completion_process_selector(crate::completion::SelectorKind::Any)
-        )]
-        process: ProcessRef,
-
-        /// The integrand name to benchmark
-        #[arg(
-            short = 'i',
-            long = "integrand-name",
-            value_name = "NAME",
-            completion_integrand_selector(crate::completion::SelectorKind::Any)
-        )]
-        integrand_name: String,
-        /// Number of cores to parallelize over
-        #[arg(short = 'c', long)]
-        n_cores: usize,
-    },
+    Bench(Bench),
     #[clap(subcommand)]
     Profile(Profile),
+
+    #[command(name = "3Drep")]
+    #[clap(subcommand)]
+    ThreeDRep(ThreeDRep),
 
     /// HPC batch evaluation branch
     Batch {
@@ -169,6 +152,10 @@ pub enum Commands {
     },
     #[command(name = "!")]
     Shell(Shell),
+
+    #[doc(hidden)]
+    #[command(skip)]
+    CommandTemplate(String),
 }
 
 impl FromStr for Commands {
@@ -187,26 +174,77 @@ impl Commands {
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<CommandExecution, Report> {
         match self {
-            Commands::Profile(p) => {
-                p.run(state, global_cli_settings)?;
+            Commands::Profile(mut p) => {
+                if let profile::ProfileResult::UltraViolet(analysis) =
+                    p.run(state, global_cli_settings)?
+                {
+                    let verdict = analysis.pass_fail(gammalooprs::uv::profile::UV_PROFILE_MAX_DOD);
+                    if verdict.failed > 0 {
+                        let Profile::UltraViolet(options) = &mut p else {
+                            unreachable!()
+                        };
+                        let (process_id, integrand_name) = state.find_integrand_ref(
+                            options.process.as_ref(),
+                            options.integrand_name.as_ref(),
+                        )?;
+                        options.process = Some(crate::state::ProcessRef::Id(process_id));
+                        options.integrand_name = Some(integrand_name.clone());
+                        options.seed = Some(options.seed.unwrap_or(42));
+                        if !options.uv_ray_directions.is_empty() && options.uv_ray_norms.is_empty()
+                        {
+                            options.uv_ray_norms.push(
+                                state
+                                    .process_list
+                                    .get_integrand_mut(process_id, &integrand_name)?
+                                    .get_settings()
+                                    .kinematics
+                                    .e_cm,
+                            );
+                        }
+                        let scope = if analysis.stopped_early {
+                            "Stopped after the first failing limit; only completed limits are reported."
+                        } else {
+                            "All selected limits were profiled."
+                        };
+                        // Reuse the command serialization accepted by run cards.
+                        // Resolve defaults that otherwise depend on session selection.
+                        let reproduction =
+                            toml::to_string_pretty(&std::collections::BTreeMap::from([(
+                                "commands",
+                                vec![Commands::Profile(p)],
+                            )]))?;
+                        return Err(eyre::eyre!(
+                            "{verdict}\n{scope}\nReproduce in the same generated state with this run-card fragment:\n{reproduction}"
+                        ));
+                    }
+                }
+            }
+            Commands::ThreeDRep(command) => {
+                command.run(state, global_cli_settings)?;
             }
             Commands::Quit(s) => {
                 return Ok(CommandExecution::break_with(s));
             }
             Commands::Inspect(inspect) => {
+                if let Some(path) = &inspect.json_output {
+                    global_cli_settings.ensure_write_target_outside_active_state(
+                        path,
+                        "write inspect JSON output",
+                    )?;
+                }
                 let _ = inspect.run(state)?;
             }
             Commands::Approach(approach) => {
                 let _ = approach.run(state, global_cli_settings)?;
             }
-            Commands::Bench {
-                samples,
-                process,
-                integrand_name,
-                n_cores,
-            } => {
-                let process_id = process.resolve(&state.process_list)?;
-                state.bench(samples, process_id, integrand_name, n_cores)?;
+            Commands::Bench(bench) => {
+                if let Some(path) = &bench.json_output {
+                    global_cli_settings.ensure_write_target_outside_active_state(
+                        path,
+                        "write benchmark JSON output",
+                    )?;
+                }
+                bench.run(state)?;
             }
             Commands::Import(s) => s.run(state, global_cli_settings)?,
             Commands::Save(s) => s.run(
@@ -290,6 +328,11 @@ impl Commands {
             Commands::Shell(s) => {
                 s.run()?;
             }
+            Commands::CommandTemplate(_) => {
+                return Err(Report::msg(
+                    "Command templates can only be executed through `run` with `-D/--define` variables",
+                ));
+            }
         }
         Ok(CommandExecution::continue_without_output())
     }
@@ -297,7 +340,9 @@ impl Commands {
 
 #[cfg(test)]
 mod tests {
-    use super::Commands;
+    use std::path::PathBuf;
+
+    use super::{Approach, Bench, Commands, Inspect, Renormalize};
     use crate::{
         commands::generate::{Generate, GenerateCmd, ProcessArgs},
         state::{ProcessRef, RunHistory, State},
@@ -459,5 +504,125 @@ mod tests {
         .unwrap_err();
 
         assert!(format!("{err:?}").contains("--read-only-state"));
+    }
+
+    #[test]
+    fn inspect_rejects_json_output_inside_read_only_state_before_integrand_lookup() {
+        let mut state = State::new_test();
+        let mut run_history = RunHistory::default();
+        let mut cli_settings = CLISettings::default();
+        let mut runtime_settings = RuntimeSettings::default();
+        cli_settings.state.folder = PathBuf::from("/tmp/read_only_state");
+        cli_settings.session.read_only_state = true;
+
+        let err = Commands::Inspect(Inspect {
+            point: vec![0.1, 0.2],
+            json_output: Some(PathBuf::from("/tmp/read_only_state/inspect.json")),
+            ..Inspect::default()
+        })
+        .run(
+            &mut state,
+            &mut run_history,
+            &mut cli_settings,
+            &mut runtime_settings,
+        )
+        .unwrap_err();
+
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("Cannot write inspect JSON output"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("--read-only-state"), "{rendered}");
+    }
+
+    #[test]
+    fn bench_rejects_json_output_inside_read_only_state_before_integrand_lookup() {
+        let mut state = State::new_test();
+        let mut run_history = RunHistory::default();
+        let mut cli_settings = CLISettings::default();
+        let mut runtime_settings = RuntimeSettings::default();
+        cli_settings.state.folder = PathBuf::from("/tmp/read_only_state");
+        cli_settings.session.read_only_state = true;
+
+        let err = Commands::Bench(Bench {
+            point: vec![0.1, 0.2],
+            duration: "1ms".to_string(),
+            json_output: Some(PathBuf::from("/tmp/read_only_state/bench.json")),
+            ..Bench::default()
+        })
+        .run(
+            &mut state,
+            &mut run_history,
+            &mut cli_settings,
+            &mut runtime_settings,
+        )
+        .unwrap_err();
+
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("Cannot write benchmark JSON output"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("--read-only-state"), "{rendered}");
+    }
+
+    #[test]
+    fn approach_rejects_output_inside_read_only_state_before_integrand_lookup() {
+        let mut state = State::new_test();
+        let mut run_history = RunHistory::default();
+        let mut cli_settings = CLISettings::default();
+        let mut runtime_settings = RuntimeSettings::default();
+        cli_settings.state.folder = PathBuf::from("/tmp/read_only_state");
+        cli_settings.session.read_only_state = true;
+
+        let err = Commands::Approach(Approach {
+            point: vec![0.1, 0.2],
+            output_results: Some(PathBuf::from("/tmp/read_only_state/approach.json")),
+            ..Approach::default()
+        })
+        .run(
+            &mut state,
+            &mut run_history,
+            &mut cli_settings,
+            &mut runtime_settings,
+        )
+        .unwrap_err();
+
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("Cannot write approach results"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("--read-only-state"), "{rendered}");
+    }
+
+    #[test]
+    fn renormalize_rejects_output_inside_read_only_state_before_integrand_lookup() {
+        let mut state = State::new_test();
+        let mut run_history = RunHistory::default();
+        let mut cli_settings = CLISettings::default();
+        let mut runtime_settings = RuntimeSettings::default();
+        cli_settings.state.folder = PathBuf::from("/tmp/read_only_state");
+        cli_settings.session.read_only_state = true;
+
+        let err = Commands::Renormalize(Renormalize {
+            result_path: Some(PathBuf::from("/tmp/read_only_state/renormalization")),
+            ..Renormalize::default()
+        })
+        .run(
+            &mut state,
+            &mut run_history,
+            &mut cli_settings,
+            &mut runtime_settings,
+        )
+        .unwrap_err();
+
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("Cannot write renormalization results"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("--read-only-state"), "{rendered}");
     }
 }

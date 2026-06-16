@@ -1,5 +1,5 @@
 use super::*;
-use gammaloop_api::state::RunHistory;
+use gammaloop_api::{StateLoadOption, state::RunHistory};
 use gammaloop_integration_tests::workspace_root;
 use std::fs;
 
@@ -67,7 +67,7 @@ fn all_example_toml_cards_are_loadable() -> Result<()> {
 #[test]
 fn test_scalar_bubble_example_cli() -> Result<()> {
     let state_path = get_tests_workspace_path().join("scalar_bubble_example");
-    let cli = get_example_cli(
+    let mut cli = get_example_cli(
         "scalar_topologies/bubble.toml",
         &["generate"],
         Some(state_path.clone()),
@@ -88,6 +88,32 @@ fn test_scalar_bubble_example_cli() -> Result<()> {
         "Expected saved state manifest in {}",
         state_path.display()
     );
+
+    let inspections = ["bubble", "bubble_no_integrated_UV"].map(|process| Inspect {
+        process: Some(ProcessRef::Unqualified(process.to_string())),
+        integrand_name: Some("scalar_bubble_below_thres".to_string()),
+        point: vec![0.11, 0.23, 0.37],
+        discrete_dim: vec![0, 0],
+        ..Default::default()
+    });
+    let expected = inspections
+        .iter()
+        .map(|inspect| inspect.run(&mut cli.state))
+        .collect::<Result<Vec<_>>>()?;
+    let mut reloaded = StateLoadOption::read_only(&state_path).load()?;
+    for (inspect, expected) in inspections.iter().zip(expected) {
+        assert!(
+            expected.1.re.is_finite()
+                && expected.1.im.is_finite()
+                && expected.1.re.hypot(expected.1.im) > 0.0,
+            "state roundtrip requires a finite, nonzero reference"
+        );
+        assert_eq!(
+            inspect.run(&mut reloaded.state)?,
+            expected,
+            "saved amplitude changed after reload"
+        );
+    }
 
     clean_test(&state_path);
     Ok(())

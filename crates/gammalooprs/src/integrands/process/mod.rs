@@ -1854,6 +1854,7 @@ pub struct StabilityLevelResult {
     pub graph_result: GraphEvaluationResult<f64>,
     pub stability_level_used: Precision,
     pub estimated_relative_accuracy: Option<F<f64>>,
+    pub estimated_decimal_digits: Option<F<f64>>,
     pub sample_count: usize,
     pub total_time: Duration,
     pub parameterization_time: Duration,
@@ -1884,6 +1885,12 @@ struct PreciseStabilityLevelResult<T: FloatLike> {
 
 impl<T: FloatLike> PreciseStabilityLevelResult<T> {
     fn into_f64(self) -> StabilityLevelResult {
+        // Preserve the exponent before a nonzero Arb estimate can underflow to f64 zero.
+        let estimated_decimal_digits = self
+            .estimated_relative_accuracy
+            .as_ref()
+            .filter(|value| value.is_non_zero() && !value.is_nan() && !value.is_infinite())
+            .map(|value| (-value.abs().log10()).into_ff64());
         StabilityLevelResult {
             result: complex_to_f64(&self.result),
             graph_result: self.graph_result.into_f64(),
@@ -1891,6 +1898,7 @@ impl<T: FloatLike> PreciseStabilityLevelResult<T> {
             estimated_relative_accuracy: self
                 .estimated_relative_accuracy
                 .map(|value| value.into_ff64()),
+            estimated_decimal_digits,
             sample_count: self.sample_count,
             total_time: self.total_time,
             parameterization_time: self.parameterization_time,
@@ -3845,6 +3853,7 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
             .map(|level| StabilityResult {
                 precision: level.stability_level_used,
                 estimated_relative_accuracy: level.estimated_relative_accuracy,
+                estimated_decimal_digits: level.estimated_decimal_digits,
                 status: StabilityStatus::from_sample_count(level.sample_count, level.is_stable),
                 total_time: level.total_time,
             })
@@ -4217,6 +4226,68 @@ mod tests {
     };
     use std::sync::OnceLock;
     use typed_index_collections::TiVec;
+
+    #[test]
+    fn precise_stability_reporting_preserves_underflowed_estimates() {
+        use super::{PreciseStabilityLevelResult, Precision};
+        use crate::{
+            integrands::evaluation::{
+                EvaluationResult, GraphEvaluationResult, NumericalStabilityLevel,
+                NumericalStabilityMedian, StabilityResult, StabilityStatus, StatisticsCounter,
+            },
+            utils::ArbPrec,
+        };
+        use spenso::algebra::complex::Complex;
+        use std::time::Duration;
+
+        let one = F::<ArbPrec>::default().one();
+        for exponent in [400, 700] {
+            // Construct a nonzero estimate in its active precision; the public
+            // relative value may underflow, but its decimal exponent must survive.
+            let level = PreciseStabilityLevelResult {
+                result: Complex::new_re(one.clone()),
+                graph_result: GraphEvaluationResult::zero(one.zero()),
+                stability_level_used: Precision::Arb,
+                estimated_relative_accuracy: Some(one.from_usize(10).powi(-exponent)),
+                sample_count: 2,
+                total_time: Duration::ZERO,
+                parameterization_time: Duration::ZERO,
+                parameterization_jacobian: None,
+                integrand_evaluation_time: Duration::ZERO,
+                evaluator_evaluation_time: Duration::ZERO,
+                is_stable: true,
+                instability_reason: None,
+                rotated_results: Vec::new(),
+            }
+            .into_f64();
+            let mut evaluation = EvaluationResult::zero();
+            evaluation
+                .evaluation_metadata
+                .stability_results
+                .push(StabilityResult {
+                    precision: level.stability_level_used,
+                    estimated_relative_accuracy: level.estimated_relative_accuracy,
+                    estimated_decimal_digits: level.estimated_decimal_digits,
+                    status: StabilityStatus::from_sample_count(level.sample_count, level.is_stable),
+                    total_time: level.total_time,
+                });
+            let metadata = serde_json::to_value(&evaluation.evaluation_metadata).unwrap();
+            let reported = metadata["stability_results"][0]["estimated_decimal_digits"]
+                .as_f64()
+                .unwrap();
+            assert!((reported - f64::from(exponent)).abs() < 1.0e-10);
+            let statistics = StatisticsCounter::from_evaluation_results(&[evaluation]);
+            let Some(NumericalStabilityMedian::InRange {
+                log10_relative_accuracy,
+            }) = statistics
+                .numerical_stability_snapshot()
+                .median(NumericalStabilityLevel::ArbPrec)
+            else {
+                panic!("a finite precision estimate must retain its histogram value");
+            };
+            assert!((log10_relative_accuracy + f64::from(exponent)).abs() < 11.0);
+        }
+    }
 
     #[test]
     fn precise_event_normalization_preserves_prior_factors_and_partial_weights() {

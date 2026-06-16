@@ -29,6 +29,14 @@ filter = "test(integration)"
 test-group = "integration"
 
 [[profile.default.overrides]]
+# Each NLO acceptance internally launches ten integration workers. Account for
+# those workers in nextest's scheduler and cap these acceptances with the
+# existing integration-test group.
+filter = "test(/^epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/^epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/^gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/^gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/)"
+test-group = "integration"
+threads-required = 10
+
+[[profile.default.overrides]]
 # Mark tests with "heavy" in the name as memory-intensive
 filter = "test(heavy) or test(memory) or test(large)"
 test-group = "memory-intensive"
@@ -51,7 +59,34 @@ path = "target/nextest/default/junit.xml"
 inherits = "default"
 # Reuse the default profile behavior but disable early termination for this curated suite.
 slow-timeout = "30y"
+test-threads = 5
+retries = 0
 default-filter = "not test(/(^|::)(slow|failing)::/) and not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec))"
+
+[[profile.test_gammaloop.overrides]]
+# These tests construct large evaluators or launch their own integration workers.
+# Reserve the complete local budget without changing their modes or sample counts.
+# Spectacles is named "integrated", so the generic "integration" rule misses it.
+filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/) or test(/^epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/^epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/^gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/^gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/) or test(/(^|::)scalar_spectacles_integrated_uv_factorizes_over_bridge$/)"
+threads-required = 5
+# Report long executions without turning a timeout into a pass or dropping a test.
+slow-timeout = "1m"
+
+[[profile.test_gammaloop.overrides]]
+# These six gg->hhh fixture users each construct the same large evaluator.
+# Their serial_test locks do not coordinate nextest's separate processes, so
+# reserve the local budget to keep their peak allocations from overlapping.
+filter = '''
+binary(=test_runs) and (
+    test(=approach::approach_amplitude_json_has_synthetic_cut_and_threshold_weights)
+    or test(=events::amplitude_events_surface_threshold_counterterms_and_reproduce_weight)
+    or test(=events::amplitude_threshold_counterterms_follow_lmb_channel_normalization)
+    or test(=events::amplitude_selectors_generate_internal_events_without_surfacing_them)
+    or test(=events::amplitude_observables_accumulate_without_returning_events)
+    or test(=inspect::inspect_x_space_reports_missing_discrete_dimensions_cleanly)
+)
+'''
+threads-required = 5
 
 [profile.ci]
 default-filter = "not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec))"
@@ -98,12 +133,74 @@ slow-timeout = { period = "5m", terminate-after = 2 }
 filter = "test(integration) or test(heavy) or test(memory) or test(large)"
 
 [[profile.ci.overrides]]
+# The NLO acceptances launch ten internal integration workers. Reserve the same
+# resources explicitly and allow the two-iteration numerical integrations to
+# complete; profile.default still supplies other matching per-test settings.
+filter = "test(/^epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/^epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/^gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/^gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/)"
+test-group = "integration"
+threads-required = 10
+slow-timeout = { period = "15m", terminate-after = 2 }
+
+[[profile.ci.overrides]]
+# These six gg->hhh fixture users and the aa->aa backend comparison construct
+# large evaluators. Reserve the complete CI budget as in the local suite so
+# their allocations cannot overlap, regardless of the runner's CPU count.
+filter = '''
+binary(=test_runs) and (
+    test(=approach::approach_amplitude_json_has_synthetic_cut_and_threshold_weights)
+    or test(=events::amplitude_events_surface_threshold_counterterms_and_reproduce_weight)
+    or test(=events::amplitude_threshold_counterterms_follow_lmb_channel_normalization)
+    or test(=events::amplitude_selectors_generate_internal_events_without_surfacing_them)
+    or test(=events::amplitude_observables_accumulate_without_returning_events)
+    or test(=inspect::inspect_x_space_reports_missing_discrete_dimensions_cleanly)
+    or test(=aa_aa::important::aa_aa_local_inspect_backend_consistency)
+)
+'''
+threads-required = "num-test-threads"
+
+[[profile.ci.overrides]]
 # Benchmark tests get even more time in CI
 filter = "test(bench) or test(benchmark)"
 
 [[profile.ci.overrides]]
 # Keep the production GL20 event snapshot under the same explicit bound in CI.
 filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/)"
+threads-required = "num-test-threads"
+slow-timeout = { period = "5m", terminate-after = 2 }
+
+# Custom profile inheritance carries ordinary settings, but per-test overrides
+# use only the selected profile and profile.default. Keep these resource and
+# timeout policies in sync with profile.ci for both CI entry points.
+[[profile.ci_gammaloop.overrides]]
+# The NLO acceptances launch ten internal integration workers. Reserve the same
+# resources explicitly and allow the two-iteration numerical integrations to
+# complete; profile.default still supplies other matching per-test settings.
+filter = "test(/^epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/^epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/^gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/^gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/)"
+test-group = "integration"
+threads-required = 10
+slow-timeout = { period = "15m", terminate-after = 2 }
+
+[[profile.ci_gammaloop.overrides]]
+# These six gg->hhh fixture users and the aa->aa backend comparison construct
+# large evaluators. Reserve the complete CI budget as in the local suite so
+# their allocations cannot overlap, regardless of the runner's CPU count.
+filter = '''
+binary(=test_runs) and (
+    test(=approach::approach_amplitude_json_has_synthetic_cut_and_threshold_weights)
+    or test(=events::amplitude_events_surface_threshold_counterterms_and_reproduce_weight)
+    or test(=events::amplitude_threshold_counterterms_follow_lmb_channel_normalization)
+    or test(=events::amplitude_selectors_generate_internal_events_without_surfacing_them)
+    or test(=events::amplitude_observables_accumulate_without_returning_events)
+    or test(=inspect::inspect_x_space_reports_missing_discrete_dimensions_cleanly)
+    or test(=aa_aa::important::aa_aa_local_inspect_backend_consistency)
+)
+'''
+threads-required = "num-test-threads"
+
+[[profile.ci_gammaloop.overrides]]
+# Keep the production GL20 event snapshot under the same explicit bound in CI.
+filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/)"
+threads-required = "num-test-threads"
 slow-timeout = { period = "5m", terminate-after = 2 }
 
 [profile.partition]

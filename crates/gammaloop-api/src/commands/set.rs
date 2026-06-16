@@ -1214,11 +1214,14 @@ mod test {
             state
                 .import_graphs(
                     graphs.clone(),
-                    Some((*process_name).to_string()),
-                    None,
-                    Some("default".to_string()),
-                    false,
-                    false,
+                    crate::state::GraphImportOptions {
+                        process_name: Some((*process_name).to_string()),
+                        process_id: None,
+                        process_definition: None,
+                        integrand_name: Some("default".to_string()),
+                        overwrite: false,
+                        append: false,
+                    },
                 )
                 .expect("graph import should succeed");
         }

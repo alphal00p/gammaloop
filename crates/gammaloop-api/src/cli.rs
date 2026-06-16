@@ -4,11 +4,12 @@ use color_eyre::Report;
 
 fn main() -> Result<(), Report> {
     // Parse once with clap‑derive
-    let cli = OneShot::parse_env_with_capture()?;
+    let cli = match OneShot::parse_env_with_capture() {
+        Ok(cli) => cli,
+        Err(error) => error.exit(),
+    };
 
-    if let Err(e) = cli.cli.run(cli.input_string) {
-        eprintln!("{:?}", e);
-    }
+    cli.cli.run(cli.input_string)?;
 
     Ok(())
 }
