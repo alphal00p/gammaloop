@@ -35,7 +35,7 @@ fn main() {
     println!("\nInput integral:\n{}\n", vakint_expr);
     // Convert the numerator of the first integral to a dot notation
     vakint_expr.0[0].numerator =
-        Vakint::convert_to_dot_notation(vakint_expr.0[0].numerator.as_view());
+        Vakint::convert_to_dot_notation(&settings, vakint_expr.0[0].numerator.as_view()).unwrap();
     println!("\nInput integral in dot notation:\n{}\n", vakint_expr);
 
     integral = vakint.evaluate(&settings, integral.as_view()).unwrap();

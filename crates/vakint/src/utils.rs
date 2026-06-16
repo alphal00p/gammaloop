@@ -1,7 +1,7 @@
 use ahash::HashMap;
 use regex::Regex;
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
+    atom::{Atom, AtomCore, AtomView, Symbol, SymbolAttribute},
     coefficient::CoefficientView,
     domains::float::Complex,
     id::{Condition, MatchSettings, Pattern, PatternRestriction},
@@ -236,7 +236,34 @@ pub fn could_match(pattern: &Pattern, target: AtomView) -> bool {
 }
 
 pub fn get_full_name(symbol: &Symbol) -> String {
-    Atom::var(*symbol).to_canonical_string()
+    // Symbol display callbacks also run during canonical printing. Backend
+    // identifiers must instead preserve the raw name, attributes and tags.
+    if symbolica::state::State::BUILTIN_SYMBOLS.contains(symbol) {
+        return symbol.get_stripped_name().into();
+    }
+    let attributes = symbol
+        .get_attributes()
+        .into_iter()
+        .map(|attribute| match attribute {
+            SymbolAttribute::Symmetric => "symmetric",
+            SymbolAttribute::Antisymmetric => "antisymmetric",
+            SymbolAttribute::Cyclesymmetric => "cyclesymmetric",
+            SymbolAttribute::Linear => "linear",
+            SymbolAttribute::Flat => "flat",
+            SymbolAttribute::Scalar => "scalar",
+            SymbolAttribute::Real => "real",
+            SymbolAttribute::Integer => "integer",
+            SymbolAttribute::Positive => "positive",
+        });
+    let metadata = attributes
+        .chain(symbol.get_tags().iter().map(String::as_str))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{}::{{{metadata}}}::{}",
+        symbol.get_namespace(),
+        symbol.get_stripped_name()
+    )
 }
 
 pub fn undress_vakint_symbols(expression: &str) -> String {
