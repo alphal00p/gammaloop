@@ -87,7 +87,7 @@ Portable context SHA256 identities:
 - `function_map_entries.symbolica`: `7a54415d0414f5b949d4ac6e43d6fcddb909faed70d26f7d1537e25fc7304380`
 
 The original failure is preserved in
-[`evidence/original_cli21_failure.md`](evidence/original_cli21_failure.md), with
+[`evidence/original_cli21_failure.typ`](evidence/original_cli21_failure.typ), with
 its machine-readable metadata and panic excerpt. This is historical application
 evidence; new independent standalone outcomes are recorded separately.
 

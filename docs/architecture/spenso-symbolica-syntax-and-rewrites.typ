@@ -518,3 +518,9 @@ Keep semantic boundaries clear:
 
 The goal is source-backed named rule families plus a small ordered pass driver.
 Avoid a universal rewrite engine unless the algebraic strategy itself is shared.
+
+== Factorization during index canonicalization
+
+Index canonicalization retains independent scalar products instead of distributing them through
+tensor sums. Explicit free indices and compact-dot dummies occupy distinct reserved names; canceled
+representation groups do not advance the surviving contraction's canonical dummy allocation.

@@ -1,0 +1,4617 @@
+{
+  "schema_version": 1,
+  "status": "COMPLETE_CAUSAL_AUDIT",
+  "date_utc": "2026-09-15",
+  "scope": "Index of decisive structural experiments. Full archived receipts retain setup failures, null results and earlier diagnostics. Counts below are these groups only, not a repository test-suite total.",
+  "source_pins_companion": "/tmp/raised-energy-expression-perf-20260914/revisions.json",
+  "factor_replays": [
+    {
+      "group": "attachment6-metric-replay",
+      "input": "original",
+      "receipt": {
+        "path": "/tmp/raised-energy-causal-20260914/attachment6-metric-replay/run-original-01/receipt.json",
+        "sha256": "5d044af564a32d1c2bdf6117356d74900d491de75071ddef96532b0431927a70"
+      },
+      "runtime": {
+        "argv": [
+          "/tmp/raised-stack/run",
+          "env",
+          "-u",
+          "GL_ALL_LOG_FILTER",
+          "-u",
+          "GL_DISPLAY_FILTER",
+          "-u",
+          "GL_LOGFILE_FILTER",
+          "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+          "CARGO_BUILD_JOBS=4",
+          "RAYON_NUM_THREADS=8",
+          "RUST_MIN_STACK=134217728",
+          "INSTA_UPDATE=no",
+          "NEXTEST_RETRIES=0",
+          "GL_ALL_LOG_FILTER=off",
+          "/tmp/raised-stack/python",
+          "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+          "--log",
+          "/tmp/raised-energy-causal-20260914/attachment6-metric-replay/run-original-01/runtime/memory.jsonl",
+          "--limit-gb",
+          "30",
+          "--",
+          "env",
+          "-u",
+          "GAMMALOOP_DUMP_EVALUATOR_PRE_NETWORK_PARSE",
+          "-u",
+          "GAMMALOOP_STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE_VERBOSE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE_ATOM_BYTES",
+          "/tmp/raised-energy-expression-perf-20260914/diagnostics/common-factor-contraction/build-01/cff-common-factor-contraction-probe",
+          "/tmp/raised-energy-causal-20260914/hot-structure/attachment6-common-metrics/original-complete-enclosing-term.atom",
+          "/tmp/raised-energy-causal-20260914/attachment6-metric-replay/run-original-01/result.atom"
+        ],
+        "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+        "started_utc": "2026-09-14T23:21:05.102298+00:00",
+        "status": "PASS",
+        "exit_code": 0,
+        "wall_seconds": 17.41674704605248,
+        "watchdog_seconds": 17.145042553078383,
+        "peak_tree_rss_bytes": 6151782400
+      },
+      "events": [
+        {
+          "seconds": 0.031868551,
+          "stage": "initialized"
+        },
+        {
+          "atom_bytes": 136264,
+          "input_utf8_bytes": 152674,
+          "seconds": 0.011644163,
+          "stage": "symbolica_parse",
+          "terms": 1
+        },
+        {
+          "stage": "network_parse_start",
+          "term": 0
+        },
+        {
+          "seconds": 0.019600086,
+          "stage": "network_parse",
+          "term": 0
+        },
+        {
+          "seconds": 0.001126643,
+          "stage": "prepare",
+          "term": 0
+        },
+        {
+          "seconds": 10.768041767,
+          "stage": "execute",
+          "term": 0
+        },
+        {
+          "seconds": 0.495150317,
+          "stage": "resolve_aliases",
+          "term": 0
+        },
+        {
+          "result_atom_bytes": 56239868,
+          "result_terms": 11,
+          "seconds": 11.30033913,
+          "stage": "contraction_complete"
+        },
+        {
+          "seconds": 4.847065708,
+          "stage": "output_written",
+          "status": "PASS_CONTRACTION_ONLY",
+          "total_seconds": 16.191308252
+        }
+      ],
+      "output": {
+        "path": "/tmp/raised-energy-causal-20260914/attachment6-metric-replay/run-original-01/result.atom",
+        "sha256": "72be124ea725306c320cdb3aa284cef0dc7a6648b5028fb71f9040e1396913f2",
+        "bytes": 125039805
+      }
+    },
+    {
+      "group": "attachment6-metric-replay",
+      "input": "factored",
+      "receipt": {
+        "path": "/tmp/raised-energy-causal-20260914/attachment6-metric-replay/run-factored-01/receipt.json",
+        "sha256": "9a4252b1adda6b8a12856910a459ca8a4fa4b8ab1733c6034b99fbc61e9d8320"
+      },
+      "runtime": {
+        "argv": [
+          "/tmp/raised-stack/run",
+          "env",
+          "-u",
+          "GL_ALL_LOG_FILTER",
+          "-u",
+          "GL_DISPLAY_FILTER",
+          "-u",
+          "GL_LOGFILE_FILTER",
+          "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+          "CARGO_BUILD_JOBS=4",
+          "RAYON_NUM_THREADS=8",
+          "RUST_MIN_STACK=134217728",
+          "INSTA_UPDATE=no",
+          "NEXTEST_RETRIES=0",
+          "GL_ALL_LOG_FILTER=off",
+          "/tmp/raised-stack/python",
+          "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+          "--log",
+          "/tmp/raised-energy-causal-20260914/attachment6-metric-replay/run-factored-01/runtime/memory.jsonl",
+          "--limit-gb",
+          "30",
+          "--",
+          "env",
+          "-u",
+          "GAMMALOOP_DUMP_EVALUATOR_PRE_NETWORK_PARSE",
+          "-u",
+          "GAMMALOOP_STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE_VERBOSE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE_ATOM_BYTES",
+          "/tmp/raised-energy-expression-perf-20260914/diagnostics/common-factor-contraction/build-01/cff-common-factor-contraction-probe",
+          "/tmp/raised-energy-causal-20260914/hot-structure/attachment6-common-metrics/factored-equivalent-complete-enclosing-term.atom",
+          "/tmp/raised-energy-causal-20260914/attachment6-metric-replay/run-factored-01/result.atom"
+        ],
+        "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+        "started_utc": "2026-09-14T23:21:23.814675+00:00",
+        "status": "PASS",
+        "exit_code": 0,
+        "wall_seconds": 3.5052194439340383,
+        "watchdog_seconds": 3.2342376430751756,
+        "peak_tree_rss_bytes": 480485376
+      },
+      "events": [
+        {
+          "seconds": 0.032347192,
+          "stage": "initialized"
+        },
+        {
+          "atom_bytes": 136150,
+          "input_utf8_bytes": 152538,
+          "seconds": 0.012159205,
+          "stage": "symbolica_parse",
+          "terms": 1
+        },
+        {
+          "stage": "network_parse_start",
+          "term": 0
+        },
+        {
+          "seconds": 0.019359625,
+          "stage": "network_parse",
+          "term": 0
+        },
+        {
+          "seconds": 0.001129713,
+          "stage": "prepare",
+          "term": 0
+        },
+        {
+          "seconds": 0.525382034,
+          "stage": "execute",
+          "term": 0
+        },
+        {
+          "seconds": 0.188394996,
+          "stage": "resolve_aliases",
+          "term": 0
+        },
+        {
+          "result_atom_bytes": 22430444,
+          "result_terms": 11,
+          "seconds": 0.738415399,
+          "stage": "contraction_complete"
+        },
+        {
+          "seconds": 1.996397185,
+          "stage": "output_written",
+          "status": "PASS_CONTRACTION_ONLY",
+          "total_seconds": 2.779683842
+        }
+      ],
+      "output": {
+        "path": "/tmp/raised-energy-causal-20260914/attachment6-metric-replay/run-factored-01/result.atom",
+        "sha256": "b0908645f96f0862c6386631180b7b72f760a1a994c606592e0bc0e59ca8def1",
+        "bytes": 49748337
+      }
+    },
+    {
+      "group": "gl1-term15-factor-replay",
+      "input": "original",
+      "receipt": {
+        "path": "/tmp/raised-energy-causal-20260914/gl1-term15-factor-replay/run-original-01/receipt.json",
+        "sha256": "0903f5146865b48683d56718e0129d7a5f6a24d6cf6b91779728bc270c1d68c6"
+      },
+      "runtime": {
+        "argv": [
+          "/tmp/raised-stack/run",
+          "env",
+          "-u",
+          "GL_ALL_LOG_FILTER",
+          "-u",
+          "GL_DISPLAY_FILTER",
+          "-u",
+          "GL_LOGFILE_FILTER",
+          "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+          "CARGO_BUILD_JOBS=4",
+          "RAYON_NUM_THREADS=8",
+          "RUST_MIN_STACK=134217728",
+          "INSTA_UPDATE=no",
+          "NEXTEST_RETRIES=0",
+          "GL_ALL_LOG_FILTER=off",
+          "/tmp/raised-stack/python",
+          "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+          "--log",
+          "/tmp/raised-energy-causal-20260914/gl1-term15-factor-replay/run-original-01/runtime/memory.jsonl",
+          "--limit-gb",
+          "30",
+          "--",
+          "env",
+          "-u",
+          "GAMMALOOP_DUMP_EVALUATOR_PRE_NETWORK_PARSE",
+          "-u",
+          "GAMMALOOP_STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE_VERBOSE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE_ATOM_BYTES",
+          "/tmp/raised-energy-expression-perf-20260914/diagnostics/common-factor-contraction/build-01/cff-common-factor-contraction-probe",
+          "/tmp/raised-energy-causal-20260914/hot-structure/gl1-recursive-common-factors-04/term15/original.atom",
+          "/tmp/raised-energy-causal-20260914/gl1-term15-factor-replay/run-original-01/result.atom"
+        ],
+        "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+        "started_utc": "2026-09-14T23:46:25.875827+00:00",
+        "status": "PASS",
+        "exit_code": 0,
+        "wall_seconds": 15.640008506947197,
+        "watchdog_seconds": 15.365941080031916,
+        "peak_tree_rss_bytes": 7018176512
+      },
+      "events": [
+        {
+          "seconds": 0.031959472,
+          "stage": "initialized"
+        },
+        {
+          "atom_bytes": 1184670,
+          "input_utf8_bytes": 1347029,
+          "seconds": 0.097735192,
+          "stage": "symbolica_parse",
+          "terms": 1
+        },
+        {
+          "stage": "network_parse_start",
+          "term": 0
+        },
+        {
+          "seconds": 0.29105505,
+          "stage": "network_parse",
+          "term": 0
+        },
+        {
+          "seconds": 0.026908719,
+          "stage": "prepare",
+          "term": 0
+        },
+        {
+          "seconds": 10.314388069,
+          "stage": "execute",
+          "term": 0
+        },
+        {
+          "seconds": 0.007266279,
+          "stage": "resolve_aliases",
+          "term": 0
+        },
+        {
+          "result_atom_bytes": 42236243,
+          "result_terms": 84,
+          "seconds": 10.655996628,
+          "stage": "contraction_complete"
+        },
+        {
+          "seconds": 3.720735923,
+          "stage": "output_written",
+          "status": "PASS_CONTRACTION_ONLY",
+          "total_seconds": 14.507660598
+        }
+      ],
+      "output": {
+        "path": "/tmp/raised-energy-causal-20260914/gl1-term15-factor-replay/run-original-01/result.atom",
+        "sha256": "5308da5866a6d4a64e30ea772dc63e86bbe004d9253fdd1f86e043affc64341c",
+        "bytes": 90645854
+      }
+    },
+    {
+      "group": "gl1-term15-factor-replay",
+      "input": "factored",
+      "receipt": {
+        "path": "/tmp/raised-energy-causal-20260914/gl1-term15-factor-replay/run-factored-01/receipt.json",
+        "sha256": "e617ac3896407f7b81545c9c0260ebdf5d80452113c504bd9fd559ddc106cf75"
+      },
+      "runtime": {
+        "argv": [
+          "/tmp/raised-stack/run",
+          "env",
+          "-u",
+          "GL_ALL_LOG_FILTER",
+          "-u",
+          "GL_DISPLAY_FILTER",
+          "-u",
+          "GL_LOGFILE_FILTER",
+          "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+          "CARGO_BUILD_JOBS=4",
+          "RAYON_NUM_THREADS=8",
+          "RUST_MIN_STACK=134217728",
+          "INSTA_UPDATE=no",
+          "NEXTEST_RETRIES=0",
+          "GL_ALL_LOG_FILTER=off",
+          "/tmp/raised-stack/python",
+          "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+          "--log",
+          "/tmp/raised-energy-causal-20260914/gl1-term15-factor-replay/run-factored-01/runtime/memory.jsonl",
+          "--limit-gb",
+          "30",
+          "--",
+          "env",
+          "-u",
+          "GAMMALOOP_DUMP_EVALUATOR_PRE_NETWORK_PARSE",
+          "-u",
+          "GAMMALOOP_STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE_VERBOSE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE_ATOM_BYTES",
+          "/tmp/raised-energy-expression-perf-20260914/diagnostics/common-factor-contraction/build-01/cff-common-factor-contraction-probe",
+          "/tmp/raised-energy-causal-20260914/hot-structure/gl1-recursive-common-factors-04/term15/factored.atom",
+          "/tmp/raised-energy-causal-20260914/gl1-term15-factor-replay/run-factored-01/result.atom"
+        ],
+        "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+        "started_utc": "2026-09-14T23:46:42.789305+00:00",
+        "status": "PASS",
+        "exit_code": 0,
+        "wall_seconds": 8.663884048932232,
+        "watchdog_seconds": 8.391567665967159,
+        "peak_tree_rss_bytes": 2589036544
+      },
+      "events": [
+        {
+          "seconds": 0.032034302,
+          "stage": "initialized"
+        },
+        {
+          "atom_bytes": 912543,
+          "input_utf8_bytes": 1065784,
+          "seconds": 0.075707645,
+          "stage": "symbolica_parse",
+          "terms": 1
+        },
+        {
+          "stage": "network_parse_start",
+          "term": 0
+        },
+        {
+          "seconds": 0.183138272,
+          "stage": "network_parse",
+          "term": 0
+        },
+        {
+          "seconds": 0.01196527,
+          "stage": "prepare",
+          "term": 0
+        },
+        {
+          "seconds": 3.542973628,
+          "stage": "execute",
+          "term": 0
+        },
+        {
+          "seconds": 0.481066881,
+          "stage": "resolve_aliases",
+          "term": 0
+        },
+        {
+          "result_atom_bytes": 37844104,
+          "result_terms": 84,
+          "seconds": 4.319782642,
+          "stage": "contraction_complete"
+        },
+        {
+          "seconds": 3.449647289,
+          "stage": "output_written",
+          "status": "PASS_CONTRACTION_ONLY",
+          "total_seconds": 7.878197821
+        }
+      ],
+      "output": {
+        "path": "/tmp/raised-energy-causal-20260914/gl1-term15-factor-replay/run-factored-01/result.atom",
+        "sha256": "bb8e04d4fba9ebe4bb32c4c4dd62f067858e4250ab076375d1eeea2a7e5444d1",
+        "bytes": 81064814
+      }
+    },
+    {
+      "group": "gl1-term16-factor-replay",
+      "input": "original",
+      "receipt": {
+        "path": "/tmp/raised-energy-causal-20260914/gl1-term16-factor-replay/run-original-01/receipt.json",
+        "sha256": "e5f76b8c9f4ff532b313603ff649b876173be3c487b614e719f17ca44ee7d2a1"
+      },
+      "runtime": {
+        "argv": [
+          "/tmp/raised-stack/run",
+          "env",
+          "-u",
+          "GL_ALL_LOG_FILTER",
+          "-u",
+          "GL_DISPLAY_FILTER",
+          "-u",
+          "GL_LOGFILE_FILTER",
+          "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+          "CARGO_BUILD_JOBS=4",
+          "RAYON_NUM_THREADS=8",
+          "RUST_MIN_STACK=134217728",
+          "INSTA_UPDATE=no",
+          "NEXTEST_RETRIES=0",
+          "GL_ALL_LOG_FILTER=off",
+          "/tmp/raised-stack/python",
+          "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+          "--log",
+          "/tmp/raised-energy-causal-20260914/gl1-term16-factor-replay/run-original-01/runtime/memory.jsonl",
+          "--limit-gb",
+          "30",
+          "--",
+          "env",
+          "-u",
+          "GAMMALOOP_DUMP_EVALUATOR_PRE_NETWORK_PARSE",
+          "-u",
+          "GAMMALOOP_STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE_VERBOSE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE_ATOM_BYTES",
+          "/tmp/raised-energy-expression-perf-20260914/diagnostics/common-factor-contraction/build-01/cff-common-factor-contraction-probe",
+          "/tmp/raised-energy-causal-20260914/hot-structure/gl1-recursive-common-factors-04/term16/original.atom",
+          "/tmp/raised-energy-causal-20260914/gl1-term16-factor-replay/run-original-01/result.atom"
+        ],
+        "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+        "started_utc": "2026-09-14T23:46:53.851009+00:00",
+        "status": "PASS",
+        "exit_code": 0,
+        "wall_seconds": 79.30477939092088,
+        "watchdog_seconds": 79.02892030705698,
+        "peak_tree_rss_bytes": 16628248576
+      },
+      "events": [
+        {
+          "seconds": 0.032320294,
+          "stage": "initialized"
+        },
+        {
+          "atom_bytes": 2571603,
+          "input_utf8_bytes": 2864683,
+          "seconds": 0.204104337,
+          "stage": "symbolica_parse",
+          "terms": 1
+        },
+        {
+          "stage": "network_parse_start",
+          "term": 0
+        },
+        {
+          "seconds": 0.387162709,
+          "stage": "network_parse",
+          "term": 0
+        },
+        {
+          "seconds": 0.024371923,
+          "stage": "prepare",
+          "term": 0
+        },
+        {
+          "seconds": 45.681227703,
+          "stage": "execute",
+          "term": 0
+        },
+        {
+          "seconds": 2.778910593,
+          "stage": "resolve_aliases",
+          "term": 0
+        },
+        {
+          "result_atom_bytes": 313749436,
+          "result_terms": 174,
+          "seconds": 49.460072441,
+          "stage": "contraction_complete"
+        },
+        {
+          "seconds": 28.25410831,
+          "stage": "output_written",
+          "status": "PASS_CONTRACTION_ONLY",
+          "total_seconds": 77.952966617
+        }
+      ],
+      "output": {
+        "path": "/tmp/raised-energy-causal-20260914/gl1-term16-factor-replay/run-original-01/result.atom",
+        "sha256": "c2d2b576eef4f1d22f44914cb12f1ce65d4ddd629fb5b488b17bf85933bc8002",
+        "bytes": 682278188
+      }
+    },
+    {
+      "group": "gl1-term16-factor-replay",
+      "input": "factored",
+      "receipt": {
+        "path": "/tmp/raised-energy-causal-20260914/gl1-term16-factor-replay/run-factored-01/receipt.json",
+        "sha256": "98c603f1710fe598ba6bfda3014ab34aa0398c1b264c490d46cbc72d49a5e8a7"
+      },
+      "runtime": {
+        "argv": [
+          "/tmp/raised-stack/run",
+          "env",
+          "-u",
+          "GL_ALL_LOG_FILTER",
+          "-u",
+          "GL_DISPLAY_FILTER",
+          "-u",
+          "GL_LOGFILE_FILTER",
+          "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+          "CARGO_BUILD_JOBS=4",
+          "RAYON_NUM_THREADS=8",
+          "RUST_MIN_STACK=134217728",
+          "INSTA_UPDATE=no",
+          "NEXTEST_RETRIES=0",
+          "GL_ALL_LOG_FILTER=off",
+          "/tmp/raised-stack/python",
+          "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+          "--log",
+          "/tmp/raised-energy-causal-20260914/gl1-term16-factor-replay/run-factored-01/runtime/memory.jsonl",
+          "--limit-gb",
+          "30",
+          "--",
+          "env",
+          "-u",
+          "GAMMALOOP_DUMP_EVALUATOR_PRE_NETWORK_PARSE",
+          "-u",
+          "GAMMALOOP_STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE_VERBOSE",
+          "-u",
+          "SPENSO_NETWORK_PROFILE_ATOM_BYTES",
+          "/tmp/raised-energy-expression-perf-20260914/diagnostics/common-factor-contraction/build-01/cff-common-factor-contraction-probe",
+          "/tmp/raised-energy-causal-20260914/hot-structure/gl1-recursive-common-factors-04/term16/factored.atom",
+          "/tmp/raised-energy-causal-20260914/gl1-term16-factor-replay/run-factored-01/result.atom"
+        ],
+        "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+        "started_utc": "2026-09-14T23:48:17.299610+00:00",
+        "status": "PASS",
+        "exit_code": 0,
+        "wall_seconds": 55.3665992510505,
+        "watchdog_seconds": 55.048850125982426,
+        "peak_tree_rss_bytes": 8326254592
+      },
+      "events": [
+        {
+          "seconds": 0.033658888,
+          "stage": "initialized"
+        },
+        {
+          "atom_bytes": 2360640,
+          "input_utf8_bytes": 2681637,
+          "seconds": 0.186597524,
+          "stage": "symbolica_parse",
+          "terms": 1
+        },
+        {
+          "stage": "network_parse_start",
+          "term": 0
+        },
+        {
+          "seconds": 0.306999627,
+          "stage": "network_parse",
+          "term": 0
+        },
+        {
+          "seconds": 0.016519633,
+          "stage": "prepare",
+          "term": 0
+        },
+        {
+          "seconds": 16.638775836,
+          "stage": "execute",
+          "term": 0
+        },
+        {
+          "seconds": 3.071568354,
+          "stage": "resolve_aliases",
+          "term": 0
+        },
+        {
+          "result_atom_bytes": 378306347,
+          "result_terms": 1,
+          "seconds": 20.148276466,
+          "stage": "contraction_complete"
+        },
+        {
+          "seconds": 33.814435926,
+          "stage": "output_written",
+          "status": "PASS_CONTRACTION_ONLY",
+          "total_seconds": 54.185327139
+        }
+      ],
+      "output": {
+        "path": "/tmp/raised-energy-causal-20260914/gl1-term16-factor-replay/run-factored-01/result.atom",
+        "sha256": "619183169bc3362270ff5bf1aae359afeff5be7f1e688ac4d869e623ac98437e",
+        "bytes": 822262680
+      }
+    }
+  ],
+  "complete_output_supplements": [
+    {
+      "receipt": {
+        "path": "/tmp/raised-energy-causal-20260914/metric-output-comparison/run-01/receipt.json",
+        "sha256": "0e10a3a88a32e778e445834321231d6627d668c811648f6e578148319780c87f"
+      },
+      "comparison": {
+        "path": "/tmp/raised-energy-causal-20260914/metric-output-comparison/run-01/comparison.json",
+        "sha256": "eff2a64a1eced92072a12a40ceed30210c9485d4a610079518d9d2211fcbed50"
+      },
+      "status": "NUMERICAL_SUPPLEMENT_AGREES",
+      "samples": [
+        {
+          "assignments": [
+            {
+              "atom": "UFO::{}::GC_1",
+              "imag_rational": [
+                2,
+                17
+              ],
+              "real_rational": [
+                2,
+                3
+              ]
+            },
+            {
+              "atom": "UFO::{}::GC_11",
+              "imag_rational": [
+                -13,
+                19
+              ],
+              "real_rational": [
+                3,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(0))",
+              "imag_rational": [
+                31,
+                21
+              ],
+              "real_rational": [
+                5,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(1))",
+              "imag_rational": [
+                -53,
+                23
+              ],
+              "real_rational": [
+                7,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(2))",
+              "imag_rational": [
+                11,
+                25
+              ],
+              "real_rational": [
+                11,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(3))",
+              "imag_rational": [
+                -29,
+                27
+              ],
+              "real_rational": [
+                13,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(1))",
+              "imag_rational": [
+                47,
+                29
+              ],
+              "real_rational": [
+                17,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(2))",
+              "imag_rational": [
+                -7,
+                17
+              ],
+              "real_rational": [
+                19,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(3))",
+              "imag_rational": [
+                23,
+                19
+              ],
+              "real_rational": [
+                23,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(1))",
+              "imag_rational": [
+                -43,
+                21
+              ],
+              "real_rational": [
+                29,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(2))",
+              "imag_rational": [
+                5,
+                23
+              ],
+              "real_rational": [
+                31,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(3))",
+              "imag_rational": [
+                -19,
+                25
+              ],
+              "real_rational": [
+                37,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(8,spenso::{}::cind(1))",
+              "imag_rational": [
+                41,
+                27
+              ],
+              "real_rational": [
+                41,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(8,spenso::{}::cind(2))",
+              "imag_rational": [
+                -3,
+                29
+              ],
+              "real_rational": [
+                43,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(8,spenso::{}::cind(3))",
+              "imag_rational": [
+                17,
+                17
+              ],
+              "real_rational": [
+                47,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::mUV",
+              "imag_rational": [
+                -37,
+                19
+              ],
+              "real_rational": [
+                53,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::tree_denoms(1)",
+              "imag_rational": [
+                0,
+                1
+              ],
+              "real_rational": [
+                1,
+                1
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(58)",
+              "imag_rational": [
+                0,
+                1
+              ],
+              "real_rational": [
+                1,
+                1
+              ]
+            }
+          ],
+          "below_threshold": true,
+          "precision_bits": 256,
+          "relative_residual": "1.2874609975403545399678585888111360567266314181684004119927177498116054010853499e-96",
+          "sample": 0,
+          "status": "NUMERICAL_AGREEMENT",
+          "threshold": "2^-128",
+          "values": [
+            {
+              "imag": "-2.5486047410195104371848473347980058555574876710397668709747167951161843698500098e-20",
+              "real": "2.8934953374581522141163310547665209795550432285506149818718342732072858063660712e-20"
+            },
+            {
+              "imag": "-2.5486047410195104371848473347980058555574876710397668709747167951161843698500566e-20",
+              "real": "2.8934953374581522141163310547665209795550432285506149818718342732072858063662116e-20"
+            }
+          ],
+          "zero_outputs": [
+            false,
+            false
+          ]
+        },
+        {
+          "assignments": [
+            {
+              "atom": "UFO::{}::GC_1",
+              "imag_rational": [
+                3,
+                21
+              ],
+              "real_rational": [
+                9,
+                5
+              ]
+            },
+            {
+              "atom": "UFO::{}::GC_11",
+              "imag_rational": [
+                -17,
+                23
+              ],
+              "real_rational": [
+                13,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(0))",
+              "imag_rational": [
+                37,
+                25
+              ],
+              "real_rational": [
+                15,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(1))",
+              "imag_rational": [
+                -2,
+                27
+              ],
+              "real_rational": [
+                19,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(2))",
+              "imag_rational": [
+                13,
+                29
+              ],
+              "real_rational": [
+                21,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(3))",
+              "imag_rational": [
+                -31,
+                17
+              ],
+              "real_rational": [
+                25,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(1))",
+              "imag_rational": [
+                53,
+                19
+              ],
+              "real_rational": [
+                31,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(2))",
+              "imag_rational": [
+                -11,
+                21
+              ],
+              "real_rational": [
+                33,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(3))",
+              "imag_rational": [
+                29,
+                23
+              ],
+              "real_rational": [
+                39,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(1))",
+              "imag_rational": [
+                -47,
+                25
+              ],
+              "real_rational": [
+                43,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(2))",
+              "imag_rational": [
+                7,
+                27
+              ],
+              "real_rational": [
+                45,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(3))",
+              "imag_rational": [
+                -23,
+                29
+              ],
+              "real_rational": [
+                49,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(8,spenso::{}::cind(1))",
+              "imag_rational": [
+                43,
+                17
+              ],
+              "real_rational": [
+                55,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(8,spenso::{}::cind(2))",
+              "imag_rational": [
+                -5,
+                19
+              ],
+              "real_rational": [
+                4,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(8,spenso::{}::cind(3))",
+              "imag_rational": [
+                19,
+                21
+              ],
+              "real_rational": [
+                5,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::mUV",
+              "imag_rational": [
+                -41,
+                23
+              ],
+              "real_rational": [
+                7,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::tree_denoms(1)",
+              "imag_rational": [
+                0,
+                1
+              ],
+              "real_rational": [
+                1,
+                1
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(58)",
+              "imag_rational": [
+                0,
+                1
+              ],
+              "real_rational": [
+                1,
+                1
+              ]
+            }
+          ],
+          "below_threshold": true,
+          "precision_bits": 256,
+          "relative_residual": "1.3806825371149855930581858623398900245867793628904701901876231892088733528904826e-91",
+          "sample": 1,
+          "status": "NUMERICAL_AGREEMENT",
+          "threshold": "2^-128",
+          "values": [
+            {
+              "imag": "-7.1367343270981818950832930757636771347986968086383025965261856310346618393128186e-16",
+              "real": "5.1149029664936895117032953268201721306335070172461184991796294554913334624588380e-17"
+            },
+            {
+              "imag": "-7.1367343270981818950832930757636771347986968086383025965261856310346618393141993e-16",
+              "real": "5.1149029664936895117032953268201721306335070172461184991796294554913334624597968e-17"
+            }
+          ],
+          "zero_outputs": [
+            false,
+            false
+          ]
+        },
+        {
+          "assignments": [
+            {
+              "atom": "UFO::{}::GC_1",
+              "imag_rational": [
+                5,
+                25
+              ],
+              "real_rational": [
+                21,
+                7
+              ]
+            },
+            {
+              "atom": "UFO::{}::GC_11",
+              "imag_rational": [
+                -19,
+                27
+              ],
+              "real_rational": [
+                23,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(0))",
+              "imag_rational": [
+                41,
+                29
+              ],
+              "real_rational": [
+                27,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(1))",
+              "imag_rational": [
+                -3,
+                17
+              ],
+              "real_rational": [
+                33,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(2))",
+              "imag_rational": [
+                17,
+                19
+              ],
+              "real_rational": [
+                35,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(3))",
+              "imag_rational": [
+                -37,
+                21
+              ],
+              "real_rational": [
+                41,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(1))",
+              "imag_rational": [
+                2,
+                23
+              ],
+              "real_rational": [
+                45,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(2))",
+              "imag_rational": [
+                -13,
+                25
+              ],
+              "real_rational": [
+                47,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(3))",
+              "imag_rational": [
+                31,
+                27
+              ],
+              "real_rational": [
+                51,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(1))",
+              "imag_rational": [
+                -53,
+                29
+              ],
+              "real_rational": [
+                57,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(2))",
+              "imag_rational": [
+                11,
+                17
+              ],
+              "real_rational": [
+                6,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(3))",
+              "imag_rational": [
+                -29,
+                19
+              ],
+              "real_rational": [
+                7,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(8,spenso::{}::cind(1))",
+              "imag_rational": [
+                47,
+                21
+              ],
+              "real_rational": [
+                9,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(8,spenso::{}::cind(2))",
+              "imag_rational": [
+                -7,
+                23
+              ],
+              "real_rational": [
+                11,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(8,spenso::{}::cind(3))",
+              "imag_rational": [
+                23,
+                25
+              ],
+              "real_rational": [
+                15,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::mUV",
+              "imag_rational": [
+                -43,
+                27
+              ],
+              "real_rational": [
+                17,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::tree_denoms(1)",
+              "imag_rational": [
+                0,
+                1
+              ],
+              "real_rational": [
+                1,
+                1
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(58)",
+              "imag_rational": [
+                0,
+                1
+              ],
+              "real_rational": [
+                1,
+                1
+              ]
+            }
+          ],
+          "below_threshold": true,
+          "precision_bits": 256,
+          "relative_residual": "6.1363668316221581913697149437328445537190193906243119563894363964838815684021448e-92",
+          "sample": 2,
+          "status": "NUMERICAL_AGREEMENT",
+          "threshold": "2^-128",
+          "values": [
+            {
+              "imag": "-1.0864665885703691754300517305460518072013739675760352096583427003097210339339401e-15",
+              "real": "1.5171983592744848436967560322669774699610841166983553788249631726913571512582552e-16"
+            },
+            {
+              "imag": "-1.0864665885703691754300517305460518072013739675760352096583427003097210339338787e-15",
+              "real": "1.5171983592744848436967560322669774699610841166983553788249631726913571512583319e-16"
+            }
+          ],
+          "zero_outputs": [
+            false,
+            false
+          ]
+        }
+      ],
+      "exact_atom_equal": false,
+      "expansion_performed": false
+    },
+    {
+      "receipt": {
+        "path": "/tmp/raised-energy-causal-20260914/hot-structure/gl1-output-comparison-04/term15/run-01/receipt.json",
+        "sha256": "8fc7fedea9cad468b2b349da1f6ae8842f70eedb6260f31f21ae4d94564e707d"
+      },
+      "comparison": {
+        "path": "/tmp/raised-energy-causal-20260914/hot-structure/gl1-output-comparison-04/term15/run-01/comparison.json",
+        "sha256": "b1685ff6cc56eb76f48e542b1fc4e131a8885b598edcd4a57f72f5a418b126f4"
+      },
+      "status": "NUMERICAL_SUPPLEMENT_AGREES",
+      "samples": [
+        {
+          "assignments": [
+            {
+              "atom": "UFO::{}::GC_10",
+              "imag_rational": [
+                2,
+                17
+              ],
+              "real_rational": [
+                2,
+                3
+              ]
+            },
+            {
+              "atom": "UFO::{}::GC_11",
+              "imag_rational": [
+                -13,
+                19
+              ],
+              "real_rational": [
+                3,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{scalar}::OSE(5)",
+              "imag_rational": [
+                31,
+                21
+              ],
+              "real_rational": [
+                5,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{scalar}::OSE(6)",
+              "imag_rational": [
+                -53,
+                23
+              ],
+              "real_rational": [
+                7,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(0))",
+              "imag_rational": [
+                11,
+                25
+              ],
+              "real_rational": [
+                11,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(1))",
+              "imag_rational": [
+                -29,
+                27
+              ],
+              "real_rational": [
+                13,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(2))",
+              "imag_rational": [
+                47,
+                29
+              ],
+              "real_rational": [
+                17,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(3))",
+              "imag_rational": [
+                -7,
+                17
+              ],
+              "real_rational": [
+                19,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(0))",
+              "imag_rational": [
+                23,
+                19
+              ],
+              "real_rational": [
+                23,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(1))",
+              "imag_rational": [
+                -43,
+                21
+              ],
+              "real_rational": [
+                29,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(2))",
+              "imag_rational": [
+                5,
+                23
+              ],
+              "real_rational": [
+                31,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(3))",
+              "imag_rational": [
+                -19,
+                25
+              ],
+              "real_rational": [
+                37,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(1))",
+              "imag_rational": [
+                41,
+                27
+              ],
+              "real_rational": [
+                41,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(2))",
+              "imag_rational": [
+                -3,
+                29
+              ],
+              "real_rational": [
+                43,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(3))",
+              "imag_rational": [
+                17,
+                17
+              ],
+              "real_rational": [
+                47,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(1))",
+              "imag_rational": [
+                -37,
+                19
+              ],
+              "real_rational": [
+                53,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(2))",
+              "imag_rational": [
+                2,
+                21
+              ],
+              "real_rational": [
+                2,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(3))",
+              "imag_rational": [
+                -13,
+                23
+              ],
+              "real_rational": [
+                3,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(1))",
+              "imag_rational": [
+                31,
+                25
+              ],
+              "real_rational": [
+                5,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(2))",
+              "imag_rational": [
+                -53,
+                27
+              ],
+              "real_rational": [
+                7,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(3))",
+              "imag_rational": [
+                11,
+                29
+              ],
+              "real_rational": [
+                11,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::mUV",
+              "imag_rational": [
+                -29,
+                17
+              ],
+              "real_rational": [
+                13,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::tree_denoms(1)",
+              "imag_rational": [
+                47,
+                19
+              ],
+              "real_rational": [
+                17,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(0)",
+              "imag_rational": [
+                -7,
+                21
+              ],
+              "real_rational": [
+                19,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(1)",
+              "imag_rational": [
+                23,
+                23
+              ],
+              "real_rational": [
+                23,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(12)",
+              "imag_rational": [
+                -43,
+                25
+              ],
+              "real_rational": [
+                29,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(13)",
+              "imag_rational": [
+                5,
+                27
+              ],
+              "real_rational": [
+                31,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(14)",
+              "imag_rational": [
+                -19,
+                29
+              ],
+              "real_rational": [
+                37,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(15)",
+              "imag_rational": [
+                41,
+                17
+              ],
+              "real_rational": [
+                41,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(16)",
+              "imag_rational": [
+                -3,
+                19
+              ],
+              "real_rational": [
+                43,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(17)",
+              "imag_rational": [
+                17,
+                21
+              ],
+              "real_rational": [
+                47,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(2)",
+              "imag_rational": [
+                -37,
+                23
+              ],
+              "real_rational": [
+                53,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(3)",
+              "imag_rational": [
+                2,
+                25
+              ],
+              "real_rational": [
+                2,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(4)",
+              "imag_rational": [
+                -13,
+                27
+              ],
+              "real_rational": [
+                3,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(5)",
+              "imag_rational": [
+                31,
+                29
+              ],
+              "real_rational": [
+                5,
+                13
+              ]
+            }
+          ],
+          "below_threshold": true,
+          "precision_bits": 256,
+          "relative_residual": "1.3177747429038154030435717564087523759637451727960634437597203781385180363712199e-82",
+          "sample": 0,
+          "status": "NUMERICAL_AGREEMENT",
+          "threshold": "2^-128",
+          "values": [
+            {
+              "imag": "-6.5506228333586069628950624602681074724820543818873950504768919730215750839049625e-6",
+              "real": "2.1507427508715130539362566726798709588443235719482746372716698201522338516311792e-6"
+            },
+            {
+              "imag": "-6.5506228333586069628950624602681074724820543818873950504768919730215750839048308e-6",
+              "real": "2.1507427508715130539362566726798709588443235719482746372716698201522338516311792e-6"
+            }
+          ],
+          "zero_outputs": [
+            false,
+            false
+          ]
+        },
+        {
+          "assignments": [
+            {
+              "atom": "UFO::{}::GC_10",
+              "imag_rational": [
+                3,
+                21
+              ],
+              "real_rational": [
+                9,
+                5
+              ]
+            },
+            {
+              "atom": "UFO::{}::GC_11",
+              "imag_rational": [
+                -17,
+                23
+              ],
+              "real_rational": [
+                13,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{scalar}::OSE(5)",
+              "imag_rational": [
+                37,
+                25
+              ],
+              "real_rational": [
+                15,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{scalar}::OSE(6)",
+              "imag_rational": [
+                -2,
+                27
+              ],
+              "real_rational": [
+                19,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(0))",
+              "imag_rational": [
+                13,
+                29
+              ],
+              "real_rational": [
+                21,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(1))",
+              "imag_rational": [
+                -31,
+                17
+              ],
+              "real_rational": [
+                25,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(2))",
+              "imag_rational": [
+                53,
+                19
+              ],
+              "real_rational": [
+                31,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(3))",
+              "imag_rational": [
+                -11,
+                21
+              ],
+              "real_rational": [
+                33,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(0))",
+              "imag_rational": [
+                29,
+                23
+              ],
+              "real_rational": [
+                39,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(1))",
+              "imag_rational": [
+                -47,
+                25
+              ],
+              "real_rational": [
+                43,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(2))",
+              "imag_rational": [
+                7,
+                27
+              ],
+              "real_rational": [
+                45,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(3))",
+              "imag_rational": [
+                -23,
+                29
+              ],
+              "real_rational": [
+                49,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(1))",
+              "imag_rational": [
+                43,
+                17
+              ],
+              "real_rational": [
+                55,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(2))",
+              "imag_rational": [
+                -5,
+                19
+              ],
+              "real_rational": [
+                4,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(3))",
+              "imag_rational": [
+                19,
+                21
+              ],
+              "real_rational": [
+                5,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(1))",
+              "imag_rational": [
+                -41,
+                23
+              ],
+              "real_rational": [
+                7,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(2))",
+              "imag_rational": [
+                3,
+                25
+              ],
+              "real_rational": [
+                9,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(3))",
+              "imag_rational": [
+                -17,
+                27
+              ],
+              "real_rational": [
+                13,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(1))",
+              "imag_rational": [
+                37,
+                29
+              ],
+              "real_rational": [
+                15,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(2))",
+              "imag_rational": [
+                -2,
+                17
+              ],
+              "real_rational": [
+                19,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(3))",
+              "imag_rational": [
+                13,
+                19
+              ],
+              "real_rational": [
+                21,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::mUV",
+              "imag_rational": [
+                -31,
+                21
+              ],
+              "real_rational": [
+                25,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::tree_denoms(1)",
+              "imag_rational": [
+                53,
+                23
+              ],
+              "real_rational": [
+                31,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(0)",
+              "imag_rational": [
+                -11,
+                25
+              ],
+              "real_rational": [
+                33,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(1)",
+              "imag_rational": [
+                29,
+                27
+              ],
+              "real_rational": [
+                39,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(12)",
+              "imag_rational": [
+                -47,
+                29
+              ],
+              "real_rational": [
+                43,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(13)",
+              "imag_rational": [
+                7,
+                17
+              ],
+              "real_rational": [
+                45,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(14)",
+              "imag_rational": [
+                -23,
+                19
+              ],
+              "real_rational": [
+                49,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(15)",
+              "imag_rational": [
+                43,
+                21
+              ],
+              "real_rational": [
+                55,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(16)",
+              "imag_rational": [
+                -5,
+                23
+              ],
+              "real_rational": [
+                4,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(17)",
+              "imag_rational": [
+                19,
+                25
+              ],
+              "real_rational": [
+                5,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(2)",
+              "imag_rational": [
+                -41,
+                27
+              ],
+              "real_rational": [
+                7,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(3)",
+              "imag_rational": [
+                3,
+                29
+              ],
+              "real_rational": [
+                9,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(4)",
+              "imag_rational": [
+                -17,
+                17
+              ],
+              "real_rational": [
+                13,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(5)",
+              "imag_rational": [
+                37,
+                19
+              ],
+              "real_rational": [
+                15,
+                3
+              ]
+            }
+          ],
+          "below_threshold": true,
+          "precision_bits": 256,
+          "relative_residual": "9.4879781489074709019137166461430171069389652441316567950699867225973298618727836e-81",
+          "sample": 1,
+          "status": "NUMERICAL_AGREEMENT",
+          "threshold": "2^-128",
+          "values": [
+            {
+              "imag": "4.8080835374251240123293986281334860565838479116580222747911523856407523059671448e-5",
+              "real": "-6.0027697078921230094523567667557556690721706418451922198855888179398841641115257e-5"
+            },
+            {
+              "imag": "4.8080835374251240123293986281334860565838479116580222747911523856407523059680936e-5",
+              "real": "-6.0027697078921230094523567667557556690721706418451922198855888179398841641114203e-5"
+            }
+          ],
+          "zero_outputs": [
+            false,
+            false
+          ]
+        },
+        {
+          "assignments": [
+            {
+              "atom": "UFO::{}::GC_10",
+              "imag_rational": [
+                5,
+                25
+              ],
+              "real_rational": [
+                21,
+                7
+              ]
+            },
+            {
+              "atom": "UFO::{}::GC_11",
+              "imag_rational": [
+                -19,
+                27
+              ],
+              "real_rational": [
+                23,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{scalar}::OSE(5)",
+              "imag_rational": [
+                41,
+                29
+              ],
+              "real_rational": [
+                27,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{scalar}::OSE(6)",
+              "imag_rational": [
+                -3,
+                17
+              ],
+              "real_rational": [
+                33,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(0))",
+              "imag_rational": [
+                17,
+                19
+              ],
+              "real_rational": [
+                35,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(1))",
+              "imag_rational": [
+                -37,
+                21
+              ],
+              "real_rational": [
+                41,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(2))",
+              "imag_rational": [
+                2,
+                23
+              ],
+              "real_rational": [
+                45,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(3))",
+              "imag_rational": [
+                -13,
+                25
+              ],
+              "real_rational": [
+                47,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(0))",
+              "imag_rational": [
+                31,
+                27
+              ],
+              "real_rational": [
+                51,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(1))",
+              "imag_rational": [
+                -53,
+                29
+              ],
+              "real_rational": [
+                57,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(2))",
+              "imag_rational": [
+                11,
+                17
+              ],
+              "real_rational": [
+                6,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(3))",
+              "imag_rational": [
+                -29,
+                19
+              ],
+              "real_rational": [
+                7,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(1))",
+              "imag_rational": [
+                47,
+                21
+              ],
+              "real_rational": [
+                9,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(2))",
+              "imag_rational": [
+                -7,
+                23
+              ],
+              "real_rational": [
+                11,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(3))",
+              "imag_rational": [
+                23,
+                25
+              ],
+              "real_rational": [
+                15,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(1))",
+              "imag_rational": [
+                -43,
+                27
+              ],
+              "real_rational": [
+                17,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(2))",
+              "imag_rational": [
+                5,
+                29
+              ],
+              "real_rational": [
+                21,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(3))",
+              "imag_rational": [
+                -19,
+                17
+              ],
+              "real_rational": [
+                23,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(1))",
+              "imag_rational": [
+                41,
+                19
+              ],
+              "real_rational": [
+                27,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(2))",
+              "imag_rational": [
+                -3,
+                21
+              ],
+              "real_rational": [
+                33,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(6,spenso::{}::cind(3))",
+              "imag_rational": [
+                17,
+                23
+              ],
+              "real_rational": [
+                35,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::mUV",
+              "imag_rational": [
+                -37,
+                25
+              ],
+              "real_rational": [
+                41,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::tree_denoms(1)",
+              "imag_rational": [
+                2,
+                27
+              ],
+              "real_rational": [
+                45,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(0)",
+              "imag_rational": [
+                -13,
+                29
+              ],
+              "real_rational": [
+                47,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(1)",
+              "imag_rational": [
+                31,
+                17
+              ],
+              "real_rational": [
+                51,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(12)",
+              "imag_rational": [
+                -53,
+                19
+              ],
+              "real_rational": [
+                57,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(13)",
+              "imag_rational": [
+                11,
+                21
+              ],
+              "real_rational": [
+                6,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(14)",
+              "imag_rational": [
+                -29,
+                23
+              ],
+              "real_rational": [
+                7,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(15)",
+              "imag_rational": [
+                47,
+                25
+              ],
+              "real_rational": [
+                9,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(16)",
+              "imag_rational": [
+                -7,
+                27
+              ],
+              "real_rational": [
+                11,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(17)",
+              "imag_rational": [
+                23,
+                29
+              ],
+              "real_rational": [
+                15,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(2)",
+              "imag_rational": [
+                -43,
+                17
+              ],
+              "real_rational": [
+                17,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(3)",
+              "imag_rational": [
+                5,
+                19
+              ],
+              "real_rational": [
+                21,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(4)",
+              "imag_rational": [
+                -19,
+                21
+              ],
+              "real_rational": [
+                23,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(5)",
+              "imag_rational": [
+                41,
+                23
+              ],
+              "real_rational": [
+                27,
+                5
+              ]
+            }
+          ],
+          "below_threshold": true,
+          "precision_bits": 256,
+          "relative_residual": "4.8428221801715216061851262048021649816667635100255331558169723896590537836642333e-81",
+          "sample": 2,
+          "status": "NUMERICAL_AGREEMENT",
+          "threshold": "2^-128",
+          "values": [
+            {
+              "imag": "5.3692077339868601101613867948983783666989437981125453728080907982682663707115985e-6",
+              "real": "-3.9932615697552457113231273693304735311471550007970805674913197976264126437811529e-5"
+            },
+            {
+              "imag": "5.3692077339868601101613867948983783666989437981125453728080907982682663707159472e-6",
+              "real": "-3.9932615697552457113231273693304735311471550007970805674913197976264126437809421e-5"
+            }
+          ],
+          "zero_outputs": [
+            false,
+            false
+          ]
+        }
+      ],
+      "exact_atom_equal": false,
+      "expansion_performed": false
+    },
+    {
+      "receipt": {
+        "path": "/tmp/raised-energy-causal-20260914/hot-structure/gl1-output-comparison-05/term16/run-01/receipt.json",
+        "sha256": "7c618445f2c6d9a16b9cbe83ecd5a8f0b27a60c32be69a7f1468da422f50e2d9"
+      },
+      "comparison": {
+        "path": "/tmp/raised-energy-causal-20260914/hot-structure/gl1-output-comparison-05/term16/run-01/comparison.json",
+        "sha256": "76c95b8186cb84bc8b5ed7b15deed1dac3df25762c658f3ae47f4ef0be9cca96"
+      },
+      "status": "NUMERICAL_SUPPLEMENT_AGREES",
+      "samples": [
+        {
+          "assignments": [
+            {
+              "atom": "UFO::{}::GC_10",
+              "imag_rational": [
+                2,
+                17
+              ],
+              "real_rational": [
+                2,
+                3
+              ]
+            },
+            {
+              "atom": "UFO::{}::GC_11",
+              "imag_rational": [
+                -13,
+                19
+              ],
+              "real_rational": [
+                3,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(0))",
+              "imag_rational": [
+                31,
+                21
+              ],
+              "real_rational": [
+                5,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(1))",
+              "imag_rational": [
+                -53,
+                23
+              ],
+              "real_rational": [
+                7,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(2))",
+              "imag_rational": [
+                11,
+                25
+              ],
+              "real_rational": [
+                11,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(3))",
+              "imag_rational": [
+                -29,
+                27
+              ],
+              "real_rational": [
+                13,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(0))",
+              "imag_rational": [
+                47,
+                29
+              ],
+              "real_rational": [
+                17,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(1))",
+              "imag_rational": [
+                -7,
+                17
+              ],
+              "real_rational": [
+                19,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(2))",
+              "imag_rational": [
+                23,
+                19
+              ],
+              "real_rational": [
+                23,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(3))",
+              "imag_rational": [
+                -43,
+                21
+              ],
+              "real_rational": [
+                29,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(1))",
+              "imag_rational": [
+                5,
+                23
+              ],
+              "real_rational": [
+                31,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(2))",
+              "imag_rational": [
+                -19,
+                25
+              ],
+              "real_rational": [
+                37,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(3))",
+              "imag_rational": [
+                41,
+                27
+              ],
+              "real_rational": [
+                41,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(1))",
+              "imag_rational": [
+                -3,
+                29
+              ],
+              "real_rational": [
+                43,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(2))",
+              "imag_rational": [
+                17,
+                17
+              ],
+              "real_rational": [
+                47,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(3))",
+              "imag_rational": [
+                -37,
+                19
+              ],
+              "real_rational": [
+                53,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::mUV",
+              "imag_rational": [
+                2,
+                21
+              ],
+              "real_rational": [
+                2,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::tree_denoms(1)",
+              "imag_rational": [
+                -13,
+                23
+              ],
+              "real_rational": [
+                3,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(0)",
+              "imag_rational": [
+                31,
+                25
+              ],
+              "real_rational": [
+                5,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(1)",
+              "imag_rational": [
+                -53,
+                27
+              ],
+              "real_rational": [
+                7,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(10)",
+              "imag_rational": [
+                11,
+                29
+              ],
+              "real_rational": [
+                11,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(11)",
+              "imag_rational": [
+                -29,
+                17
+              ],
+              "real_rational": [
+                13,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(12)",
+              "imag_rational": [
+                47,
+                19
+              ],
+              "real_rational": [
+                17,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(13)",
+              "imag_rational": [
+                -7,
+                21
+              ],
+              "real_rational": [
+                19,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(14)",
+              "imag_rational": [
+                23,
+                23
+              ],
+              "real_rational": [
+                23,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(15)",
+              "imag_rational": [
+                -43,
+                25
+              ],
+              "real_rational": [
+                29,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(16)",
+              "imag_rational": [
+                5,
+                27
+              ],
+              "real_rational": [
+                31,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(17)",
+              "imag_rational": [
+                -19,
+                29
+              ],
+              "real_rational": [
+                37,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(2)",
+              "imag_rational": [
+                41,
+                17
+              ],
+              "real_rational": [
+                41,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(3)",
+              "imag_rational": [
+                -3,
+                19
+              ],
+              "real_rational": [
+                43,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(4)",
+              "imag_rational": [
+                17,
+                21
+              ],
+              "real_rational": [
+                47,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(5)",
+              "imag_rational": [
+                -37,
+                23
+              ],
+              "real_rational": [
+                53,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(6)",
+              "imag_rational": [
+                2,
+                25
+              ],
+              "real_rational": [
+                2,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(7)",
+              "imag_rational": [
+                -13,
+                27
+              ],
+              "real_rational": [
+                3,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(8)",
+              "imag_rational": [
+                31,
+                29
+              ],
+              "real_rational": [
+                5,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(9)",
+              "imag_rational": [
+                -53,
+                17
+              ],
+              "real_rational": [
+                7,
+                3
+              ]
+            }
+          ],
+          "below_threshold": true,
+          "precision_bits": 256,
+          "relative_residual": "3.6696455471793565529701514517913407686368330999035885389121851960797049200095770e-86",
+          "sample": 0,
+          "status": "NUMERICAL_AGREEMENT",
+          "threshold": "2^-128",
+          "values": [
+            {
+              "imag": "-1.7146513093075861138383512611049121485152256901596228056391584375547649390403237e-10",
+              "real": "1.5440780223286668344488804366436107501370838070215603628529111949132960980098302e-10"
+            },
+            {
+              "imag": "-1.7146513093075861138383512611049121485152256901596228056391584375547649390404644e-10",
+              "real": "1.5440780223286668344488804366436107501370838070215603628529111949132960980094884e-10"
+            }
+          ],
+          "zero_outputs": [
+            false,
+            false
+          ]
+        },
+        {
+          "assignments": [
+            {
+              "atom": "UFO::{}::GC_10",
+              "imag_rational": [
+                3,
+                21
+              ],
+              "real_rational": [
+                9,
+                5
+              ]
+            },
+            {
+              "atom": "UFO::{}::GC_11",
+              "imag_rational": [
+                -17,
+                23
+              ],
+              "real_rational": [
+                13,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(0))",
+              "imag_rational": [
+                37,
+                25
+              ],
+              "real_rational": [
+                15,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(1))",
+              "imag_rational": [
+                -2,
+                27
+              ],
+              "real_rational": [
+                19,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(2))",
+              "imag_rational": [
+                13,
+                29
+              ],
+              "real_rational": [
+                21,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(3))",
+              "imag_rational": [
+                -31,
+                17
+              ],
+              "real_rational": [
+                25,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(0))",
+              "imag_rational": [
+                53,
+                19
+              ],
+              "real_rational": [
+                31,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(1))",
+              "imag_rational": [
+                -11,
+                21
+              ],
+              "real_rational": [
+                33,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(2))",
+              "imag_rational": [
+                29,
+                23
+              ],
+              "real_rational": [
+                39,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(3))",
+              "imag_rational": [
+                -47,
+                25
+              ],
+              "real_rational": [
+                43,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(1))",
+              "imag_rational": [
+                7,
+                27
+              ],
+              "real_rational": [
+                45,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(2))",
+              "imag_rational": [
+                -23,
+                29
+              ],
+              "real_rational": [
+                49,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(3))",
+              "imag_rational": [
+                43,
+                17
+              ],
+              "real_rational": [
+                55,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(1))",
+              "imag_rational": [
+                -5,
+                19
+              ],
+              "real_rational": [
+                4,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(2))",
+              "imag_rational": [
+                19,
+                21
+              ],
+              "real_rational": [
+                5,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(3))",
+              "imag_rational": [
+                -41,
+                23
+              ],
+              "real_rational": [
+                7,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::mUV",
+              "imag_rational": [
+                3,
+                25
+              ],
+              "real_rational": [
+                9,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::tree_denoms(1)",
+              "imag_rational": [
+                -17,
+                27
+              ],
+              "real_rational": [
+                13,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(0)",
+              "imag_rational": [
+                37,
+                29
+              ],
+              "real_rational": [
+                15,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(1)",
+              "imag_rational": [
+                -2,
+                17
+              ],
+              "real_rational": [
+                19,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(10)",
+              "imag_rational": [
+                13,
+                19
+              ],
+              "real_rational": [
+                21,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(11)",
+              "imag_rational": [
+                -31,
+                21
+              ],
+              "real_rational": [
+                25,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(12)",
+              "imag_rational": [
+                53,
+                23
+              ],
+              "real_rational": [
+                31,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(13)",
+              "imag_rational": [
+                -11,
+                25
+              ],
+              "real_rational": [
+                33,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(14)",
+              "imag_rational": [
+                29,
+                27
+              ],
+              "real_rational": [
+                39,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(15)",
+              "imag_rational": [
+                -47,
+                29
+              ],
+              "real_rational": [
+                43,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(16)",
+              "imag_rational": [
+                7,
+                17
+              ],
+              "real_rational": [
+                45,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(17)",
+              "imag_rational": [
+                -23,
+                19
+              ],
+              "real_rational": [
+                49,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(2)",
+              "imag_rational": [
+                43,
+                21
+              ],
+              "real_rational": [
+                55,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(3)",
+              "imag_rational": [
+                -5,
+                23
+              ],
+              "real_rational": [
+                4,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(4)",
+              "imag_rational": [
+                19,
+                25
+              ],
+              "real_rational": [
+                5,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(5)",
+              "imag_rational": [
+                -41,
+                27
+              ],
+              "real_rational": [
+                7,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(6)",
+              "imag_rational": [
+                3,
+                29
+              ],
+              "real_rational": [
+                9,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(7)",
+              "imag_rational": [
+                -17,
+                17
+              ],
+              "real_rational": [
+                13,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(8)",
+              "imag_rational": [
+                37,
+                19
+              ],
+              "real_rational": [
+                15,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(9)",
+              "imag_rational": [
+                -2,
+                21
+              ],
+              "real_rational": [
+                19,
+                5
+              ]
+            }
+          ],
+          "below_threshold": true,
+          "precision_bits": 256,
+          "relative_residual": "1.4495522171941969433479289320496276135601196900756697881356924159523698400083419e-80",
+          "sample": 1,
+          "status": "NUMERICAL_AGREEMENT",
+          "threshold": "2^-128",
+          "values": [
+            {
+              "imag": "1.0707140626547625568007667712894698061164140830146313218057709620496762231440457e-5",
+              "real": "8.2064534881413109506460108280926804968432991756686731333143089390899712768015174e-5"
+            },
+            {
+              "imag": "1.0707140626547625568007667712894698061164140830146313218057709620496762231442302e-5",
+              "real": "8.2064534881413109506460108280926804968432991756686731333143089390899712768029933e-5"
+            }
+          ],
+          "zero_outputs": [
+            false,
+            false
+          ]
+        },
+        {
+          "assignments": [
+            {
+              "atom": "UFO::{}::GC_10",
+              "imag_rational": [
+                5,
+                25
+              ],
+              "real_rational": [
+                21,
+                7
+              ]
+            },
+            {
+              "atom": "UFO::{}::GC_11",
+              "imag_rational": [
+                -19,
+                27
+              ],
+              "real_rational": [
+                23,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(0))",
+              "imag_rational": [
+                41,
+                29
+              ],
+              "real_rational": [
+                27,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(1))",
+              "imag_rational": [
+                -3,
+                17
+              ],
+              "real_rational": [
+                33,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(2))",
+              "imag_rational": [
+                17,
+                19
+              ],
+              "real_rational": [
+                35,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(0,spenso::{}::cind(3))",
+              "imag_rational": [
+                -37,
+                21
+              ],
+              "real_rational": [
+                41,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(0))",
+              "imag_rational": [
+                2,
+                23
+              ],
+              "real_rational": [
+                45,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(1))",
+              "imag_rational": [
+                -13,
+                25
+              ],
+              "real_rational": [
+                47,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(2))",
+              "imag_rational": [
+                31,
+                27
+              ],
+              "real_rational": [
+                51,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(3))",
+              "imag_rational": [
+                -53,
+                29
+              ],
+              "real_rational": [
+                57,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(1))",
+              "imag_rational": [
+                11,
+                17
+              ],
+              "real_rational": [
+                6,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(2))",
+              "imag_rational": [
+                -29,
+                19
+              ],
+              "real_rational": [
+                7,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(3,spenso::{}::cind(3))",
+              "imag_rational": [
+                47,
+                21
+              ],
+              "real_rational": [
+                9,
+                13
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(1))",
+              "imag_rational": [
+                -7,
+                23
+              ],
+              "real_rational": [
+                11,
+                3
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(2))",
+              "imag_rational": [
+                23,
+                25
+              ],
+              "real_rational": [
+                15,
+                5
+              ]
+            },
+            {
+              "atom": "gammalooprs::{spenso::rank1,spenso::tensor}::Q(5,spenso::{}::cind(3))",
+              "imag_rational": [
+                -43,
+                27
+              ],
+              "real_rational": [
+                17,
+                7
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::mUV",
+              "imag_rational": [
+                5,
+                29
+              ],
+              "real_rational": [
+                21,
+                11
+              ]
+            },
+            {
+              "atom": "gammalooprs::{}::tree_denoms(1)",
+              "imag_rational": [
+                -19,
+                17
+              ],
+              "real_rational": [
+                23,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(0)",
+              "imag_rational": [
+                41,
+                19
+              ],
+              "real_rational": [
+                27,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(1)",
+              "imag_rational": [
+                -3,
+                21
+              ],
+              "real_rational": [
+                33,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(10)",
+              "imag_rational": [
+                17,
+                23
+              ],
+              "real_rational": [
+                35,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(11)",
+              "imag_rational": [
+                -37,
+                25
+              ],
+              "real_rational": [
+                41,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(12)",
+              "imag_rational": [
+                2,
+                27
+              ],
+              "real_rational": [
+                45,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(13)",
+              "imag_rational": [
+                -13,
+                29
+              ],
+              "real_rational": [
+                47,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(14)",
+              "imag_rational": [
+                31,
+                17
+              ],
+              "real_rational": [
+                51,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(15)",
+              "imag_rational": [
+                -53,
+                19
+              ],
+              "real_rational": [
+                57,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(16)",
+              "imag_rational": [
+                11,
+                21
+              ],
+              "real_rational": [
+                6,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(17)",
+              "imag_rational": [
+                -29,
+                23
+              ],
+              "real_rational": [
+                7,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(2)",
+              "imag_rational": [
+                47,
+                25
+              ],
+              "real_rational": [
+                9,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(3)",
+              "imag_rational": [
+                -7,
+                27
+              ],
+              "real_rational": [
+                11,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(4)",
+              "imag_rational": [
+                23,
+                29
+              ],
+              "real_rational": [
+                15,
+                7
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(5)",
+              "imag_rational": [
+                -43,
+                17
+              ],
+              "real_rational": [
+                17,
+                11
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(6)",
+              "imag_rational": [
+                5,
+                19
+              ],
+              "real_rational": [
+                21,
+                13
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(7)",
+              "imag_rational": [
+                -19,
+                21
+              ],
+              "real_rational": [
+                23,
+                3
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(8)",
+              "imag_rational": [
+                41,
+                23
+              ],
+              "real_rational": [
+                27,
+                5
+              ]
+            },
+            {
+              "atom": "three_dimensional_reps::{}::sigma(9)",
+              "imag_rational": [
+                -3,
+                25
+              ],
+              "real_rational": [
+                33,
+                7
+              ]
+            }
+          ],
+          "below_threshold": true,
+          "precision_bits": 256,
+          "relative_residual": "6.1397760821374567258606095274596590700902815090914187971652891858229832350607880e-78",
+          "sample": 2,
+          "status": "NUMERICAL_AGREEMENT",
+          "threshold": "2^-128",
+          "values": [
+            {
+              "imag": "6.8548394016210179143978688620032691440977894907631236939966934473905802750333270e-2",
+              "real": "-2.1132560248044587565146684835412780701235987071025599365011305577770125775747808e-2"
+            },
+            {
+              "imag": "6.8548394016210179143978688620032691440977894907631236939966934473905802750337588e-2",
+              "real": "-2.1132560248044587565146684835412780701235987071025599365011305577770125775752126e-2"
+            }
+          ],
+          "zero_outputs": [
+            false,
+            false
+          ]
+        }
+      ],
+      "exact_atom_equal": false,
+      "expansion_performed": false
+    }
+  ],
+  "sparse_controls": [
+    {
+      "receipt": {
+        "path": "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/run-01/receipt.json",
+        "sha256": "eac2daa76dd4f27a32f0bf05620745c67c264a50efcef22f8c5bfb850e6bc5f9"
+      },
+      "status": "MEMORY_CAP",
+      "stages": [
+        {
+          "argv": [
+            "/tmp/raised-stack/run",
+            "env",
+            "-u",
+            "GL_ALL_LOG_FILTER",
+            "-u",
+            "GL_DISPLAY_FILTER",
+            "-u",
+            "GL_LOGFILE_FILTER",
+            "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+            "CARGO_BUILD_JOBS=4",
+            "RAYON_NUM_THREADS=8",
+            "RUST_MIN_STACK=134217728",
+            "INSTA_UPDATE=no",
+            "NEXTEST_RETRIES=0",
+            "GL_ALL_LOG_FILTER=off",
+            "SPENSO_NETWORK_PROFILE=1",
+            "SPENSO_NETWORK_PROFILE_VERBOSE=1",
+            "SPENSO_NETWORK_PROFILE_ATOM_BYTES=1",
+            "/tmp/raised-stack/python",
+            "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+            "--log",
+            "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/run-01/fixed_baseline/memory.jsonl",
+            "--limit-gb",
+            "30",
+            "--",
+            "/run/current-system/sw/bin/timeout",
+            "--verbose",
+            "--signal=TERM",
+            "--kill-after=15s",
+            "60s",
+            "/tmp/raised-energy-expression-perf-20260914/diagnostics/common-factor-contraction/build-01/cff-common-factor-contraction-probe",
+            "/tmp/raised-energy-expression-perf-20260914/upstream-expression-analysis/c3-orientation58-pre_network-000-terms/007.atom",
+            "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/run-01/fixed_baseline-result.atom"
+          ],
+          "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+          "started_utc": "2026-09-15T06:16:40.414844+00:00",
+          "status": "PASS",
+          "exit_code": 0,
+          "wall_seconds": 8.578118019038811,
+          "watchdog_seconds": 8.31063634203747,
+          "peak_tree_rss_bytes": 1581096960,
+          "case": "fixed_baseline",
+          "output": {
+            "path": "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/run-01/fixed_baseline-result.atom",
+            "sha256": "6a24a9b1284650968e6e8065d3a0b1d1d83942dc73e3b9dbfa886ffa812e5df9",
+            "bytes": 131643595
+          },
+          "last_profile_events": [
+            "spenso_profile execute.batch_done batch=15 ops=1 elapsed_ms=90.717",
+            "spenso_profile execute.plan graph_nodes=3 graph_hedges=5791 ignored_hedges=5786 rerooted=0 ready_batch=1 batch_subgraph_hedges=5",
+            "spenso_profile execute.batch_op_start batch=16 op_index=0 total=1 op=\u220f leaves=2 subgraph_hedges=5",
+            "spenso_profile execute.slow_op batch=16 op_index=0 elapsed_ms=30.000 op=\u220f leaves=2 subgraph_hedges=5",
+            "spenso_profile execute.batch_done batch=16 ops=1 elapsed_ms=30.237",
+            "spenso_profile execute.plan graph_nodes=1 graph_hedges=5791 ignored_hedges=5790 rerooted=0 ready_batch=0 batch_subgraph_hedges=0",
+            "spenso_profile merge_ops.start nodes=1 hedges=1",
+            "spenso_profile merge_ops.after_expr_tree",
+            "spenso_profile merge_ops.after_scan sums=0 prods=0",
+            "spenso_profile merge_ops.after_components to_del=0",
+            "spenso_profile merge_ops.after_forget",
+            "spenso_profile merge_ops.end nodes=1 hedges=1"
+          ]
+        },
+        {
+          "argv": [
+            "/tmp/raised-stack/run",
+            "env",
+            "-u",
+            "GL_ALL_LOG_FILTER",
+            "-u",
+            "GL_DISPLAY_FILTER",
+            "-u",
+            "GL_LOGFILE_FILTER",
+            "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+            "CARGO_BUILD_JOBS=4",
+            "RAYON_NUM_THREADS=8",
+            "RUST_MIN_STACK=134217728",
+            "INSTA_UPDATE=no",
+            "NEXTEST_RETRIES=0",
+            "GL_ALL_LOG_FILTER=off",
+            "SPENSO_NETWORK_PROFILE=1",
+            "SPENSO_NETWORK_PROFILE_VERBOSE=1",
+            "SPENSO_NETWORK_PROFILE_ATOM_BYTES=1",
+            "/tmp/raised-stack/python",
+            "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+            "--log",
+            "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/run-01/native_sparse_profile/memory.jsonl",
+            "--limit-gb",
+            "30",
+            "--",
+            "/run/current-system/sw/bin/timeout",
+            "--verbose",
+            "--signal=TERM",
+            "--kill-after=15s",
+            "60s",
+            "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/build-01/cff-sparse-term7-contraction-probe",
+            "/tmp/raised-energy-expression-perf-20260914/upstream-expression-analysis/c3-orientation58-pre_network-000-terms/007.atom",
+            "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/run-01/native_sparse_profile-result.atom"
+          ],
+          "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+          "started_utc": "2026-09-15T06:16:49.097950+00:00",
+          "status": "MEMORY_CAP",
+          "exit_code": 137,
+          "wall_seconds": 20.76465532707516,
+          "watchdog_seconds": null,
+          "peak_tree_rss_bytes": 30377439232,
+          "case": "native_sparse_profile",
+          "last_profile_events": [
+            "spenso_profile product.result_rank_pair_start operands=8 left_operand=2 right_operand=4 degree=1 left=",
+            "spenso_profile product.result_rank_slow_pair elapsed_ms=0.286",
+            "spenso_profile product.result_rank_pair_start operands=7 left_operand=4 right_operand=5 degree=1 left=",
+            "spenso_profile product.result_rank_slow_pair elapsed_ms=0.290",
+            "spenso_profile product.result_rank_pair_start operands=6 left_operand=0 right_operand=3 degree=1 left=",
+            "spenso_profile product.result_rank_slow_pair elapsed_ms=0.335",
+            "spenso_profile product.result_rank_pair_start operands=5 left_operand=3 right_operand=4 degree=1 left=",
+            "spenso_profile product.result_rank_slow_pair elapsed_ms=0.804",
+            "spenso_profile product.result_rank_pair_start operands=4 left_operand=0 right_operand=2 degree=2 left=",
+            "spenso_profile product.result_rank_slow_pair elapsed_ms=0.850",
+            "spenso_profile product.result_rank_pair_start operands=3 left_operand=1 right_operand=2 degree=3 left=",
+            "spenso_profile product.lazy_tensor_sum left_terms=2 right_terms=1 distributed_terms=2 left_structure="
+          ]
+        }
+      ]
+    },
+    {
+      "receipt": {
+        "path": "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/common-vector-replay/run-01/receipt.json",
+        "sha256": "cb14fe949c11297726dad09b26ee00fe4f822210a3d16888bdbe7db0010020c1"
+      },
+      "status": "MEMORY_CAP",
+      "stages": [
+        {
+          "argv": [
+            "/tmp/raised-stack/run",
+            "env",
+            "-u",
+            "GL_ALL_LOG_FILTER",
+            "-u",
+            "GL_DISPLAY_FILTER",
+            "-u",
+            "GL_LOGFILE_FILTER",
+            "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+            "CARGO_BUILD_JOBS=4",
+            "RAYON_NUM_THREADS=8",
+            "RUST_MIN_STACK=134217728",
+            "INSTA_UPDATE=no",
+            "NEXTEST_RETRIES=0",
+            "GL_ALL_LOG_FILTER=off",
+            "SPENSO_NETWORK_PROFILE=1",
+            "SPENSO_NETWORK_PROFILE_VERBOSE=1",
+            "SPENSO_NETWORK_PROFILE_ATOM_BYTES=1",
+            "/tmp/raised-stack/python",
+            "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+            "--log",
+            "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/common-vector-replay/run-01/fixed_baseline/memory.jsonl",
+            "--limit-gb",
+            "30",
+            "--",
+            "/run/current-system/sw/bin/timeout",
+            "--verbose",
+            "--signal=TERM",
+            "--kill-after=15s",
+            "60s",
+            "/tmp/raised-energy-expression-perf-20260914/diagnostics/common-factor-contraction/build-01/cff-common-factor-contraction-probe",
+            "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/common-vectors/combined-factored-complete-term.atom",
+            "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/common-vector-replay/run-01/fixed_baseline-result.atom"
+          ],
+          "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+          "started_utc": "2026-09-15T07:17:42.631685+00:00",
+          "status": "PASS",
+          "exit_code": 0,
+          "wall_seconds": 8.214317464036867,
+          "watchdog_seconds": 7.942198786069639,
+          "peak_tree_rss_bytes": 1121796096,
+          "case": "fixed_baseline",
+          "output": {
+            "path": "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/common-vector-replay/run-01/fixed_baseline-result.atom",
+            "sha256": "0f1bad90c0a5c54b7595c855b084ae6ec7f5bbc71107ecf4932834d51bf53db8",
+            "bytes": 127057789
+          },
+          "last_profile_events": [
+            "spenso_profile execute.batch_done batch=15 ops=1 elapsed_ms=77.776",
+            "spenso_profile execute.plan graph_nodes=3 graph_hedges=5677 ignored_hedges=5672 rerooted=0 ready_batch=1 batch_subgraph_hedges=5",
+            "spenso_profile execute.batch_op_start batch=16 op_index=0 total=1 op=\u220f leaves=2 subgraph_hedges=5",
+            "spenso_profile execute.slow_op batch=16 op_index=0 elapsed_ms=62.005 op=\u220f leaves=2 subgraph_hedges=5",
+            "spenso_profile execute.batch_done batch=16 ops=1 elapsed_ms=62.262",
+            "spenso_profile execute.plan graph_nodes=1 graph_hedges=5677 ignored_hedges=5676 rerooted=0 ready_batch=0 batch_subgraph_hedges=0",
+            "spenso_profile merge_ops.start nodes=1 hedges=1",
+            "spenso_profile merge_ops.after_expr_tree",
+            "spenso_profile merge_ops.after_scan sums=0 prods=0",
+            "spenso_profile merge_ops.after_components to_del=0",
+            "spenso_profile merge_ops.after_forget",
+            "spenso_profile merge_ops.end nodes=1 hedges=1"
+          ]
+        },
+        {
+          "argv": [
+            "/tmp/raised-stack/run",
+            "env",
+            "-u",
+            "GL_ALL_LOG_FILTER",
+            "-u",
+            "GL_DISPLAY_FILTER",
+            "-u",
+            "GL_LOGFILE_FILTER",
+            "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+            "CARGO_BUILD_JOBS=4",
+            "RAYON_NUM_THREADS=8",
+            "RUST_MIN_STACK=134217728",
+            "INSTA_UPDATE=no",
+            "NEXTEST_RETRIES=0",
+            "GL_ALL_LOG_FILTER=off",
+            "SPENSO_NETWORK_PROFILE=1",
+            "SPENSO_NETWORK_PROFILE_VERBOSE=1",
+            "SPENSO_NETWORK_PROFILE_ATOM_BYTES=1",
+            "/tmp/raised-stack/python",
+            "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+            "--log",
+            "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/common-vector-replay/run-01/native_sparse_profile/memory.jsonl",
+            "--limit-gb",
+            "30",
+            "--",
+            "/run/current-system/sw/bin/timeout",
+            "--verbose",
+            "--signal=TERM",
+            "--kill-after=15s",
+            "60s",
+            "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/build-01/cff-sparse-term7-contraction-probe",
+            "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/common-vectors/combined-factored-complete-term.atom",
+            "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/common-vector-replay/run-01/native_sparse_profile-result.atom"
+          ],
+          "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+          "started_utc": "2026-09-15T07:17:50.947896+00:00",
+          "status": "MEMORY_CAP",
+          "exit_code": 137,
+          "wall_seconds": 21.131099299062043,
+          "watchdog_seconds": null,
+          "peak_tree_rss_bytes": 30361759744,
+          "case": "native_sparse_profile",
+          "last_profile_events": [
+            "spenso_profile product.result_rank_pair_start operands=8 left_operand=0 right_operand=7 degree=1 left=",
+            "spenso_profile product.result_rank_slow_pair elapsed_ms=0.291",
+            "spenso_profile product.result_rank_pair_start operands=7 left_operand=1 right_operand=5 degree=1 left=",
+            "spenso_profile product.result_rank_slow_pair elapsed_ms=0.298",
+            "spenso_profile product.result_rank_pair_start operands=6 left_operand=2 right_operand=3 degree=1 left=",
+            "spenso_profile product.result_rank_slow_pair elapsed_ms=0.326",
+            "spenso_profile product.result_rank_pair_start operands=5 left_operand=0 right_operand=3 degree=1 left=",
+            "spenso_profile product.result_rank_slow_pair elapsed_ms=0.791",
+            "spenso_profile product.result_rank_pair_start operands=4 left_operand=1 right_operand=2 degree=2 left=",
+            "spenso_profile product.result_rank_slow_pair elapsed_ms=0.890",
+            "spenso_profile product.result_rank_pair_start operands=3 left_operand=0 right_operand=2 degree=3 left=",
+            "spenso_profile product.lazy_tensor_sum left_terms=1 right_terms=4 distributed_terms=4 left_structure="
+          ]
+        }
+      ]
+    }
+  ],
+  "relative_zero_reproducer": {
+    "receipt": {
+      "path": "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/receipt.json",
+      "sha256": "a2c09fc006ff2a90a153ed7faf80e4bd859b22077b9c2754fbf5bb847305d839"
+    },
+    "cases": [
+      {
+        "stage": "literal-zero-relative",
+        "argv": [
+          "/tmp/raised-stack/run",
+          "env",
+          "-u",
+          "GL_ALL_LOG_FILTER",
+          "-u",
+          "GL_DISPLAY_FILTER",
+          "-u",
+          "GL_LOGFILE_FILTER",
+          "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+          "CARGO_BUILD_JOBS=4",
+          "RAYON_NUM_THREADS=8",
+          "RUST_MIN_STACK=134217728",
+          "INSTA_UPDATE=no",
+          "NEXTEST_RETRIES=0",
+          "GL_ALL_LOG_FILTER=off",
+          "/tmp/raised-stack/python",
+          "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+          "--log",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/literal-zero-relative/memory.jsonl",
+          "--limit-gb",
+          "30",
+          "--",
+          "/run/current-system/sw/bin/timeout",
+          "--verbose",
+          "--signal=TERM",
+          "--kill-after=5s",
+          "10s",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/cff-epsilon-zero-reproducer",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/literal-zero.atom",
+          "relative",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/literal-zero-relative.json"
+        ],
+        "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+        "started_utc": "2026-09-15T07:16:32.581182+00:00",
+        "status": "PASS",
+        "exit_code": 0,
+        "wall_seconds": 0.4548893260071054,
+        "watchdog_seconds": 0.18736628093756735,
+        "peak_tree_rss_bytes": 0
+      },
+      {
+        "stage": "captured-subtree-absolute",
+        "argv": [
+          "/tmp/raised-stack/run",
+          "env",
+          "-u",
+          "GL_ALL_LOG_FILTER",
+          "-u",
+          "GL_DISPLAY_FILTER",
+          "-u",
+          "GL_LOGFILE_FILTER",
+          "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+          "CARGO_BUILD_JOBS=4",
+          "RAYON_NUM_THREADS=8",
+          "RUST_MIN_STACK=134217728",
+          "INSTA_UPDATE=no",
+          "NEXTEST_RETRIES=0",
+          "GL_ALL_LOG_FILTER=off",
+          "/tmp/raised-stack/python",
+          "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+          "--log",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/captured-subtree-absolute/memory.jsonl",
+          "--limit-gb",
+          "30",
+          "--",
+          "/run/current-system/sw/bin/timeout",
+          "--verbose",
+          "--signal=TERM",
+          "--kill-after=5s",
+          "10s",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/cff-epsilon-zero-reproducer",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/captured-subtree.atom",
+          "absolute",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/captured-subtree-absolute.json"
+        ],
+        "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+        "started_utc": "2026-09-15T07:16:33.036919+00:00",
+        "status": "PASS",
+        "exit_code": 0,
+        "wall_seconds": 0.457035742001608,
+        "watchdog_seconds": 0.18754757090937346,
+        "peak_tree_rss_bytes": 0
+      },
+      {
+        "stage": "captured-subtree-collected-relative",
+        "argv": [
+          "/tmp/raised-stack/run",
+          "env",
+          "-u",
+          "GL_ALL_LOG_FILTER",
+          "-u",
+          "GL_DISPLAY_FILTER",
+          "-u",
+          "GL_LOGFILE_FILTER",
+          "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+          "CARGO_BUILD_JOBS=4",
+          "RAYON_NUM_THREADS=8",
+          "RUST_MIN_STACK=134217728",
+          "INSTA_UPDATE=no",
+          "NEXTEST_RETRIES=0",
+          "GL_ALL_LOG_FILTER=off",
+          "/tmp/raised-stack/python",
+          "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+          "--log",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/captured-subtree-collected-relative/memory.jsonl",
+          "--limit-gb",
+          "30",
+          "--",
+          "/run/current-system/sw/bin/timeout",
+          "--verbose",
+          "--signal=TERM",
+          "--kill-after=5s",
+          "10s",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/cff-epsilon-zero-reproducer",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/captured-subtree.atom",
+          "collected-relative",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/captured-subtree-collected-relative.json"
+        ],
+        "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+        "started_utc": "2026-09-15T07:16:33.494683+00:00",
+        "status": "TIME_LIMIT",
+        "exit_code": 124,
+        "wall_seconds": 10.417121123056859,
+        "watchdog_seconds": 10.147937412955798,
+        "peak_tree_rss_bytes": 20189184,
+        "timeout_signal_lines": [
+          "timeout: sending signal TERM to command \u2018/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/cff-epsilon-zero-reproducer\u2019"
+        ]
+      },
+      {
+        "stage": "captured-subtree-relative",
+        "argv": [
+          "/tmp/raised-stack/run",
+          "env",
+          "-u",
+          "GL_ALL_LOG_FILTER",
+          "-u",
+          "GL_DISPLAY_FILTER",
+          "-u",
+          "GL_LOGFILE_FILTER",
+          "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+          "CARGO_BUILD_JOBS=4",
+          "RAYON_NUM_THREADS=8",
+          "RUST_MIN_STACK=134217728",
+          "INSTA_UPDATE=no",
+          "NEXTEST_RETRIES=0",
+          "GL_ALL_LOG_FILTER=off",
+          "/tmp/raised-stack/python",
+          "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+          "--log",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/captured-subtree-relative/memory.jsonl",
+          "--limit-gb",
+          "30",
+          "--",
+          "/run/current-system/sw/bin/timeout",
+          "--verbose",
+          "--signal=TERM",
+          "--kill-after=5s",
+          "10s",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/cff-epsilon-zero-reproducer",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/captured-subtree.atom",
+          "relative",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/captured-subtree-relative.json"
+        ],
+        "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+        "started_utc": "2026-09-15T07:16:43.912689+00:00",
+        "status": "TIME_LIMIT",
+        "exit_code": 124,
+        "wall_seconds": 10.398993571987376,
+        "watchdog_seconds": 10.133683783002198,
+        "peak_tree_rss_bytes": 21254144,
+        "timeout_signal_lines": [
+          "timeout: sending signal TERM to command \u2018/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/cff-epsilon-zero-reproducer\u2019"
+        ]
+      },
+      {
+        "stage": "minimal-subtree-relative",
+        "argv": [
+          "/tmp/raised-stack/run",
+          "env",
+          "-u",
+          "GL_ALL_LOG_FILTER",
+          "-u",
+          "GL_DISPLAY_FILTER",
+          "-u",
+          "GL_LOGFILE_FILTER",
+          "CARGO_TARGET_DIR=/common/dev/gammaloop/higher-power-energies-review/target",
+          "CARGO_BUILD_JOBS=4",
+          "RAYON_NUM_THREADS=8",
+          "RUST_MIN_STACK=134217728",
+          "INSTA_UPDATE=no",
+          "NEXTEST_RETRIES=0",
+          "GL_ALL_LOG_FILTER=off",
+          "/tmp/raised-stack/python",
+          "/tmp/raised-stack-latest-review-20260914/ram-watchdog-ps10.py",
+          "--log",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/minimal-subtree-relative/memory.jsonl",
+          "--limit-gb",
+          "30",
+          "--",
+          "/run/current-system/sw/bin/timeout",
+          "--verbose",
+          "--signal=TERM",
+          "--kill-after=5s",
+          "10s",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/cff-epsilon-zero-reproducer",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/minimal-subtree.atom",
+          "relative",
+          "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/minimal-subtree-relative.json"
+        ],
+        "cwd": "/tmp/raised-energy-expression-perf-20260914/diagnostic-workspaces/c3",
+        "started_utc": "2026-09-15T07:16:54.312599+00:00",
+        "status": "TIME_LIMIT",
+        "exit_code": 124,
+        "wall_seconds": 10.355658715008758,
+        "watchdog_seconds": 10.084550620988011,
+        "peak_tree_rss_bytes": 17948672,
+        "timeout_signal_lines": [
+          "timeout: sending signal TERM to command \u2018/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/run-01/cff-epsilon-zero-reproducer\u2019"
+        ]
+      }
+    ]
+  },
+  "c6_original_phase_capture": {
+    "path": "/tmp/raised-energy-causal-20260914/c6-vakint-phases/run-01/receipt.json",
+    "sha256": "cfc60ca7c3457337ad82f14cafe633369d411a8df85a65f8b2cf550a01198b9a"
+  },
+  "c6_complete_coefficient_capture": {
+    "path": "/tmp/raised-energy-causal-20260914/c6-coefficient-boundary/run-01/receipt.json",
+    "sha256": "8d637c1ce07e7053ccbec65b76e4aa3e860e2f99fe436a6ddc211e00b37800fe"
+  },
+  "c6_depth_only_control": {
+    "assessment": {
+      "path": "/tmp/raised-energy-causal-20260914/c6-absolute-pole-order/run-01/terminal-assessment.json",
+      "sha256": "9026d2602e31590aa9cf93e4f204c41948fe68716855f882f0906205cea287f4"
+    },
+    "phase_counts": {
+      "evaluate_term_start": 10,
+      "term_topology_start": 10,
+      "topology_rules_start": 10,
+      "numerator_rules_start": 10,
+      "numerator_rules_done": 10,
+      "dot_conversion_start": 10,
+      "dot_conversion_done": 10,
+      "scalar_parse_start": 10,
+      "scalar_inventory_start": 10,
+      "scalar_inventory_done": 10,
+      "scalar_protect_start": 10,
+      "scalar_protect_done": 10,
+      "coefficient_list_start": 10,
+      "coefficient_row": 47,
+      "coefficient_restored": 47,
+      "scalar_insert_start": 47,
+      "insert_zero_certification_start": 47,
+      "insert_collect_start": 1857,
+      "insert_collect_done": 1857,
+      "insert_add_done": 840,
+      "scalar_insert_done": 47,
+      "scalar_parse_done": 10,
+      "backend_kernel_start": 10,
+      "kernel_symbol_inventory_start": 10,
+      "kernel_symbol_inventory_done": 10,
+      "kernel_coefficient_pole_start": 47,
+      "kernel_coefficient_canonical": 47,
+      "epsilon_check_start": 57,
+      "epsilon_series_start": 57,
+      "epsilon_series_done": 57,
+      "kernel_coefficient_pole_done": 47,
+      "backend_kernel_done": 10,
+      "normalization_series_start": 10,
+      "normalization_series_done": 10,
+      "backend_start": 10,
+      "backend_done": 10,
+      "restore_aliases_start": 10,
+      "restore_aliases_done": 10,
+      "final_epsilon_series_start": 10,
+      "final_epsilon_series_done": 10,
+      "evaluate_term_done": 10
+    },
+    "main_events": [
+      {
+        "seconds": 0.037247649,
+        "settings_match": true,
+        "stage": "initialized"
+      },
+      {
+        "numerator_bytes": 8013,
+        "numerator_terms": 2,
+        "stage": "parsed_term",
+        "term_index": 0
+      },
+      {
+        "numerator_bytes": 2930,
+        "numerator_terms": 3,
+        "stage": "parsed_term",
+        "term_index": 1
+      },
+      {
+        "numerator_bytes": 3059,
+        "numerator_terms": 2,
+        "stage": "parsed_term",
+        "term_index": 2
+      },
+      {
+        "numerator_bytes": 6459,
+        "numerator_terms": 2,
+        "stage": "parsed_term",
+        "term_index": 3
+      },
+      {
+        "numerator_bytes": 6693,
+        "numerator_terms": 2,
+        "stage": "parsed_term",
+        "term_index": 4
+      },
+      {
+        "numerator_bytes": 4758,
+        "numerator_terms": 2,
+        "stage": "parsed_term",
+        "term_index": 5
+      },
+      {
+        "numerator_bytes": 6088,
+        "numerator_terms": 2,
+        "stage": "parsed_term",
+        "term_index": 6
+      },
+      {
+        "numerator_bytes": 5990,
+        "numerator_terms": 2,
+        "stage": "parsed_term",
+        "term_index": 7
+      },
+      {
+        "numerator_bytes": 5439,
+        "numerator_terms": 2,
+        "stage": "parsed_term",
+        "term_index": 8
+      },
+      {
+        "numerator_bytes": 3698,
+        "numerator_terms": 2,
+        "stage": "parsed_term",
+        "term_index": 9
+      },
+      {
+        "seconds": 0.833756036,
+        "stage": "evaluate_complete"
+      },
+      {
+        "stage": "complete",
+        "total_seconds": 0.913508418
+      }
+    ],
+    "limits": [
+      "Full native GammaLoop was not rerun; public Vakint standalone uses exact captured all10 inputs/settings and native pinned dependencies, with different global Symbolica allocation history.",
+      "Reported RSS is watchdog-sampled process-tree RSS on a sub-second workload and can miss shorter peaks.",
+      "Passing absolute0 is evidence of the hang mechanism and batch completion, not independent validation of all integrated physics results."
+    ]
+  },
+  "c7_early_color_control": {
+    "result": {
+      "path": "/tmp/raised-energy-causal-20260914/uv-boundaries/c7-no-early-color/causal-result.json",
+      "sha256": "05e7952630fe9dfc887a67b7ed4cf5f2adfb7ac0003f23ef2c1f014829fa221e"
+    },
+    "status": "PASS_CAUSAL_TWO_CALL_REVERSAL_RESTORES_COMPLETE_C6_NETWORK_INPUT",
+    "scope": "One attachment workload: orientation58, direct3D MUV, hedge_poset, integrated generation disabled. Remove only early color simplification in direct Taylor numerator and build_direct cograph numerator. C7 projected4D color, zip_add and local4D changes remain native. Separate reviewed stop occurs after full pre-network logging. No phi/pi/sign/namespace/slot/algebra normalization; outer whitespace strip only. No claim about either call separately or unseen workloads. No production remedy proposed.",
+    "comparisons": [
+      {
+        "baseline": "c6",
+        "exact_utf8_equal_after_outer_whitespace_strip": true,
+        "baseline_sha256": "04552e62b442d245f85c8df798b3b99ca122aa3a6f5293babe5381def1d6e0b8",
+        "current_sha256": "04552e62b442d245f85c8df798b3b99ca122aa3a6f5293babe5381def1d6e0b8"
+      },
+      {
+        "baseline": "c7",
+        "exact_utf8_equal_after_outer_whitespace_strip": false,
+        "baseline_sha256": "db81b12224610722618b503567b67a1855dc91af5b0332c503b89a2e65dc7053",
+        "current_sha256": "04552e62b442d245f85c8df798b3b99ca122aa3a6f5293babe5381def1d6e0b8"
+      }
+    ]
+  },
+  "structural_proofs_and_reviews": [
+    {
+      "path": "/tmp/raised-energy-causal-20260914/hot-structure/attachment6-common-metrics/proof.json",
+      "sha256": "7a1b48d835bb0a158975e91aca19343dc8ea3c7c946afa856f52134bab4f5967"
+    },
+    {
+      "path": "/tmp/raised-energy-causal-20260914/hot-structure/gl1-recursive-common-factors-04/root-certificate-review.json",
+      "sha256": "adfc760ff31e66d5cf0ad61652c6460687df0ddf57a3747aa4d2857dd1c125fc"
+    },
+    {
+      "path": "/tmp/raised-energy-causal-20260914/hot-structure/gl1-recursive-common-factors-04/term15/independent-tree-proof.json",
+      "sha256": "82ffc713a5fc64a52cb6ced0bb955d816e309ed1980a878efcf99fdcc1865fdb"
+    },
+    {
+      "path": "/tmp/raised-energy-causal-20260914/hot-structure/gl1-recursive-common-factors-04/term16/independent-tree-proof.json",
+      "sha256": "1cd4e2958bcb57145cecb936feb01fb1013f7cf9be64894009489b6682678b8b"
+    },
+    {
+      "path": "/tmp/raised-energy-causal-20260914/hot-structure/gl1-proper-uv-sign-template-01/proof.json",
+      "sha256": "3f5505f4546f8ecb97b5d4a3fa39a3f8e3dde7a01351a463bbbd6cf757b25485"
+    },
+    {
+      "path": "/tmp/raised-energy-causal-20260914/uv-boundaries/gl1-owner-map-audit/proof.json",
+      "sha256": "dcabb1e8fd947d71fee3652e30110622425ed9f50cf094b65aa696a9c153bb00"
+    },
+    {
+      "path": "/tmp/raised-energy-causal-20260914/hot-structure/c3-gl1-complete-raw-owner-join.json",
+      "sha256": "e2235928944e202167901a95b7cc3fe661e0595840b545724c9b20b52a6270ed"
+    },
+    {
+      "path": "/tmp/raised-energy-causal-20260914/hot-structure/gl1-term16-scalar-growth.json",
+      "sha256": "a21900c1f11bbf56b2a193f58c4a895c7c2e80805840d576633c09bb68d047f6"
+    },
+    {
+      "path": "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/c1-c3-same-owner-structure.json",
+      "sha256": "7b5939c61540ecf4a03b8f10261d60b30654c3d55ab8ef169ee247eb8fc45317"
+    },
+    {
+      "path": "/tmp/raised-energy-causal-20260914/hot-structure/attachment7-common-vectors-independent-review.json",
+      "sha256": "af06d3679895512ed6126bdfae897451e20df111f0e5c48d9dc1cefe5778e360"
+    },
+    {
+      "path": "/tmp/raised-energy-causal-20260914/attachment7-sparse-profile/common-vector-replay/null-result-structure-review.json",
+      "sha256": "45ff58fe79a54dc387bea0466b7d03db0d07ddced829e5f1c3e424a83c34cf3c"
+    },
+    {
+      "path": "/tmp/raised-energy-causal-20260914/c6-coefficient-boundary/complete-coefficient/proof.json",
+      "sha256": "c04dad8ba036f8c0d9fa4b1316bebe794f4a0f8088579985f115c586ea6e90cb"
+    },
+    {
+      "path": "/tmp/raised-energy-causal-20260914/c6-series-zero-reproducer/independent-review.json",
+      "sha256": "178590e0dd1098d0798d9b13bcc87dfe810666c67056079bac51d700dd7019b3"
+    },
+    {
+      "path": "/tmp/raised-energy-causal-20260914/c6-c7-direct-boundaries/backend-equality.json",
+      "sha256": "f05103fa86f3ff4183cf43891b4d0bed96a2058220d6d06582df332299ae1389"
+    },
+    {
+      "path": "/tmp/raised-energy-causal-20260914/uv-boundaries/grouping-residual-review/review.json",
+      "sha256": "68bec818dceb16211801c65d01e4eb2b1c7d33764a0271e409b11618452e30a7"
+    }
+  ],
+  "group_counts": {
+    "factor_replay_processes": {
+      "PASS": 6
+    },
+    "complete_output_comparisons": {
+      "NUMERICAL_SUPPLEMENT_AGREES": 3,
+      "fixed_points_per_pair": 3
+    },
+    "sparse_profile_processes": {
+      "PASS": 2,
+      "MEMORY_CAP": 2
+    },
+    "minimal_series_cases": {
+      "PASS": 2,
+      "TIME_LIMIT": 3
+    },
+    "depth_only_batch": {
+      "completed_terms": 10,
+      "completed_pole_queries": 47,
+      "completed_series_calls": 57
+    },
+    "c7_full_input_capture": {
+      "expected_stop_capture": 1,
+      "raw_exit_code": 1
+    }
+  },
+  "limits": [
+    "No production code or existing tests changed.",
+    "Exact input factor identities are separate from finite numerical output supplements.",
+    "Factor alternatives were not benchmarked through evaluator construction or code compilation.",
+    "C6 standalone completion is not full GammaLoop completion or independent integrated-physics validation.",
+    "C7 paired reversal was measured only up to the complete pre-network input, not through downstream execution.",
+    "Manual PySecDec and exhaustive contraction-strategy benchmarking are excluded.",
+    "Single guarded observations on a shared host; no automatic retries or snapshot updates."
+  ]
+}

@@ -75,3 +75,11 @@ shutdown, suspension, interruption, and error paths.
 The old plan proposed features and recorded intermediate states. It is available as the
 #link("ratatui-integration-dashboard-history.typ")[archived dashboard implementation history],
 but it is not an API or freshness authority.
+
+== Raised-energy integration updates
+
+The numerical-stability panel includes the median and processed percentage for each precision.
+An interrupted run may write diagnostic stability and observable previews, but resume state still
+represents the last completed iteration. Integration workspace manifests carry an explicit version;
+resume and summary reject an unsupported version before decoding state. Read-only sessions use
+sanitized state names for their current-directory output paths.
