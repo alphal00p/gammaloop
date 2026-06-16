@@ -1572,7 +1572,7 @@ mod tests {
         }
         // At unit on-shell energies, Wick rotation reduces the scalar contour
         // to the independently integrated Euclidean propagator product.
-        let signed_contour = value * (Atom::num(2) * Atom::var(GS.pi)).pow(3) / (-Atom::i()).pow(1);
+        let signed_contour = value * (Atom::num(2) * Atom::var(GS.pi)).pow(3) / Atom::i().pow(1);
         assert!(
             (signed_contour - Atom::one() / Atom::num(4))
                 .together()
@@ -1636,7 +1636,7 @@ mod tests {
         }
         // At unit on-shell energies, Wick rotation reduces the scalar contour
         // to the independently integrated Euclidean propagator product.
-        let signed_contour = value * (Atom::num(2) * Atom::var(GS.pi)).pow(6) / (-Atom::i()).pow(2);
+        let signed_contour = value * (Atom::num(2) * Atom::var(GS.pi)).pow(6) / Atom::i().pow(2);
         assert!(
             (signed_contour - -Atom::one() / Atom::num(12))
                 .together()

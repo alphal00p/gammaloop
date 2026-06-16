@@ -207,6 +207,10 @@ pub struct CutCFF {
 impl CutCFF {
     /// Convert a generated CFF into GammaLoop's scalar-denominator convention.
     ///
+    /// Together with the energy factors below this yields the signed
+    /// `dq0/(2*pi*i)` contour. Physical amplitudes restore `dq0/(2*pi)`
+    /// through a separate `i` per integrated loop energy.
+    ///
     /// `three-dimensional-reps` writes every source with positive local
     /// `1/(2E_i)` factors. For an ordinary CFF, surface conversion removes
     /// those factors and `Graph::cff` restores the historical global
@@ -411,7 +415,7 @@ impl Graph {
         let cff_loop_number = self
             .get_loop_number()
             .saturating_sub(self.cyclotomatic_number(&contract_subgraph));
-        let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
+        let cff_phase = Atom::i().pow(cff_loop_number as i64);
         let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
         let cff_energy_factor = match production.energy_factor_ownership {
             CffEnergyFactorOwnership::GlobalSourceProduct => {
@@ -715,7 +719,7 @@ impl Graph {
             }
         }
         let residues = select_indexed_cff_residues(cff, cutset)?;
-        let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
+        let cff_phase = Atom::i().pow(cff_loop_number as i64);
         let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
         let mut terms = BTreeMap::new();
         for (cut_cff_index, expr) in residues {
@@ -844,7 +848,7 @@ impl Graph {
         let cff_loop_number = self
             .get_loop_number()
             .saturating_sub(self.cyclotomatic_number(contract_subgraph));
-        let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
+        let cff_phase = Atom::i().pow(cff_loop_number as i64);
         let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
         let cff_energy_factor = match energy_factor_ownership {
             CffEnergyFactorOwnership::GlobalSourceProduct => {
@@ -918,7 +922,7 @@ impl Graph {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::{collections::BTreeSet, fmt::Write};
 
     use super::*;
     use crate::{
@@ -2003,9 +2007,9 @@ mod tests {
             .sqrt();
         // Ordinary CFF distributes the double-pole residue across orientations,
         // so the complete explicit sum and its typed source-frame bridge are
-        // needed to obtain the contour with GammaLoop's historical -i measure factor.
+        // needed to obtain the physical contour normalization.
         let expected_orientation_sum =
-            -Atom::i() / (Atom::num(32) * Atom::var(GS.pi).pow(3) * on_shell_energy.pow(3));
+            Atom::i() / (Atom::num(32) * Atom::var(GS.pi).pow(3) * on_shell_energy.pow(3));
         let terms = &cff
             .terms
             .values()
@@ -2861,10 +2865,10 @@ mod tests {
             // The raw mathematical q0 contour of (q0²-E²)^-3 is
             // -3i/(128π³E⁵), including the spatial (2π)^-3 normalization.
             // The ordinary 1/prod(-2E) factors and typed source-frame bridge
-            // together recover the signed dq0/(2πi) contour. GammaLoop's
-            // historical -i measure factor reverses the physical q0 contour
-            // above; this check retains that production convention.
-            let production_contour = Atom::num(3) * Atom::i()
+            // together recover the signed dq0/(2πi) contour. Multiplication
+            // by i, rather than the historical -i, restores the physical
+            // dq0/(2π) measure independently of the denominator count.
+            let production_contour = -Atom::num(3) * Atom::i()
                 / (Atom::num(128) * Atom::var(GS.pi).pow(3) * energy.pow(5));
             let difference = (&orientation_sum - &production_contour).together();
             assert!(
@@ -3640,7 +3644,7 @@ mod tests {
             })
             .sqrt();
         let expected_orientation_sum =
-            -Atom::i() / (Atom::num(32) * Atom::var(GS.pi).pow(3) * on_shell_energy.pow(3));
+            Atom::i() / (Atom::num(32) * Atom::var(GS.pi).pow(3) * on_shell_energy.pow(3));
         let terms = &cff
             .terms
             .values()
@@ -5868,7 +5872,7 @@ mod tests {
                 .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
                 * Atom::num(cff.production_prefactor_factor())
                 * (Atom::num(2) * Atom::var(GS.pi)).pow(6)
-                / (-Atom::i()).pow(2);
+                / Atom::i().pow(2);
             for edge in (0..3).map(EdgeIndex) {
                 actual = actual.replace(GS.ose(edge)).with(1);
                 for component in 1..=3 {
@@ -6337,6 +6341,127 @@ mod tests {
     }
 
     #[test]
+    fn scalar_amplitude_phases_match_independent_bubble_contours() -> Result<()> {
+        test_initialise()?;
+        let model = crate::utils::load_generic_model("scalars");
+        let coupling = model.get_coupling("SCALAR_COUPLING");
+        let lambda: Atom = model.get_parameter("lam").name.into();
+        assert_eq!(coupling.value, Some(Complex::new(0.0, -1.0)));
+        assert_eq!(
+            coupling
+                .expression
+                .replace(lambda.to_pattern())
+                .with(Atom::one()),
+            -Atom::i(),
+        );
+        let [coupling_symbol, coupling_expression] = coupling.rep_rule();
+        // A zero-energy bubble with masses 1 and 2 has poles at 1 and 2.
+        // Closing below gives -i times their residue sum:
+        // -i * [1/(2*(1-4)) + 1/(4*(4-1))] = i/12.
+        // Joining such bubbles at quartic vertices leaves independent energy
+        // contours. Strip only the real spatial (2π)^(-3L) measure below.
+        // These are energy-integral oracles, not UV-convergent 4D integrals.
+        let unit_phases = [
+            Atom::one(),
+            Atom::i(),
+            -Atom::one(),
+            -Atom::i(),
+            Atom::one(),
+        ];
+        for (loops, unit_phase) in unit_phases.into_iter().enumerate() {
+            let mut dot = format!(
+                "digraph scalar_phase_{loops} {{ edge [particle=scalar_1]; \
+                 incoming0 [style=invis]; incoming1 [style=invis]; \
+                 outgoing0 [style=invis]; outgoing1 [style=invis]; \
+                 incoming0 -> a0 [id={}]; incoming1 -> a0 [id={}]; \
+                 a{loops} -> outgoing0 [id={}]; a{loops} -> outgoing1 [id={}];",
+                2 * loops,
+                2 * loops + 1,
+                2 * loops + 2,
+                2 * loops + 3,
+            );
+            for bubble in 0..loops {
+                write!(
+                    dot,
+                    "a{bubble} -> a{} [id={} lmb_id={bubble}]; \
+                     a{bubble} -> a{} [id={} particle=scalar_2];",
+                    bubble + 1,
+                    2 * bubble,
+                    bubble + 1,
+                    2 * bubble + 1,
+                )?;
+            }
+            dot.push('}');
+            let physical: Graph = dot.into_graph(&model)?;
+            assert_eq!(physical.get_loop_number(), loops);
+            let unit = physical
+                .with_global_numerator_only(format!("scalar_unit_phase_{loops}"), Atom::one());
+            let expected_unit = unit_phase / Atom::num(12).pow(loops as i64);
+            // V=L+1 quartic vertices and I=2L scalar propagators give
+            // physical phases -i,+i,-i,+i,-i for positive lambda.
+            let expected_physical = (if loops.is_multiple_of(2) {
+                -Atom::i()
+            } else {
+                Atom::i()
+            }) / Atom::num(12).pow(loops as i64);
+            for (mut graph, expected) in [(unit, expected_unit), (physical, expected_physical)] {
+                let numerator = graph
+                    .production_numerator_atom_for_full_3d_expression()
+                    .replace(coupling_symbol.to_pattern())
+                    .with(coupling_expression.to_pattern())
+                    .replace(lambda.to_pattern())
+                    .with(Atom::one());
+                let options = graph.denominator_only_cff_3d_expression_options();
+                let cutset = CutSet::empty(graph.n_hedges());
+                let production = graph.generate_3d_expression_for_integrand(
+                    &[],
+                    &graph.get_esurface_canonization(&graph.loop_momentum_basis),
+                    &options,
+                    Some(&numerator),
+                )?;
+                let stored = graph.cff_from_production_expression(
+                    &production,
+                    &cutset,
+                    &OrientationPattern::default(),
+                )?;
+                let direct = graph.cff(
+                    &graph.empty_subgraph::<SuBitGraph>(),
+                    &cutset,
+                    &OrientationPattern::default(),
+                    &options,
+                    Some(&numerator),
+                )?;
+                for (route, cff) in [("stored", stored), ("direct", direct)] {
+                    let mut actual = cff
+                        .terms
+                        .values()
+                        .flat_map(|term| &term.orientations)
+                        .fold(Atom::zero(), |sum, term| sum + &term.expression)
+                        * Atom::num(cff.production_prefactor_factor())
+                        * &numerator
+                        * (Atom::num(2) * Atom::var(GS.pi)).pow(3 * loops as i64);
+                    for edge in 0..2 * loops + 4 {
+                        let id = EdgeIndex(edge);
+                        actual = actual
+                            .replace(GS.ose(id))
+                            .with(Atom::num(1 + edge as i64 % 2))
+                            .replace(GS.emr_mom(id, GS.cind(0)))
+                            .with(Atom::zero())
+                            .replace(cut_energy(id))
+                            .with(Atom::zero());
+                    }
+                    assert_eq!(
+                        actual, expected,
+                        "{} {route}: physical contour differs from its exact residue value",
+                        graph.name,
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn ordinary_terminal_sources_match_signed_contours() -> Result<()> {
         test_initialise()?;
         let tadpole: Graph = dot!(digraph ordinary_unit_tadpole {
@@ -6435,7 +6560,7 @@ mod tests {
                 );
                 let mut gamma_signed = term_sum
                     * (Atom::num(2) * Atom::var(GS.pi)).pow(3 * loop_count as i64)
-                    / (-Atom::i()).pow(loop_count as i64);
+                    / Atom::i().pow(loop_count as i64);
                 for (edge, energy) in energies.iter().enumerate() {
                     raw_signed = raw_signed
                         .replace(three_dimensional_reps::symbols::ose_atom_from_index(

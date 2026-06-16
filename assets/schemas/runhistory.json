@@ -5062,7 +5062,7 @@
           }
         },
         "number_of_fermion_loops": {
-          "description": "Number of closed fermion loops; negative disables",
+          "description": "Number of closed fermion loops, excluding ghosts; negative disables",
           "type": [
             "array",
             "null"
@@ -5139,6 +5139,7 @@
           ]
         },
         "symmetrize_left_right_states": {
+          "description": "Optional CP-based left/right graph identification; requires CP symmetry.",
           "type": [
             "boolean",
             "null"

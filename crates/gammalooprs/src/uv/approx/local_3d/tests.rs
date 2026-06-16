@@ -160,7 +160,7 @@ fn soft_dispatch_preserves_the_complete_quartic_contour() -> Result<()> {
     // The selected cograph is q^4/(q^2-E^2+i0)^3. Its independent clockwise
     // Below contour is -3/(16E); the attached tadpole was contracted and must
     // contribute neither another energy integral nor another measure factor.
-    let normalization = -Atom::i() / (Atom::num(2) * Atom::var(GS.pi)).pow(3);
+    let normalization = Atom::i() / (Atom::num(2) * Atom::var(GS.pi)).pow(3);
     let expected = -Atom::num(3) * normalization / Atom::num(32);
     for (numerator, projected) in results {
         let mut contour = Atom::Zero;
