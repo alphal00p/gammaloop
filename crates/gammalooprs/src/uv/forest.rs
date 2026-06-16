@@ -18,12 +18,16 @@ use spenso::shadowing::symbolica_utils::LogPrint;
 
 use symbolica::atom::{Atom, AtomCore};
 
-use linnet::half_edge::{involution::HedgePair, subgraph::SubSetOps};
+use linnet::half_edge::{
+    involution::HedgePair,
+    subgraph::{SubSetLike, SubSetOps},
+};
 use vakint::Vakint;
 
 use super::{
     RenormalizationPart, UVgenerationSettings,
     approx::Approximation,
+    export::{UVForestNodeExpression, dot_attr_value},
     poset::{DAG, DagNode},
 };
 
@@ -122,6 +126,55 @@ pub struct Forest {
 impl Forest {
     pub(crate) fn n_terms(&self) -> usize {
         self.dag.nodes.len()
+    }
+
+    pub(crate) fn dot_serialize_for_export(&mut self, name: &str) -> String {
+        self.dag.compute_topological_order();
+        self.dag
+            .to_dot_impl(&|node| {
+                let order = node.order.unwrap_or_default() as usize;
+                format!(
+                    "label={}",
+                    dot_attr_value(&Self::export_node_key(order, &node.data))
+                )
+            })
+            .replacen("digraph Poset {", &format!("digraph {name} {{"), 1)
+    }
+
+    pub(crate) fn export_node_expressions(
+        &self,
+        graph: &Graph,
+        forest_index: usize,
+        post_process: &mut impl FnMut(Atom) -> Atom,
+    ) -> Result<Vec<UVForestNodeExpression>> {
+        let mut nodes = self.dag.nodes.values().collect::<Vec<_>>();
+        nodes.sort_by_key(|node| node.data.topo_order);
+
+        let mut terms = Vec::new();
+        for node in nodes {
+            let node_index = node.data.topo_order;
+            let node_key = Self::export_node_key(node_index, &node.data);
+            let final_integrand = node.data.final_integrand(graph)?;
+            for (term_index, (&residue_index, numerator)) in final_integrand.iter().enumerate() {
+                terms.push(UVForestNodeExpression {
+                    forest_index,
+                    node_index,
+                    node_key: node_key.clone(),
+                    term_index,
+                    residue_index,
+                    numerator: post_process(numerator.clone()),
+                });
+            }
+        }
+
+        Ok(terms)
+    }
+
+    fn export_node_key(node_index: usize, approximation: &Approximation) -> String {
+        format!(
+            "legacy:{node_index}:S_{}",
+            approximation.spinney.filter().string_label()
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
