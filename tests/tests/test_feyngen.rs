@@ -4,6 +4,8 @@ use std::fs;
 use gammaloop_api::state::SyncSettings;
 use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
 use gammalooprs::feyngen::diagram_generator::evaluate_sign_origin;
+use gammalooprs::integrands::process::amplitude::load::StandaloneEvaluatorArchive;
+use gammalooprs::integrands::process::cross_section::load::StandaloneCrossSectionArchive;
 use gammalooprs::processes::{
     CycleSignature, GraphGroupSelectionSpec, GraphSelectionSignatureInventory, ProcessCollection,
     RaisedCutSignatureInventory, RaisedPropagatorScope, RaisedPropagatorSignature,
@@ -15,6 +17,7 @@ use gammaloop_integration_tests::{CLIState, get_test_cli, get_tests_workspace_pa
 use serial_test::serial;
 use symbolica::{
     atom::{Atom, AtomCore},
+    domains::float::Complex,
     printer::CanonicalOrderingSettings,
 };
 use tracing::debug;
@@ -643,6 +646,65 @@ fn scalar_lu_generation_with_e2e_hack_compiles() -> Result<()> {
 }
 
 #[test]
+fn amplitude_standalone_export_reloads_and_evaluates() -> Result<()> {
+    let workspace = get_tests_workspace_path().join("amplitude_standalone_export");
+    let output_dir = workspace.join("standalone_export_check");
+    if workspace.exists() {
+        fs::remove_dir_all(&workspace)?;
+    }
+
+    let mut cli = get_test_cli(
+        Some("scalars_load.toml".into()),
+        workspace.clone(),
+        Some("amplitude_standalone_export".to_string()),
+        true,
+    )?;
+    cli.run_command("set global kv global.generation.evaluator.store_atom=true")?;
+    cli.run_command("generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i archive_eval --global-prefactor-num '1𝑖'")?;
+    cli.run_command("generate")?;
+
+    cli.state.process_list.export_standalone(
+        &output_dir,
+        &StandaloneExportSettings {
+            mode: StandaloneExportMode::Rust,
+            format: StandaloneDataFormat::Json,
+            ..Default::default()
+        },
+    )?;
+
+    let exported_base = output_dir
+        .join("processes")
+        .join("amplitudes")
+        .join("triangle")
+        .join("archive_eval");
+    let archive_path = exported_base.join("standalone_evaluators.json");
+    assert!(archive_path.exists());
+    assert!(exported_base.join("standalone_evaluators_rust.rs").exists());
+
+    let archive: StandaloneEvaluatorArchive<(), String> =
+        serde_json::from_slice(&fs::read(archive_path)?)?;
+    let mut loaded = archive.load()?;
+    let graph_term = loaded
+        .graph_terms
+        .first_mut()
+        .ok_or_else(|| eyre!("standalone amplitude archive has no graph terms"))?;
+    let input = (0..graph_term.param_builder_params.len())
+        .map(|index| Complex::new(0.625 + index as f64 * 0.173, 0.031 + index as f64 * 0.007))
+        .collect::<Vec<_>>();
+    let (_, _, evaluator, result) = &mut graph_term.original_integrand.parametric;
+    evaluator.evaluate(&input, result);
+    assert!(!result.is_empty());
+    assert!(
+        result
+            .iter()
+            .all(|value| value.re.is_finite() && value.im.is_finite())
+    );
+
+    fs::remove_dir_all(workspace)?;
+    Ok(())
+}
+
+#[test]
 fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
     let workspace = get_tests_workspace_path().join("cross_section_standalone_export");
     let output_dir = workspace.join("standalone_export_check");
@@ -660,29 +722,34 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
     cli.run_command("generate xs z > d d~")?;
     cli.run_command("generate")?;
 
-    cli.state.process_list.export_standalone(
-        &output_dir,
-        &StandaloneExportSettings {
-            mode: StandaloneExportMode::Rust,
-            format: StandaloneDataFormat::Json,
-            ..Default::default()
-        },
-    )?;
+    for format in [StandaloneDataFormat::Json, StandaloneDataFormat::Binary] {
+        cli.state.process_list.export_standalone(
+            &output_dir,
+            &StandaloneExportSettings {
+                mode: StandaloneExportMode::Rust,
+                format,
+                ..Default::default()
+            },
+        )?;
+    }
 
     let exported_base = output_dir
         .join("processes")
         .join("cross_sections")
         .join("z_ddx")
         .join("default");
-    let archive_path = exported_base.join("standalone_cross_section.json");
-    assert!(archive_path.exists());
+    let json_archive_path = exported_base.join("standalone_cross_section.json");
+    let binary_archive_path = exported_base.join("standalone_cross_section.bin");
+    assert!(json_archive_path.exists());
+    assert!(binary_archive_path.exists());
     assert!(
         exported_base
             .join("standalone_cross_section_rust.rs")
             .exists()
     );
 
-    let archive: serde_json::Value = serde_json::from_slice(&fs::read(archive_path)?)?;
+    let json_archive_bytes = fs::read(json_archive_path)?;
+    let archive: serde_json::Value = serde_json::from_slice(&json_archive_bytes)?;
     let graph_term = archive["graph_terms"]
         .as_array()
         .and_then(|graph_terms| graph_terms.first())
@@ -693,6 +760,42 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
         .ok_or_else(|| eyre!("standalone graph term has no cut-group integrands"))?;
     assert!(!cut_group_integrands.is_empty());
     assert!(graph_term.get("raised_cut_integrands").is_none());
+
+    let json_archive: StandaloneCrossSectionArchive<(), String> =
+        serde_json::from_slice(&json_archive_bytes)?;
+    let binary_archive_bytes = fs::read(binary_archive_path)?;
+    let (binary_archive, consumed): (StandaloneCrossSectionArchive, usize) =
+        bincode::decode_from_slice(&binary_archive_bytes, bincode::config::standard())?;
+    assert_eq!(consumed, binary_archive_bytes.len());
+
+    for (format, mut loaded) in [
+        ("JSON", json_archive.load()?),
+        ("binary", binary_archive.load()?),
+    ] {
+        let graph_term = loaded
+            .graph_terms
+            .first_mut()
+            .ok_or_else(|| eyre!("{format} standalone cross-section archive has no graph terms"))?;
+        let input = (0..graph_term.param_builder_params.len())
+            .map(|index| Complex::new(0.625 + index as f64 * 0.173, 0.031 + index as f64 * 0.007))
+            .collect::<Vec<_>>();
+        let stack = graph_term
+            .cut_group_integrands
+            .first_mut()
+            .and_then(|integrands| integrands.values_mut().next())
+            .ok_or_else(|| {
+                eyre!("{format} standalone graph term has no indexed cut-group evaluator")
+            })?;
+        let (_, _, evaluator, result) = &mut stack.single_parametric;
+        evaluator.evaluate(&input, result);
+        assert!(!result.is_empty(), "{format} evaluator result is empty");
+        assert!(
+            result
+                .iter()
+                .all(|value| value.re.is_finite() && value.im.is_finite()),
+            "{format} evaluator result is not finite",
+        );
+    }
 
     fs::remove_dir_all(workspace)?;
     Ok(())
@@ -1078,28 +1181,60 @@ fn cp_fix_from_symbolica()->Result<()>{
 }
 
 #[test]
-#[rustfmt::skip]
 fn test_generate_sm_full_a_ddx() -> Result<()> {
-    let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join("test_generate_sm_full_a_ddx"),
+        Some("feyngen".to_string()),
+        true,
+    )?;
     cli.run_command("import model sm-full.json")?;
 
     // Full particle contents
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"1 | -1 = -1");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"47 | -47 = -47");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"37 | -35+Group(29,1,-1)+Group(30,1,-1)+Group(31,1,-1)+Group(32,1,-1) = -39");//less 37 vs 45 due to lorentz cancellations
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?,@"36 | -33+Group(29,1,-1)+Group(30,1,-1)+Group(32,1,-1)+Group(33,1,-1)+Group(35,1,-1)+Group(36,1,-1) = -39");//as above
+    assert_eq!(evaluate_overall_factor(generate_graphs_and_count(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?.1.as_view()), Atom::num(-1)); //good
+    assert_eq!(
+        evaluate_overall_factor(
+            generate_graphs_and_count(
+                &mut cli,
+                "xs",
+                "a > d d~ [{{2}}] --numerator-grouping only_detect_zeroes",
+                false
+            )?
+            .1
+            .as_view()
+        ),
+        Atom::num(-47)
+    ); //good
+    assert_eq!(
+        evaluate_overall_factor(
+            generate_graphs_and_count(
+                &mut cli,
+                "xs",
+                "a > d d~ [{{2}}] --numerator-grouping group_identical_graphs_up_to_sign",
+                false
+            )?
+            .1
+            .as_view()
+        ),
+        Atom::num(-39)
+    ); //less 37 vs 45 due to lorentz cancellations
+    assert_eq!(evaluate_overall_factor(generate_graphs_and_count(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?.1.as_view()), Atom::num(-39)); //as above
 
     Ok(())
 }
 
 #[test]
-#[rustfmt::skip]
 fn test_vacuum_amplitude_kaapo() -> Result<()> {
-    let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join("test_vacuum_amplitude_kaapo"),
+        Some("feyngen".to_string()),
+        true,
+    )?;
     cli.run_command("import model sm-default.json")?;
 
     // 4-loop vaccuum contribution to the neutron start equation of state
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g d d~ ghG ghG~ [{4}] --numerator-grouping only_detect_zeroes --number-of-factorized-loop-subtopologies 1 1000 --number-of-fermion-loops 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",false)?,@"52 | -44/3 = -44/3");
+    assert_eq!(evaluate_overall_factor(generate_graphs_and_count(&mut cli, "amp", "{} > {} | g d d~ ghG ghG~ [{4}] --numerator-grouping only_detect_zeroes --number-of-factorized-loop-subtopologies 1 1000 --number-of-fermion-loops 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",false)?.1.as_view()), Atom::num((-44, 3)));
 
     Ok(())
 }

@@ -219,6 +219,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
             stability_results: vec![StabilityResult {
                 precision,
                 estimated_relative_accuracy: None,
+                estimated_decimal_digits: None,
                 status: StabilityStatus::Unknown,
                 total_time: start_evaluate_sample.elapsed(),
             }],

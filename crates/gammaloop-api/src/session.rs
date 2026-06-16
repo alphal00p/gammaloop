@@ -16,9 +16,12 @@ use gammalooprs::settings::{global::GenerationSettings, RuntimeSettings};
 use tracing::{info, warn};
 
 use crate::{
+    command_template::contains_placeholder,
     commands::{
         process_settings::{serialize_runtime_named_settings, ProcessSettingsCompletionEntry},
-        run::{prepare_command_histories_with_context, PreparedCommand, PreparedRun},
+        run::{
+            prepare_command_histories_with_context, PreparedCommand, PreparedRun, MAX_RUN_DEPTH,
+        },
         save::SaveState,
         CommandExecution, Commands, StartCommandsBlock,
     },
@@ -233,13 +236,74 @@ impl<'a> CliSession<'a> {
         )?;
 
         for block in &effective_boot_run_history.command_blocks {
-            let block_context = format!("command block '{}'", block.name);
-            let _ = prepare_command_histories_with_context(
-                &block.commands,
-                &merged_history,
+            // Reusable blocks may inherit variables through nested runs. Validate
+            // names and recursion without expanding those variables; expansion
+            // uses the actual invocation environment before any command executes.
+            let mut pending = vec![(
+                format!("command block '{}'", block.name),
+                block.commands.clone(),
+                vec![block.name.clone()],
                 2,
-                &block_context,
-            )?;
+            )];
+            while let Some((context, commands, active_blocks, depth)) = pending.pop() {
+                for (index, command) in commands.into_iter().enumerate() {
+                    let Commands::Run(run) = command.command else {
+                        continue;
+                    };
+                    if depth > MAX_RUN_DEPTH {
+                        return Err(eyre!(
+                            "Maximum nested run depth of {} reached while validating {}",
+                            MAX_RUN_DEPTH,
+                            context
+                        ));
+                    }
+                    let names = run
+                        .selected_block_names()
+                        .iter()
+                        .filter(|name| !contains_placeholder(name))
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    let selected = merged_history
+                        .select_command_blocks(&names)
+                        .map_err(|err| {
+                            eyre!(
+                                "Failed to validate {} command #{}: {}",
+                                context,
+                                index + 1,
+                                err
+                            )
+                        })?;
+                    for nested in selected.into_iter().rev() {
+                        if let Some(start) =
+                            active_blocks.iter().position(|name| *name == nested.name)
+                        {
+                            let mut cycle = active_blocks[start..].to_vec();
+                            cycle.push(nested.name.clone());
+                            return Err(eyre!(
+                                "Command block recursion detected: {}",
+                                cycle.join(" -> ")
+                            ));
+                        }
+                        let mut active = active_blocks.clone();
+                        active.push(nested.name.clone());
+                        pending.push((
+                            format!("command block '{}'", nested.name),
+                            nested.commands,
+                            active,
+                            depth + 1,
+                        ));
+                    }
+                    let inline = run.parse_inline_commands()?;
+                    if !inline.is_empty() {
+                        pending.push((
+                            format!("{} run -c", context),
+                            inline,
+                            active_blocks.clone(),
+                            depth + 1,
+                        ));
+                    }
+                }
+            }
         }
 
         let prepared = prepare_command_histories_with_context(
@@ -278,6 +342,24 @@ impl<'a> CliSession<'a> {
             .command_blocks
             .iter()
             .map(|block| block.name.clone())
+            .collect()
+    }
+
+    pub fn current_command_block_placeholders(
+        &self,
+    ) -> BTreeMap<String, Vec<crate::command_template::PlaceholderSpec>> {
+        self.run_history
+            .command_blocks
+            .iter()
+            .map(|block| {
+                (
+                    block.name.clone(),
+                    self.run_history
+                        .command_block_placeholder_specs(&block.name)
+                        .into_iter()
+                        .collect(),
+                )
+            })
             .collect()
     }
 
@@ -910,6 +992,7 @@ fn normalize_persisted_run_history(
 
     let persisted_run = crate::commands::Run {
         block_names: run.block_names.clone(),
+        defines: run.defines.clone(),
         commands: (!persisted_inline_commands.is_empty()).then(|| {
             persisted_inline_commands
                 .iter()
@@ -936,14 +1019,14 @@ fn normalize_persisted_run_history(
 
 fn persisted_command_raw_string(command: &CommandHistory) -> String {
     normalize_command_history(command)
-        .raw_string
+        .raw_string()
         .expect("persisted inline commands should remain representable as raw strings")
+        .to_string()
 }
 
 fn normalize_command_history(command: &CommandHistory) -> CommandHistory {
     let raw_string = command
-        .raw_string
-        .as_deref()
+        .raw_string()
         .filter(|raw| raw_round_trips(raw, &command.command))
         .map(str::to_string)
         .or_else(|| match &command.command {
@@ -997,6 +1080,7 @@ mod tests {
             .join("\n");
         let command = CommandHistory::new(Commands::Run(Run {
             block_names: Vec::new(),
+            defines: Vec::new(),
             commands: Some(commands.clone()),
         }));
 
@@ -1011,6 +1095,7 @@ mod tests {
     fn display_command_truncates_multiline_commands_beyond_line_limit() {
         let command = CommandHistory::new(Commands::Run(Run {
             block_names: Vec::new(),
+            defines: Vec::new(),
             commands: Some("cmd1\ncmd2\ncmd3\ncmd4\ncmd5\ncmd6".to_string()),
         }));
 

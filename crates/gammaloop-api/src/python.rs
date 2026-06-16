@@ -30,7 +30,7 @@ use crate::{
     render_smart_toml,
     session::{display_command, CliSession, CliSessionState},
     settings_tree::{json_type_name, serialize_settings_with_defaults, value_at_path},
-    state::{ProcessListExt, ProcessRef, RunHistory, State},
+    state::{GraphImportOptions, ProcessListExt, ProcessRef, RunHistory, State},
     CLISettings, LoadedState, StateLoadOption,
 };
 use ahash::{HashMap, HashMapExt};
@@ -944,6 +944,7 @@ impl PyIntegrationResult {
 pub struct PyStabilityResult {
     pub precision: String,
     pub estimated_relative_accuracy: Option<f64>,
+    pub estimated_decimal_digits: Option<f64>,
     pub status: String,
     pub sample_count: usize,
     pub total_time_seconds: f64,
@@ -1029,6 +1030,9 @@ impl PySampleEvaluationResult {
                         precision: result.precision.to_string(),
                         estimated_relative_accuracy: result
                             .estimated_relative_accuracy
+                            .map(|value| value.0),
+                        estimated_decimal_digits: result
+                            .estimated_decimal_digits
                             .map(|value| value.0),
                         status: result.status.to_string(),
                         sample_count: result.status.sample_count(),
@@ -1156,6 +1160,17 @@ impl PyBatchEvaluationResult {
     #[getter]
     fn observables<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         py_observable_dict_from_bundle(py, &self.inner.observables)
+    }
+
+    #[getter]
+    fn numerical_stability<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyDict>>> {
+        self.inner
+            .numerical_stability
+            .as_ref()
+            .map(|stability| {
+                py_observable_dict_from_bundle(py, &stability.as_observable_snapshot_bundle())
+            })
+            .transpose()
     }
 
     fn __str__(&self) -> String {
@@ -1787,6 +1802,7 @@ fn py_integrand_info_from_info(info: IntegrandInfo) -> PyIntegrandInfo {
     }
 }
 
+#[allow(dead_code)]
 fn py_process_ref_from_any(process: &Bound<'_, PyAny>) -> PyResult<ProcessRef> {
     if let Ok(process_id) = process.extract::<usize>() {
         return Ok(ProcessRef::Id(process_id));
@@ -1800,6 +1816,7 @@ fn py_process_ref_from_any(process: &Bound<'_, PyAny>) -> PyResult<ProcessRef> {
     ProcessRef::from_str(&process).map_err(exceptions::PyValueError::new_err)
 }
 
+#[allow(dead_code)]
 fn py_complex_target_from_any(
     target: &Bound<'_, PyAny>,
 ) -> PyResult<spenso::algebra::complex::Complex<gammalooprs::utils::F<f64>>> {
@@ -1822,6 +1839,7 @@ fn py_complex_target_from_any(
     ))
 }
 
+#[allow(dead_code)]
 fn resolve_python_slot_key(
     state: &State,
     process: &ProcessRef,
@@ -1841,6 +1859,7 @@ fn resolve_python_slot_key(
     ))
 }
 
+#[allow(dead_code)]
 fn build_python_integrate_command(
     state: &State,
     slots: Option<Vec<(ProcessRef, String)>>,
@@ -2283,6 +2302,29 @@ impl GammaLoopAPI {
         })
     }
 
+    #[getter]
+    pub(crate) fn read_only_state(&self) -> bool {
+        self.cli_settings.session.read_only_state
+    }
+
+    #[pyo3(name = "is_read_only_state", signature = ())]
+    pub(crate) fn is_read_only_state_python(&self) -> bool {
+        self.cli_settings.session.read_only_state
+    }
+
+    #[pyo3(name = "state_access_mode", signature = ())]
+    pub(crate) fn state_access_mode_python(&self) -> &'static str {
+        match self.cli_settings.session.state_access_mode() {
+            crate::StateAccessMode::ReadWrite => "read_write",
+            crate::StateAccessMode::ReadOnly => "read_only",
+        }
+    }
+
+    #[getter]
+    pub(crate) fn active_state_folder(&self) -> String {
+        self.cli_settings.state.folder.display().to_string()
+    }
+
     #[pyo3(
         name = "evaluate_sample",
         signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, return_events=None, momentum_space=false, integrator_weight=None, discrete_dim=None, graph_name=None, orientation=None)
@@ -2330,6 +2372,7 @@ impl GammaLoopAPI {
         let gammalooprs::integrands::evaluation::BatchSampleEvaluationResult {
             mut samples,
             observables,
+            numerical_stability: _,
         } = res;
         let value = samples.pop().ok_or_else(|| {
             eyre!("evaluate_sample did not return any result for the single input sample")
@@ -2432,11 +2475,14 @@ impl GammaLoopAPI {
 
         self.gammaloop_state.import_graphs(
             graphs,
-            process_name,
-            process_id,
-            integrand_name,
-            overwrite,
-            append,
+            GraphImportOptions {
+                process_name,
+                process_id,
+                process_definition: None,
+                integrand_name,
+                overwrite,
+                append,
+            },
         )
     }
 

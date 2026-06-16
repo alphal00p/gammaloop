@@ -500,6 +500,44 @@ fn assert_close(lhs: f64, rhs: f64) {
 }
 
 #[test]
+fn additional_event_weights_roundtrip_preserves_all_keys_and_values() -> Result<()> {
+    let weights = [
+        (AdditionalWeightKey::Original, Complex::new(F(1.5), F(-0.5))),
+        (
+            AdditionalWeightKey::FullMultiplicativeFactor,
+            Complex::new(F(2.0), F(0.0)),
+        ),
+        (
+            AdditionalWeightKey::ThresholdCounterterm { subset_index: 3 },
+            Complex::new(F(-0.25), F(0.75)),
+        ),
+        (
+            AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                esurface_id: 3,
+                overlap_group: 5,
+            },
+            Complex::new(F(0.5), F(-1.25)),
+        ),
+    ]
+    .into_iter()
+    .collect();
+    for weights in [BTreeMap::new(), weights] {
+        let original = gammalooprs::observables::GenericAdditionalWeightInfo::<f64> { weights };
+        let json = serde_json::to_vec(&original)?;
+        let restored: gammalooprs::observables::GenericAdditionalWeightInfo<f64> =
+            serde_json::from_slice(&json)?;
+        assert_eq!(restored.weights, original.weights);
+        let encoded = bincode::serde::encode_to_vec(&original, bincode::config::standard())?;
+        let (restored, _): (
+            gammalooprs::observables::GenericAdditionalWeightInfo<f64>,
+            _,
+        ) = bincode::serde::decode_from_slice(&encoded, bincode::config::standard())?;
+        assert_eq!(restored.weights, original.weights);
+    }
+    Ok(())
+}
+
+#[test]
 fn graph_evaluation_result_merges_groups_and_downcasts() {
     let first_event = make_event(
         0.25,

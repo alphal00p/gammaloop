@@ -182,6 +182,114 @@ the round-trippable Symbolica representation.
 Subgraph labels must be created through the subgraph symbol factory so every
 consumer receives the same symbol metadata and print behavior.
 
+## UV profiling from the CLI
+
+`profile ultra-violet` probes the generated integrand along rays on which one
+or more loop momenta are scaled to infinity. It works for both amplitudes and
+Local-Unitarity cross sections. The ordinary, fast invocation is:
+
+```text
+profile ultra-violet -p <process> -i <integrand>
+```
+
+By default, `--selected-limits only-divergent` is active. For each graph, this
+mode uses the graph's expected bare UV degrees to retain only cycle unions with
+degree of divergence greater than or equal to zero. It profiles each distinct
+cycle union once in one generated physical loop-momentum basis, preferring the
+generation LMB when that basis represents the cycle. Thus the default avoids
+the old Cartesian scan over every loop subset in every LMB while still testing
+every expected divergent cycle. The target cycles are enumerated on the same
+physical domain as UV generation: dummy edges are excluded for amplitudes; LU
+first removes the incoming side and then enumerates separately in the
+complement of every compatible exact physical cut. If the stored physical LMBs
+cannot represent an expected divergent cycle exactly, profiling reports an
+error instead of silently claiming complete coverage.
+
+The exhaustive behavior remains available explicitly:
+
+```text
+profile ultra-violet -p <process> -i <integrand> \
+  --selected-limits all
+```
+
+`all` visits every nonempty loop-coordinate subset of every generated physical
+LMB. The same graph-theoretic cycle may consequently appear in several rows;
+that repetition is intentional because this mode audits all LMB
+representations. Cutkosky cuts do not create duplicate rows: in LU mode they
+are compatibility alternatives for a limit, not an additional profiling
+dimension.
+
+One graph can be selected by its name, numeric ID, or `#`-prefixed numeric ID:
+
+```text
+profile ultra-violet -p <process> -i <integrand> --graph GL0
+profile ultra-violet -p <process> -i <integrand> --graph '#2'
+```
+
+For a cross section, a particular physical Cutkosky cut can additionally be
+selected by its edge IDs. A graph selection is required:
+
+```text
+profile ultra-violet -p <process> -i <integrand> \
+  --graph GL0 --cutkosky-cut 2,5
+```
+
+`--cut-edges` is a visible alias for `--cutkosky-cut`. The edge order is
+immaterial. GammaLoop rejects a missing, ambiguous, or amplitude-mode cut
+selection and reports the available physical cuts for a missing match.
+
+### Physical cuts and LU residue groups
+
+Two identities must remain distinct when propagators are raised. Several
+physical Cutkosky cuts can correspond to the same normalized E-surface
+residue. Production LU evaluates that residue group once and emits an event
+tagged with the group's deterministic first cut. Therefore selecting any
+non-representative physical cut in that group correctly projects the weight of
+the representative event; evaluating another independent residue would
+double-count the group.
+
+The selected physical cut nevertheless remains authoritative for deciding
+which UV limits exist. A cycle is compatible with a cut precisely when it does
+not contain an edge of that cut. Consequently:
+
+- with `--cutkosky-cut` (or `--cut-edges`), compatibility is tested against
+  exactly the requested physical edge set, even if another raised-edge alias
+  belongs to the same residue group;
+- without a cut selection, an LU limit is retained when it is compatible with
+  at least one exact physical cut of the graph.
+
+The second rule applies in both selected-limit modes. In exhaustive `all` mode
+it means that every nonempty LMB subset which is physically compatible with at
+least one cut is present, while the subset is still evaluated only once as
+part of the graph's summed LU integrand. In `only-divergent` mode the same
+compatibility filter is applied before retaining the unique expected-divergent
+cycle representatives.
+
+### Result and failure summaries
+
+The command first prints one detailed fitted-slope table per selected graph.
+The final `UV limit tests` line reports the passed and total counts. If any
+limit fails, it is followed by one colored rounded table containing only the
+failures, with columns for graph, selected cut edges, LMB, fixed and scaled
+loop edges, orientation, and failure reason. This final table is intended to
+make failures actionable without searching all successful rows.
+`--per-orientation` is available only for the orientation-parametric, localized
+direct-local3D representation; it includes orientation-local fits and failures
+in addition to the summed fit. Selector-free explicit-sum direct local3D and
+projected local4D are summed representations and reject this option rather than
+claiming per-production-orientation finiteness.
+
+Each finite-precision ray is first fitted over its complete scale range. A
+missing or non-linear double-precision fit triggers a complete Arb reevaluation
+of that ray. The reported power is then fitted on the longest high-scale suffix
+with at least half of the samples (and at least five) whose
+\(R^2\) is at least `0.99`; this permits a short pre-asymptotic transient without
+discarding isolated points. A fit which still has no such asymptotic suffix is
+reported as `unstable_fit`, even when its raw slope happens to lie below the UV
+threshold. At least five scale points are consequently required.
+The minimum and maximum scale exponents must also be finite and strictly
+increasing, so the fitted suffix is always the large-scale end of the ray.
+
 ## Current Boundaries
 
 - Parametric integrand generation currently supports final 3D output only.

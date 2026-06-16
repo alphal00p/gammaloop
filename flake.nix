@@ -459,6 +459,9 @@
         gammalooprs = [
           "tests/resources/graphs"
         ];
+        "gammaloop-integration-tests" = [
+          "tests/resources/graphs"
+        ];
       };
 
       workspacePackageRuntimeTestExtraSourceRoots = {

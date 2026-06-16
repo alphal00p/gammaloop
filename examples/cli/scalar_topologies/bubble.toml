@@ -110,7 +110,7 @@ commands = [
 	""",
 
 	"""integrate -p bubble_no_integrated_UV -i scalar_bubble_below_thres -p bubble -i scalar_bubble_below_thres --n-cores 1
-	             --target bubble_no_integrated_UV@scalar_bubble_below_thres=1.471664021721597e-2,0.0 bubble@scalar_bubble_below_thres=2.7029875684552542e-3,0.0
+	             --target bubble_no_integrated_UV@scalar_bubble_below_thres=0.0,1.471664021721597e-2 bubble@scalar_bubble_below_thres=0.0,2.7029875684552542e-3
                  --restart
     """,
 ]
@@ -127,7 +127,7 @@ commands = [
 	""",
 
 	"""integrate -p bubble_no_integrated_UV -i scalar_bubble_above_thres -p bubble -i scalar_bubble_above_thres --n-cores 1
-	             --target bubble_no_integrated_UV@scalar_bubble_above_thres=1.182031845384170e-2,9.11674467431249e-3 bubble@scalar_bubble_above_thres=-1.93334194919018e-4,9.116744674312493e-3
+	             --target bubble_no_integrated_UV@scalar_bubble_above_thres=-9.11674467431249e-3,1.182031845384170e-2 bubble@scalar_bubble_above_thres=-9.116744674312493e-3,-1.93334194919018e-4
                  --restart
     """,
 ]
@@ -157,3 +157,6 @@ check_esurface_at_generation = false
 
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = false
+
+[default_runtime_settings.integrator]
+integrated_phase = "imag"

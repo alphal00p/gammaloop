@@ -8,14 +8,17 @@
       "idenso",
       "linnet",
       "spenso",
-      "symbolica-utils"
+      "symbolica-utils",
+      "three-dimensional-reps"
     ],
     "gammaloop-integration-tests": [
       "gammaloop-api",
       "gammaloop-workspace-hack",
       "gammalooprs",
+      "linnet",
       "spenso",
       "symbolica-utils",
+      "three-dimensional-reps",
       "vakint"
     ],
     "gammaloop-tracing-filter": [
@@ -95,16 +98,23 @@
       "spenso": [
         "shadowing"
       ],
-      "symbolica-utils": []
+      "symbolica-utils": [],
+      "three-dimensional-reps": [
+        "display"
+      ]
     },
     "gammaloop-integration-tests": {
       "gammaloop-api": [],
       "gammaloop-workspace-hack": [],
       "gammalooprs": [],
+      "linnet": [],
       "spenso": [
         "shadowing"
       ],
       "symbolica-utils": [],
+      "three-dimensional-reps": [
+        "eval"
+      ],
       "vakint": []
     },
     "gammaloop-tracing-filter": {
@@ -504,14 +514,17 @@
       "idenso",
       "linnet",
       "spenso",
-      "symbolica-utils"
+      "symbolica-utils",
+      "three-dimensional-reps"
     ],
     "gammaloop-integration-tests": [
       "gammaloop-api",
       "gammaloop-workspace-hack",
       "gammalooprs",
+      "linnet",
       "spenso",
       "symbolica-utils",
+      "three-dimensional-reps",
       "vakint"
     ],
     "gammaloop-tracing-filter": [
@@ -595,16 +608,23 @@
       "spenso": [
         "shadowing"
       ],
-      "symbolica-utils": []
+      "symbolica-utils": [],
+      "three-dimensional-reps": [
+        "display"
+      ]
     },
     "gammaloop-integration-tests": {
       "gammaloop-api": [],
       "gammaloop-workspace-hack": [],
       "gammalooprs": [],
+      "linnet": [],
       "spenso": [
         "shadowing"
       ],
       "symbolica-utils": [],
+      "three-dimensional-reps": [
+        "eval"
+      ],
       "vakint": []
     },
     "gammaloop-tracing-filter": {

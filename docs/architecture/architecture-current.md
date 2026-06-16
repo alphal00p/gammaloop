@@ -3,11 +3,9 @@
 ## Scope
 This document describes the current, implemented architecture of this repository.
 
-The application is organized around two main Rust crates:
+The workspace is organized around two main Rust crates:
 - `gammalooprs` (`crates/gammalooprs`): core physics/domain logic, graph processing, integrand construction, evaluation, and integration.
 - `gammaloop-api` (`crates/gammaloop-api`): CLI, REPL, Python bindings, command parsing, and persisted state orchestration.
-
-The shared `three-dimensional-reps` crate supplies exact generalized CFF algebra.
 
 ## High-Level Architecture
 At a high level, gammaLoop uses a layered architecture with a stateful application shell.
@@ -107,8 +105,9 @@ and backend-boundary invariants are documented in
 
 GammaLoop owns production graph/source construction, UV orchestration, exact
 source mapping, and evaluator preparation. The `three-dimensional-reps` crate
-owns the shared CFF algebra. Its feature-gated eager evaluator is a diagnostic
-tool: GammaLoop owns production inputs, factors, and evaluator preparation.
+owns the shared CFF algebra. The `3Drep` command and feature-gated eager
+evaluator are diagnostic tools, not production contracts: GammaLoop may prepare
+their inputs, factors, and expressions differently.
 
 The shared `LinearEnergyExpr` stores exact `Rational` coefficients for indexed
 internal/external energies, the uniform scale and the constant term;
@@ -271,6 +270,47 @@ duplicate-denominator global sign as typed metadata. GammaLoop consumes that
 bridge exactly once for root, reduced, and exact production CFF sources,
 cancelling the shared-core-local uniform convention and retaining GammaLoop's
 established complete-integrand convention.
+The NLO acceptance layer independently generates orientation-local direct 3D,
+explicit-sum direct 3D, and projected local 4D with local and integrated UV and
+threshold counterterms. It compares complete GL0/GL2 values at a common native-
+Arb point in all three routes; the fast Monte Carlo tests integrate explicit-sum
+3D. DD acceptance checks the inclusive `(alpha_s/pi) * LO` correction,
+graphwise UV-mass and localization-scale independence, cancellation of total
+renormalization-scale dependence, opposite GL0/GL2 squared-scale logarithms,
+and the physical and projected EMR energy bounds. TT acceptance uses the
+fully-MSbar scheme, without on-shell counterterms.
+
+Direct-photon benchmarks use the off-shell spin projector `-g^(mu nu)` and no
+picobarn conversion. The inclusive lepton-process targets instead use the
+Eq. (7.1) normalization `2(4 pi alpha)/(3 Ecm^3)` and the conversion to picobarns;
+individual lepton-process graph components are not assigned the unconverted
+published photon targets. Existing signed-component and magnitude tests retain
+the current phase conventions. Resolving the overall phase and the unfinished
+right-hand-side cut conjugation is separate work. Current validation results
+and measured timings belong in the accompanying test evidence and PR.
+
+The scalar local-equivalence matrix is generated from the scalar model rather
+than from hand-built graph data. Its unit-numerator lanes remain unchanged after
+generation, companion probes use only Feynman-rule-local edge factors, and
+there is no graph-specific production branch. The matrix enables local UV,
+integrated UV and threshold counterterms while comparing all three local-UV
+routes, including native-Arb checks. `just test_LU_scalar_xs` includes the slow
+cases, uses release compilation by default and stops on the first failure.
+Nonzero route comparisons require finite values and precision-scaled relative
+agreement. Only an independent exact source-zero certificate permits the
+separate absolute bound; small magnitude alone does not qualify. The curated suite includes the six base scalar graphs GL00, GL02,
+GL04, GL08, GL09 and GL24. Each profiles direct local3D separately for every
+complete residue-map key and projected local4D after the complete residue sum.
+
+UV profiling defaults to `only-divergent`: every expected cycle union with
+DOD >= 0 is tested using the generation LMB when suitable, otherwise the first
+suitable basis in the deterministically sorted complete LMB list. The
+exhaustive `all` mode is opt-in. Amplitude and LU inputs share this behavior,
+with graph and Cutkosky-cut selectors for LU profiling and a colored final
+failure summary. Per-key profiling is defined for orientation-parametric,
+localized direct local3D. Selector-free explicit-sum direct local3D and
+projected local4D are summed representations and reject that request.
+
 ### 3.3 Tensor-network contraction order
 
 Evaluator construction parses the factorized numerator into a Spenso network,
@@ -451,6 +491,14 @@ normalized event weight is reconstructed as:
 
 This is populated only when
 `settings.general.store_additional_weights_in_event = true`.
+
+Serialized event `additional_weights.weights` is a list of `[key, value]` pairs.
+This preserves structured counterterm identifiers in JSON, including
+`AmplitudeThresholdCounterterm { esurface_id, overlap_group }`, and supports
+round trips without converting identifiers to display strings. `inspect
+--json-output` retains the same event weights and evaluation as ordinary
+inspection. Consumers of event JSON must read the pair list, including `[]`
+for no weights.
 
 ### 3.3 Event generation policy
 

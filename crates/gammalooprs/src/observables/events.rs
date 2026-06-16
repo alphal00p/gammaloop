@@ -134,6 +134,7 @@ impl<T: FloatLike> GenericEventGroupList<T> {
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct GenericAdditionalWeightInfo<T: FloatLike> {
+    #[serde(with = "vectorize", bound(deserialize = "T: Deserialize<'de>"))]
     pub weights: BTreeMap<AdditionalWeightKey, Complex<F<T>>>,
 }
 
