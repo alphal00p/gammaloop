@@ -63,6 +63,8 @@ mod repeated_masses;
 mod runtime_graph_subset;
 #[path = "test_runs/scalar_3L_cross_section_inspects.rs"]
 mod scalar_3l_cross_section_inspects;
+#[path = "test_runs/scalar_phase_conventions.rs"]
+mod scalar_phase_conventions;
 #[path = "test_runs/smoke.rs"]
 mod smoke;
 #[path = "test_runs/spin_sums.rs"]
@@ -73,3 +75,9 @@ mod test_3d_reps;
 mod test_integrated_uv_cts;
 #[path = "test_runs/utils.rs"]
 mod utils;
+
+#[path = "test_runs/amplitude_phase_conventions.rs"]
+mod amplitude_phase_conventions;
+
+#[path = "test_runs/scalar_virtual_phase_conventions.rs"]
+mod scalar_virtual_phase_conventions;

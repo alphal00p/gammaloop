@@ -1,7 +1,7 @@
 commands = [
   "import model sm",
 
-  "generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==0 QED^2==6 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p epem_a_tth -i LO",
+  "generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==0 QED^2==6 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states false -p epem_a_tth -i LO",
   "save dot",
 ]
 

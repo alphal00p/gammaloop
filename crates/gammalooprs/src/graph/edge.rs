@@ -98,6 +98,10 @@ impl PossibleParticle {
         }
     }
 
+    pub fn is_anticommutating(&self) -> bool {
+        self.particle().is_some_and(|p| p.is_anticommutating())
+    }
+
     pub fn is_self_antiparticle(&self) -> bool {
         match self {
             PossibleParticle::Particle(p) => p.is_self_antiparticle(),

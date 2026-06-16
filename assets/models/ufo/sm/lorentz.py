@@ -17,15 +17,21 @@ except ImportError:
 
 UUS1 = Lorentz(name="UUS1", spins=[-1, -1, 1], structure="1")
 
-UUV1 = Lorentz(name="UUV1", spins=[-1, -1, 3], structure="-P(3,2)")
+UUV1 = Lorentz(name="UUV1", spins=[-1, -1, 3], structure="P(3,2)")
 
 SSS1 = Lorentz(name="SSS1", spins=[1, 1, 1], structure="1")
 
-FFS1 = Lorentz(name="FFS1", spins=[2, 2, 1], structure="ProjM(1,2)")
+# Scalar/pseudoscalar and vector/axial coefficients stay explicit so that
+# gamma5-free combinations cancel before dimension-dependent Dirac algebra.
+FFS1 = Lorentz(
+    name="FFS1", spins=[2, 2, 1], structure="(Identity(1,2) + Gamma5(1,2))/2"
+)
 
-FFS2 = Lorentz(name="FFS2", spins=[2, 2, 1], structure="ProjM(1,2) - ProjP(1,2)")
+FFS2 = Lorentz(name="FFS2", spins=[2, 2, 1], structure="Gamma5(1,2)")
 
-FFS3 = Lorentz(name="FFS3", spins=[2, 2, 1], structure="ProjP(1,2)")
+FFS3 = Lorentz(
+    name="FFS3", spins=[2, 2, 1], structure="(Identity(1,2) - Gamma5(1,2))/2"
+)
 
 # Keep the CP-even scalar bilinear explicit. Writing this as ProjM + ProjP hides
 # the exact gamma5 cancellation from dimension-dependent Dirac algebra.
@@ -33,24 +39,28 @@ FFS4 = Lorentz(name="FFS4", spins=[2, 2, 1], structure="Identity(1,2)")
 
 FFV1 = Lorentz(name="FFV1", spins=[2, 2, 3], structure="Gamma(3,1,2)")
 
-FFV2 = Lorentz(name="FFV2", spins=[2, 2, 3], structure="Gamma(3,1,-1)*ProjM(-1,2)")
+FFV2 = Lorentz(
+    name="FFV2",
+    spins=[2, 2, 3],
+    structure="(Gamma(3,1,2) - Gamma(3,1,-1)*Gamma5(-1,2))/2",
+)
 
 FFV3 = Lorentz(
     name="FFV3",
     spins=[2, 2, 3],
-    structure="Gamma(3,1,-1)*ProjM(-1,2) - 2*Gamma(3,1,-1)*ProjP(-1,2)",
+    structure="(-Gamma(3,1,2) - 3*Gamma(3,1,-1)*Gamma5(-1,2))/2",
 )
 
 FFV4 = Lorentz(
     name="FFV4",
     spins=[2, 2, 3],
-    structure="Gamma(3,1,-1)*ProjM(-1,2) + 2*Gamma(3,1,-1)*ProjP(-1,2)",
+    structure="(3*Gamma(3,1,2) + Gamma(3,1,-1)*Gamma5(-1,2))/2",
 )
 
 FFV5 = Lorentz(
     name="FFV5",
     spins=[2, 2, 3],
-    structure="Gamma(3,1,-1)*ProjM(-1,2) + 4*Gamma(3,1,-1)*ProjP(-1,2)",
+    structure="(5*Gamma(3,1,2) + 3*Gamma(3,1,-1)*Gamma5(-1,2))/2",
 )
 
 VSS1 = Lorentz(name="VSS1", spins=[3, 1, 1], structure="P(1,2) - P(1,3)")
