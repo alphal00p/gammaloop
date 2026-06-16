@@ -125,15 +125,24 @@ impl AmplitudeCountertermAtom {
 
         for (index, integrand) in self.parametric.iter() {
             let dual_shape = shape_from_cut_cff_index(index);
-
-            let (evaluator_stack, evaluator_timings) = EvaluatorStack::new_with_timings(
-                slice::from_ref(integrand),
-                param_builder,
-                orientations.as_slice().as_ref(),
-                dual_shape,
-                &global_settings.generation.evaluator,
-            )
-            .unwrap();
+            let (evaluator_stack, evaluator_timings) =
+                if global_settings.generation.explicit_orientation_sum_only {
+                    EvaluatorStack::new_explicit_sum_with_timings(
+                        slice::from_ref(integrand),
+                        param_builder,
+                        dual_shape,
+                        &global_settings.generation.evaluator,
+                    )
+                } else {
+                    EvaluatorStack::new_with_timings(
+                        slice::from_ref(integrand),
+                        param_builder,
+                        orientations.as_slice().as_ref(),
+                        dual_shape,
+                        &global_settings.generation.evaluator,
+                    )
+                }
+                .unwrap();
             timings += evaluator_timings;
             evaluator_stacks.insert(*index, evaluator_stack);
         }
@@ -369,7 +378,8 @@ impl AmplitudeCountertermData {
 
                 let raised_esurface_id = esurface_builder.raised_esurface_id;
                 self.ensure_active_raised_esurface(raised_esurface_id)?;
-                let single_result = esurface_builder.solve_rstar().rstar_samples().evaluate(
+                let rstar_solution = esurface_builder.solve_rstar();
+                let single_result = rstar_solution.rstar_samples().evaluate(
                     param_builder,
                     orientation,
                     evaluation_metadata,
@@ -437,14 +447,14 @@ impl AmplitudeCountertermData {
             let mut loop_momenta_at_esurface: TiVec<ExistingEsurfaceId, Option<MomentumSample<T>>> =
                 ti_vec![];
             for existing_esurface_id in group.existing_esurfaces.iter() {
-                let single_result = overlap_builder
-                    .new_esurface_builder(*existing_esurface_id)
-                    .map(|esurface_builder| -> Result<_> {
-                        self.ensure_active_raised_esurface(esurface_builder.raised_esurface_id)?;
-                        let rstar_sample = esurface_builder.solve_rstar().rstar_samples();
-                        Result::Ok(rstar_sample.rstar_sample)
-                    })
-                    .transpose()?;
+                let single_result = if let Some(esurface_builder) =
+                    overlap_builder.new_esurface_builder(*existing_esurface_id)
+                {
+                    self.ensure_active_raised_esurface(esurface_builder.raised_esurface_id)?;
+                    Some(esurface_builder.solve_rstar().rstar_samples().rstar_sample)
+                } else {
+                    None
+                };
 
                 loop_momenta_at_esurface.push(single_result);
             }
@@ -581,7 +591,6 @@ impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
         })
     }
 }
-
 struct EsurfaceCTBuilder<'a, T: FloatLike> {
     overlap_builder: &'a OverlapBuilder<'a, T>,
     _existing_esurface_id: ExistingEsurfaceId,

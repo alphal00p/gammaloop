@@ -1318,6 +1318,8 @@ impl FloatLike for ArbPrec {
 }
 
 impl<const N: u32> VarFloat<N> {
+    pub(crate) const BINARY_PRECISION: u32 = N;
+
     fn machine_epsilon(&self) -> Self {
         self.from_i64(2).pow((N - 1) as u64).inv()
     }

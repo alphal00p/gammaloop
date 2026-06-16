@@ -121,9 +121,13 @@ impl<'a> FinalIntegrand<'a> {
     fn orientations_match_outside_integrated_subgraph(
         reduced_orientation: &EdgeVec<Orientation>,
         global_orientation: &EdgeVec<Orientation>,
+        internal_edges: &[EdgeIndex],
     ) -> bool {
         reduced_orientation.iter().all(|(edge, reduced)| {
-            matches!(reduced, Orientation::Undirected) || *reduced == global_orientation[edge]
+            internal_edges.contains(&edge)
+                || matches!(reduced, Orientation::Undirected)
+                || matches!(global_orientation[edge], Orientation::Undirected)
+                || *reduced == global_orientation[edge]
         })
     }
 
@@ -141,6 +145,8 @@ impl<'a> FinalIntegrand<'a> {
     /// The first criterion is currently future-proof only: the canonical full-graph acyclic basis is
     /// built from `Default` / `Reversed` assignments on paired internal edges, so `Undirected`
     /// internal entries are not expected there unless the global orientation-generation step changes.
+    /// If no full orientation matches the reduced external class, the same score selects a
+    /// deterministic fallback from all valid orientations.
     fn select_representative_orientation<'b>(
         reduced_orientation: &EdgeVec<Orientation>,
         valid_global_orientations: &'b [EdgeVec<Orientation>],
@@ -149,12 +155,21 @@ impl<'a> FinalIntegrand<'a> {
         valid_global_orientations
             .iter()
             .filter(|candidate| {
-                Self::orientations_match_outside_integrated_subgraph(reduced_orientation, candidate)
+                Self::orientations_match_outside_integrated_subgraph(
+                    reduced_orientation,
+                    candidate,
+                    internal_edges,
+                )
             })
             .max_by_key(|candidate| Self::representative_score(candidate, internal_edges))
+            .or_else(|| {
+                valid_global_orientations
+                    .iter()
+                    .max_by_key(|candidate| Self::representative_score(candidate, internal_edges))
+            })
             .ok_or_else(|| {
                 eyre!(
-                    "no valid global orientation matches reduced orientation {}",
+                    "no valid global orientations are available for reduced orientation {}",
                     GS.orientation_delta(reduced_orientation)
                 )
             })
@@ -198,18 +213,21 @@ impl<'a> FinalIntegrand<'a> {
         let compatible: Vec<_> = valid_global_orientations
             .iter()
             .filter(|candidate| {
-                Self::orientations_match_outside_integrated_subgraph(reduced_orientation, candidate)
+                Self::orientations_match_outside_integrated_subgraph(
+                    reduced_orientation,
+                    candidate,
+                    internal_edges,
+                )
             })
             .collect();
         let compatible_count = compatible.len();
-        if compatible_count == 0 {
-            return Err(eyre!(
-                "no valid global orientation matches reduced orientation {}",
-                GS.orientation_delta(reduced_orientation)
-            ));
-        }
-
-        let representatives: Vec<_> = if average_compatible_orientations {
+        let representatives: Vec<_> = if compatible_count == 0 {
+            vec![Self::select_representative_orientation(
+                reduced_orientation,
+                valid_global_orientations,
+                internal_edges,
+            )?]
+        } else if average_compatible_orientations {
             compatible
         } else {
             vec![Self::select_representative_orientation(
@@ -230,7 +248,7 @@ impl<'a> FinalIntegrand<'a> {
             internal_selector_sum += internal_selector.clone();
             localized += reduced_expression.clone() * &reduced_selector * internal_selector;
         }
-        if average_compatible_orientations {
+        if average_compatible_orientations && compatible_count > 0 {
             localized /= Atom::num(compatible_count as i64);
             internal_selector_sum /= Atom::num(compatible_count as i64);
             representative_delta_sum /= Atom::num(compatible_count as i64);
@@ -613,7 +631,7 @@ mod tests {
     use super::FinalIntegrand;
     use crate::utils::GS;
     use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
-    use symbolica::function;
+    use symbolica::{atom::Atom, function};
 
     fn orientation(value: i8) -> Orientation {
         match value {
@@ -708,13 +726,14 @@ mod tests {
     }
 
     #[test]
-    fn errors_for_missing_external_orientation_class() {
+    fn falls_back_for_missing_external_orientation_class() {
         let valid = vec![edgevec([1, 1, 1]), edgevec([1, -1, 1])];
         let reduced = edgevec([-1, 0, 1]);
         let internal = edges([1]);
 
-        assert!(
-            FinalIntegrand::select_representative_orientation(&reduced, &valid, &internal).is_err()
+        assert_eq!(
+            FinalIntegrand::select_representative_orientation(&reduced, &valid, &internal).unwrap(),
+            &valid[0]
         );
     }
 
@@ -747,6 +766,28 @@ mod tests {
             * GS.sign_theta(GS.sign(EdgeIndex(0)))
             * GS.sign_theta(-GS.sign(EdgeIndex(2)))
             * GS.sign_theta(GS.sign(EdgeIndex(1)));
+        assert_eq!(localized, expected);
+    }
+
+    #[test]
+    fn orientation_term_averages_compatible_internal_representatives() {
+        let reduced_expression = function!(GS.ose, 0);
+        let reduced_orientation = edgevec([1, 0, -1]);
+        let valid = vec![edgevec([1, 1, -1]), edgevec([1, -1, -1])];
+        let localized = FinalIntegrand::localized_orientation_term(
+            &reduced_expression,
+            &reduced_orientation,
+            &valid,
+            &edges([1]),
+            true,
+        )
+        .unwrap();
+
+        let expected = reduced_expression
+            * GS.sign_theta(GS.sign(EdgeIndex(0)))
+            * GS.sign_theta(-GS.sign(EdgeIndex(2)))
+            * (GS.sign_theta(GS.sign(EdgeIndex(1))) + GS.sign_theta(-GS.sign(EdgeIndex(1))))
+            / Atom::num(2);
         assert_eq!(localized, expected);
     }
 }

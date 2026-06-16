@@ -108,7 +108,11 @@ impl Wood {
         let mut spinneys = Vec::new();
 
         for cut in cuts.cuts.iter() {
-            let cut_sub = subgraph.subtract(&cut.union);
+            let cut_sub = if cut.residue_selector.is_threshold_esurface_residue() {
+                subgraph.clone()
+            } else {
+                subgraph.subtract(&cut.union)
+            };
             spinneys.extend(graph.classified_spinneys(
                 &cut_sub,
                 settings,
@@ -316,7 +320,8 @@ pub struct ForestNode<'a> {
 
 impl OperationNode {
     pub fn is_compatible_with(&self, cut: &CutSet) -> bool {
-        self.covers().is_none_or(|c| !c.intersects(&cut.union))
+        cut.residue_selector.is_threshold_esurface_residue()
+            || self.covers().is_none_or(|c| !c.intersects(&cut.union))
     }
 
     pub fn current<'a>(&'a self, wood: &'a Wood, topo_order: usize) -> Option<Vec<ForestNode<'a>>> {
@@ -777,7 +782,11 @@ impl Forests {
     //     Ok(())
     // }
 
-    pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<RenormalizationPart> {
+    pub(crate) fn pole_part_of_ends(
+        &self,
+        graph: &Graph,
+        pole_part: bool,
+    ) -> Result<RenormalizationPart> {
         let mut sum = Atom::Zero;
 
         let wild = Atom::var(W_.x___);
@@ -816,16 +825,18 @@ impl Forests {
             sum += atom;
         }
 
-        let n_loops = graph.n_loops(&graph.full_filter());
-        let pole_stripped = sum
-            .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
-            .unwrap();
+        if pole_part {
+            let n_loops = graph.n_loops(&graph.full_filter());
+            let pole_stripped = sum
+                .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
+                .unwrap();
 
-        sum = Atom::Zero;
+            sum = Atom::Zero;
 
-        for (power, p) in pole_stripped.terms() {
-            if power < 0 {
-                sum += p * Atom::var(GS.dim_epsilon).pow(power);
+            for (power, p) in pole_stripped.terms() {
+                if power < 0 {
+                    sum += p * Atom::var(GS.dim_epsilon).pow(power);
+                }
             }
         }
 

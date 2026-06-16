@@ -82,6 +82,11 @@ impl Graph {
         let tsquare = Atom::var(GS.rescale).pow(2);
         let m_uv_expansion_sq = Atom::var(GS.m_uv_expansion).pow(2);
         let m_uv_vacuum_sq = Atom::var(GS.m_uv_vacuum).pow(2);
+        let rescaled_denominator_edges = self
+            .iter_edges_of(replacement_subgraph)
+            .filter_map(|(pair, edge_id, _)| pair.is_paired().then_some(edge_id.0 as i64))
+            .collect::<Vec<_>>();
+        let variadic_rescaled_denominator_edges = rescaled_denominator_edges.clone();
 
         debug_tags!(#uv, #integrated, #inspect;
             log.res = atomarg,
@@ -89,25 +94,45 @@ impl Graph {
         );
         atomarg = atomarg
             .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
-            .with(
+            .with_map(move |m| {
+                let edge = m.get(W_.a_).unwrap();
+                let edge_atom = edge.to_atom();
+                let momentum = m.get(W_.mom_).unwrap().to_atom();
+                let mass = m.get(W_.mass_).unwrap().to_atom();
+                let propagator = m.get(W_.prop_).unwrap().to_atom();
+
+                let should_rescale = i64::try_from(edge_atom.as_view())
+                    .ok()
+                    .is_some_and(|edge_id| rescaled_denominator_edges.contains(&edge_id));
+                if !should_rescale {
+                    return GS.den(edge_atom, momentum, mass, propagator);
+                }
+
                 GS.den(
-                    W_.a_,
-                    W_.mom_,
-                    &tsquare * Atom::var(W_.mass_) + m_uv_expansion_sq.clone(),
-                    Atom::var(W_.prop_) * &tsquare + m_uv_expansion_sq.clone() * &tsquare
+                    edge_atom,
+                    momentum,
+                    &tsquare * mass + m_uv_expansion_sq.clone(),
+                    propagator * &tsquare + m_uv_expansion_sq.clone() * &tsquare
                         - m_uv_vacuum_sq.clone(),
-                ) / &tsquare,
-            )
+                ) / &tsquare
+            })
             .replace(function!(GS.den, W_.a_, W_.mom_, W_.a___))
             .with_map(move |m| {
+                let edge = m.get(W_.a_).unwrap().to_atom();
+                let momentum = m.get(W_.mom_).unwrap().to_atom();
+                let should_rescale = i64::try_from(edge.as_view())
+                    .ok()
+                    .is_some_and(|edge_id| variadic_rescaled_denominator_edges.contains(&edge_id));
                 let mut f = symbolica::atom::FunctionBuilder::new(GS.den);
-                f = f.add_arg(m.get(W_.a_).unwrap().to_atom());
-                f = f.add_arg(
-                    (m.get(W_.mom_).unwrap().to_atom() * GS.rescale)
+                f = f.add_arg(edge);
+                f = f.add_arg(if should_rescale {
+                    (momentum * GS.rescale)
                         .expand()
                         .replace(GS.rescale)
-                        .with(Atom::Zero),
-                );
+                        .with(Atom::Zero)
+                } else {
+                    momentum
+                });
                 f = f.add_arg(m.get(W_.a___).unwrap().to_atom());
                 f.finish()
             });
@@ -143,25 +168,11 @@ impl Integrated<'_> {
         integrand: &Atom,
     ) -> Result<Atom> {
         let reduced = current.reduced_subgraph(given);
-        let graph = ctx.graph;
-
-        let mut t_arg = ctx
-            .graph
-            .numerator(&reduced, given.subgraph())
-            .to_d_dim(GS.dim)
-            .get_single_atom()
-            .unwrap();
-
-        t_arg /= graph.denominator(&reduced, |_| 1);
-
-        t_arg = t_arg
-            .replace(GS.dim)
-            .max_level(0)
-            .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
+        let t_arg = integrated_uv_start(ctx.graph, current, given, integrand)?;
 
         debug_tags!(#uv, #integrated, #algebra, #start; log.integrand = integrand, reduced = %reduced.string_label(), "Start");
 
-        Ok((t_arg * integrand).simplify_metrics())
+        Ok(t_arg)
     }
 
     #[debug_instrument(
@@ -478,6 +489,43 @@ impl Integrated<'_> {
         // println!("\nIntegrated CT:\n{}\n", res);
         Ok(res)
     }
+}
+
+pub(crate) fn integrated_uv_start<S: super::ForestNodeLike>(
+    graph: &Graph,
+    current: &S,
+    given: &S,
+    integrand: &Atom,
+) -> Result<Atom> {
+    let reduced = current.reduced_subgraph(given);
+    let mut t_arg = graph
+        .numerator(&reduced, given.subgraph())
+        .to_d_dim(GS.dim)
+        .get_single_atom()
+        .map_err(|error| eyre!("graph numerator is not a single symbolic atom: {error}"))?;
+
+    t_arg /= graph.denominator(&reduced, |_| 1);
+    t_arg = t_arg
+        .replace(GS.dim)
+        .max_level(0)
+        .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
+
+    Ok((t_arg * integrand).simplify_metrics())
+}
+
+pub(crate) fn integrated_uv_rescale_series<S: super::ForestNodeLike>(
+    graph: &Graph,
+    current: &S,
+    given: &S,
+    integrand: &Atom,
+) -> Result<Atom> {
+    let reduced = current.reduced_subgraph(given);
+    let n_loops = graph.n_loops(current.subgraph()) - graph.n_loops(given.subgraph());
+    let rescaled = graph.uv_rescaled(&reduced, n_loops, current.lmb(), integrand);
+    let series = rescaled
+        .series(GS.rescale, Atom::Zero, 0)
+        .map_err(|error| eyre!("integrated UV rescale series expansion failed: {error}"))?;
+    Ok(series.to_atom().replace(GS.rescale).with(Atom::num(1)))
 }
 
 impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {

@@ -11,12 +11,14 @@ use ahash::HashMap;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
+use idenso::{color::ColorSimplifier, shorthands::metric::MetricSimplifier};
 use itertools::Itertools;
 use rayon::{
     ThreadPool,
     iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
 use spenso::algebra::algebraic_traits::IsZero;
+use three_dimensional_reps::RepresentationMode;
 use tracing::info;
 use vakint::Vakint;
 
@@ -25,12 +27,21 @@ use crate::{
     cff::{
         CutCFFIndex,
         esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
-        expression::{CFFExpression, OrientationID},
+        expression::{
+            OrientationID, ThreeDExpression, cff_expression_uses_ltd_lu_residue_basis,
+            ltd_lu_local_series_coefficients_from_parametric_atom,
+            normalize_cut_edge_support_with_raised_edge_groups,
+            normalize_three_d_expression_cut_support_with_raised_edge_groups,
+            prepare_ltd_lu_local_series_expression, select_lu_cut_residue_for_basis,
+        },
     },
     debug_tags, define_index,
     graph::{
         GraphGroup, GroupId, LMBext, LmbChannelFallback, LmbIndex, LoopMomentumBasis,
-        cuts::{CutSet, ResidueSelector},
+        cuts::{
+            CutSet, LuCutResiduePlanData, LuLocalSeriesCoordinate, LuResidueSelectionBasis,
+            ResidueSelector,
+        },
         parse::complete_group_parsing,
     },
     integrands::process::{
@@ -48,12 +59,20 @@ use crate::{
         GraphSelectionSignatureInventory, GraphSelectionSubject, NamedGraphGenerationReport,
         RaisedCutSignatureInventory,
     },
-    settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
+    settings::{
+        GlobalSettings,
+        global::{GenerationSettings, ThreeDRepresentation},
+        runtime::LockedRuntimeSettings,
+    },
     utils::{
         F, GS, W_,
         hyperdual_utils::{shape_from_cut_cff_index, simple_n_deriv_shape},
     },
-    uv::{approx::CutStructure, forest::ParametricIntegrands, wood::CutWoods},
+    uv::{
+        approx::CutStructure,
+        forest::{ParametricIntegrands, cff_explicit_sum_needs_outer_orientation_projection},
+        wood::CutWoods,
+    },
 };
 use eyre::{Context, eyre};
 use linnet::half_edge::{
@@ -133,6 +152,204 @@ impl<T> IndexMut<(LeftThresholdId, RightThresholdId)> for IteratedCtCollection<T
     fn index_mut(&mut self, index: (LeftThresholdId, RightThresholdId)) -> &mut Self::Output {
         let (left_id, right_id) = index;
         &mut self.data[left_id.0 * self.num_left_thresholds + right_id.0]
+    }
+}
+
+struct LuCutResidueSigns {
+    edge_sets: Vec<Vec<EdgeIndex>>,
+    cut_orientation_signs: Vec<i64>,
+    /// Orientation of the selected generated E-surface denominator used by
+    /// combinatorial LTD residue selection.
+    selected_denominator_signs: Vec<i64>,
+    /// Orientation of the direct Laurent local-series coordinate used for
+    /// repeated/confluent LU cuts.
+    local_series_denominator_signs: Vec<i64>,
+    surface_family_signs: Vec<i64>,
+    local_series_coordinates: Vec<LuLocalSeriesCoordinate>,
+}
+
+struct LuCutCoordinateSigns {
+    selected_denominator_sign: i64,
+    local_series_denominator_sign: i64,
+    surface_family_sign: i64,
+    local_series_coordinate: LuLocalSeriesCoordinate,
+}
+
+struct LuResiduePlanComponents<'a> {
+    raised_cut_group: &'a RaisedCutGroup,
+    lu_cut_signs: LuCutResidueSigns,
+    full_graph_projection_bridge: i64,
+    ltd_repeated_channel_bridge_sign: i64,
+    ltd_repeated_channel_source_bridge_sign: i64,
+    repeated_channel_edge_support_bridge: i64,
+    simple_surface_family_sign: i64,
+    repeated_residue_prefactor_sign: i64,
+    repeated_local_series_orientation_sign: i64,
+    simple_mixed_repeated_channel_contact: bool,
+}
+
+impl LuResiduePlanComponents<'_> {
+    fn is_simple_lu_cut(&self) -> bool {
+        self.raised_cut_group.related_esurface_group.max_occurence == 1
+    }
+
+    fn selected_denominator_variable_sign(&self) -> i64 {
+        if self.is_simple_lu_cut() {
+            self.lu_cut_signs
+                .selected_denominator_signs
+                .iter()
+                .product()
+        } else {
+            1
+        }
+    }
+
+    fn selected_esurface_signs(&self) -> Vec<(EsurfaceID, i64)> {
+        self.raised_cut_group
+            .cut_esurface_ids
+            .iter()
+            .copied()
+            .zip(self.lu_cut_signs.selected_denominator_signs.iter().copied())
+            .collect()
+    }
+
+    fn local_series_esurface_signs(&self) -> Vec<(EsurfaceID, i64)> {
+        if self.is_simple_lu_cut() {
+            self.raised_cut_group
+                .cut_esurface_ids
+                .iter()
+                .copied()
+                .zip(
+                    self.lu_cut_signs
+                        .local_series_denominator_signs
+                        .iter()
+                        .copied(),
+                )
+                .collect()
+        } else {
+            self.raised_cut_group
+                .cut_esurface_ids
+                .iter()
+                .copied()
+                .map(|esurface_id| (esurface_id, 1))
+                .collect()
+        }
+    }
+
+    fn local_series_prefactor_sign(&self) -> i64 {
+        if self.is_simple_lu_cut() {
+            self.full_graph_projection_bridge
+                * self.simple_surface_family_sign
+                * self
+                    .lu_cut_signs
+                    .local_series_denominator_signs
+                    .iter()
+                    .product::<i64>()
+        } else {
+            self.full_graph_projection_bridge * self.repeated_local_series_orientation_sign
+        }
+    }
+
+    fn residue_prefactor_sign(&self) -> i64 {
+        if self.is_simple_lu_cut() {
+            let repeated_channel_cutkosky_bridge = if self.ltd_repeated_channel_bridge_sign < 0 {
+                self.lu_cut_signs.cut_orientation_signs.iter().product()
+            } else {
+                1
+            };
+            self.local_series_prefactor_sign()
+                * self.selected_denominator_variable_sign()
+                * repeated_channel_cutkosky_bridge
+        } else {
+            self.full_graph_projection_bridge
+                * self.ltd_repeated_channel_bridge_sign
+                * self.repeated_channel_edge_support_bridge
+                * self.repeated_residue_prefactor_sign
+        }
+    }
+
+    fn direct_original_prefactor_sign(&self) -> i64 {
+        // Direct original/root terms are extracted from the requested LTD
+        // production expression, not from the auxiliary CFF projection used to
+        // identify and canonicalize LU surfaces. The global LTD measure bridge
+        // is applied by the embedding code, so this local bridge contains only
+        // the Cutkosky/local-coordinate orientation and repeated-channel source
+        // conventions.
+        if self.is_simple_lu_cut() {
+            if self.simple_mixed_repeated_channel_contact {
+                // A simple cut whose support spans repeated-channel supports
+                // is not an ordinary one-surface Laurent coordinate: its
+                // support-local bridge is the repeated-channel routing bridge
+                // times the selected Cutkosky/surface-family orientation.
+                self.ltd_repeated_channel_bridge_sign
+                    * self.simple_surface_family_sign
+                    * self
+                        .lu_cut_signs
+                        .selected_denominator_signs
+                        .iter()
+                        .product::<i64>()
+                    * self
+                        .lu_cut_signs
+                        .cut_orientation_signs
+                        .iter()
+                        .product::<i64>()
+            } else {
+                // Ordinary simple cuts are fixed by their own resolved
+                // Laurent-coordinate Jacobian and by the full-source
+                // same-routing duplicate convention. The latter is separate
+                // from the derivative bridge used by selected repeated
+                // residues.
+                self.simple_surface_family_sign
+                    * self
+                        .lu_cut_signs
+                        .local_series_denominator_signs
+                        .iter()
+                        .product::<i64>()
+                    * self.ltd_repeated_channel_source_bridge_sign
+            }
+        } else {
+            self.lu_cut_signs
+                .cut_orientation_signs
+                .iter()
+                .product::<i64>()
+                * if self
+                    .raised_cut_group
+                    .related_esurface_group
+                    .max_occurence
+                    .is_multiple_of(2)
+                {
+                    -1
+                } else {
+                    1
+                }
+        }
+    }
+
+    fn into_residue_selector(
+        self,
+        left_th_cut: Option<RaisedEsurfaceGroup>,
+        right_th_cut: Option<RaisedEsurfaceGroup>,
+    ) -> ResidueSelector {
+        let local_series_prefactor_sign = self.local_series_prefactor_sign();
+        let residue_prefactor_sign = self.residue_prefactor_sign();
+        let direct_original_prefactor_sign = self.direct_original_prefactor_sign();
+        let selected_esurface_signs = self.selected_esurface_signs();
+        let local_series_esurface_signs = self.local_series_esurface_signs();
+
+        ResidueSelector::new_lu_cut(
+            self.raised_cut_group.related_esurface_group.clone(),
+            LuCutResiduePlanData {
+                edge_sets: self.lu_cut_signs.edge_sets,
+                esurface_signs: selected_esurface_signs,
+                local_series_esurface_signs,
+                residue_prefactor_sign,
+                local_series_prefactor_sign,
+                direct_original_prefactor_sign,
+                local_series_coordinates: self.lu_cut_signs.local_series_coordinates,
+            },
+            left_th_cut,
+            right_th_cut,
+        )
     }
 }
 
@@ -573,7 +790,7 @@ impl CrossSection {
         &mut self,
         model: &Model,
         process_definition: &ProcessDefinition,
-        global_settings: &GenerationSettings,
+        global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
@@ -760,6 +977,9 @@ impl CrossSection {
                 graph_to_group_id: graph_to_group_id_for_group_structure(
                     &self.graph_group_structure,
                 ),
+                explicit_orientation_sum_only: global_settings
+                    .generation
+                    .explicit_orientation_sum_only,
             },
             event_processing_runtime: Default::default(),
             active_f64_backend: Default::default(),
@@ -885,6 +1105,32 @@ pub struct CrossSectionCut {
 }
 
 impl CrossSectionCut {
+    pub(crate) fn positive_energy_cut_orientation_sign(&self, graph: &Graph) -> Result<i64> {
+        let cut_edges = self.cut.iter_edges(graph).collect_vec();
+        if cut_edges.is_empty() {
+            return Err(eyre!(
+                "Cannot determine Cutkosky positive-energy orientation for an empty cut in graph {}",
+                graph.name
+            ));
+        }
+
+        let mut cut_orientation_sign = 1;
+        for (orientation, edge_data) in &cut_edges {
+            match *orientation {
+                Orientation::Default => {}
+                Orientation::Reversed => cut_orientation_sign *= -1,
+                Orientation::Undirected => {
+                    return Err(eyre!(
+                        "Cannot determine Cutkosky positive-energy orientation for undirected edge {} in graph {}",
+                        edge_data.data.name,
+                        graph.name
+                    ));
+                }
+            }
+        }
+        Ok(cut_orientation_sign)
+    }
+
     fn amplitude_side_subjects<'a>(&self, graph: &'a Graph) -> [GraphSelectionSubject<'a>; 2] {
         let cut_edges = self.cut.as_subgraph();
         [
@@ -1043,6 +1289,84 @@ impl Display for CutId {
     }
 }
 
+fn loop_signature_row(lmb: &LoopMomentumBasis, edge_id: EdgeIndex, row_sign: i64) -> Vec<i64> {
+    let signature = lmb.edge_signatures[edge_id].internal.to_momtrop_format();
+    signature
+        .iter()
+        .map(|entry| row_sign * *entry as i64)
+        .collect_vec()
+}
+
+fn localized_energy_signature_row(
+    lmb: &LoopMomentumBasis,
+    edge_id: EdgeIndex,
+    row_sign: i64,
+    localized_external_index: usize,
+) -> Vec<i64> {
+    let mut row = loop_signature_row(lmb, edge_id, row_sign);
+    let external_signature = lmb.edge_signatures[edge_id].external.to_momtrop_format();
+    row.push(
+        row_sign
+            * external_signature
+                .get(localized_external_index)
+                .copied()
+                .unwrap_or_default() as i64,
+    );
+    row
+}
+
+fn integer_determinant_sign(rows: &[Vec<i64>]) -> Option<i64> {
+    let dimension = rows.len();
+    if !rows.iter().all(|row| row.len() == dimension) {
+        return None;
+    }
+    if dimension == 0 {
+        return Some(1);
+    }
+
+    let mut matrix = rows
+        .iter()
+        .map(|row| row.iter().map(|entry| i128::from(*entry)).collect_vec())
+        .collect_vec();
+    let mut determinant_sign = 1_i128;
+    let mut previous_pivot = 1_i128;
+
+    for column in 0..dimension - 1 {
+        let pivot_row = (column..dimension).find(|row| matrix[*row][column] != 0)?;
+        if pivot_row != column {
+            matrix.swap(column, pivot_row);
+            determinant_sign = -determinant_sign;
+        }
+
+        let pivot = matrix[column][column];
+        for row in column + 1..dimension {
+            for col in column + 1..dimension {
+                matrix[row][col] = (matrix[row][col] * pivot
+                    - matrix[row][column] * matrix[column][col])
+                    / previous_pivot;
+            }
+            matrix[row][column] = 0;
+        }
+        previous_pivot = pivot;
+    }
+
+    let determinant = determinant_sign * matrix[dimension - 1][dimension - 1];
+    Some(determinant.signum() as i64)
+}
+
+fn unique_lu_sign(signs: &[i64], context: &str, graph_name: &str, cuts: &[CutId]) -> Result<i64> {
+    let unique_signs = signs.iter().copied().collect::<BTreeSet<_>>();
+    if unique_signs.len() != 1 {
+        return Err(eyre!(
+            "Cannot determine a unique {context} sign for graph {graph_name} and cuts {cuts:?}: found signs {unique_signs:?}"
+        ));
+    }
+    Ok(*unique_signs
+        .iter()
+        .next()
+        .expect("one sign was checked above"))
+}
+
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionGraph {
@@ -1053,6 +1377,14 @@ pub struct CrossSectionGraph {
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cut_esurface_id_map: TiVec<CutId, EsurfaceID>,
     pub derived_data: CrossSectionDerivedData,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CutkoskyCutCount {
+    pub candidate_st_cuts: usize,
+    pub multi_edge_candidate_cuts: usize,
+    pub process_compatible_cuts: usize,
+    pub selected_cuts: usize,
 }
 
 impl CrossSectionGraph {
@@ -1127,35 +1459,45 @@ impl CrossSectionGraph {
         &mut self,
         model: &Model,
         process_definition: &ProcessDefinition,
-        settings: &GenerationSettings,
+        global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
     ) -> Result<GraphGenerationStats> {
+        global_settings.ensure_step_iii_pending_options_are_supported()?;
+        let settings = &global_settings.generation;
+        if global_settings.three_d_representation == ThreeDRepresentation::Ltd
+            && settings.uv.subtract_uv
+            && !settings.uv.local_uv_cts_from_expanded_4d_integrands
+        {
+            return Err(eyre!(
+                "`global.3d_representation = LTD` with local UV counterterms from 3D expansions is not supported for cross-section supergraphs; set `global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` to use the representation-neutral 4D-expanded local UV construction"
+            ));
+        }
         let preprocess_started = std::time::Instant::now();
         let mut stats = GraphGenerationStats::default();
         self.apply_spin_sum(model, settings, &runtime_default)?;
-        debug_tags!(#generation; "generating cuts");
+        debug!("generating cuts");
         self.generate_cuts(model, process_definition, settings)?;
-        debug_tags!(#generation; "generating esurfaces corresponding to cuts");
+        debug!("generating esurfaces corresponding to cuts");
         self.generate_esurface_cuts();
-        debug_tags!(#generation; "generating cff");
-        stats.merge_in_place(&self.generate_cff(settings)?);
-        debug_tags!(#generation; "building lmbs");
+        debug!("generating 3D expression");
+        stats.merge_in_place(&self.build_3d_expression(global_settings)?);
+        debug!("building lmbs");
         self.build_lmbs()?;
-        debug_tags!(#generation; "building multi channeling channels");
+        debug!("building multi channeling channels");
 
         if self.graph.is_group_master {
             self.build_multi_channeling_channels(settings.override_lmb_heuristics)?;
         }
 
         let vk = crate::utils::vakint()?;
-        debug_tags!(#generation; "building parametric integrand");
-        self.build_parametric_integrand(settings, vk)?;
+        debug!("building parametric integrand");
+        self.build_parametric_integrand(global_settings, vk)?;
         //self.build_parametric_integrand_raised_cuts(settings)?;
 
         if settings.threshold_subtraction.enable_thresholds {
-            debug_tags!(#generation, #subtraction; "building threshold counterterm");
+            debug!("building threshold counterterm");
             self.build_subspace_data()?;
-            self.build_threshold_counterterm(settings, vk)?;
+            self.build_threshold_counterterm(settings, global_settings.three_d_representation, vk)?;
         }
 
         stats.total_time += preprocess_started.elapsed();
@@ -1179,68 +1521,202 @@ impl CrossSectionGraph {
         self.graph.dot_serialize_fmt(writer, settings)
     }
 
-    fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<GraphGenerationStats> {
+    fn build_3d_expression(&mut self, settings: &GlobalSettings) -> Result<GraphGenerationStats> {
         let canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        let contract_edges = self
+        let representation = settings.three_d_representation;
+        let mut options = self
             .graph
-            .iter_edges_of(
-                &self
-                    .graph
-                    .tree_edges
-                    .subtract(&self.graph.initial_state_cut),
-            )
-            .map(|x| x.1)
-            .collect_vec();
-
-        let global_cff = self.graph.generate_cff(
-            &contract_edges,
+            .production_3d_expression_options(representation, &settings.generation)?;
+        // Cross-section event weights are finite Cutkosky/LU residues of the
+        // original graph. Higher-energy numerator completions are global
+        // representation identities used to control infinity sectors, but they
+        // are not part of the finite local residue decomposition: the full
+        // numerator is inserted after the residue has fixed the local
+        // denominator coordinates, and local UV is subtracted by the dedicated
+        // local counterterm construction.
+        options.energy_degree_bounds.clear();
+        let use_confluent_cff = self
+            .graph
+            .production_cff_needs_confluent_repeated_channels(&options)?;
+        let mut global_expression = self.graph.generate_3d_expression_for_integrand(
+            &[],
             &canonize_esurface,
-            &settings.orientation_pattern,
+            &options,
+            use_confluent_cff,
         )?;
-
+        let global_lu_residue_selection_basis = if representation == ThreeDRepresentation::Ltd
+            || (representation == ThreeDRepresentation::Cff
+                && cff_expression_uses_ltd_lu_residue_basis(&global_expression))
+        {
+            LuResidueSelectionBasis::GeneratedEsurface
+        } else {
+            LuResidueSelectionBasis::PositiveEnergyCutkosky
+        };
+        let cff_reference_lu_residue_selection_basis =
+            if representation == ThreeDRepresentation::Cff {
+                global_lu_residue_selection_basis
+            } else {
+                let cff_reference_options = self.graph.production_3d_expression_options(
+                    ThreeDRepresentation::Cff,
+                    &settings.generation,
+                )?;
+                if self
+                    .graph
+                    .production_cff_needs_confluent_repeated_channels(&cff_reference_options)?
+                {
+                    LuResidueSelectionBasis::GeneratedEsurface
+                } else {
+                    LuResidueSelectionBasis::PositiveEnergyCutkosky
+                }
+            };
+        let raised_edge_groups = self.graph.get_raised_edge_groups();
+        normalize_three_d_expression_cut_support_with_raised_edge_groups(
+            &mut global_expression,
+            &raised_edge_groups,
+        );
+        let generated_esurfaces = &global_expression.surfaces.esurface_cache;
+        let normalized_generated_esurfaces =
+            self.normalized_generated_esurfaces(generated_esurfaces, &raised_edge_groups);
         let cut_esurface_map = self
             .cut_esurface
             .iter()
             .map(|esurface| {
-                if let Some(pos) = self
-                    .graph
-                    .surface_cache
-                    .esurface_cache
-                    .iter()
-                    .position(|e_sf| e_sf == esurface)
-                    .map(Into::<EsurfaceID>::into)
-                {
-                    pos
-                } else {
-                    let pos = self.graph.surface_cache.esurface_cache.len();
-                    self.graph
-                        .surface_cache
-                        .esurface_cache
-                        .push(esurface.clone());
-                    EsurfaceID(pos)
-                }
+                self.find_generated_esurface_id(
+                    esurface,
+                    generated_esurfaces,
+                    &normalized_generated_esurfaces,
+                    &raised_edge_groups,
+                    "Cutkosky cut",
+                )
             })
-            .collect();
+            .collect::<Result<_>>()?;
 
         self.cut_esurface_id_map = cut_esurface_map;
 
         let esurface_raised_data = self
             .graph
-            .determine_raised_esurfaces_from_expression(&global_cff);
+            .determine_raised_esurfaces_from_expression(&global_expression);
 
         let (raised_cut_data, raised_cut_stats) = RaisedCutData::new_from_esurface(
             &esurface_raised_data,
             &self.cut_esurface_id_map,
-            &settings.evaluator,
+            &settings.generation.evaluator,
         );
 
-        self.derived_data.global_cff_expression = Some(global_cff);
+        let cff_projection = if representation == ThreeDRepresentation::Ltd {
+            let mut cff_options = self.graph.production_3d_expression_options(
+                ThreeDRepresentation::Cff,
+                &settings.generation,
+            )?;
+            cff_options.energy_degree_bounds.clear();
+            let mut cff_expression = self.graph.generate_3d_expression_for_integrand(
+                &[],
+                &canonize_esurface,
+                &cff_options,
+                false,
+            )?;
+            normalize_three_d_expression_cut_support_with_raised_edge_groups(
+                &mut cff_expression,
+                &raised_edge_groups,
+            );
+
+            let cff_generated_esurfaces = &cff_expression.surfaces.esurface_cache;
+            let cff_normalized_generated_esurfaces =
+                self.normalized_generated_esurfaces(cff_generated_esurfaces, &raised_edge_groups);
+            let cff_cut_esurface_map = self
+                .cut_esurface
+                .iter()
+                .map(|esurface| {
+                    self.find_generated_esurface_id(
+                        esurface,
+                        cff_generated_esurfaces,
+                        &cff_normalized_generated_esurfaces,
+                        &raised_edge_groups,
+                        "CFF projection Cutkosky cut",
+                    )
+                })
+                .collect::<Result<_>>()?;
+
+            let cff_esurface_raised_data = self
+                .graph
+                .determine_raised_esurfaces_from_expression(&cff_expression);
+            let (cff_raised_data, _) = RaisedCutData::new_from_esurface(
+                &cff_esurface_raised_data,
+                &cff_cut_esurface_map,
+                &settings.generation.evaluator,
+            );
+
+            Some((cff_expression, cff_cut_esurface_map, cff_raised_data))
+        } else {
+            None
+        };
+
+        self.derived_data.global_three_d_expression = Some(global_expression);
+        self.derived_data.global_lu_residue_selection_basis = global_lu_residue_selection_basis;
+        self.derived_data.cff_reference_lu_residue_selection_basis =
+            cff_reference_lu_residue_selection_basis;
         self.derived_data.raised_data = raised_cut_data;
+        self.derived_data.cff_projection_three_d_expression = None;
+        self.derived_data.cff_projection_cut_esurface_id_map = TiVec::new();
+        self.derived_data.cff_projection_raised_data = RaisedCutData::new();
+        if let Some((cff_expression, cff_cut_esurface_map, cff_raised_data)) = cff_projection {
+            self.derived_data.cff_projection_three_d_expression = Some(cff_expression);
+            self.derived_data.cff_projection_cut_esurface_id_map = cff_cut_esurface_map;
+            self.derived_data.cff_projection_raised_data = cff_raised_data;
+        }
 
         Ok(raised_cut_stats)
+    }
+
+    fn normalized_generated_esurfaces(
+        &self,
+        generated_esurfaces: &TiVec<EsurfaceID, Esurface>,
+        raised_edge_groups: &[Vec<EdgeIndex>],
+    ) -> TiVec<EsurfaceID, Esurface> {
+        generated_esurfaces
+            .iter()
+            .map(|esurface| {
+                Graph::normalize_esurface_with_raised_edge_groups(esurface, raised_edge_groups)
+            })
+            .collect()
+    }
+
+    fn find_generated_esurface_id(
+        &self,
+        esurface: &Esurface,
+        generated_esurfaces: &TiVec<EsurfaceID, Esurface>,
+        normalized_generated_esurfaces: &TiVec<EsurfaceID, Esurface>,
+        raised_edge_groups: &[Vec<EdgeIndex>],
+        context: impl Display,
+    ) -> Result<EsurfaceID> {
+        let normalized_esurface =
+            Graph::normalize_esurface_with_raised_edge_groups(esurface, raised_edge_groups);
+        if let Some(position) = generated_esurfaces
+            .iter()
+            .position(|generated| generated == esurface)
+        {
+            return Ok(position.into());
+        }
+        generated_esurfaces
+            .iter()
+            .zip(normalized_generated_esurfaces.iter())
+            .position(|(_, normalized_generated)| normalized_generated == &normalized_esurface)
+            .ok_or_else(|| {
+                eyre!(
+                    "{context} E-surface {esurface:?} for graph {} was not present in the generated 3D expression surface cache.\n\
+                     Normalized requested E-surface: {:?}\n\
+                     Cut E-surfaces: {:?}\nGenerated E-surfaces: {:?}\nGenerated H-surfaces: {:?}",
+                    self.graph.name,
+                    normalized_esurface,
+                    self.cut_esurface,
+                    generated_esurfaces,
+                    self.graph.surface_cache.hsurface_cache,
+                )
+            })
+            .map(Into::into)
     }
 
     pub(crate) fn process_valid_cuts(
@@ -1252,27 +1728,42 @@ impl CrossSectionGraph {
         if !self.cuts.is_empty() {
             return Ok(self.cuts.clone());
         }
-        self.compute_process_valid_cuts(model, process_definition, settings)
+        self.process_compatible_cutkosky_cuts(model, process_definition, settings)
             .map(|(_, cuts)| cuts)
     }
 
-    fn compute_process_valid_cuts(
+    pub fn cutkosky_cut_count_for_process(
         &self,
         model: &Model,
         process_definition: &ProcessDefinition,
         settings: &GenerationSettings,
-    ) -> Result<(usize, TiVec<CutId, CrossSectionCut>)> {
+    ) -> Result<CutkoskyCutCount> {
+        self.process_compatible_cutkosky_cuts(model, process_definition, settings)
+            .map(|(cut_count, _)| cut_count)
+    }
+
+    fn process_compatible_cutkosky_cuts(
+        &self,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+        settings: &GenerationSettings,
+    ) -> Result<(CutkoskyCutCount, TiVec<CutId, CrossSectionCut>)> {
         let all_st_cuts = self.graph.all_st_cuts_for_cs(
             self.source_nodes.clone(),
             self.target_nodes.clone(),
             &self.graph.get_initial_state_tree().0,
         );
-        let num_st_cuts = all_st_cuts.len();
+        let candidate_st_cuts = all_st_cuts.len();
 
-        let mut cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
+        let multi_edge_cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
             .into_iter()
             .map(|(left, cut, right)| CrossSectionCut { cut, left, right })
             .filter(|cut| cut.cut.nedges(&self.graph) > 1)
+            .collect();
+        let multi_edge_candidate_cuts = multi_edge_cuts.len();
+
+        let mut cuts: TiVec<CutId, CrossSectionCut> = multi_edge_cuts
+            .into_iter()
             .filter_map(
                 |cut| match cut.is_valid_for_process(self, process_definition, model) {
                     Ok(true) => Some(Ok(cut)),
@@ -1281,6 +1772,7 @@ impl CrossSectionGraph {
                 },
             )
             .collect::<Result<_>>()?;
+        let process_compatible_cuts = cuts.len();
 
         cuts.sort_by(|a, b| a.cut.cmp(&b.cut));
 
@@ -1304,7 +1796,13 @@ impl CrossSectionGraph {
             });
         }
 
-        Ok((num_st_cuts, cuts))
+        let cut_count = CutkoskyCutCount {
+            candidate_st_cuts,
+            multi_edge_candidate_cuts,
+            process_compatible_cuts,
+            selected_cuts: cuts.len(),
+        };
+        Ok((cut_count, cuts))
     }
 
     fn generate_cuts(
@@ -1319,18 +1817,25 @@ impl CrossSectionGraph {
             "Cut discovery timing milestone"
         );
         let started = std::time::Instant::now();
-        let (num_st_cuts, cuts) =
-            self.compute_process_valid_cuts(model, process_definition, settings)?;
+        let (cut_count, cuts) =
+            self.process_compatible_cutkosky_cuts(model, process_definition, settings)?;
         self.cuts = cuts;
         debug_tags!(#generation, #profile, #graph;
             stage = "cross_section_generate_cuts_done",
             graph = %self.graph.name,
-            st_cut_count = num_st_cuts,
+            st_cut_count = cut_count.candidate_st_cuts,
+            multi_edge_candidate_cut_count = cut_count.multi_edge_candidate_cuts,
+            process_compatible_cut_count = cut_count.process_compatible_cuts,
             valid_cut_count = self.cuts.len(),
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Cut discovery timing milestone"
         );
-        generation_progress::cuts_discovered("", &self.graph.name, num_st_cuts, self.cuts.len());
+        generation_progress::cuts_discovered(
+            "",
+            &self.graph.name,
+            cut_count.candidate_st_cuts,
+            self.cuts.len(),
+        );
 
         Ok(())
     }
@@ -1357,18 +1862,20 @@ impl CrossSectionGraph {
 
     pub(crate) fn build_parametric_integrand(
         &mut self,
-        settings: &GenerationSettings,
+        global_settings: &GlobalSettings,
         vakint: &Vakint,
     ) -> Result<()> {
-        self.derived_data.cut_paramatric_integrand = self.build_integrand(settings, vakint)?;
+        self.derived_data.cut_paramatric_integrand =
+            self.build_integrand(global_settings, vakint)?;
         Ok(())
     }
 
     fn build_integrand(
         &mut self,
-        settings: &GenerationSettings,
+        global_settings: &GlobalSettings,
         vakint: &Vakint,
     ) -> Result<TiVec<RaisedCutId, ParametricIntegrands>> {
+        let settings = &global_settings.generation;
         let started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "supergraph_build_integrand_start",
@@ -1396,26 +1903,18 @@ impl CrossSectionGraph {
             "Generation timing milestone"
         );
 
-        let cuts = self
+        let representation = global_settings.three_d_representation;
+        let root_expression = self
             .derived_data
-            .raised_data
-            .raised_cut_groups
-            .iter()
-            .map(|cuts| CutSet {
-                residue_selector: ResidueSelector {
-                    lu_cut: Some(cuts.related_esurface_group.clone()),
-                    left_th_cut: None,
-                    right_th_cut: None,
-                },
-                union: cuts
-                    .cuts
-                    .iter()
-                    .map(|cut_id| self.cuts[*cut_id].cut.as_subgraph())
-                    .reduce(|cut_1, cut_2| cut_1.union(&cut_2))
-                    .unwrap_or_else(|| self.graph.empty_subgraph()),
-                canonicalize_external_shifts: false,
-            })
-            .collect();
+            .global_three_d_expression
+            .as_ref()
+            .expect("global 3D expression should have been created");
+        let raised_cut_groups = self.derived_data.raised_data.raised_cut_groups.clone();
+        let cuts = self.cutsets_for_raised_cut_groups(&raised_cut_groups)?;
+
+        if !settings.uv.subtract_uv {
+            return self.build_direct_3d_original_integrand(&cuts, settings, representation);
+        }
 
         let cut_structure = CutStructure { cuts };
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -1437,17 +1936,14 @@ impl CrossSectionGraph {
             total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Generation timing milestone"
         );
-        let valid_orientations: Vec<_> = self
-            .derived_data
-            .global_cff_expression
-            .as_ref()
-            .expect("global_cff_expression should have been created")
+        let valid_orientations: Vec<_> = root_expression
             .orientations
             .iter()
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
         let lu_prefactor = self.lu_prefactor_helper();
+        let representation_prefactor = self.three_d_representation_lu_prefactor(representation);
 
         let unfold_started = std::time::Instant::now();
         let mut cut_forests = cut_woods.unfold(&self.graph);
@@ -1464,8 +1960,11 @@ impl CrossSectionGraph {
             &mut self.graph,
             vakint,
             &valid_orientations,
-            &settings.uv,
-            &settings.orientation_pattern,
+            settings,
+            Some(root_expression),
+            self.derived_data.global_lu_residue_selection_basis,
+            self.derived_data.cff_reference_lu_residue_selection_basis,
+            representation,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "supergraph_cut_forests_compute_done",
@@ -1490,7 +1989,38 @@ impl CrossSectionGraph {
         let finalize_started = std::time::Instant::now();
         let result = parametric_integrands
             .into_iter()
-            .map(|integrand| integrand.map(|a| a * &lu_prefactor))
+            .map(|integrand| {
+                if cff_explicit_sum_needs_outer_orientation_projection(
+                    &self.graph,
+                    &integrand.cuts,
+                    settings,
+                    representation,
+                ) && !integrand.explicitly_summed_orientations
+                {
+                    integrand.sum_orientations_explicitly(&valid_orientations)
+                } else {
+                    integrand
+                }
+            })
+            .zip(raised_cut_groups.iter())
+            .map(|(integrand, _raised_cut_group)| {
+                let generated_basis_prefactor = if representation == ThreeDRepresentation::Cff
+                    && self.derived_data.global_lu_residue_selection_basis
+                        == LuResidueSelectionBasis::GeneratedEsurface
+                {
+                    Atom::num(
+                        integrand
+                            .cuts
+                            .residue_selector
+                            .generated_esurface_lu_residue_prefactor_sign(),
+                    )
+                } else {
+                    Atom::num(1)
+                };
+                integrand.map(|atom| {
+                    atom * &lu_prefactor * &representation_prefactor * &generated_basis_prefactor
+                })
+            })
             .collect();
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "supergraph_build_integrand_done",
@@ -1502,9 +2032,733 @@ impl CrossSectionGraph {
         Ok(result)
     }
 
+    fn cutsets_for_raised_cut_groups(
+        &self,
+        raised_cut_groups: &TiVec<RaisedCutId, RaisedCutGroup>,
+    ) -> Result<Vec<CutSet>> {
+        raised_cut_groups
+            .iter()
+            .map(|cuts| {
+                Ok(CutSet {
+                    residue_selector: self
+                        .residue_selector_for_raised_cut_group(cuts, None, None)?,
+                    union: cuts
+                        .cuts
+                        .iter()
+                        .map(|cut_id| self.cuts[*cut_id].cut.as_subgraph())
+                        .reduce(|cut_1, cut_2| cut_1.union(&cut_2))
+                        .unwrap_or_else(|| self.graph.empty_subgraph()),
+                    canonicalize_external_shifts: false,
+                })
+            })
+            .collect()
+    }
+
+    fn residue_selector_for_raised_cut_group(
+        &self,
+        raised_cut_group: &RaisedCutGroup,
+        left_th_cut: Option<RaisedEsurfaceGroup>,
+        right_th_cut: Option<RaisedEsurfaceGroup>,
+    ) -> Result<ResidueSelector> {
+        let is_simple_lu_cut = raised_cut_group.related_esurface_group.max_occurence == 1;
+        let lu_cut_signs =
+            self.lu_cut_edge_sets_with_cutkosky_signs(raised_cut_group.cuts.iter().copied())?;
+        let simple_ltd_lu_cut_surface_family_sign = if is_simple_lu_cut {
+            unique_lu_sign(
+                &lu_cut_signs.surface_family_signs,
+                "simple LTD LU surface-family",
+                &self.graph.name,
+                &raised_cut_group.cuts,
+            )?
+        } else {
+            1
+        };
+        let full_graph_projection_bridge = self.graph.three_d_ltd_projection_bridge_sign();
+        let ltd_repeated_channel_bridge_sign = self
+            .graph
+            .three_d_ltd_repeated_channel_residue_bridge_sign();
+        let ltd_repeated_channel_source_bridge_sign =
+            self.graph.three_d_ltd_repeated_channel_source_bridge_sign();
+        let repeated_channel_edge_support_bridge =
+            self.repeated_ltd_lu_cut_edge_support_bridge_sign(&lu_cut_signs.edge_sets)?;
+        let repeated_local_series_orientation_sign = if is_simple_lu_cut {
+            1
+        } else {
+            self.repeated_ltd_lu_cut_local_series_prefactor_sign(
+                &raised_cut_group.related_esurface_group,
+                &lu_cut_signs.selected_denominator_signs,
+            )
+        };
+        let repeated_residue_prefactor_sign = if is_simple_lu_cut {
+            1
+        } else {
+            self.repeated_ltd_lu_cut_residue_prefactor_sign(
+                &raised_cut_group.related_esurface_group,
+                &lu_cut_signs.cut_orientation_signs,
+            )
+        };
+        let simple_mixed_repeated_channel_contact =
+            self.simple_lu_cut_has_mixed_repeated_channel_contact(raised_cut_group, &lu_cut_signs)?;
+        let components = LuResiduePlanComponents {
+            raised_cut_group,
+            lu_cut_signs,
+            full_graph_projection_bridge,
+            ltd_repeated_channel_bridge_sign,
+            ltd_repeated_channel_source_bridge_sign,
+            repeated_channel_edge_support_bridge,
+            simple_surface_family_sign: simple_ltd_lu_cut_surface_family_sign,
+            repeated_residue_prefactor_sign,
+            repeated_local_series_orientation_sign,
+            simple_mixed_repeated_channel_contact,
+        };
+        Ok(components.into_residue_selector(left_th_cut, right_th_cut))
+    }
+
+    fn simple_lu_cut_has_mixed_repeated_channel_contact(
+        &self,
+        raised_cut_group: &RaisedCutGroup,
+        lu_cut_signs: &LuCutResidueSigns,
+    ) -> Result<bool> {
+        if raised_cut_group.related_esurface_group.max_occurence != 1
+            || lu_cut_signs.edge_sets.len() != 1
+        {
+            return Ok(false);
+        }
+
+        let simple_cut_edges = lu_cut_signs.edge_sets[0].iter().copied().collect_vec();
+        let mut contacted_supports = 0usize;
+        let mut contacted_edges = BTreeSet::new();
+
+        for repeated_group in self
+            .derived_data
+            .raised_data
+            .raised_cut_groups
+            .iter()
+            .filter(|group| group.related_esurface_group.max_occurence > 1)
+        {
+            let repeated_support =
+                self.normalized_cut_edge_support_union(repeated_group.cuts.iter().copied())?;
+            let intersection = simple_cut_edges
+                .iter()
+                .copied()
+                .filter(|edge| repeated_support.contains(edge))
+                .collect_vec();
+            if intersection.is_empty() {
+                continue;
+            }
+            contacted_supports += 1;
+            contacted_edges.extend(intersection);
+        }
+
+        Ok(contacted_supports > 1 && contacted_edges.len() > 1)
+    }
+
+    fn normalized_cut_edge_support_union(
+        &self,
+        cut_ids: impl IntoIterator<Item = CutId>,
+    ) -> Result<BTreeSet<EdgeIndex>> {
+        let raised_edge_groups = self.graph.get_raised_edge_groups();
+        let mut support = BTreeSet::new();
+        for cut_id in cut_ids {
+            let cut_edges = self.cuts[cut_id]
+                .cut
+                .iter_edges(&self.graph)
+                .map(|(_, edge_data)| {
+                    self.graph
+                        .edge_name_to_index(&edge_data.data.name)
+                        .expect("Cut edge should belong to the graph")
+                })
+                .sorted()
+                .collect_vec();
+            support.extend(normalize_cut_edge_support_with_raised_edge_groups(
+                &cut_edges,
+                &raised_edge_groups,
+            ));
+        }
+        Ok(support)
+    }
+
+    fn repeated_ltd_lu_cut_edge_support_bridge_sign(
+        &self,
+        cut_edge_sets: &[Vec<EdgeIndex>],
+    ) -> Result<i64> {
+        let repeated_support_signs = self.graph.three_d_ltd_repeated_channel_edge_support_signs();
+        let signs = cut_edge_sets
+            .iter()
+            .map(|cut_edge_set| {
+                repeated_support_signs
+                    .get(cut_edge_set)
+                    .copied()
+                    .unwrap_or(1)
+            })
+            .collect_vec();
+        unique_lu_sign(
+            &signs,
+            "repeated LTD LU edge-support bridge",
+            &self.graph.name,
+            &[],
+        )
+    }
+
+    fn lu_cut_edge_sets_with_cutkosky_signs(
+        &self,
+        cut_ids: impl IntoIterator<Item = CutId>,
+    ) -> Result<LuCutResidueSigns> {
+        let raised_edge_groups = self.graph.get_raised_edge_groups();
+        let edge_sets_and_signs = cut_ids
+            .into_iter()
+            .map(|cut_id| {
+                let cut_edges = self.cuts[cut_id].cut.iter_edges(&self.graph).collect_vec();
+                if cut_edges.is_empty() {
+                    return Err(eyre!(
+                        "Cannot build Cutkosky residue selector for an empty cut in graph {}",
+                        self.graph.name
+                    ));
+                }
+                for (orientation, edge_data) in &cut_edges {
+                    if *orientation == Orientation::Undirected {
+                        return Err(eyre!(
+                            "Cannot build Cutkosky residue selector for undirected edge {} in graph {}",
+                            edge_data.data.name,
+                            self.graph.name
+                        ));
+                    }
+                }
+
+                let cut_edges = cut_edges
+                    .iter()
+                    .map(|(_, edge_data)| {
+                        self.graph
+                            .edge_name_to_index(&edge_data.data.name)
+                            .expect("Cut edge should belong to the graph")
+                    })
+                    .sorted()
+                    .collect_vec();
+                let cut_orientation_sign =
+                    self.cuts[cut_id].positive_energy_cut_orientation_sign(&self.graph)?;
+                let coordinate_signs =
+                    self.simple_ltd_lu_cut_local_coordinate_signs(cut_id, cut_orientation_sign)?;
+                Ok((
+                    normalize_cut_edge_support_with_raised_edge_groups(
+                        &cut_edges,
+                        &raised_edge_groups,
+                    ),
+                    cut_orientation_sign,
+                    coordinate_signs.selected_denominator_sign,
+                    coordinate_signs.local_series_denominator_sign,
+                    coordinate_signs.surface_family_sign,
+                    coordinate_signs.local_series_coordinate,
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let mut edge_sets = Vec::with_capacity(edge_sets_and_signs.len());
+        let mut cut_orientation_signs = Vec::with_capacity(edge_sets_and_signs.len());
+        let mut selected_denominator_signs = Vec::with_capacity(edge_sets_and_signs.len());
+        let mut local_series_denominator_signs = Vec::with_capacity(edge_sets_and_signs.len());
+        let mut surface_family_signs = Vec::with_capacity(edge_sets_and_signs.len());
+        let mut local_series_coordinates = Vec::with_capacity(edge_sets_and_signs.len());
+        for (
+            edge_set,
+            cut_orientation_sign,
+            selected_denominator_sign,
+            local_series_denominator_sign,
+            surface_family_sign,
+            local_series_coordinate,
+        ) in edge_sets_and_signs
+        {
+            edge_sets.push(edge_set);
+            cut_orientation_signs.push(cut_orientation_sign);
+            selected_denominator_signs.push(selected_denominator_sign);
+            local_series_denominator_signs.push(local_series_denominator_sign);
+            surface_family_signs.push(surface_family_sign);
+            local_series_coordinates.push(local_series_coordinate);
+        }
+        Ok(LuCutResidueSigns {
+            edge_sets,
+            cut_orientation_signs,
+            selected_denominator_signs,
+            local_series_denominator_signs,
+            surface_family_signs,
+            local_series_coordinates,
+        })
+    }
+
+    fn simple_ltd_lu_cut_local_coordinate_signs(
+        &self,
+        cut_id: CutId,
+        cut_orientation_sign: i64,
+    ) -> Result<LuCutCoordinateSigns> {
+        let all_lmbs = self.derived_data.lmbs.as_ref().ok_or_else(|| {
+            eyre!(
+                "Cannot determine LTD LU cut coordinate-basis sign for graph {} before LMBs are built",
+                self.graph.name
+            )
+        })?;
+        let cut = &self.cuts[cut_id];
+        let ordered_cut_edges = cut
+            .cut
+            .iter_edges(&self.graph)
+            .map(|(_, edge_data)| {
+                self.graph
+                    .edge_name_to_index(&edge_data.data.name)
+                    .expect("Cut edge should belong to the graph")
+            })
+            .collect_vec();
+        let mut cut_edges = ordered_cut_edges.clone();
+        cut_edges.sort_unstable();
+        let cut_edge_orientations = cut
+            .cut
+            .iter_edges(&self.graph)
+            .map(|(orientation, edge_data)| {
+                let edge_id = self
+                    .graph
+                    .edge_name_to_index(&edge_data.data.name)
+                    .expect("Cut edge should belong to the graph");
+                let sign = match orientation {
+                    Orientation::Default => Ok(1),
+                    Orientation::Reversed => Ok(-1),
+                    Orientation::Undirected => Err(eyre!(
+                        "Cannot determine LTD LU cut coordinate-basis sign for undirected edge {} in graph {}",
+                        edge_data.data.name,
+                        self.graph.name
+                    )),
+                }?;
+                Ok((edge_id, sign))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
+        let mut candidates = all_lmbs
+            .iter_enumerated()
+            .filter_map(|(lmb_index, lmb)| {
+                let mut omitted_cut_edges = cut_edges.clone();
+                omitted_cut_edges.retain(|edge_id| !lmb.loop_edges.contains(edge_id));
+                if omitted_cut_edges.len() != 1 {
+                    return None;
+                }
+                let left = SubspaceData::new_with_user_selected_lmb(
+                    cut.left.clone(),
+                    lmb_index,
+                    &self.graph,
+                    all_lmbs,
+                )
+                .ok()?;
+                let right = SubspaceData::new_with_user_selected_lmb(
+                    cut.right.clone(),
+                    lmb_index,
+                    &self.graph,
+                    all_lmbs,
+                )
+                .ok()?;
+                Some((lmb_index, omitted_cut_edges[0], left, right))
+            })
+            .collect_vec();
+        candidates.sort_by_key(|(lmb_index, _, left, right)| {
+            (
+                left.iter_basis_edges(all_lmbs).collect_vec(),
+                right.iter_basis_edges(all_lmbs).collect_vec(),
+                usize::from(*lmb_index),
+            )
+        });
+        let selected_candidate = candidates.first();
+        let (lmb_index, omitted_cut_edge, left, right) = selected_candidate.ok_or_else(|| {
+            eyre!(
+                "Cannot determine LTD LU cut coordinate-basis sign for cut {} in graph {}: no LMB resolves exactly one cut edge externally",
+                cut_id.0,
+                self.graph.name
+            )
+        })?;
+        let lmb = &all_lmbs[*lmb_index];
+        let generated_esurface_id = self.cut_esurface_id_map.get(cut_id).copied().ok_or_else(|| {
+            eyre!(
+                "Cannot determine LTD LU cut local-series Jacobian for cut {} in graph {} before generated cut E-surfaces are mapped",
+                cut_id.0,
+                self.graph.name
+            )
+        })?;
+        let generated_expression =
+            self.derived_data
+                .global_three_d_expression
+                .as_ref()
+                .ok_or_else(|| {
+                    eyre!(
+                        "Cannot determine LTD LU cut local-series Jacobian for cut {} in graph {} before the generated 3D expression is built",
+                        cut_id.0,
+                        self.graph.name
+                    )
+                })?;
+        let generated_esurface =
+            &generated_expression.surfaces.esurface_cache[generated_esurface_id];
+        let omitted_external_signature = lmb.edge_signatures[*omitted_cut_edge]
+            .external
+            .to_momtrop_format();
+        let external_candidates = generated_esurface
+            .external_shift
+            .iter()
+            .filter_map(|(external_edge, surface_sign)| {
+                let localized_external_index =
+                    lmb.ext_edges
+                        .iter_enumerated()
+                        .find_map(|(external_index, edge_id)| {
+                            (*edge_id == *external_edge).then_some(usize::from(external_index))
+                        })?;
+                let omitted_external_sign = omitted_external_signature
+                    .get(localized_external_index)
+                    .copied()
+                    .unwrap_or_default() as i64;
+                (omitted_external_sign != 0).then_some((
+                    *external_edge,
+                    *surface_sign,
+                    localized_external_index,
+                    omitted_external_sign,
+                ))
+            })
+            .collect_vec();
+        let selected_external_candidate = if external_candidates.len() == 1 {
+            external_candidates[0]
+        } else {
+            let initial_state_cut_edges = self
+                .graph
+                .get_edges_in_initial_state_cut()
+                .into_iter()
+                .collect::<BTreeSet<_>>();
+            let equivalent_initial_state_cut_candidates =
+                external_candidates
+                    .first()
+                    .is_some_and(|(_, surface_sign, _, omitted_sign)| {
+                        external_candidates.iter().all(
+                            |(external_edge, candidate_surface_sign, _, candidate_omitted_sign)| {
+                                initial_state_cut_edges.contains(external_edge)
+                                    && candidate_surface_sign == surface_sign
+                                    && candidate_omitted_sign == omitted_sign
+                            },
+                        )
+                    });
+
+            if equivalent_initial_state_cut_candidates {
+                // Initial-state cut carriers are external half-edge coordinates
+                // for forward-scattering edges. When the selected surface and
+                // the omitted Cutkosky edge have the same derivative with
+                // respect to several such coordinates, these are equivalent
+                // local charts for the same simple pole. Pick the canonical
+                // LMB external-coordinate representative; the determinant
+                // below supplies the physical Jacobian.
+                external_candidates
+                    .iter()
+                    .copied()
+                    .min_by_key(|(_, _, localized_external_index, _)| *localized_external_index)
+                    .expect("equivalent candidates are non-empty")
+            } else {
+                return Err(eyre!(
+                    "Cannot determine a unique LTD LU cut local-series external coordinate for cut {} in graph {}: generated E-surface {:?} has external shift {:?}, omitted cut edge {} has external signature {:?}, candidates {:?}",
+                    cut_id.0,
+                    self.graph.name,
+                    generated_esurface_id,
+                    generated_esurface.external_shift,
+                    usize::from(*omitted_cut_edge),
+                    omitted_external_signature,
+                    external_candidates,
+                ));
+            }
+        };
+        let (
+            localized_external_edge,
+            localized_external_surface_sign,
+            localized_external_index,
+            omitted_external_sign,
+        ) = selected_external_candidate;
+
+        // Rows define the signed local coordinate map from branch coordinates,
+        // Cutkosky positive-energy variables, and the selected external-energy
+        // localization variable to the LMB loop-energy coordinates plus that
+        // external-energy coordinate.
+        let mut local_series_rows = Vec::new();
+        for edge_id in left.iter_basis_edges(all_lmbs) {
+            local_series_rows.push(localized_energy_signature_row(
+                lmb,
+                edge_id,
+                1,
+                localized_external_index,
+            ));
+        }
+        for edge_id in ordered_cut_edges.iter().copied() {
+            if edge_id == *omitted_cut_edge {
+                let mut row = vec![0; lmb.loop_edges.len()];
+                row.push(omitted_external_sign);
+                local_series_rows.push(row);
+            } else {
+                let row_sign = *cut_edge_orientations
+                    .get(&edge_id)
+                    .expect("Cut edge orientation was collected above");
+                local_series_rows.push(localized_energy_signature_row(
+                    lmb,
+                    edge_id,
+                    row_sign,
+                    localized_external_index,
+                ));
+            }
+        }
+        for edge_id in right.iter_basis_edges(all_lmbs) {
+            local_series_rows.push(localized_energy_signature_row(
+                lmb,
+                edge_id,
+                1,
+                localized_external_index,
+            ));
+        }
+        let local_series_jacobian_sign =
+            integer_determinant_sign(&local_series_rows).ok_or_else(|| {
+                eyre!(
+                    "Cannot determine LTD LU cut local-series Jacobian for cut {} in graph {}: singular local coordinate basis {:?}",
+                    cut_id.0,
+                    self.graph.name,
+                    local_series_rows
+                )
+            })?;
+        let branch_coordinate_count = left.loopcount() + right.loopcount();
+        let cutkosky_local_orientation_sign = if branch_coordinate_count.is_multiple_of(2) {
+            omitted_external_sign
+        } else {
+            1
+        };
+        // The selected generated E-surface denominator is oriented in two
+        // determinant steps. First replace the omitted cut-edge row by a unit
+        // localized-external-energy row; since the stored row is scaled by
+        // `omitted_external_sign`, this contributes the same sign again.
+        // Then map that localized external coordinate to the generated
+        // selected E-surface variable through its own external coefficient.
+        let selected_denominator_sign =
+            localized_external_surface_sign * omitted_external_sign * local_series_jacobian_sign;
+
+        // Direct Laurent extraction for repeated/confluent LU poles is instead
+        // normalized against GammaLoop's positive-energy Cutkosky variables.
+        // This keeps the Cutkosky edge-flow orientation separate from the
+        // generated E-surface selection sign above.
+        let local_series_denominator_sign =
+            -cut_orientation_sign * cutkosky_local_orientation_sign * local_series_jacobian_sign;
+        let surface_family_sign = if right.loopcount() == 0 {
+            selected_denominator_sign * local_series_denominator_sign
+        } else {
+            1
+        };
+        Ok(LuCutCoordinateSigns {
+            selected_denominator_sign,
+            local_series_denominator_sign,
+            surface_family_sign,
+            local_series_coordinate: LuLocalSeriesCoordinate {
+                esurface_id: generated_esurface_id,
+                external_edge: localized_external_edge,
+            },
+        })
+    }
+
+    fn repeated_ltd_lu_cut_residue_prefactor_sign(
+        &self,
+        raised_esurface_group: &RaisedEsurfaceGroup,
+        cut_orientation_signs: &[i64],
+    ) -> i64 {
+        // Repeated generated E-surfaces collapse several Cutkosky branches
+        // onto one representative denominator. The bridge to GammaLoop's
+        // simultaneous positive-energy Cutkosky convention is the determinant
+        // parity of the confluent coordinate basis. Oppositely routed copies
+        // are accounted for by their Cutkosky orientation signs. Same-routed
+        // duplicate copies add the residual wedge-order parity only for even
+        // collapsed pole order; for odd order that parity is absorbed by the
+        // unpaired derivative coordinate.
+        let cut_orientation_sign = cut_orientation_signs.iter().product::<i64>();
+        if !raised_esurface_group.max_occurence.is_multiple_of(2) {
+            return cut_orientation_sign;
+        }
+
+        let same_routing_duplicate_excess = cut_orientation_signs
+            .iter()
+            .copied()
+            .counts()
+            .values()
+            .map(|count| count.saturating_sub(1))
+            .sum::<usize>();
+        if same_routing_duplicate_excess.is_multiple_of(2) {
+            cut_orientation_sign
+        } else {
+            -cut_orientation_sign
+        }
+    }
+
+    fn repeated_ltd_lu_cut_local_series_prefactor_sign(
+        &self,
+        raised_esurface_group: &RaisedEsurfaceGroup,
+        selected_denominator_signs: &[i64],
+    ) -> i64 {
+        // Direct Laurent extraction expands the repeated LU pole in one
+        // canonical generated E-surface parameter. The bridge to GammaLoop's
+        // positive-energy Cutkosky variables is the determinant/Jacobian sign
+        // of the selected local coordinate, not just the graph-edge flow
+        // orientation. Even repeated multiplicity cancels this bridge; odd
+        // multiplicity leaves one copy.
+        if raised_esurface_group.max_occurence.is_multiple_of(2) {
+            1
+        } else {
+            selected_denominator_signs.iter().product::<i64>()
+        }
+    }
+
+    fn finalize_parametric_integrand_atom(&self, atom: Atom) -> Result<Atom> {
+        Ok(atom
+            .replace(GS.dim)
+            .with(4)
+            .simplify_color()
+            .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+            .with(W_.d_)
+            .expand_dots()?
+            .simplify_metrics()
+            .collect_factors())
+    }
+
+    fn build_direct_3d_original_integrand(
+        &mut self,
+        cuts: &[CutSet],
+        settings: &GenerationSettings,
+        representation: ThreeDRepresentation,
+    ) -> Result<TiVec<RaisedCutId, ParametricIntegrands>> {
+        let expression = self
+            .derived_data
+            .global_three_d_expression
+            .as_ref()
+            .expect("global 3D expression should have been created");
+        let numerator = self
+            .graph
+            .production_numerator_atom_for_full_3d_expression();
+        let loop_number = self.forward_scattering_loop_count() as i64;
+        let direct_normalization =
+            (-Atom::i()).pow(loop_number) / (Atom::num(2) * Atom::var(GS.pi)).pow(3 * loop_number);
+        let lu_prefactor = self.lu_prefactor_helper();
+        let representation_prefactor = self.three_d_representation_lu_prefactor(representation);
+
+        let parametric_integrands = self
+            .derived_data
+            .raised_data
+            .raised_cut_groups
+            .iter()
+            .zip(cuts.iter())
+            .map(|(raised_cut_group, cutset)| {
+                if representation == ThreeDRepresentation::Ltd {
+                    let lu_cut = cutset.residue_selector.lu_cut().ok_or_else(|| {
+                        eyre!(
+                            "missing LU cut residue selector for direct LTD original integrand of graph {} and cuts {:?}",
+                            self.graph.name,
+                            raised_cut_group.cuts,
+                        )
+                    })?;
+                    let direct_original_prefactor_sign = cutset
+                        .residue_selector
+                        .ltd_direct_original_residue_prefactor_sign();
+                    let mut residue = expression.clone();
+                    prepare_ltd_lu_local_series_expression(&mut residue, cutset);
+                    let atom = self.graph.three_d_expression_parametric_atom_with_numerator_gs(
+                        &residue,
+                        &numerator,
+                        RepresentationMode::Ltd,
+                        true,
+                        &settings.orientation_pattern,
+                    );
+                    let integrands = ltd_lu_local_series_coefficients_from_parametric_atom(
+                        &self.graph.name,
+                        &residue,
+                        atom,
+                        lu_cut,
+                        cutset
+                            .residue_selector
+                            .ltd_lu_cut_local_series_esurface_signs(),
+                        cutset
+                            .residue_selector
+                            .ltd_lu_cut_local_series_coordinates(),
+                        false,
+                    )?
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, coefficient)| {
+                        let mut cut_cff_index = CutCFFIndex::new_all_none();
+                        cut_cff_index.lu_cut_order = Some(i + 1);
+                        Ok((
+                            cut_cff_index,
+                            self.finalize_parametric_integrand_atom(
+                                coefficient
+                                    * &direct_normalization
+                                    * &lu_prefactor
+                                    * &representation_prefactor
+                                    * Atom::num(direct_original_prefactor_sign),
+                            )?,
+                        ))
+                    })
+                    .collect::<Result<BTreeMap<_, _>>>()?;
+                    return Ok(ParametricIntegrands {
+                        integrands,
+                        cuts: cutset.clone(),
+                        explicitly_summed_orientations: true,
+                    });
+                }
+                let lu_residue_selection_basis =
+                    self.derived_data.global_lu_residue_selection_basis;
+                let residues = select_lu_cut_residue_for_basis(
+                    expression.clone(),
+                    &raised_cut_group.related_esurface_group,
+                    cutset.residue_selector.lu_cut_edge_sets(),
+                    cutset.residue_selector.ltd_lu_cut_esurface_signs(),
+                    lu_residue_selection_basis,
+                );
+                let generated_basis_prefactor = if lu_residue_selection_basis
+                    == LuResidueSelectionBasis::GeneratedEsurface
+                    && representation == ThreeDRepresentation::Cff
+                {
+                    Atom::num(
+                        cutset
+                            .residue_selector
+                            .generated_esurface_lu_residue_prefactor_sign(),
+                    )
+                } else {
+                    Atom::num(1)
+                };
+                let integrands = residues
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, residue)| {
+                        let mut cut_cff_index = CutCFFIndex::new_all_none();
+                        cut_cff_index.lu_cut_order = Some(i + 1);
+                        let atom = self
+                            .graph
+                            .three_d_expression_parametric_atom_with_numerator_gs(
+                                &residue,
+                                &numerator,
+                                RepresentationMode::Cff,
+                                true,
+                                &settings.orientation_pattern,
+                            );
+                        Ok((
+                            cut_cff_index,
+                            self.finalize_parametric_integrand_atom(
+                                atom * &direct_normalization
+                                    * &lu_prefactor
+                                    * &representation_prefactor
+                                    * &generated_basis_prefactor,
+                            )?,
+                        ))
+                    })
+                    .collect::<Result<BTreeMap<_, _>>>()?;
+                Ok(ParametricIntegrands {
+                    integrands,
+                    cuts: cutset.clone(),
+                    explicitly_summed_orientations: true,
+                })
+            })
+            .collect::<Result<TiVec<_, _>>>()?;
+        Ok(parametric_integrands)
+    }
+
+    fn forward_scattering_loop_count(&self) -> usize {
+        self.graph.cyclotomatic_number(&self.graph.full_filter())
+            - self.graph.initial_state_cut.nedges(&self.graph)
+    }
+
     fn lu_prefactor_helper(&self) -> Atom {
-        let loop_number = self.graph.cyclotomatic_number(&self.graph.full_filter())
-            - self.graph.initial_state_cut.nedges(&self.graph);
+        let loop_number = self.forward_scattering_loop_count();
 
         let loop_3 = loop_number as i64 * 3;
         let energy_conservation_delta_factor = Atom::num(2) * Atom::var(GS.pi);
@@ -1521,6 +2775,31 @@ impl CrossSectionGraph {
         let tsrat_pow = tstar.pow(loop_3);
         let hfunction = Atom::var(GS.hfunction_lu_cut);
         tsrat_pow * hfunction * energy_conservation_delta_factor
+    }
+
+    fn three_d_representation_lu_prefactor(&self, representation: ThreeDRepresentation) -> Atom {
+        match representation {
+            ThreeDRepresentation::Cff => Atom::num(1),
+            ThreeDRepresentation::Ltd => self.ltd_lu_measure_parity_factor(),
+        }
+    }
+
+    fn ltd_lu_measure_parity_factor(&self) -> Atom {
+        // Cross-section LU residues are normalized in the CFF loop-measure
+        // convention. LTD performs the same energy integrations in the dual
+        // measure convention, leaving the representation bridge (-1)^(L-1)
+        // for an L-loop forward-scattering graph. This is global to the
+        // representation, independent of the selected Cutkosky cut.
+        let parity = if self
+            .forward_scattering_loop_count()
+            .saturating_sub(1)
+            .is_multiple_of(2)
+        {
+            1
+        } else {
+            -1
+        };
+        Atom::num(i64::from(parity))
     }
 
     fn single_th_prefactor_helper_atom(
@@ -1625,9 +2904,14 @@ impl CrossSectionGraph {
             include_integrated,
         );
 
-        let mut product = left_prefactor * right_prefactor;
+        let mut product = (left_prefactor * right_prefactor).expand();
 
-        product = product.replace_multiple(Self::fuse_left_right_replacement());
+        product = product.replace_multiple(Self::side_specific_eta_replacements(
+            left_order,
+            right_order,
+        ));
+        product =
+            product.replace_multiple(Self::fuse_left_right_replacements(left_order, right_order));
         product
     }
 
@@ -1790,56 +3074,77 @@ impl CrossSectionGraph {
         Ok(evaluator)
     }
 
-    fn fuse_left_right_replacement() -> Vec<Replacement> {
+    fn fuse_left_right_replacements(left_order: u8, right_order: u8) -> Vec<Replacement> {
         let f = symbol!("f");
+        let left_base = function!(f, GS.radius_star_left);
+        let right_base = function!(f, GS.radius_star_right);
+        let fused_base = function!(f, GS.radius_star_left, GS.radius_star_right);
 
-        vec![
-            Replacement::new(
-                (function!(f, GS.radius_star_left) * function!(f, GS.radius_star_right))
-                    .to_pattern(),
-                function!(f, GS.radius_star_left, GS.radius_star_right),
-            ),
-            Replacement::new(
-                (function!(f, GS.radius_star_left)
-                    * function!(Symbol::DERIVATIVE, W_.x_, f, GS.radius_star_right))
-                .to_pattern(),
-                function!(
-                    Symbol::DERIVATIVE,
-                    0,
-                    W_.x_,
-                    f,
+        (0..left_order)
+            .cartesian_product(0..right_order)
+            .map(|(left_derivative_order, right_derivative_order)| {
+                let source = nth_derivative(
+                    left_base.clone(),
                     GS.radius_star_left,
-                    GS.radius_star_right
-                ),
-            ),
-            Replacement::new(
-                (function!(Symbol::DERIVATIVE, W_.x_, f, GS.radius_star_left)
-                    * function!(f, GS.radius_star_right))
-                .to_pattern(),
-                function!(
-                    Symbol::DERIVATIVE,
-                    W_.x_,
-                    0,
-                    f,
-                    GS.radius_star_left,
-                    GS.radius_star_right
-                ),
-            ),
-            Replacement::new(
-                (function!(Symbol::DERIVATIVE, W_.x_, f, GS.radius_star_left)
-                    * function!(Symbol::DERIVATIVE, W_.y_, f, GS.radius_star_right))
-                .to_pattern(),
-                function!(
-                    Symbol::DERIVATIVE,
-                    W_.x_,
-                    W_.y_,
-                    f,
-                    GS.radius_star_left,
-                    GS.radius_star_right
-                ),
-            ),
-        ]
+                    left_derivative_order,
+                ) * nth_derivative(
+                    right_base.clone(),
+                    GS.radius_star_right,
+                    right_derivative_order,
+                );
+                let target = nth_derivative(
+                    nth_derivative(
+                        fused_base.clone(),
+                        GS.radius_star_left,
+                        left_derivative_order,
+                    ),
+                    GS.radius_star_right,
+                    right_derivative_order,
+                );
+                Replacement::new(source.to_pattern(), target)
+            })
+            .collect()
     }
+
+    fn side_specific_eta_replacements(left_order: u8, right_order: u8) -> Vec<Replacement> {
+        let eta = symbol!("η");
+        let eta_left = symbol!("η_left");
+        let eta_right = symbol!("η_right");
+
+        let mut replacements = Vec::new();
+        for order in 1..=left_order {
+            replacements.push(Replacement::new(
+                nth_derivative(
+                    function!(eta, GS.radius_star_left),
+                    GS.radius_star_left,
+                    order,
+                )
+                .to_pattern(),
+                nth_derivative(
+                    function!(eta_left, GS.radius_star_left),
+                    GS.radius_star_left,
+                    order,
+                ),
+            ));
+        }
+        for order in 1..=right_order {
+            replacements.push(Replacement::new(
+                nth_derivative(
+                    function!(eta, GS.radius_star_right),
+                    GS.radius_star_right,
+                    order,
+                )
+                .to_pattern(),
+                nth_derivative(
+                    function!(eta_right, GS.radius_star_right),
+                    GS.radius_star_right,
+                    order,
+                ),
+            ));
+        }
+        replacements
+    }
+
     //fn th_prefactor_helper(
     //    &self,
     //    subspace_loop_count: usize,
@@ -1909,8 +3214,8 @@ impl CrossSectionGraph {
     fn build_lmbs(&mut self) -> Result<()> {
         let mut lmbs: TiVec<LmbIndex, LoopMomentumBasis> = vec![].into();
 
-        let externals: SuBitGraph = self.graph.empty_subgraph();
         let full_filter = self.graph.full_filter();
+        let externals: SuBitGraph = self.graph.empty_subgraph();
         let cut_graph = full_filter.subtract(&self.graph.initial_state_cut.right);
 
         for s in self.graph.all_spanning_forests_of(&cut_graph) {
@@ -2222,8 +3527,15 @@ impl CrossSectionGraph {
     fn build_threshold_counterterm(
         &mut self,
         settings: &GenerationSettings,
+        representation: ThreeDRepresentation,
         vakint: &Vakint,
     ) -> Result<()> {
+        let root_expression = self
+            .derived_data
+            .global_three_d_expression
+            .as_ref()
+            .expect("threshold root 3D expression should have been created");
+
         // threshold enumeration as st cuts
         let all_possible_thresholds: TiVec<GlobalThresholdId, _> = {
             let mut unsorted = self.graph.all_st_cuts_for_cs(
@@ -2242,15 +3554,22 @@ impl CrossSectionGraph {
             unsorted.into()
         };
 
-        let mut left_cut_threshold_data: TiVec<CutId, TiVec<LeftThresholdId, EsurfaceID>> =
-            ti_vec![TiVec::new(); self.cuts.len()];
+        let mut left_cut_threshold_data: TiVec<CutId, Vec<(GlobalThresholdId, EsurfaceID)>> =
+            ti_vec![Vec::new(); self.cuts.len()];
 
-        let mut right_cut_threshold_data: TiVec<CutId, TiVec<RightThresholdId, EsurfaceID>> =
-            ti_vec![TiVec::new(); self.cuts.len()];
+        let mut right_cut_threshold_data: TiVec<CutId, Vec<(GlobalThresholdId, EsurfaceID)>> =
+            ti_vec![Vec::new(); self.cuts.len()];
+
+        let raised_edge_groups = self.graph.get_raised_edge_groups();
+        let generated_esurfaces = &root_expression.surfaces.esurface_cache;
+        let normalized_generated_esurfaces =
+            self.normalized_generated_esurfaces(generated_esurfaces, &raised_edge_groups);
 
         for (cut_id, cut) in self.cuts.iter_enumerated() {
-            for (_threshold_id, (left_threshold_diagram, threshold_cut, right_threshold_diagram)) in
-                all_possible_thresholds.iter_enumerated()
+            for (
+                global_threshold_id,
+                (left_threshold_diagram, threshold_cut, right_threshold_diagram),
+            ) in all_possible_thresholds.iter_enumerated()
             {
                 if &cut.cut == threshold_cut
                     && settings.threshold_subtraction.skip_thresholds_that_are_cuts
@@ -2285,14 +3604,16 @@ impl CrossSectionGraph {
                             Some(&self.graph.initial_state_cut),
                         );
 
-                        let threshold_id = self
-                            .graph
-                            .surface_cache
-                            .esurface_cache
-                            .position(|esurface| esurface == &threshold_esurface)
-                            .unwrap();
-
-                        left_cut_threshold_data[cut_id].push(threshold_id);
+                        let threshold_id = self.find_generated_esurface_id(
+                            &threshold_esurface,
+                            generated_esurfaces,
+                            &normalized_generated_esurfaces,
+                            &raised_edge_groups,
+                            format!(
+                                "left threshold {global_threshold_id:?} for Cutkosky cut {cut_id:?}"
+                            ),
+                        )?;
+                        left_cut_threshold_data[cut_id].push((global_threshold_id, threshold_id));
                     }
                 } else if cut.right.includes(right_threshold_diagram) {
                     let sandwich = cut.right.intersection(left_threshold_diagram);
@@ -2324,27 +3645,26 @@ impl CrossSectionGraph {
                         //         &self.graph,
                         //     );
 
-                        let threshold_id = self
-                            .graph
-                            .surface_cache
-                            .esurface_cache
-                            .position(|esurface| esurface == &threshold_esurface)
-                            .unwrap();
-
-                        right_cut_threshold_data[cut_id].push(threshold_id);
+                        let threshold_id = self.find_generated_esurface_id(
+                            &threshold_esurface,
+                            generated_esurfaces,
+                            &normalized_generated_esurfaces,
+                            &raised_edge_groups,
+                            format!(
+                                "right threshold {global_threshold_id:?} for Cutkosky cut {cut_id:?}"
+                            ),
+                        )?;
+                        right_cut_threshold_data[cut_id].push((global_threshold_id, threshold_id));
                     }
                 }
             }
         }
 
-        let threshold_raised_data = self.graph.determine_raised_esurfaces_from_expression(
-            self.derived_data
-                .global_cff_expression
-                .as_ref()
-                .expect("global_cff_expression should have been created"),
-        );
+        let threshold_raised_data = self
+            .graph
+            .determine_raised_esurfaces_from_expression(root_expression);
         let mut raised_threshold_ids: TiVec<EsurfaceID, Option<RaisedEsurfaceId>> =
-            ti_vec![None; self.graph.surface_cache.esurface_cache.len()];
+            ti_vec![None; root_expression.surfaces.esurface_cache.len()];
 
         for (raised_threshold_id, raised_group) in
             threshold_raised_data.raised_groups.iter_enumerated()
@@ -2389,7 +3709,11 @@ impl CrossSectionGraph {
                 raised_cut_group
                     .cuts
                     .iter()
-                    .flat_map(|cut_id| left_cut_threshold_data[*cut_id].iter().copied())
+                    .flat_map(|cut_id| {
+                        left_cut_threshold_data[*cut_id]
+                            .iter()
+                            .map(|(_, esurface_id)| *esurface_id)
+                    })
                     .collect(),
             );
 
@@ -2397,7 +3721,11 @@ impl CrossSectionGraph {
                 raised_cut_group
                     .cuts
                     .iter()
-                    .flat_map(|cut_id| right_cut_threshold_data[*cut_id].iter().copied())
+                    .flat_map(|cut_id| {
+                        right_cut_threshold_data[*cut_id]
+                            .iter()
+                            .map(|(_, esurface_id)| *esurface_id)
+                    })
                     .collect(),
             );
 
@@ -2444,11 +3772,11 @@ impl CrossSectionGraph {
                 );
 
                 cut_structure.push(CutSet {
-                    residue_selector: ResidueSelector {
-                        lu_cut: Some(raised_cut_group.related_esurface_group.clone()),
-                        left_th_cut: Some(raised_esurface_group.clone()),
-                        right_th_cut: None,
-                    },
+                    residue_selector: self.residue_selector_for_raised_cut_group(
+                        raised_cut_group,
+                        Some(raised_esurface_group.clone()),
+                        None,
+                    )?,
                     union: esurface_cut_union,
                     canonicalize_external_shifts: false,
                 });
@@ -2461,11 +3789,11 @@ impl CrossSectionGraph {
                 );
 
                 cut_structure.push(CutSet {
-                    residue_selector: ResidueSelector {
-                        lu_cut: Some(raised_cut_group.related_esurface_group.clone()),
-                        left_th_cut: None,
-                        right_th_cut: Some(raised_esurface_group.clone()),
-                    },
+                    residue_selector: self.residue_selector_for_raised_cut_group(
+                        raised_cut_group,
+                        None,
+                        Some(raised_esurface_group.clone()),
+                    )?,
                     union: esurface_cut_union,
                     canonicalize_external_shifts: false,
                 });
@@ -2484,11 +3812,11 @@ impl CrossSectionGraph {
                 );
 
                 cut_structure.push(CutSet {
-                    residue_selector: ResidueSelector {
-                        lu_cut: Some(raised_cut_group.related_esurface_group.clone()),
-                        left_th_cut: Some(left_raised_esurface_group.clone()),
-                        right_th_cut: Some(right_raised_esurface_group.clone()),
-                    },
+                    residue_selector: self.residue_selector_for_raised_cut_group(
+                        raised_cut_group,
+                        Some(left_raised_esurface_group.clone()),
+                        Some(right_raised_esurface_group.clone()),
+                    )?,
                     union: esurface_cut_union,
                     canonicalize_external_shifts: false,
                 });
@@ -2501,11 +3829,7 @@ impl CrossSectionGraph {
 
         let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
         let mut cut_forests = cut_woods.unfold(&self.graph);
-        let valid_orientations: Vec<_> = self
-            .derived_data
-            .global_cff_expression
-            .as_ref()
-            .expect("global_cff_expression should have been created")
+        let valid_orientations: Vec<_> = root_expression
             .orientations
             .iter()
             .map(|orientation| orientation.data.orientation.clone())
@@ -2515,8 +3839,11 @@ impl CrossSectionGraph {
             &mut self.graph,
             vakint,
             &valid_orientations,
-            &settings.uv,
-            &settings.orientation_pattern,
+            settings,
+            Some(root_expression),
+            self.derived_data.global_lu_residue_selection_basis,
+            self.derived_data.cff_reference_lu_residue_selection_basis,
+            representation,
         )?;
 
         let mut threshold_counterterms = cut_forests
@@ -2524,6 +3851,7 @@ impl CrossSectionGraph {
             .into_iter();
 
         let lu_prefactor = self.lu_prefactor_helper();
+        let representation_prefactor = self.three_d_representation_lu_prefactor(representation);
 
         let mut result = TiVec::<RaisedCutId, LUCounterTermData>::new();
         for (raised_cut_id, _raised_cut_group) in self
@@ -2545,32 +3873,62 @@ impl CrossSectionGraph {
             let mut iterated_atoms = vec![];
 
             for _ in 0..left_raised_cut_threshold_data[raised_cut_id].len() {
+                let atoms = threshold_counterterms.next().unwrap();
+                let atoms = if cff_explicit_sum_needs_outer_orientation_projection(
+                    &self.graph,
+                    &atoms.cuts,
+                    settings,
+                    representation,
+                ) && !atoms.explicitly_summed_orientations
+                {
+                    atoms.sum_orientations_explicitly(&valid_orientations)
+                } else {
+                    atoms
+                };
                 left_atoms.push(
-                    threshold_counterterms
-                        .next()
-                        .unwrap()
-                        .map(|x| x * &lu_prefactor * &left_rstar_pow),
+                    atoms.map(|x| x * &lu_prefactor * &representation_prefactor * &left_rstar_pow),
                 );
             }
 
             for _ in 0..right_raised_cut_threshold_data[raised_cut_id].len() {
+                let atoms = threshold_counterterms.next().unwrap();
+                let atoms = if cff_explicit_sum_needs_outer_orientation_projection(
+                    &self.graph,
+                    &atoms.cuts,
+                    settings,
+                    representation,
+                ) && !atoms.explicitly_summed_orientations
+                {
+                    atoms.sum_orientations_explicitly(&valid_orientations)
+                } else {
+                    atoms
+                };
                 right_atoms.push(
-                    threshold_counterterms
-                        .next()
-                        .unwrap()
-                        .map(|x| x * &lu_prefactor * &right_rstar_pow),
+                    atoms.map(|x| x * &lu_prefactor * &representation_prefactor * &right_rstar_pow),
                 );
             }
 
             for _ in 0..(left_raised_cut_threshold_data[raised_cut_id].len()
                 * right_raised_cut_threshold_data[raised_cut_id].len())
             {
-                iterated_atoms.push(
-                    threshold_counterterms
-                        .next()
-                        .unwrap()
-                        .map(|x| x * &lu_prefactor * &left_rstar_pow * &right_rstar_pow),
-                );
+                let atoms = threshold_counterterms.next().unwrap();
+                let atoms = if cff_explicit_sum_needs_outer_orientation_projection(
+                    &self.graph,
+                    &atoms.cuts,
+                    settings,
+                    representation,
+                ) && !atoms.explicitly_summed_orientations
+                {
+                    atoms.sum_orientations_explicitly(&valid_orientations)
+                } else {
+                    atoms
+                };
+                iterated_atoms.push(atoms.map(|x| {
+                    x * &lu_prefactor
+                        * &representation_prefactor
+                        * &left_rstar_pow
+                        * &right_rstar_pow
+                }));
             }
 
             let iterated_collection = IteratedCtCollection {
@@ -2707,7 +4065,12 @@ impl CrossSectionGraph {
 pub struct CrossSectionDerivedData {
     pub orientations: Option<TiVec<OrientationID, EdgeVec<Orientation>>>,
     pub cut_paramatric_integrand: TiVec<RaisedCutId, ParametricIntegrands>,
-    pub global_cff_expression: Option<CFFExpression<OrientationID>>,
+    pub global_three_d_expression: Option<ThreeDExpression<OrientationID>>,
+    pub global_lu_residue_selection_basis: LuResidueSelectionBasis,
+    pub cff_reference_lu_residue_selection_basis: LuResidueSelectionBasis,
+    pub cff_projection_three_d_expression: Option<ThreeDExpression<OrientationID>>,
+    pub cff_projection_cut_esurface_id_map: TiVec<CutId, EsurfaceID>,
+    pub cff_projection_raised_data: RaisedCutData,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub threshold_counterterms: TiVec<RaisedCutId, LUCounterTermData>,
@@ -2727,6 +4090,7 @@ pub struct RaisedCutData {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct RaisedCutGroup {
     pub cuts: Vec<CutId>,
+    pub cut_esurface_ids: Vec<EsurfaceID>,
     pub related_esurface_group: RaisedEsurfaceGroup,
 }
 
@@ -2751,26 +4115,47 @@ impl RaisedCutData {
         evaluator_settings: &EvaluatorSettings,
     ) -> (Self, GraphGenerationStats) {
         let mut stats = GraphGenerationStats::default();
-        let reversed_map = cut_esurface_map
-            .iter_enumerated()
-            .map(|(cut_id, &esurface_id)| (esurface_id, cut_id))
-            .collect::<HashMap<EsurfaceID, CutId>>();
+        let mut reversed_map = HashMap::<EsurfaceID, Vec<CutId>>::default();
+        for (cut_id, &esurface_id) in cut_esurface_map.iter_enumerated() {
+            reversed_map.entry(esurface_id).or_default().push(cut_id);
+        }
 
         let mut groups = TiVec::new();
 
         for (_raised_esurface_id, raised_esurface_group) in
             raised_esurface_data.raised_groups.iter_enumerated()
         {
-            if cut_esurface_map.contains(&raised_esurface_group.esurface_ids[0]) {
-                let cuts = raised_esurface_group
+            let cuts = raised_esurface_group
+                .esurface_ids
+                .iter()
+                .filter_map(|esurface_id| reversed_map.get(esurface_id))
+                .flatten()
+                .copied()
+                .unique()
+                .collect::<Vec<_>>();
+
+            if !cuts.is_empty() {
+                let cuts = cuts
+                    .into_iter()
+                    .sorted_by_key(|cut_id| cut_id.0)
+                    .collect_vec();
+                let cut_esurface_ids = cuts
+                    .iter()
+                    .map(|cut_id| cut_esurface_map[*cut_id])
+                    .collect_vec();
+                let representative_esurface_id = cut_esurface_map[cuts[0]];
+                let mut related_esurface_group = raised_esurface_group.clone();
+                if let Some(position) = related_esurface_group
                     .esurface_ids
                     .iter()
-                    .map(|esurface_id| reversed_map[esurface_id])
-                    .collect::<Vec<_>>();
-
+                    .position(|esurface_id| *esurface_id == representative_esurface_id)
+                {
+                    related_esurface_group.esurface_ids.swap(0, position);
+                }
                 let raised_cut_group = RaisedCutGroup {
                     cuts,
-                    related_esurface_group: raised_esurface_group.clone(),
+                    cut_esurface_ids,
+                    related_esurface_group,
                 };
 
                 groups.push(raised_cut_group);
@@ -2778,15 +4163,23 @@ impl RaisedCutData {
                 continue;
             }
         }
+        groups.sort_by_key(|group: &RaisedCutGroup| {
+            (
+                group.cuts.iter().map(|cut_id| cut_id.0).min(),
+                group
+                    .related_esurface_group
+                    .esurface_ids
+                    .iter()
+                    .copied()
+                    .min(),
+            )
+        });
 
         let global_max_occurence = groups
             .iter()
             .map(|group| group.related_esurface_group.max_occurence)
             .max()
-            .unwrap_or_else(|| {
-                println!("corrupted groups");
-                panic!();
-            });
+            .expect("at least one raised cut group should be associated with cut E-surfaces");
 
         let dual_shapes = (1..global_max_occurence)
             .map(simple_n_deriv_shape)
@@ -2817,7 +4210,13 @@ impl CrossSectionDerivedData {
     fn new_empty() -> Self {
         Self {
             orientations: None,
-            global_cff_expression: None,
+            global_three_d_expression: None,
+            global_lu_residue_selection_basis: LuResidueSelectionBasis::PositiveEnergyCutkosky,
+            cff_reference_lu_residue_selection_basis:
+                LuResidueSelectionBasis::PositiveEnergyCutkosky,
+            cff_projection_three_d_expression: None,
+            cff_projection_cut_esurface_id_map: TiVec::new(),
+            cff_projection_raised_data: RaisedCutData::new(),
             cut_paramatric_integrand: TiVec::new(),
             lmbs: None,
             multi_channeling_setup: None,
@@ -2836,7 +4235,6 @@ pub(crate) fn build_derivative_structure_atom(
         laurent_coefficient <= -1,
         "only laurent coefficients up to -1 are supported"
     );
-
     assert!(
         singularity_order >= 1,
         "eta order must be at least 1, got {singularity_order}"
@@ -2875,7 +4273,7 @@ pub(crate) fn build_derivative_structure_atom(
         .unwrap();
 
     let factorial_prefactor = (2..=(order + laurent_coefficient)).product::<i32>();
-    debug!("factorial prefactor: {}", factorial_prefactor);
+
     let mut expression_to_derive = polynomial_in_delta_t.to_atom() / Atom::num(factorial_prefactor);
 
     expression_to_derive = expression_to_derive
@@ -2930,6 +4328,13 @@ fn ordered_f_derivative_params(
             param
         })
         .collect()
+}
+
+fn nth_derivative(mut atom: Atom, variable: Symbol, order: u8) -> Atom {
+    for _ in 0..order {
+        atom = atom.derivative(variable);
+    }
+    atom
 }
 
 pub(crate) fn params_for_derivative_order(singularity_order: u8) -> Vec<Atom> {
@@ -3199,6 +4604,37 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn iterated_threshold_helper_rewrites_eta_to_side_specific_families() {
+        let eta = symbol!("η");
+        let eta_left = symbol!("η_left");
+        let eta_right = symbol!("η_right");
+
+        let atom = function!(eta, GS.radius_star_left).derivative(GS.radius_star_left)
+            * function!(eta, GS.radius_star_right).derivative(GS.radius_star_right);
+        let rewritten = atom.replace_multiple(
+            super::CrossSectionGraph::side_specific_eta_replacements(1, 1),
+        );
+        let expected = function!(eta_left, GS.radius_star_left).derivative(GS.radius_star_left)
+            * function!(eta_right, GS.radius_star_right).derivative(GS.radius_star_right);
+
+        assert_eq!(rewritten.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn iterated_threshold_helper_fuses_distributed_f_factors() {
+        let f = symbol!("f");
+        let left = function!(f, GS.radius_star_left);
+        let right = function!(f, GS.radius_star_right);
+        let atom = (left * (right.clone() + right.derivative(GS.radius_star_right))).expand();
+        let rewritten =
+            atom.replace_multiple(super::CrossSectionGraph::fuse_left_right_replacements(1, 2));
+        let base = function!(f, GS.radius_star_left, GS.radius_star_right);
+        let expected = base.clone() + base.derivative(GS.radius_star_right);
+
+        assert_eq!(rewritten.to_string(), expected.to_string());
     }
 
     #[test]

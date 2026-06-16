@@ -30,6 +30,7 @@
       "linnet",
       "spenso",
       "spenso-hep-lib",
+      "three-dimensional-reps",
       "vakint"
     ],
     "idenso": [
@@ -63,6 +64,9 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros"
+    ],
+    "three-dimensional-reps": [
+      "linnet"
     ],
     "vakint": []
   },
@@ -119,6 +123,7 @@
         "shadowing"
       ],
       "spenso-hep-lib": [],
+      "three-dimensional-reps": [],
       "vakint": []
     },
     "idenso": {
@@ -168,6 +173,13 @@
       "spenso-hep-lib": [],
       "spenso-macros": []
     },
+    "three-dimensional-reps": {
+      "linnet": [
+        "bincode",
+        "serde",
+        "symbolica"
+      ]
+    },
     "vakint": {}
   },
   "package_dirs": {
@@ -186,6 +198,7 @@
     "spenso-hep-lib": "crates/spenso-hep-lib",
     "spenso-macros": "crates/spenso-macros",
     "spynso3": "crates/spynso3",
+    "three-dimensional-reps": "crates/three-dimensional-reps",
     "vakint": "crates/vakint"
   },
   "packages": [
@@ -204,6 +217,7 @@
     "spenso-hep-lib",
     "spenso-macros",
     "spynso3",
+    "three-dimensional-reps",
     "vakint"
   ],
   "resolved_normal_dependencies": {
@@ -218,6 +232,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "three-dimensional-reps",
       "vakint"
     ],
     "gammaloop-integration-tests": [
@@ -231,6 +246,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "three-dimensional-reps",
       "vakint"
     ],
     "gammaloop-tracing-filter": [
@@ -251,6 +267,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "three-dimensional-reps",
       "vakint"
     ],
     "idenso": [
@@ -291,6 +308,10 @@
       "spenso-hep-lib",
       "spenso-macros"
     ],
+    "three-dimensional-reps": [
+      "gammaloop-workspace-hack",
+      "linnet"
+    ],
     "vakint": []
   },
   "resolved_test_dependencies": {
@@ -305,6 +326,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "three-dimensional-reps",
       "vakint"
     ],
     "gammaloop-integration-tests": [
@@ -318,6 +340,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "three-dimensional-reps",
       "vakint"
     ],
     "gammaloop-tracing-filter": [
@@ -338,6 +361,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "three-dimensional-reps",
       "vakint"
     ],
     "idenso": [
@@ -383,6 +407,10 @@
       "spenso-hep-lib",
       "spenso-macros"
     ],
+    "three-dimensional-reps": [
+      "gammaloop-workspace-hack",
+      "linnet"
+    ],
     "vakint": []
   },
   "symbolica_normal_packages": [
@@ -399,6 +427,7 @@
     "spenso-hep-lib",
     "spenso-macros",
     "spynso3",
+    "three-dimensional-reps",
     "vakint"
   ],
   "symbolica_test_packages": [
@@ -415,6 +444,7 @@
     "spenso-hep-lib",
     "spenso-macros",
     "spynso3",
+    "three-dimensional-reps",
     "vakint"
   ],
   "test_dependencies": {
@@ -448,6 +478,7 @@
       "linnet",
       "spenso",
       "spenso-hep-lib",
+      "three-dimensional-reps",
       "vakint"
     ],
     "idenso": [
@@ -485,6 +516,9 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros"
+    ],
+    "three-dimensional-reps": [
+      "linnet"
     ],
     "vakint": []
   },
@@ -541,6 +575,7 @@
         "shadowing"
       ],
       "spenso-hep-lib": [],
+      "three-dimensional-reps": [],
       "vakint": []
     },
     "idenso": {
@@ -593,6 +628,13 @@
       ],
       "spenso-hep-lib": [],
       "spenso-macros": []
+    },
+    "three-dimensional-reps": {
+      "linnet": [
+        "bincode",
+        "serde",
+        "symbolica"
+      ]
     },
     "vakint": {}
   },

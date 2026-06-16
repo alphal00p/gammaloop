@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::BTreeMap,
     fmt::Display,
     ops::{Deref, Range},
 };
@@ -30,7 +31,7 @@ use tracing::debug;
 use tracing::warn;
 
 use crate::{
-    GammaLoopContext,
+    DependentMomentaConstructor, GammaLoopContext,
     graph::{Graph, LoopMomentumBasis},
     integrands::process::{
         amplitude::export::ExportAtomTo,
@@ -40,6 +41,7 @@ use crate::{
     momentum::sample::{ExternalFourMomenta, MomentumSample},
     momentum::{Helicity, PolType},
     numerator::ParsingNet,
+    settings::RuntimeSettings,
     utils::{
         ArbPrec, F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128,
         hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
@@ -52,6 +54,25 @@ use crate::{
 pub struct ParamValuePairs {
     pub value_range: Range<usize>,
     pub params: Vec<Atom>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamBuilderInputGroup {
+    Runtime,
+    Model,
+    ExternalEnergy,
+    ExternalSpatial,
+    Polarization,
+    LoopMomentumSpatial,
+    LocalCounterterm,
+    Additional,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParamBuilderInputParameter {
+    pub index: usize,
+    pub atom: Atom,
+    pub group: ParamBuilderInputGroup,
 }
 
 impl ParamValuePairs {
@@ -157,6 +178,7 @@ define_gamma_loop_pairs! {
     m_uv,
     renormalization_localization_scale,
     mu_r_sq,
+    numerator_sampling_scale,
     orientations,
     override_if,
     pub model_parameters,
@@ -196,6 +218,8 @@ impl GammaLoopPairs {
     pub fn validate(&self) {
         debug!("Validating mu_r_sq");
         self.mu_r_sq.validate();
+        debug!("Validating numerator_sampling_scale");
+        self.numerator_sampling_scale.validate();
         debug!("Validating model_parameters");
         self.model_parameters.validate();
         debug!("Validating external_energies");
@@ -252,6 +276,9 @@ impl GammaLoopPairs {
                 GS.renormalization_localization_scale,
             ),
             mu_r_sq: ParamValuePairs::default_from_symbol(GS.mu_r_sq),
+            numerator_sampling_scale: ParamValuePairs::default_from_symbol(
+                GS.numerator_sampling_scale,
+            ),
             tstar: ParamValuePairs::default_from_symbol(GS.rescale_star),
             radius_left: ParamValuePairs::default_from_symbol(GS.radius_left),
             radius_right: ParamValuePairs::default_from_symbol(GS.radius_right),
@@ -1034,6 +1061,53 @@ impl<T: FloatLike> ParamBuilder<T> {
         let range = self.pairs.model_parameters.value_range.clone();
         &self.values[0][range]
     }
+
+    /// Register additional evaluator input parameters on this builder.
+    ///
+    /// This updates the parameter ranges and value buffers owned by the builder. It must be called
+    /// before constructing any evaluator or function map from this `ParamBuilder`; existing
+    /// evaluators keep their original parameter indexing and are not updated by this mutation.
+    pub fn ensure_additional_input_parameters<I>(
+        &mut self,
+        params: I,
+    ) -> Vec<ParamBuilderInputParameter>
+    where
+        I: IntoIterator<Item = Atom>,
+    {
+        let requested: Vec<Atom> = params.into_iter().collect();
+        if requested.is_empty() {
+            return Vec::new();
+        }
+
+        let mut known = self
+            .evaluator_input_parameters()
+            .into_iter()
+            .map(|parameter| (parameter.atom.to_canonical_string(), parameter))
+            .collect::<BTreeMap<_, _>>();
+
+        for param in &requested {
+            if !known.contains_key(&param.to_canonical_string()) {
+                self.pairs.additional_params.params.push(param.clone());
+            }
+        }
+
+        let new_len = self.pairs.update_ranges();
+        for values in &mut self.values {
+            values.resize(new_len, Complex::new_re(F::default()));
+        }
+        self.validate();
+
+        known = self
+            .evaluator_input_parameters()
+            .into_iter()
+            .map(|parameter| (parameter.atom.to_canonical_string(), parameter))
+            .collect();
+        requested
+            .iter()
+            .filter_map(|param| known.get(&param.to_canonical_string()).cloned())
+            .collect()
+    }
+
     pub fn validate(&self) {
         self.pairs.validate();
     }
@@ -1134,6 +1208,128 @@ impl<T: FloatLike> ParamBuilder<T> {
             .expect("failed to add constant to function map");
     }
 
+    pub fn set_runtime_parameter_values(
+        &mut self,
+        m_uv: Complex<F<T>>,
+        mu_r_sq: Complex<F<T>>,
+        numerator_sampling_scale: Complex<F<T>>,
+    ) {
+        self.m_uv_value(m_uv);
+        self.mu_r_sq_value(mu_r_sq);
+        self.numerator_sampling_scale_value(numerator_sampling_scale);
+    }
+
+    pub fn input_params(&mut self) -> InputParams<'_, T> {
+        InputParams {
+            values: SliceMut::Borrowed(&mut self.values[0]),
+            multiplicative_offset: 1,
+            override_pos: self.pairs.override_if.value_range.start,
+            orientations_start: self.pairs.orientations.value_range.start,
+        }
+    }
+
+    pub fn evaluator_input_parameters(&self) -> Vec<ParamBuilderInputParameter> {
+        [
+            (&self.pairs.m_uv, ParamBuilderInputGroup::Runtime),
+            (
+                &self.pairs.renormalization_localization_scale,
+                ParamBuilderInputGroup::Runtime,
+            ),
+            (&self.pairs.mu_r_sq, ParamBuilderInputGroup::Runtime),
+            (
+                &self.pairs.numerator_sampling_scale,
+                ParamBuilderInputGroup::Runtime,
+            ),
+            (&self.pairs.model_parameters, ParamBuilderInputGroup::Model),
+            (
+                &self.pairs.external_energies,
+                ParamBuilderInputGroup::ExternalEnergy,
+            ),
+            (
+                &self.pairs.external_spatial,
+                ParamBuilderInputGroup::ExternalSpatial,
+            ),
+            (
+                &self.pairs.polarizations,
+                ParamBuilderInputGroup::Polarization,
+            ),
+            (
+                &self.pairs.loop_moms_spatial,
+                ParamBuilderInputGroup::LoopMomentumSpatial,
+            ),
+            (&self.pairs.tstar, ParamBuilderInputGroup::LocalCounterterm),
+            (
+                &self.pairs.h_function_lu_cut,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.h_function_left_th,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.h_function_right_th,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.esurface_derivative_lu_cut,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.esurface_derivative_left_th,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.esurface_derivative_right_th,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.uv_damp_plus_left,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.uv_damp_minus_left,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.radius_left,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.radius_star_left,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.uv_damp_plus_right,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.uv_damp_minus_right,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.radius_right,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.radius_star_right,
+                ParamBuilderInputGroup::LocalCounterterm,
+            ),
+            (
+                &self.pairs.additional_params,
+                ParamBuilderInputGroup::Additional,
+            ),
+        ]
+        .into_iter()
+        .flat_map(|(pair, group)| {
+            pair.params
+                .iter()
+                .cloned()
+                .zip(pair.value_range.clone())
+                .map(move |(atom, index)| ParamBuilderInputParameter { index, atom, group })
+        })
+        .collect()
+    }
+
     pub(crate) fn new_empty() -> Self {
         Self {
             polarization_cache: ParamCache::default(),
@@ -1168,20 +1364,14 @@ impl<T: FloatLike> ParamBuilder<T> {
             .unwrap();
 
         for e in graph.iter_edge_ids() {
-            if lmb.edge_signatures[e]
-                .internal
-                .iter()
-                .any(|sign| sign.is_sign())
-            {
-                new.add_tagged_function::<Symbol>(
-                    GS.ose,
-                    vec![Atom::num(e.0 as i64)],
-                    format!("OSE{e}"),
-                    vec![],
-                    graph.explicit_ose_atom(e),
-                )
-                .unwrap();
-            }
+            new.add_tagged_function(
+                GS.ose,
+                vec![Atom::num(e.0 as i64)],
+                format!("OSE{e}"),
+                Vec::<Symbol>::new(),
+                graph.explicit_ose_atom(e),
+            )
+            .unwrap();
         }
 
         for (edge_id, signature) in lmb.edge_signatures.iter() {
@@ -1193,14 +1383,14 @@ impl<T: FloatLike> ParamBuilder<T> {
                 0
             };
             for i in start..4 {
-                new.add_tagged_function::<Symbol>(
+                new.add_tagged_function(
                     GS.emr_mom,
                     vec![
                         Atom::num(edge_id.0 as i64),
                         Atom::from(ExpandedIndex::from_iter([i])),
                     ],
                     format!("Q({edge_id}, {i})"),
-                    vec![],
+                    Vec::<Symbol>::new(),
                     lmb.loop_atom(
                         edge_id,
                         GS.emr_mom,
@@ -1229,16 +1419,14 @@ impl<T: FloatLike> ParamBuilder<T> {
             symbol!("x").to_atom(),
         )
         .unwrap();
-        let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
 
         // new.fn_map.add_conditional(GS.orientation_if);
-        new.add_constant(GS.pi.into(), pi_rational.into());
         new.add_constant(CS.cf.into(), Rational::new(4, 3).into());
         new.add_constant(CS.ca.into(), Rational::new(3, 1).into());
         new.add_constant(CS.nc.into(), Rational::new(3, 1).into());
         new.add_constant(CS.tr.into(), Rational::new(1, 2).into());
 
-        new.values = vec![vec![Complex::new_re(F(T::from_f64(0.))); len]];
+        new.values = vec![vec![Complex::new_re(F(T::new_zero())); len]];
         new.update_model_values(model);
         //panic!();
         new
@@ -1292,7 +1480,20 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
     }
 
-    pub(crate) fn update_model_values(&mut self, model: &Model) {
+    pub(crate) fn numerator_sampling_scale_value(
+        &mut self,
+        numerator_sampling_scale: Complex<F<T>>,
+    ) {
+        debug_assert!(self.pairs.numerator_sampling_scale.value_range.len() == 1);
+
+        for (index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = index + 1;
+            values[self.pairs.numerator_sampling_scale.value_range.start * multiplicative_offset] =
+                numerator_sampling_scale.clone();
+        }
+    }
+
+    pub fn update_model_values(&mut self, model: &Model) {
         for (value_index, values) in self.values.iter_mut().enumerate() {
             let multiplicative_offset = value_index + 1;
             let mut pos = self.pairs.model_parameters.value_range.start * multiplicative_offset;
@@ -1319,6 +1520,38 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
     }
 
+    pub fn set_external_kinematics_and_polarizations(
+        &mut self,
+        graph: &Graph,
+        settings: &RuntimeSettings,
+        dependent_momenta_constructor: DependentMomentaConstructor<'_>,
+    ) -> Result<()> {
+        let externals = settings
+            .kinematics
+            .externals
+            .get_dependent_externals(dependent_momenta_constructor)?;
+        self.add_external_four_mom_all_derivatives(&externals);
+
+        let pols = self.pairs.polarizations_values(
+            graph,
+            &externals,
+            settings.kinematics.externals.get_helicities(),
+        );
+
+        for (value_index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = value_index + 1;
+            let mut polarization_start =
+                self.pairs.polarizations.value_range.start * multiplicative_offset;
+
+            for pol_value in &pols {
+                values[polarization_start] = pol_value.clone();
+                polarization_start += multiplicative_offset;
+            }
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn add_external_four_mom(
         &mut self,
         ext: &ExternalFourMomenta<F<T>>,
@@ -1340,6 +1573,17 @@ impl<T: FloatLike> ParamBuilder<T> {
             let multiplicative_offset = value_index + 1;
             self.pairs.add_external_four_mom_impl(
                 ext,
+                &mut self.values[value_index],
+                multiplicative_offset,
+            );
+        }
+    }
+
+    pub(crate) fn add_additional_params_all_derivatives(&mut self, additional_params: &[F<T>]) {
+        for value_index in 0..self.values.len() {
+            let multiplicative_offset = value_index + 1;
+            self.pairs.add_additional_params(
+                additional_params,
                 &mut self.values[value_index],
                 multiplicative_offset,
             );
@@ -1539,20 +1783,13 @@ impl<T: FloatLike> ParamBuilder<T> {
             }
 
             // Log external momentum info for debugging
+            let zero = F(T::new_zero());
             debug!(
                 "   🔍 External momenta: [{:.6}, {:.6}, {:.6}, {:.6}] (first external)",
-                external_moms
-                    .first()
-                    .map_or(&F::from_f64(0.0), |m| &m.temporal.value),
-                external_moms
-                    .first()
-                    .map_or(&F::from_f64(0.0), |m| &m.spatial.px),
-                external_moms
-                    .first()
-                    .map_or(&F::from_f64(0.0), |m| &m.spatial.py),
-                external_moms
-                    .first()
-                    .map_or(&F::from_f64(0.0), |m| &m.spatial.pz),
+                external_moms.first().map_or(&zero, |m| &m.temporal.value),
+                external_moms.first().map_or(&zero, |m| &m.spatial.px),
+                external_moms.first().map_or(&zero, |m| &m.spatial.py),
+                external_moms.first().map_or(&zero, |m| &m.spatial.pz),
             );
         } else {
             // Only log this in very verbose debug mode
@@ -1645,6 +1882,73 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
 
         table.build()
+    }
+}
+
+impl ParamBuilder<f64> {
+    pub fn input_params_quad(&self) -> InputParams<'_, f128> {
+        InputParams {
+            values: SliceMut::Owned(self.values[0].iter().map(|value| value.higher()).collect()),
+            multiplicative_offset: 1,
+            override_pos: self.pairs.override_if.value_range.start,
+            orientations_start: self.pairs.orientations.value_range.start,
+        }
+    }
+
+    pub fn input_params_arb(&self) -> InputParams<'_, ArbPrec> {
+        InputParams {
+            values: SliceMut::Owned(
+                self.values[0]
+                    .iter()
+                    .map(|value| value.higher().higher())
+                    .collect(),
+            ),
+            multiplicative_offset: 1,
+            override_pos: self.pairs.override_if.value_range.start,
+            orientations_start: self.pairs.orientations.value_range.start,
+        }
+    }
+
+    pub fn set_diagnostic_kinematic_values(&mut self) {
+        let Some(values) = self.values.first_mut() else {
+            return;
+        };
+
+        Self::set_diagnostic_range(
+            values,
+            self.pairs.external_energies.value_range.clone(),
+            0.37,
+            0.23,
+        );
+        Self::set_diagnostic_range(
+            values,
+            self.pairs.external_spatial.value_range.clone(),
+            0.11,
+            0.071,
+        );
+        Self::set_diagnostic_range(
+            values,
+            self.pairs.loop_moms_spatial.value_range.clone(),
+            0.19,
+            0.097,
+        );
+        Self::set_diagnostic_range(
+            values,
+            self.pairs.additional_params.value_range.clone(),
+            0.29,
+            0.053,
+        );
+    }
+
+    fn set_diagnostic_range(
+        values: &mut [Complex<F<f64>>],
+        range: Range<usize>,
+        first: f64,
+        step: f64,
+    ) {
+        for (offset, index) in range.enumerate() {
+            values[index] = Complex::new_re(F(first + step * offset as f64));
+        }
     }
 }
 
