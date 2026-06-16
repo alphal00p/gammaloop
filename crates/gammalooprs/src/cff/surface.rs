@@ -1,91 +1,167 @@
-use super::{
-    esurface::{Esurface, EsurfaceID},
-    hsurface::{Hsurface, HsurfaceID},
+pub use three_dimensional_reps::surface::{
+    EsurfaceCollection, EsurfaceID, HsurfaceCollection, HsurfaceID, HybridSurfaceID,
+    InfiniteSurface, LinearEnergyExpr, LinearSurface, LinearSurfaceCollection, LinearSurfaceID,
+    LinearSurfaceKind, SurfaceAtom, SurfaceOrigin, UnitSurface,
 };
-use bincode_trait_derive::{Decode, Encode};
-use derive_more::From;
-use linnet::half_edge::involution::EdgeIndex;
-use serde::{Deserialize, Serialize};
-use symbolica::{atom::Atom, parse};
-use typed_index_collections::TiVec;
 
-use crate::graph::LoopMomentumBasis;
+use linnet::{half_edge::involution::EdgeIndex, num_traits::SignOrZero};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    id::{Pattern, Replacement},
+};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+use super::{esurface::Esurface, hsurface::Hsurface};
+use crate::{
+    graph::LoopMomentumBasis,
+    utils::{GS, cut_energy, external_energy_atom_from_index, ose_atom_from_index},
+};
 
-/// A esurface that is equal to 1, useful for represnting a single vertex
-pub struct UnitSurface {}
+pub type HybridSurface = three_dimensional_reps::surface::HybridSurface<Esurface, Hsurface>;
+pub type HybridSurfaceRef<'a> =
+    three_dimensional_reps::surface::HybridSurfaceRef<'a, Esurface, Hsurface>;
+pub type HybridSurfaceCollection =
+    three_dimensional_reps::surface::HybridSurfaceCollection<Esurface, Hsurface>;
+pub type HybridSurfaceCache<T> = three_dimensional_reps::surface::HybridSurfaceCache<T>;
+pub type SurfaceCache = three_dimensional_reps::surface::SurfaceCache<Esurface, Hsurface>;
 
-/// Esurface whose inverse is equal to 0, useful for setting surfaces to zero
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct InfiniteSurface {}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum HybridSurface {
-    Esurface(Esurface),
-    Hsurface(Hsurface),
-    Unit(UnitSurface),
-    Infinite(InfiniteSurface),
+impl SurfaceAtom for Esurface {
+    fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
+        self.to_atom(cut_edges)
+    }
 }
 
-impl HybridSurface {
-    #[allow(dead_code)]
-    pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
+impl SurfaceAtom for Hsurface {
+    fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
+        self.to_atom(cut_edges)
+    }
+}
+
+pub trait GammaLoopLinearEnergyExpr {
+    fn to_atom_gs(&self, cut_edges: &[EdgeIndex]) -> Atom;
+}
+
+impl GammaLoopLinearEnergyExpr for LinearEnergyExpr {
+    fn to_atom_gs(&self, cut_edges: &[EdgeIndex]) -> Atom {
+        let internal = self
+            .internal_terms
+            .iter()
+            .fold(Atom::new(), |acc, (edge_id, coeff)| {
+                let energy = if cut_edges.contains(edge_id) {
+                    cut_energy(*edge_id)
+                } else {
+                    ose_atom_from_index(*edge_id)
+                };
+                acc + coeff.clone() * energy
+            });
+
+        let external = self
+            .external_terms
+            .iter()
+            .fold(Atom::new(), |acc, (edge_id, coeff)| {
+                acc + coeff.clone() * external_energy_atom_from_index(*edge_id)
+            });
+
+        let scale = if self.uniform_scale_coeff.is_zero() {
+            Atom::new()
+        } else {
+            self.uniform_scale_coeff.clone() * Atom::var(GS.numerator_sampling_scale)
+        };
+
+        internal + external + scale + self.constant.clone()
+    }
+}
+
+pub trait GammaLoopHybridSurfaceRef {
+    fn to_atom_gs(&self, cut_edges: &[EdgeIndex]) -> Atom;
+}
+
+impl<E: SurfaceAtom, H: SurfaceAtom> GammaLoopHybridSurfaceRef
+    for three_dimensional_reps::surface::HybridSurfaceRef<'_, E, H>
+{
+    fn to_atom_gs(&self, cut_edges: &[EdgeIndex]) -> Atom {
         match self {
-            HybridSurface::Esurface(surface) => surface.to_atom(cut_edges),
-            HybridSurface::Hsurface(surface) => surface.to_atom(cut_edges),
-            HybridSurface::Unit(_) => Atom::num(1),
-            HybridSurface::Infinite(_) => parse!("η_inf"),
+            three_dimensional_reps::surface::HybridSurfaceRef::Esurface(surface) => {
+                surface.to_atom(cut_edges)
+            }
+            three_dimensional_reps::surface::HybridSurfaceRef::Hsurface(surface) => {
+                surface.to_atom(cut_edges)
+            }
+            three_dimensional_reps::surface::HybridSurfaceRef::Linear(surface) => {
+                surface.expression.to_atom_gs(cut_edges)
+            }
+            three_dimensional_reps::surface::HybridSurfaceRef::Unit(_) => Atom::num(1),
+            three_dimensional_reps::surface::HybridSurfaceRef::Infinite(_) => {
+                symbolica::parse!("η_inf")
+            }
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum HybridSurfaceRef<'a> {
-    Esurface(&'a Esurface),
-    Hsurface(&'a Hsurface),
-    Unit(UnitSurface),
-    Infinite(InfiniteSurface),
+pub trait GammaLoopSurfaceCache {
+    fn substitute_energies_gs(&self, atom: &Atom, cut_edges: &[EdgeIndex]) -> Atom;
+    fn get_all_replacements_gs(&self, cut_edges: &[EdgeIndex]) -> Vec<Replacement>;
+    fn get_all_replacements_gs_in_lmb(
+        &self,
+        cut_edges: &[EdgeIndex],
+        lmb: &LoopMomentumBasis,
+    ) -> Vec<Replacement>;
 }
 
-impl HybridSurfaceRef<'_> {
-    pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
-        match self {
-            HybridSurfaceRef::Esurface(surface) => surface.to_atom(cut_edges),
-            HybridSurfaceRef::Hsurface(surface) => surface.to_atom(cut_edges),
-            HybridSurfaceRef::Unit(_) => Atom::num(1),
-            HybridSurfaceRef::Infinite(_) => parse!("η_inf"),
-        }
+impl<E: SurfaceAtom, H: SurfaceAtom> GammaLoopSurfaceCache
+    for three_dimensional_reps::surface::SurfaceCache<E, H>
+{
+    fn substitute_energies_gs(&self, atom: &Atom, cut_edges: &[EdgeIndex]) -> Atom {
+        let replacement_rules = self.get_all_replacements_gs(cut_edges);
+        atom.replace_multiple(&replacement_rules)
     }
 
-    pub(crate) fn to_atom_in_lmb(&self, cut_edges: &[EdgeIndex], lmb: &LoopMomentumBasis) -> Atom {
-        match self {
-            HybridSurfaceRef::Esurface(surface) => surface.to_atom_in_lmb(cut_edges, lmb),
-            HybridSurfaceRef::Hsurface(surface) => surface.to_atom_in_lmb(cut_edges, lmb),
-            HybridSurfaceRef::Unit(_) => Atom::num(1),
-            HybridSurfaceRef::Infinite(_) => parse!("η_inf"),
-        }
+    fn get_all_replacements_gs(&self, cut_edges: &[EdgeIndex]) -> Vec<Replacement> {
+        self.iter_all_surfaces()
+            .map(|(id, surface)| {
+                let id_atom = Pattern::from(Atom::from(id));
+                let surface_atom = Pattern::from(surface.to_atom_gs(cut_edges));
+                Replacement::new(id_atom, surface_atom)
+            })
+            .collect()
     }
-}
 
-#[derive(From, Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, Hash)]
-pub enum HybridSurfaceID {
-    Esurface(EsurfaceID),
-    Hsurface(HsurfaceID),
-    Unit,
-    Infinite,
-}
+    fn get_all_replacements_gs_in_lmb(
+        &self,
+        cut_edges: &[EdgeIndex],
+        lmb: &LoopMomentumBasis,
+    ) -> Vec<Replacement> {
+        let external_shift_replacements = lmb
+            .edge_signatures
+            .iter()
+            .map(|(edge_id, signature)| {
+                let canonical = signature.external.iter_enumerated().fold(
+                    Atom::Zero,
+                    |sum, (external_index, sign)| {
+                        let energy = external_energy_atom_from_index(lmb.ext_edges[external_index]);
+                        match sign {
+                            SignOrZero::Zero => sum,
+                            SignOrZero::Plus => sum + energy,
+                            SignOrZero::Minus => sum - energy,
+                        }
+                    },
+                );
+                Replacement::new(
+                    external_energy_atom_from_index(edge_id).to_pattern(),
+                    canonical,
+                )
+            })
+            .collect::<Vec<_>>();
 
-pub type HybridSurfaceCollection = TiVec<HybridSurfaceID, HybridSurface>;
-pub type HybridSurfaceCache<T> = TiVec<HybridSurfaceID, T>;
-
-impl From<HybridSurfaceID> for Atom {
-    fn from(id: HybridSurfaceID) -> Atom {
-        match id {
-            HybridSurfaceID::Esurface(id) => Atom::from(id),
-            HybridSurfaceID::Hsurface(id) => Atom::from(id),
-            HybridSurfaceID::Unit => Atom::num(1),
-            HybridSurfaceID::Infinite => parse!("η_inf"),
-        }
+        self.iter_all_surfaces()
+            .map(|(id, surface)| {
+                let id_atom = Pattern::from(Atom::from(id));
+                let surface_atom = Pattern::from(
+                    surface
+                        .to_atom_gs(cut_edges)
+                        .replace_multiple(&external_shift_replacements),
+                );
+                Replacement::new(id_atom, surface_atom)
+            })
+            .collect()
     }
 }

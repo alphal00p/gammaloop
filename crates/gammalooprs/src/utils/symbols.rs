@@ -9,7 +9,7 @@ use spenso::{
     structure::{
         abstract_index::AIND_SYMBOLS,
         concrete_index::ExpandedIndex,
-        representation::{Minkowski, RepName, Representation},
+        representation::{LibraryRep, Minkowski, RepName, Representation},
         slot::{DummyAind, IsAbstractSlot},
     },
     utils::{to_subscript, to_superscript},
@@ -20,6 +20,25 @@ use symbolica::printer::{PrintState, PrintUserData};
 use crate::{cff::expression::GraphOrientation, graph::LoopMomentumBasis, numerator::aind::Aind};
 
 use super::symbolica_ext::CallSymbol;
+
+fn concrete_lorentz_component_index(index: AtomView<'_>) -> Option<i64> {
+    let AtomView::Fun(function) = index else {
+        return None;
+    };
+
+    if function.get_symbol() == AIND_SYMBOLS.cind && function.get_nargs() == 1 {
+        return i64::try_from(function.get(0)).ok();
+    }
+
+    if function.get_symbol() == LibraryRep::from(Minkowski {}).symbol()
+        && function.get_nargs() == 2
+        && i64::try_from(function.get(0)).ok()? == 4
+    {
+        return i64::try_from(function.get(1)).ok();
+    }
+
+    None
+}
 
 pub struct WildCards {
     pub edgeid_: Symbol,
@@ -166,6 +185,7 @@ pub struct GammaloopSymbols {
     /// UV localization scale factor
     pub renormalization_localization_scale: Symbol,
     pub mu_r_sq: Symbol,
+    pub numerator_sampling_scale: Symbol,
     pub sign: Symbol,
     pub theta: Symbol,
     pub broadcasting_sqrt: Symbol,
@@ -272,7 +292,7 @@ impl GammaloopSymbols {
         function!(self.theta, arg.as_view())
     }
 
-    pub(crate) fn sign(&self, edge: EdgeIndex) -> Atom {
+    pub fn sign(&self, edge: EdgeIndex) -> Atom {
         function!(self.sign, Atom::num(edge.0 as i64))
     }
 }
@@ -763,6 +783,25 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
             }
         }
     ),
+    numerator_sampling_scale: symbol!(
+        "M",
+        print = |a, opt, _state| {
+            let AtomView::Var(_a) = a else {
+                return None;
+            };
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(i)) => {
+                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(*i as usize);
+                    if SpensoPrintSettings::from(*i as usize).is_typst() {
+                        Some("M".to_string())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        }
+    ),
     delta_vec: ETS.delta,
     top: symbol!("Top"),
     num: symbol!("num"),
@@ -812,15 +851,14 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
             {
                 let mut iter = ff.iter();
                 let eid = iter.next().unwrap();
-                if let AtomView::Fun(cind) = iter.next().unwrap()
-                    && cind.get_symbol() == AIND_SYMBOLS.cind
-                    && let Some(i) = cind.iter().next()
-                    && let Ok(i) = i64::try_from(i)
-                {
+                let index = iter.next().unwrap();
+                if let Some(i) = concrete_lorentz_component_index(index) {
                     if i == 0 {
                         **out = Atom::Zero;
                     } else {
-                        **out = get_symbol!("Q").unwrap().f(&[eid, cind.as_view()])
+                        **out = get_symbol!("Q")
+                            .unwrap()
+                            .f(&[eid, AIND_SYMBOLS.cind.f([i]).as_view()])
                     }
                 }
             }

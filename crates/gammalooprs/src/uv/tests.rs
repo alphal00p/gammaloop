@@ -73,9 +73,9 @@ fn scalar_bubble_root_integrand_reference(
     let vakint = crate::utils::vakint().unwrap();
     let valid_orientations: Vec<_> = amplitude_graph
         .derived_data
-        .cff_expression
+        .three_d_expression
         .as_ref()
-        .expect("cff_expression should have been created")
+        .expect("3D expression should have been created")
         .orientations
         .iter()
         .map(|orientation| orientation.data.orientation.clone())
@@ -85,8 +85,11 @@ fn scalar_bubble_root_integrand_reference(
             &mut amplitude_graph.graph,
             vakint,
             &valid_orientations,
-            &reference_settings.uv,
-            &generation_settings.orientation_pattern,
+            &reference_settings,
+            amplitude_graph.derived_data.three_d_expression.as_ref(),
+            crate::graph::cuts::LuResidueSelectionBasis::PositiveEnergyCutkosky,
+            crate::graph::cuts::LuResidueSelectionBasis::PositiveEnergyCutkosky,
+            crate::settings::global::ThreeDRepresentation::Cff,
         )
         .unwrap();
 
@@ -166,8 +169,16 @@ fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
         uv,
         ..Default::default()
     };
-    amp.preprocess(&model, &generation_settings, &(&runtime).into(), &theadpool)
-        .unwrap();
+    amp.preprocess(
+        &model,
+        &GlobalSettings {
+            generation: generation_settings,
+            ..Default::default()
+        },
+        &(&runtime).into(),
+        &theadpool,
+    )
+    .unwrap();
 
     amp.build_integrand(
         &model,
@@ -305,7 +316,6 @@ fn scalars_profile_new() {
         add_sigma: true,
         keep_sigma: false,
         subtract_uv: true,
-        use_legacy: false,
         ..Default::default()
     });
 
@@ -421,7 +431,7 @@ fn nested_bubble_soft_ct() {
     let s = series
         .replace(t)
         .with(Atom::var(t).pow(-1))
-        .series(t, Atom::Zero, 0.into(), true)
+        .series(t, Atom::Zero, 0)
         .unwrap();
     println!("Series: {:>}", s);
     println!("Correct UV cancellation if 0: {:>}", s.to_atom().expand());
@@ -434,22 +444,30 @@ fn nested_bubble_soft_ct() {
 
     let mut fnmap = FunctionMap::new();
 
-    fnmap.add_constant(
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("m")),
         symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-    );
-    fnmap.add_constant(
+    )
+    .unwrap();
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("MH")),
         symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-    );
-    fnmap.add_constant(
+    )
+    .unwrap();
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("mUV")),
         symbolica::domains::float::Complex::new((10.).into(), (0.).into()),
-    );
-    fnmap.add_constant(
+    )
+    .unwrap();
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("ZERO")),
         symbolica::domains::float::Complex::new((0.).into(), (0.).into()),
-    );
+    )
+    .unwrap();
     let ev = exp
         .evaluator(
             &fnmap,
@@ -625,7 +643,7 @@ fn nested_bubble_scalar_quad() {
     let s = series
         .replace(t)
         .with(Atom::var(t).pow(-1))
-        .series(t, Atom::Zero, 0.into(), true)
+        .series(t, Atom::Zero, 0)
         .unwrap();
     println!("Series: {:>}", s);
     println!(
@@ -643,18 +661,24 @@ fn nested_bubble_scalar_quad() {
 
     let mut fnmap = FunctionMap::new();
 
-    fnmap.add_constant(
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("m")),
         symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-    );
-    fnmap.add_constant(
+    )
+    .unwrap();
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("MH")),
         symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-    );
-    fnmap.add_constant(
+    )
+    .unwrap();
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("mUV")),
         symbolica::domains::float::Complex::new((10.).into(), (0.).into()),
-    );
+    )
+    .unwrap();
     let ev = exp
         .evaluator(
             &fnmap,
@@ -807,7 +831,7 @@ fn nested_bubble_scalar() {
     let s = series
         .replace(t)
         .with(Atom::var(t).pow(-1))
-        .series(t, Atom::Zero, 0.into(), true)
+        .series(t, Atom::Zero, 0)
         .unwrap();
     println!("Series: {}", s);
     println!("Correct UV cancellation if 0: {:>}", s.to_atom().expand());
@@ -820,18 +844,24 @@ fn nested_bubble_scalar() {
 
     let mut fnmap = FunctionMap::new();
 
-    fnmap.add_constant(
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("m")),
         symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-    );
-    fnmap.add_constant(
+    )
+    .unwrap();
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("MH")),
         symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-    );
-    fnmap.add_constant(
+    )
+    .unwrap();
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("mUV")),
         symbolica::domains::float::Complex::new((10.).into(), (0.).into()),
-    );
+    )
+    .unwrap();
     let ev = exp
         .evaluator(
             &fnmap,
@@ -964,10 +994,12 @@ fn disconnect_forest_scalar() {
 
     let mut fnmap = FunctionMap::new();
 
-    fnmap.add_constant(
+    crate::utils::symbolica_ext::add_numeric_constant_to_fn_map(
+        &mut fnmap,
         Atom::var(symbol!("m")),
         symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-    );
+    )
+    .unwrap();
     let ev = exp
         .evaluator(
             &fnmap,
@@ -1529,7 +1561,7 @@ mod failing {
         let set = GenerationSettings {
             orientation_pattern: OrientationPattern::from_orientation(
                 &amp.derived_data
-                    .cff_expression
+                    .three_d_expression
                     .as_ref()
                     .unwrap()
                     .orientations[OrientationID(0)],
@@ -1543,8 +1575,15 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff(&OrientationPattern::default()).unwrap();
-        amp.build_integrands(&set, vk).unwrap();
+        amp.build_cff_expression_for_tests().unwrap();
+        amp.build_integrands(
+            &GlobalSettings {
+                generation: set,
+                ..Default::default()
+            },
+            vk,
+        )
+        .unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
     }
@@ -1570,7 +1609,7 @@ mod failing {
         let set = GenerationSettings {
             orientation_pattern: OrientationPattern::from_orientation(
                 &amp.derived_data
-                    .cff_expression
+                    .three_d_expression
                     .as_ref()
                     .unwrap()
                     .orientations[OrientationID(0)],
@@ -1584,8 +1623,15 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff(&OrientationPattern::default()).unwrap();
-        amp.build_integrands(&set, vk).unwrap();
+        amp.build_cff_expression_for_tests().unwrap();
+        amp.build_integrands(
+            &GlobalSettings {
+                generation: set,
+                ..Default::default()
+            },
+            vk,
+        )
+        .unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
     }
@@ -1682,9 +1728,7 @@ mod failing {
         let runtime = RuntimeSettings::default();
         amp.preprocess(
             &model,
-            &GenerationSettings {
-                ..Default::default()
-            },
+            &GlobalSettings::default(),
             &(&runtime).into(),
             &theadpool,
         )

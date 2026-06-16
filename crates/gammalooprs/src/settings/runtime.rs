@@ -203,6 +203,10 @@ pub struct GeneralSettings {
     #[serde(skip_serializing_if = "is_float::<1000>")]
     pub mu_r: f64,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub numerator_interpolation_scale: Option<f64>,
+    #[serde(skip_serializing_if = "is_float::<1>")]
+    pub numerator_sampling_scale: f64,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub additional_param_values: Vec<f64>,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub integral_unit: IntegralUnit,
@@ -226,7 +230,8 @@ impl Default for GeneralSettings {
             m_uv: 1000.0,
             renormalization_localization_scale: 1000.0,
             mu_r: 1000.0,
-
+            numerator_interpolation_scale: None,
+            numerator_sampling_scale: 1.0,
             additional_param_values: vec![],
             integral_unit: IntegralUnit::Auto,
             disable_flux_factor: false,
@@ -1684,6 +1689,15 @@ pub struct LocalCounterTermSettings {
     pub uv_localisation: UVLocalisationSettings,
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum UVLocalisationFunction {
+    #[default]
+    Gaussian,
+    Unit,
+}
+
 #[cfg_attr(
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
@@ -1691,6 +1705,8 @@ pub struct LocalCounterTermSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct UVLocalisationSettings {
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub function: UVLocalisationFunction,
     #[serde(skip_serializing_if = "is_float::<10>")]
     pub sliver_width: f64,
     #[serde(skip_serializing_if = "is_false")]
@@ -1704,6 +1720,7 @@ pub struct UVLocalisationSettings {
 impl Default for UVLocalisationSettings {
     fn default() -> Self {
         Self {
+            function: UVLocalisationFunction::default(),
             sliver_width: 10.0,
             dynamic_width: false,
             gaussian_width: 1.0,

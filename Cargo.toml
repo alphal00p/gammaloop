@@ -57,6 +57,7 @@ spenso-macros = { path = "crates/spenso-macros/" }
 symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9135b4091505276baa11ef262fe1165f2b95ea33", default-features = false, features = ["gmp"] }
 sysinfo = "0.33.1"
 tabled = "0.20.0"
+three-dimensional-reps = { path = "crates/three-dimensional-reps/" }
 thiserror = "2.0"
 toml = "0.9.12"
 tracing = "0.1.44"

@@ -5,8 +5,8 @@ use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::HedgeGraph;
-use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation};
-use linnet::half_edge::subgraph::{OrientedCut, SuBitGraph, SubSetLike, SubSetOps};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
+use linnet::half_edge::subgraph::OrientedCut;
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
 
@@ -18,17 +18,20 @@ use symbolica::{function, parse};
 use tracing::debug;
 use typed_index_collections::TiVec;
 
-use crate::cff::cff_graph::VertexSet;
+use crate::cff::VertexSet;
 
-use crate::cff::expression::{CFFExpression, OrientationID};
+use crate::cff::expression::{
+    CFFExpression, OrientationID, RaisedEsurfaceDataView, RaisedEsurfaceGroupView,
+};
+pub use crate::cff::surface::EsurfaceID;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 use crate::{GammaLoopContext, define_index};
 
 use crate::integrands::process::GenericEvaluator;
+use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
 };
-use crate::momentum::{SignOrZero, ThreeMomentum};
 use crate::processes::CrossSectionCut;
 use crate::utils::hyperdual_utils::new_constant;
 use crate::utils::{
@@ -60,6 +63,14 @@ impl PartialEq for Esurface {
 impl Eq for Esurface {}
 
 impl Esurface {
+    fn energy_depends_on_subspace(
+        edge_index: EdgeIndex,
+        subspace: &SubspaceData,
+        lmb: &LoopMomentumBasis,
+    ) -> bool {
+        subspace.loop_signature_depends_on_subspace(&lmb.edge_signatures[edge_index].internal)
+    }
+
     pub(crate) fn contains_all_with_minus_sign(&self, edges: &[EdgeIndex]) -> bool {
         edges.iter().all(|edge| {
             self.external_shift
@@ -78,30 +89,6 @@ impl Esurface {
         })
     }
     pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
-        self.to_atom_impl(cut_edges, external_energy_atom_from_index)
-    }
-
-    pub(crate) fn to_atom_in_lmb(&self, cut_edges: &[EdgeIndex], lmb: &LoopMomentumBasis) -> Atom {
-        self.to_atom_impl(cut_edges, |edge| {
-            lmb.edge_signatures[edge].external.iter_enumerated().fold(
-                Atom::Zero,
-                |sum, (external_index, sign)| {
-                    let atom = external_energy_atom_from_index(lmb.ext_edges[external_index]);
-                    match sign {
-                        SignOrZero::Zero => sum,
-                        SignOrZero::Plus => sum + atom,
-                        SignOrZero::Minus => sum - atom,
-                    }
-                },
-            )
-        })
-    }
-
-    fn to_atom_impl(
-        &self,
-        cut_edges: &[EdgeIndex],
-        external_shift_atom: impl Fn(EdgeIndex) -> Atom,
-    ) -> Atom {
         let symbolic_energies = self
             .energies
             .iter()
@@ -118,7 +105,7 @@ impl Esurface {
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                external_shift_atom(*i) * &Atom::num(*sign) + &sum
+                external_energy_atom_from_index(*i) * &Atom::num(*sign) + &sum
             });
 
         let builder_atom = Atom::new();
@@ -162,7 +149,8 @@ impl Esurface {
             .iter()
             .map(|(index, sign)| {
                 let external_signature = &lmb.edge_signatures[*index].external;
-                new_constant(&energy_sum, &F::from_f64(*sign as f64))
+                let sign = energy_sum.values[0].from_i64(*sign);
+                new_constant(&energy_sum, &sign)
                     * external_signature
                         .try_apply(&dual_external_moms.raw)
                         .map(|mom| mom.temporal.value)
@@ -207,7 +195,7 @@ impl Esurface {
             .iter()
             .map(|(index, sign)| {
                 let external_signature = &lmb.edge_signatures[*index].external;
-                F::from_f64(*sign as f64)
+                energy_sum.from_i64(*sign)
                     * compute_t_part_of_shift_part(external_signature, external_moms)
             })
             .reduce(|acc, x| acc + x)
@@ -225,7 +213,7 @@ impl Esurface {
         external_moms: &ExternalFourMomenta<F<T>>,
         subspace: &SubspaceData,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
-        graph: &Graph,
+        _graph: &Graph,
         real_mass_vector: &EdgeVec<F<T>>,
         reversed_edges: &[EdgeIndex],
         e_cm: &F<T>,
@@ -241,13 +229,18 @@ impl Esurface {
             external_moms,
             subspace,
             all_lmbs,
-            graph,
+            _graph,
             real_mass_vector,
         );
 
         if shift_part < -F::from_ff64(SHIFT_THRESHOLD) * e_cm {
             let lmb = subspace.get_lmb(all_lmbs);
-            let subspace_energy_indices = subspace.contains(&self.energies, graph).collect_vec();
+            let subspace_energy_indices = self
+                .energies
+                .iter()
+                .copied()
+                .filter(|index| Self::energy_depends_on_subspace(*index, subspace, lmb))
+                .collect_vec();
 
             if !subspace_energy_indices.iter().any(|&index| {
                 subspace
@@ -263,7 +256,7 @@ impl Esurface {
             let mass_sum: F<T> = subspace_energy_indices
                 .iter()
                 .map(|&index| &real_mass_vector[index])
-                .fold(F::from_f64(0.0), |acc, x| acc + x);
+                .fold(e_cm.zero(), |acc, x| acc + x);
 
             let zero_vector = ThreeMomentum::new(e_cm.zero(), e_cm.zero(), e_cm.zero());
 
@@ -273,19 +266,22 @@ impl Esurface {
                 .map(|(index, sign)| {
                     let external_signature = &lmb.edge_signatures[*index].external;
                     compute_shift_part(external_signature, external_moms).spatial
-                        * F::from_f64(*sign as f64)
+                        * e_cm.from_i64(*sign)
                 })
                 .reduce(|acc, x| acc + x)
                 .unwrap_or_else(|| zero_vector.clone());
 
-            let other_part = subspace
-                .does_not_contain(&self.energies, graph)
+            let other_part = self
+                .energies
+                .iter()
+                .copied()
+                .filter(|index| !Self::energy_depends_on_subspace(*index, subspace, lmb))
                 .map(|index| {
                     let signature = &lmb.edge_signatures[index];
                     let sign = if reversed_edges.contains(&index) {
-                        -F::from_f64(1.0)
+                        e_cm.from_i64(-1)
                     } else {
-                        F::from_f64(1.0)
+                        e_cm.one()
                     };
 
                     signature.compute_momentum(
@@ -341,7 +337,7 @@ impl Esurface {
                 .energies
                 .iter()
                 .map(|index| &real_mass_vector[*index])
-                .fold(F::from_f64(0.0), |acc, x| acc + x);
+                .fold(e_cm.zero(), |acc, x| acc + x);
 
             let zero_vector = ThreeMomentum::new(e_cm.zero(), e_cm.zero(), e_cm.zero());
 
@@ -351,7 +347,7 @@ impl Esurface {
                 .map(|(index, sign)| {
                     let external_signature = &lmb.edge_signatures[*index].external;
                     compute_shift_part(external_signature, external_moms).spatial
-                        * F::from_f64(*sign as f64)
+                        * e_cm.from_i64(*sign)
                 })
                 .reduce(|acc, x| acc + x)
                 .unwrap_or_else(|| zero_vector.clone());
@@ -372,7 +368,7 @@ impl Esurface {
         external_moms: &ExternalFourMomenta<F<T>>,
         subspace: &SubspaceData,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
-        graph: &Graph,
+        _graph: &Graph,
         masses: &EdgeVec<F<T>>,
     ) -> F<T> {
         let lmb = subspace.get_lmb(all_lmbs);
@@ -382,7 +378,10 @@ impl Esurface {
             .iter()
             .map(|(index, sign)| {
                 let external_signature = &lmb.edge_signatures[*index].external;
-                F::from_f64(*sign as f64)
+                external_moms[ExternalIndex(0)]
+                    .temporal
+                    .value
+                    .from_i64(*sign)
                     * compute_t_part_of_shift_part(external_signature, external_moms)
             })
             .reduce(|acc, x| acc + x)
@@ -393,8 +392,11 @@ impl Esurface {
             .map(|mom| mom.spatial.clone())
             .collect::<TiVec<ExternalIndex, _>>();
 
-        let remaining_shift = subspace
-            .does_not_contain(&self.energies, graph)
+        let remaining_shift = self
+            .energies
+            .iter()
+            .copied()
+            .filter(|index| !Self::energy_depends_on_subspace(*index, subspace, lmb))
             .map(|index| {
                 let signature = &lmb.edge_signatures[index];
                 //panic!("signature: {:?}", signature);
@@ -419,7 +421,10 @@ impl Esurface {
             .iter()
             .map(|(index, sign)| {
                 let external_signature = &lmb.edge_signatures[*index].external;
-                F::from_f64(*sign as f64)
+                external_moms[ExternalIndex(0)]
+                    .temporal
+                    .value
+                    .from_i64(*sign)
                     * compute_t_part_of_shift_part(external_signature, external_moms)
             })
             .reduce(|acc, x| acc + x)
@@ -465,8 +470,11 @@ impl Esurface {
         );
 
         let lmb = subspace.get_lmb(all_lmbs);
-        let (derivative, energy_sum) = subspace
-            .contains(&self.energies, graph)
+        let (derivative, energy_sum) = self
+            .energies
+            .iter()
+            .copied()
+            .filter(|index| Self::energy_depends_on_subspace(*index, subspace, lmb))
             .map(|index| {
                 let signature = &lmb.edge_signatures[index];
 
@@ -574,7 +582,12 @@ impl Esurface {
         let external_3_momenta = external_moms.iter().map(|x| x.spatial.clone()).collect();
 
         //println!("got to energy loop");
-        for energy in subspace.contains(&self.energies, graph) {
+        for energy in self
+            .energies
+            .iter()
+            .copied()
+            .filter(|index| Self::energy_depends_on_subspace(*index, subspace, lmb))
+        {
             debug!("computing contribution for energy {:?}", energy);
             let signature = &lmb.edge_signatures[energy];
             //println!("signature {:?}", signature);
@@ -606,7 +619,9 @@ impl Esurface {
             debug!("current denominator: {}", denominator);
         }
 
-        radius_guess += esurface_shift.abs() / denominator;
+        if denominator != const_builder.zero() {
+            radius_guess += esurface_shift.abs() / denominator;
+        }
         debug!("final radius guess: {}", radius_guess);
         let negative_radius = radius_guess.ref_neg();
         (radius_guess, negative_radius)
@@ -664,91 +679,6 @@ impl Esurface {
                 .collect();
 
             self.external_shift = add_external_shifts(&self.external_shift, &external_shift);
-        }
-    }
-
-    pub(crate) fn new_from_subgraph(
-        subgraph: &SuBitGraph,
-        graph: &Graph,
-        orientation: &EdgeVec<Orientation>,
-    ) -> Self {
-        if graph.initial_state_cut.is_empty() {
-            todo!("handle case for amplitudes")
-        }
-
-        let subgraph_without_is_cut = subgraph.subtract(
-            &graph
-                .initial_state_cut
-                .left
-                .union(&graph.initial_state_cut.right),
-        );
-
-        let mut unit_flow = None;
-
-        let vertex_set = graph
-            .iter_nodes_of(subgraph)
-            .map(|(node_id, _, _)| VertexSet::from_usize(node_id.into()))
-            .reduce(|acc, v| acc.join(&v))
-            .unwrap();
-
-        let virtual_boundary = graph
-            .iter_edges_of(&subgraph_without_is_cut)
-            .filter_map(|(pair, edge_id, _)| match pair {
-                HedgePair::Split { split, .. } => {
-                    if let Some(common_flow) = unit_flow {
-                        match orientation[edge_id] {
-                            Orientation::Default => {
-                                if common_flow != split {
-                                    panic!("inconsistent flow on virtual boundary, cannot construct esurface");
-                                }
-                            }
-                            Orientation::Reversed => {
-                                if common_flow != -split {
-                                    panic!("inconsistent flow on virtual boundary, cannot construct esurface");
-                                }
-                            }
-                            Orientation::Undirected => (),
-                        }
-                    } else {
-                        match orientation[edge_id] {
-                            Orientation::Default => unit_flow = Some(split),
-                            Orientation::Reversed => unit_flow = Some(-split),
-                            Orientation::Undirected => (),
-                        }
-                    }
-                    Some(edge_id)
-                }
-                _ => None,
-            }).sorted()
-            .collect_vec();
-
-        let flow = unit_flow.expect("no virtual boundary found, cannot construct esurface");
-
-        let is_cut_part_of_subgraph = subgraph.intersection(
-            &graph
-                .initial_state_cut
-                .left
-                .union(&graph.initial_state_cut.right),
-        );
-
-        let mut exernal_shift = Vec::new();
-
-        for (pair, edge_index, _) in graph.iter_edges_of(&is_cut_part_of_subgraph) {
-            let HedgePair::Split {
-                split: edge_flow, ..
-            } = pair
-            else {
-                continue;
-            };
-
-            let sign = if flow == edge_flow { 1 } else { -1 };
-            exernal_shift.push((edge_index, sign));
-        }
-
-        Self {
-            energies: virtual_boundary,
-            external_shift: exernal_shift,
-            vertex_set,
         }
     }
 
@@ -851,25 +781,6 @@ pub type EsurfaceCollection = TiVec<EsurfaceID, Esurface>;
 
 pub type EsurfaceCache<T> = TiVec<EsurfaceID, T>;
 
-/// Index type for esurface, location of an esurface in the list of all esurfaces of a graph
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    Serialize,
-    Deserialize,
-    PartialEq,
-    From,
-    Into,
-    Eq,
-    Encode,
-    Decode,
-    Hash,
-    PartialOrd,
-    Ord,
-)]
-pub struct EsurfaceID(pub usize);
-
 /// Container for esurfaces that exist at a given point in the phase space
 pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, GroupEsurfaceId>;
 pub type ExistingThresholds = TiVec<ExistingEsurfaceId, EsurfaceID>;
@@ -938,12 +849,6 @@ pub(crate) fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> E
     res
 }
 
-impl From<EsurfaceID> for Atom {
-    fn from(id: EsurfaceID) -> Self {
-        parse!(&format!("η({})", Into::<usize>::into(id.0)))
-    }
-}
-
 define_index!(
     pub struct RaisedEsurfaceId;
 );
@@ -961,29 +866,54 @@ pub struct RaisedEsurfaceGroup {
     pub max_occurence: usize,
 }
 
+impl RaisedEsurfaceGroupView for RaisedEsurfaceGroup {
+    fn esurface_ids(&self) -> &[EsurfaceID] {
+        &self.esurface_ids
+    }
+
+    fn max_occurrence(&self) -> usize {
+        self.max_occurence
+    }
+}
+
+impl RaisedEsurfaceDataView for RaisedEsurfaceData {
+    fn for_each_raised_group(&self, mut f: impl FnMut(&dyn RaisedEsurfaceGroupView)) {
+        for group in &self.raised_groups {
+            f(group);
+        }
+    }
+}
+
 impl Graph {
+    pub(crate) fn normalize_esurface_with_raised_edge_groups(
+        esurface: &Esurface,
+        raised_edges: &[Vec<EdgeIndex>],
+    ) -> Esurface {
+        let mut normalized = esurface.clone();
+        for energy in normalized.energies.iter_mut() {
+            if let Some(representative) = raised_edges
+                .iter()
+                .find(|group| group.contains(energy))
+                .and_then(|group| group.first())
+            {
+                *energy = *representative;
+            }
+        }
+        normalized.energies.sort();
+        normalized
+    }
+
     pub(crate) fn determine_raised_esurfaces_from_expression(
         &self,
         expr: &CFFExpression<OrientationID>,
     ) -> RaisedEsurfaceData {
         let raised_edges = self.get_raised_edge_groups();
-
-        let normalized_cut_esurfaces = self
-            .surface_cache
+        let normalized_cut_esurfaces = expr
+            .surfaces
             .esurface_cache
             .iter()
             .map(|esurface| {
-                let mut new_esurface = esurface.clone();
-                for energy in new_esurface.energies.iter_mut() {
-                    let group_index_of_energy =
-                        raised_edges.iter().position(|group| group.contains(energy));
-
-                    if let Some(found_group_index) = group_index_of_energy {
-                        *energy = *raised_edges[found_group_index].first().unwrap();
-                    }
-                }
-                new_esurface.energies.sort();
-                new_esurface
+                Self::normalize_esurface_with_raised_edge_groups(esurface, &raised_edges)
             })
             .collect::<TiVec<EsurfaceID, _>>();
 
@@ -1031,7 +961,7 @@ impl Graph {
                 .orientations
                 .iter()
                 .map(|orientation_expression| {
-                    orientation_expression.expression.max_value_count_on_branch(
+                    orientation_expression.max_effective_denominator_value_count_on_branch(
                         &crate::cff::surface::HybridSurfaceID::Esurface(representative_esurface_id),
                     )
                 })
@@ -1052,21 +982,14 @@ mod tests {
     use linnet::half_edge::builder::HedgeGraphBuilder;
     use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
     use linnet::half_edge::nodestore::NodeStorageVec;
-    use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
 
-    use crate::cff::cff_graph::VertexSet;
-    use crate::graph::LoopMomentumBasis;
-    use crate::momentum::{
-        FourMomentum, SignOrZero,
-        sample::{ExternalFourMomenta, ExternalIndex},
-        signature::LoopExtSignature,
-    };
+    use crate::cff::VertexSet;
     use crate::processes::CrossSectionCut;
     use crate::{
         cff::{esurface::Esurface, generation::ShiftRewrite},
-        utils::{F, external_energy_atom_from_index, test_utils::dummy_hedge_graph},
+        utils::{F, test_utils::dummy_hedge_graph},
     };
 
     use super::add_external_shifts;
@@ -1116,85 +1039,6 @@ mod tests {
             vertex_set: VertexSet::dummy(),
             //subspace_graph: dummy_graph.full_graph(),
         };
-    }
-
-    #[test]
-    fn to_atom_in_lmb_uses_canonical_external_edges_not_carrier_edges() {
-        let dummy_graph = dummy_hedge_graph(9);
-        let mut edge_signatures = dummy_graph
-            .new_edgevec_from_iter(
-                (0..9).map(|_| LoopExtSignature::from((Vec::<isize>::new(), vec![0, 0]))),
-            )
-            .unwrap();
-        edge_signatures[EdgeIndex::from(8)] =
-            LoopExtSignature::from((Vec::<isize>::new(), vec![0, 1]));
-        let lmb = LoopMomentumBasis {
-            tree: SuBitGraph::empty(0),
-            loop_edges: vec![].into(),
-            ext_edges: vec![EdgeIndex::from(2), EdgeIndex::from(6)].into(),
-            edge_signatures,
-        };
-        let esurface = Esurface {
-            energies: vec![],
-            external_shift: vec![(EdgeIndex::from(8), -1)],
-            vertex_set: VertexSet::dummy(),
-        };
-
-        let atom = esurface.to_atom_in_lmb(&[], &lmb).expand();
-        let expected =
-            (Atom::num(-1) * external_energy_atom_from_index(EdgeIndex::from(6))).expand();
-
-        assert_eq!(atom.to_canonical_string(), expected.to_canonical_string());
-    }
-
-    #[test]
-    fn shift_part_uses_expanded_global_external_slots() {
-        let dummy_graph = dummy_hedge_graph(7);
-        let mut edge_signatures = dummy_graph
-            .new_edgevec_from_iter(
-                (0..7).map(|_| LoopExtSignature::from((Vec::<isize>::new(), vec![0]))),
-            )
-            .unwrap();
-        edge_signatures[EdgeIndex::from(6)] =
-            LoopExtSignature::from((Vec::<isize>::new(), vec![1]));
-        let mut lmb = LoopMomentumBasis {
-            tree: SuBitGraph::empty(0),
-            loop_edges: vec![].into(),
-            ext_edges: vec![EdgeIndex::from(6)].into(),
-            edge_signatures,
-        };
-        lmb.canonicalize_external_order(&(0..7).map(EdgeIndex::from).collect::<Vec<EdgeIndex>>());
-
-        assert_eq!(lmb.ext_edges.len(), 7);
-        assert_eq!(
-            lmb.edge_signatures[EdgeIndex::from(6)].external[ExternalIndex(2)],
-            SignOrZero::Zero
-        );
-        assert_eq!(
-            lmb.edge_signatures[EdgeIndex::from(6)].external[ExternalIndex(6)],
-            SignOrZero::Plus
-        );
-
-        let external_moms: ExternalFourMomenta<F<f64>> = vec![
-            FourMomentum::from([F(10.0), F(0.0), F(0.0), F(0.0)]),
-            FourMomentum::from([F(20.0), F(0.0), F(0.0), F(0.0)]),
-            FourMomentum::from([F(2000.0), F(0.0), F(0.0), F(0.0)]),
-            FourMomentum::from([F(30.0), F(0.0), F(0.0), F(0.0)]),
-            FourMomentum::from([F(40.0), F(0.0), F(0.0), F(0.0)]),
-            FourMomentum::from([F(50.0), F(0.0), F(0.0), F(0.0)]),
-            FourMomentum::from([F(438.555), F(0.0), F(0.0), F(0.0)]),
-        ]
-        .into();
-        let esurface = Esurface {
-            energies: vec![],
-            external_shift: vec![(EdgeIndex::from(6), -1)],
-            vertex_set: VertexSet::dummy(),
-        };
-
-        assert_eq!(
-            esurface.compute_shift_part_from_momenta(&external_moms, &lmb),
-            F(-438.555)
-        );
     }
 
     #[test]

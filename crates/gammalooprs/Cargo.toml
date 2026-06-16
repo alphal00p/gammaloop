@@ -70,6 +70,7 @@ statrs = "0.16.1"
 # compensated-summation = "0.3.0"
 # serde_with = "3.9.0"
 tabled = { workspace = true, features = ["ansi"] }
+three-dimensional-reps = { workspace = true }
 # gxhash = "3.4.1"
 thiserror = { workspace = true }
 toml = { workspace = true }

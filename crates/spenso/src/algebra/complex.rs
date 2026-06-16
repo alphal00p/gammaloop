@@ -14,16 +14,8 @@ use ref_ops::{RefAdd, RefDiv, RefMul, RefSub};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "shadowing")]
 use symbolica::domains::{
-    float::{
-        Complex as SymComplex, Constructible, Float as SymbolicaFloat,
-        FloatLike as SymbolicaFloatLike, Real,
-    },
+    float::{Complex as SymComplex, Constructible, Real},
     rational::Rational,
-};
-#[cfg(feature = "shadowing")]
-use symbolica::{
-    atom::{AtomView, EvaluationInfo},
-    evaluate::{EvaluationDomain, ExternalFunction},
 };
 
 use crate::algebra::algebraic_traits::{RefOne, RefZero};
@@ -63,29 +55,6 @@ duplicate! {
 pub struct Complex<T> {
     pub re: T,
     pub im: T,
-}
-
-#[cfg(feature = "shadowing")]
-impl<T> EvaluationDomain for Complex<T>
-where
-    T: EvaluationDomain,
-    T: 'static,
-{
-    const FIXED_PRECISION: Option<u32> = T::FIXED_PRECISION;
-
-    fn try_from_complex_float(value: SymComplex<SymbolicaFloat>) -> Result<Self, String> {
-        let zero = value.re.zero();
-        let re = T::try_from_complex_float(SymComplex::new(value.re, zero.clone()))?;
-        let im = T::try_from_complex_float(SymComplex::new(value.im, zero))?;
-        Ok(Self::new(re, im))
-    }
-
-    fn resolve_function(
-        tags: &[AtomView],
-        info: &EvaluationInfo,
-    ) -> Option<Box<dyn ExternalFunction<Self>>> {
-        info.get_evaluator(tags)
-    }
 }
 
 #[cfg(feature = "python_stubgen")]

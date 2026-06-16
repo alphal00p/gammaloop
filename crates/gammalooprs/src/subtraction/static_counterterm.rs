@@ -35,6 +35,7 @@ use crate::{
     utils, IntegrableSingularityDampener, IntegratedCounterTermRange,
     IntegratedCounterTermSettings, UVLocalisationSettings,
 };
+use crate::settings::runtime::UVLocalisationFunction;
 
 use super::overlap::{OverlapGroup, OverlapStructure};
 
@@ -617,9 +618,10 @@ impl<'a, T: FloatLike> RstarSamples<'a, T> {
                 .compute_onshell_energies(rstar_sample.loop_moms(), rstar_sample.external_moms());
             let esurface_cache = compute_esurface_cache(esurfaces, &energy_cache);
 
+            let two = energy_cache[0].from_i64(2);
             let rstar_energy_product = graph
                 .get_virtual_edges_iterator()
-                .map(|(edge_id, _)| F::from_f64(2.0) * &energy_cache[edge_id])
+                .map(|(edge_id, _)| two.clone() * &energy_cache[edge_id])
                 .fold(energy_cache[0].one(), |acc, e| acc * e);
 
             let multichanneling_denominator =
@@ -786,6 +788,10 @@ fn evaluate_uv_localisation<T: FloatLike>(
     e_cm: &F<T>,
     settings: &UVLocalisationSettings,
 ) -> F<T> {
+    if settings.function == UVLocalisationFunction::Unit {
+        return radius.one();
+    }
+
     let normalizing_scale = match settings.dynamic_width {
         true => radius_star,
         false => e_cm,

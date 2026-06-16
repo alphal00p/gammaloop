@@ -8,8 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    completion::CompletionArgExt,
-    state::{CommandHistory, ProcessRef, RunHistory, State},
+    state::{CommandHistory, RunHistory, State},
     CLISettings,
 };
 use symbolica::atom::Atom;
@@ -37,6 +36,8 @@ pub mod set;
 pub mod shell;
 pub use set::Set;
 pub use shell::Shell;
+pub mod threedreps;
+pub use threedreps::ThreeDRep;
 pub mod run;
 pub use run::Run;
 pub mod evaluate;
@@ -122,34 +123,12 @@ pub enum Commands {
 
     Renormalize(Renormalize),
 
-    /// Benchmark raw integrand evaluation speed
-    Bench {
-        /// Number of random samples to evaluate
-        #[arg(short = 's', long, value_name = "SAMPLES")]
-        samples: usize,
-        /// Process reference: #<id>, name:<name>, or <id>/<name>
-        #[arg(
-            short = 'p',
-            long = "process",
-            value_name = "PROCESS",
-            completion_process_selector(crate::completion::SelectorKind::Any)
-        )]
-        process: ProcessRef,
-
-        /// The integrand name to benchmark
-        #[arg(
-            short = 'i',
-            long = "integrand-name",
-            value_name = "NAME",
-            completion_integrand_selector(crate::completion::SelectorKind::Any)
-        )]
-        integrand_name: String,
-        /// Number of cores to parallelize over
-        #[arg(short = 'c', long)]
-        n_cores: usize,
-    },
     #[clap(subcommand)]
     Profile(Profile),
+
+    #[command(name = "3Drep")]
+    #[clap(subcommand)]
+    ThreeDRep(ThreeDRep),
 
     /// HPC batch evaluation branch
     Batch {
@@ -189,20 +168,14 @@ impl Commands {
             Commands::Profile(p) => {
                 p.run(state, global_cli_settings)?;
             }
+            Commands::ThreeDRep(command) => {
+                command.run(state, global_cli_settings, default_runtime_settings)?;
+            }
             Commands::Quit(s) => {
                 return Ok(CommandExecution::break_with(s));
             }
             Commands::Inspect(inspect) => {
                 let _ = inspect.run(state)?;
-            }
-            Commands::Bench {
-                samples,
-                process,
-                integrand_name,
-                n_cores,
-            } => {
-                let process_id = process.resolve(&state.process_list)?;
-                state.bench(samples, process_id, integrand_name, n_cores)?;
             }
             Commands::Import(s) => s.run(state, global_cli_settings)?,
             Commands::Save(s) => s.run(
@@ -213,15 +186,23 @@ impl Commands {
             )?,
             Commands::Set(s) => s.run(state, global_cli_settings, default_runtime_settings)?,
             Commands::Generate(g) => {
+                let only_generates_diagrams = matches!(
+                    g.mode.as_ref(),
+                    Some(generate::GenerateCmd::Amp(args) | generate::GenerateCmd::Xs(args))
+                        if args.only_diagrams
+                );
                 let would_compile_into_active_state = global_cli_settings.session.read_only_state
                     && global_cli_settings.global.generation.evaluator.compile
-                    && matches!(
-                        g.mode.as_ref(),
-                        None | Some(generate::GenerateCmd::Existing(_))
-                    );
+                    && global_cli_settings
+                        .global
+                        .generation
+                        .compile
+                        .requires_external_compilation()
+                    && !only_generates_diagrams;
                 if would_compile_into_active_state {
                     return Err(Report::msg(format!(
-                        "Cannot compile generated integrands into '{}' because this session was started with --read-only-state. Disable `global.generation.evaluator.compile`, restart without --read-only-state, or save the state elsewhere first.",
+                        "Cannot compile generated integrands with the '{}' backend into '{}' because this session was started with --read-only-state. Disable `global.generation.evaluator.compile`, use the `symjit` backend, generate diagrams only, restart without --read-only-state, or save the state elsewhere first.",
+                        global_cli_settings.global.generation.compile.compilation_mode,
                         global_cli_settings.state.folder.display()
                     )));
                 }
@@ -304,7 +285,7 @@ mod tests {
         state::{ProcessRef, RunHistory, State},
         CLISettings,
     };
-    use gammalooprs::settings::RuntimeSettings;
+    use gammalooprs::settings::{global::CompilationMode, RuntimeSettings};
 
     #[test]
     fn select_command_parses_graph_names() {
@@ -384,6 +365,7 @@ mod tests {
         let mut runtime_settings = RuntimeSettings::default();
         cli_settings.session.read_only_state = true;
         cli_settings.global.generation.evaluator.compile = true;
+        cli_settings.global.generation.compile.compilation_mode = CompilationMode::Assembly;
 
         let err = Commands::Generate(Generate {
             keep_sources: false,

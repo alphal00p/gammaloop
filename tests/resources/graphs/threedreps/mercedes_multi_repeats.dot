@@ -1,0 +1,24 @@
+digraph mercedes_multi_repeats {
+  num="1";
+  overall_factor="1";
+  edge [num="1"];
+  node [num="1"];
+  v0;
+  v1;
+  v2;
+  v3;
+  v4;
+  v5;
+  v6;
+  v7;
+  v0:0 -> v4:1 [id=0 dir=none name="q0" particle="scalar_1" lmb_rep="K(0,a___)+-1*K(1,a___)" mass="0.8"];
+  v4:2 -> v5:3 [id=1 dir=none name="q1" particle="scalar_1" lmb_rep="K(0,a___)+-1*K(1,a___)" mass="0.8"];
+  v5:4 -> v1:5 [id=2 dir=none name="q2" particle="scalar_1" lmb_rep="K(0,a___)+-1*K(1,a___)" mass="0.8"];
+  v0:6 -> v2:7 [id=3 dir=none name="q3" particle="scalar_1" lmb_rep="-1*K(0,a___)+K(2,a___)" mass="0.9"];
+  v0:8 -> v3:9 [id=4 dir=none name="q4" particle="scalar_1" lmb_rep="K(1,a___)+-1*K(2,a___)" mass="1.1"];
+  v1:10 -> v6:11 [id=5 dir=none lmb_id="0" name="q5" particle="scalar_1" lmb_rep="K(0,a___)" mass="0.75"];
+  v6:12 -> v2:13 [id=6 dir=none name="q6" particle="scalar_1" lmb_rep="K(0,a___)" mass="0.75"];
+  v3:14 -> v1:15 [id=7 dir=none lmb_id="1" name="q7" particle="scalar_1" lmb_rep="K(1,a___)" mass="1.0"];
+  v2:16 -> v7:17 [id=8 dir=none lmb_id="2" name="q8" particle="scalar_1" lmb_rep="K(2,a___)" mass="0.6"];
+  v7:18 -> v3:19 [id=9 dir=none name="q9" particle="scalar_1" lmb_rep="K(2,a___)" mass="0.6"];
+}

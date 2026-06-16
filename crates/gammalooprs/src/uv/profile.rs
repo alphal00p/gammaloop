@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use crate::DependentMomentaConstructor;
-use crate::cff::expression::{GraphOrientation, OrientationData};
+use crate::cff::expression::{GammaLoopGraphOrientation, OrientationData};
 use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::graph::{Graph, LmbIndex};
 use crate::integrands::evaluation::EvaluationResult;
@@ -1025,7 +1025,7 @@ impl<'a> UVProfileRunner<'a> {
         let integrand_expr = &g.derived_data.all_mighty_integrand;
         let analytic_orientations: Vec<_> = g
             .derived_data
-            .cff_expression
+            .three_d_expression
             .as_ref()
             .unwrap()
             .orientations
@@ -1083,7 +1083,7 @@ impl<'a> UVProfileRunner<'a> {
                     )> = analytic_orientations
                         .par_iter()
                         .map(|o| {
-                            let oatom = o.data.orientation.select(integrand_expr);
+                            let oatom = o.data.orientation.select_gs(integrand_expr);
                             g.graph
                                 .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), lmb)
                                 .into_iter()
@@ -1504,7 +1504,7 @@ impl SubSetResult {
 
     pub fn analyse_analytic(&self) -> Option<AnalyticAnalysis> {
         //             .derived_data
-        //             .cff_expression
+        //             .three_d_expression
         //             .as_ref()
         //             .unwrap()
         //             .orientations
