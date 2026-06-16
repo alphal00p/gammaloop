@@ -27,8 +27,10 @@ problem is posed. The numerator then has to use exactly that namespace, and the
 same factor-to-occurrence assignment must control both CFF generation and
 numerical numerator evaluation.
 
-This is GammaLoop production machinery, independently of LTD; no LMB variable
-is ever used as an energy-identity or energy-capacity index here.
+This is GammaLoop production machinery. It is not a requirement that the
+diagnostic `3Drep` CLI prepare its inputs or expressions in the same way. It is
+also deliberately independent of LTD; no LMB variable is ever used as an
+energy-identity or energy-capacity index here.
 
 ## Equality is defined for the complete fixed-cut functional
 

@@ -7,7 +7,7 @@ fn v_diag() -> Result<()> {
         Some("v_diag.toml".into()),
         get_tests_workspace_path().join("v_diag"),
         Some("v_diag".to_string()),
-        false,
+        true,
     )?;
     Ok(())
 }

@@ -431,6 +431,15 @@ fn lu_rust_get_integrand_info_reports_groups_orientations_lmbs_and_cuts() -> Res
                 .map(|threshold| threshold.esurface_id)
                 .collect::<Vec<_>>()
         );
+        assert_eq!(
+            group
+                .threshold_esurface_ids
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len(),
+            group.threshold_esurface_ids.len(),
+            "threshold IDs must uniquely identify the exported thresholds"
+        );
         for threshold in &group.threshold_esurfaces {
             assert_eq!(threshold.representative_graph_id, master_graph_id);
             assert_eq!(threshold.classification, None);
@@ -626,7 +635,7 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
     );
     assert!(!metadata.is_nan);
 
-    let snapshot = serde_json::json!({
+    let mut snapshot = serde_json::json!({
         "process": info.process_name,
         "integrand": info.integrand_name,
         "graph": "GL20",
@@ -641,7 +650,102 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
         },
         "event_groups": event_groups,
     });
-    insta::assert_json_snapshot!("gl20_multichannel_local_inspect_events", snapshot);
+    // Retain the signed absorptive weights in the reference for this source convention.
+    // Edge relabeling can change CFF discovery and event enumeration; physical cut IDs
+    // and every numerical event payload retain their meaning. Compare the saved
+    // payload by channel basis and cut, allowing enumeration and roundoff to vary.
+    let mut expected: serde_json::Value = serde_json::from_str(
+        include_str!("snapshots/test_evaluation_api__gl20_multichannel_local_inspect_events.snap")
+            .splitn(3, "---\n")
+            .nth(2)
+            .expect("the reference snapshot must contain a JSON payload"),
+    )?;
+    for payload in [&mut snapshot, &mut expected] {
+        for group in payload["event_groups"].as_array_mut().unwrap() {
+            let events = group.as_array_mut().unwrap();
+            for event in events.iter_mut() {
+                let event = event.as_object_mut().unwrap();
+                event.remove("event_index");
+                event.remove("event_group_index");
+                event["cut_info"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("lmb_channel_id");
+            }
+            events.sort_by_cached_key(|event| {
+                (
+                    event["cut_info"]["lmb_channel_edge_ids"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|edge| edge.as_u64().unwrap())
+                        .collect::<Vec<_>>(),
+                    event["cut_info"]["cut_id"].as_u64().unwrap(),
+                )
+            });
+        }
+    }
+    let mut remaining = vec![(&snapshot, &expected, String::from("event snapshot"))];
+    while let Some((actual, expected, context)) = remaining.pop() {
+        match (actual, expected) {
+            (serde_json::Value::Object(actual), serde_json::Value::Object(expected)) => {
+                assert!(
+                    actual.keys().eq(expected.keys()),
+                    "{context}: fields differ"
+                );
+                if actual.len() == 2 && actual.contains_key("re") && actual.contains_key("im") {
+                    let actual_re = actual["re"].as_f64().unwrap();
+                    let actual_im = actual["im"].as_f64().unwrap();
+                    let expected_re = expected["re"].as_f64().unwrap();
+                    let expected_im = expected["im"].as_f64().unwrap();
+                    let distance = (actual_re - expected_re).hypot(actual_im - expected_im);
+                    let scale = actual_re
+                        .hypot(actual_im)
+                        .max(expected_re.hypot(expected_im));
+                    // A residual component is judged at the complete complex scale;
+                    // an absorptive sign reversal must still fail this comparison.
+                    assert!(
+                        actual_re.is_finite()
+                            && actual_im.is_finite()
+                            && expected_re.is_finite()
+                            && expected_im.is_finite()
+                            && distance <= 1.0e-10 * scale,
+                        "{context}: actual={actual:?}, expected={expected:?}",
+                    );
+                } else {
+                    remaining.extend(
+                        actual.iter().map(|(key, value)| {
+                            (value, &expected[key], format!("{context}.{key}"))
+                        }),
+                    );
+                }
+            }
+            (serde_json::Value::Array(actual), serde_json::Value::Array(expected)) => {
+                assert_eq!(actual.len(), expected.len(), "{context}: length differs");
+                remaining.extend(
+                    actual
+                        .iter()
+                        .zip(expected)
+                        .enumerate()
+                        .map(|(index, (a, e))| (a, e, format!("{context}[{index}]"))),
+                );
+            }
+            (serde_json::Value::Number(actual), serde_json::Value::Number(expected))
+                if actual.is_f64() || expected.is_f64() =>
+            {
+                let actual = actual.as_f64().unwrap();
+                let expected = expected.as_f64().unwrap();
+                assert!(
+                    actual.is_finite()
+                        && expected.is_finite()
+                        && (actual - expected).abs()
+                            <= 1.0e-10 * actual.abs().max(expected.abs()).max(1.0),
+                    "{context}: actual={actual}, expected={expected}",
+                );
+            }
+            _ => assert_eq!(actual, expected, "{context}"),
+        }
+    }
 
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
