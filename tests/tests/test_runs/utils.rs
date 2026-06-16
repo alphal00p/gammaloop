@@ -469,6 +469,245 @@ pub(super) fn assert_complex_approx_eq(
     );
 }
 
+pub(super) fn mink_dot(left_edge: usize, right_edge: usize, dummy_index: usize) -> String {
+    format!(
+        "gammalooprs::Q({left_edge},spenso::mink(4,{dummy_index}))*gammalooprs::Q({right_edge},spenso::mink(4,{dummy_index}))",
+    )
+}
+
+pub(super) fn evaluate_xspace_process_with_events(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    process: &str,
+    integrand: &str,
+    point: &[f64],
+    discrete_dims: &[usize],
+) -> Result<gammalooprs::integrands::evaluation::SingleSampleEvaluationResult> {
+    let (process_id, resolved_integrand_name) = cli.state.find_integrand_ref(
+        Some(&ProcessRef::Unqualified(process.to_string())),
+        Some(&integrand.to_string()),
+    )?;
+    let points = ndarray::Array2::from_shape_vec((1, point.len()), point.to_vec())?;
+    let discrete_dims =
+        ndarray::Array2::from_shape_vec((1, discrete_dims.len()), discrete_dims.to_vec())?;
+    evaluate_sample(
+        &mut cli.state,
+        &EvaluateSamples {
+            process_id: Some(process_id),
+            integrand_name: Some(resolved_integrand_name),
+            use_arb_prec: false,
+            minimal_output: false,
+            return_generated_events: Some(true),
+            momentum_space: false,
+            points: points.view(),
+            integrator_weights: None,
+            discrete_dims: Some(discrete_dims.view()),
+            graph_names: None,
+            orientations: None,
+        },
+    )
+}
+
+pub(super) fn complex_ff64(value: &Complex<F<f64>>) -> Complex<f64> {
+    Complex::new(value.re.0, value.im.0)
+}
+
+pub(super) fn assert_f64_approx_eq(actual: f64, expected: f64, context: &str) {
+    let scale = actual.abs().max(expected.abs()).max(1.0);
+    let tolerance = 1.0e-10 * scale;
+    assert!(
+        (actual - expected).abs() <= tolerance,
+        "{context}: actual={actual}, expected={expected}, tolerance={tolerance}"
+    );
+}
+
+pub(super) fn assert_evaluation_outputs_match(
+    actual: &gammalooprs::integrands::evaluation::EvaluationResultOutput,
+    expected: &gammalooprs::integrands::evaluation::EvaluationResultOutput,
+    context: &str,
+) {
+    match (
+        actual.parameterization_jacobian.as_ref(),
+        expected.parameterization_jacobian.as_ref(),
+    ) {
+        (Some(actual), Some(expected)) => {
+            assert_f64_approx_eq(actual.0, expected.0, &format!("{context}: jacobian"));
+        }
+        (None, None) => {}
+        _ => panic!("{context}: jacobian presence differs"),
+    }
+    assert_f64_approx_eq(
+        actual.integrator_weight.0,
+        expected.integrator_weight.0,
+        &format!("{context}: integrator weight"),
+    );
+
+    assert_eq!(
+        actual.event_groups.len(),
+        expected.event_groups.len(),
+        "{context}: event-group count differs"
+    );
+    for (group_index, (actual_group, expected_group)) in actual
+        .event_groups
+        .iter()
+        .zip(expected.event_groups.iter())
+        .enumerate()
+    {
+        assert_eq!(
+            actual_group.len(),
+            expected_group.len(),
+            "{context}: event count differs in group {group_index}"
+        );
+        let actual_events = actual_group
+            .iter()
+            .sorted_by_key(|event| {
+                (
+                    event.cut_info.graph_group_id,
+                    event.cut_info.graph_id,
+                    event.cut_info.cut_id,
+                    event.cut_info.orientation_id,
+                    event.cut_info.lmb_channel_id,
+                )
+            })
+            .collect_vec();
+        let expected_events = expected_group
+            .iter()
+            .sorted_by_key(|event| {
+                (
+                    event.cut_info.graph_group_id,
+                    event.cut_info.graph_id,
+                    event.cut_info.cut_id,
+                    event.cut_info.orientation_id,
+                    event.cut_info.lmb_channel_id,
+                )
+            })
+            .collect_vec();
+
+        for (event_index, (actual_event, expected_event)) in
+            actual_events.iter().zip(expected_events.iter()).enumerate()
+        {
+            let event_context = format!(
+                "{context}: group {group_index} event {event_index}; actual cut={:?}; expected cut={:?}; actual additional={:?}; expected additional={:?}",
+                actual_event.cut_info,
+                expected_event.cut_info,
+                actual_event.additional_weights.weights,
+                expected_event.additional_weights.weights
+            );
+            assert_eq!(
+                actual_event.cut_info.cut_id, expected_event.cut_info.cut_id,
+                "{event_context}: cut id differs"
+            );
+            assert_eq!(
+                actual_event.cut_info.graph_id, expected_event.cut_info.graph_id,
+                "{event_context}: graph id differs"
+            );
+            assert_eq!(
+                actual_event.cut_info.graph_group_id, expected_event.cut_info.graph_group_id,
+                "{event_context}: graph-group id differs"
+            );
+            assert_eq!(
+                actual_event.cut_info.orientation_id, expected_event.cut_info.orientation_id,
+                "{event_context}: orientation id differs"
+            );
+            assert_complex_approx_eq(
+                complex_ff64(&actual_event.weight),
+                complex_ff64(&expected_event.weight),
+                &format!("{event_context}: event weight"),
+            );
+            assert_eq!(
+                actual_event.additional_weights.weights.keys().collect_vec(),
+                expected_event
+                    .additional_weights
+                    .weights
+                    .keys()
+                    .collect_vec(),
+                "{event_context}: additional-weight keys differ"
+            );
+            for (key, expected_weight) in &expected_event.additional_weights.weights {
+                let actual_weight = &actual_event.additional_weights.weights[key];
+                assert_complex_approx_eq(
+                    complex_ff64(actual_weight),
+                    complex_ff64(expected_weight),
+                    &format!("{event_context}: additional weight {key:?}"),
+                );
+            }
+        }
+    }
+    let actual_total = complex_ff64(&actual.integrand_result);
+    let expected_total = complex_ff64(&expected.integrand_result);
+    let actual_norm =
+        (actual_total.re * actual_total.re + actual_total.im * actual_total.im).sqrt();
+    let expected_norm =
+        (expected_total.re * expected_total.re + expected_total.im * expected_total.im).sqrt();
+    let scale = actual_norm.max(expected_norm).max(1.0);
+    let tolerance = 1.0e-10 * scale;
+    let distance = complex_distance(actual_total, expected_total);
+    if distance > tolerance {
+        let mut diagnostic = format!(
+            "{context}: integrand result: actual={actual_total}, expected={expected_total}, tolerance={tolerance}; actual groups={}, expected groups={}",
+            actual.event_groups.len(),
+            expected.event_groups.len()
+        );
+        for (label, groups, total) in [
+            ("actual", &actual.event_groups, actual_total),
+            ("expected", &expected.event_groups, expected_total),
+        ] {
+            diagnostic.push_str(&format!("\n{label} integrand_result={total}"));
+            for (group_index, group) in groups.iter().enumerate() {
+                diagnostic.push_str(&format!(
+                    "\n{label} group {group_index} events={}",
+                    group.len()
+                ));
+                for (event_index, event) in group.iter().enumerate() {
+                    diagnostic.push_str(&format!(
+                        "\n{label} group {group_index} event {event_index} cut={:?} weight={} additional={:?}",
+                        event.cut_info,
+                        complex_ff64(&event.weight),
+                        event.additional_weights.weights
+                    ));
+                }
+            }
+        }
+        panic!("{diagnostic}");
+    }
+}
+
+pub(super) fn assert_three_way_local_uv_outputs_match(
+    cff_3d: &gammalooprs::integrands::evaluation::SingleSampleEvaluationResult,
+    cff_4d: &gammalooprs::integrands::evaluation::SingleSampleEvaluationResult,
+    ltd_4d: &gammalooprs::integrands::evaluation::SingleSampleEvaluationResult,
+    context: &str,
+) {
+    assert_evaluation_outputs_match(
+        &cff_4d.sample.evaluation,
+        &cff_3d.sample.evaluation,
+        &format!("{context}: CFF local-4D vs CFF local-3D"),
+    );
+    assert_evaluation_outputs_match(
+        &ltd_4d.sample.evaluation,
+        &cff_3d.sample.evaluation,
+        &format!("{context}: LTD local-4D vs CFF local-3D"),
+    );
+}
+
+pub(super) fn evaluation_has_threshold_counterterm(
+    evaluation: &gammalooprs::integrands::evaluation::EvaluationResultOutput,
+) -> bool {
+    evaluation
+        .event_groups
+        .iter()
+        .flat_map(|group| group.iter())
+        .any(|event| {
+            event.additional_weights.weights.keys().any(|key| {
+                matches!(
+                    key,
+                    gammalooprs::observables::events::AdditionalWeightKey::ThresholdCounterterm {
+                        ..
+                    }
+                )
+            })
+        })
+}
+
 pub(super) fn setup_epem_tth_spin_sum_cli(
     test_name: &str,
 ) -> Result<gammaloop_integration_tests::CLIState> {
