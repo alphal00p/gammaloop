@@ -23,13 +23,10 @@ use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    domains::rational::Fraction,
-    evaluate::JITCompiledEvaluator,
-    prelude::*,
-    state::StateMap,
+    domains::rational::Fraction, evaluate::JITCompiledEvaluator, prelude::*, state::StateMap,
 };
 
-const STANDALONE_EVALUATORS_VERSION: u32 = 5;
+const STANDALONE_EVALUATORS_VERSION: u32 = 7;
 const ARB_PRECISION_BITS: u32 = 1000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
@@ -73,7 +70,9 @@ struct StandaloneGraphTermArchive<A = Vec<u8>> {
     threshold_counterterms: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
+)]
 struct StandaloneCutCFFIndex {
     left_threshold_order: Option<usize>,
     right_threshold_order: Option<usize>,
@@ -88,12 +87,15 @@ struct StandaloneIndexedEvaluatorStackArchive<A = Vec<u8>> {
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
+    explicit_orientation_sum_only: bool,
+    production_orientation_ids: Vec<usize>,
     single_parametric: StandaloneGenericEvaluatorArchive<A>,
     iterative: Option<StandaloneGenericEvaluatorArchive<A>>,
     summed_function_map: Option<StandaloneGenericEvaluatorArchive<A>>,
     summed: Option<StandaloneGenericEvaluatorArchive<A>>,
     representative_input: Vec<StandaloneComplexInput>,
     start: usize,
+    residue_map_id_start: usize,
     mult_offset: usize,
 }
 
@@ -432,7 +434,8 @@ fn apply_fn_map_entries(
 ) -> Result<(Vec<Replacement>, FunctionMap)> {
     let mut fn_map = FunctionMap::new();
     let mut replacements: Vec<Replacement> = vec![];
-    fn_map.add_aliases([(parse_lit!(gammalooprs::x), Atom::Zero)])
+    fn_map
+        .add_aliases([(parse_lit!(gammalooprs::x), Atom::Zero)])
         .map_err(|error| eyre!(error))?;
 
     for (lhs, rhs, tags, args) in parsed_entries {
@@ -556,17 +559,17 @@ where
             .optimization_settings(optimization_settings)
             .build()
             .map(|eval| {
-            (
-                eval.map_coeff(&|value| {
-                    Complex::new(
-                        T::exact_from_rational(&value.re),
-                        T::exact_from_rational(&value.im),
-                    )
-                }),
-                exprs.len(),
-            )
-        })
-        .map_err(|error| eyre!("{error}"))
+                (
+                    eval.map_coeff(&|value| {
+                        Complex::new(
+                            T::exact_from_rational(&value.re),
+                            T::exact_from_rational(&value.im),
+                        )
+                    }),
+                    exprs.len(),
+                )
+            })
+            .map_err(|error| eyre!("{error}"))
     }
 }
 
@@ -626,8 +629,25 @@ impl<A> StandaloneEvaluatorStackArchive<A> {
             .collect()
     }
 
-    fn set_orientation<T: StandaloneNumber>(&self, orientation: &[i8]) -> Result<Vec<Complex<T>>> {
+    fn set_orientation<T: StandaloneNumber>(
+        &self,
+        orientation_index: usize,
+        orientation: &[i8],
+    ) -> Result<Vec<Complex<T>>> {
         let mut input = self.representative_input::<T>()?;
+        let production_orientation_id = self
+            .production_orientation_ids
+            .get(orientation_index)
+            .ok_or_else(|| {
+                eyre!(
+                    "Missing production residue-map ID for runtime orientation {}",
+                    orientation_index
+                )
+            })?;
+        input[self.residue_map_id_start * self.mult_offset] = Complex::new(
+            T::exact_from_rational(&Rational::from(*production_orientation_id)),
+            T::zero_value(),
+        );
         let zero = T::zero_value();
         let one = T::one_value();
         set_orientation_values_impl(
@@ -694,7 +714,10 @@ fn evaluate_eager<T: StandaloneNumber>(
     evaluator: &mut ExpressionEvaluator<Complex<T>>,
     output_len: usize,
     inputs: &[Vec<Complex<T>>],
-) -> Vec<Complex<T>> {
+) -> Vec<Complex<T>>
+where
+    Complex<T>: EvaluationDomain,
+{
     let mut accumulated = vec![Complex::new(T::zero_value(), T::zero_value()); output_len];
 
     for input in inputs {
@@ -978,6 +1001,15 @@ fn evaluate_double_archive<A: ImportWithMap, S>(
     let stack = graph.stack(&options.stack)?;
     let (payload, iterate) = stack.selected_payload(options.method)?;
 
+    if stack.explicit_orientation_sum_only
+        && options.method == StandaloneMethod::SingleParametric
+        && options.orientation_index.is_some()
+    {
+        return Err(eyre!(
+            "`--orientation-index` is invalid for an explicit orientation-sum evaluator because its single-parametric expression already contains the complete orientation sum"
+        ));
+    }
+
     let params = graph
         .param_builder_params
         .iter()
@@ -996,6 +1028,9 @@ fn evaluate_double_archive<A: ImportWithMap, S>(
         ]
     } else {
         match options.method {
+            StandaloneMethod::SingleParametric if stack.explicit_orientation_sum_only => {
+                vec![stack.representative_input::<f64>()?]
+            }
             StandaloneMethod::SingleParametric => {
                 if let Some(index) = options.orientation_index {
                     let orientation = graph.orientations.get(index).ok_or_else(|| {
@@ -1005,12 +1040,15 @@ fn evaluate_double_archive<A: ImportWithMap, S>(
                             graph.orientations.len()
                         )
                     })?;
-                    vec![stack.set_orientation::<f64>(orientation)?]
+                    vec![stack.set_orientation::<f64>(index, orientation)?]
                 } else {
                     graph
                         .orientations
                         .iter()
-                        .map(|orientation| stack.set_orientation::<f64>(orientation))
+                        .enumerate()
+                        .map(|(index, orientation)| {
+                            stack.set_orientation::<f64>(index, orientation)
+                        })
                         .collect::<Result<Vec<_>>>()?
                 }
             }
@@ -1104,6 +1142,15 @@ where
     let graph = archive.graph_term(options.graph_index, options.graph_name.as_deref())?;
     let stack = graph.stack(&options.stack)?;
     let (payload, iterate) = stack.selected_payload(options.method)?;
+
+    if stack.explicit_orientation_sum_only
+        && options.method == StandaloneMethod::SingleParametric
+        && options.orientation_index.is_some()
+    {
+        return Err(eyre!(
+            "`--orientation-index` is invalid for an explicit orientation-sum evaluator because its single-parametric expression already contains the complete orientation sum"
+        ));
+    }
     let params = graph
         .param_builder_params
         .iter()
@@ -1122,6 +1169,9 @@ where
         ]
     } else {
         match options.method {
+            StandaloneMethod::SingleParametric if stack.explicit_orientation_sum_only => {
+                vec![stack.representative_input::<T>()?]
+            }
             StandaloneMethod::SingleParametric => {
                 if let Some(index) = options.orientation_index {
                     let orientation = graph.orientations.get(index).ok_or_else(|| {
@@ -1131,12 +1181,13 @@ where
                             graph.orientations.len()
                         )
                     })?;
-                    vec![stack.set_orientation::<T>(orientation)?]
+                    vec![stack.set_orientation::<T>(index, orientation)?]
                 } else {
                     graph
                         .orientations
                         .iter()
-                        .map(|orientation| stack.set_orientation::<T>(orientation))
+                        .enumerate()
+                        .map(|(index, orientation)| stack.set_orientation::<T>(index, orientation))
                         .collect::<Result<Vec<_>>>()?
                 }
             }
@@ -1203,16 +1254,14 @@ fn main() -> Result<()> {
                         StandaloneNumericTarget::Quad,
                     )
                 }
-                StandaloneNumericTarget::Arb => {
-                    evaluate_higher_precision_archive::<Float, _, _>(
-                        archive,
-                        &state_map,
-                        &options,
-                        custom_input.as_deref(),
-                        "arb",
-                        StandaloneNumericTarget::Arb,
-                    )
-                }
+                StandaloneNumericTarget::Arb => evaluate_higher_precision_archive::<Float, _, _>(
+                    archive,
+                    &state_map,
+                    &options,
+                    custom_input.as_deref(),
+                    "arb",
+                    StandaloneNumericTarget::Arb,
+                ),
             }
         }
         "json" => {
@@ -1231,16 +1280,14 @@ fn main() -> Result<()> {
                         StandaloneNumericTarget::Quad,
                     )
                 }
-                StandaloneNumericTarget::Arb => {
-                    evaluate_higher_precision_archive::<Float, _, _>(
-                        archive,
-                        &state_map,
-                        &options,
-                        custom_input.as_deref(),
-                        "arb",
-                        StandaloneNumericTarget::Arb,
-                    )
-                }
+                StandaloneNumericTarget::Arb => evaluate_higher_precision_archive::<Float, _, _>(
+                    archive,
+                    &state_map,
+                    &options,
+                    custom_input.as_deref(),
+                    "arb",
+                    StandaloneNumericTarget::Arb,
+                ),
             }
         }
         _ => Err(eyre!(

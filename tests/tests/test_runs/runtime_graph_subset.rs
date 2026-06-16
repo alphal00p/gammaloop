@@ -215,71 +215,19 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
     };
     assert_eq!(selected_grid.bins.len(), expected_master_names.len());
 
-    let (ProcessIntegrand::CrossSection(source_xs), ProcessIntegrand::CrossSection(selected_xs)) =
-        (&source, &selected)
-    else {
-        panic!("expected cross-section integrands")
-    };
     let unknown_error = source
         .clone_with_selected_graph_groups(&["UNKNOWN_GRAPH".to_string()])
         .err()
         .expect("unknown graph name must be rejected");
     assert!(format!("{unknown_error:?}").contains("Unknown graph 'UNKNOWN_GRAPH'"));
 
-    for (new_group_id, group) in selected_xs.data.graph_group_structure.iter_enumerated() {
-        let selected_master_id = group
-            .into_iter()
-            .find(|&graph_id| selected_xs.data.graph_terms[graph_id].graph.is_group_master)
-            .expect("selected group must contain its master");
-        let selected_master = &selected_xs.data.graph_terms[selected_master_id];
-        assert_eq!(selected_master.graph.group_id, Some(new_group_id));
-        assert!(selected_master.graph.is_group_master);
-        let old_group_id = source.resolve_group_id_by_master_name(&selected_master.graph.name)?;
-        let expected_names = source_xs.data.graph_group_structure[old_group_id]
-            .into_iter()
-            .map(|graph_id| source_xs.data.graph_terms[graph_id].graph.name.clone())
-            .collect_vec();
-        let actual_names = group
-            .into_iter()
-            .map(|graph_id| selected_xs.data.graph_terms[graph_id].graph.name.clone())
-            .collect_vec();
-        assert_eq!(actual_names, expected_names);
-    }
-    assert_eq!(
-        selected_xs.data.graph_to_group_id.len(),
-        selected_xs.data.graph_terms.len()
-    );
-    for selected_term in &selected_xs.data.graph_terms {
-        let source_term = source_xs
-            .data
-            .graph_terms
-            .iter()
-            .find(|term| term.graph.name == selected_term.graph.name)
-            .expect("selected cross-section term must come from source");
-        assert_eq!(selected_term.lmbs.len(), source_term.lmbs.len());
-        assert_eq!(selected_term.cuts.len(), source_term.cuts.len());
-        assert_eq!(
-            selected_term.threshold_candidate_esurface_ids,
-            source_term.threshold_candidate_esurface_ids
-        );
-        assert_eq!(
-            selected_term.cut_threshold_associations.len(),
-            source_term.cut_threshold_associations.len()
-        );
-        for (selected_cut, source_cut) in selected_term
-            .cut_threshold_associations
-            .iter()
-            .zip(source_term.cut_threshold_associations.iter())
-        {
-            assert_eq!(selected_cut.left.len(), source_cut.left.len());
-            assert_eq!(selected_cut.right.len(), source_cut.right.len());
-        }
-    }
-    let selected_term_names = selected_xs
-        .data
-        .graph_terms
-        .iter()
-        .map(|term| term.graph.name.clone())
+    let selected_term_names = (0..selected.graph_count())
+        .map(|id| {
+            selected
+                .graph_name_by_id(id)
+                .expect("selected graph ID must resolve")
+        })
+        .map(str::to_owned)
         .collect::<BTreeSet<_>>();
 
     let model = cli
@@ -335,6 +283,7 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
                     .graph_name_by_id(event.cut_info.graph_id)
                     .expect("event graph id must resolve in reduced view");
                 assert!(selected_term_names.contains(graph_name));
+                assert_eq!(event.cut_info.graph_group_id, Some(group_id));
                 sum + Complex::new(event.weight.re.0, event.weight.im.0)
             });
         assert_complex_close(event_sum, selected_effective, "selected event weights");

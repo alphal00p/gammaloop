@@ -90,11 +90,11 @@ fn aaa() {
         elapsed
     );
 
-    let expanded_simplified = simplified.expand();
+    let factored_simplified = simplified.collect_factors();
     println!(
         "Gamma simplified: {}, {} terms",
-        expanded_simplified.log_print(Some(120)),
-        expanded_simplified.nterms(),
+        factored_simplified.log_print(Some(120)),
+        factored_simplified.nterms(),
     );
 
     let evaluator_settings = EvaluatorSettings {
@@ -192,12 +192,13 @@ fn aaa() {
     for (name, expr) in [
         ("Concretized", num),
         ("Simplified", simplified),
-        ("Expanded", expanded_simplified),
+        ("Factored", factored_simplified),
     ] {
         println!("Creating evaluator for {}", name);
         let (mut evaluator, timings) = EvaluatorStack::new_with_timings(
             std::slice::from_ref(&expr),
             &evaluator_param_builder,
+            &[],
             &[],
             None,
             &evaluator_settings,
