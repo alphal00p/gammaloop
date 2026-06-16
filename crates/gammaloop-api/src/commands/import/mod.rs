@@ -11,8 +11,9 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
+    commands::generate::parse_process_spec_string,
     completion::CompletionArgExt,
-    state::{ProcessRef, State},
+    state::{GraphImportOptions, ProcessRef, State},
     CLISettings,
 };
 use color_eyre::Result;
@@ -23,8 +24,16 @@ pub enum Import {
     Model(ImportModel),
     Graphs {
         // #[arg(short = 'p')]
-        #[arg(value_hint = clap::ValueHint::FilePath)]
-        path: PathBuf,
+        #[arg(value_name = "PATH", value_hint = clap::ValueHint::FilePath)]
+        source: Option<String>,
+
+        /// Inline DOT graph content to import instead of reading from a file path.
+        #[arg(long = "inline-dot", value_name = "DOT")]
+        inline_dot: Option<String>,
+
+        /// Process definition used to select physical Cutkosky cuts for imported graphs.
+        #[arg(long = "process-spec", value_name = "SPEC")]
+        process_spec: Option<String>,
 
         /// Process reference: #<id>, name:<name>, or <id>/<name>
         #[arg(
@@ -52,24 +61,20 @@ impl Import {
     pub fn run(self, state: &mut State, cli_settings: &CLISettings) -> Result<()> {
         match self {
             Import::Graphs {
-                path,
+                source,
+                inline_dot,
+                process_spec,
                 process,
                 integrand_name,
                 overwrite,
                 append,
             } => {
-                let resolved_path =
-                    Self::resolve_graph_import_path(&path, &cli_settings.state.folder)?;
-                let default_process_name = resolved_path
-                    .file_stem()
-                    .ok_or_else(|| {
-                        eyre!(
-                            "Could not derive a process name from graph path '{}'",
-                            resolved_path.display()
-                        )
-                    })?
-                    .to_string_lossy()
-                    .into_owned();
+                let source = GraphImportSource::resolve(
+                    source.as_deref(),
+                    inline_dot.as_deref(),
+                    &cli_settings.state.folder,
+                )?;
+                let default_process_name = source.default_process_name()?;
                 let (process_name, process_id) = match process {
                     Some(ProcessRef::Id(id)) => (None, Some(id)),
                     Some(ProcessRef::Name(name)) => (Some(name), None),
@@ -96,18 +101,27 @@ impl Import {
                     None => (Some(default_process_name), None),
                 };
 
-                info!(
-                    "Loading graphs from '{}'",
-                    Self::display_graph_import_path(&resolved_path).display()
-                );
-                let graphs = Graph::from_path(&resolved_path, &state.model)?;
+                info!("Loading graphs from {}", source.display_name());
+                let graphs = source.load(&state.model)?;
+                let generation_type = State::infer_graph_list_generation_type(&graphs)?;
+                let process_definition = process_spec
+                    .as_deref()
+                    .map(|spec| {
+                        parse_process_spec_string(spec, generation_type, &state.model)
+                            .map(|spec| spec.process_definition)
+                            .wrap_err_with(|| format!("Failed to parse --process-spec `{spec}`"))
+                    })
+                    .transpose()?;
                 state.import_graphs(
                     graphs,
-                    process_name,
-                    process_id,
-                    integrand_name,
-                    overwrite,
-                    append,
+                    GraphImportOptions {
+                        process_name,
+                        process_id,
+                        process_definition,
+                        integrand_name,
+                        overwrite,
+                        append,
+                    },
                 )
             }
             Import::Model(im) => im.run(state),
@@ -181,5 +195,66 @@ impl Import {
             }
         }
         normalized
+    }
+}
+
+enum GraphImportSource {
+    Path(PathBuf),
+    String(String),
+}
+
+impl GraphImportSource {
+    fn resolve(
+        source: Option<&str>,
+        inline_dot: Option<&str>,
+        state_folder: &Path,
+    ) -> Result<Self> {
+        if let Some(inline_dot) = inline_dot {
+            if let Some(source) = source {
+                return Err(eyre!(
+                    "Cannot combine graph path '{}' with --inline-dot. Use either a path or inline DOT content.",
+                    source
+                ));
+            }
+            return Ok(Self::String(inline_dot.to_string()));
+        }
+
+        let source = source.ok_or_else(|| {
+            eyre!("`import graphs` requires either a graph path or --inline-dot <DOT>.")
+        })?;
+
+        Ok(Self::Path(Import::resolve_graph_import_path(
+            Path::new(source),
+            state_folder,
+        )?))
+    }
+
+    fn default_process_name(&self) -> Result<String> {
+        match self {
+            Self::Path(path) => path
+                .file_stem()
+                .ok_or_else(|| {
+                    eyre!(
+                        "Could not derive a process name from graph path '{}'",
+                        path.display()
+                    )
+                })
+                .map(|stem| stem.to_string_lossy().into_owned()),
+            Self::String(_) => Ok("inline_graphs".to_string()),
+        }
+    }
+
+    fn display_name(&self) -> String {
+        match self {
+            Self::Path(path) => format!("'{}'", Import::display_graph_import_path(path).display()),
+            Self::String(_) => "inline DOT string".to_string(),
+        }
+    }
+
+    fn load(self, model: &gammalooprs::model::Model) -> Result<Vec<Graph>> {
+        match self {
+            Self::Path(path) => Graph::from_path(&path, model),
+            Self::String(dot_string) => Graph::from_string(dot_string, model),
+        }
     }
 }

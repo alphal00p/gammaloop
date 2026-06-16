@@ -687,6 +687,16 @@ pub enum ProcessRef {
     Unqualified(String),
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct GraphImportOptions {
+    pub process_name: Option<String>,
+    pub process_id: Option<usize>,
+    pub process_definition: Option<ProcessDefinition>,
+    pub integrand_name: Option<String>,
+    pub overwrite: bool,
+    pub append: bool,
+}
+
 impl Serialize for ProcessRef {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -2978,24 +2988,25 @@ impl State {
         Ok(())
     }
 
-    pub fn import_graphs(
-        &mut self,
-        graphs: Vec<Graph>,
-        process_name: Option<String>,
-        process_id: Option<usize>,
-        integrand_name: Option<String>,
-        overwrite: bool,
-        append: bool,
-    ) -> Result<()> {
-        let generation_type = if graphs.iter().all(|g| g.initial_state_cut.nedges(g) == 0) {
-            GenerationType::Amplitude
-        } else if graphs.iter().all(|g| g.initial_state_cut.nedges(g) > 0) {
-            GenerationType::CrossSection
-        } else {
-            return Err(eyre!(
-                "Mix of amplitude and cross section graphs in the same file is not supported"
-            ));
-        };
+    pub fn import_graphs(&mut self, graphs: Vec<Graph>, options: GraphImportOptions) -> Result<()> {
+        let GraphImportOptions {
+            process_name,
+            process_id,
+            process_definition,
+            integrand_name,
+            overwrite,
+            append,
+        } = options;
+        let generation_type = Self::infer_graph_list_generation_type(&graphs)?;
+        if let Some(definition) = &process_definition {
+            if definition.generation_type != generation_type {
+                return Err(eyre!(
+                    "--process-spec describes a {} process, but the imported graph list is {}",
+                    definition.generation_type,
+                    generation_type
+                ));
+            }
+        }
 
         let integrand_base_name = integrand_name.clone().unwrap_or("default".to_string());
         let process = if let Some(proc_id) = process_id {
@@ -3024,15 +3035,20 @@ impl State {
             {
                 Some(existing_proc)
             } else {
-                let process_defintion =
-                    ProcessDefinition::from_graph_list(&graphs, generation_type, &self.model)?;
+                let mut process_definition = match process_definition.clone() {
+                    Some(definition) => definition,
+                    None => {
+                        ProcessDefinition::from_graph_list(&graphs, generation_type, &self.model)?
+                    }
+                };
+                process_definition.process_id = self.process_list.processes.len();
                 let process = Process::from_graph_list(
                     p_name,
                     integrand_base_name.clone(),
                     // TODO: avoid clone here
                     graphs.clone(),
                     generation_type,
-                    Some(process_defintion),
+                    Some(process_definition),
                     None,
                     &self.model,
                 )?;
@@ -3042,6 +3058,17 @@ impl State {
             }
         };
         if let Some(p) = process {
+            if let Some(mut imported_definition) = process_definition {
+                imported_definition.folder_name = p.definition.folder_name.clone();
+                imported_definition.process_id = p.definition.process_id;
+                if imported_definition != p.definition {
+                    return Err(eyre!(
+                        "--process-spec does not match existing process '{}'. Import the graphs into a new process or use the same process specification that created this process.",
+                        p.definition.folder_name
+                    ));
+                }
+            }
+
             let existing_names = p.get_integrand_names();
             let integrand_name = if existing_names.contains(&integrand_base_name.as_str()) {
                 if append {
@@ -3083,6 +3110,18 @@ impl State {
         }
 
         Ok(())
+    }
+
+    pub(crate) fn infer_graph_list_generation_type(graphs: &[Graph]) -> Result<GenerationType> {
+        if graphs.iter().all(|g| g.initial_state_cut.nedges(g) == 0) {
+            Ok(GenerationType::Amplitude)
+        } else if graphs.iter().all(|g| g.initial_state_cut.nedges(g) > 0) {
+            Ok(GenerationType::CrossSection)
+        } else {
+            Err(eyre!(
+                "Mix of amplitude and cross section graphs in the same file is not supported"
+            ))
+        }
     }
 
     pub fn bench(
@@ -3468,11 +3507,14 @@ mod tests {
         state
             .import_graphs(
                 graphs,
-                Some("scalar_bubble".to_string()),
-                None,
-                Some("default".to_string()),
-                false,
-                false,
+                GraphImportOptions {
+                    process_name: Some("scalar_bubble".to_string()),
+                    process_id: None,
+                    process_definition: None,
+                    integrand_name: Some("default".to_string()),
+                    overwrite: false,
+                    append: false,
+                },
             )
             .expect("graph import should succeed");
 
@@ -3766,11 +3808,14 @@ mod tests {
         state
             .import_graphs(
                 graphs,
-                Some("scalar_bubble".to_string()),
-                None,
-                Some("default".to_string()),
-                false,
-                false,
+                GraphImportOptions {
+                    process_name: Some("scalar_bubble".to_string()),
+                    process_id: None,
+                    process_definition: None,
+                    integrand_name: Some("default".to_string()),
+                    overwrite: false,
+                    append: false,
+                },
             )
             .expect("graph import should succeed");
         state

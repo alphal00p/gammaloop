@@ -6305,6 +6305,13 @@ mod tests {
     }
 
     #[test]
+    fn completion_offers_inline_graph_import() {
+        let values = completion_values("import graphs --in", &CompletionState::default());
+
+        assert!(values.contains(&"--inline-dot".to_string()), "{values:?}");
+    }
+
+    #[test]
     fn completion_offers_ir_profile_select_graphs_and_limits() {
         let completion_state = CompletionState {
             process_entries: sample_process_entries(),

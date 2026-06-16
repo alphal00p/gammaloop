@@ -14,7 +14,12 @@ use gammaloop_api::{
     state::{CommandHistory, CommandsBlock, RunHistory},
 };
 use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_workspace_path};
-use gammalooprs::{processes::ProcessCollection, settings::RuntimeSettings};
+use gammalooprs::{
+    feyngen::GenerationType,
+    graph::Graph,
+    processes::{CrossSection, ProcessCollection, ProcessDefinition},
+    settings::{RuntimeSettings, global::GenerationSettings},
+};
 use serial_test::serial;
 
 static TEMPLATE_CLI: OnceLock<Mutex<CLIState>> = OnceLock::new();
@@ -864,6 +869,58 @@ fn import_graphs_relative_path_reports_lookup_locations() -> Result<()> {
     Ok(())
 }
 
+fn import_graphs_inline_dot_process_spec_filters_cutkosky_cuts() -> Result<()> {
+    const PROCESS_SPEC: &str =
+        "e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]";
+    const DOT: &str = include_str!("../resources/graphs/benchmark_epem_a_tth_NNLO_graph.dot");
+
+    let root = cli_state_path("import_graphs_inline_dot_process_spec_filters_cutkosky_cuts");
+    clean_test(&root);
+    let mut cli = get_test_cli(None, root.join("state"), None, true)?;
+    cli.run_command("import model sm-default.json")?;
+
+    let graphs = Graph::from_string(DOT, &cli.state.model)?;
+    let inferred_definition = ProcessDefinition::from_graph_list(
+        &graphs,
+        GenerationType::CrossSection,
+        &cli.state.model,
+    )?;
+    let all_cuts_cross_section =
+        CrossSection::from_graph_list("all_cuts".to_string(), graphs.clone(), &cli.state.model)?;
+    let all_cut_count = all_cuts_cross_section.supergraphs[0].cutkosky_cut_count_for_process(
+        &cli.state.model,
+        &inferred_definition,
+        &GenerationSettings::default(),
+    )?;
+    assert_eq!(all_cut_count.candidate_st_cuts, 27);
+    assert_eq!(all_cut_count.multi_edge_candidate_cuts, 25);
+    assert_eq!(all_cut_count.process_compatible_cuts, 25);
+
+    cli.run_command(&format!(
+        "import graphs --inline-dot \"\"\"{DOT}\"\"\" --process-spec '{PROCESS_SPEC}' -p epem_a_tth -i NNLO -o"
+    ))?;
+
+    assert_eq!(cli.state.process_list.processes.len(), 1);
+    let process = &cli.state.process_list.processes[0];
+    assert_eq!(process.definition.folder_name, "epem_a_tth");
+    let ProcessCollection::CrossSections(cross_sections) = &process.collection else {
+        panic!("imported NNLO graph should create a cross-section process");
+    };
+    let cross_section = cross_sections
+        .get("NNLO")
+        .expect("imported cross section should use requested integrand name");
+    let process_cut_count = cross_section.supergraphs[0].cutkosky_cut_count_for_process(
+        &cli.state.model,
+        &process.definition,
+        &GenerationSettings::default(),
+    )?;
+    assert_eq!(process_cut_count.candidate_st_cuts, 27);
+    assert_eq!(process_cut_count.multi_edge_candidate_cuts, 25);
+    assert_eq!(process_cut_count.process_compatible_cuts, 9);
+    assert_eq!(process_cut_count.selected_cuts, 9);
+    Ok(())
+}
+
 fn remove_processes_with_process_selector_removes_only_that_process() -> Result<()> {
     let mut cli = new_cli("remove_processes_with_process_selector_removes_only_that_process")?;
     populate_generated_scalar_box_process(&mut cli)?;
@@ -984,6 +1041,7 @@ fn cli_stateful_workflow_behaviors() -> Result<()> {
     import_graphs_relative_path_prefers_active_state_root_parent()?;
     import_graphs_relative_path_falls_back_to_current_working_directory()?;
     import_graphs_relative_path_reports_lookup_locations()?;
+    import_graphs_inline_dot_process_spec_filters_cutkosky_cuts()?;
     remove_processes_with_process_selector_removes_only_that_process()?;
     remove_processes_with_integrand_selector_removes_only_that_integrand()?;
     remove_processes_without_integrand_selector_drops_the_selected_process()?;

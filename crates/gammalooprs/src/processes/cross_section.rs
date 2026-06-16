@@ -1326,6 +1326,14 @@ pub struct CrossSectionGraph {
     pub derived_data: CrossSectionDerivedData,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CutkoskyCutCount {
+    pub candidate_st_cuts: usize,
+    pub multi_edge_candidate_cuts: usize,
+    pub process_compatible_cuts: usize,
+    pub selected_cuts: usize,
+}
+
 impl CrossSectionGraph {
     pub(crate) fn new(graph: Graph) -> Self {
         let (source_node, target_node) = graph.get_source_and_target();
@@ -1548,23 +1556,38 @@ impl CrossSectionGraph {
             .map(|(_, cuts)| cuts)
     }
 
+    pub fn cutkosky_cut_count_for_process(
+        &self,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+        settings: &GenerationSettings,
+    ) -> Result<CutkoskyCutCount> {
+        self.compute_process_valid_cuts(model, process_definition, settings)
+            .map(|(cut_count, _)| cut_count)
+    }
+
     fn compute_process_valid_cuts(
         &self,
         model: &Model,
         process_definition: &ProcessDefinition,
         settings: &GenerationSettings,
-    ) -> Result<(usize, TiVec<CutId, CrossSectionCut>)> {
+    ) -> Result<(CutkoskyCutCount, TiVec<CutId, CrossSectionCut>)> {
         let all_st_cuts = self.graph.all_st_cuts_for_cs(
             self.source_nodes.clone(),
             self.target_nodes.clone(),
             &self.graph.get_initial_state_tree().0,
         );
-        let num_st_cuts = all_st_cuts.len();
+        let candidate_st_cuts = all_st_cuts.len();
 
-        let mut cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
+        let multi_edge_cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
             .into_iter()
             .map(|(left, cut, right)| CrossSectionCut { cut, left, right })
             .filter(|cut| cut.cut.nedges(&self.graph) > 1)
+            .collect();
+        let multi_edge_candidate_cuts = multi_edge_cuts.len();
+
+        let mut cuts: TiVec<CutId, CrossSectionCut> = multi_edge_cuts
+            .into_iter()
             .filter_map(
                 |cut| match cut.is_valid_for_process(self, process_definition, model) {
                     Ok(true) => Some(Ok(cut)),
@@ -1573,6 +1596,7 @@ impl CrossSectionGraph {
                 },
             )
             .collect::<Result<_>>()?;
+        let process_compatible_cuts = cuts.len();
 
         cuts.sort_by(|a, b| a.cut.cmp(&b.cut));
 
@@ -1596,7 +1620,13 @@ impl CrossSectionGraph {
             });
         }
 
-        Ok((num_st_cuts, cuts))
+        let cut_count = CutkoskyCutCount {
+            candidate_st_cuts,
+            multi_edge_candidate_cuts,
+            process_compatible_cuts,
+            selected_cuts: cuts.len(),
+        };
+        Ok((cut_count, cuts))
     }
 
     fn generate_cuts(
@@ -1611,18 +1641,23 @@ impl CrossSectionGraph {
             "Cut discovery timing milestone"
         );
         let started = std::time::Instant::now();
-        let (num_st_cuts, cuts) =
+        let (cut_count, cuts) =
             self.compute_process_valid_cuts(model, process_definition, settings)?;
         self.cuts = cuts;
         debug_tags!(#generation, #profile, #graph;
             stage = "cross_section_generate_cuts_done",
             graph = %self.graph.name,
-            st_cut_count = num_st_cuts,
+            st_cut_count = cut_count.candidate_st_cuts,
             valid_cut_count = self.cuts.len(),
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Cut discovery timing milestone"
         );
-        generation_progress::cuts_discovered("", &self.graph.name, num_st_cuts, self.cuts.len());
+        generation_progress::cuts_discovered(
+            "",
+            &self.graph.name,
+            cut_count.candidate_st_cuts,
+            self.cuts.len(),
+        );
 
         Ok(())
     }
