@@ -15,6 +15,7 @@ use std::{
 
 use clap::Args;
 use color_eyre::{Result, Section};
+use colored::Colorize;
 use eyre::{eyre, Context};
 use gammalooprs::{
     processes::{Amplitude, CrossSection},
@@ -34,7 +35,7 @@ use gammalooprs::{
     feyngen::GenerationType,
     graph::Graph,
     initialisation::initialise,
-    integrands::{process::ProcessIntegrand, HasIntegrand},
+    integrands::process::ProcessIntegrand,
     is_interrupt_requested,
     model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
     processes::{
@@ -3512,11 +3513,14 @@ mod tests {
         state
             .import_graphs(
                 graphs,
-                Some("scalar_bubble".to_string()),
-                None,
-                Some("default".to_string()),
-                false,
-                false,
+                GraphImportOptions {
+                    process_name: Some("scalar_bubble".to_string()),
+                    process_id: None,
+                    process_definition: None,
+                    integrand_name: Some("default".to_string()),
+                    overwrite: false,
+                    append: false,
+                },
             )
             .expect("graph import should succeed");
         state
