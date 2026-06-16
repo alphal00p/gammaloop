@@ -5,7 +5,7 @@ networks in `crates/spenso/src/network/parsing`. It focuses on the
 control flow, shorthand expansion, opaque leaves, structure inference,
 and edge cases that affect Schoonschip-style notation.
 
-#strong[Audit status:] reviewed 2026-09-14 against `ab00e491`.
+#strong[Audit status:] reviewed 2026-09-21 against `11fe63d8`.
 Lifecycle: current implementation architecture.
 
 == Entry Points
@@ -13,15 +13,17 @@ Lifecycle: current implementation architecture.
 Parsing starts from `NetworkParse` methods such as `parse_to_atom_net`.
 The parser first rejects chains or traces nested inside another chain or
 trace, because they share one global `in`/`out` placeholder scope. It then
-creates a fresh `ParseState` and calls `try_from_view_impl` on the input
-`AtomView`.
+creates a fresh `ParseState`, reserves the serialized names of input slot
+indices, and calls `try_from_view_impl` on the input `AtomView`. Parser
+clones share both the allocator and reservation set, so newly generated
+dummies cannot collide with written indices or each other.
 
 #table(
     columns: 2,
     align: (auto,auto,),
     table.header([*Concept*], [*Role*]),
     [`ParseState`], [Tracks recursion depth and owns the dummy-index
-    allocator used by shorthand materialization.],
+    allocator and reserved index names used by shorthand materialization.],
     [Tensor library], [Maps parsed structures to library tensors when a
     matching key exists.],
     [Function library], [Used by the opaque tensor-expression boundary
@@ -738,6 +740,15 @@ let factor = ChainExpansion::replace_placeholders(factor, &left, &right);
     Non-integer powers fall back to scalar parsing.],
 )
 
+When a positive integer power greater than one lowers shorthand that
+allocates internal dummy indices, each remaining copy is parsed from the
+original base with the shared allocator. For a self-dual representation,
+`dot(p(rep), q(rep))^2` therefore has two contracted pairs, `p(d1) * q(d1)`
+and `p(d2) * q(d2)`, with distinct internal indices. Explicit boundary
+slots stay unchanged. Bases that allocate no new indices use the
+ordinary network power path; scalar precontraction and negative-power
+restrictions still apply.
+
 == Edge Cases
 <edge-cases>
 #table(
@@ -833,3 +844,11 @@ materialize_shorthand(fun):
     return a regular tensor leaf
   parse the rebuilt expression recursively
 ```
+
+== Factorized scalar and symbolic-dimension boundaries
+
+Scalar factors and compatible sums remain grouped while tensor slots are inferred. A scalar-weighted
+compact vector is accepted only when exactly one factor supplies its compact axis and every other
+factor has scalar structure; unsupported products remain opaque. Library lookup retains the canonical
+layout. Missing tensor leaves use the target's fallible `Concretize::concretize_logical` boundary:
+symbolic targets may keep symbolic dimensions, while component targets report materialization errors.

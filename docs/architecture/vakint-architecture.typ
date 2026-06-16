@@ -160,3 +160,20 @@ For supported workflows, see the
 #link("../../../products/vakint/latest/reference/topologies/")[generated topology table]. Exact
 Rust signatures are in the
 #link("../../../products/vakint/latest/reference/rust/vakint/")[native Vakint Rustdoc].
+
+== Factorized tensor projection and epsilon coefficients
+
+The default tensor-projection path reduces universal loop-momentum kernels while preserving graph
+coefficients as factorized expressions. Temporary coefficient aliases are restored after analytic
+integration. `project_onto_tensor_integrals = false` instead reduces each complete numerator through
+FORM. Both modes retain separate denominator topologies and validate Lorentz domains.
+
+Opaque spin tensors declare their Lorentz slots with `vakint::tensor(body, slot, ...)`. Projection
+may introduce `vakint::tensor_index` slots, which the caller translates before completing spin algebra.
+Vakint does not evaluate that algebra. Numerator and normalization poles increase the required epsilon
+order; positive powers do not reduce the conservative depth. Opaque epsilon-dependent functions error.
+
+The Python adapter accepts complex mass/numerator substitutions as `numerical_parameters`; the
+PySecDec boundary requires real pole masses and external momenta, with complex numerator coefficients
+allowed. Physical PySecDec integration tests remain explicit manual checks. The commands and detailed
+contracts are in #link("../products/vakint/content/evaluation.typ")[the evaluation guide].

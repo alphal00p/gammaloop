@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Spenso source on
-2026-09-14.
+2026-09-21.
 
 This note covers the `spenso` Rust crate. `spenso-macros`, `spenso-hep-lib`, and `spynso3` are
 separate packages: they provide derives, concrete physics tensors, and a Python adapter rather
@@ -150,9 +150,11 @@ functions before falling back to scalar or opaque-tensor construction.
 structure discovery, recursion depth, shorthand expansion versus opaque leaves, composite scalar
 handling, and how strictly a function must be tagged as a tensor. The tensor library resolves
 known keys; `TensorFromExpression` owns construction of an opaque tensor leaf; the function
-library owns supported opaque operations. Fresh dummy indices come from a parse-local
-`ParseState`, so callers combining independently parsed expressions must still manage index
-namespaces deliberately.
+library owns supported opaque operations. A parse-local `ParseState` reserves written slot-index
+names before allocating dummies, and parser clones share that reservation set and allocator.
+Positive powers that lower shorthand with internal dummies reparse each copy from the original
+base, giving it fresh internal indices while retaining explicit boundary slots. Callers combining
+independently parsed expressions must still manage index namespaces deliberately.
 
 The detailed dispatch and shorthand behavior are recorded in the
 #link("parsing-flow.typ")[Symbolica-to-network parsing flow]. Syntax and rewrite ownership across
@@ -231,3 +233,11 @@ For supported workflows, start with the
 for exact public signatures. Python construction and execution are documented in the
 #link("../../../products/spenso/latest/guides/python/")[Spynso3 workflow], whose ownership is
 separate from the core crate described here.
+
+== Factor preservation at materialization
+
+Parsing retains scalar spectators and compatible sum boundaries. Fallible `Concretize` methods
+separate target construction from canonical layout: symbolic tensors may retain symbolic dimensions,
+while finite-component targets report errors. This uses the same `CanonicalLayout` as library leaves.
+Odd tensor powers preserve the remaining base after paired contractions. Completed execution waves
+release unused store payloads while retaining live aliases and tensor handles.
