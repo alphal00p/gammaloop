@@ -161,3 +161,9 @@ for exact public signatures. The
 #link("../../../products/linnet/latest/guides/clinnet/")[Clinnet guide] and
 #link("../../../products/linnet/latest/guides/linnest/")[Linnest guide] document the downstream
 rendering boundaries that this crate intentionally does not own.
+
+== Dense edge joins used by tensor contraction
+
+Joining graph edges updates moved payloads through their owning half-edges. Node identification and
+edge deletion preserve slot order, flow, graph extent, and complete node membership. These operations
+remain on the existing half-edge owner; no alternative graph representation is introduced.

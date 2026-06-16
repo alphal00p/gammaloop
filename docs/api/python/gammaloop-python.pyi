@@ -40,6 +40,8 @@ class BatchEvaluationResult:
         r"""
         Observable snapshots accumulated across the complete sample batch.
         """
+    @property
+    def numerical_stability(self) -> typing.Optional[dict]: ...
     def __str__(self) -> builtins.str:
         r"""
         Return a human-readable batch and observable summary.
@@ -398,6 +400,10 @@ class GammaLoopAPI:
     settings, processes, or run history. Create separate instances when independent
     sessions are required.
     """
+    @property
+    def read_only_state(self) -> builtins.bool: ...
+    @property
+    def active_state_folder(self) -> builtins.str: ...
     def __new__(cls, state_folder: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, boot_commands_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, model_file: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, trace_logs_filename: typing.Optional[builtins.str] = None, level: typing.Optional[LogLevel] = None, logfile_level: typing.Optional[LogLevel] = None, logging_prefix: builtins.object | None = None, read_only_state: builtins.bool = False, settings_global_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, clean_state: builtins.bool = False) -> GammaLoopAPI:
         r"""
         Load or create a GammaLoop state and initialize its CLI session.
@@ -448,6 +454,8 @@ class GammaLoopAPI:
         api = GammaLoopAPI(state_folder="./state", read_only_state=True)
         ```
         """
+    def is_read_only_state(self) -> builtins.bool: ...
+    def state_access_mode(self) -> builtins.str: ...
     def evaluate_sample(self, point: typing.Sequence[builtins.float], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = False, minimal_output: builtins.bool = False, return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = False, integrator_weight: typing.Optional[builtins.float] = None, discrete_dim: typing.Optional[typing.Sequence[builtins.int]] = None, graph_name: typing.Optional[builtins.str] = None, orientation: typing.Optional[builtins.int] = None) -> EvaluationResult:
         r"""
         Evaluate one integration or momentum-space sample.
@@ -965,50 +973,6 @@ class GammaLoopAPI:
         ```python
         api.run("display processes")
         ```
-        """
-    def generate_cff(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.list[tuple[builtins.dict[builtins.int, builtins.int], builtins.str]]:
-        r"""
-        Build a causal-flow expression from an inline DOT graph or one of its subgraphs.
-
-        Parameters
-        ----------
-        dot_string : str
-            Inline DOT graph using particles from the active model.
-        subgraph_nodes : Sequence[str]
-            Vertex names retained in the subgraph; an empty sequence selects all nodes.
-        reverse_dangling : Sequence[int]
-            Dangling edge ids whose orientation is reversed.
-        orientation_pattern : str, optional
-            Pattern restricting returned causal-flow orientations.
-
-        Returns
-        -------
-        list[tuple[dict[int, int], str]]
-            Edge-direction maps paired with their energy-denominator expressions.
-        """
-    def generate_cff_as_json_string(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.str:
-        r"""
-        Serialize a causal-flow expression and its surfaces as JSON.
-
-        This accepts the same graph, subgraph, and dangling-edge inputs as
-        ``generate_cff``. The current JSON representation is intended for GammaLoop
-        tooling and may contain internal structural details.
-
-        Parameters
-        ----------
-        dot_string : str
-            Inline DOT graph using particles from the active model.
-        subgraph_nodes : Sequence[str]
-            Vertex names retained in the subgraph; an empty sequence selects all nodes.
-        reverse_dangling : Sequence[int]
-            Dangling edge ids whose orientation is reversed.
-        orientation_pattern : str, optional
-            Pattern restricting returned causal-flow orientations.
-
-        Returns
-        -------
-        str
-            JSON representation of the causal-flow expression and E-surfaces.
         """
 
 @typing.final
@@ -1958,6 +1922,8 @@ class StabilityResult:
         r"""
         Estimated relative accuracy, or ``None`` when it could not be estimated.
         """
+    @property
+    def estimated_decimal_digits(self) -> typing.Optional[builtins.float]: ...
     @property
     def status(self) -> builtins.str:
         r"""

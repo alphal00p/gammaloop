@@ -322,7 +322,7 @@ What this adds:
   boundary index before parsing.
 - Executes the disconnected tensor-valued intermediate first, then reconnects
   it with an explicit metric in a second network execution.
-- Adds `docs/architecture/spenso-large-expression-pathology.md`, summarizing
+- Adds `docs/architecture/spenso-large-expression-pathology.typ`, summarizing
   the large-expression behavior and what the lazy-sum, component-Horner, and
   staged-disconnect experiments show.
 

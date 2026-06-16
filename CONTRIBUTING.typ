@@ -151,7 +151,7 @@ identity with factor-preserving rewrites and exact cancellation;
 evaluations at explicit coordinates provide additional checks, not a
 general symbolic proof. The worked GL04 `1zs/T2` certificate is
 maintained in
-#link("docs/architecture/exact-powered-denominator-cff-lifting.md#worked-live-reproducer-gl04-temporal-square-1zst2")[`docs/architecture/exact-powered-denominator-cff-lifting.md`];.
+#link("docs/architecture/exact-powered-denominator-cff-lifting.typ#worked-live-reproducer-gl04-temporal-square-1zst2")[`docs/architecture/exact-powered-denominator-cff-lifting.typ`];.
 
 == Debug Logging Pattern
 
