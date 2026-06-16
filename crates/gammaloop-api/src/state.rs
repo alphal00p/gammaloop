@@ -60,6 +60,7 @@ use gammalooprs::{
 
 use crate::{
     command_parser::{normalize_clap_args, split_command_line},
+    command_template::{contains_placeholder, placeholder_specs, PlaceholderSpec},
     commands::{save::SaveState, Commands},
     integrand_info::{collect_integrand_info, IntegrandInfo},
     model_parameters::{external_model_parameter_type, validate_model_parameter_type},
@@ -1007,6 +1008,14 @@ impl Serialize for CommandHistory {
     where
         S: serde::Serializer,
     {
+        if self.is_template() {
+            return self
+                .raw_string
+                .as_deref()
+                .unwrap_or("__command_template")
+                .serialize(serializer);
+        }
+
         if get_serialize_commands_as_strings() {
             if let Some(ref raw_string) = self.raw_string {
                 raw_string.serialize(serializer)
@@ -1102,6 +1111,26 @@ impl CommandHistory {
         }
     }
 
+    pub fn new_template(raw_string: String) -> Self {
+        Self::new_with_raw(Commands::CommandTemplate, raw_string)
+    }
+
+    pub fn is_template(&self) -> bool {
+        matches!(self.command, Commands::CommandTemplate)
+    }
+
+    pub fn raw_string(&self) -> Option<&str> {
+        self.raw_string.as_deref()
+    }
+
+    pub fn semantically_eq(&self, other: &Self) -> bool {
+        match (self.is_template(), other.is_template()) {
+            (true, true) => self.raw_string == other.raw_string,
+            (false, false) => self.command == other.command,
+            _ => false,
+        }
+    }
+
     /// Create a CommandHistory from a command (alias for new)
     pub fn from_command(command: Commands) -> Self {
         Self::new(command)
@@ -1112,9 +1141,7 @@ impl CommandHistory {
     /// This function attempts to parse the raw string using clap, and if successful,
     /// creates a CommandHistory with both the parsed command and the original string.
     pub fn from_raw_string(raw_string: &str) -> Result<Self, clap::Error> {
-        use crate::Repl;
         use clap::error::ErrorKind;
-        use clap::Parser;
 
         let args = split_command_line(raw_string)
             .map(normalize_clap_args)
@@ -1124,11 +1151,23 @@ impl CommandHistory {
                     "Could not parse command: unmatched quotes or trailing escape",
                 )
             })?;
+
+        match Self::from_args_and_raw(args, raw_string.to_string()) {
+            Ok(command) => Ok(command),
+            Err(_) if contains_placeholder(raw_string) => Ok(Self::new_template(raw_string.into())),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub fn from_args_and_raw(args: Vec<String>, raw_string: String) -> Result<Self, clap::Error> {
+        use crate::Repl;
+        use clap::Parser;
+
         let cli = Repl::try_parse_from(
             std::iter::once("gammaloop").chain(args.iter().map(String::as_str)),
         )?;
 
-        Ok(Self::new_with_raw(cli.command, raw_string.into()))
+        Ok(Self::new_with_raw(cli.command, raw_string))
     }
 }
 
@@ -1179,7 +1218,7 @@ impl CommandsBlock {
                 .commands
                 .iter()
                 .zip(other.commands.iter())
-                .all(|(left, right)| left.command == right.command)
+                .all(|(left, right)| left.semantically_eq(right))
     }
 }
 
@@ -1242,6 +1281,57 @@ impl RunHistory {
 
     pub fn command_block(&self, name: &str) -> Option<&CommandsBlock> {
         self.command_blocks.iter().find(|block| block.name == name)
+    }
+
+    pub fn command_block_placeholder_names(&self, name: &str) -> BTreeSet<String> {
+        self.command_block_placeholder_specs(name)
+            .into_iter()
+            .map(|spec| spec.name)
+            .collect()
+    }
+
+    pub fn command_block_placeholder_specs(&self, name: &str) -> BTreeSet<PlaceholderSpec> {
+        let mut placeholders = BTreeSet::new();
+        let mut visited = HashSet::new();
+        self.collect_command_block_placeholder_specs(name, &mut visited, &mut placeholders);
+        placeholders
+    }
+
+    fn collect_command_block_placeholder_specs(
+        &self,
+        name: &str,
+        visited: &mut HashSet<String>,
+        placeholders: &mut BTreeSet<PlaceholderSpec>,
+    ) {
+        if !visited.insert(name.to_string()) {
+            return;
+        }
+
+        let Some(block) = self.command_block(name) else {
+            return;
+        };
+
+        for command in &block.commands {
+            if let Some(raw) = command.raw_string() {
+                placeholders.extend(placeholder_specs(raw));
+            }
+            let Commands::Run(run) = &command.command else {
+                continue;
+            };
+            for nested_name in run.selected_block_names() {
+                let mut nested_placeholders = BTreeSet::new();
+                self.collect_command_block_placeholder_specs(
+                    nested_name,
+                    visited,
+                    &mut nested_placeholders,
+                );
+                for defined in &run.defines {
+                    nested_placeholders.retain(|spec| spec.name.as_str() != defined.key.as_str());
+                }
+                placeholders.extend(nested_placeholders);
+            }
+        }
+        visited.remove(name);
     }
 
     pub fn select_command_blocks(
@@ -1343,9 +1433,9 @@ impl RunHistory {
 
     pub(crate) fn filtered_for_save(&self) -> Self {
         let mut filtered = self.clone();
-        filtered
-            .commands
-            .retain(|command_history| should_persist_command(&command_history.command));
+        filtered.commands.retain(|command_history| {
+            command_history.is_template() || should_persist_command(&command_history.command)
+        });
         filtered
     }
 
@@ -3104,6 +3194,8 @@ impl State {
         let mut loaded_state = State::new(&save_path, trace_logs_filename);
         debug!("Loading state manifest version {}", manifest.version);
 
+        // Load the model before importing Symbolica state so UFO symbols retain their custom print
+        // callbacks; the import then remaps serialized symbol ids onto those definitions.
         let mut model = if let Some(model_path) = &model_path {
             info!("Loading model from {}", model_path.display());
             Model::from_file(model_path)?
@@ -3284,7 +3376,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, process::Command};
 
     use gammalooprs::{
         graph::Graph,
@@ -3303,6 +3395,8 @@ mod tests {
         },
         utils::{load_generic_model, serde_utils::SHOWDEFAULTS},
     };
+    use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
+    use symbolica::atom::{Atom, AtomCore};
     use tempfile::tempdir;
 
     use crate::commands::{
@@ -3312,6 +3406,53 @@ mod tests {
     };
 
     use super::*;
+
+    const STATE_LOAD_ORDER_CHILD: &str = "GAMMALOOP_STATE_LOAD_ORDER_CHILD";
+    const STATE_LOAD_ORDER_TEST: &str = "state::tests::state_load_preserves_ufo_custom_printer";
+
+    #[test]
+    fn state_load_preserves_ufo_custom_printer() {
+        if let Some(state_path) = std::env::var_os(STATE_LOAD_ORDER_CHILD) {
+            let _state = State::load(state_path.into(), None, None).unwrap();
+            // A one-character symbol is unquoted by Symbolica's default Typst printer, so the
+            // quotes prove that loading the model installed GammaLoop's UFO callback first.
+            let rendered = Atom::from(UFOSymbol::from("G"))
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string();
+            assert_eq!(rendered, r#""G""#);
+            return;
+        }
+
+        let temp = tempdir().unwrap();
+        let mut state = State::new(temp.path(), None);
+        state.model = load_generic_model("sm");
+        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.save(temp.path(), true, false).unwrap();
+
+        let output = Command::new(std::env::current_exe().unwrap())
+            .arg(STATE_LOAD_ORDER_TEST)
+            .arg("--exact")
+            .arg("--nocapture")
+            .env(STATE_LOAD_ORDER_CHILD, temp.path())
+            .output()
+            .unwrap();
+        let transcript = format!(
+            "stdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        assert!(
+            output.status.success(),
+            "child failed: {}\n{transcript}",
+            output.status
+        );
+        assert!(
+            !transcript.contains(
+                "Imported symbol UFO::G was previously defined with user-defined functions"
+            ),
+            "{transcript}"
+        );
+    }
 
     fn build_generated_scalar_bubble_state_with_external_backend() -> State {
         test_initialise().expect("test initialisation should succeed");
@@ -4023,6 +4164,7 @@ b = 1.0
         run_history.push_with_raw(
             Commands::Run(Run {
                 block_names: vec!["block_a".to_string()],
+                defines: Vec::new(),
                 commands: None,
             }),
             Some("run block_a".to_string()),
