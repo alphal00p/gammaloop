@@ -7,13 +7,15 @@
       "gammalooprs",
       "idenso",
       "linnet",
-      "spenso"
+      "spenso",
+      "three-dimensional-reps"
     ],
     "gammaloop-integration-tests": [
       "gammaloop-api",
       "gammaloop-workspace-hack",
       "gammalooprs",
       "spenso",
+      "three-dimensional-reps",
       "vakint"
     ],
     "gammaloop-tracing-filter": [
@@ -86,6 +88,10 @@
       ],
       "spenso": [
         "shadowing"
+      ],
+      "three-dimensional-reps": [
+        "diagnostics",
+        "display"
       ]
     },
     "gammaloop-integration-tests": {
@@ -94,6 +100,11 @@
       "gammalooprs": [],
       "spenso": [
         "shadowing"
+      ],
+      "three-dimensional-reps": [
+        "diagnostics",
+        "eval",
+        "test-support"
       ],
       "vakint": []
     },
@@ -455,13 +466,15 @@
       "gammalooprs",
       "idenso",
       "linnet",
-      "spenso"
+      "spenso",
+      "three-dimensional-reps"
     ],
     "gammaloop-integration-tests": [
       "gammaloop-api",
       "gammaloop-workspace-hack",
       "gammalooprs",
       "spenso",
+      "three-dimensional-reps",
       "vakint"
     ],
     "gammaloop-tracing-filter": [
@@ -538,6 +551,10 @@
       ],
       "spenso": [
         "shadowing"
+      ],
+      "three-dimensional-reps": [
+        "diagnostics",
+        "display"
       ]
     },
     "gammaloop-integration-tests": {
@@ -546,6 +563,11 @@
       "gammalooprs": [],
       "spenso": [
         "shadowing"
+      ],
+      "three-dimensional-reps": [
+        "diagnostics",
+        "eval",
+        "test-support"
       ],
       "vakint": []
     },

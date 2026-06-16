@@ -1,0 +1,117 @@
+digraph Box {
+
+    num = "1";
+    overall_factor = "1";
+    overall_factor_evaluated = "1";
+    projector = "ϵ(0,spenso::mink(4,hedge(0)))*ϵ(1,spenso::mink(4,hedge(1)))*ϵbar(2,spenso::mink(4,hedge(2)))*ϵbar(3,spenso::mink(4,hedge(3)))";
+	group_id=0
+    is_group_master=true
+
+	exte0	 [style=invis];
+	exte0	-> A:0	 [id=0 name="p0" particle="a"];
+	exte1	 [style=invis];
+	exte1	-> B:1	 [id=1 name="p1" particle="a"];
+	exte2	 [style=invis];
+	C:2	-> exte2	 [id=2 name="p2" particle="a"];
+	exte3	 [style=invis];
+	D:3	-> exte3	 [id=3 name="p3" particle="a"];
+
+	A -> B	 [id=4 name="q4" particle="t" lmb_id=0];
+	B -> C	 [id=5 name="q5" particle="t"];
+	C -> D   [id=6 name="q6" particle="t"];	
+	D -> A   [id=7 name="q7" particle="t"];
+
+}
+
+digraph DoubleBox {
+
+    num = "1";
+    overall_factor = "1";
+    overall_factor_evaluated = "1";
+    projector = "ϵ(0,spenso::mink(4,hedge(0)))*ϵ(1,spenso::mink(4,hedge(1)))*ϵbar(2,spenso::mink(4,hedge(2)))*ϵbar(3,spenso::mink(4,hedge(3)))";
+	group_id=1
+    is_group_master=true
+
+	exte0	 [style=invis];
+	exte0	-> A:0	 [id=0 name="p0" particle="a"];
+	exte1	 [style=invis];
+	exte1	-> B:1	 [id=1 name="p1" particle="a"];
+	exte2	 [style=invis];
+	C:2	-> exte2	 [id=2 name="p2" particle="a"];
+	exte3	 [style=invis];
+	D:3	-> exte3	 [id=3 name="p3" particle="a"];
+
+	A -> B	 [id=4 name="q4" particle="t" lmb_id=0];
+	B -> V1	 [id=5 name="q5" particle="t"];
+	V1 -> C  [id=6 name="q6" particle="t"];
+	C -> D   [id=7 name="q7" particle="t"];	
+	D -> V2  [id=8 name="q8" particle="t"];
+	V2 -> A  [id=9 name="q9" particle="t"];
+	V1 -> V2 [id=10 name="q10" particle="g" lmb_id=1];
+
+}
+
+digraph TripleBox {
+
+    num = "1";
+    overall_factor = "1";
+    overall_factor_evaluated = "1";
+    projector = "ϵ(0,spenso::mink(4,hedge(0)))*ϵ(1,spenso::mink(4,hedge(1)))*ϵbar(2,spenso::mink(4,hedge(2)))*ϵbar(3,spenso::mink(4,hedge(3)))";
+	group_id=2
+    is_group_master=true
+
+	exte0	 [style=invis];
+	exte0	-> A:0	 [id=0 name="p0" particle="a"];
+	exte1	 [style=invis];
+	exte1	-> B:1	 [id=1 name="p1" particle="a"];
+	exte2	 [style=invis];
+	C:2	-> exte2	 [id=2 name="p2" particle="a"];
+	exte3	 [style=invis];
+	D:3	-> exte3	 [id=3 name="p3" particle="a"];
+
+	A -> B	 [id=4 name="q4" particle="t" lmb_id=0];
+	B -> V1	 [id=5 name="q5" particle="t"];
+	V1 -> V2 [id=6 name="q6" particle="t"];
+	V2 -> C  [id=7 name="q7" particle="t"];
+	C -> D   [id=8 name="q8" particle="t"];	
+	D -> V3  [id=9 name="q9" particle="t"];
+	V3 -> V4 [id=10 name="q10" particle="t"];
+	V4 -> A  [id=11 name="q11" particle="t"];
+	V1 -> V4 [id=12 name="q12" particle="g" lmb_id=1];
+	V2 -> V3 [id=13 name="q13" particle="g" lmb_id=2];
+
+}
+
+digraph QuadrupleBox {
+
+    num = "1";
+    overall_factor = "1";
+    overall_factor_evaluated = "1";
+    projector = "ϵ(0,spenso::mink(4,hedge(0)))*ϵ(1,spenso::mink(4,hedge(1)))*ϵbar(2,spenso::mink(4,hedge(2)))*ϵbar(3,spenso::mink(4,hedge(3)))";
+	group_id=3
+    is_group_master=true
+
+	exte0	 [style=invis];
+	exte0	-> A:0	 [id=0 name="p0" particle="a"];
+	exte1	 [style=invis];
+	exte1	-> B:1	 [id=1 name="p1" particle="a"];
+	exte2	 [style=invis];
+	C:2	-> exte2	 [id=2 name="p2" particle="a"];
+	exte3	 [style=invis];
+	D:3	-> exte3	 [id=3 name="p3" particle="a"];
+
+	A -> B	 [id=4 name="q4" particle="t" lmb_id=0];
+	B -> V1	 [id=5 name="q5" particle="t"];
+	V1 -> V2 [id=6 name="q6" particle="t"];
+	V2 -> V3 [id=7 name="q7" particle="t"];
+    V3 -> C  [id=8 name="q8" particle="t"];
+	C -> D   [id=9 name="q9" particle="t"];	
+	D -> V4  [id=10 name="q10" particle="t"];
+	V4 -> V5 [id=11 name="q11" particle="t"];
+	V5 -> V6 [id=12 name="q12" particle="t"];
+    V6 -> A  [id=13 name="q13" particle="t"];
+	V1 -> V6 [id=14 name="q14" particle="g" lmb_id=1];
+	V2 -> V5 [id=15 name="q15" particle="g" lmb_id=2];
+	V3 -> V4 [id=16 name="q16" particle="g" lmb_id=3];
+
+}
