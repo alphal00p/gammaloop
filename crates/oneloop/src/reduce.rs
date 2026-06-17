@@ -96,6 +96,9 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
 }
 
 fn tadpole_coefficient(exponent: i32, m_sq: &Atom) -> Atom {
+    if *m_sq == Atom::Zero {
+        return Atom::Zero;
+    }
     let d = Atom::var(S.d);
     let mut coeff = Atom::num(1);
     for k in 1..i64::from(exponent) {
@@ -285,6 +288,14 @@ mod tests {
             MasterIntegral::Tadpole { m_sq } => assert_eq!(*m_sq, msq),
             other => panic!("expected a tadpole master, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn massless_dotted_tadpole_vanishes() {
+        crate::ensure_symbolica_license();
+        let r = reduce(&family(vec![Atom::Zero], vec![], vec![2]));
+        assert_eq!(r.terms.len(), 1);
+        assert_eq!(r.terms[0].0, Atom::Zero);
     }
 
     #[test]
