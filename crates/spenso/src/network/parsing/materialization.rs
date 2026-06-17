@@ -60,6 +60,11 @@ struct SchoonschipMaterialization {
     additional_factors: Vec<Atom>,
 }
 
+struct ChainEndpoint<Aind> {
+    slot: Slot<LibraryRep, Aind>,
+    additional_factors: Vec<Atom>,
+}
+
 impl SchoonschipMaterialization {
     /// Merge the current atom and accumulated factors into parser input.
     fn into_expression(self) -> Atom {
@@ -532,6 +537,46 @@ where
         )
     }
 
+    fn materialize_chain_endpoint(
+        value: AtomView<'a>,
+        label: &str,
+        state: &ParseState<Aind>,
+        schoonschip_mode: SchoonschipExpansionMode,
+    ) -> Result<ChainEndpoint<Aind>, TensorNetworkError<K, Symbol>> {
+        match Slot::<LibraryRep, Aind>::try_from(value) {
+            Ok(slot) => Ok(ChainEndpoint {
+                slot,
+                additional_factors: Vec::new(),
+            }),
+            Err(slot_err) => {
+                if schoonschip_mode.any()
+                    && let Some(materialized) =
+                        SchoonschipMaterializer::<Aind>::with_mode(state, schoonschip_mode)
+                            .materialize_shorthand_arg(value)
+                {
+                    let slot =
+                        match Slot::<LibraryRep, Aind>::try_from(materialized.current.as_view()) {
+                            Ok(slot) => slot,
+                            Err(err) => {
+                                return Err(eyre!(
+                                    "invalid materialized chain {label} `{}` from `{}`: {err}",
+                                    materialized.current,
+                                    value
+                                )
+                                .into());
+                            }
+                        };
+                    return Ok(ChainEndpoint {
+                        slot,
+                        additional_factors: materialized.additional_factors,
+                    });
+                }
+
+                Err(eyre!("invalid chain {label} `{}`: {slot_err}", value).into())
+            }
+        }
+    }
+
     #[allow(clippy::result_large_err)]
     fn materialize_chain_shorthand<S, Lib, FunLib>(
         value: FunView<'a>,
@@ -556,36 +601,51 @@ where
             ));
         }
 
-        let start = Slot::<LibraryRep, Aind>::try_from(args[0])
-            .map_err(|err| eyre!("invalid chain start `{}`: {err}", args[0]))?;
-        let end = Slot::<LibraryRep, Aind>::try_from(args[1])
-            .map_err(|err| eyre!("invalid chain end `{}`: {err}", args[1]))?;
+        let schoonschip_mode = settings
+            .shorthand_parsing
+            .schoonschip_expansion()
+            .unwrap_or_else(SchoonschipExpansionMode::none);
+        let ChainEndpoint {
+            slot: start,
+            additional_factors: start_factors,
+        } = Self::materialize_chain_endpoint(args[0], "start", &state, schoonschip_mode)?;
+        let ChainEndpoint {
+            slot: end,
+            additional_factors: end_factors,
+        } = Self::materialize_chain_endpoint(args[1], "end", &state, schoonschip_mode)?;
         let factors = &args[2..];
+
+        let factor_schoonschip_mode = schoonschip_mode.for_chain_like_root();
+        let factor_settings = settings
+            .clone()
+            .with_schoonschip_expansion(factor_schoonschip_mode);
+
+        let mut factor_networks = Vec::new();
+        for factor in start_factors.into_iter().chain(end_factors) {
+            factor_networks.extend(Self::parse_chain_like_factor_networks::<S, Lib, FunLib>(
+                factor,
+                state.clone(),
+                library,
+                function_library,
+                settings,
+            )?);
+        }
 
         if factors.is_empty() {
             let metric = FunctionBuilder::new(ETS.metric)
                 .add_arg(start.to_atom())
                 .add_arg(end.to_atom())
                 .finish();
-            return Self::try_from_view_impl(
-                metric.as_view(),
+            factor_networks.extend(Self::parse_chain_like_factor_networks::<S, Lib, FunLib>(
+                metric,
                 state,
                 library,
                 function_library,
                 settings,
-            );
+            )?);
+            return Ok(Self::chain_like_network_product(factor_networks));
         }
 
-        let factor_schoonschip_mode = settings
-            .shorthand_parsing
-            .schoonschip_expansion()
-            .unwrap_or_else(SchoonschipExpansionMode::none)
-            .for_chain_like_root();
-        let factor_settings = settings
-            .clone()
-            .with_schoonschip_expansion(factor_schoonschip_mode);
-
-        let mut factor_networks = Vec::new();
         let mut left = start;
         for (position, factor) in factors.iter().enumerate() {
             let fresh_right = position + 1 != factors.len();

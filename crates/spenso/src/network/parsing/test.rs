@@ -49,6 +49,21 @@ fn schoonschip_only_settings() -> ParseSettings {
     }
 }
 
+fn schoonschip_without_inner_products_settings() -> ParseSettings {
+    ParseSettings {
+        shorthand_parsing: ShorthandParsing::Expand {
+            schoonschip: SchoonschipExpansionMode {
+                inner_products: false,
+                expand_schoonship: true,
+                expand_inside_chains: true,
+            },
+            trace: true,
+            chain: true,
+        },
+        ..Default::default()
+    }
+}
+
 #[test]
 fn parse_chain_as_opaque_tensor() {
     let rep = mink4();
@@ -84,6 +99,40 @@ fn parse_chain_as_opaque_tensor_with_expanded_structure() {
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
     assert_eq!(parsed.graph.n_nodes(), 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
+}
+
+#[test]
+fn parse_chain_materializes_schoonschip_endpoints() {
+    let rep = mink4();
+    let expr = chain!(
+        vector!(compact_start, Atom::num(1), rep.to_symbolic([])),
+        vector!(compact_end, Atom::num(2), rep.to_symbolic([])),
+        chain_factor(tensor_symbol!(parse_endpoint_chain_f)),
+    );
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+
+    assert!(parsed.state.is_scalar());
+    assert!(parsed.graph.dangling_indices().is_empty());
+}
+
+#[test]
+fn parse_chain_materializes_mixed_schoonschip_endpoint() {
+    let rep = mink4();
+    let expr = chain!(
+        slot!(rep, i),
+        vector!(compact_end, Atom::num(2), rep.to_symbolic([])),
+        chain_factor(tensor_symbol!(parse_mixed_endpoint_chain_f)),
+    );
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+
+    assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+    assert_eq!(parsed.graph.dangling_indices().len(), 1);
 }
 
 #[test]
@@ -376,6 +425,24 @@ fn parse_schoonschipped_metric_product() {
 
     assert!(parsed.state.is_scalar());
     assert!(parsed.graph.dangling_indices().is_empty());
+}
+
+#[test]
+fn inner_product_schoonschip_can_be_disabled() {
+    let rep = mink4();
+    let expr = function!(
+        ETS.metric,
+        vector!(compact_p, rep.to_symbolic([])),
+        vector!(compact_q, rep.to_symbolic([]))
+    );
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&schoonschip_without_inner_products_settings())
+        .unwrap();
+
+    assert!(parsed.state.is_scalar());
+    assert!(parsed.graph.dangling_indices().is_empty());
+    assert_eq!(parsed.graph.n_nodes(), 1);
 }
 
 #[test]

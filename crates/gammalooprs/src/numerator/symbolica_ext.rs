@@ -128,7 +128,11 @@ impl AtomCoreExt for AtomView<'_> {
             TENSORLIB.read().unwrap().deref(),
             &ParseSettings {
                 shorthand_parsing: ShorthandParsing::Expand {
-                    schoonschip: SchoonschipExpansionMode::none(),
+                    schoonschip: SchoonschipExpansionMode {
+                        inner_products: false,
+                        expand_schoonship: true,
+                        expand_inside_chains: true,
+                    },
                     trace: true,
                     chain: true,
                 },
