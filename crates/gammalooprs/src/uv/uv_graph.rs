@@ -203,7 +203,9 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             .with(Atom::var(W_.a_).sqrt())
             .replace_multiple(&ose_reps)
             .replace_multiple(&mom_reps)
-            .replace(GS.if_sigma.f(&[W_.a_]))
+            .replace(GS.uv_local.f(&[W_.a_]))
+            .with(Atom::one())
+            .replace(GS.uv_integrated.f(&[W_.a_]))
             .with(Atom::one());
         // .replace_multiple(&q3_reps);
         let mut loops = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);

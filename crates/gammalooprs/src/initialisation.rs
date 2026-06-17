@@ -8,6 +8,7 @@ static INITIALISED: std::sync::Once = std::sync::Once::new();
 
 initialize!(|| {
     in_symbolica_initializer(|| {
+        let _ = ETS.force_in_initializer().delta;
         let _ = ETS.force_in_initializer().metric;
         let _ = GS.force_in_initializer();
         let _ = UFO.force_in_initializer();

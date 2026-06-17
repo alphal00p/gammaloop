@@ -5,14 +5,14 @@ use spenso::network::{
     ContractScalars, ExecutionResult, Network, NetworkState, Sequential, SequentialExtract,
     SingleSmallestDegree, SmallestDegree, Steps, tags::SPENSO_TAG,
 };
-use symbolica::atom::{Atom, AtomCore, Symbol};
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 
 use symbolica::symbol;
 
 use spenso::network::library::DummyLibrary;
 use spenso::network::library::panicing::ErroringLibrary;
 use spenso::shadowing::symbolica_utils::AtomCoreExt;
-use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
 
 // use log::trace;
 
@@ -504,6 +504,52 @@ fn parse_scalar_expr() {
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
     assert_eq!(net.simple_execute::<()>(), expr);
+}
+
+#[test]
+fn parse_dot_delta_sum_executes_back_to_atom_without_concretization() {
+    test_initialize();
+    let _delta = spenso::network::library::symbolic::ETS.delta;
+    let _q = spenso::vector_symbol!(Q);
+    let _q3 = spenso::vector_symbol!(
+        Q3,
+        norm = |f, out| {
+            if let AtomView::Fun(ff) = f
+                && ff.get_nargs() == 2
+            {
+                let mut iter = ff.iter();
+                let eid = iter.next().unwrap();
+                if let AtomView::Fun(cind) = iter.next().unwrap()
+                    && cind.get_symbol() == AIND_SYMBOLS.cind
+                    && let Some(i) = cind.iter().next()
+                    && let Ok(i) = i64::try_from(i)
+                {
+                    if i == 0 {
+                        **out = Atom::Zero;
+                    } else {
+                        **out = FunctionBuilder::new(spenso::vector_symbol!(Q))
+                            .add_arg(eid)
+                            .add_arg(cind.as_view())
+                            .finish()
+                    }
+                }
+            }
+        }
+    );
+    let expr = parse!(
+        "t*Q(0,spenso::mink(4,e))^2
+        -(spenso::dot(
+            spenso::δ(spenso::cind(0),spenso::mink(4)),
+            Q3(4,spenso::mink(4))
+        )*s+1)"
+    );
+    let net = expr
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+
+    let out = net.simple_execute::<()>();
+
+    assert_snapshot!(out.to_bare_ordered_string(), @"(1+Q3(4,mink(4,d_1000000))*s*δ(cind(0),mink(4,d_1000000)))*-1+(Q(0,mink(4,e)))^2*t");
 }
 
 #[test]

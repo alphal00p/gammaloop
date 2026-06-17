@@ -221,6 +221,16 @@ macro_rules! vector_symbol {
             ]
         )
     };
+    ($name:ident, $($setting:ident = $value:expr),* $(,)?) => {
+        symbolica::symbol!(
+            stringify!($name),
+            tags = [
+                &$crate::network::tags::SPENSO_TAG.tensor,
+                &$crate::network::tags::SPENSO_TAG.rank1
+            ],
+            $($setting = $value),*
+        )
+    };
     ($name:literal) => {
         symbolica::symbol!(
             $name,
@@ -228,6 +238,16 @@ macro_rules! vector_symbol {
                 &$crate::network::tags::SPENSO_TAG.tensor,
                 &$crate::network::tags::SPENSO_TAG.rank1
             ]
+        )
+    };
+    ($name:literal, $($setting:ident = $value:expr),* $(,)?) => {
+        symbolica::symbol!(
+            $name,
+            tags = [
+                &$crate::network::tags::SPENSO_TAG.tensor,
+                &$crate::network::tags::SPENSO_TAG.rank1
+            ],
+            $($setting = $value),*
         )
     };
 }

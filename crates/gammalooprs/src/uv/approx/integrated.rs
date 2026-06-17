@@ -241,7 +241,7 @@ impl Integrated<'_> {
         tracing::Span::current().record("reduced", reduced_label.as_str());
         debug_tags!(#uv, #integrated, #vakint, #trace, #input;
             log.integrand = integrand,
-            "Vakint trace"
+            "Integrating and truncating"
         );
         let mut integrand_vakint = to_vakint_integrand(
             integrand,
@@ -310,6 +310,7 @@ impl Integrated<'_> {
 
         let vk_metric = vakint_symbol!("g");
         let mink = Minkowski {}.new_rep(GS.dim);
+
         // apply metric
         res = res
             .replace(vakint::symbols::S.p.f(&[W_.i_, W_.j_]))
@@ -521,13 +522,13 @@ pub(crate) fn to_vakint_integrand<
 
     // strip the momentum wrapper from the denominator
     integrand_vakint = integrand_vakint
-        .replace(function!(
-            GS.den,
-            W_.prop_,
-            function!(GS.emr_mom, W_.prop_, W_.mom_),
-            W_.x__
-        ))
-        .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__))
+        // .replace(function!(
+        //     GS.den,
+        //     W_.prop_,
+        //     function!(GS.emr_mom, W_.prop_, W_.mom_),
+        //     W_.x__
+        // ))
+        // .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__))
         .expand();
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_after_den_strip_expand",
@@ -799,6 +800,12 @@ pub(crate) fn to_vakint_integrand<
         let mut vars = HashSet::new();
 
         let mut graph: HedgeGraph<ContractibleEdge, ()> = graph.build();
+        let uncontracted_propagator_count =
+            graph.iter_edges().filter(|(p, _, _)| p.is_paired()).count();
+        let uncontracted_propagator_power_sum = graph
+            .iter_edges()
+            .filter_map(|(p, _, e)| p.is_paired().then_some(e.data.power))
+            .sum::<i32>();
 
         while let Some(same_mass_two_bond) = graph.a_bond(&|c| {
             let mut count = 0;
@@ -867,17 +874,27 @@ pub(crate) fn to_vakint_integrand<
 
         // println!("{}->{}", t.integral, new_integral);
         t.integral = function!(vakint::symbols::S.topo, new_integral);
+        let nloops = graph.cyclotomatic_number(&graph.full_filter());
+        let contracted_propagator_count =
+            graph.iter_edges().filter(|(p, _, _)| p.is_paired()).count();
+        let contracted_propagator_power_sum = graph
+            .iter_edges()
+            .filter_map(|(p, _, e)| p.is_paired().then_some(e.data.power))
+            .sum::<i32>();
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_graph_rebuild",
             term_index = %term_index,
             reduced = %reduced_label,
             dependent_subgraph = %dependent_subgraph_label,
+            nloops = nloops,
+            uncontracted_propagator_count = uncontracted_propagator_count,
+            uncontracted_propagator_power_sum = uncontracted_propagator_power_sum,
+            contracted_propagator_count = contracted_propagator_count,
+            contracted_propagator_power_sum = contracted_propagator_power_sum,
             log.integral = t.integral,
             log.numerator = t.numerator,
             "Vakint trace"
         );
-
-        let nloops = graph.cyclotomatic_number(&graph.full_filter());
 
         let lmb = graph.lmb();
         let mom_pat = function!(GS.emr_mom, W_.a_).to_pattern();

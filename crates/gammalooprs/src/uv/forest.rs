@@ -124,7 +124,7 @@ impl CutForests {
                 forest_terms = forest.n_terms(),
                 "Building orientation parametric forest"
             );
-            let mut integrands = forest.orientation_parametric_expr(graph, settings.add_sigma)?;
+            let mut integrands = forest.orientation_parametric_expr(graph)?;
             debug_tags!(#generation, #profile, #uv, #graph, #cut, #summary;
                 stage = "orientation_parametric_expr_sum_done",
                 forest_index = i,
@@ -144,7 +144,9 @@ impl CutForests {
             if !settings.keep_sigma {
                 integrands.values_mut().for_each(|s| {
                     *s = s
-                        .replace(function!(GS.if_sigma, W_.a___))
+                        .replace(function!(GS.uv_local, W_.a___))
+                        .with(Atom::num(1))
+                        .replace(function!(GS.uv_integrated, W_.a___))
                         .with(Atom::num(1))
                 });
             }
@@ -405,11 +407,10 @@ impl Forest {
         ))
     }
 
-    #[debug_instrument(graph = %graph.log_display(), add_sigma)]
+    #[debug_instrument(graph = %graph.log_display())]
     pub(crate) fn orientation_parametric_expr(
         &self,
         graph: &Graph,
-        add_sigma: bool,
     ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let mut sum = None;
 
@@ -441,29 +442,7 @@ impl Forest {
                 .ok_or(eyre!("Final integrand not computed"))?
                 .iter()
             {
-                let a = if add_sigma {
-                    debug_tags!(#generation, #uv, #graph, #orientation, #inspect;
-                        sigma = true,
-                        "{}",
-                        n.data
-                            .simple_approx
-                            .as_ref()
-                            .unwrap()
-                            .expr(&graph.full_filter())
-                    );
-                    integrand
-                        * function!(
-                            GS.if_sigma,
-                            n.data
-                                .simple_approx
-                                .as_ref()
-                                .unwrap()
-                                .expr(&graph.full_filter())
-                        )
-                } else {
-                    integrand.clone()
-                }
-                .collect_color();
+                let a = integrand.clone().collect_color();
 
                 if first {
                     sum.insert(*cut_index, a);

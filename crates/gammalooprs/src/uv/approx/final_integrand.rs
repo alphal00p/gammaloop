@@ -184,16 +184,46 @@ impl<'a> FinalIntegrand<'a> {
         reduced_orientation: &EdgeVec<Orientation>,
         valid_global_orientations: &[EdgeVec<Orientation>],
         internal_edges: &[EdgeIndex],
+        average_compatible_orientations: bool,
     ) -> Result<Atom> {
+        let compatible_count = valid_global_orientations
+            .iter()
+            .filter(|candidate| {
+                Self::orientations_match_outside_integrated_subgraph(reduced_orientation, candidate)
+            })
+            .count();
         let representative = Self::select_representative_orientation(
             reduced_orientation,
             valid_global_orientations,
             internal_edges,
         )?;
 
-        Ok(reduced_expression.clone()
-            * reduced_orientation.orientation_thetas()
-            * Self::internal_orientation_selector(representative, internal_edges))
+        let reduced_selector = reduced_orientation.orientation_thetas();
+        let internal_selector = Self::internal_orientation_selector(representative, internal_edges);
+        let mut localized = reduced_expression.clone() * &reduced_selector * &internal_selector;
+        if average_compatible_orientations {
+            localized /= Atom::num(compatible_count as i64);
+        }
+        let active_orientation_count = valid_global_orientations
+            .iter()
+            .filter(|orientation| !orientation.select(localized.as_atom_view()).is_zero())
+            .count();
+
+        debug_tags!(#generation, #profile, #uv, #integrated, #local, #orientation, #trace;
+            stage = "localized_integrated_ct_orientation_term",
+            internal_edges = ?internal_edges,
+            compatible_count,
+            active_orientation_count,
+            average_compatible_orientations,
+            log.reduced_delta = GS.orientation_delta(reduced_orientation),
+            log.representative_delta = GS.orientation_delta(representative),
+            log.reduced_selector = reduced_selector,
+            log.internal_selector = internal_selector,
+            log.localized = localized,
+            "Localized integrated UV CT orientation term"
+        );
+
+        Ok(localized)
     }
 
     fn internal_paired_edges_of_subgraph(graph: &Graph, subgraph: &SuBitGraph) -> Vec<EdgeIndex> {
@@ -221,12 +251,23 @@ impl<'a> FinalIntegrand<'a> {
             panic!("Should only have one t_arg for the 4d approximation");
         }
 
-        t4.remove(&CutCFFIndex::new_all_none())
+        let signed_t4 = t4
+            .remove(&CutCFFIndex::new_all_none())
             .map(|t4| t4_sign * t4)
-            .unwrap()
+            .unwrap();
+        let finite = signed_t4
             .series(GS.dim_epsilon, Atom::Zero, 0)
             .unwrap()
-            .coefficient((0, 1).into())
+            .coefficient((0, 1).into());
+        debug_tags!(#generation, #profile, #uv, #integrated, #local, #trace;
+            stage = "finite_integrated_ct",
+            t4_sign = ?t4_sign,
+            log.signed_t4 = signed_t4,
+            log.finite = finite,
+            "Extracted finite integrated UV CT"
+        );
+
+        finite
             .replace(GS.m_uv_int)
             .with(GS.m_uv)
             .map_mink_dim(4)
@@ -239,6 +280,7 @@ impl<'a> FinalIntegrand<'a> {
         graph: &mut Graph,
         integrated_node: &S,
         finite_ct: &Atom,
+        integrated_sign: Sign,
         cuts: &CutSet,
     ) -> Result<LocalizedIntegratedCt> {
         debug_tags!(#uv; log.expr = finite_ct, "Localizing integrated UV CT");
@@ -256,6 +298,23 @@ impl<'a> FinalIntegrand<'a> {
         }
 
         let to_contract = integrated_node.subgraph();
+        let integrated_loop_count = graph.n_loops(to_contract);
+        // Negative multi-loop integrated entries are forest-overlap terms: the local recursion
+        // needs them, but localizing their finite integrated CT again double counts the addback.
+        let skip_finite_addback =
+            integrated_loop_count > 1 && matches!(integrated_sign, Sign::Negative);
+        let finite_ct = if skip_finite_addback {
+            Atom::Zero
+        } else {
+            finite_ct.clone()
+        };
+        debug_tags!(#generation, #profile, #uv, #integrated, #local, #summary;
+            stage = "localize_integrated_ct_forest_overlap",
+            integrated_loop_count,
+            integrated_sign = ?integrated_sign,
+            skip_finite_addback,
+            "Applied integrated UV forest-overlap addback rule"
+        );
         let cff = graph.cff(
             &to_contract
                 .union(&graph.tree_edges)
@@ -269,6 +328,7 @@ impl<'a> FinalIntegrand<'a> {
         );
 
         let internal_edges = Self::internal_paired_edges_of_subgraph(graph, to_contract);
+        let average_compatible_orientations = false;
         let localizing_integrand = GS.localizing_integrand(integrated_node.lmb());
         debug_tags!(#generation, #profile, #uv, #integrated, #local, #summary;
             stage = "localize_integrated_ct_factors",
@@ -276,6 +336,7 @@ impl<'a> FinalIntegrand<'a> {
             fourddenoms_byte_size = fourddenoms.as_view().get_byte_size(),
             localizing_integrand_byte_size = localizing_integrand.as_view().get_byte_size(),
             internal_edges = ?internal_edges,
+            average_compatible_orientations,
             "Integrated UV CT localization size checkpoint"
         );
 
@@ -289,11 +350,12 @@ impl<'a> FinalIntegrand<'a> {
                     &orientation,
                     self.valid_orientations,
                     &internal_edges,
+                    average_compatible_orientations,
                 )?;
             }
 
             let localized_cff_byte_size = localized.as_view().get_byte_size();
-            let active_ct = localized * finite_ct;
+            let active_ct = localized * finite_ct.clone();
             let localized_ct = &active_ct * &localizing_integrand;
             debug_tags!(#generation, #profile, #uv, #integrated, #local, #term, #summary;
                 stage = "localize_integrated_ct_term",
@@ -328,13 +390,17 @@ impl<'a> FinalIntegrand<'a> {
         cuts: &CutSet,
     ) -> Result<LocalizedIntegratedCt> {
         let finite = self.finite_integrated_ct(integrated_4d);
+        let integrated_sign = integrated_4d
+            .expr()
+            .map(|(_, sign)| sign)
+            .unwrap_or(Sign::Positive);
         debug_tags!(
             #uv;
             log.finite = finite,
             "Computing localized integrated UV CT",
         );
 
-        self.localize_integrated_ct(graph, integrated_node, &finite, cuts)
+        self.localize_integrated_ct(graph, integrated_node, &finite, integrated_sign, cuts)
     }
 
     #[debug_instrument(
@@ -350,6 +416,8 @@ impl<'a> FinalIntegrand<'a> {
         local_sign: Sign,
         integrated_4d: &ApproxOp,
         cutset: &CutSet,
+        uv_marker: Option<&Atom>,
+        tag_local_terms: bool,
     ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let global_num = graph.global_atom();
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -374,7 +442,38 @@ impl<'a> FinalIntegrand<'a> {
             .enumerate()
         {
             let mut term_started = std::time::Instant::now();
-            let mut cff = local_sign * (local - integ);
+            let mut cff;
+            if let Some(marker) = uv_marker {
+                let local_term = if tag_local_terms {
+                    local * function!(GS.uv_local, marker.clone())
+                } else {
+                    local.clone()
+                };
+                let integrated_term = integ * function!(GS.uv_integrated, marker.clone());
+                cff = local_sign * (&local_term - &integrated_term);
+                debug_tags!(#generation, #profile, #uv, #graph, #term, #trace;
+                    stage = "final_integrand_cff_inputs",
+                    cut_index = ?local_index,
+                    local_sign = ?local_sign,
+                    tag_local_terms,
+                    log.local = local_term,
+                    log.integrated = integrated_term,
+                    log.cff_before_replacements = cff,
+                    "Built final UV CFF inputs"
+                );
+            } else {
+                cff = local_sign * (local - integ);
+                debug_tags!(#generation, #profile, #uv, #graph, #term, #trace;
+                    stage = "final_integrand_cff_inputs",
+                    cut_index = ?local_index,
+                    local_sign = ?local_sign,
+                    tag_local_terms,
+                    log.local = local,
+                    log.integrated = integ,
+                    log.cff_before_replacements = cff,
+                    "Built final UV CFF inputs"
+                );
+            }
 
             if local_index != integrated_index {
                 return Err(eyre!(
@@ -607,6 +706,7 @@ mod tests {
             &reduced_orientation,
             &valid,
             &edges([1]),
+            false,
         )
         .unwrap();
 

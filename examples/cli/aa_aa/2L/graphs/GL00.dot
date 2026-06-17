@@ -3,7 +3,7 @@ digraph GL00{
     overall_factor = "(AutG(1))^(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(4)";
     overall_factor_evaluated = "-4";
     projector = "ϵ(0,spenso::mink(4,hedge(0)))*ϵ(1,spenso::mink(4,hedge(1)))*ϵbar(2,spenso::mink(4,hedge(2)))*ϵbar(3,spenso::mink(4,hedge(3)))";
-    // params = "if_sigma(S_16C7⊛0);if_sigma(S_16C7⊛3s*Top(S_3s⊛0))";
+    // params = "uv_local(S_16C7⊛0);uv_local(S_16C7⊛3s*Top(S_3s⊛0))";
 
 	0 [int_id="V_137"];
 

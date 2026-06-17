@@ -818,14 +818,6 @@ impl AmplitudeGraph {
 
     // fn get_eager_const_map(&self)->HashM
 
-    fn add_additional_factors_to_cff_atom(&self, cff_atom: &Atom) -> Atom {
-        // let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
-        let factors_of_pi = (Atom::var(GS.pi) * 2).pow(3 * self.graph.get_loop_number() as i64);
-
-        // debug!("result: {}", result);
-        cff_atom / factors_of_pi
-    }
-
     pub fn to_numerical(
         numerical_result: AtomView,
         true_settings: &vakint::VakintSettings,
@@ -1106,16 +1098,13 @@ impl AmplitudeGraph {
             "Generation timing milestone"
         );
 
-        let add_factors_started = std::time::Instant::now();
-        let exprs: Vec<_> = parametric_exprs
-            .into_iter()
-            .map(|e| e.map(|a| self.add_additional_factors_to_cff_atom(&a)))
-            .collect();
+        let normalization_started = std::time::Instant::now();
+        let exprs: Vec<_> = parametric_exprs.into_iter().collect();
         crate::debug_tags!(#generation, #profile, #graph, #summary;
-            stage = "amplitude_graph_additional_factors_done",
+            stage = "amplitude_graph_cff_normalization_done",
             graph = %self.graph.name,
             expr_count = exprs.len(),
-            elapsed_ms = add_factors_started.elapsed().as_secs_f64() * 1000.0,
+            elapsed_ms = normalization_started.elapsed().as_secs_f64() * 1000.0,
             total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Generation timing milestone"
         );

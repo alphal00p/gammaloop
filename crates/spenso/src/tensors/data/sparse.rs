@@ -609,7 +609,13 @@ where
 
     fn scalar(mut self) -> Option<Self::Scalar> {
         if self.structure.is_scalar() {
-            self.elements.drain().next().map(|(_, v)| v)
+            Some(
+                self.elements
+                    .drain()
+                    .next()
+                    .map(|(_, v)| v)
+                    .unwrap_or(self.zero),
+            )
         } else {
             None
         }
@@ -617,7 +623,7 @@ where
 
     fn scalar_ref(&self) -> Option<Self::ScalarRef<'_>> {
         if self.structure.is_scalar() {
-            self.elements.values().next()
+            Some(self.elements.values().next().unwrap_or(&self.zero))
         } else {
             None
         }

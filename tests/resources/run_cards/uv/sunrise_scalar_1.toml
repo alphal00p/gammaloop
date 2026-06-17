@@ -19,6 +19,11 @@ summed_function_map = true
 enable_thresholds = true
 check_esurface_at_generation = false
 
+
+
+[cli_settings.global.generation.uv]
+add_sigma = true
+
 [[command_blocks]]
 name = "generate"
 commands = [
@@ -45,13 +50,46 @@ b = 1.0
 [default_runtime_settings.general]
 mu_r = 3.0
 m_uv = 20.0
-additional_param_values = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+additional_param_values = [
+#uv_local(S_47⊛0)
+1.0,
+#uv_local(S_47⊛y*Top(S_y⊛0))
+1.0,
+#uv_local(S_47⊛3s*Top(S_3s⊛0))
+1.0,
+#uv_local(S_47⊛3I*Top(S_3I⊛0))
+1.0,
+#uv_local(S_47⊛44*Top(S_44⊛0))
+1.0,
+#uv_local(S_47⊛44*Top(S_44⊛y*Top(S_y⊛0)))
+1.0,
+#uv_local(S_47⊛44*Top(S_44⊛3s*Top(S_3s⊛0)))
+1.0,
+#uv_local(S_47⊛44*Top(S_44⊛3I*Top(S_3I⊛0)))
+1.0,
+#uv_integrated(S_47⊛0)
+-1.0,
+#uv_integrated(S_47⊛y*Top(S_y⊛0))
+-1.0,
+#uv_integrated(S_47⊛3s*Top(S_3s⊛0))
+-1.0,
+#uv_integrated(S_47⊛3I*Top(S_3I⊛0))
+-1.0,
+#uv_integrated(S_47⊛44*Top(S_44⊛0))
+1.0,
+#uv_integrated(S_47⊛44*Top(S_44⊛y*Top(S_y⊛0)))
+1.0,
+#uv_integrated(S_47⊛44*Top(S_44⊛3s*Top(S_3s⊛0)))
+1.0,
+#uv_integrated(S_47⊛44*Top(S_44⊛3I*Top(S_3I⊛0)))
+1.0]
+
 
 [default_runtime_settings.kinematics.externals]
 type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
-momenta = [[2.0, 0.0, 0.0, 0.0], "dependent"]
+momenta = [[1.0, 0.0, 0.5, 0.5], "dependent"]
 helicities = [0, 0]
 
 [default_runtime_settings.subtraction]
@@ -60,17 +98,17 @@ disable_threshold_subtraction = false
 [[default_runtime_settings.stability.rotation_axis]]
 type = "z"
 
-[[default_runtime_settings.stability.levels]]
-precision = "Double"
-required_precision_for_re = 0.0000000001
-required_precision_for_im = 0.0000000001
-escalate_for_large_weight_threshold = 0.9
+# [[default_runtime_settings.stability.levels]]
+# precision = "Double"
+# required_precision_for_re = 0.000001
+# required_precision_for_im = 0.000001
+# escalate_for_large_weight_threshold = 0.9
 
 [[default_runtime_settings.stability.levels]]
 precision = "Quad"
 required_precision_for_re = 0.00001
 required_precision_for_im = 0.00001
-escalate_for_large_weight_threshold = -1.0
+escalate_for_large_weight_threshold = 0.9
 
 [[default_runtime_settings.stability.levels]]
 precision = "Arb"

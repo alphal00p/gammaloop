@@ -5,7 +5,7 @@ digraph adad {
     // projector = "spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(2)))*spenso::g(spenso::bis(4,gammalooprs::hedge(1)),spenso::bis(4,gammalooprs::hedge(3)))"
     ext [style=invis];
 
-      params = "if_sigma(S_143⊛0);if_sigma(S_143⊛FU*Top(S_FU⊛0))"
+      params = "uv_local(S_143⊛0);uv_local(S_143⊛FU*Top(S_FU⊛0))"
 
     ext -> v1:0 [id=0 particle="a"];
     ext -> v1:1 [id=1 particle="d"];

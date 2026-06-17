@@ -4,7 +4,7 @@ use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 
 use spenso::{
-    network::tags::SPENSO_TAG,
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         abstract_index::AIND_SYMBOLS,
@@ -180,7 +180,8 @@ pub struct GammaloopSymbols {
 
     pub localizing_integrand: Symbol,
 
-    pub if_sigma: Symbol,
+    pub uv_local: Symbol,
+    pub uv_integrated: Symbol,
 
     pub nc2_1: Symbol,
     pub top: Symbol,
@@ -637,7 +638,8 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         tags = [SPENSO_TAG.index.clone()]
     ),
     override_if: symbol!("override_if"),
-    if_sigma: symbol!("if_sigma"),
+    uv_local: symbol!("uv_local"),
+    uv_integrated: symbol!("uv_integrated"),
     is_function: symbol!("is_function"),
     is_symbol: symbol!("is_symbol"),
     nc2_1: symbol!("NC2_1"),
@@ -755,27 +757,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
             }
         }
     ),
-    delta_vec: symbol!(
-        "δ",
-        norm = |f, out| {
-            if let AtomView::Fun(ff) = f
-                && ff.get_nargs() == 2
-            {
-                let mut iter = ff.iter();
-                let matchid = iter.next().unwrap();
-                if let AtomView::Fun(cind) = iter.next().unwrap()
-                    && cind.get_symbol() == AIND_SYMBOLS.cind
-                {
-                    if cind.as_view() != matchid {
-                        **out = Atom::Zero;
-                    } else {
-                        **out = Atom::num(1);
-                    }
-                }
-            }
-        },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
+    delta_vec: ETS.delta,
     top: symbol!("Top"),
     num: symbol!("num"),
     den: symbol!(
@@ -1013,17 +995,10 @@ impl GammaloopSymbols {
     }
 
     pub(crate) fn localizing_integrand(&self, lmb: &LoopMomentumBasis) -> Atom {
-        // Multiply by the localized normalized integral \int \vec{k} 1 / (|\vec{k}|^2 + mUV^2)^2, which integrates to \pi^2/ mUV
+        // Normalize each factor with int d^3k / (|k|^2 + rls^2)^2 = pi^2 / rls,
+        // so the localizing integrand itself integrates to one.
         let pi_atom = (Symbol::PI).to_atom();
-        let mut normalization_term_integral =
-            (pi_atom.pow(2)) / GS.renormalization_localization_scale;
-        // However, gammaloop adds a factro 1/(2*pi)^3 per loop, and this integrated CT will be subject to it, so we must undo it.
-        normalization_term_integral /= (Atom::from(2) * pi_atom).pow(3);
-
-        // We need to correct the Wick rotation `i` per loop
-        // TODO: Understand this better: this is *not* part of the normalization really, but probably related to the fact that our
-        // UV CT is using minkowski denominators and not euclidean ones.
-        normalization_term_integral /= Atom::i();
+        let normalization_term_integral = (pi_atom.pow(2)) / GS.renormalization_localization_scale;
 
         let mut res = Atom::one();
 

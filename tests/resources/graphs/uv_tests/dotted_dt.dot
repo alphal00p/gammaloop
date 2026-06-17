@@ -9,12 +9,12 @@ digraph dotted_dt {
         id=2
         dir=none
         particle="scalar_1"
-        num="1𝑖 *Q(2,spenso::mink(4,edge(2,1)))* Q(0,spenso::mink(4,edge(2,1)))"
+        num="1𝑖 * Q(2,spenso::mink(4,edge(2,1)))* Q(0,spenso::mink(4,edge(2,1)))"
     ];
     1:4 -> 2:5 [
         id=3
         particle="scalar_1"
-        num="1𝑖 *Q(3,spenso::mink(4,edge(2,1)))* Q(0,spenso::mink(4,edge(2,1)))"
+        num="1𝑖 * Q(3,spenso::mink(4,edge(2,1)))* Q(0,spenso::mink(4,edge(2,1)))"
     ];
     2 -> 3 [id=4 particle="scalar_1"];
     3 -> 0 [id=5 particle="scalar_1"];

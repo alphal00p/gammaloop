@@ -300,6 +300,12 @@ impl Approximation {
                 .local_3d
                 .expr()
                 .expect("root local CFF should have been computed");
+            let uv_marker = (settings.add_sigma && settings.keep_sigma).then(|| {
+                self.simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter())
+            });
             self.final_integrand = Some(
                 FinalIntegrand::new(valid_orientations, orientation_pattern).build(
                     graph,
@@ -308,6 +314,8 @@ impl Approximation {
                     local_sign,
                     &self.integrated_4d,
                     cuts,
+                    uv_marker.as_ref(),
+                    true,
                 )?,
             );
         }
@@ -394,15 +402,24 @@ impl Approximation {
             })
             .collect::<Result<BTreeMap<_, _>>>()?;
 
+        let integrated_loop_count = graph.n_loops(self.spinney.filter());
+        let output_sign = if integrated_loop_count > 1 {
+            *sign
+        } else {
+            -*sign
+        };
         self.integrated_4d = ApproxOp::Dependent {
             t_arg: IntegrandExpr { integrands },
-            sign: -*sign,
+            sign: output_sign,
             subgraph: unsafe { InternalSubGraph::new_unchecked(self.reduced_subgraph(dependent)) },
         };
 
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "compute_integrated_done",
             integrand_count = current.len(),
+            integrated_loop_count,
+            parent_sign = ?sign,
+            output_sign = ?output_sign,
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Computed integrated UV CT"
         );
@@ -457,8 +474,15 @@ impl Approximation {
         );
 
         let ctx = UVCtx { graph, settings };
+        let uv_marker = (settings.add_sigma && settings.keep_sigma).then(|| {
+            self.simple_approx
+                .as_ref()
+                .unwrap()
+                .expr(&ctx.graph.full_filter())
+        });
 
         let mut integrands = BTreeMap::new();
+        let mut tagged_integrands = uv_marker.as_ref().map(|_| BTreeMap::new());
         for (((index_local, local), (index_integ, integ)), (index_frozen, frozen)) in cff
             .into_iter()
             .zip(integrated_t.active.integrands)
@@ -481,15 +505,57 @@ impl Approximation {
             }
             let mut sum_3d = Atom::Zero;
 
+            debug_tags!(#generation, #profile, #uv, #integrated, #local, #graph, #term, #trace;
+                stage = "compute_local_3d_term_inputs",
+                cut_index = ?index_local,
+                log.local = local,
+                log.localized_integrated = integ,
+                log.frozen = frozen,
+                "Local 3D UV CT term inputs"
+            );
+
             debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                 "adding localT(expr)"
             );
-            sum_3d += Local3DApproximation::full().kernel(&ctx, &*self, dependent, &local)?;
+            let local_ct = Local3DApproximation::full().kernel(&ctx, &*self, dependent, &local)?;
+            debug_tags!(#generation, #profile, #uv, #local, #graph, #term, #trace;
+                stage = "compute_local_3d_term_local_done",
+                cut_index = ?index_local,
+                log.local_ct = local_ct,
+                "Computed localT(expr)"
+            );
             debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                 "subtracting localT(integrated(expr))"
             );
-            sum_3d -=
+            let localized_integrated_ct =
                 Local3DApproximation::reduced().kernel(&ctx, &*self, dependent, &integ)? * frozen;
+            debug_tags!(#generation, #profile, #uv, #integrated, #local, #graph, #term, #trace;
+                stage = "compute_local_3d_term_integrated_done",
+                cut_index = ?index_local,
+                log.localized_integrated_ct = localized_integrated_ct,
+                "Computed localT(integrated(expr))"
+            );
+            if let (Some(marker), Some(tagged_integrands)) =
+                (uv_marker.as_ref(), tagged_integrands.as_mut())
+            {
+                let tagged_sum_3d = local_ct.clone() * function!(GS.uv_local, marker.clone())
+                    - localized_integrated_ct.clone() * function!(GS.uv_integrated, marker.clone());
+                tagged_integrands.insert(index_local, tagged_sum_3d.clone());
+                debug_tags!(#generation, #profile, #uv, #local, #graph, #term, #trace;
+                    stage = "compute_local_3d_term_tagged_output",
+                    cut_index = ?index_local,
+                    log.tagged_local_3d_ct = tagged_sum_3d,
+                    "Computed tagged local 3D UV CT expression"
+                );
+            }
+            sum_3d += local_ct;
+            sum_3d -= localized_integrated_ct;
+            debug_tags!(#generation, #profile, #uv, #local, #graph, #term, #trace;
+                stage = "compute_local_3d_term_output",
+                cut_index = ?index_local,
+                log.local_3d_ct = sum_3d,
+                "Computed local 3D UV CT expression"
+            );
             integrands.insert(index_local, sum_3d);
             debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                 stage = "compute_local_3d_term_done",
@@ -500,8 +566,9 @@ impl Approximation {
             );
         }
 
+        let output_sign = -sign;
         self.local_3d = CFFapprox::Dependent {
-            sign: -sign,
+            sign: output_sign,
             t_arg: IntegrandExpr { integrands },
         };
 
@@ -511,17 +578,25 @@ impl Approximation {
                 .local_3d
                 .expr()
                 .ok_or(eyre!("Local3d not yet computed"))?;
+            let final_local_terms = match tagged_integrands.as_ref() {
+                Some(tagged_integrands) => tagged_integrands,
+                None => &local_terms,
+            };
             final_integrand.build(
                 graph,
                 self,
-                &local_terms,
+                final_local_terms,
                 local_sign,
                 &self.integrated_4d,
                 cuts,
+                uv_marker.as_ref(),
+                false,
             )?
         });
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "compute_local_3d_done",
+            parent_sign = ?sign,
+            output_sign = ?output_sign,
             final_integrand_elapsed_ms = final_started.elapsed().as_secs_f64() * 1000.0,
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Computed local 3D UV CT"

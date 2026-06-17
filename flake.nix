@@ -594,10 +594,18 @@
             checkPhase = ''
               runHook preCheck
 
+              cat > nextest-nix.toml <<EOF
+              [store]
+              dir = "$PWD/target/nextest"
+
+              EOF
+              cat ${workspaceTestSrc}/.config/nextest.toml >> nextest-nix.toml
+
               set +e
               cargo nextest run \
                 --archive-file ${nextestArchive}/${nextestArchiveFileName} \
                 --archive-format tar-zst \
+                --config-file "$PWD/nextest-nix.toml" \
                 --workspace-remap . \
                 ${nextestPackageFilter target.packages} ${nextestBaseExtraArgs}
               nextest_status=$?

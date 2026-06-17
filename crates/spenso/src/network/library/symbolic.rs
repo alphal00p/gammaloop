@@ -208,6 +208,8 @@ pub struct TensorLibrary<T: HasStructure<Structure = ExplicitKey<Aind>>, Aind> {
 
 pub struct ExplicitTensorSymbols {
     pub flat: Symbol,
+    /// Component selector for rank-one tensors.
+    pub delta: Symbol,
     /// Print modes:
     /// - spenso: coloring builtin symbols colors the representation name, and tensor name
     ///   - 0: no dim,
@@ -279,6 +281,23 @@ pub static ETS, ETS_INNER: ExplicitTensorSymbols = || ExplicitTensorSymbols {
             }
             _=>None}
 
+    }),
+    delta: crate::vector_symbol!("δ", norm = |f, out| {
+        if let AtomView::Fun(ff) = f
+            && ff.get_nargs() == 2
+        {
+            let mut iter = ff.iter();
+            let matchid = iter.next().unwrap();
+            if let AtomView::Fun(cind) = iter.next().unwrap()
+                && cind.get_symbol() == AIND_SYMBOLS.cind
+            {
+                if cind.as_view() != matchid {
+                    **out = Atom::Zero;
+                } else {
+                    **out = Atom::num(1);
+                }
+            }
+        }
     }),
     // sharp: symbol!("♯";Symmetric),
     metric: tensor_symbol!("g";Symmetric,Real,Linear;print = |a, opt, _state| {
@@ -785,7 +804,7 @@ mod test {
         slot,
         structure::{
             ToSymbolic,
-            abstract_index::AbstractIndex,
+            abstract_index::{AIND_SYMBOLS, AbstractIndex},
             representation::{Euclidean, Minkowski},
         },
         tensors::data::SparseOrDense,
@@ -1106,6 +1125,72 @@ mod test {
         } else {
             panic!("Not Key")
         }
+    }
+
+    #[test]
+    fn mixed_tensor_path_handles_sparse_zero_scalar_mwe() {
+        initialize();
+        let _delta = ETS.delta;
+        let _q = crate::vector_symbol!(Q);
+        let _q3 = crate::vector_symbol!(
+            Q3,
+            norm = |f, out| {
+                if let AtomView::Fun(ff) = f
+                    && ff.get_nargs() == 2
+                {
+                    let mut iter = ff.iter();
+                    let eid = iter.next().unwrap();
+                    if let AtomView::Fun(cind) = iter.next().unwrap()
+                        && cind.get_symbol() == AIND_SYMBOLS.cind
+                        && let Some(i) = cind.iter().next()
+                        && let Ok(i) = i64::try_from(i)
+                    {
+                        if i == 0 {
+                            **out = Atom::Zero;
+                        } else {
+                            **out = FunctionBuilder::new(crate::vector_symbol!(Q))
+                                .add_arg(eid)
+                                .add_arg(cind.as_view())
+                                .finish()
+                        }
+                    }
+                }
+            }
+        );
+        let mut lib =
+            TensorLibrary::<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>::new();
+        lib.update_ids();
+
+        let expr = parse!(
+            "t*Q(0,spenso::mink(4,e))^2
+            -(spenso::dot(
+                δ(spenso::cind(0),spenso::mink(4)),
+                Q3(4,spenso::mink(4))
+            )*s+1)"
+        );
+        let settings = ParseSettings {
+            strict_tensor_filter: StrictTensorFilter::ContainsReps,
+            ..Default::default()
+        };
+        let mut net = Network::<
+            NetworkStore<
+                MixedTensor<f64, ShadowedStructure<AbstractIndex>>,
+                ConcreteOrParam<RealOrComplex<f64>>,
+            >,
+            _,
+            Symbol,
+        >::try_from_view(expr.as_view(), &lib, &settings)
+        .map_err(|a| a.to_string())
+        .unwrap();
+
+        net.execute::<Sequential, SmallestDegree, _, _, _>(&lib, &ErroringLibrary::new())
+            .unwrap();
+        let result = net.result_scalar().unwrap().to_string();
+
+        assert_eq!(
+            result,
+            "-1+t*(Q(0,cind(0))^2-Q(0,cind(1))^2-Q(0,cind(2))^2-Q(0,cind(3))^2)"
+        );
     }
 
     #[test]

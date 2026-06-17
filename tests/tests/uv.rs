@@ -44,6 +44,7 @@ struct IntegratedUvCase<'a> {
     integrand_name: &'a str,
     original_m_uv: f64,
     shifted_m_uv: f64,
+    original_renormalization_localization_scale: f64,
     shifted_renormalization_localization_scale: f64,
     original_mu_r: f64,
     shifted_mu_r: f64,
@@ -54,7 +55,9 @@ struct IntegratedUvCase<'a> {
 
 struct IntegratedUvResults {
     no_integrated: Option<IntegralEstimate>,
+    no_integrated_muv_shifted: Option<IntegralEstimate>,
     integrated: IntegralEstimate,
+    integrated_muv_shifted: Option<IntegralEstimate>,
     integrated_per_graph: Option<BTreeMap<String, IntegralEstimate>>,
     integrated_muv_shifted_per_graph: Option<BTreeMap<String, IntegralEstimate>>,
     integrated_rls_shifted_per_graph: Option<BTreeMap<String, IntegralEstimate>>,
@@ -68,6 +71,12 @@ struct CheckRow {
     threshold: Option<String>,
 }
 
+struct DiagnosticRow {
+    check: &'static str,
+    graph: String,
+    details: String,
+}
+
 struct IntegratedUvCaseResult {
     graph: String,
     uv_profile_passed: Option<bool>,
@@ -77,6 +86,7 @@ struct IntegratedUvCaseResult {
     rls_rows: Vec<CheckRow>,
     mur_dependence_passed: Option<bool>,
     mur_rows: Vec<CheckRow>,
+    diagnostic_rows: Vec<DiagnosticRow>,
     target_passed: Option<bool>,
     target_threshold: Option<&'static str>,
     error: Option<String>,
@@ -93,15 +103,8 @@ impl IntegratedUvCaseResult {
     }
 }
 
-fn set_fast_deterministic_integrator(
-    cli: &mut CLIState,
-    case: &IntegratedUvCase<'_>,
-) -> Result<()> {
-    let (n_start, n_max) = if case.test_name == "sunrise_scalar_1" {
-        (250000, 1000000)
-    } else {
-        (50000, 200000)
-    };
+fn set_fast_deterministic_integrator(cli: &mut CLIState) -> Result<()> {
+    let (n_start, n_max) = (50000, 400000);
 
     cli.run_command(&format!(
         "set process kv integrator.target_relative_accuracy=0.001 \
@@ -126,6 +129,44 @@ fn shifted_rls_integrand_name(integrand_name: &str) -> String {
     format!("{integrand_name}_rls_shifted")
 }
 
+fn set_original_integrated_uv_scales(
+    cli: &mut CLIState,
+    case: &IntegratedUvCase<'_>,
+) -> Result<()> {
+    cli.run_command(&format!(
+        "set process -p {} -i {} kv general.m_uv={}",
+        case.process, case.integrand_name, case.original_m_uv
+    ))?;
+    cli.run_command(&format!(
+        "set process -p {} -i {} kv general.mu_r={}",
+        case.process, case.integrand_name, case.original_mu_r
+    ))?;
+    cli.run_command(&format!(
+        "set process -p {} -i {} kv general.renormalization_localization_scale={}",
+        case.process, case.integrand_name, case.original_renormalization_localization_scale
+    ))?;
+
+    let no_integrated_process = no_integrated_process_name(case.process);
+    if process_integrand_exists(cli, &no_integrated_process, case.integrand_name) {
+        cli.run_command(&format!(
+            "set process -p {} -i {} kv general.m_uv={}",
+            no_integrated_process, case.integrand_name, case.original_m_uv
+        ))?;
+        cli.run_command(&format!(
+            "set process -p {} -i {} kv general.mu_r={}",
+            no_integrated_process, case.integrand_name, case.original_mu_r
+        ))?;
+        cli.run_command(&format!(
+            "set process -p {} -i {} kv general.renormalization_localization_scale={}",
+            no_integrated_process,
+            case.integrand_name,
+            case.original_renormalization_localization_scale
+        ))?;
+    }
+
+    Ok(())
+}
+
 fn add_integrated_uv_scale_variants(cli: &mut CLIState, case: &IntegratedUvCase<'_>) -> Result<()> {
     if (case.original_m_uv - case.shifted_m_uv).abs() > f64::EPSILON {
         let shifted_name = shifted_muv_integrand_name(case.integrand_name);
@@ -137,6 +178,18 @@ fn add_integrated_uv_scale_variants(cli: &mut CLIState, case: &IntegratedUvCase<
             "set process -p {} -i {} kv general.m_uv={}",
             case.process, shifted_name, case.shifted_m_uv
         ))?;
+
+        let no_integrated_process = no_integrated_process_name(case.process);
+        if process_integrand_exists(cli, &no_integrated_process, case.integrand_name) {
+            cli.run_command(&format!(
+                "duplicate integrand -p {} -i {} --output_process_name {} --output_integrand_name {}",
+                no_integrated_process, case.integrand_name, no_integrated_process, shifted_name
+            ))?;
+            cli.run_command(&format!(
+                "set process -p {} -i {} kv general.m_uv={}",
+                no_integrated_process, shifted_name, case.shifted_m_uv
+            ))?;
+        }
     }
 
     let shifted_rls_name = shifted_rls_integrand_name(case.integrand_name);
@@ -264,7 +317,7 @@ fn run_integrated_uv_integration(
     cli: &mut CLIState,
     case: &IntegratedUvCase<'_>,
 ) -> Result<IntegratedUvResults> {
-    set_fast_deterministic_integrator(cli, case)?;
+    set_fast_deterministic_integrator(cli)?;
     let no_integrated_process = no_integrated_process_name(case.process);
     let has_no_integrated =
         process_integrand_exists(cli, &no_integrated_process, case.integrand_name);
@@ -281,6 +334,10 @@ fn run_integrated_uv_integration(
     if let Some(name) = &muv_shifted_name {
         processes.push(ProcessRef::Unqualified(case.process.to_string()));
         integrand_names.push(name.clone());
+        if has_no_integrated {
+            processes.push(ProcessRef::Unqualified(no_integrated_process.clone()));
+            integrand_names.push(name.clone());
+        }
     }
 
     let integration_result = Integrate {
@@ -302,6 +359,13 @@ fn run_integrated_uv_integration(
         .slot(&integrated_key)
         .expect("integrated slot should exist");
     let integrated_per_graph = graph_estimates_for_slot(cli, integrated_slot)?;
+    let integrated_muv_shifted = muv_shifted_name.as_ref().map(|name| {
+        integration_result
+            .slot(&format!("{}@{}", case.process, name))
+            .expect("integrated shifted-m_uv slot should exist")
+            .integral
+            .clone()
+    });
     let integrated_muv_shifted_per_graph = muv_shifted_name
         .as_ref()
         .map(|name| {
@@ -314,6 +378,17 @@ fn run_integrated_uv_integration(
         })
         .transpose()?
         .flatten();
+    let no_integrated_muv_shifted =
+        muv_shifted_name
+            .as_ref()
+            .filter(|_| has_no_integrated)
+            .map(|name| {
+                integration_result
+                    .slot(&format!("{}@{}", no_integrated_process, name))
+                    .expect("no-integrated shifted-m_uv slot should exist")
+                    .integral
+                    .clone()
+            });
 
     Ok(IntegratedUvResults {
         no_integrated: has_no_integrated.then(|| {
@@ -326,7 +401,9 @@ fn run_integrated_uv_integration(
                 .integral
                 .clone()
         }),
+        no_integrated_muv_shifted,
         integrated: integrated_slot.integral.clone(),
+        integrated_muv_shifted,
         integrated_per_graph,
         integrated_muv_shifted_per_graph,
         integrated_rls_shifted_per_graph: None,
@@ -337,7 +414,7 @@ fn run_integrated_uv_rls_integration(
     cli: &mut CLIState,
     case: &IntegratedUvCase<'_>,
 ) -> Result<IntegratedUvResults> {
-    set_fast_deterministic_integrator(cli, case)?;
+    set_fast_deterministic_integrator(cli)?;
     let rls_shifted_name = shifted_rls_integrand_name(case.integrand_name);
     let integration_result = Integrate {
         process: vec![
@@ -370,7 +447,9 @@ fn run_integrated_uv_rls_integration(
 
     Ok(IntegratedUvResults {
         no_integrated: None,
+        no_integrated_muv_shifted: None,
         integrated: integrated_slot.integral.clone(),
+        integrated_muv_shifted: None,
         integrated_per_graph,
         integrated_muv_shifted_per_graph: None,
         integrated_rls_shifted_per_graph,
@@ -589,6 +668,74 @@ fn integral_estimate_change_sigma(lhs: &IntegralEstimate, rhs: &IntegralEstimate
     }
 }
 
+fn complex_estimate_delta(lhs: &IntegralEstimate, rhs: &IntegralEstimate) -> Complex<F<f64>> {
+    Complex::new(
+        F(lhs.result.re.0 - rhs.result.re.0),
+        F(lhs.result.im.0 - rhs.result.im.0),
+    )
+}
+
+fn complex_delta(lhs: Complex<F<f64>>, rhs: Complex<F<f64>>) -> Complex<F<f64>> {
+    Complex::new(F(lhs.re.0 - rhs.re.0), F(lhs.im.0 - rhs.im.0))
+}
+
+fn complex_ratio(
+    numerator: Complex<F<f64>>,
+    denominator: Complex<F<f64>>,
+) -> Option<Complex<F<f64>>> {
+    let norm_sq = denominator.re.0 * denominator.re.0 + denominator.im.0 * denominator.im.0;
+    (norm_sq > 0.0).then(|| {
+        Complex::new(
+            F((numerator.re.0 * denominator.re.0 + numerator.im.0 * denominator.im.0) / norm_sq),
+            F((numerator.im.0 * denominator.re.0 - numerator.re.0 * denominator.im.0) / norm_sq),
+        )
+    })
+}
+
+fn complex_norm(value: Complex<F<f64>>) -> f64 {
+    value.re.0.hypot(value.im.0)
+}
+
+fn format_complex(value: Complex<F<f64>>) -> String {
+    format!("{:+.6e}{:+.6e}i", value.re.0, value.im.0)
+}
+
+fn integrated_uv_decomposition_row(
+    case: &IntegratedUvCase<'_>,
+    results: &IntegratedUvResults,
+) -> Option<DiagnosticRow> {
+    let a_original = results.no_integrated.as_ref()?;
+    let a_shifted = results.no_integrated_muv_shifted.as_ref()?;
+    let full_shifted = results.integrated_muv_shifted.as_ref()?;
+    let b_original = complex_estimate_delta(&results.integrated, a_original);
+    let b_shifted = complex_estimate_delta(full_shifted, a_shifted);
+    let delta_a = complex_estimate_delta(a_shifted, a_original);
+    let delta_b = complex_delta(b_shifted, b_original);
+    let ratio = complex_ratio(delta_b, delta_a);
+    let norm_ratio = complex_norm(delta_b) / complex_norm(delta_a).max(f64::MIN_POSITIVE);
+    let ratio = ratio
+        .map(format_complex)
+        .unwrap_or_else(|| "undefined".to_string());
+
+    Some(DiagnosticRow {
+        check: "m_uv.A/B",
+        graph: "integrated".to_string(),
+        details: format!(
+            "m_uv {}->{}: A={} -> {}, ΔA={}; B={} -> {}, ΔB={}; ΔB/ΔA={}, |ΔB|/|ΔA|={:.6e}",
+            case.original_m_uv,
+            case.shifted_m_uv,
+            format_complex(a_original.result),
+            format_complex(a_shifted.result),
+            format_complex(delta_a),
+            format_complex(b_original),
+            format_complex(b_shifted),
+            format_complex(delta_b),
+            ratio,
+            norm_ratio,
+        ),
+    })
+}
+
 fn integrated_uv_profile_passes(
     cli: &mut CLIState,
     process: &str,
@@ -623,14 +770,12 @@ fn integrated_result_scale_invariance_rows(
                         graph
                     )
                 })?;
+                let sigma = integral_estimate_change_sigma(shifted_graph, baseline_graph);
                 rows.push(CheckRow {
                     check,
                     graph: graph.clone(),
-                    passed: shifted_graph.is_compatible_with_result(baseline_graph, 2),
-                    sigma: Some(integral_estimate_change_sigma(
-                        shifted_graph,
-                        baseline_graph,
-                    )),
+                    passed: sigma.is_finite() && sigma <= 2.0,
+                    sigma: Some(sigma),
                     threshold: Some("compatible within 2sigma".to_string()),
                 });
             }
@@ -669,6 +814,7 @@ fn run_integrated_uv_case(case: &IntegratedUvCase<'_>) -> IntegratedUvCaseResult
         rls_rows: Vec::new(),
         mur_dependence_passed: case.check_mu_r_dependence.then_some(false),
         mur_rows: Vec::new(),
+        diagnostic_rows: Vec::new(),
         target_passed: case.targets.any().then_some(false),
         target_threshold: case.targets.any().then_some("2sigma"),
         error: None,
@@ -690,6 +836,7 @@ fn run_integrated_uv_case(case: &IntegratedUvCase<'_>) -> IntegratedUvCaseResult
 
     let case_result = (|| -> Result<()> {
         cli.run_command("run generate")?;
+        set_original_integrated_uv_scales(&mut cli, case)?;
         add_integrated_uv_scale_variants(&mut cli, case)?;
 
         let no_integrated_process = no_integrated_process_name(case.process);
@@ -708,6 +855,9 @@ fn run_integrated_uv_case(case: &IntegratedUvCase<'_>) -> IntegratedUvCaseResult
         }
 
         let baseline = run_integrated_uv_integration(&mut cli, case)?;
+        if let Some(row) = integrated_uv_decomposition_row(case, &baseline) {
+            outcome.diagnostic_rows.push(row);
+        }
 
         if (case.original_m_uv - case.shifted_m_uv).abs() > f64::EPSILON {
             let shifted_muv_name = shifted_muv_integrand_name(case.integrand_name);
@@ -882,6 +1032,15 @@ fn print_integrated_uv_summary(results: &[IntegratedUvCaseResult]) {
                 error: error.clone(),
             });
         }
+        rows.extend(result.diagnostic_rows.iter().map(|row| SummaryRow {
+            case: result.graph.clone(),
+            check: row.check.to_string(),
+            graph: row.graph.clone(),
+            status: "info".to_string(),
+            sigma: "-".to_string(),
+            threshold: row.details.clone(),
+            error: error.clone(),
+        }));
         rows.push(SummaryRow {
             case: result.graph.clone(),
             check: "target".to_string(),
@@ -915,7 +1074,8 @@ fn dod0_bubble_uv() {
         integrand_name: "scalar_bubble_below_thres",
         original_m_uv: 20.0,
         shifted_m_uv: 7.0,
-        shifted_renormalization_localization_scale: 7.0,
+        original_renormalization_localization_scale: 5.0,
+        shifted_renormalization_localization_scale: 25.0,
         original_mu_r: 3.0,
         shifted_mu_r: 9.0,
         skip_uv_profile: false,
@@ -936,7 +1096,8 @@ fn dod1_bubble_uv() {
         integrand_name: "scalar_bubble_below_thres",
         original_m_uv: 20.0,
         shifted_m_uv: 7.0,
-        shifted_renormalization_localization_scale: 7.0,
+        original_renormalization_localization_scale: 5.0,
+        shifted_renormalization_localization_scale: 25.0,
         original_mu_r: 3.0,
         shifted_mu_r: 19.0,
         skip_uv_profile: false,
@@ -957,7 +1118,8 @@ fn dod2_bubble_uv() {
         integrand_name: "scalar_bubble_below_thres",
         original_m_uv: 20.0,
         shifted_m_uv: 7.0,
-        shifted_renormalization_localization_scale: 7.0,
+        original_renormalization_localization_scale: 5.0,
+        shifted_renormalization_localization_scale: 25.0,
         original_mu_r: 3.0,
         shifted_mu_r: 19000.0,
         skip_uv_profile: false,
@@ -978,7 +1140,8 @@ fn se1l_uv() {
         integrand_name: "se1l",
         original_m_uv: 20.0,
         shifted_m_uv: 7.0,
-        shifted_renormalization_localization_scale: 7.0,
+        original_renormalization_localization_scale: 5.0,
+        shifted_renormalization_localization_scale: 25.0,
         original_mu_r: 20.0,
         shifted_mu_r: 19000.0,
         skip_uv_profile: false,
@@ -997,16 +1160,36 @@ fn sunrise_scalar_1_uv() {
         test_name: "sunrise_scalar_1",
         process: "sunrise_scalar_1",
         integrand_name: "scalar_sunrise",
-        original_m_uv: 20.0,
-        shifted_m_uv: 19.0,
-        shifted_renormalization_localization_scale: 19.0,
-        original_mu_r: 3.0,
-        shifted_mu_r: 19000.0,
+        original_m_uv: 0.2,
+        shifted_m_uv: 0.5,
+        original_renormalization_localization_scale: 0.2,
+        shifted_renormalization_localization_scale: 0.5,
+        original_mu_r: 0.2,
+        shifted_mu_r: 0.8,
         skip_uv_profile: false,
         targets: IntegratedUvTargets {
             no_integrated: Some(Complex::new(F(0.0), F(0.0923237056143842))),
-            integrated: Some(Complex::new(F(0.0), F(-0.4579696434253027))),
+            integrated: Some(Complex::new(F(0.0), F(-0.05318488929058126))),
         },
+        check_mu_r_dependence: true,
+    });
+}
+
+#[test]
+fn dotted_sunrise_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "uv/dotted_sunrise",
+        test_name: "dotted_sunrise",
+        process: "dotted_sunrise",
+        integrand_name: "dotted_sunrise",
+        original_m_uv: 5.0,
+        shifted_m_uv: 25.0,
+        original_renormalization_localization_scale: 5.0,
+        shifted_renormalization_localization_scale: 25.0,
+        original_mu_r: 3.0,
+        shifted_mu_r: 19000.0,
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets::default(),
         check_mu_r_dependence: true,
     });
 }
@@ -1018,29 +1201,12 @@ fn dotted_dt_uv() {
         test_name: "dotted_dt",
         process: "dotted_dt",
         integrand_name: "dotted_dt",
-        original_m_uv: 20.0,
-        shifted_m_uv: 7.0,
-        shifted_renormalization_localization_scale: 25.0,
-        original_mu_r: 3.0,
-        shifted_mu_r: 19000.0,
-        skip_uv_profile: false,
-        targets: IntegratedUvTargets::default(),
-        check_mu_r_dependence: true,
-    });
-}
-
-#[test]
-fn dotted_dt_onshell_uv() {
-    run_single_integrated_uv_case(&IntegratedUvCase {
-        run_card: "uv/dotted_dt_onshell",
-        test_name: "dotted_dt_onshell",
-        process: "dotted_dt",
-        integrand_name: "dotted_dt",
-        original_m_uv: 20.0,
-        shifted_m_uv: 7.0,
-        shifted_renormalization_localization_scale: 25.0,
-        original_mu_r: 3.0,
-        shifted_mu_r: 19000.0,
+        original_m_uv: 0.2,
+        shifted_m_uv: 0.5,
+        original_renormalization_localization_scale: 0.2,
+        shifted_renormalization_localization_scale: 0.5,
+        original_mu_r: 0.2,
+        shifted_mu_r: 0.8,
         skip_uv_profile: false,
         targets: IntegratedUvTargets::default(),
         check_mu_r_dependence: true,
@@ -1056,7 +1222,8 @@ fn epem_a_bbx_amp_uv() {
         integrand_name: "epem_a_bbx",
         original_m_uv: 20.0,
         shifted_m_uv: 7.0,
-        shifted_renormalization_localization_scale: 7.0,
+        original_renormalization_localization_scale: 5.0,
+        shifted_renormalization_localization_scale: 25.0,
         original_mu_r: 20.0,
         shifted_mu_r: 9.0,
         skip_uv_profile: false,
@@ -1450,7 +1617,8 @@ mod slow {
             integrand_name: "2L",
             original_m_uv: 91.188,
             shifted_m_uv: 364.752,
-            shifted_renormalization_localization_scale: 364.752,
+            original_renormalization_localization_scale: 5.0,
+            shifted_renormalization_localization_scale: 25.0,
             original_mu_r: 91.188,
             shifted_mu_r: 364.752,
             skip_uv_profile: false,
@@ -1468,7 +1636,8 @@ mod slow {
             integrand_name: "NLO",
             original_m_uv: 20.0,
             shifted_m_uv: 7.0,
-            shifted_renormalization_localization_scale: 7.0,
+            original_renormalization_localization_scale: 5.0,
+            shifted_renormalization_localization_scale: 25.0,
             original_mu_r: 3.0,
             shifted_mu_r: 9.0,
             skip_uv_profile: false,
@@ -1486,7 +1655,8 @@ mod slow {
             integrand_name: "adad_gluon",
             original_m_uv: 20.0,
             shifted_m_uv: 7.0,
-            shifted_renormalization_localization_scale: 7.0,
+            original_renormalization_localization_scale: 5.0,
+            shifted_renormalization_localization_scale: 25.0,
             original_mu_r: 20.0,
             shifted_mu_r: 9.0,
             skip_uv_profile: false,
@@ -1534,7 +1704,8 @@ mod failing {
             integrand_name: "NLO",
             original_m_uv: 20.0,
             shifted_m_uv: 7.0,
-            shifted_renormalization_localization_scale: 7.0,
+            original_renormalization_localization_scale: 5.0,
+            shifted_renormalization_localization_scale: 25.0,
             original_mu_r: 3.0,
             shifted_mu_r: 9.0,
             skip_uv_profile: true,

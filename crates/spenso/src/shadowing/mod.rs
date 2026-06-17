@@ -41,6 +41,7 @@ initialize!(|| {
         let _ = *CYCLIC.force_in_initializer();
         let _ = *SYM.force_in_initializer();
         let _ = *COLLECT.force_in_initializer();
+        let _ = ETS.force_in_initializer().delta;
         let _ = ETS.force_in_initializer().metric;
         let _ = SPENSO_TAG.force_in_initializer().bracket;
         let _ = AIND_SYMBOLS.force_in_initializer().cind;
