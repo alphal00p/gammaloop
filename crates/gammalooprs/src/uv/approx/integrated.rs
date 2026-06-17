@@ -167,7 +167,7 @@ impl Integrated<'_> {
         debug_tags!(#uv,#integrated,#rescaled;log.res = rescaled, n_loops=%n_loops,"Rescaled expanded");
 
         let series = rescaled
-            .series(GS.rescale, Atom::Zero, 1)
+            .series(GS.rescale, Atom::Zero, 0)
             .unwrap()
             .to_atom();
         debug_tags!(#uv,#integrated, #series;log.res = series, "Series expanded");

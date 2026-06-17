@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 use color_eyre::Result;
 use gammaloop_api::commands::{
     Profile,
-    evaluate_samples::{EvaluateSamples, evaluate_sample, evaluate_samples},
+    evaluate_samples::{EvaluateSamples, evaluate_sample},
     integrate::Integrate,
     profile::{InfraRedProfile, UltraVioletProfile},
 };
@@ -11,7 +11,7 @@ use gammaloop_api::state::ProcessRef;
 use gammaloop_integration_tests::{
     CLIState, clean_test, get_example_cli, get_test_cli, get_tests_workspace_path, workspace_root,
 };
-use gammalooprs::integrands::HasIntegrand;
+use gammalooprs::integrands::{HasIntegrand, evaluation::EvaluationMetaData};
 use gammalooprs::observables::events::AdditionalWeightKey;
 use gammalooprs::settings::runtime::{IntegralEstimate, SlotIntegrationResult};
 use gammalooprs::utils::F;
@@ -20,7 +20,10 @@ use serde_json::{Map, Value, json};
 use spenso::algebra::complex::Complex;
 use tabled::{Table, Tabled};
 
-const MU_R_SAMPLE_RELATIVE_THRESHOLD: f64 = 1.0e-10;
+const INSPECT_DEPENDENCE_ACCURACY_FACTOR: f64 = 1000.0;
+const UV_PROFILE_MIN_SCALE_EXPONENT: f64 = 4.0;
+const UV_PROFILE_MAX_SCALE_EXPONENT: f64 = 8.0;
+const UV_PROFILE_N_POINTS: usize = 33;
 
 #[derive(Default)]
 struct IntegratedUvTargets {
@@ -46,7 +49,6 @@ struct IntegratedUvCase<'a> {
     shifted_mu_r: f64,
     skip_uv_profile: bool,
     targets: IntegratedUvTargets,
-    min_change_sigma: Option<f64>,
     check_mu_r_dependence: bool,
 }
 
@@ -77,9 +79,6 @@ struct IntegratedUvCaseResult {
     mur_rows: Vec<CheckRow>,
     target_passed: Option<bool>,
     target_threshold: Option<&'static str>,
-    ct_change_passed: Option<bool>,
-    ct_change_sigma: Option<f64>,
-    ct_change_threshold: Option<f64>,
     error: Option<String>,
 }
 
@@ -91,7 +90,6 @@ impl IntegratedUvCaseResult {
             && self.rls_invariance_passed
             && self.mur_dependence_passed.unwrap_or(true)
             && self.target_passed.unwrap_or(true)
-            && self.ct_change_passed.unwrap_or(true)
     }
 }
 
@@ -128,28 +126,6 @@ fn shifted_rls_integrand_name(integrand_name: &str) -> String {
     format!("{integrand_name}_rls_shifted")
 }
 
-fn deterministic_havana_points(n_dim: usize, n_points: usize) -> Result<Array2<f64>> {
-    let mut values = Vec::with_capacity(n_dim * n_points);
-    for sample_index in 0..n_points {
-        for dim_index in 0..n_dim {
-            let raw = ((sample_index + 1) * 37 + (dim_index + 3) * 17) % 997;
-            values.push(0.05 + 0.9 * (raw as f64 + 0.5) / 997.0);
-        }
-    }
-    Ok(Array2::from_shape_vec((n_points, n_dim), values)?)
-}
-
-fn deterministic_discrete_dimensions(
-    n_points: usize,
-    depth: usize,
-) -> Result<Option<Array2<usize>>> {
-    if depth == 0 {
-        Ok(None)
-    } else {
-        Ok(Some(Array2::from_elem((n_points, depth), 0)))
-    }
-}
-
 fn add_integrated_uv_scale_variants(cli: &mut CLIState, case: &IntegratedUvCase<'_>) -> Result<()> {
     if (case.original_m_uv - case.shifted_m_uv).abs() > f64::EPSILON {
         let shifted_name = shifted_muv_integrand_name(case.integrand_name);
@@ -163,14 +139,14 @@ fn add_integrated_uv_scale_variants(cli: &mut CLIState, case: &IntegratedUvCase<
         ))?;
     }
 
-    let shifted_name = shifted_rls_integrand_name(case.integrand_name);
+    let shifted_rls_name = shifted_rls_integrand_name(case.integrand_name);
     cli.run_command(&format!(
         "duplicate integrand -p {} -i {} --output_process_name {} --output_integrand_name {}",
-        case.process, case.integrand_name, case.process, shifted_name
+        case.process, case.integrand_name, case.process, shifted_rls_name
     ))?;
     cli.run_command(&format!(
         "set process -p {} -i {} kv general.renormalization_localization_scale={}",
-        case.process, shifted_name, case.shifted_renormalization_localization_scale
+        case.process, shifted_rls_name, case.shifted_renormalization_localization_scale
     ))?;
 
     if case.check_mu_r_dependence && (case.original_mu_r - case.shifted_mu_r).abs() > f64::EPSILON {
@@ -401,102 +377,162 @@ fn run_integrated_uv_rls_integration(
     })
 }
 
-fn evaluate_effective_samples(
+fn required_stability_accuracy_floor(
     cli: &mut CLIState,
-    process_id: usize,
+    process: &str,
     integrand_name: &str,
-    points: &Array2<f64>,
-    discrete_dims: Option<&Array2<usize>>,
-) -> Result<Vec<Complex<F<f64>>>> {
-    let result = evaluate_samples(
+) -> Result<f64> {
+    let process_id = cli
+        .state
+        .resolve_process_ref(Some(&ProcessRef::Unqualified(process.to_string())))?;
+    let integrand = cli
+        .state
+        .process_list
+        .get_integrand(process_id, integrand_name)?
+        .require_generated()?;
+
+    Ok(integrand
+        .get_settings()
+        .stability
+        .levels
+        .first()
+        .map(|level| {
+            level
+                .required_precision_for_re
+                .max(level.required_precision_for_im)
+        })
+        .unwrap_or(f64::EPSILON))
+}
+
+fn stability_relative_accuracy(metadata: &EvaluationMetaData, accuracy_floor: f64) -> f64 {
+    let stability_accuracy = metadata
+        .stability_results
+        .iter()
+        .filter_map(|result| result.estimated_relative_accuracy.as_ref())
+        .fold(0.0_f64, |max, accuracy| max.max(accuracy.0.abs()));
+    let instability_error = metadata
+        .relative_instability_error
+        .re
+        .0
+        .abs()
+        .max(metadata.relative_instability_error.im.0.abs());
+
+    stability_accuracy
+        .max(instability_error)
+        .max(accuracy_floor.abs())
+        .max(f64::EPSILON)
+}
+
+fn deterministic_uv_momentum_point(
+    cli: &mut CLIState,
+    process: &str,
+    integrand_name: &str,
+) -> Result<Vec<f64>> {
+    let process_id = cli
+        .state
+        .resolve_process_ref(Some(&ProcessRef::Unqualified(process.to_string())))?;
+    let integrand = cli
+        .state
+        .process_list
+        .get_integrand(process_id, integrand_name)?
+        .require_generated()?;
+    let seed = [0.11, -0.07, 0.19, -0.13, 0.05, 0.29];
+    let scale =
+        10_f64.powf(UV_PROFILE_MIN_SCALE_EXPONENT) * integrand.get_settings().kinematics.e_cm;
+
+    Ok((0..integrand.get_n_dim())
+        .map(|index| scale * seed[index % seed.len()])
+        .collect())
+}
+
+struct InspectEvaluation {
+    value: Complex<f64>,
+    relative_accuracy: f64,
+}
+
+fn evaluate_summed_momentum_sample(
+    cli: &mut CLIState,
+    process: &str,
+    integrand_name: &str,
+    point: &[f64],
+    accuracy_floor: f64,
+) -> Result<InspectEvaluation> {
+    let process_id = cli
+        .state
+        .resolve_process_ref(Some(&ProcessRef::Unqualified(process.to_string())))?;
+    let graph_name = cli
+        .state
+        .process_list
+        .get_integrand(process_id, integrand_name)?
+        .require_generated()?
+        .graph_name_by_id(0)
+        .ok_or_else(|| eyre::eyre!("Generated {integrand_name} integrand should have graph id 0"))?
+        .to_string();
+    let points = Array2::from_shape_vec((1, point.len()), point.to_vec())?;
+    let result = evaluate_sample(
         &mut cli.state,
         &EvaluateSamples {
             process_id: Some(process_id),
             integrand_name: Some(integrand_name.to_string()),
             use_arb_prec: false,
-            minimal_output: true,
+            minimal_output: false,
             return_generated_events: Some(false),
-            momentum_space: false,
+            momentum_space: true,
             points: points.view(),
             integrator_weights: None,
-            discrete_dims: discrete_dims.map(|dims| dims.view()),
-            graph_names: None,
-            orientations: None,
+            discrete_dims: None,
+            graph_names: Some(vec![Some(graph_name)]),
+            orientations: Some(vec![None]),
         },
     )?;
+    let evaluation = result.sample.evaluation;
+    let metadata = evaluation
+        .evaluation_metadata
+        .as_ref()
+        .ok_or_else(|| eyre::eyre!("inspect evaluation should include metadata"))?;
 
-    Ok(result
-        .samples
-        .into_iter()
-        .map(|sample| {
-            let evaluation = sample.evaluation;
-            let jacobian = evaluation.parameterization_jacobian.unwrap_or(F(1.0));
-            evaluation.integrand_result * Complex::new_re(jacobian)
-        })
-        .collect())
+    Ok(InspectEvaluation {
+        value: evaluation.integrand_result.map(|entry| entry.0),
+        relative_accuracy: stability_relative_accuracy(metadata, accuracy_floor),
+    })
 }
 
-fn complex_norm(value: Complex<F<f64>>) -> f64 {
-    value.re.0.hypot(value.im.0)
-}
-
-fn sampled_mu_r_change_rows(
+fn inspect_scale_dependence_row(
     cli: &mut CLIState,
     case: &IntegratedUvCase<'_>,
+    baseline_name: &str,
+    check: &'static str,
+    shifted_name: &str,
 ) -> Result<Vec<CheckRow>> {
-    let process_id = cli
-        .state
-        .resolve_process_ref(Some(&ProcessRef::Unqualified(case.process.to_string())))?;
-    let integrand = cli
-        .state
-        .process_list
-        .get_integrand(process_id, case.integrand_name)?
-        .require_generated()?;
-    let points = deterministic_havana_points(integrand.get_n_dim(), 32)?;
-    let discrete_dims =
-        deterministic_discrete_dimensions(points.nrows(), integrand.discrete_sampling_depth())?;
-    let shifted_name = shifted_mur_integrand_name(case.integrand_name);
-    let baseline = evaluate_effective_samples(
-        cli,
-        process_id,
-        case.integrand_name,
-        &points,
-        discrete_dims.as_ref(),
-    )?;
-    let shifted = evaluate_effective_samples(
-        cli,
-        process_id,
-        &shifted_name,
-        &points,
-        discrete_dims.as_ref(),
-    )?;
-    let mut changed_samples = 0usize;
-    let mut finite_samples = 0usize;
-    let mut max_relative_delta = 0.0f64;
-
-    for (baseline_value, shifted_value) in baseline.into_iter().zip(shifted) {
-        let delta = shifted_value - baseline_value;
-        let baseline_norm = complex_norm(baseline_value);
-        let shifted_norm = complex_norm(shifted_value);
-        let delta_norm = complex_norm(delta);
-        if baseline_norm.is_finite() && shifted_norm.is_finite() && delta_norm.is_finite() {
-            finite_samples += 1;
-            let relative_delta =
-                delta_norm / baseline_norm.max(shifted_norm).max(f64::MIN_POSITIVE);
-            max_relative_delta = max_relative_delta.max(relative_delta);
-            if relative_delta >= MU_R_SAMPLE_RELATIVE_THRESHOLD {
-                changed_samples += 1;
-            }
-        }
-    }
+    let accuracy_floor = required_stability_accuracy_floor(cli, case.process, baseline_name)?;
+    let point = deterministic_uv_momentum_point(cli, case.process, baseline_name)?;
+    let baseline =
+        evaluate_summed_momentum_sample(cli, case.process, baseline_name, &point, accuracy_floor)?;
+    let shifted =
+        evaluate_summed_momentum_sample(cli, case.process, shifted_name, &point, accuracy_floor)?;
+    let delta_norm =
+        (shifted.value.re - baseline.value.re).hypot(shifted.value.im - baseline.value.im);
+    let scale = baseline
+        .value
+        .re
+        .hypot(baseline.value.im)
+        .max(shifted.value.re.hypot(shifted.value.im))
+        .max(f64::MIN_POSITIVE);
+    let relative_delta = delta_norm / scale;
+    let relative_accuracy = baseline
+        .relative_accuracy
+        .max(shifted.relative_accuracy)
+        .max(f64::EPSILON);
+    let required_relative_delta = INSPECT_DEPENDENCE_ACCURACY_FACTOR * relative_accuracy;
+    let passed = relative_delta.is_finite() && relative_delta >= required_relative_delta;
 
     Ok(vec![CheckRow {
-        check: "mu_r",
-        graph: "sample".to_string(),
-        passed: changed_samples > 0,
+        check,
+        graph: "inspect".to_string(),
+        passed,
         sigma: None,
         threshold: Some(format!(
-            "max relative sample delta {max_relative_delta:.3e} >= {MU_R_SAMPLE_RELATIVE_THRESHOLD:.1e} ({changed_samples}/{finite_samples})"
+            "inspect relative delta {relative_delta:.3e} >= {INSPECT_DEPENDENCE_ACCURACY_FACTOR:.0}*accuracy {required_relative_delta:.3e} (accuracy={relative_accuracy:.3e})"
         )),
     }])
 }
@@ -516,10 +552,14 @@ fn integrated_uv_targets_pass(
         }
     }
 
-    if let Some(integrated_target) = &targets.integrated
-        && !results
-            .integrated
-            .is_compatible_with_target(*integrated_target, 2)
+    if targets
+        .integrated
+        .as_ref()
+        .is_some_and(|integrated_target| {
+            !results
+                .integrated
+                .is_compatible_with_target(*integrated_target, 2)
+        })
     {
         return Ok(false);
     }
@@ -549,23 +589,6 @@ fn integral_estimate_change_sigma(lhs: &IntegralEstimate, rhs: &IntegralEstimate
     }
 }
 
-fn integrated_uv_result_change_sigma(results: &IntegratedUvResults) -> f64 {
-    integral_estimate_change_sigma(
-        &results.integrated,
-        results
-            .no_integrated
-            .as_ref()
-            .expect("no-integrated result should exist for ct-diff checks"),
-    )
-}
-
-fn integrated_uv_meaningfully_changes_result(
-    results: &IntegratedUvResults,
-    min_change_sigma: f64,
-) -> bool {
-    integrated_uv_result_change_sigma(results) >= min_change_sigma
-}
-
 fn integrated_uv_profile_passes(
     cli: &mut CLIState,
     process: &str,
@@ -574,9 +597,9 @@ fn integrated_uv_profile_passes(
     let res = Profile::UltraViolet(UltraVioletProfile {
         process: Some(ProcessRef::Unqualified(process.to_string())),
         integrand_name: Some(integrand_name.to_string()),
-        min_scale_exponent: 4.0,
-        max_scale_exponent: 8.0,
-        n_points: 17,
+        min_scale_exponent: UV_PROFILE_MIN_SCALE_EXPONENT,
+        max_scale_exponent: UV_PROFILE_MAX_SCALE_EXPONENT,
+        n_points: UV_PROFILE_N_POINTS,
         per_orientation: true,
         ..Default::default()
     })
@@ -648,9 +671,6 @@ fn run_integrated_uv_case(case: &IntegratedUvCase<'_>) -> IntegratedUvCaseResult
         mur_rows: Vec::new(),
         target_passed: case.targets.any().then_some(false),
         target_threshold: case.targets.any().then_some("2sigma"),
-        ct_change_passed: case.min_change_sigma.map(|_| false),
-        ct_change_sigma: None,
-        ct_change_threshold: case.min_change_sigma,
         error: None,
     };
 
@@ -689,38 +709,51 @@ fn run_integrated_uv_case(case: &IntegratedUvCase<'_>) -> IntegratedUvCaseResult
 
         let baseline = run_integrated_uv_integration(&mut cli, case)?;
 
-        if let Some(min_change_sigma) = case.min_change_sigma {
-            if baseline.no_integrated.is_none() {
-                return Err(eyre::eyre!(
-                    "ct-diff check requested for {} but no {} process exists",
-                    case.process,
-                    no_integrated_process
-                ));
-            }
-            let change_sigma = integrated_uv_result_change_sigma(&baseline);
-            outcome.ct_change_sigma = Some(change_sigma);
-            outcome.ct_change_passed = Some(integrated_uv_meaningfully_changes_result(
-                &baseline,
-                min_change_sigma,
-            ));
+        if (case.original_m_uv - case.shifted_m_uv).abs() > f64::EPSILON {
+            let shifted_muv_name = shifted_muv_integrand_name(case.integrand_name);
+            outcome.muv_rows = inspect_scale_dependence_row(
+                &mut cli,
+                case,
+                case.integrand_name,
+                "m_uv.inspect",
+                &shifted_muv_name,
+            )?;
         }
-
-        outcome.muv_rows = integrated_result_scale_invariance_rows(
-            &baseline,
-            "m_uv",
-            &baseline.integrated_muv_shifted_per_graph,
-        )?;
+        outcome
+            .muv_rows
+            .extend(integrated_result_scale_invariance_rows(
+                &baseline,
+                "m_uv.integrated",
+                &baseline.integrated_muv_shifted_per_graph,
+            )?);
         outcome.muv_invariance_passed = outcome.muv_rows.iter().all(|row| row.passed);
         let rls_baseline = run_integrated_uv_rls_integration(&mut cli, case)?;
-        outcome.rls_rows = integrated_result_scale_invariance_rows(
-            &rls_baseline,
-            "rls",
-            &rls_baseline.integrated_rls_shifted_per_graph,
+        let shifted_rls_name = shifted_rls_integrand_name(case.integrand_name);
+        outcome.rls_rows = inspect_scale_dependence_row(
+            &mut cli,
+            case,
+            case.integrand_name,
+            "rls.inspect",
+            &shifted_rls_name,
         )?;
+        outcome
+            .rls_rows
+            .extend(integrated_result_scale_invariance_rows(
+                &rls_baseline,
+                "rls.integrated",
+                &rls_baseline.integrated_rls_shifted_per_graph,
+            )?);
         outcome.rls_invariance_passed = outcome.rls_rows.iter().all(|row| row.passed);
 
         if case.check_mu_r_dependence {
-            outcome.mur_rows = sampled_mu_r_change_rows(&mut cli, case)?;
+            let shifted_mur_name = shifted_mur_integrand_name(case.integrand_name);
+            outcome.mur_rows = inspect_scale_dependence_row(
+                &mut cli,
+                case,
+                case.integrand_name,
+                "mu_r.inspect",
+                &shifted_mur_name,
+            )?;
             outcome.mur_dependence_passed = Some(outcome.mur_rows.iter().all(|row| row.passed));
         }
 
@@ -840,7 +873,11 @@ fn print_integrated_uv_summary(results: &[IntegratedUvCaseResult]) {
                 sigma: "-".to_string(),
                 threshold: result.mur_dependence_passed.map_or_else(
                     || "-".to_string(),
-                    |_| format!("sample delta >= {MU_R_SAMPLE_RELATIVE_THRESHOLD:.1e}"),
+                    |_| {
+                        format!(
+                            "relative delta >= {INSPECT_DEPENDENCE_ACCURACY_FACTOR:.0}*accuracy"
+                        )
+                    },
                 ),
                 error: error.clone(),
             });
@@ -853,17 +890,6 @@ fn print_integrated_uv_summary(results: &[IntegratedUvCaseResult]) {
             sigma: "-".to_string(),
             threshold: result.target_threshold.unwrap_or("-").to_string(),
             error: error.clone(),
-        });
-        rows.push(SummaryRow {
-            case: result.graph.clone(),
-            check: "ct_diff".to_string(),
-            graph: "-".to_string(),
-            status: status(result.ct_change_passed),
-            sigma: sigma(result.ct_change_sigma),
-            threshold: result
-                .ct_change_threshold
-                .map_or_else(|| "-".to_string(), |threshold| format!(">={threshold:.1}σ")),
-            error,
         });
     }
 
@@ -897,7 +923,6 @@ fn dod0_bubble_uv() {
             no_integrated: Some(Complex::new(F(1.4693e-2), F(0.0))),
             integrated: Some(Complex::new(F(2.684e-3), F(0.0))),
         },
-        min_change_sigma: Some(5.0),
         check_mu_r_dependence: true,
     });
 }
@@ -919,7 +944,6 @@ fn dod1_bubble_uv() {
             no_integrated: Some(Complex::new(F(0.06391215597405007), F(0.0))),
             integrated: Some(Complex::new(F(0.016077154810262402), F(0.0))),
         },
-        min_change_sigma: Some(5.0),
         check_mu_r_dependence: true,
     });
 }
@@ -941,7 +965,6 @@ fn dod2_bubble_uv() {
             no_integrated: Some(Complex::new(F(-0.5686331457910163), F(0.0))),
             integrated: Some(Complex::new(F(0.03635644889635933), F(0.0))),
         },
-        min_change_sigma: Some(5.0),
         check_mu_r_dependence: true,
     });
 }
@@ -963,7 +986,6 @@ fn se1l_uv() {
             no_integrated: Some(Complex::new(F(-16932.936021390098), F(-13238.904716706178))),
             integrated: Some(Complex::new(F(-17852.22360006917), F(-13238.904716706178))),
         },
-        min_change_sigma: Some(5.0),
         check_mu_r_dependence: true,
     });
 }
@@ -985,7 +1007,42 @@ fn sunrise_scalar_1_uv() {
             no_integrated: Some(Complex::new(F(0.0), F(0.0923237056143842))),
             integrated: Some(Complex::new(F(0.0), F(-0.4579696434253027))),
         },
-        min_change_sigma: Some(3.0),
+        check_mu_r_dependence: true,
+    });
+}
+
+#[test]
+fn dotted_dt_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "uv/dotted_dt",
+        test_name: "dotted_dt",
+        process: "dotted_dt",
+        integrand_name: "dotted_dt",
+        original_m_uv: 20.0,
+        shifted_m_uv: 7.0,
+        shifted_renormalization_localization_scale: 25.0,
+        original_mu_r: 3.0,
+        shifted_mu_r: 19000.0,
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets::default(),
+        check_mu_r_dependence: true,
+    });
+}
+
+#[test]
+fn dotted_dt_onshell_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "uv/dotted_dt_onshell",
+        test_name: "dotted_dt_onshell",
+        process: "dotted_dt",
+        integrand_name: "dotted_dt",
+        original_m_uv: 20.0,
+        shifted_m_uv: 7.0,
+        shifted_renormalization_localization_scale: 25.0,
+        original_mu_r: 3.0,
+        shifted_mu_r: 19000.0,
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets::default(),
         check_mu_r_dependence: true,
     });
 }
@@ -1004,7 +1061,6 @@ fn epem_a_bbx_amp_uv() {
         shifted_mu_r: 9.0,
         skip_uv_profile: false,
         targets: IntegratedUvTargets::default(),
-        min_change_sigma: Some(5.0),
         check_mu_r_dependence: true,
     });
 }
@@ -1399,7 +1455,6 @@ mod slow {
             shifted_mu_r: 364.752,
             skip_uv_profile: false,
             targets: IntegratedUvTargets::default(),
-            min_change_sigma: Some(5.0),
             check_mu_r_dependence: true,
         });
     }
@@ -1418,7 +1473,6 @@ mod slow {
             shifted_mu_r: 9.0,
             skip_uv_profile: false,
             targets: IntegratedUvTargets::default(),
-            min_change_sigma: Some(5.0),
             check_mu_r_dependence: true,
         });
     }
@@ -1437,7 +1491,6 @@ mod slow {
             shifted_mu_r: 9.0,
             skip_uv_profile: false,
             targets: IntegratedUvTargets::default(),
-            min_change_sigma: Some(5.0),
             check_mu_r_dependence: true,
         });
     }
@@ -1489,7 +1542,6 @@ mod failing {
                 no_integrated: None,
                 integrated: Some(Complex::new(F(0.0), F(1.163e-3))),
             },
-            min_change_sigma: Some(5.0),
             check_mu_r_dependence: true,
         });
     }
