@@ -1,0 +1,49 @@
+{
+  "variant_label": null,
+  "width_overrides": {
+    "sliver_width": 30.0,
+    "gaussian_width": 1.0,
+    "h_sigma": 1.0
+  },
+  "xi_scale": 4.0,
+  "targets": [
+    {
+      "label": "highstat_iter_0001_imag_plus",
+      "reported_component": "im[+]",
+      "reported_value": 89.10839395271918,
+      "graph": 0,
+      "lmb_channel": 14,
+      "x_peak": [
+        0.6449078898232747,
+        0.845483944142289,
+        0.3261975067051197,
+        0.6092926996747431,
+        0.10565752732380618,
+        0.6562744227546086
+      ],
+      "axis_indices": [
+        4,
+        1
+      ]
+    },
+    {
+      "label": "highstat_iter_0001_imag_minus",
+      "reported_component": "im[-]",
+      "reported_value": -62.98723405864441,
+      "graph": 0,
+      "lmb_channel": 9,
+      "x_peak": [
+        0.5387589249438893,
+        0.24174091659991892,
+        0.9441190487748046,
+        0.7527842995682404,
+        0.5585112730395129,
+        0.25621170988207465
+      ],
+      "axis_indices": [
+        2,
+        1
+      ]
+    }
+  ]
+}

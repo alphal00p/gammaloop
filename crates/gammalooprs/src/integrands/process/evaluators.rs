@@ -28,6 +28,7 @@ use spenso::{
     shadowing::symbolica_utils::SpensoPrintSettings,
 };
 use std::ops::Deref;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{mem::transmute, ops::Neg, path::Path};
 use symbolica::{
     domains::{dual::HyperDual, float::Complex as SymComplex, rational::Fraction},
@@ -71,6 +72,9 @@ const NETWORK_SCALAR_ALIAS_MIN_BYTES: usize = 4096;
 const DUMP_EVALUATOR_PRE_NETWORK_PARSE_ENV: &str = "GAMMALOOP_DUMP_EVALUATOR_PRE_NETWORK_PARSE";
 const STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE_ENV: &str =
     "GAMMALOOP_STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE";
+const TRACE_PARAMETRIC_NONFINITE_ENV: &str = "GAMMALOOP_TRACE_PARAMETRIC_NONFINITE";
+const DUMP_PARAMETRIC_NONFINITE_DIR_ENV: &str = "GAMMALOOP_DUMP_PARAMETRIC_NONFINITE_DIR";
+static PARAMETRIC_NONFINITE_DUMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Clone, Copy)]
 pub enum SingleOrAllOrientations<'a, OID> {
@@ -908,7 +912,7 @@ impl EvaluatorStack {
         usize: From<OID>,
     {
         let mut result: Option<Vec<DualOrNot<Complex<F<T>>>>> = None;
-        for (_, e) in orientations.iter() {
+        for (orientation_id, e) in orientations.iter() {
             input.set_orientation_values(e);
             let output = evaluate_evaluator(
                 &mut self.single_parametric,
@@ -916,6 +920,130 @@ impl EvaluatorStack {
                 evaluation_metadata,
                 record_primary_timing,
             );
+            if std::env::var_os(TRACE_PARAMETRIC_NONFINITE_ENV).is_some() {
+                let output_nonfinite = output.iter().any(|entry| match entry {
+                    DualOrNot::Dual(dual_result) => dual_result.values.iter().any(|value| {
+                        value.re.is_nan()
+                            || value.re.is_infinite()
+                            || value.im.is_nan()
+                            || value.im.is_infinite()
+                    }),
+                    DualOrNot::NonDual(value) => {
+                        value.re.is_nan()
+                            || value.re.is_infinite()
+                            || value.im.is_nan()
+                            || value.im.is_infinite()
+                    }
+                });
+
+                if output_nonfinite {
+                    let f128_params = input
+                        .as_slice()
+                        .iter()
+                        .map(|value| {
+                            Complex::new(
+                                F::<f128>::from_ff64(value.re.into_ff64()),
+                                F::<f128>::from_ff64(value.im.into_ff64()),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    let mut f128_out =
+                        vec![Complex::default(); self.single_parametric.compute_out_size()];
+                    self.single_parametric
+                        .f128
+                        .evaluate(&f128_params, &mut f128_out);
+
+                    let arb_params = input
+                        .as_slice()
+                        .iter()
+                        .map(|value| {
+                            Complex::new(
+                                F::<ArbPrec>::from_ff64(value.re.into_ff64()),
+                                F::<ArbPrec>::from_ff64(value.im.into_ff64()),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    let mut arb_out =
+                        vec![Complex::default(); self.single_parametric.compute_out_size()];
+                    self.single_parametric
+                        .arb
+                        .evaluate(&arb_params, &mut arb_out);
+
+                    let f128_nonfinite_count = f128_out
+                        .iter()
+                        .filter(|value| {
+                            value.re.is_nan()
+                                || value.re.is_infinite()
+                                || value.im.is_nan()
+                                || value.im.is_infinite()
+                        })
+                        .count();
+                    let arb_nonfinite_count = arb_out
+                        .iter()
+                        .filter(|value| {
+                            value.re.is_nan()
+                                || value.re.is_infinite()
+                                || value.im.is_nan()
+                                || value.im.is_infinite()
+                        })
+                        .count();
+                    let f128_dump = f128_out
+                        .iter()
+                        .enumerate()
+                        .map(|(index, value)| format!("{index}: {value:+16e}"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let arb_dump = arb_out
+                        .iter()
+                        .enumerate()
+                        .map(|(index, value)| format!("{index}: {value:+16e}"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let params_dump = input
+                        .as_slice()
+                        .iter()
+                        .enumerate()
+                        .map(|(index, value)| format!("{index:04}\t{value:+16e}"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+
+                    if let Some(dump_dir) = std::env::var_os(DUMP_PARAMETRIC_NONFINITE_DIR_ENV) {
+                        let dump_dir = std::path::PathBuf::from(dump_dir);
+                        let _ = std::fs::create_dir_all(&dump_dir);
+                        let dump_index =
+                            PARAMETRIC_NONFINITE_DUMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+                        let stem = format!(
+                            "parametric_nonfinite_{dump_index:04}_orientation{}",
+                            usize::from(orientation_id)
+                        );
+                        let _ = std::fs::write(
+                            dump_dir.join(format!("{stem}.txt")),
+                            format!(
+                                "orientation_id={}\norientations_start={}\noverride_pos={}\nmultiplicative_offset={}\nf128_nonfinite_count={}\narb_nonfinite_count={}\n\n# f128_out\n{}\n\n# arb_out\n{}\n\n# params_after_orientation\n{}\n",
+                                usize::from(orientation_id),
+                                input.orientations_start,
+                                input.override_pos,
+                                input.multiplicative_offset,
+                                f128_nonfinite_count,
+                                arb_nonfinite_count,
+                                f128_dump,
+                                arb_dump,
+                                params_dump
+                            ),
+                        );
+                    }
+                    crate::debug_tags!(#integration, #inspect, #dump;
+                        stage = "parametric_orientation_nonfinite",
+                        orientation_id = usize::from(orientation_id),
+                        output_nonfinite = output_nonfinite,
+                        f128_nonfinite_count = f128_nonfinite_count,
+                        arb_nonfinite_count = arb_nonfinite_count,
+                        f128 = %f128_dump,
+                        arb = %arb_dump,
+                        "single-parametric orientation produced nonfinite output"
+                    );
+                }
+            }
             if let Some(result) = &mut result {
                 for (r, v) in result.iter_mut().zip(output) {
                     *r += v;

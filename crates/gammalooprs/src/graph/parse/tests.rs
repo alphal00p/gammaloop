@@ -29,6 +29,7 @@ use crate::{
     momentum::sample::LoopIndex,
     numerator::{Numerator, UnInit, aind::Aind},
     processes::DotExportSettings,
+    uv::uv_graph::UVE,
 };
 
 #[test]
@@ -802,6 +803,37 @@ fn parse_triangle_lmb() {
 
     let lmb = g.loop_momentum_basis.loop_edges;
     assert_eq!(lmb[LoopIndex::from(0)], EdgeIndex::from(5));
+}
+
+#[test]
+fn edge_mass_attribute_drives_evaluated_edge_mass() {
+    test_initialise().unwrap();
+
+    let g: Graph = dot!(
+        digraph mass_override_triangle {
+            ext [style=invis]
+        ext -> v4:0 [pdg=1000, id=0 ];
+        v5:1 -> ext [pdg=1000, id=1 ];
+        v6:2 -> ext [pdg=1000, id=2 ];
+        v4 -> v5 [pdg=1000, id=3, lmb_id=0, mass=7];
+        v5 -> v6 [pdg=1000, id=4];
+        v6 -> v4 [pdg=1000, id=5];
+    }
+    ,"scalars"
+        )
+    .unwrap();
+
+    assert_eq!(
+        g.underlying[EdgeIndex::from(3)].mass_atom().to_string(),
+        "7"
+    );
+
+    let model = crate::utils::load_generic_model("scalars");
+    let evaluated_mass = g.underlying[EdgeIndex::from(3)]
+        .mass_value::<f64>(&model, &g.param_builder)
+        .unwrap();
+    assert_eq!(evaluated_mass.re.0, 7.0);
+    assert_eq!(evaluated_mass.im.0, 0.0);
 }
 
 mod failing {

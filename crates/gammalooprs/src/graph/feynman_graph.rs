@@ -156,12 +156,12 @@ where
     }
 
     fn get_external_energy_atoms(&self) -> Vec<Atom> {
-        self.iter_edges()
-            .filter_map(|(pair, edge_id, _)| match pair {
-                HedgePair::Unpaired { .. } => Some(external_energy_atom_from_index(edge_id)),
-                _ => None,
-            })
-            .collect_vec()
+        let external_filter: SuBitGraph = self.external_filter();
+
+        external_filter
+            .included_iter()
+            .map(|hedge| external_energy_atom_from_index(self[&hedge]))
+            .collect()
     }
 
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom {
@@ -194,17 +194,17 @@ where
     }
 
     fn external_spatial_params(&self) -> Vec<Atom> {
-        self.iter_edges()
-            .flat_map(|(pair, edge_id, _)| {
-                if let HedgePair::Unpaired { .. } = pair {
-                    vec![
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
-                    ]
-                } else {
-                    vec![]
-                }
+        let external_filter: SuBitGraph = self.external_filter();
+
+        external_filter
+            .included_iter()
+            .flat_map(|hedge| {
+                let edge_id = self[&hedge];
+                vec![
+                    GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
+                    GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
+                    GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
+                ]
             })
             .collect()
     }
@@ -234,10 +234,9 @@ impl ParamBuilderGraph for Graph {
         if self.initial_state_cut.nedges(&self.underlying) == 0 {
             self.underlying.get_external_energy_atoms()
         } else {
-            self.underlying
-                .iter_edges_of(&self.initial_state_cut)
-                .sorted_by(|a, b| a.1.cmp(&b.1))
-                .map(|(_, edge_id, _)| external_energy_atom_from_index(edge_id))
+            self.external_momentum_edge_order()
+                .into_iter()
+                .map(external_energy_atom_from_index)
                 .collect()
         }
     }
@@ -286,10 +285,9 @@ impl ParamBuilderGraph for Graph {
         if self.initial_state_cut.nedges(&self.underlying) == 0 {
             self.underlying.external_spatial_params()
         } else {
-            self.underlying
-                .iter_edges_of(&self.initial_state_cut)
-                .sorted_by(|a, b| a.1.cmp(&b.1))
-                .flat_map(|(_, edge_id, _)| {
+            self.external_momentum_edge_order()
+                .into_iter()
+                .flat_map(|edge_id| {
                     vec![
                         GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
                         GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
@@ -626,13 +624,13 @@ impl FeynmanGraph for Graph {
     }
 
     fn external_in_or_out_signature(&self) -> ExternalSignature {
-        self.iter_edges()
-            .filter_map(|(pair, _, _)| match pair {
-                HedgePair::Unpaired { flow, .. } => match flow {
-                    Flow::Sink => Some(1i8),
-                    Flow::Source => Some(-1i8),
-                },
-                _ => None,
+        let external_filter: SuBitGraph = self.external_filter();
+
+        external_filter
+            .included_iter()
+            .map(|hedge| match self.flow(hedge) {
+                Flow::Sink => 1i8,
+                Flow::Source => -1i8,
             })
             .collect()
     }

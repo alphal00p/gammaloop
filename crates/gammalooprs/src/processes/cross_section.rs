@@ -1538,6 +1538,8 @@ impl CrossSectionGraph {
                 }
                 lmb.put_loop_to_ext(loopid.unwrap());
             }
+            let external_momentum_edge_order = self.graph.external_momentum_edge_order();
+            lmb.canonicalize_external_order(&external_momentum_edge_order);
             //lmbs.push(self.graph.lmb_impl(&full_filter, &s, externals.clone()));
             lmbs.push(lmb);
         }

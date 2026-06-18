@@ -4409,6 +4409,12 @@ impl ProcessDefinition {
 
                         loop_momentum_basis.put_loop_to_ext(LoopIndex(l));
                     }
+                    let external_momentum_edge_order = graph
+                        .initial_state_cut
+                        .iter_left_hedges()
+                        .map(|hedge| graph[&hedge])
+                        .collect_vec();
+                    loop_momentum_basis.canonicalize_external_order(&external_momentum_edge_order);
 
                     let lmb_init_loop_ids = lmb
                         .iter()

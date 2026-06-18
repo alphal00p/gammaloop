@@ -1448,6 +1448,22 @@ fn stability_check<T: FloatLike>(
         return (results[0].clone(), None, true, None);
     }
 
+    if !is_final_level
+        && results.iter().any(|result| {
+            result.re.is_nan()
+                || result.re.is_infinite()
+                || result.im.is_nan()
+                || result.im.is_infinite()
+        })
+    {
+        return (
+            results[0].clone(),
+            None,
+            false,
+            Some(StabilityFailureReason::ErrorThreshold),
+        );
+    }
+
     let average = results
         .iter()
         .skip(1)
@@ -1555,6 +1571,22 @@ fn stability_check_on_norm<T: FloatLike>(
 ) -> StabilityCheckResult<T> {
     if results.len() == 1 {
         return (results[0].clone(), None, true, None);
+    }
+
+    if !is_final_level
+        && results.iter().any(|result| {
+            result.re.is_nan()
+                || result.re.is_infinite()
+                || result.im.is_nan()
+                || result.im.is_infinite()
+        })
+    {
+        return (
+            results[0].clone(),
+            None,
+            false,
+            Some(StabilityFailureReason::ErrorThreshold),
+        );
     }
 
     let average = results.iter().fold(F::<T>::from_f64(0.0), |acc, x| {
@@ -3248,6 +3280,34 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
         let im_is_nan = stability_level_result.result.im.is_nan()
             || stability_level_result.result.im.is_infinite();
         let is_nan = re_is_nan || im_is_nan;
+        if is_nan {
+            match source {
+                EvaluationSource::XSpace(sample) => {
+                    warn!(
+                        stage = "process_final_nonfinite_sample",
+                        ?sample,
+                        result = %stability_level_result.result,
+                        re_is_nan,
+                        im_is_nan,
+                        "final process evaluation is nonfinite"
+                    );
+                }
+                EvaluationSource::Momentum(input) => {
+                    warn!(
+                        stage = "process_final_nonfinite_sample",
+                        graph_id = ?input.graph_id,
+                        group_id = ?input.group_id,
+                        orientation = ?input.orientation,
+                        channel_id = ?input.channel_id,
+                        loop_momenta = ?input.loop_momenta,
+                        result = %stability_level_result.result,
+                        re_is_nan,
+                        im_is_nan,
+                        "final process evaluation is nonfinite"
+                    );
+                }
+            }
+        }
 
         let stability_results = results_of_stability_levels
             .iter()

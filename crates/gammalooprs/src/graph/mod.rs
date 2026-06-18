@@ -9,8 +9,8 @@ use linnet::{
         HedgeGraph,
         involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
         subgraph::{
-            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubSetLike, SubSetOps,
-            subset::SubSet,
+            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike,
+            SubSetOps, subset::SubSet,
         },
     },
     parser::DotGraph,
@@ -101,6 +101,25 @@ impl Graph {
         &self.global_prefactor.num
             * &self.global_prefactor.projector
             * evaluate_overall_factor(self.overall_factor.as_view())
+    }
+
+    pub(crate) fn external_momentum_edge_order(&self) -> Vec<EdgeIndex> {
+        if self.initial_state_cut.nedges(&self.underlying) == 0 {
+            let external_filter: SuBitGraph = self.external_filter();
+            external_filter
+                .included_iter()
+                .map(|hedge| self.underlying[&hedge])
+                .collect_vec()
+        } else {
+            self.initial_state_cut
+                .iter_left_hedges()
+                .map(|hedge| self.underlying[&hedge])
+                .collect_vec()
+        }
+    }
+
+    pub(crate) fn canonicalize_lmb_external_order(&self, lmb: &mut LoopMomentumBasis) {
+        lmb.canonicalize_external_order(&self.external_momentum_edge_order());
     }
 
     pub(crate) fn random_externals(&self, seed: u64) -> Externals {
@@ -423,9 +442,9 @@ impl Graph {
     }
 
     pub fn get_edges_in_initial_state_cut(&self) -> Vec<EdgeIndex> {
-        self.underlying
-            .iter_edges_of(&self.initial_state_cut)
-            .map(|(_, edge_index, _)| edge_index)
+        self.initial_state_cut
+            .iter_left_hedges()
+            .map(|hedge| self.underlying[&hedge])
             .collect_vec()
     }
     pub(crate) fn is_always_pinch(

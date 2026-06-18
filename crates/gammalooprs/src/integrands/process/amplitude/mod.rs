@@ -50,7 +50,7 @@ use crate::{
     },
     model::Model,
     momentum::{
-        Helicity, Rotation, RotationMethod, SignOrZero,
+        Helicity, Rotation, RotationMethod, SignOrZero, ThreeMomentum,
         sample::{ExternalIndex, MomentumSample},
         signature::SignatureLike,
     },
@@ -64,7 +64,9 @@ use crate::{
         },
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
-    utils::{ArbPrec, W_, serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS},
+    utils::{
+        ArbPrec, W_, compute_shift_part, serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS,
+    },
 };
 
 use super::{
@@ -583,7 +585,29 @@ impl AmplitudeGraphTerm {
             "evaluated sum of threshold counterterms"
         );
 
-        let diff = result - sum_of_cts.clone();
+        let diff = result.clone() - sum_of_cts.clone();
+        let result_is_nonfinite = result.re.is_nan()
+            || result.re.is_infinite()
+            || result.im.is_nan()
+            || result.im.is_infinite();
+        let sum_of_cts_is_nonfinite = sum_of_cts.re.is_nan()
+            || sum_of_cts.re.is_infinite()
+            || sum_of_cts.im.is_nan()
+            || sum_of_cts.im.is_infinite();
+        let diff_is_nonfinite =
+            diff.re.is_nan() || diff.re.is_infinite() || diff.im.is_nan() || diff.im.is_infinite();
+        crate::debug_tags!(#integration, #subtraction, #threshold, #inspect;
+            stage = "amplitude_threshold_subtraction",
+            graph = %self.graph.name,
+            original = %format!("{:+16e}", result),
+            cts = %format!("{:+16e}", sum_of_cts),
+            diff = %format!("{:+16e}", diff),
+            prefactor = %format!("{:+16e}", prefactor),
+            original_nonfinite = result_is_nonfinite,
+            cts_nonfinite = sum_of_cts_is_nonfinite,
+            diff_nonfinite = diff_is_nonfinite,
+            "amplitude threshold subtraction"
+        );
 
         Ok((
             diff * prefactor.clone(),
@@ -1134,29 +1158,135 @@ impl AmplitudeIntegrand {
                 group_esurface_map
                     .iter_enumerated()
                     .filter_map(|(group_esurface_id, raised_esurface_map)| {
-                        let esurface_exists = raised_esurface_map
+                        let (representative_graph_group_pos, representative_raised_esurface_id) =
+                            raised_esurface_map
                             .iter_enumerated()
                             .find_map(|(graph_group_pos, option_raised_esurface_id)| {
-                                option_raised_esurface_id.map(|raised_esurface_id| {
-                                    // extreme indexing
-                                    let graph = &self.data.graph_terms[self
-                                        .data
-                                        .graph_group_structure[group_id][graph_group_pos]];
-                                    let esurface_id =
-                                        graph.threshold_counterterm.raised_data.raised_groups
-                                            [raised_esurface_id]
-                                            .esurface_ids[0];
-
-                                    let esurface = &graph.esurfaces[esurface_id];
-                                    esurface.exists(
-                                        &external_moms,
-                                        &graph.graph.loop_momentum_basis,
-                                        &graph.graph.get_real_mass_vector(model),
-                                        &F(e_cm),
-                                    )
-                                })
+                                option_raised_esurface_id
+                                    .map(|raised_esurface_id| (graph_group_pos, raised_esurface_id))
                             })
                             .expect("no graph in group has this esurface, map corrupted");
+
+                        let representative_graph_id =
+                            self.data.graph_group_structure[group_id][representative_graph_group_pos];
+                        let representative_graph = &self.data.graph_terms[representative_graph_id];
+                        let representative_esurface_id =
+                            representative_graph.threshold_counterterm.raised_data.raised_groups
+                                [representative_raised_esurface_id]
+                                .esurface_ids[0];
+
+                        let esurface_exists = representative_graph.esurfaces
+                            [representative_esurface_id]
+                            .exists(
+                                &external_moms,
+                                &representative_graph.graph.loop_momentum_basis,
+                                &representative_graph.graph.get_real_mass_vector(model),
+                                &F(e_cm),
+                            );
+
+                        for (graph_group_pos, option_raised_esurface_id) in
+                            raised_esurface_map.iter_enumerated()
+                        {
+                            let Some(raised_esurface_id) = option_raised_esurface_id else {
+                                continue;
+                            };
+
+                            let graph_id =
+                                self.data.graph_group_structure[group_id][graph_group_pos];
+                            let graph_term = &self.data.graph_terms[graph_id];
+                            let graph = &graph_term.graph;
+                            let raised_group =
+                                &graph_term.threshold_counterterm.raised_data.raised_groups
+                                    [*raised_esurface_id];
+                            let esurface_id = raised_group.esurface_ids[0];
+                            let esurface = &graph_term.esurfaces[esurface_id];
+                            let lmb = &graph.loop_momentum_basis;
+                            let real_mass_vector = graph.get_real_mass_vector(model);
+                            let candidate_exists = esurface.exists(
+                                &external_moms,
+                                lmb,
+                                &real_mass_vector,
+                                &F(e_cm),
+                            );
+                            let shift_part =
+                                esurface.compute_shift_part_from_momenta(&external_moms, lmb);
+                            let mass_sum: F<f64> = esurface
+                                .energies
+                                .iter()
+                                .map(|index| &real_mass_vector[*index])
+                                .fold(F::from_f64(0.0), |acc, x| acc + x);
+                            let zero_vector = ThreeMomentum::new(F(0.0), F(0.0), F(0.0));
+                            let shift_vector = esurface
+                                .external_shift
+                                .iter()
+                                .map(|(index, sign)| {
+                                    let external_signature = &lmb.edge_signatures[*index].external;
+                                    compute_shift_part(external_signature, &external_moms).spatial
+                                        * F::from_f64(*sign as f64)
+                                })
+                                .reduce(|acc, x| acc + x)
+                                .unwrap_or_else(|| zero_vector.clone());
+                            let shift_vector_sq = shift_vector.norm_squared();
+                            let existence_margin =
+                                &shift_part * &shift_part - &shift_vector_sq - &mass_sum * &mass_sum;
+                            let lmb_reps = graph.integrand_replacement(
+                                &graph.full_filter(),
+                                &graph.loop_momentum_basis,
+                                &[W_.x___],
+                            );
+                            let atom = esurface.lmb_atom_simplified(graph, &lmb_reps);
+                            let raw_atom = esurface.to_atom(&[]);
+                            let edge_ids = esurface
+                                .energies
+                                .iter()
+                                .map(|edge_id| edge_id.0)
+                                .collect_vec();
+                            let local_esurface_ids = raised_group
+                                .esurface_ids
+                                .iter()
+                                .map(|esurface_id| esurface_id.0)
+                                .collect_vec();
+                            let is_representative =
+                                graph_group_pos == representative_graph_group_pos
+                                    && *raised_esurface_id == representative_raised_esurface_id;
+                            let generated = graph_term
+                                .threshold_counterterm
+                                .generated_mask
+                                .get(*raised_esurface_id)
+                                .copied();
+                            let active = graph_term
+                                .threshold_counterterm
+                                .active_mask
+                                .get(*raised_esurface_id)
+                                .copied();
+
+                            crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #esurface;
+                                stage = "amplitude_threshold_esurface_candidate",
+                                group_id = group_id.0,
+                                group_esurface_id = group_esurface_id.0,
+                                graph = %graph.name,
+                                graph_group_pos = graph_group_pos.0,
+                                raised_esurface_id = raised_esurface_id.0,
+                                esurface_id = esurface_id.0,
+                                local_esurface_ids = ?local_esurface_ids,
+                                edges = ?edge_ids,
+                                representative = is_representative,
+                                representative_graph_group_pos = representative_graph_group_pos.0,
+                                representative_raised_esurface_id = representative_raised_esurface_id.0,
+                                representative_exists = esurface_exists,
+                                candidate_exists,
+                                generated = ?generated,
+                                active = ?active,
+                                max_occurrence = raised_group.max_occurence,
+                                shift_part = %format!("{:+16e}", shift_part),
+                                shift_vector_sq = %format!("{:+16e}", shift_vector_sq),
+                                mass_sum = %format!("{:+16e}", mass_sum),
+                                existence_margin = %format!("{:+16e}", existence_margin),
+                                file.atom = %atom,
+                                file.raw_atom = %raw_atom,
+                                "amplitude threshold esurface candidate"
+                            );
+                        }
 
                         if esurface_exists {
                             Some(group_esurface_id)
@@ -1324,6 +1454,37 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                     group_id.0,
                     existing_esurfaces.len()
                 );
+                for group_esurface_id in existing_esurfaces.iter() {
+                    let Ok((graph_group_pos, raised_esurface_id)) = get_representative(
+                        &self.data.group_derived_data[group_id].esurface_map[*group_esurface_id],
+                    ) else {
+                        continue;
+                    };
+                    let graph_id = self.data.graph_group_structure[group_id][graph_group_pos];
+                    let graph_term = &self.data.graph_terms[graph_id];
+                    let graph = &graph_term.graph;
+                    let esurface_id = graph_term.threshold_counterterm.raised_data.raised_groups
+                        [raised_esurface_id]
+                        .esurface_ids[0];
+                    let lmb_reps = graph.integrand_replacement(
+                        &graph.full_filter(),
+                        &graph.loop_momentum_basis,
+                        &[W_.x___],
+                    );
+                    let atom =
+                        graph_term.esurfaces[esurface_id].lmb_atom_simplified(graph, &lmb_reps);
+                    crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #esurface;
+                        stage = "amplitude_threshold_existing_esurface",
+                        group_id = group_id.0,
+                        group_esurface_id = group_esurface_id.0,
+                        graph = %graph.name,
+                        graph_group_pos = graph_group_pos.0,
+                        raised_esurface_id = raised_esurface_id.0,
+                        esurface_id = esurface_id.0,
+                        file.atom = %atom,
+                        "amplitude threshold existing esurface"
+                    );
+                }
 
                 let graph_data = self.data.graph_group_structure[group_id]
                     .into_iter()

@@ -1,0 +1,57 @@
+[[command_blocks]]
+name = "axis_x2_center_inspect"
+commands = [
+    "set process -p qq_hhh_2L -i subtracted defaults",
+    "set process -p qq_hhh_2L -i subtracted kv subtraction.disable_threshold_subtraction=false",
+    """set process -p qq_hhh_2L -i subtracted string '
+[kinematics.externals.data]
+helicities = [1, -1, 0, 0, 0, 0, 0, 0, 0]
+'""",
+    """set process -p qq_hhh_2L -i subtracted string '
+[kinematics.externals.data]
+momenta = [
+    [5.0000000000000000e+02, 0.0000000000000000e+00, 0.0000000000000000e+00, 5.0000000000000000e+02],
+    [5.0000000000000000e+02, 0.0000000000000000e+00, 0.0000000000000000e+00, -5.0000000000000000e+02],
+    [4.0000000000000000e+03, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00],
+    [4.0000000000000000e+03, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00],
+    [4.0000000000000000e+03, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00],
+    [4.0000000000000000e+03, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00],
+    [4.3855556622469447e+02, 1.5533220018353779e+02, 3.4801603965135871e+02, -1.7737736157184119e+02],
+    [3.5636963749219223e+02, -1.6802389008511000e+01, -3.1872911024360047e+02, 9.7487191636880979e+01],
+    "dependent"
+]
+'""",
+    """set process -p qq_hhh_2L -i subtracted string '
+[general]
+generate_events = true
+store_additional_weights_in_event = true
+evaluator_method = "SingleParametric"
+enable_cache = false
+debug_cache = false
+disable_flux_factor = false
+integral_unit = "none"
+'""",
+    """set process -p qq_hhh_2L -i subtracted string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "spherical_common_radial"
+mapping = "linear"
+b = 1.0
+'""",
+    "set process -p qq_hhh_2L -i subtracted kv general.generate_events=true general.store_additional_weights_in_event=true general.enable_cache=false integrator.integrated_phase=\"imag\" subtraction.local_ct_settings.uv_localisation.sliver_width=30 subtraction.local_ct_settings.uv_localisation.gaussian_width=1",
+    """set process -p qq_hhh_2L -i subtracted string '
+[subtraction.integrated_ct_settings.range]
+type = "infinite"
+
+[subtraction.integrated_ct_settings.range.h_function_settings]
+function = "poly_exponential"
+sigma = 1
+enabled_dampening = true
+'""",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 9 -f -x 0.5387589249438893 0.24174091659991892 0.9441182287966725 0.7527842995682404 0.5585112730395129 0.25621170988207465",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 9 -f -x 0.5387589249438893 0.24174091659991892 0.9441185115837143 0.7527842995682404 0.5585112730395129 0.25621170988207465"
+]

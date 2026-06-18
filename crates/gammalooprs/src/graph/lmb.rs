@@ -183,18 +183,36 @@ impl LoopMomentumBasis {
             .iter_mut()
             .for_each(|(_, s)| s.put_loop_to_ext(i));
     }
-    // pub(crate) fn swap_external(&mut self, i: ExternalIndex, j: ExternalIndex) {
-    //     self.ext_edges.swap(i, j);
-    //     self.edge_signatures = self
-    //         .edge_signatures
-    //         .iter()
-    //         .map(|(eid, a)| {
-    //             let mut a = a.clone();
-    //             a.swap_external(i, j);
-    //             (eid, a)
-    //         })
-    //         .collect();
-    // }
+    pub(crate) fn swap_external(&mut self, i: ExternalIndex, j: ExternalIndex) {
+        if i == j {
+            return;
+        }
+
+        self.ext_edges.swap(i, j);
+        self.edge_signatures
+            .iter_mut()
+            .for_each(|(_, s)| s.swap_external(i, j));
+    }
+
+    pub(crate) fn canonicalize_external_order(&mut self, external_edge_order: &[EdgeIndex]) {
+        if self.ext_edges.len() < 2 {
+            return;
+        }
+
+        for target_slot in 0..self.ext_edges.len() {
+            let source_slot = (target_slot..self.ext_edges.len())
+                .min_by_key(|slot| {
+                    let edge = self.ext_edges[ExternalIndex(*slot)];
+                    external_edge_order
+                        .iter()
+                        .position(|ordered_edge| *ordered_edge == edge)
+                        .map_or((1, usize::from(edge)), |position| (0, position))
+                })
+                .unwrap_or(target_slot);
+
+            self.swap_external(ExternalIndex(target_slot), ExternalIndex(source_slot));
+        }
+    }
 }
 
 /// Helpers for constructing loop-momentum bases and turning them into Symbolica
@@ -720,6 +738,12 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
 
         // The external flows are signed subgraphs (i.e. with only half of the edges to indicate a direction)
         // They always contain the dependent external (except for the flow for the dep ext)
+        let external_edge_order = self
+            .iter_edges_of(&externals)
+            .map(|(_, edge_id, _)| edge_id)
+            .unique()
+            .collect_vec();
+
         let mut external_flows: TiVec<ExternalIndex, _> = vec![].into();
         let mut ext_edges: TiVec<ExternalIndex, EdgeIndex> = vec![].into();
 
@@ -1029,12 +1053,15 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             )
             .map_err(LmbError::EdgeSignatureVector)?;
 
-        Ok(LoopMomentumBasis {
+        let mut lmb = LoopMomentumBasis {
             tree: forest_edge,
             edge_signatures: signature,
             ext_edges,
             loop_edges,
-        })
+        };
+        lmb.canonicalize_external_order(&external_edge_order);
+
+        Ok(lmb)
     }
 
     fn generate_loop_momentum_bases_of<S: SubGraphLike>(
@@ -1220,7 +1247,11 @@ impl LMBext for Graph {
         shrunken: &InternalSubGraph,
         externals: SuBitGraph,
     ) -> LmbResult<LoopMomentumBasis> {
-        self.underlying.shrunken_sub_lmb(outer, shrunken, externals)
+        let mut lmb = self
+            .underlying
+            .shrunken_sub_lmb(outer, shrunken, externals)?;
+        self.canonicalize_lmb_external_order(&mut lmb);
+        Ok(lmb)
     }
 
     fn shrunken_lmb_of(
@@ -1228,7 +1259,9 @@ impl LMBext for Graph {
         outer: &SuBitGraph,
         shrunken: &InternalSubGraph,
     ) -> LoopMomentumBasis {
-        self.underlying.shrunken_lmb_of(outer, shrunken)
+        let mut lmb = self.underlying.shrunken_lmb_of(outer, shrunken);
+        self.canonicalize_lmb_external_order(&mut lmb);
+        lmb
     }
 
     fn empty_lmb(&self) -> LoopMomentumBasis {
@@ -1245,7 +1278,10 @@ impl LMBext for Graph {
             + ModifySubSet<HedgePair>
             + ModifySubSet<Hedge>,
     {
-        self.underlying.generate_loop_momentum_bases_of(subgraph)
+        let mut lmbs = self.underlying.generate_loop_momentum_bases_of(subgraph);
+        lmbs.iter_mut()
+            .for_each(|lmb| self.canonicalize_lmb_external_order(lmb));
+        lmbs
     }
 
     fn replacement_impl<'a, S: SubSetLike, I>(
@@ -1285,11 +1321,15 @@ impl LMBext for Graph {
     where
         S::Base: ModifySubSet<Hedge> + SubGraphLike,
     {
-        self.underlying.lmb_impl(subgraph, tree, externals)
+        let mut lmb = self.underlying.lmb_impl(subgraph, tree, externals)?;
+        self.canonicalize_lmb_external_order(&mut lmb);
+        Ok(lmb)
     }
 
     fn lmb_of<S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> LoopMomentumBasis {
-        self.underlying.lmb_of(subgraph)
+        let mut lmb = self.underlying.lmb_of(subgraph);
+        self.canonicalize_lmb_external_order(&mut lmb);
+        lmb
     }
 
     fn compatible_sub_lmb<S: SubGraphLike>(
@@ -1305,7 +1345,9 @@ impl LMBext for Graph {
             + ModifySubSet<HedgePair>
             + ModifySubSet<Hedge>,
     {
-        self.underlying.compatible_sub_lmb(subgraph, externals, lmb)
+        let mut sub_lmb = self.underlying.compatible_sub_lmb(subgraph, externals, lmb);
+        self.canonicalize_lmb_external_order(&mut sub_lmb);
+        sub_lmb
     }
 }
 
@@ -1324,7 +1366,11 @@ impl LMBext for &Graph {
         shrunken: &InternalSubGraph,
         externals: SuBitGraph,
     ) -> LmbResult<LoopMomentumBasis> {
-        self.underlying.shrunken_sub_lmb(outer, shrunken, externals)
+        let mut lmb = self
+            .underlying
+            .shrunken_sub_lmb(outer, shrunken, externals)?;
+        self.canonicalize_lmb_external_order(&mut lmb);
+        Ok(lmb)
     }
 
     fn shrunken_lmb_of(
@@ -1332,7 +1378,9 @@ impl LMBext for &Graph {
         outer: &SuBitGraph,
         shrunken: &InternalSubGraph,
     ) -> LoopMomentumBasis {
-        self.underlying.shrunken_lmb_of(outer, shrunken)
+        let mut lmb = self.underlying.shrunken_lmb_of(outer, shrunken);
+        self.canonicalize_lmb_external_order(&mut lmb);
+        lmb
     }
 
     fn empty_lmb(&self) -> LoopMomentumBasis {
@@ -1349,7 +1397,10 @@ impl LMBext for &Graph {
             + ModifySubSet<HedgePair>
             + ModifySubSet<Hedge>,
     {
-        self.underlying.generate_loop_momentum_bases_of(subgraph)
+        let mut lmbs = self.underlying.generate_loop_momentum_bases_of(subgraph);
+        lmbs.iter_mut()
+            .for_each(|lmb| self.canonicalize_lmb_external_order(lmb));
+        lmbs
     }
 
     fn generate_loop_momentum_bases(&self) -> TiVec<LmbIndex, LoopMomentumBasis> {
@@ -1393,11 +1444,15 @@ impl LMBext for &Graph {
     where
         S::Base: ModifySubSet<Hedge> + SubGraphLike,
     {
-        self.underlying.lmb_impl(subgraph, tree, externals)
+        let mut lmb = self.underlying.lmb_impl(subgraph, tree, externals)?;
+        self.canonicalize_lmb_external_order(&mut lmb);
+        Ok(lmb)
     }
 
     fn lmb_of<S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> LoopMomentumBasis {
-        self.underlying.lmb_of(subgraph)
+        let mut lmb = self.underlying.lmb_of(subgraph);
+        self.canonicalize_lmb_external_order(&mut lmb);
+        lmb
     }
 
     fn compatible_sub_lmb<S: SubGraphLike>(
@@ -1413,7 +1468,9 @@ impl LMBext for &Graph {
             + ModifySubSet<HedgePair>
             + ModifySubSet<Hedge>,
     {
-        self.underlying.compatible_sub_lmb(subgraph, externals, lmb)
+        let mut sub_lmb = self.underlying.compatible_sub_lmb(subgraph, externals, lmb);
+        self.canonicalize_lmb_external_order(&mut sub_lmb);
+        sub_lmb
     }
 }
 

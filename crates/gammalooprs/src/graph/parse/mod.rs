@@ -25,7 +25,7 @@ use crate::{
     },
     processes::DotExportSettings,
     utils::symbolica_ext::{DOD, LogPrint},
-    uv::UltravioletGraph,
+    uv::{UltravioletGraph, uv_graph::UVE},
 };
 use ahash::{AHashMap, AHashSet};
 use idenso::{color::ColorSimplifier, tensor::SymbolicNetParse};
@@ -784,6 +784,10 @@ impl Graph {
             param_builder,
         };
 
+        let external_momentum_edge_order = g.external_momentum_edge_order();
+        g.loop_momentum_basis
+            .canonicalize_external_order(&external_momentum_edge_order);
+
         let updated_param_builder_with_lmb = ParamBuilder::new(
             &g,
             model,
@@ -1093,6 +1097,7 @@ impl Graph {
                     ));
                     }
 
+                let mass = EdgeMass::from_atom(e.mass_atom(), model, param_builder)?;
 
                 let num = match e.num {
                     Some(num) => Autogen::explicit(num),
@@ -1118,7 +1123,7 @@ impl Graph {
 
                 Ok(EdgeData::new(
                     Edge {
-                        mass: EdgeMass::from_atom(e.particle.mass_atom(), model, param_builder)?,
+                        mass,
                         is_dummy: e.is_dummy,
                         name: Autogen::from_option_or_generate(e.name, || eid.to_string()),
                         particle: e.particle,

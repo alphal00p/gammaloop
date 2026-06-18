@@ -1,0 +1,724 @@
+# Standalone steering card for the symmetrized, exact-xi subtracted
+# d d~ -> H H H two-loop amplitude imported from qq_hhh_2L.dot.
+#
+# This file is meant to live in:
+#   examples/cli/qq_hhh_2L/qq_hhh_2L.toml
+#
+# Loading the card intentionally does not run any command. Typical usage:
+#
+#   ./target/debug/gammaloop --clean-state examples/cli/qq_hhh_2L/qq_hhh_2L.toml
+#   ./target/debug/gammaloop -o -s ./examples/cli/qq_hhh_2L/state run generate_diagrams generate_integrands integrate
+#
+# The process has nine external momenta:
+#   Q(0) Q(1) Q(2) Q(3) -> Q(4) Q(5) Q(6) Q(7) Q(8)
+# where Q(0), Q(1) are d, d~, Q(6), Q(7), Q(8) are the Higgses, and
+# Q(2)=Q(4)=xi and Q(3)=Q(5)=xi are auxiliary exact-xi helper pairs.
+# The helper vector is kept away from Q(0)+Q(1) to avoid artificial
+# threshold/pass-on denominator degeneracies in the exact-xi topology.
+#
+# The intended production setup keeps threshold subtraction enabled, sums over
+# orientations, compiles a SummedFunctionMap evaluator, and generates all LMB
+# channels with inverse-Jacobian multichanneling. Keep
+# `assume_positive_external_energies=false` for this exact-xi topology.
+# With it enabled, threshold generation trims surfaces involving the helper
+# legs, and runtime inspect aborts because those surfaces are still required by
+# the threshold-counterterm existence check for the configured kinematics.
+commands = []
+
+[cli_settings]
+[cli_settings.state]
+folder = "./examples/cli/qq_hhh_2L/state"
+name = "qq_hhh_2L"
+
+[[command_blocks]]
+name = "load"
+commands = [
+    "set global kv global.generation.override_lmb_heuristics=true",
+    "set global kv global.generation.evaluator.store_atom=false",
+    "set global kv global.generation.evaluator.compile=true",
+    "set global kv global.generation.evaluator.summed=false",
+    "set global kv global.generation.evaluator.summed_function_map=true",
+    "set global kv global.generation.uv.subtract_uv=false",
+    "set global kv global.generation.uv.generate_integrated=false",
+    "set global kv global.generation.threshold_subtraction.enable_thresholds=true",
+    "set global kv global.generation.threshold_subtraction.check_esurface_at_generation=false",
+    "set global kv global.generation.threshold_subtraction.assume_positive_external_energies=false",
+    "import model sm-default.json",
+    "set model MT=173.0",
+    "set model MH=125.0",
+    "set model WT=0.0",
+    "set model WH=0.0",
+    "set model ymt=173.0",
+    "remove processes -p qq_hhh_2L",
+    "import graphs ./examples/cli/qq_hhh_2L/qq_hhh_2L.dot -p qq_hhh_2L -i subtracted"
+]
+
+[[command_blocks]]
+name = "generate_diagrams"
+commands = [
+    "run load"
+]
+
+[[command_blocks]]
+name = "generate"
+commands = [
+    "set global kv global.generation.override_lmb_heuristics=true",
+    "set global kv global.generation.evaluator.store_atom=false",
+    "set global kv global.generation.evaluator.compile=true",
+    "set global kv global.generation.evaluator.summed=false",
+    "set global kv global.generation.evaluator.summed_function_map=true",
+    "set global kv global.generation.uv.subtract_uv=false",
+    "set global kv global.generation.uv.generate_integrated=false",
+    "set global kv global.generation.threshold_subtraction.enable_thresholds=true",
+    "set global kv global.generation.threshold_subtraction.check_esurface_at_generation=false",
+    "set global kv global.generation.threshold_subtraction.assume_positive_external_energies=false",
+    "generate existing -p qq_hhh_2L -i subtracted"
+]
+
+[[command_blocks]]
+name = "generate_integrands"
+commands = [
+    "run generate"
+]
+
+[[command_blocks]]
+name = "generate_single_parametric"
+commands = [
+    "set global kv global.generation.override_lmb_heuristics=true",
+    "set global kv global.generation.evaluator.store_atom=true",
+    "set global kv global.generation.evaluator.compile=false",
+    "set global kv global.generation.evaluator.summed=false",
+    "set global kv global.generation.evaluator.summed_function_map=false",
+    "set global kv global.generation.uv.subtract_uv=false",
+    "set global kv global.generation.uv.generate_integrated=false",
+    "set global kv global.generation.threshold_subtraction.enable_thresholds=true",
+    "set global kv global.generation.threshold_subtraction.check_esurface_at_generation=false",
+    "set global kv global.generation.threshold_subtraction.assume_positive_external_energies=false",
+    "generate existing -p qq_hhh_2L -i subtracted"
+]
+
+[[command_blocks]]
+name = "generate_integrands_single_parametric"
+commands = [
+    "run generate_single_parametric"
+]
+
+[[command_blocks]]
+name = "display_integrands"
+commands = [
+    "display integrand -p qq_hhh_2L -i subtracted"
+]
+
+[[command_blocks]]
+name = "inspect_imag_maxweight_spotchecks"
+commands = [
+    "run runtime_single_parametric sampling_lmb_mc",
+    "set process -p qq_hhh_2L -i subtracted kv general.generate_events=true general.store_additional_weights_in_event=true general.enable_cache=false integrator.integrated_phase=\"imag\"",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 1 9 -f -x 0.23262693392408407 3.4231896575351528e-07 0.49485992364488252 0.99442214604999712 0.33719614224884459 0.78136672187917255",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 11 -f -x 0.2754370318227255 0.025975374287740258 0.50782398548203456 0.68942356972268137 0.8046095789779234 0.5244357050879469"
+]
+
+[[command_blocks]]
+name = "inspect_reintegration_maxweight_200k"
+commands = [
+    "run runtime_common sampling_lmb_mc",
+    "set process -p qq_hhh_2L -i subtracted kv general.generate_events=true general.store_additional_weights_in_event=true general.enable_cache=false integrator.integrated_phase=\"imag\"",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 14 -f -x 0.22215871102735293 0.95151497131053109 0.10251622320444055 0.17567342269336178 0.34693037158790663 0.51463740505783795"
+]
+
+[[command_blocks]]
+name = "runtime_common"
+commands = [
+    "set process -p qq_hhh_2L -i subtracted defaults",
+    "set process -p qq_hhh_2L -i subtracted kv subtraction.disable_threshold_subtraction=false",
+    """set process -p qq_hhh_2L -i subtracted string '
+[kinematics.externals.data]
+helicities = [1, -1, 0, 0, 0, 0, 0, 0, 0]
+'""",
+    """set process -p qq_hhh_2L -i subtracted string '
+[kinematics.externals.data]
+momenta = [
+    [5.0000000000000000e+02, 0.0000000000000000e+00, 0.0000000000000000e+00, 5.0000000000000000e+02],
+    [5.0000000000000000e+02, 0.0000000000000000e+00, 0.0000000000000000e+00, -5.0000000000000000e+02],
+    [3.0000000000000000e+03, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00],
+    [3.0000000000000000e+03, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00],
+    [3.0000000000000000e+03, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00],
+    [3.0000000000000000e+03, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00],
+    [4.3855556622469447e+02, 1.5533220018353779e+02, 3.4801603965135871e+02, -1.7737736157184119e+02],
+    [3.5636963749219223e+02, -1.6802389008511000e+01, -3.1872911024360047e+02, 9.7487191636880979e+01],
+    "dependent"
+]
+'""",
+    """set process -p qq_hhh_2L -i subtracted string '
+[general]
+generate_events = true
+store_additional_weights_in_event = true
+evaluator_method = "SummedFunctionMap"
+enable_cache = true
+debug_cache = false
+disable_flux_factor = false
+integral_unit = "none"
+'"""
+]
+
+[[command_blocks]]
+name = "runtime_single_parametric"
+commands = [
+    "run runtime_common",
+    "set process -p qq_hhh_2L -i subtracted kv general.evaluator_method=\"SingleParametric\""
+]
+
+[[command_blocks]]
+name = "sampling_lmb_mc"
+commands = [
+    """set process -p qq_hhh_2L -i subtracted string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "spherical_common_radial"
+mapping = "linear"
+b = 1.0
+'"""
+]
+
+[[command_blocks]]
+name = "sampling_lmb_summed"
+commands = [
+    """set process -p qq_hhh_2L -i subtracted string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+'"""
+]
+
+[[command_blocks]]
+name = "sampling_no_lmb_mc"
+commands = [
+    """set process -p qq_hhh_2L -i subtracted string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+'"""
+]
+
+[[command_blocks]]
+name = "sampling_graph_summed_lmb_summed"
+commands = [
+    """set process -p qq_hhh_2L -i subtracted string '
+[sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+'"""
+]
+
+[[command_blocks]]
+name = "sampling_lmb_summed_ose"
+commands = [
+    """set process -p qq_hhh_2L -i subtracted string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "ose"
+coordinate_system = "hyperspherical"
+mapping = "linear"
+b = 1.0
+'"""
+]
+
+[[command_blocks]]
+name = "sampling_relative_lmb_summed"
+commands = [
+    """set process -p qq_hhh_2L -i subtracted string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "relative_spherical"
+mapping = "linear"
+b = 1.0
+'"""
+]
+
+[[command_blocks]]
+name = "sampling_common_radial_lmb_summed"
+commands = [
+    """set process -p qq_hhh_2L -i subtracted string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "spherical_common_radial"
+mapping = "linear"
+b = 1.0
+'"""
+]
+
+[[command_blocks]]
+name = "sampling_product_common_radial_lmb_summed"
+commands = [
+    """set process -p qq_hhh_2L -i subtracted string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "spherical_product_common_radial"
+mapping = "linear"
+b = 1.0
+'"""
+]
+
+[[command_blocks]]
+name = "stability_recording"
+commands = [
+    """set process -p qq_hhh_2L -i subtracted string '
+[stability.recording]
+record_all_stability_levels = true
+record_rotated_results = true
+record_loop_momenta_escalation = true
+'"""
+]
+
+[[command_blocks]]
+name = "stability_strict"
+commands = [
+    """set process -p qq_hhh_2L -i subtracted string '
+[stability]
+check_on_norm = true
+escalate_if_exact_zero = false
+loop_momenta_norm_escalation_factor = -1.0
+rotation_axis = [
+    { type = "z" },
+    { type = "x" },
+    { type = "y" },
+]
+
+[stability.recording]
+record_all_stability_levels = true
+record_rotated_results = true
+record_loop_momenta_escalation = true
+
+[[stability.levels]]
+precision = "Double"
+required_precision_for_re = 1.0e-7
+required_precision_for_im = 1.0e-7
+escalate_for_large_weight_threshold = 0.5
+
+[[stability.levels]]
+precision = "Quad"
+required_precision_for_re = 1.0e-7
+required_precision_for_im = 1.0e-7
+escalate_for_large_weight_threshold = -1.0
+
+[[stability.levels]]
+precision = "Arb"
+required_precision_for_re = 1.0e-7
+required_precision_for_im = 1.0e-7
+escalate_for_large_weight_threshold = -1.0
+'"""
+]
+
+[[command_blocks]]
+name = "generate_all_lmbs"
+commands = [
+    "set global kv global.generation.override_lmb_heuristics=true",
+    "set global kv global.generation.evaluator.store_atom=false",
+    "set global kv global.generation.evaluator.compile=true",
+    "set global kv global.generation.evaluator.summed=false",
+    "set global kv global.generation.evaluator.summed_function_map=true",
+    "set global kv global.generation.uv.subtract_uv=false",
+    "set global kv global.generation.uv.generate_integrated=false",
+    "set global kv global.generation.threshold_subtraction.enable_thresholds=true",
+    "set global kv global.generation.threshold_subtraction.check_esurface_at_generation=false",
+    "set global kv global.generation.threshold_subtraction.assume_positive_external_energies=false",
+    "generate existing -p qq_hhh_2L -i subtracted"
+]
+
+[[command_blocks]]
+name = "integrate_smoke"
+commands = [
+    "run runtime_common",
+    "run sampling_lmb_summed",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=128 integrator.n_increase=0 integrator.n_max=128 integrator.seed=1337 integrator.integrated_phase=\"real\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 32
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/integrate_smoke
+        --renderer tabled
+        --show-phase both
+        --show-max-weight-info
+        --show-max-weight-info-for-discrete-bins
+        --show-top-discrete-grid
+        --show-discrete-contributions-sum
+        --write-results-for-each-iteration
+        --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+    "run runtime_common",
+    "run sampling_lmb_mc",
+    "set process -p qq_hhh_2L -i subtracted kv general.generate_events=false general.store_additional_weights_in_event=false",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1000000 integrator.n_increase=1000000 integrator.n_max=10000000000 integrator.seed=261012 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 1024
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/integrate_xi3000_common_radial_lmb_mc
+        --renderer tabled
+        --show-phase both
+        --show-max-weight-info
+        --show-max-weight-info-for-discrete-bins
+        --show-top-discrete-grid
+        --show-discrete-contributions-sum
+        --write-results-for-each-iteration
+        --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_reintegration_200k"
+commands = [
+    "run runtime_common",
+    "run sampling_lmb_mc",
+    "set process -p qq_hhh_2L -i subtracted kv general.generate_events=false general.store_additional_weights_in_event=false",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=200000 integrator.n_increase=200000 integrator.n_max=1000000 integrator.seed=270617 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 1024
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/reintegration_patch_xi3000_lmb_mc_200k
+        --renderer tabled
+        --show-phase both
+        --show-max-weight-info
+        --show-max-weight-info-for-discrete-bins
+        --show-top-discrete-grid
+        --show-discrete-contributions-sum
+        --write-results-for-each-iteration
+        --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_imag_10pct"
+commands = [
+    "run runtime_common",
+    "run sampling_lmb_mc",
+    "set process -p qq_hhh_2L -i subtracted kv general.generate_events=false general.store_additional_weights_in_event=false",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1000000 integrator.n_increase=1000000 integrator.n_max=10000000000 integrator.seed=270618 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-1",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 1024
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/integrate_xi3000_common_radial_lmb_mc_imag_10pct
+        --renderer tabled
+        --show-phase both
+        --show-max-weight-info
+        --show-max-weight-info-for-discrete-bins
+        --show-top-discrete-grid
+        --show-discrete-contributions-sum
+        --write-results-for-each-iteration
+        --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_lmb_summed"
+commands = [
+    "run runtime_common",
+    "run sampling_lmb_summed",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=2048 integrator.n_increase=2048 integrator.n_max=1000000 integrator.seed=260716 integrator.integrated_phase=\"real\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 128
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/integrate_lmb_summed
+        --renderer tabled
+        --show-phase both
+        --show-max-weight-info
+        --show-max-weight-info-for-discrete-bins
+        --show-top-discrete-grid
+        --show-discrete-contributions-sum
+        --write-results-for-each-iteration
+        --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_no_lmb_mc"
+commands = [
+    "run runtime_common",
+    "run sampling_no_lmb_mc",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=2048 integrator.n_increase=2048 integrator.n_max=500000 integrator.seed=260717 integrator.integrated_phase=\"real\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 128
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/integrate_no_lmb_mc
+        --renderer tabled
+        --show-phase both
+        --show-max-weight-info
+        --show-max-weight-info-for-discrete-bins
+        --show-top-discrete-grid
+        --show-discrete-contributions-sum
+        --write-results-for-each-iteration
+        --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_graph_summed_lmb_summed"
+commands = [
+    "run runtime_common",
+    "run sampling_graph_summed_lmb_summed",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1024 integrator.n_increase=1024 integrator.n_max=500000 integrator.seed=260718 integrator.integrated_phase=\"real\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 64
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/integrate_graph_summed_lmb_summed
+        --renderer tabled
+        --show-phase both
+        --show-max-weight-info
+        --show-max-weight-info-for-discrete-bins
+        --show-top-discrete-grid
+        --show-discrete-contributions-sum
+        --write-results-for-each-iteration
+        --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_lmb_summed_ose"
+commands = [
+    "run runtime_common",
+    "run sampling_lmb_summed_ose",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1024 integrator.n_increase=1024 integrator.n_max=500000 integrator.seed=260719 integrator.integrated_phase=\"real\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 64
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/integrate_lmb_summed_ose
+        --renderer tabled
+        --show-phase both
+        --show-max-weight-info
+        --show-max-weight-info-for-discrete-bins
+        --show-top-discrete-grid
+        --show-discrete-contributions-sum
+        --write-results-for-each-iteration
+        --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_lmb_summed_ose_smoke"
+commands = [
+    "run runtime_common",
+    "run sampling_lmb_summed_ose",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1024 integrator.n_increase=0 integrator.n_max=1024 integrator.seed=260720 integrator.integrated_phase=\"real\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 64
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/integrate_lmb_summed_ose_smoke
+        --renderer tabled
+        --show-phase both
+        --show-max-weight-info
+        --show-max-weight-info-for-discrete-bins
+        --show-top-discrete-grid
+        --show-discrete-contributions-sum
+        --write-results-for-each-iteration
+        --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_relative_lmb_summed_smoke"
+commands = [
+    "run runtime_common",
+    "run sampling_relative_lmb_summed",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1024 integrator.n_increase=0 integrator.n_max=1024 integrator.seed=260721 integrator.integrated_phase=\"real\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 64
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/integrate_relative_lmb_summed_smoke
+        --renderer tabled
+        --show-phase both
+        --show-max-weight-info
+        --show-max-weight-info-for-discrete-bins
+        --show-top-discrete-grid
+        --show-discrete-contributions-sum
+        --write-results-for-each-iteration
+        --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_common_radial_lmb_summed_smoke"
+commands = [
+    "run runtime_common",
+    "run sampling_common_radial_lmb_summed",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1024 integrator.n_increase=0 integrator.n_max=1024 integrator.seed=260722 integrator.integrated_phase=\"real\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 64
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/integrate_common_radial_lmb_summed_smoke
+        --renderer tabled
+        --show-phase both
+        --show-max-weight-info
+        --show-max-weight-info-for-discrete-bins
+        --show-top-discrete-grid
+        --show-discrete-contributions-sum
+        --write-results-for-each-iteration
+        --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_product_common_radial_lmb_summed_smoke"
+commands = [
+    "run runtime_common",
+    "run sampling_product_common_radial_lmb_summed",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1024 integrator.n_increase=0 integrator.n_max=1024 integrator.seed=260723 integrator.integrated_phase=\"real\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 64
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/integrate_product_common_radial_lmb_summed_smoke
+        --renderer tabled
+        --show-phase both
+        --show-max-weight-info
+        --show-max-weight-info-for-discrete-bins
+        --show-top-discrete-grid
+        --show-discrete-contributions-sum
+        --write-results-for-each-iteration
+        --restart
+    """
+]
+
+[[command_blocks]]
+name = "inspect_collinear"
+commands = [
+    "run runtime_common",
+    "run sampling_no_lmb_mc",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 1000 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 100 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 10 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 1 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 0.1 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 0.01 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 0.001 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 0.0001 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 1 -f -m -x 1000 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 1 -f -m -x 100 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 1 -f -m -x 10 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 1 -f -m -x 1 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 1 -f -m -x 0.1 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 1 -f -m -x 0.01 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 1 -f -m -x 0.001 0 150 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 1 -f -m -x 0.0001 0 150 250 125 -375"
+]
+
+[[command_blocks]]
+name = "inspect_soft_collinear"
+commands = [
+    "run runtime_common",
+    "run sampling_no_lmb_mc",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 1000 0 1000 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 100 0 100 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 10 0 10 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 1 0 1 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 0.1 0 0.1 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 0.01 0 0.01 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 0.001 0 0.001 250 125 -375",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -m -x 0.0001 0 0.0001 250 125 -375"
+]
+
+[[command_blocks]]
+name = "inspect_known_variance_point"
+commands = [
+    "run runtime_common",
+    "run sampling_lmb_mc",
+    # Point previously seen with a large but apparently not singular weight.
+    # Change --discrete-dim and -x to the latest max-weight point as needed.
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 -f -x 0.31390634220043045 0.61945042268059569 0.90716850422920681 0.71401078676936824 0.49683778437982462 0.078198648800276493"
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 1000.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+    [5.0000000000000000e+02, 0.0000000000000000e+00, 0.0000000000000000e+00, 5.0000000000000000e+02],
+    [5.0000000000000000e+02, 0.0000000000000000e+00, 0.0000000000000000e+00, -5.0000000000000000e+02],
+    [3.0000000000000000e+03, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00],
+    [3.0000000000000000e+03, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00],
+    [3.0000000000000000e+03, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00],
+    [3.0000000000000000e+03, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.0000000000000000e+00],
+    [4.3855556622469447e+02, 1.5533220018353779e+02, 3.4801603965135871e+02, -1.7737736157184119e+02],
+    [3.5636963749219223e+02, -1.6802389008511000e+01, -3.1872911024360047e+02, 9.7487191636880979e+01],
+    "dependent"
+]
+helicities = [1, -1, 0, 0, 0, 0, 0, 0, 0]
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = true
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+disable_flux_factor = false
+integral_unit = "none"
+mu_r = 91.188
+m_uv = 91.188
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "spherical_common_radial"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+
+[default_runtime_settings.integrator]
+integrated_phase = "imag"
+target_relative_accuracy = 1.0e-2
+n_start = 1000000
+n_increase = 1000000
+n_max = 10000000000
+
+[cli_settings.global.generation]
+override_lmb_heuristics = true
+
+[cli_settings.global.generation.uv]
+subtract_uv = false
+generate_integrated = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = false
+assume_positive_external_energies = false
+
+[cli_settings.global.generation.compile]
+compilation_mode = "assembly"
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = true
+summed = false
+summed_function_map = true
+
+[cli_settings.global.n_cores]
+feyngen = 3
+generate = 3
+compile = 3
+integrate = 3
