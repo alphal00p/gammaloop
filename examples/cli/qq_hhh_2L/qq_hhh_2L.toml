@@ -117,6 +117,7 @@ graphs = "monte_carlo"
 orientations = "summed"
 lmb_multichanneling = true
 lmb_channels = "monte_carlo"
+lmb_channel_weight = "inverse_jacobian"
 coordinate_system = "spherical_common_radial"
 mapping = "linear"
 b = 1.0
