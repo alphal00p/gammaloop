@@ -1308,6 +1308,29 @@ impl AmplitudeIntegrand {
             all_existing_esurfaces.push(group_existing_esurfaces);
         }
 
+        let groups_above_threshold = all_existing_esurfaces
+            .iter()
+            .filter(|existing_esurfaces| !existing_esurfaces.is_empty())
+            .count();
+        let existing_esurface_count: usize = all_existing_esurfaces
+            .iter()
+            .map(ExistingEsurfaces::len)
+            .sum();
+        let threshold_status = if existing_esurface_count == 0 {
+            "below threshold"
+        } else {
+            "above threshold"
+        };
+        info!(
+            integrand = %self.data.name,
+            threshold_status,
+            groups_above_threshold,
+            group_count = all_existing_esurfaces.len(),
+            existing_esurfaces = existing_esurface_count,
+            "Input is {threshold_status}: {existing_esurface_count} existing threshold E-surfaces across {groups_above_threshold}/{} graph groups",
+            all_existing_esurfaces.len()
+        );
+
         all_existing_esurfaces
     }
 
@@ -1456,6 +1479,14 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
             .iter()
             .all(|term| !term.threshold_counterterm.evaluators.is_empty());
 
+        let is_tree_level = self.data.graph_terms[0].graph.get_loop_number() == 0;
+        let existing_esurfaces = if thresholds_generated && !is_tree_level {
+            debug!("esurface existence check");
+            Some(self.get_existing_esurfaces(model))
+        } else {
+            None
+        };
+
         if !thresholds_generated && !self.settings.subtraction.disable_threshold_subtraction {
             warn!(
                 "Not all graphs have threshold counterterms generated, but threshold subtraction is not disabled. disable runtime threshold subtraction to remove this warning"
@@ -1463,11 +1494,29 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
             self.settings.subtraction.disable_threshold_subtraction = true;
         }
 
-        let is_tree_level = self.data.graph_terms[0].graph.get_loop_number() == 0;
+        if let Some(existing_esurfaces) = &existing_esurfaces {
+            let existing_esurface_count: usize =
+                existing_esurfaces.iter().map(ExistingEsurfaces::len).sum();
+            if self.settings.subtraction.disable_threshold_subtraction
+                && existing_esurface_count > 0
+            {
+                let groups_above_threshold = existing_esurfaces
+                    .iter()
+                    .filter(|existing_esurfaces| !existing_esurfaces.is_empty())
+                    .count();
+                warn!(
+                    integrand = %self.data.name,
+                    groups_above_threshold,
+                    group_count = existing_esurfaces.len(),
+                    existing_esurfaces = existing_esurface_count,
+                    "Input is above threshold, but threshold subtraction is disabled. Turn threshold subtraction on for this input by setting subtraction.disable_threshold_subtraction=false."
+                );
+            }
+        }
 
         if !self.settings.subtraction.disable_threshold_subtraction && !is_tree_level {
-            debug!("esurface existence check");
-            let existing_esurfaces = self.get_existing_esurfaces(model);
+            let existing_esurfaces = existing_esurfaces
+                .expect("threshold existence should be checked before runtime threshold setup");
             self.validate_runtime_threshold_counterterms(&existing_esurfaces)?;
             for (group_id, existing_esurfaces) in existing_esurfaces.iter_enumerated() {
                 debug!(
