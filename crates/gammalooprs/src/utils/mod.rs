@@ -3863,11 +3863,12 @@ pub(crate) fn global_parameterize<T: FloatLike>(
             (vec![first, second], common_jac * relative_jac)
         }
         ParameterizationMode::SphericalCommonRadial => {
-            if x.len() != 6 {
+            if x.is_empty() || !x.len().is_multiple_of(3) {
                 panic!(
-                    "spherical_common_radial parameterization currently requires exactly two loop three-momenta"
+                    "spherical_common_radial parameterization requires complete loop three-momenta"
                 );
             }
+            let n_loop_momenta = x.len() / 3;
 
             let mut jac = one.clone();
             let radius = match settings.mapping {
@@ -3895,39 +3896,42 @@ pub(crate) fn global_parameterize<T: FloatLike>(
                 }
             };
 
-            let fraction = x[1].clone();
-            let complement = &one - &fraction;
-            let first_radius = &radius * &fraction;
-            let second_radius = &radius * &complement;
-            jac *= &radius * first_radius.square() * second_radius.square();
+            let mut remaining_fraction = one.clone();
+            let mut stick_jac = one.clone();
+            let mut radii = Vec::with_capacity(n_loop_momenta);
+            for i in 0..n_loop_momenta {
+                let fraction = if i + 1 == n_loop_momenta {
+                    remaining_fraction.clone()
+                } else {
+                    stick_jac *= &remaining_fraction;
+                    let fraction = &remaining_fraction * &x[1 + i];
+                    remaining_fraction *= &one - &x[1 + i];
+                    fraction
+                };
+                radii.push(&radius * fraction);
+            }
 
-            let phi0 = F::<T>::from_f64(2.) * zero.PI() * &x[2];
-            jac *= F::<T>::from_f64(2.) * zero.PI();
-            let cos_theta0 = -&one + F::<T>::from_f64(2.) * &x[3];
-            jac *= F::<T>::from_f64(2.);
-            let sin_theta0 = (&one - cos_theta0.square()).sqrt();
+            jac *= radius.pow((n_loop_momenta - 1) as u64) * stick_jac;
+            for radius_i in &radii {
+                jac *= radius_i.square();
+            }
 
-            let phi1 = F::<T>::from_f64(2.) * zero.PI() * &x[4];
-            jac *= F::<T>::from_f64(2.) * zero.PI();
-            let cos_theta1 = -&one + F::<T>::from_f64(2.) * &x[5];
-            jac *= F::<T>::from_f64(2.);
-            let sin_theta1 = (&one - cos_theta1.square()).sqrt();
+            let angle_offset = n_loop_momenta;
+            let mut momenta = Vec::with_capacity(n_loop_momenta);
+            for (i, radius_i) in radii.iter().enumerate() {
+                let phi = F::<T>::from_f64(2.) * zero.PI() * &x[angle_offset + 2 * i];
+                jac *= F::<T>::from_f64(2.) * zero.PI();
+                let cos_theta = -&one + F::<T>::from_f64(2.) * &x[angle_offset + 2 * i + 1];
+                jac *= F::<T>::from_f64(2.);
+                let sin_theta = (&one - cos_theta.square()).sqrt();
+                momenta.push([
+                    radius_i * &sin_theta * phi.cos(),
+                    radius_i * &sin_theta * phi.sin(),
+                    radius_i * cos_theta,
+                ]);
+            }
 
-            (
-                vec![
-                    [
-                        &first_radius * &sin_theta0 * phi0.cos(),
-                        &first_radius * &sin_theta0 * phi0.sin(),
-                        &first_radius * &cos_theta0,
-                    ],
-                    [
-                        &second_radius * &sin_theta1 * phi1.cos(),
-                        &second_radius * &sin_theta1 * phi1.sin(),
-                        &second_radius * &cos_theta1,
-                    ],
-                ],
-                jac,
-            )
+            (momenta, jac)
         }
         ParameterizationMode::SphericalProductCommonRadial => {
             if x.len() != 6 {
@@ -4086,17 +4090,11 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
             )
         }
         ParameterizationMode::SphericalCommonRadial => {
-            if moms.len() != 2 {
+            if moms.is_empty() {
                 panic!(
-                    "spherical_common_radial inverse parameterization currently requires exactly two loop three-momenta"
+                    "spherical_common_radial inverse parameterization requires at least one loop three-momentum"
                 );
             }
-
-            let r0_sq = moms[0].px.square() + moms[0].py.square() + moms[0].pz.square();
-            let r1_sq = moms[1].px.square() + moms[1].py.square() + moms[1].pz.square();
-            let r0 = r0_sq.sqrt();
-            let r1 = r1_sq.sqrt();
-            let radius = &r0 + &r1;
 
             let phi_x = |x: &F<T>, y: &F<T>| {
                 if y < &zero {
@@ -4106,21 +4104,22 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
                 }
             };
 
-            let phi0 = phi_x(&moms[0].px, &moms[0].py);
-            let phi1 = phi_x(&moms[1].px, &moms[1].py);
+            let radii_sq = moms
+                .iter()
+                .map(|mom| mom.px.square() + mom.py.square() + mom.pz.square())
+                .collect::<Vec<_>>();
+            let radii = radii_sq
+                .iter()
+                .map(|radius_sq| radius_sq.sqrt())
+                .collect::<Vec<_>>();
+            let radius = radii
+                .iter()
+                .fold(zero.clone(), |acc, radius_i| acc + radius_i);
 
-            if radius.is_zero() || r0.is_zero() || r1.is_zero() {
-                return (
-                    vec![
-                        zero.clone(),
-                        zero.clone(),
-                        phi0,
-                        zero.clone(),
-                        phi1,
-                        zero.clone(),
-                    ],
-                    zero,
-                );
+            let mut xs = Vec::with_capacity(3 * moms.len());
+            if radius.is_zero() || radii.iter().any(F::is_zero) {
+                xs.resize(3 * moms.len(), zero.clone());
+                return (xs, zero);
             }
 
             let mut inv_jac = one.clone();
@@ -4149,23 +4148,32 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
                 }
             };
 
-            inv_jac /= &radius * r0_sq * r1_sq;
-            inv_jac /= F::<T>::from_f64(2.) * zero.PI();
-            inv_jac /= F::<T>::from_f64(2.);
-            inv_jac /= F::<T>::from_f64(2.) * zero.PI();
-            inv_jac /= F::<T>::from_f64(2.);
+            xs.push(radial_x);
+            let mut remaining_fraction = one.clone();
+            let mut stick_jac = one.clone();
+            for (i, radius_i) in radii.iter().enumerate().take(moms.len() - 1) {
+                let fraction = radius_i / &radius;
+                xs.push(&fraction / &remaining_fraction);
+                stick_jac *= &remaining_fraction;
+                remaining_fraction -= fraction;
+                if remaining_fraction.is_zero() && i + 2 < moms.len() {
+                    return (vec![zero.clone(); 3 * moms.len()], zero);
+                }
+            }
 
-            (
-                vec![
-                    radial_x,
-                    &r0 / &radius,
-                    phi0,
-                    F::<T>::from_f64(0.5) * (&one + &moms[0].pz / &r0),
-                    phi1,
-                    F::<T>::from_f64(0.5) * (&one + &moms[1].pz / &r1),
-                ],
-                inv_jac,
-            )
+            inv_jac /= radius.pow((moms.len() - 1) as u64) * stick_jac;
+            for radius_sq in &radii_sq {
+                inv_jac /= radius_sq;
+            }
+
+            for (mom, radius_i) in moms.iter().zip(radii.iter()) {
+                xs.push(phi_x(&mom.px, &mom.py));
+                inv_jac /= F::<T>::from_f64(2.) * zero.PI();
+                xs.push(F::<T>::from_f64(0.5) * (&one + &mom.pz / radius_i));
+                inv_jac /= F::<T>::from_f64(2.);
+            }
+
+            (xs, inv_jac)
         }
         ParameterizationMode::SphericalProductCommonRadial => {
             if moms.len() != 2 {
