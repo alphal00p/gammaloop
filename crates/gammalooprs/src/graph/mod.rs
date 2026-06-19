@@ -108,11 +108,13 @@ impl Graph {
             let external_filter: SuBitGraph = self.external_filter();
             external_filter
                 .included_iter()
+                .sorted()
                 .map(|hedge| self.underlying[&hedge])
                 .collect_vec()
         } else {
             self.initial_state_cut
                 .iter_left_hedges()
+                .sorted()
                 .map(|hedge| self.underlying[&hedge])
                 .collect_vec()
         }

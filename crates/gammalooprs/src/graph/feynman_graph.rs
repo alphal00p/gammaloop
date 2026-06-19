@@ -231,14 +231,10 @@ impl ParamBuilderGraph for Graph {
     }
 
     fn get_external_energy_atoms(&self) -> Vec<Atom> {
-        if self.initial_state_cut.nedges(&self.underlying) == 0 {
-            self.underlying.get_external_energy_atoms()
-        } else {
-            self.external_momentum_edge_order()
-                .into_iter()
-                .map(external_energy_atom_from_index)
-                .collect()
-        }
+        self.external_momentum_edge_order()
+            .into_iter()
+            .map(external_energy_atom_from_index)
+            .collect()
     }
 
     fn get_ose_replacements(&self) -> Vec<Replacement> {
@@ -282,20 +278,16 @@ impl ParamBuilderGraph for Graph {
     }
 
     fn external_spatial_params(&self) -> Vec<Atom> {
-        if self.initial_state_cut.nedges(&self.underlying) == 0 {
-            self.underlying.external_spatial_params()
-        } else {
-            self.external_momentum_edge_order()
-                .into_iter()
-                .flat_map(|edge_id| {
-                    vec![
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
-                    ]
-                })
-                .collect()
-        }
+        self.external_momentum_edge_order()
+            .into_iter()
+            .flat_map(|edge_id| {
+                vec![
+                    GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
+                    GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
+                    GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
+                ]
+            })
+            .collect()
     }
 }
 
@@ -499,6 +491,10 @@ impl FeynmanGraph for Graph {
         let external_filter: SuBitGraph = self.external_filter();
 
         self.iter_edges_of(&external_filter)
+            .sorted_by_key(|(pair, _, _)| match pair {
+                HedgePair::Unpaired { hedge, .. } => *hedge,
+                _ => unreachable!(),
+            })
             .map(|(_, _, edge)| {
                 let c = edge
                     .data
@@ -626,11 +622,19 @@ impl FeynmanGraph for Graph {
     fn external_in_or_out_signature(&self) -> ExternalSignature {
         let external_filter: SuBitGraph = self.external_filter();
 
-        external_filter
-            .included_iter()
-            .map(|hedge| match self.flow(hedge) {
-                Flow::Sink => 1i8,
-                Flow::Source => -1i8,
+        self.iter_edges_of(&external_filter)
+            .sorted_by_key(|(pair, _, _)| match pair {
+                HedgePair::Unpaired { hedge, .. } => *hedge,
+                _ => unreachable!(),
+            })
+            .map(|(pair, _, _)| match pair {
+                HedgePair::Unpaired {
+                    flow: Flow::Sink, ..
+                } => 1i8,
+                HedgePair::Unpaired {
+                    flow: Flow::Source, ..
+                } => -1i8,
+                _ => unreachable!(),
             })
             .collect()
     }
@@ -639,6 +643,10 @@ impl FeynmanGraph for Graph {
         let external_filter: SuBitGraph = self.external_filter();
 
         self.iter_edges_of(&external_filter)
+            .sorted_by_key(|(pair, _, _)| match pair {
+                HedgePair::Unpaired { hedge, .. } => *hedge,
+                _ => unreachable!(),
+            })
             .filter_map(|(_, _, data)| data.data.particle())
             .collect()
     }
@@ -646,10 +654,22 @@ impl FeynmanGraph for Graph {
     fn get_external_signature(&self) -> SignatureLike<ExternalIndex> {
         let externals: SuBitGraph = self.external_filter();
 
-        SignatureLike::from_iter(externals.included_iter().map(|h| match self.flow(h) {
-            Flow::Source => SignOrZero::Minus,
-            Flow::Sink => SignOrZero::Plus,
-        }))
+        SignatureLike::from_iter(
+            self.iter_edges_of(&externals)
+                .sorted_by_key(|(pair, _, _)| match pair {
+                    HedgePair::Unpaired { hedge, .. } => *hedge,
+                    _ => unreachable!(),
+                })
+                .map(|(pair, _, _)| match pair {
+                    HedgePair::Unpaired {
+                        flow: Flow::Source, ..
+                    } => SignOrZero::Minus,
+                    HedgePair::Unpaired {
+                        flow: Flow::Sink, ..
+                    } => SignOrZero::Plus,
+                    _ => unreachable!(),
+                }),
+        )
     }
 
     fn get_energy_atoms(&self) -> Vec<Atom> {
