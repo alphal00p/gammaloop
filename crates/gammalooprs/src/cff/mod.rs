@@ -179,7 +179,12 @@ impl Graph {
 
         let mut terms = BTreeMap::new();
 
-        let replacement_rules = self.surface_cache.get_all_replacements(&[]);
+        let replacement_rules = if cutset.canonicalize_external_shifts {
+            self.surface_cache
+                .get_all_replacements_in_lmb(&[], &self.loop_momentum_basis)
+        } else {
+            self.surface_cache.get_all_replacements(&[])
+        };
 
         for (cut_cff_index, expr) in residues.into_iter() {
             let mut cff_term = CFFTerm {

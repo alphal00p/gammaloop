@@ -9,6 +9,7 @@ use crate::cff::{CutCFFIndex, esurface::RaisedEsurfaceGroup};
 pub struct CutSet {
     pub residue_selector: ResidueSelector,
     pub union: SuBitGraph,
+    pub canonicalize_external_shifts: bool,
 }
 
 impl LogMessage for CutSet {
@@ -81,6 +82,7 @@ impl CutSet {
                 right_th_cut: None,
             },
             union: SuBitGraph::empty(size),
+            canonicalize_external_shifts: false,
         }
     }
 }

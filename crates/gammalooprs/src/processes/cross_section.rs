@@ -1020,6 +1020,7 @@ impl CrossSectionGraph {
                     .map(|cut_id| self.cuts[*cut_id].cut.as_subgraph())
                     .reduce(|cut_1, cut_2| cut_1.union(&cut_2))
                     .unwrap_or_else(|| self.graph.empty_subgraph()),
+                canonicalize_external_shifts: false,
             })
             .collect();
 
@@ -1876,6 +1877,7 @@ impl CrossSectionGraph {
                         right_th_cut: None,
                     },
                     union: esurface_cut_union,
+                    canonicalize_external_shifts: false,
                 });
             }
 
@@ -1892,6 +1894,7 @@ impl CrossSectionGraph {
                         right_th_cut: Some(raised_esurface_group.clone()),
                     },
                     union: esurface_cut_union,
+                    canonicalize_external_shifts: false,
                 });
             }
 
@@ -1914,6 +1917,7 @@ impl CrossSectionGraph {
                         right_th_cut: Some(right_raised_esurface_group.clone()),
                     },
                     union: esurface_cut_union,
+                    canonicalize_external_shifts: false,
                 });
             }
         }

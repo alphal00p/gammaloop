@@ -1261,6 +1261,7 @@ impl AmplitudeGraph {
                     right_th_cut: None,
                 },
                 union: cut_union,
+                canonicalize_external_shifts: true,
             };
 
             cuts.push(cutset);
@@ -1574,7 +1575,7 @@ pub(crate) fn threshold_counterterm_helper_atom(order: u8, loop_number: usize) -
     let local_prefactor = &jacobian_ratio / &factors_of_pi
         * (uv_damp_plus / &delta_r_plus + uv_damp_minus / &delta_r_minus);
 
-    let integrated_prefactor = i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / &factors_of_pi;
+    let integrated_prefactor = -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / &factors_of_pi;
 
     let mut result = (local_prefactor + integrated_prefactor) * laurent_coeffs.next().unwrap();
 

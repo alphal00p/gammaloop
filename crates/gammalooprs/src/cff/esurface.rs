@@ -25,10 +25,10 @@ use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 use crate::{GammaLoopContext, define_index};
 
 use crate::integrands::process::GenericEvaluator;
-use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
 };
+use crate::momentum::{SignOrZero, ThreeMomentum};
 use crate::processes::CrossSectionCut;
 use crate::utils::hyperdual_utils::new_constant;
 use crate::utils::{
@@ -78,6 +78,32 @@ impl Esurface {
         })
     }
     pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
+        self.to_atom_impl(cut_edges, |edge| external_energy_atom_from_index(edge))
+    }
+
+    pub(crate) fn to_atom_in_lmb(&self, cut_edges: &[EdgeIndex], lmb: &LoopMomentumBasis) -> Atom {
+        self.to_atom_impl(cut_edges, |edge| {
+            lmb.edge_signatures[edge].external.iter_enumerated().fold(
+                Atom::Zero,
+                |sum, (external_index, sign)| {
+                    let atom = external_energy_atom_from_index(EdgeIndex::from(usize::from(
+                        external_index,
+                    )));
+                    match sign {
+                        SignOrZero::Zero => sum,
+                        SignOrZero::Plus => sum + atom,
+                        SignOrZero::Minus => sum - atom,
+                    }
+                },
+            )
+        })
+    }
+
+    fn to_atom_impl(
+        &self,
+        cut_edges: &[EdgeIndex],
+        external_shift_atom: impl Fn(EdgeIndex) -> Atom,
+    ) -> Atom {
         let symbolic_energies = self
             .energies
             .iter()
@@ -94,7 +120,7 @@ impl Esurface {
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                external_energy_atom_from_index(*i) * &Atom::num(*sign) + &sum
+                external_shift_atom(*i) * &Atom::num(*sign) + &sum
             });
 
         let builder_atom = Atom::new();
@@ -1016,14 +1042,17 @@ mod tests {
     use linnet::half_edge::builder::HedgeGraphBuilder;
     use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
     use linnet::half_edge::nodestore::NodeStorageVec;
+    use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
 
     use crate::cff::cff_graph::VertexSet;
+    use crate::graph::LoopMomentumBasis;
+    use crate::momentum::signature::LoopExtSignature;
     use crate::processes::CrossSectionCut;
     use crate::{
         cff::{esurface::Esurface, generation::ShiftRewrite},
-        utils::{F, test_utils::dummy_hedge_graph},
+        utils::{F, external_energy_atom_from_index, test_utils::dummy_hedge_graph},
     };
 
     use super::add_external_shifts;
@@ -1073,6 +1102,35 @@ mod tests {
             vertex_set: VertexSet::dummy(),
             //subspace_graph: dummy_graph.full_graph(),
         };
+    }
+
+    #[test]
+    fn to_atom_in_lmb_uses_external_slots_not_carrier_edges() {
+        let dummy_graph = dummy_hedge_graph(7);
+        let mut edge_signatures = dummy_graph
+            .new_edgevec_from_iter(
+                (0..7).map(|_| LoopExtSignature::from((Vec::<isize>::new(), vec![0]))),
+            )
+            .unwrap();
+        edge_signatures[EdgeIndex::from(6)] =
+            LoopExtSignature::from((Vec::<isize>::new(), vec![1]));
+        let lmb = LoopMomentumBasis {
+            tree: SuBitGraph::empty(0),
+            loop_edges: vec![].into(),
+            ext_edges: vec![EdgeIndex::from(6)].into(),
+            edge_signatures,
+        };
+        let esurface = Esurface {
+            energies: vec![],
+            external_shift: vec![(EdgeIndex::from(6), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+
+        let atom = esurface.to_atom_in_lmb(&[], &lmb).expand();
+        let expected =
+            (Atom::num(-1) * external_energy_atom_from_index(EdgeIndex::from(0))).expand();
+
+        assert_eq!(atom.to_canonical_string(), expected.to_canonical_string());
     }
 
     #[test]

@@ -806,15 +806,18 @@ applied to an object whose external-shift mapping is not synchronized with the
 raw CT pass-on evaluator.
 ```
 
-Current-code fix applied in this workspace:
+Superseded implementation hypothesis from the earlier trace:
 
 ```text
-Loop-momentum bases are now canonicalized so that external slots are ordered by
-the external half-edge ids. This keeps the numerical external momenta aligned
-between DOT parsing, diagram generation, threshold-existence checks, and local
-threshold CT evaluation.
+The first proposed fix was to canonicalize all generated loop-momentum bases so
+external slots were ordered by external half-edge ids.
 
-Touched areas:
+This was not the final fix retained in this workspace. The actual source of the
+bad shifted symbolic surfaces was narrower: the symbolic CFF surface atoms
+generated in an LMB were using external carrier edge ids instead of user
+external slots.
+
+Superseded touched-area list from that hypothesis:
   crates/gammalooprs/src/graph/lmb.rs
   crates/gammalooprs/src/graph/mod.rs
   crates/gammalooprs/src/graph/feynman_graph.rs
@@ -823,21 +826,58 @@ Touched areas:
   crates/gammalooprs/src/processes/cross_section.rs
 ```
 
-Validation after the LMB external-order fix:
+Current-code fix applied in this workspace:
 
 ```text
-cargo fmt --check: passed
+E- and H-surface `to_atom_in_lmb` now translate external shifts through the
+LMB edge signature into compact external slots Q0, Q1, ... rather than through
+`lmb.ext_edges[external_index]`. This keeps the symbolic pass-one CFF
+denominators aligned with the numerical external momenta supplied by the user.
+
+Amplitude threshold CT generation must use the original/non-generated-basis
+residue selector for this target:
+
+  threshold_residue_in_generated_basis = false
+
+The generated-basis selector was useful as a diagnostic, but in the current
+code path it produces larger raw pass-one residues at the engineered root.
+
+Touched areas for the retained fix:
+  crates/gammalooprs/src/cff/esurface.rs
+  crates/gammalooprs/src/cff/generation.rs
+  crates/gammalooprs/src/cff/hsurface.rs
+  crates/gammalooprs/src/cff/mod.rs
+  crates/gammalooprs/src/cff/surface.rs
+  crates/gammalooprs/src/integrands/process/amplitude/mod.rs
+  crates/gammalooprs/src/processes/amplitude.rs
+  crates/gammalooprs/src/subtraction/overlap.rs
+```
+
+Validation after the LMB external-order/local-existence fix:
+
+```text
+All commands below were run through
+  python3 run_with_memory_watch.py --limit-gb 30 -- ...
+
+cargo fmt --check: passed, peak RSS 0.10 GiB
 git diff --check: passed
-cargo test --no-run --profile dev-optim -p gammalooprs: passed
-just build-cli: passed
+cargo check -p gammalooprs: passed, peak RSS 1.18 GiB
+cargo test -p gammalooprs to_atom_in_lmb_uses_external_slots_not_carrier_edges -- --nocapture:
+  passed, 2 tests, peak RSS 5.59 GiB
+just build-cli:
+  passed, peak RSS 7.35 GiB
+just build-api-wheel plus .venv reinstall:
+  passed, peak RSS 7.59 GiB
+qq_hhh_2L SingleParametric scratch regeneration in state_watchdog_probe:
+  passed, peak RSS 0.82 GiB
 
 just test_gammaloop --no-fail-fast:
-  still blocked before running tests by the pre-existing spenso dead-code
-  warning under -Dwarnings.
-
-just test_gammaloop --no-warnings-as-errors --no-fail-fast:
-  same baseline result before and after the fix:
-  1331 tests run, 1279 passed, 52 failed, 129 skipped.
+  launched under the watchdog and reached test 1339/1339, but stop.order
+  interrupted the last UV test and the harness exited with code 130. The
+  partial run showed broad unrelated failures, including generated example
+  card discovery under qq_hhh workspaces, missing large-spenso fixture files,
+  UV/integration tolerance failures, and one symjit assertion. Treat this as
+  an incomplete baseline audit, not a clean regression signal for this fix.
 ```
 
 Focused old-cluster max-point checks after the fix:
@@ -1178,7 +1218,7 @@ present threshold CTs:
 
 ```text
 GL05_isr_p2_ct threshold_counterterm:4:0   edges [9,12,15]
-GL05_isr_p1_ct threshold_counterterm:34:0  edges [15,16]
+GL05_isr_p1_ct threshold_counterterm:34:0  edges [9,10,15]
 GL05           threshold_counterterm:31:0  edges [9,10,15]
 GL05           threshold_counterterm:5:0   edges [9,12,16]
 ```
@@ -1189,3 +1229,595 @@ absolute value around the feature, while the dominant CT sum ranges from order
 one on the saved scan to order `1e4` very close to the root. Thus this specific
 drop is not an existence-condition switch; it is a smooth near-pole crossing
 where several CT contributions add with the same phase instead of cancelling.
+
+### T4/T34 dual-cancellation deep dive
+
+The engineered intersection probe for the graph-0 group uses:
+
+```text
+x_root = [0.5387589249438893, 0.24174091659991892,
+          0.9441181235200773, 0.7527842995682404,
+          0.5585112730395129, 0.25621170988207465]
+graph group = 0
+LMB channel = 9
+```
+
+At this point, the two dangerous E-surfaces have the same local radial
+projection:
+
+```text
+GL05_isr_p2_ct threshold_counterterm:4:0
+  group E-surface = 196
+  local raised/local E-surface = 4/4
+  edges = [9,12,16]
+  r = 1061.8603586938355
+  rstar = 1061.8603586937081
+  r - rstar = 1.2733e-10
+  deta/dr = +2.3502742820730385
+
+GL05_isr_p1_ct threshold_counterterm:34:0
+  group E-surface = 192
+  local raised/local E-surface = 34/34
+  edges = [9,10,15]
+  r = 1061.8603586938355
+  rstar = 1061.8603586937081
+  r - rstar = 1.2733e-10
+  deta/dr = +2.3502742820730385
+```
+
+The raw pass-one residues at the same point have the same phase:
+
+```text
+GL05_isr_p2_ct T4  raw ~= -1.2920e-3 + 3.2616e-3 i
+GL05_isr_p1_ct T34 raw ~= -1.1832e-3 + 2.9237e-3 i
+```
+
+Consequently the local helper multiplies both by the same near-pole
+`1 / (r - rstar)` structure and the two threshold CTs add instead of
+dual-cancelling.
+
+The relevant E-surface equations at the engineered point are:
+
+```text
+T4  / group 196 / GL05_isr_p2_ct:
+  -Q5 - Q6 + OSE12 + OSE16 + OSE9 + Q0 + Q1 + Q3 = 0
+
+T34 / group 192 / GL05_isr_p1_ct:
+  -Q4 - Q7 + OSE10 + OSE15 + OSE9 + Q0 + Q1 + Q2 = 0
+```
+
+The overlap machinery sees both group E-surfaces, but the actual CT evaluation
+maps a group E-surface through the current graph position:
+
+```text
+GL05_isr_p2_ct:
+  group 196 -> local 4, present and on shell
+  group 192 -> absent in current graph
+
+GL05_isr_p1_ct:
+  group 192 -> local 34, present and on shell
+  group 196 -> absent in current graph
+```
+
+There are same-edge-pattern local surfaces in the opposite graphs, but they are
+not the dangerous partner at the intersection:
+
+```text
+GL05_isr_p2_ct group 97,  edges [9,10,15], eta(rstar) ~= -2.0316e3
+GL05_isr_p1_ct group 95,  edges [9,12,16], eta(rstar) ~= -2.0316e3
+```
+
+The code path responsible for this is:
+
+```text
+AmplitudeGraph::preprocess
+  -> build_threshold_counterterm_parametric_integrand
+     builds threshold CT atoms from one graph's CFF expression only
+
+AmplitudeCountertermData::evaluate
+  -> OverlapBuilder::new_esurface_builder
+     skips group E-surfaces absent in the current graph position
+
+AmplitudeGraphTerm::evaluate_impl
+  evaluates original graph - graph-local threshold CTs
+
+generic evaluate_graph_group
+  sums the already-subtracted graph terms
+```
+
+This is why a local sign flip is not the right fix. In the toy cancellation,
+the relative minus comes from evaluating the other denominator in the selected
+residue:
+
+```text
+R_A ~ N(r*) / (g_B (r_A* - r_B*))
+R_B ~ N(r*) / (g_A (r_B* - r_A*))
+```
+
+The current graph-local CFF branch selection never produces the opposite
+graph's denominator in the pass-one residue, so the source of that relative
+sign is absent before the helper is evaluated.
+
+The robust fix should move amplitude threshold-subtraction generation to a
+graph-group object, or otherwise construct a group-level rational residue in
+group E-surface variables before compiling the pass-one CT evaluators. Merely
+delaying subtraction until after `evaluate_graph_group` is not sufficient,
+because `(G1 - CT1) + (G2 - CT2)` is algebraically identical to
+`(G1 + G2) - (CT1 + CT2)` if the CTs themselves remain graph-local.
+
+The raw selected pass-one CFF factors confirm this diagnosis. Extracting the
+linear inverse factors from the selected residues gives, for
+`GL05_isr_p1_ct`/T34, factors such as:
+
+```text
+-Q4 - Q6 - Q7 + OSE15 + OSE16 + Q0 + Q1 + Q2
+-Q4 - Q7 + OSE11 + OSE15 + Q0 + Q1 + Q2
+-Q4 + OSE10 + OSE12
+-Q4 + OSE10 + OSE13 + OSE9 + Q0 + Q1 + Q2
+-Q7 + OSE12 + OSE15 + OSE9 + Q0 + Q1 + Q2
+-Q7 + OSE13 + OSE15
+-Q7 + OSE14 + OSE15 + OSE9 + Q1
+```
+
+and, for `GL05_isr_p2_ct`/T4:
+
+```text
+-Q5 - Q6 - Q7 + OSE15 + OSE16 + Q0 + Q1 + Q3
+-Q5 - Q6 + OSE13 + OSE16 + Q0 + Q1 + Q3
+-Q5 + OSE10 + OSE12
+-Q5 + OSE11 + OSE12 + OSE9 + Q0 + Q1 + Q3
+-Q6 + OSE10 + OSE16 + OSE9 + Q0 + Q1 + Q3
+-Q6 + OSE11 + OSE16
+-Q6 + OSE14 + OSE16 + OSE9 + Q0
+```
+
+The selected T34 residue no longer contains a T34 inverse factor by
+construction, but it also contains no T4-like factor
+
+```text
+-Q5 - Q6 + OSE12 + OSE16 + OSE9 + Q0 + Q1 + Q3
+```
+
+Likewise, the selected T4 residue contains no T34-like factor
+
+```text
+-Q4 - Q7 + OSE10 + OSE15 + OSE9 + Q0 + Q1 + Q2
+```
+
+Thus the toy-model relative sign
+
+```text
+1 / (r_A* - r_B*)  versus  1 / (r_B* - r_A*)
+```
+
+cannot arise in the current selected residues. The overlap/rstar solver knows
+both group E-surfaces exist and uses the same center, but the compiled
+pass-one numerator for each graph has already been formed from a graph-local
+CFF expression in which the other group surface is absent.
+
+Additional implementation checks:
+
+- `AmplitudeCountertermData::evaluate` applies each selected E-surface CT
+  independently and sums the results. The final graph term uses
+  `original - sum_of_cts`, so the final sign is common to all local threshold
+  CTs and cannot generate the missing relative sign.
+- The amplitude overlap prefactor is not the culprit. It is built from the
+  complement of each overlap group and only partitions different overlap
+  groups. For the dangerous point all relevant surfaces are in the same
+  overlap group, and the raw dumps show the prefactor is `1` for the suspect
+  CTs.
+- The cross-section LU threshold path has the missing structural ingredient:
+  it explicitly generates left, right, and left/right cartesian-product
+  threshold residues, then combines them with inclusion-exclusion in
+  `LUCounterTerm::evaluate`. The amplitude threshold path has no analogous
+  same-overlap or graph-group iterated threshold residue.
+
+Consequently, the next real fix should not be another local sign flip in
+`threshold_counterterm_helper_atom`. The required change is architectural:
+amplitude threshold subtraction needs a grouped/overlap-aware pass-one
+construction that can form the residue of the graph-group object in common
+group E-surface variables, or an equivalent same-overlap inclusion-exclusion
+term, before the local radial helper is applied.
+
+### Current status after external-slot fix and retained selector
+
+Fresh validation was run on 2026-06-19 after rebuilding the CLI, cleaning the
+state, and regenerating `qq_hhh_2L` with the non-compiled SingleParametric
+generation block:
+
+```text
+./run_with_memory_watch.py --limit-gb 30 --interval 2 -- just build-cli
+./run_with_memory_watch.py --limit-gb 30 --interval 2 -- \
+  ./target/dev-optim/gammaloop --clean-state examples/cli/qq_hhh_2L/qq_hhh_2L.toml quit
+./run_with_memory_watch.py --limit-gb 30 --interval 2 -- \
+  ./target/dev-optim/gammaloop -o -s ./examples/cli/qq_hhh_2L/state \
+  run generate_diagrams generate_integrands_single_parametric
+```
+
+The retained source-level settings/fixes are:
+
+```text
+crates/gammalooprs/src/cff/esurface.rs:
+  Esurface::to_atom_in_lmb uses external slot ids from the LMB edge signature.
+
+crates/gammalooprs/src/cff/hsurface.rs:
+  Hsurface::to_atom_in_lmb uses the same external slot convention.
+
+crates/gammalooprs/src/processes/amplitude.rs:
+  amplitude threshold CT generation sets
+  threshold_residue_in_generated_basis = false.
+```
+
+The focused regression tests and package check passed:
+
+```text
+./run_with_memory_watch.py --limit-gb 30 --interval 2 -- \
+  cargo test -p gammalooprs to_atom_in_lmb_uses_external_slots_not_carrier_edges
+  -> 2 passed
+
+./run_with_memory_watch.py --limit-gb 30 --interval 2 -- cargo check -p gammalooprs
+  -> passed
+```
+
+The engineered root probe was rerun with:
+
+```text
+x_root = [0.5387589249438893, 0.24174091659991892,
+          0.9441181235200773, 0.7527842995682404,
+          0.5585112730395129, 0.25621170988207465]
+graph group = 0
+LMB channel = 9
+```
+
+Fresh raw pass-one threshold CT residues at this root are now small and finite:
+
+```text
+GL05 T5:
+  raw_result = +7.22605196011759e-7 + 2.12240111969347e-6 i
+
+GL05 T31:
+  raw_result = -2.57103769264393e-7 + 2.59605085238467e-6 i
+
+GL05_isr_p2_ct T4:
+  raw_result = +8.72856100696575e-8 - 4.72733492950589e-6 i
+
+GL05_isr_p1_ct T34:
+  raw_result = +1.33108172701426e-6 - 5.46209673633603e-6 i
+```
+
+This is the important comparison against the diagnostic generated-basis
+selector:
+
+```text
+Using threshold_residue_in_generated_basis = true at the same engineered root:
+  GL05 T5          ~= -2.41e-4 + 6.85e-4 i
+  GL05 T31         ~= -3.07e-4 + 7.30e-4 i
+  GL05_isr_p2 T4   ~= -2.64e-4 + 4.48e-3 i
+  GL05_isr_p1 T34  ~= -1.10e-5 + 3.76e-3 i
+
+So the generated-basis selector reintroduces inflated pass-one residues and
+should not be used for this debugging target.
+```
+
+Latest watchdog probe at the same engineered root after rebuilding both CLI and
+Python API:
+
+```text
+state:
+  examples/cli/qq_hhh_2L/state_watchdog_probe
+command block:
+  inspect_threshold_overlap_root
+
+CLI inspect:
+  integrand_result          = -4.2848606320878566e-16 +1.0478274563803044e-15 i
+  parameterization_jacobian = +5.4229032752001450e19
+  integrator_weight         = +1.0
+  threshold_counterterm:10:0 = -1.7514504877544214e-16 +7.4837130458710868e-17 i
+  threshold_counterterm:33:0 = -2.7407962379201643e-16 -2.1202011538495107e-17 i
+
+Python API evaluate_sample with the same state, runtime settings, and
+discrete_dim=[0,9]:
+  integrand_result          = -4.2848606320878566e-16 +1.0478274563803044e-15 i
+  parameterization_jacobian = +5.422903275200145e19
+  threshold_counterterm:10:0 abs = 1.904636033625483e-16
+  threshold_counterterm:33:0 abs = 2.7489846393032416e-16
+
+This confirms that the CLI and Python API are using the same fixed threshold
+counterterm code path.
+```
+
+Scoped replacement validation after the UV regression check:
+
+```text
+The LMB external-slot replacement is now scoped to amplitude threshold CT
+cutsets only:
+
+  CutSet::canonicalize_external_shifts = true
+    only in AmplitudeGraph::build_threshold_counterterm_parametric_integrand
+
+  CutSet::canonicalize_external_shifts = false
+    for ordinary UV/CFF and cross-section cutsets
+
+Reason:
+  globally replacing every CFF surface in LMB-slot convention leaked
+  Q(0,cind(0)) into UV/local evaluator expressions whose parameter maps still
+  use the edge-indexed external-energy symbols Q(4,cind(0)), Q(5,cind(0)), ...
+
+Validation:
+  cargo nextest run -p gammalooprs --cargo-profile dev-optim \
+    -P test_gammaloop --run-ignored all \
+    -E 'test(uv::tests::scalars_profile)' --no-fail-fast
+    -> 2 tests run, 2 passed
+
+  cargo test -p gammalooprs to_atom_in_lmb_uses_external_slots_not_carrier_edges
+    -> 2 passed
+
+  cargo check -p gammalooprs
+    -> passed
+```
+
+Fresh root probe after rebuilding both CLI and Python API and regenerating
+`examples/cli/qq_hhh_2L/state_clean_probe` with SingleParametric output:
+
+```text
+inspect_threshold_overlap_root:
+  integrand_result          = -4.2848606419508805e-16 +1.0478274571169974e-15 i
+  parameterization_jacobian = +5.4229032752001450e19
+  integrator_weight         = +1.0
+  generated events          = 6
+  accepted events           = 6
+  arb stability             = Stable(2 samples), rel. accuracy 7.5290827595602410e-26
+
+  threshold_counterterm:10:0 =
+    -1.7514504877544214e-16 +7.4837130458710868e-17 i
+  threshold_counterterm:33:0 =
+    -2.7407962379201643e-16 -2.1202011538495107e-17 i
+```
+
+Fresh 4096-point imaginary smoke integration after the scoped replacement:
+
+```text
+command block:
+  integrate_debug_imag_4096
+
+state:
+  examples/cli/qq_hhh_2L/state_clean_probe
+
+result:
+  All re = -3.2(9.1)e-3   285%
+  All im = -1.19(85)e-2   70.9%
+
+global max weights:
+  re[+] = +2.1768988663429763e1
+    graph 0, LMB channel 11,
+    x = [0.23844051619928841, 0.41480916417720726,
+         0.84657084021138962, 0.33683279500664520,
+         0.51358515737196997, 0.078273790141412225]
+
+  re[-] = -1.3851544772165392e1
+    graph 0, LMB channel 5,
+    x = [0.19383529716105175, 0.31833693697749332,
+         0.23544541436522859, 0.45637354424474219,
+         0.53736706089196995, 0.44996245133302959]
+
+  im[+] = +1.2478804222096382e1
+    graph 1, LMB channel 11,
+    x = [0.71906345171460317, 0.26040351173928078,
+         0.80739917696325181, 0.93515792609772008,
+         0.57309382535847941, 0.76652808410758222]
+
+  im[-] = -1.5177455697466318e1
+    graph 1, LMB channel 1,
+    x = [0.61777759691350409, 0.30698347744194177,
+         0.89614285895604617, 0.44171512552571912,
+         0.47700201088427285, 0.18926861664962313]
+
+statistics:
+  f64             = 100.00%
+  f128            = 0.00%
+  arb             = 0.00%
+  nans+unstable   = 0.00%
+  peak RSS        = 2.91 GiB under run_with_memory_watch.py --limit-gb 30
+```
+
+Fresh fixed-bin event decomposition at the low-stat imaginary max points:
+
+```text
+global_im_plus_4096:
+  weighted_abs = 3.76020481e-1, nan = false
+  dominant event = GL12_isr_p2_ct, |event| = 3.76167550e-1
+  largest CT = threshold_counterterm:48:0,
+    -2.299715e-1 +2.968640e-1 i, |.| = 3.75519770e-1
+
+global_im_minus_4096:
+  weighted_abs = 4.44734039e-1, nan = false
+  dominant event = GL12_isr_p2_ct, |event| = 4.43617356e-1
+  largest CT = threshold_counterterm:45:0 edges [9,13,16],
+    -2.761941e-1 -3.750059e-1 i, |.| = 4.65738722e-1
+
+group0_im_plus_4096:
+  weighted_abs = 1.80475169e-1, nan = false
+  dominant event = GL06, |event| = 1.76244869e-1
+  largest CT = threshold_counterterm:16:0 edges [9,11,12],
+    -8.205254e-2 +8.723207e-2 i, |.| = 1.19758313e-1
+
+group0_im_minus_4096:
+  weighted_abs = 3.18161921e-2, nan = false
+  dominant event = GL06_isr_p1_ct, |event| = 1.29901248e-1
+  largest CT = threshold_counterterm:17:0 edges [9,13,14],
+    +9.341700e-2 +8.139351e-2 i, |.| = 1.23901730e-1
+
+Conclusion:
+  these fixed-bin probes do not show the previous runaway missed-dual-
+  cancellation pattern. The individual CT pieces are O(1), finite, and in the
+  same scale as the corresponding event weights.
+```
+
+Graph-by-graph dual-cancellation conclusion:
+
+```text
+The original GL05 graph-local dangerous pair is fixed:
+
+  T5  group 140, edges [9,12,16]
+  T31 group 143, edges [9,10,15]
+
+At the engineered root both are present in GL05 and have the same rstar and
+deta/dr, so the graph-local residue construction has the required ingredients
+for the usual dual-cancellation mechanism.
+
+The ISR T4/T34 pair is different:
+
+  GL05_isr_p2_ct T4   group 196, edges [9,12,16]
+  GL05_isr_p1_ct T34  group 192, edges [9,10,15]
+
+At the same root:
+  group 196 is present in GL05_isr_p2_ct and absent in GL05_isr_p1_ct.
+  group 192 is present in GL05_isr_p1_ct and absent in GL05_isr_p2_ct.
+
+The common graph-group overlap center is therefore doing what it can, but the
+usual toy-model sign flip from evaluating the "other" denominator in the same
+selected graph residue cannot occur across these two ISR graph terms. Any
+remaining large finite weights from this structure should be studied as a
+graph-group threshold-subtraction issue, not as a missing graph-local
+dual-cancellation partner inside GL05 itself.
+```
+
+### Graph-local overlap localization update
+
+A later code pass made the overlap treatment match the latest diagnosis more
+closely:
+
+```text
+Common graph-group behavior retained:
+  - group-level E-surface existence is true if any graph-local incarnation
+    exists;
+  - center solving still uses all locally existing incarnations in the group;
+  - this keeps one common center across the graph group, which is required for
+    comparable radial variables.
+
+Graph-local behavior added:
+  - each graph term records local_esurface_exists[group_esurface_id];
+  - threshold CT evaluation skips group surfaces that do not exist in that
+    graph term;
+  - the group overlap structure is localized before building that graph term's
+    overlap prefactor evaluators;
+  - complements are recomputed after localization, so graph-local
+    dual-cancellation patterns are no longer polluted by surfaces that exist
+    only in sibling graph terms.
+```
+
+Relevant source locations:
+
+```text
+crates/gammalooprs/src/integrands/process/amplitude/mod.rs
+  get_existing_esurfaces now populates per-graph local_esurface_exists.
+  overlap.localized_to_existing_surfaces(...) is applied before assigning the
+  threshold_counterterm.overlap for each graph term.
+
+crates/gammalooprs/src/subtraction/overlap.rs
+  OverlapInput includes local_esurface_exists.
+  center checks require every locally existing incarnation of a group surface
+  to be inside the shared center.
+  OverlapStructure::localized_to_existing_surfaces remaps the common group
+  overlap to the graph-local existing-surface set and recomputes complements.
+
+crates/gammalooprs/src/subtraction/amplitude_counterterm.rs
+  evaluate skips selected E-surfaces whose group surface does not exist in the
+  current graph term.
+```
+
+Focused validation after this localization:
+
+```text
+cargo fmt --check
+  -> passed
+
+./run_with_memory_watch.py --limit-gb 30 --interval 2 -- cargo check -p gammalooprs
+  -> passed, peak RSS ~= 0.98 GiB
+
+./run_with_memory_watch.py --limit-gb 30 --interval 2 -- \
+  cargo test -p gammalooprs overlap_structure_localizes_to_graph_existing_surfaces
+  -> passed
+
+./run_with_memory_watch.py --limit-gb 30 --interval 2 -- \
+  cargo test -p gammalooprs to_atom_in_lmb_uses_external_slots_not_carrier_edges
+  -> 2 passed
+
+./run_with_memory_watch.py --limit-gb 30 --interval 2 -- just build-cli
+  -> passed
+```
+
+The engineered root was reprobed after cleaning the state and regenerating with
+the non-compiled SingleParametric block. For the selected dangerous surfaces:
+
+```text
+x_root = [0.5387589249438893, 0.24174091659991892,
+          0.9441181235200773, 0.7527842995682404,
+          0.5585112730395129, 0.25621170988207465]
+graph group = 0
+LMB channel = 9
+
+GL05 T5:
+  raw_result ~= +7.23e-7 +2.12e-6 i
+  prefactor  = 1
+
+GL05 T31:
+  raw_result ~= -2.57e-7 +2.60e-6 i
+  prefactor  = 1
+
+GL05_isr_p2_ct T4:
+  raw_result ~= +8.73e-8 -4.73e-6 i
+  prefactor  = 1
+
+GL05_isr_p1_ct T34:
+  raw_result ~= +1.33e-6 -5.46e-6 i
+  prefactor  = 1
+```
+
+The same probe reports a common radial geometry for the T5/T31/T4/T34 root
+structures:
+
+```text
+radius      ~= 1.0618603586916703e3
+radius_star ~= 1.0618603586915431e3
+deta/dr     ~= 2.3502742820729676
+```
+
+The center dumps also confirm that localization is active while the center is
+shared:
+
+```text
+GL05 selected surfaces:
+  localized overlap_group_size = 15
+
+GL05_isr_p2_ct selected surfaces:
+  localized overlap_group_size = 14
+
+GL05_isr_p1_ct selected surfaces:
+  localized overlap_group_size = 14
+```
+
+A short post-localization SingleParametric t=4 sanity integration with
+`sliver_width=30`, threshold `h_sigma=1`, `gaussian_width=1`, and 4096 points
+was finite:
+
+```text
+re = +1.296154082749754e-2 +/- 2.1563212648705775e-2
+im = -5.585394162946225e-3 +/- 1.1526410120066537e-2
+
+max_re_plus  = +8.016765903727686e1
+max_re_minus = -3.372170192412362e1
+max_im_plus  = +1.7304666135846336e1
+max_im_minus = -4.238957848210082e1
+
+f128 = 0.0244%, arb = 0.0244%, nans+unstable = 0%
+```
+
+This is not a precision run, but it is a useful regression signal: after
+graph-local overlap localization, the quick scan does not reproduce the old
+catastrophic threshold CT spikes or NaNs. A production compiled/SummedFunctionMap
+state should still be regenerated cleanly before a serious run; one compiled
+generation attempt in this debugging session was interrupted while compiling,
+so do not treat the current `state` directory as a confirmed fresh production
+artifact unless `run generate_diagrams generate_integrands` has completed
+normally in the same checkout.

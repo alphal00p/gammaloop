@@ -127,6 +127,14 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "inspect_threshold_overlap_root"
+commands = [
+    "run runtime_single_parametric sampling_lmb_mc",
+    "set process -p qq_hhh_2L -i subtracted kv general.generate_events=true general.store_additional_weights_in_event=true general.enable_cache=false integrator.integrated_phase=\"imag\"",
+    "inspect -p qq_hhh_2L -i subtracted --discrete-dim 0 9 -f -x 0.5387589249438893 0.24174091659991892 0.9441181235200773 0.7527842995682404 0.5585112730395129 0.25621170988207465"
+]
+
+[[command_blocks]]
 name = "runtime_common"
 commands = [
     "set process -p qq_hhh_2L -i subtracted defaults",
@@ -369,6 +377,26 @@ commands = [
     "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=128 integrator.n_increase=0 integrator.n_max=128 integrator.seed=1337 integrator.integrated_phase=\"real\" integrator.target_relative_accuracy=1.0e-2",
     """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 32
         --workspace-path ./examples/cli/qq_hhh_2L/workspaces/integrate_smoke
+        --renderer tabled
+        --show-phase both
+        --show-max-weight-info
+        --show-max-weight-info-for-discrete-bins
+        --show-top-discrete-grid
+        --show-discrete-contributions-sum
+        --write-results-for-each-iteration
+        --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_debug_imag_4096"
+commands = [
+    "run runtime_single_parametric",
+    "run sampling_lmb_mc",
+    "set process -p qq_hhh_2L -i subtracted kv general.generate_events=false general.store_additional_weights_in_event=false",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=4096 integrator.n_increase=0 integrator.n_max=4096 integrator.seed=280619 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-1",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 256
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/integrate_debug_imag_4096
         --renderer tabled
         --show-phase both
         --show-max-weight-info

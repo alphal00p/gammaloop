@@ -7,7 +7,7 @@ use crate::{
         surface::{HybridSurface, HybridSurfaceID, InfiniteSurface},
         tree::Tree,
     },
-    graph::{Graph, get_cff_inverse_energy_product_impl},
+    graph::{Graph, LoopMomentumBasis, get_cff_inverse_energy_product_impl},
     processes::{CrossSectionCut, CutId},
     settings::global::OrientationPattern,
 };
@@ -755,6 +755,20 @@ impl SurfaceCache {
             .map(|(id, surface)| {
                 let id_atom = Pattern::from(Atom::from(id));
                 let surface_atom = Pattern::from(surface.to_atom(cut_edges));
+                Replacement::new(id_atom, surface_atom)
+            })
+            .collect()
+    }
+
+    pub(crate) fn get_all_replacements_in_lmb(
+        &self,
+        cut_edges: &[EdgeIndex],
+        lmb: &LoopMomentumBasis,
+    ) -> Vec<Replacement> {
+        self.iter_all_surfaces()
+            .map(|(id, surface)| {
+                let id_atom = Pattern::from(Atom::from(id));
+                let surface_atom = Pattern::from(surface.to_atom_in_lmb(cut_edges, lmb));
                 Replacement::new(id_atom, surface_atom)
             })
             .collect()
