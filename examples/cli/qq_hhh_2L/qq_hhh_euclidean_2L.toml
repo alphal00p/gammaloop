@@ -34,6 +34,9 @@ store_additional_weights_in_event = false
 disable_flux_factor = false
 integral_unit = "none"
 
+[default_runtime_settings.kinematics]
+e_cm = 1000.0
+
 [default_runtime_settings.kinematics.externals]
 type = "constant"
 
@@ -132,6 +135,9 @@ commands = [
     "set model ymt=750.0",
     "set process -p qq_hhh_2L -i subtracted kv subtraction.disable_threshold_subtraction=false",
     """set process -p qq_hhh_2L -i subtracted string '
+[kinematics]
+e_cm = 1000.0
+
 [kinematics.externals]
 type = "constant"
 [kinematics.externals.data]
