@@ -21,6 +21,9 @@ commands = []
 folder = "./examples/cli/qq_hhh_2L/state"
 name = "qq_hhh_2L"
 
+[default_runtime_settings.kinematics]
+e_cm = 1000.0
+
 [[command_blocks]]
 name = "generation_settings"
 commands = [
@@ -69,6 +72,9 @@ commands = [
     "set process -p qq_hhh_2L -i subtracted defaults",
     "set process -p qq_hhh_2L -i subtracted kv subtraction.disable_threshold_subtraction=false",
     """set process -p qq_hhh_2L -i subtracted string '
+[kinematics]
+e_cm = 1000.0
+
 [kinematics.externals]
 type = "constant"
 [kinematics.externals.data]
