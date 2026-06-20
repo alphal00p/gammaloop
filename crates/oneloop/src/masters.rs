@@ -3,7 +3,7 @@ use symbolica::function;
 
 use crate::symbols::S;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum MasterIntegral {
     Tadpole {
         m_sq: Atom,
