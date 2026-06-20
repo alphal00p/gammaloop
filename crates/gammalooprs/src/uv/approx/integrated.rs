@@ -477,7 +477,8 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
                 let pole_part = if given.subgraph().is_empty() {
                     integrand.clone()
                 } else {
-                    self.series_and_truncate(ctx, current, given, integrand)?
+                    // Nested integrated branches receive finite_part - full, i.e. minus the pole part.
+                    -self.series_and_truncate(ctx, current, given, integrand)?
                 };
                 let with_added_expr = self.start(ctx, current, given, &pole_part)?;
                 let top = self.t(ctx, current, given, &with_added_expr)?;

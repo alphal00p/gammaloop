@@ -174,11 +174,11 @@ impl<'a> FinalIntegrand<'a> {
         selector
     }
 
-    /// Localize a reduced-graph orientation term onto one representative full orientation.
+    /// Localize a reduced-graph orientation term onto compatible full orientations.
     ///
     /// The reduced term already contains the external-edge selector structure through
-    /// `reduced_orientation.orientation_thetas()`. We only add the selector for the integrated
-    /// subgraph's internal edges chosen by `select_representative_orientation`.
+    /// `reduced_orientation.orientation_thetas()`. We only add selectors for the integrated
+    /// subgraph's internal edges.
     fn localized_orientation_term(
         reduced_expression: &Atom,
         reduced_orientation: &EdgeVec<Orientation>,
@@ -186,23 +186,45 @@ impl<'a> FinalIntegrand<'a> {
         internal_edges: &[EdgeIndex],
         average_compatible_orientations: bool,
     ) -> Result<Atom> {
-        let compatible_count = valid_global_orientations
+        let compatible: Vec<_> = valid_global_orientations
             .iter()
             .filter(|candidate| {
                 Self::orientations_match_outside_integrated_subgraph(reduced_orientation, candidate)
             })
-            .count();
-        let representative = Self::select_representative_orientation(
-            reduced_orientation,
-            valid_global_orientations,
-            internal_edges,
-        )?;
+            .collect();
+        let compatible_count = compatible.len();
+        if compatible_count == 0 {
+            return Err(eyre!(
+                "no valid global orientation matches reduced orientation {}",
+                GS.orientation_delta(reduced_orientation)
+            ));
+        }
+
+        let representatives: Vec<_> = if average_compatible_orientations {
+            compatible
+        } else {
+            vec![Self::select_representative_orientation(
+                reduced_orientation,
+                valid_global_orientations,
+                internal_edges,
+            )?]
+        };
 
         let reduced_selector = reduced_orientation.orientation_thetas();
-        let internal_selector = Self::internal_orientation_selector(representative, internal_edges);
-        let mut localized = reduced_expression.clone() * &reduced_selector * &internal_selector;
+        let mut localized = Atom::Zero;
+        let mut internal_selector_sum = Atom::Zero;
+        let mut representative_delta_sum = Atom::Zero;
+        for representative in representatives {
+            let internal_selector =
+                Self::internal_orientation_selector(representative, internal_edges);
+            representative_delta_sum += GS.orientation_delta(representative);
+            internal_selector_sum += internal_selector.clone();
+            localized += reduced_expression.clone() * &reduced_selector * internal_selector;
+        }
         if average_compatible_orientations {
             localized /= Atom::num(compatible_count as i64);
+            internal_selector_sum /= Atom::num(compatible_count as i64);
+            representative_delta_sum /= Atom::num(compatible_count as i64);
         }
         let active_orientation_count = valid_global_orientations
             .iter()
@@ -216,9 +238,9 @@ impl<'a> FinalIntegrand<'a> {
             active_orientation_count,
             average_compatible_orientations,
             log.reduced_delta = GS.orientation_delta(reduced_orientation),
-            log.representative_delta = GS.orientation_delta(representative),
+            log.representative_delta = representative_delta_sum,
             log.reduced_selector = reduced_selector,
-            log.internal_selector = internal_selector,
+            log.internal_selector = internal_selector_sum,
             log.localized = localized,
             "Localized integrated UV CT orientation term"
         );
@@ -299,20 +321,14 @@ impl<'a> FinalIntegrand<'a> {
 
         let to_contract = integrated_node.subgraph();
         let integrated_loop_count = graph.n_loops(to_contract);
-        // Negative multi-loop integrated entries are forest-overlap terms: the local recursion
-        // needs them, but localizing their finite integrated CT again double counts the addback.
-        let skip_finite_addback =
-            integrated_loop_count > 1 && matches!(integrated_sign, Sign::Negative);
-        let finite_ct = if skip_finite_addback {
-            Atom::Zero
-        } else {
-            finite_ct.clone()
-        };
+        // Keep finite addbacks for nested multi-loop entries. The integrated recursion already
+        // encodes forest-overlap signs by feeding nested branches the negative pole part; dropping
+        // the localized finite representative here removes the Tint(T(...)) terms.
+        let finite_ct = finite_ct.clone();
         debug_tags!(#generation, #profile, #uv, #integrated, #local, #summary;
             stage = "localize_integrated_ct_forest_overlap",
             integrated_loop_count,
             integrated_sign = ?integrated_sign,
-            skip_finite_addback,
             "Applied integrated UV forest-overlap addback rule"
         );
         let cff = graph.cff(
@@ -328,7 +344,7 @@ impl<'a> FinalIntegrand<'a> {
         );
 
         let internal_edges = Self::internal_paired_edges_of_subgraph(graph, to_contract);
-        let average_compatible_orientations = false;
+        let average_compatible_orientations = true;
         let localizing_integrand = GS.localizing_integrand(integrated_node.lmb());
         debug_tags!(#generation, #profile, #uv, #integrated, #local, #summary;
             stage = "localize_integrated_ct_factors",

@@ -68,13 +68,13 @@ additional_param_values = [
 #uv_local(S_47⊛44*Top(S_44⊛3I*Top(S_3I⊛0)))
 1.0,
 #uv_integrated(S_47⊛0)
--1.0,
+1.0,
 #uv_integrated(S_47⊛y*Top(S_y⊛0))
--1.0,
+1.0,
 #uv_integrated(S_47⊛3s*Top(S_3s⊛0))
--1.0,
+1.0,
 #uv_integrated(S_47⊛3I*Top(S_3I⊛0))
--1.0,
+1.0,
 #uv_integrated(S_47⊛44*Top(S_44⊛0))
 1.0,
 #uv_integrated(S_47⊛44*Top(S_44⊛y*Top(S_y⊛0)))
