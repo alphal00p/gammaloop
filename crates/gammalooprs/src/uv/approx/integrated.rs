@@ -151,6 +151,42 @@ impl Integrated<'_> {
     #[debug_instrument(
         current = %current.log_display(),
         given = %given.log_display(),
+        integrand = %integrand.log_display(),
+    )]
+    pub(crate) fn series_and_truncate<S: super::ForestNodeLike>(
+        &self,
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+        integrand: &Atom,
+    ) -> Result<Atom> {
+        let graph = ctx.graph;
+
+        let n_loops = graph.n_loops(current.subgraph()) - graph.n_loops(given.subgraph());
+        let series = integrand
+            .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
+            .unwrap();
+        let series_atom = series.to_atom();
+
+        debug_tags!(#uv, #integrated, #inspect, #series;
+            log.series = series_atom,
+            "dim epsilon Series "
+        );
+
+        let mut pole_stripped = Atom::Zero;
+
+        for (power, p) in series.terms() {
+            if power < 0 {
+                pole_stripped += p * Atom::var(GS.dim_epsilon).pow(power);
+            }
+        }
+
+        Ok(pole_stripped)
+    }
+
+    #[debug_instrument(
+        current = %current.log_display(),
+        given = %given.log_display(),
     )]
     pub(crate) fn t<S: super::ForestNodeLike>(
         &self,
@@ -227,7 +263,7 @@ impl Integrated<'_> {
         given = %given.log_display(),
         reduced,
     )]
-    pub(crate) fn integrate_and_truncate<S: super::ForestNodeLike>(
+    pub(crate) fn integrate<S: super::ForestNodeLike>(
         &self,
         ctx: &UVCtx<'_>,
         current: &S,
@@ -384,32 +420,6 @@ impl Integrated<'_> {
             "Replaced post vakint "
         );
 
-        let n_loops = graph.n_loops(&graph.full_filter());
-        let series = res
-            .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
-            .unwrap();
-        let series_atom = series.to_atom();
-
-        debug_tags!(#uv, #integrated, #inspect, #series;
-            log.series = series_atom,
-            "dim epsilon Series "
-        );
-
-        let mut pole_stripped = Atom::Zero;
-
-        for (power, p) in series.terms() {
-            // println!("Power: {}", power);
-            // println!("Coeff: {}", p.printer(LOGPRINTOPTS));
-            if settings.pole_part {
-                if power < 0 {
-                    pole_stripped += p * Atom::var(GS.dim_epsilon).pow(power);
-                }
-            } else if power >= 0 {
-                pole_stripped += p * Atom::var(GS.dim_epsilon).pow(power);
-            }
-        }
-
-        res = pole_stripped;
         // This strips as many dummies as possible after undoing chains and traces,
         // so that terms can merge later on.
         let bispinor_rep = Bispinor {}.into();
@@ -429,12 +439,6 @@ impl Integrated<'_> {
         debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #undo_single_length;
             log.expr = res,
             "Integrated UV chain cleanup after undo_single_length"
-        );
-
-        debug_tags!(#uv, #integrated, #final;
-            pole_part = %settings.pole_part,
-            log.res = res,
-            "Final integrated 4d CT"
         );
 
         if res
@@ -470,14 +474,19 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
     ) -> Result<Atom> {
         match current.renormalization_scheme() {
             ApproximationType::MUV => {
-                let start = self.start(ctx, current, given, integrand)?;
-                let integrated_t = self.t(ctx, current, given, &start)?;
-                let result = self.integrate_and_truncate(ctx, current, given, &integrated_t)?;
+                let pole_part = if given.subgraph().is_empty() {
+                    integrand.clone()
+                } else {
+                    self.series_and_truncate(ctx, current, given, integrand)?
+                };
+                let with_added_expr = self.start(ctx, current, given, &pole_part)?;
+                let top = self.t(ctx, current, given, &with_added_expr)?;
+                let integrated = self.integrate(ctx, current, given, &top)?;
                 debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #result;
-                    log.result = result,
+                    log.result = integrated,
                     "Integrated UV after integrate_and_truncate"
                 );
-                Ok(result)
+                Ok(integrated)
             }
             ApproximationType::IR => Err(eyre!("Not yet implemented IR")),
             ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),

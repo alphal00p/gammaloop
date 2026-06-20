@@ -390,6 +390,27 @@ impl<'a> FinalIntegrand<'a> {
         cuts: &CutSet,
     ) -> Result<LocalizedIntegratedCt> {
         let finite = self.finite_integrated_ct(integrated_4d);
+
+        // let n_loops = graph.n_loops(integrated_node.subgraph());
+
+        // let series = finite
+        //     .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
+        //     .unwrap();
+        // let series_atom = series.to_atom();
+
+        // debug_tags!(#uv, #integrated, #inspect, #series;
+        //     log.series = series_atom,
+        //     "dim epsilon Series "
+        // );
+
+        // let mut pole_stripped = Atom::Zero;
+
+        // for (power, p) in series.terms() {
+        //     if power >= 0 {
+        //         pole_stripped += p * Atom::var(GS.dim_epsilon).pow(power);
+        //     }
+        // }
+
         let integrated_sign = integrated_4d
             .expr()
             .map(|(_, sign)| sign)

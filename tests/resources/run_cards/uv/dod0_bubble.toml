@@ -3,7 +3,7 @@ commands = []
 [cli_settings]
 [cli_settings.global]
 logfile_directive = "off"
-display_directive = "gammalooprs=info,gammalooprs::uv[{#vakint}]=debug"
+display_directive = "gammalooprs=info,gammalooprs::uv::approx::integrated[{#uv}]=debug"
 
 [cli_settings.global.log_style]
 include_fields = true
