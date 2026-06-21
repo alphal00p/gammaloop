@@ -4,7 +4,7 @@
 # Usual run sequence:
 #
 #   ./target/dev-optim/gammaloop --clean-state examples/cli/qq_hhh_2L/qq_hhh_euclidean_2L.toml quit
-#   ./target/dev-optim/gammaloop -o -s ./examples/cli/qq_hhh_2L/state_euclidean run generate_diagrams generate_integrands integrate
+#   ./target/dev-optim/gammaloop -o -s ./examples/cli/qq_hhh_2L/state_euclidean_ecm1000_t0p5 run generate_diagrams generate_integrands integrate
 #
 # The process has nine external momenta:
 #   Q(0) Q(1) Q(2) Q(3) -> Q(4) Q(5) Q(6) Q(7) Q(8)
@@ -19,7 +19,7 @@ commands = []
 
 [cli_settings]
 [cli_settings.state]
-folder = "./examples/cli/qq_hhh_2L/state_euclidean"
+folder = "./examples/cli/qq_hhh_2L/state_euclidean_ecm1000_t0p5"
 name = "qq_hhh_euclidean_2L"
 
 # These defaults are visible during `generate existing`, before process-specific
@@ -82,8 +82,8 @@ n_start = 1500000
 n_increase = 0
 n_max = 10000000000
 integrated_phase = "imag"
-target_relative_accuracy = 1.0e-2
-seed = 762500
+target_relative_accuracy = 1.0e-1
+seed = 1337
 
 [[command_blocks]]
 name = "generation_settings"
@@ -198,9 +198,9 @@ name = "integrate"
 commands = [
     "run runtime",
     "run sampling",
-    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1500000 integrator.n_increase=0 integrator.n_max=10000000000 integrator.seed=762500 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-2",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1500000 integrator.n_increase=0 integrator.n_max=10000000000 integrator.seed=1337 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-1",
     """integrate -p qq_hhh_2L -i subtracted --n-cores 8 --batch-size 1024
-        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/euclidean_mt750_t0p5_sliver100_hsigma1_sfm
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/euclidean_mt750_ecm1000_t0p5_sliver100_hsigma1_sfm_seed1337
         --renderer tabled
         --show-phase both
         --show-max-weight-info
