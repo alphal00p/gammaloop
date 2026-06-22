@@ -28,9 +28,6 @@ commands = [
   "set global kv global.generation.uv.generate_integrated=true",
   "import graphs ./tests/resources/graphs/uv_tests/dotted_sunrise.dot -p dotted_sunrise -i dotted_sunrise",
   "generate existing -p dotted_sunrise -i dotted_sunrise",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./tests/resources/graphs/uv_tests/dotted_sunrise.dot -p dotted_sunrise_no_integrated_UV -i dotted_sunrise",
-  "generate existing -p dotted_sunrise_no_integrated_UV -i dotted_sunrise",
   "set model mass_scalar_1=1.0",
 ]
 

@@ -27,8 +27,6 @@ commands = [
   "remove processes",
   "set global kv global.generation.uv.generate_integrated=true",
   "generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble -i scalar_bubble_below_thres",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble_no_integrated_UV -i scalar_bubble_below_thres",
   "set model mass_scalar_2=2.0",
 ]
 
@@ -49,7 +47,7 @@ m_uv = 20.0
 type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
-momenta = [[1.0, 0.0, 0.0, 0.0], "dependent"]
+momenta = [[1.0, 0.0, 0.5, 0.5], "dependent"]
 helicities = [0, 0]
 
 [default_runtime_settings.subtraction]

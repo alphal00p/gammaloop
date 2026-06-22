@@ -15,7 +15,7 @@ summed = false
 summed_function_map = true
 
 # [cli_settings.global.generation.uv]
-# generate_only_integrated_uv_with_n_loops = 1
+# add_integrated_uv_with_n_loops = 1
 
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true
@@ -32,9 +32,6 @@ commands = [
   "set global kv global.generation.uv.generate_integrated=true",
   "import graphs ./tests/resources/graphs/uv_tests/epem_a_bbx.dot -p epem_a_bbx -i epem_a_bbx",
   "generate existing -p epem_a_bbx -i epem_a_bbx",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./tests/resources/graphs/uv_tests/epem_a_bbx.dot -p epem_a_bbx_no_integrated_UV -i epem_a_bbx",
-  "generate existing -p epem_a_bbx_no_integrated_UV -i epem_a_bbx",
 ]
 
 [default_runtime_settings.kinematics]

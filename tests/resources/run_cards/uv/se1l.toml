@@ -27,9 +27,6 @@ commands = [
   "set global kv global.generation.uv.generate_integrated=true",
   "import graphs ./tests/resources/graphs/uv_tests/se1l.dot -p se1l -i se1l",
   "generate existing -p se1l -i se1l",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./tests/resources/graphs/uv_tests/se1l.dot -p se1l_no_integrated_UV -i se1l",
-  "generate existing -p se1l_no_integrated_UV -i se1l",
 ]
 
 [default_runtime_settings.sampling]

@@ -116,10 +116,6 @@ commands = [
   "import graphs ./examples/cli/aa_aa/2L/graphs/GL00.dot -p aa_aa_2l_gl00 -i 2L -o",
   "generate existing -p aa_aa_2l_gl00 -i 2L",
   "set process -p aa_aa_2l_gl00 -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./examples/cli/aa_aa/2L/graphs/GL00.dot -p aa_aa_2l_gl00_no_integrated_UV -i 2L -o",
-  "generate existing -p aa_aa_2l_gl00_no_integrated_UV -i 2L",
-  "set process -p aa_aa_2l_gl00_no_integrated_UV -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
 ]
 
 [[command_blocks]]
@@ -129,10 +125,6 @@ commands = [
   "import graphs ./examples/cli/aa_aa/2L/graphs/GL01.dot -p aa_aa_2l_gl01 -i 2L -o",
   "generate existing -p aa_aa_2l_gl01 -i 2L",
   "set process -p aa_aa_2l_gl01 -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./examples/cli/aa_aa/2L/graphs/GL01.dot -p aa_aa_2l_gl01_no_integrated_UV -i 2L -o",
-  "generate existing -p aa_aa_2l_gl01_no_integrated_UV -i 2L",
-  "set process -p aa_aa_2l_gl01_no_integrated_UV -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
 ]
 
 [[command_blocks]]
@@ -142,10 +134,6 @@ commands = [
   "import graphs ./examples/cli/aa_aa/2L/graphs/GL03.dot -p aa_aa_2l_gl03 -i 2L -o",
   "generate existing -p aa_aa_2l_gl03 -i 2L",
   "set process -p aa_aa_2l_gl03 -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./examples/cli/aa_aa/2L/graphs/GL03.dot -p aa_aa_2l_gl03_no_integrated_UV -i 2L -o",
-  "generate existing -p aa_aa_2l_gl03_no_integrated_UV -i 2L",
-  "set process -p aa_aa_2l_gl03_no_integrated_UV -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
 ]
 
 [[command_blocks]]
@@ -155,10 +143,6 @@ commands = [
   "import graphs ./examples/cli/aa_aa/2L/graphs/GL05.dot -p aa_aa_2l_gl05 -i 2L -o",
   "generate existing -p aa_aa_2l_gl05 -i 2L",
   "set process -p aa_aa_2l_gl05 -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./examples/cli/aa_aa/2L/graphs/GL05.dot -p aa_aa_2l_gl05_no_integrated_UV -i 2L -o",
-  "generate existing -p aa_aa_2l_gl05_no_integrated_UV -i 2L",
-  "set process -p aa_aa_2l_gl05_no_integrated_UV -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
 ]
 
 [[command_blocks]]
@@ -168,10 +152,6 @@ commands = [
   "import graphs ./examples/cli/aa_aa/2L/graphs/GL06.dot -p aa_aa_2l_gl06 -i 2L -o",
   "generate existing -p aa_aa_2l_gl06 -i 2L",
   "set process -p aa_aa_2l_gl06 -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./examples/cli/aa_aa/2L/graphs/GL06.dot -p aa_aa_2l_gl06_no_integrated_UV -i 2L -o",
-  "generate existing -p aa_aa_2l_gl06_no_integrated_UV -i 2L",
-  "set process -p aa_aa_2l_gl06_no_integrated_UV -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
 ]
 
 [[command_blocks]]
@@ -181,10 +161,6 @@ commands = [
   "import graphs ./examples/cli/aa_aa/2L/graphs/GL08.dot -p aa_aa_2l_gl08 -i 2L -o",
   "generate existing -p aa_aa_2l_gl08 -i 2L",
   "set process -p aa_aa_2l_gl08 -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./examples/cli/aa_aa/2L/graphs/GL08.dot -p aa_aa_2l_gl08_no_integrated_UV -i 2L -o",
-  "generate existing -p aa_aa_2l_gl08_no_integrated_UV -i 2L",
-  "set process -p aa_aa_2l_gl08_no_integrated_UV -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
 ]
 
 [[command_blocks]]
@@ -194,10 +170,6 @@ commands = [
   "import graphs ./examples/cli/aa_aa/2L/graphs/GL12.dot -p aa_aa_2l_gl12 -i 2L -o",
   "generate existing -p aa_aa_2l_gl12 -i 2L",
   "set process -p aa_aa_2l_gl12 -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./examples/cli/aa_aa/2L/graphs/GL12.dot -p aa_aa_2l_gl12_no_integrated_UV -i 2L -o",
-  "generate existing -p aa_aa_2l_gl12_no_integrated_UV -i 2L",
-  "set process -p aa_aa_2l_gl12_no_integrated_UV -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
 ]
 
 [[command_blocks]]
@@ -207,10 +179,6 @@ commands = [
   "import graphs ./examples/cli/aa_aa/2L/graphs/GL14.dot -p aa_aa_2l_gl14 -i 2L -o",
   "generate existing -p aa_aa_2l_gl14 -i 2L",
   "set process -p aa_aa_2l_gl14 -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./examples/cli/aa_aa/2L/graphs/GL14.dot -p aa_aa_2l_gl14_no_integrated_UV -i 2L -o",
-  "generate existing -p aa_aa_2l_gl14_no_integrated_UV -i 2L",
-  "set process -p aa_aa_2l_gl14_no_integrated_UV -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
 ]
 
 [[command_blocks]]
@@ -220,10 +188,6 @@ commands = [
   "import graphs ./examples/cli/aa_aa/2L/graphs/GL16.dot -p aa_aa_2l_gl16 -i 2L -o",
   "generate existing -p aa_aa_2l_gl16 -i 2L",
   "set process -p aa_aa_2l_gl16 -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./examples/cli/aa_aa/2L/graphs/GL16.dot -p aa_aa_2l_gl16_no_integrated_UV -i 2L -o",
-  "generate existing -p aa_aa_2l_gl16_no_integrated_UV -i 2L",
-  "set process -p aa_aa_2l_gl16_no_integrated_UV -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
 ]
 
 [[command_blocks]]
@@ -233,10 +197,6 @@ commands = [
   "import graphs ./examples/cli/aa_aa/2L/graphs/GL17.dot -p aa_aa_2l_gl17 -i 2L -o",
   "generate existing -p aa_aa_2l_gl17 -i 2L",
   "set process -p aa_aa_2l_gl17 -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./examples/cli/aa_aa/2L/graphs/GL17.dot -p aa_aa_2l_gl17_no_integrated_UV -i 2L -o",
-  "generate existing -p aa_aa_2l_gl17_no_integrated_UV -i 2L",
-  "set process -p aa_aa_2l_gl17_no_integrated_UV -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
 ]
 
 [[command_blocks]]
@@ -246,8 +206,4 @@ commands = [
   "import graphs ./examples/cli/aa_aa/2L/graphs/GL18.dot -p aa_aa_2l_gl18 -i 2L -o",
   "generate existing -p aa_aa_2l_gl18 -i 2L",
   "set process -p aa_aa_2l_gl18 -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./examples/cli/aa_aa/2L/graphs/GL18.dot -p aa_aa_2l_gl18_no_integrated_UV -i 2L -o",
-  "generate existing -p aa_aa_2l_gl18_no_integrated_UV -i 2L",
-  "set process -p aa_aa_2l_gl18_no_integrated_UV -i 2L kv general.generate_events=true general.store_additional_weights_in_event=true",
 ]

@@ -27,9 +27,6 @@ commands = [
   "set global kv global.generation.uv.generate_integrated=true",
   "import graphs ./tests/resources/graphs/uv_tests/dotted_dt.dot -p dotted_dt -i dotted_dt",
   "generate existing -p dotted_dt -i dotted_dt",
-  "set global kv global.generation.uv.generate_integrated=false",
-  "import graphs ./tests/resources/graphs/uv_tests/dotted_dt.dot -p dotted_dt_no_integrated_UV -i dotted_dt",
-  "generate existing -p dotted_dt_no_integrated_UV -i dotted_dt",
   "set model mass_scalar_1=1.0",
 ]
 

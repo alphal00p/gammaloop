@@ -3407,10 +3407,14 @@ fn stability_iterator_for_source<I: ProcessIntegrandImpl>(
                 threshold: threshold.0,
             });
         }
-        if sum_norm > threshold
-            && let Some(last) = stability_iterator.last().copied()
-        {
-            stability_iterator = vec![last];
+        if sum_norm > threshold {
+            let escalated_level_index = stability_iterator
+                .iter()
+                .position(|level| level.precision == Precision::Quad)
+                .or_else(|| stability_iterator.len().checked_sub(1));
+            if let Some(level_index) = escalated_level_index {
+                stability_iterator = stability_iterator[level_index..].to_vec();
+            }
         }
     }
 

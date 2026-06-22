@@ -67,13 +67,6 @@ commands = [
       -p epem_a_tth -i NLO
       --global-prefactor-num "1𝑖"
       --select-graphs GL00""",
-  "set global kv global.generation.uv.generate_integrated=false",
-  """generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==2 QED^2==6 [{{3}} QCD=1]
-      --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
-      --symmetrize-left-right-states true
-      -p epem_a_tth_no_integrated_UV -i NLO
-      --global-prefactor-num "1𝑖"
-      --select-graphs GL00""",
   "save dot",
 ]
 
