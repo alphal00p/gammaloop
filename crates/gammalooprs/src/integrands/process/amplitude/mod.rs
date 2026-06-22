@@ -8,6 +8,7 @@ use bincode_trait_derive::{Decode, Encode};
 
 use color_eyre::{Help, Result};
 
+use colored::Colorize;
 use eyre::{Context, eyre};
 use itertools::Itertools;
 use linnet::half_edge::{
@@ -882,6 +883,76 @@ pub mod export;
 pub mod load;
 
 impl AmplitudeIntegrand {
+    fn threshold_esurface_specifier(
+        &self,
+        group_id: GroupId,
+        group_esurface_id: GroupEsurfaceId,
+    ) -> String {
+        let details = self.data.group_derived_data[group_id].esurface_map[group_esurface_id]
+            .iter_enumerated()
+            .filter_map(|(graph_group_pos, raised_esurface_id)| {
+                raised_esurface_id.map(|raised_esurface_id| (graph_group_pos, raised_esurface_id))
+            })
+            .find(|(graph_group_pos, _)| {
+                let graph_id = self.data.graph_group_structure[group_id][*graph_group_pos];
+                self.data.graph_terms[graph_id]
+                    .threshold_counterterm
+                    .local_esurface_exists[group_esurface_id]
+            })
+            .or_else(|| {
+                get_representative(
+                    &self.data.group_derived_data[group_id].esurface_map[group_esurface_id],
+                )
+                .ok()
+            })
+            .map(|(graph_group_pos, raised_esurface_id)| {
+                let graph_id = self.data.graph_group_structure[group_id][graph_group_pos];
+                let graph_term = &self.data.graph_terms[graph_id];
+                let esurface_id = graph_term.threshold_counterterm.raised_data.raised_groups
+                    [raised_esurface_id]
+                    .esurface_ids[0];
+                let esurface = &graph_term.esurfaces[esurface_id];
+                let loop_order = esurface.energies.len().saturating_sub(1);
+                let edge_ids = esurface.energies.iter().map(|edge_id| edge_id.0).join(",");
+
+                (loop_order, format!("{}({edge_ids})", group_esurface_id.0))
+            });
+
+        match details {
+            Some((1, specifier)) => specifier.green().bold().to_string(),
+            Some((2, specifier)) => specifier.blue().bold().to_string(),
+            Some((_, specifier)) => specifier.cyan().bold().to_string(),
+            None => format!("{}(?)", group_esurface_id.0).dimmed().to_string(),
+        }
+    }
+
+    fn format_overlap_structure(
+        &self,
+        group_id: GroupId,
+        overlap: &crate::subtraction::overlap::OverlapStructure,
+    ) -> String {
+        overlap
+            .overlap_groups
+            .iter()
+            .map(|overlap_group| {
+                let esurfaces = overlap_group
+                    .existing_esurfaces
+                    .iter()
+                    .map(|existing_esurface_id| {
+                        let group_esurface_id = overlap.existing_esurfaces[*existing_esurface_id];
+                        self.threshold_esurface_specifier(group_id, group_esurface_id)
+                    })
+                    .join(", ");
+
+                format!(
+                    "{}: [{}]",
+                    overlap_group.existing_esurfaces.len(),
+                    esurfaces
+                )
+            })
+            .join(", ")
+    }
+
     pub(crate) fn kinematics_for_threshold_approach(
         &mut self,
         momentum_sample: &MomentumSample<ArbPrec>,
@@ -1657,13 +1728,9 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                         })?;
 
                 info!(
-                    "overlap structure of group {}: {:?}",
+                    "overlap structure of group {}: [{}]",
                     group_id.0,
-                    overlap
-                        .overlap_groups
-                        .iter()
-                        .map(|group| group.existing_esurfaces.len())
-                        .collect_vec()
+                    self.format_overlap_structure(group_id, &overlap)
                 );
 
                 let loop_number = self

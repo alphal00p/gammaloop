@@ -201,7 +201,7 @@ commands = [
     "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1500000 integrator.n_increase=0 integrator.n_max=10000000000 integrator.seed=1337 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-1",
     """integrate -p qq_hhh_2L -i subtracted --n-cores 8 --batch-size 1024
         --workspace-path ./examples/cli/qq_hhh_2L/workspaces/euclidean_mt750_ecm1000_t0p5_sliver100_hsigma1_sfm_seed1337
-        --renderer tabled
+        --renderer ratatui
         --show-phase both
         --show-max-weight-info
         --show-max-weight-info-for-discrete-bins
