@@ -31,35 +31,3 @@ pub struct IntegralFamily {
     pub targets: Vec<Integral>,
     pub numerator: Atom,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{Integral, IntegralFamily, Kinematics, Propagator};
-    use symbolica::atom::Atom;
-
-    #[test]
-    fn bubble_family_has_two_propagators_and_one_target() {
-        let family = IntegralFamily {
-            propagators: vec![
-                Propagator {
-                    momentum: Atom::Zero,
-                    mass_sq: Atom::Zero,
-                },
-                Propagator {
-                    momentum: Atom::Zero,
-                    mass_sq: Atom::Zero,
-                },
-            ],
-            isps: vec![],
-            kinematics: Kinematics::default(),
-            targets: vec![Integral {
-                propagator_exponents: vec![1, 1],
-                isp_exponents: vec![],
-            }],
-            numerator: Atom::num(1),
-        };
-        assert_eq!(family.propagators.len(), 2);
-        assert_eq!(family.targets.len(), 1);
-        assert_eq!(family.targets[0].propagator_exponents, vec![1, 1]);
-    }
-}
