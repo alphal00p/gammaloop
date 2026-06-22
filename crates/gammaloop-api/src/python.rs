@@ -33,7 +33,7 @@ use crate::{
     render_smart_toml,
     session::{display_command, CliSession, CliSessionState},
     settings_tree::{json_type_name, serialize_settings_with_defaults, value_at_path},
-    state::{ProcessRef, RunHistory, State},
+    state::{ProcessListExt, ProcessRef, RunHistory, State},
     CLISettings, LoadedState, StateLoadOption,
 };
 use ahash::{HashMap, HashMapExt};
@@ -2698,17 +2698,17 @@ impl GammaLoopAPI {
         )
     }
 
-    #[pyo3(name="get_dot_files", signature = (process_id=None, integrand_name=None,settings=DotExportSettings::default()))]
+    #[pyo3(name="get_dot_files", signature = (process=None, integrand_name=None, settings=DotExportSettings::default()))]
     pub(crate) fn get_dot_files(
         &mut self,
-        process_id: Option<usize>,
+        process: Option<ProcessRef>,
         integrand_name: Option<String>,
         settings: DotExportSettings,
     ) -> PyResult<String> {
         let (pid, name) = self
             .gammaloop_state
             .process_list
-            .find_integrand(process_id, integrand_name.as_ref())
+            .find_integrand_ref(process.as_ref(), integrand_name.as_ref())
             .map_err(|e| {
                 exceptions::PyException::new_err(format!("Could not find integrand: {}", e))
             })?;
