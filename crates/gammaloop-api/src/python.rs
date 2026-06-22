@@ -14,6 +14,7 @@ use gammalooprs::{
     settings::{global::OrientationPattern, RuntimeSettings},
     utils::tracing::LogLevel,
 };
+use idenso::shorthands::{metric::to_dots_impl, schoonschip::Schoonschip};
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::{ModifySubSet, SuBitGraph},
@@ -55,7 +56,7 @@ use gammalooprs::feyngen::{
 use itertools::{self, Itertools};
 use std::{path::PathBuf, str::FromStr};
 
-use symbolica::{atom::AtomCore, parse};
+use symbolica::{atom::AtomCore, parse, printer::PrintOptions};
 // const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
@@ -81,6 +82,23 @@ pub(crate) fn evaluate_graph_overall_factor(overall_factor: &str) -> Result<Stri
 #[pyo3(name = "atom_to_canonical_string")]
 pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
     Ok(parse!(atom_str).to_canonical_string())
+}
+
+#[pyfunction]
+#[pyo3(name = "to_dots")]
+pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
+    let dotted = to_dots_impl(
+        parse!(atom_str, default_namespace = "python")
+            .to_dots()
+            .as_view(),
+    );
+    Ok(format!(
+        "{}",
+        dotted.as_view().printer(PrintOptions {
+            hide_namespace: Some(std::borrow::Cow::Borrowed("python")),
+            ..PrintOptions::file()
+        })
+    ))
 }
 
 #[pymodule(name = "_gammaloop")]
@@ -136,6 +154,7 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     */
     // m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
+    m.add_wrapped(wrap_pyfunction!(atom_to_dots))?;
     m.add_wrapped(wrap_pyfunction!(evaluate_graph_overall_factor))?;
     Ok(())
 }
