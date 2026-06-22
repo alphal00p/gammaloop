@@ -124,6 +124,19 @@ impl Graph {
         lmb.canonicalize_external_order(&self.external_momentum_edge_order());
     }
 
+    pub(crate) fn dummy_stripped_external_flows_of<S: SubGraphLike>(&self, subgraph: &S) -> S::Base
+    where
+        S::Base: ModifySubSet<HedgePair> + ModifySubSet<Hedge>,
+    {
+        let mut externals = self.underlying.full_crown(subgraph);
+        for (pair, _, edge) in self.underlying.iter_edges() {
+            if edge.data.is_dummy {
+                externals.sub(pair);
+            }
+        }
+        externals
+    }
+
     pub(crate) fn random_externals(&self, seed: u64) -> Externals {
         let mut rng = SmallRng::seed_from_u64(seed);
         let mom_range = -10.0..10.0;

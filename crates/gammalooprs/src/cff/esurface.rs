@@ -1048,7 +1048,11 @@ mod tests {
 
     use crate::cff::cff_graph::VertexSet;
     use crate::graph::LoopMomentumBasis;
-    use crate::momentum::signature::LoopExtSignature;
+    use crate::momentum::{
+        FourMomentum, SignOrZero,
+        sample::{ExternalFourMomenta, ExternalIndex},
+        signature::LoopExtSignature,
+    };
     use crate::processes::CrossSectionCut;
     use crate::{
         cff::{esurface::Esurface, generation::ShiftRewrite},
@@ -1131,6 +1135,56 @@ mod tests {
             (Atom::num(-1) * external_energy_atom_from_index(EdgeIndex::from(0))).expand();
 
         assert_eq!(atom.to_canonical_string(), expected.to_canonical_string());
+    }
+
+    #[test]
+    fn shift_part_uses_expanded_global_external_slots() {
+        let dummy_graph = dummy_hedge_graph(7);
+        let mut edge_signatures = dummy_graph
+            .new_edgevec_from_iter(
+                (0..7).map(|_| LoopExtSignature::from((Vec::<isize>::new(), vec![0]))),
+            )
+            .unwrap();
+        edge_signatures[EdgeIndex::from(6)] =
+            LoopExtSignature::from((Vec::<isize>::new(), vec![1]));
+        let mut lmb = LoopMomentumBasis {
+            tree: SuBitGraph::empty(0),
+            loop_edges: vec![].into(),
+            ext_edges: vec![EdgeIndex::from(6)].into(),
+            edge_signatures,
+        };
+        lmb.canonicalize_external_order(&(0..7).map(EdgeIndex::from).collect::<Vec<EdgeIndex>>());
+
+        assert_eq!(lmb.ext_edges.len(), 7);
+        assert_eq!(
+            lmb.edge_signatures[EdgeIndex::from(6)].external[ExternalIndex(2)],
+            SignOrZero::Zero
+        );
+        assert_eq!(
+            lmb.edge_signatures[EdgeIndex::from(6)].external[ExternalIndex(6)],
+            SignOrZero::Plus
+        );
+
+        let external_moms: ExternalFourMomenta<F<f64>> = vec![
+            FourMomentum::from([F(10.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(20.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(2000.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(30.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(40.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(50.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(438.555), F(0.0), F(0.0), F(0.0)]),
+        ]
+        .into();
+        let esurface = Esurface {
+            energies: vec![],
+            external_shift: vec![(EdgeIndex::from(6), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+
+        assert_eq!(
+            esurface.compute_shift_part_from_momenta(&external_moms, &lmb),
+            F(-438.555)
+        );
     }
 
     #[test]

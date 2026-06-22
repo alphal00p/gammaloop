@@ -183,35 +183,42 @@ impl LoopMomentumBasis {
             .iter_mut()
             .for_each(|(_, s)| s.put_loop_to_ext(i));
     }
-    pub(crate) fn swap_external(&mut self, i: ExternalIndex, j: ExternalIndex) {
-        if i == j {
-            return;
-        }
-
-        self.ext_edges.swap(i, j);
-        self.edge_signatures
-            .iter_mut()
-            .for_each(|(_, s)| s.swap_external(i, j));
-    }
-
     pub(crate) fn canonicalize_external_order(&mut self, external_edge_order: &[EdgeIndex]) {
-        if self.ext_edges.len() < 2 {
+        if external_edge_order.is_empty() {
             return;
         }
 
-        for target_slot in 0..self.ext_edges.len() {
-            let source_slot = (target_slot..self.ext_edges.len())
-                .min_by_key(|slot| {
-                    let edge = self.ext_edges[ExternalIndex(*slot)];
-                    external_edge_order
-                        .iter()
-                        .position(|ordered_edge| *ordered_edge == edge)
-                        .map_or((1, usize::from(edge)), |position| (0, position))
-                })
-                .unwrap_or(target_slot);
+        let current_ext_edges = self.ext_edges.clone();
+        let mut ordered_ext_edges = external_edge_order.to_vec();
+        ordered_ext_edges.extend(
+            current_ext_edges
+                .iter()
+                .copied()
+                .filter(|edge| !external_edge_order.contains(edge))
+                .sorted(),
+        );
 
-            self.swap_external(ExternalIndex(target_slot), ExternalIndex(source_slot));
+        if ordered_ext_edges == current_ext_edges.raw {
+            return;
         }
+
+        for (_, signature) in self.edge_signatures.iter_mut() {
+            let mut expanded_external = vec![SignOrZero::Zero; ordered_ext_edges.len()];
+
+            for (old_slot, edge) in current_ext_edges.iter_enumerated() {
+                let Some(new_slot) = ordered_ext_edges
+                    .iter()
+                    .position(|ordered_edge| ordered_edge == edge)
+                else {
+                    continue;
+                };
+                expanded_external[new_slot] = signature.external[old_slot];
+            }
+
+            signature.external = SignatureLike::from_iter(expanded_external);
+        }
+
+        self.ext_edges = ordered_ext_edges.into();
     }
 }
 
@@ -1278,9 +1285,22 @@ impl LMBext for Graph {
             + ModifySubSet<HedgePair>
             + ModifySubSet<Hedge>,
     {
-        let mut lmbs = self.underlying.generate_loop_momentum_bases_of(subgraph);
-        lmbs.iter_mut()
-            .for_each(|lmb| self.canonicalize_lmb_external_order(lmb));
+        let Some(_) = subgraph.included_iter().next() else {
+            return vec![].into();
+        };
+
+        let externals = self.dummy_stripped_external_flows_of(subgraph);
+        let mut lmbs: TiVec<LmbIndex, LoopMomentumBasis> = vec![].into();
+        for forest in self.underlying.all_spanning_forests_of(subgraph) {
+            let mut lmb = self
+                .underlying
+                .lmb_impl(subgraph.included(), &forest, externals.clone())
+                .unwrap_or_else(|err| {
+                    panic!("Failed to build loop momentum basis from spanning forest:\n{err}")
+                });
+            self.canonicalize_lmb_external_order(&mut lmb);
+            lmbs.push(lmb);
+        }
         lmbs
     }
 
@@ -1397,9 +1417,22 @@ impl LMBext for &Graph {
             + ModifySubSet<HedgePair>
             + ModifySubSet<Hedge>,
     {
-        let mut lmbs = self.underlying.generate_loop_momentum_bases_of(subgraph);
-        lmbs.iter_mut()
-            .for_each(|lmb| self.canonicalize_lmb_external_order(lmb));
+        let Some(_) = subgraph.included_iter().next() else {
+            return vec![].into();
+        };
+
+        let externals = self.dummy_stripped_external_flows_of(subgraph);
+        let mut lmbs: TiVec<LmbIndex, LoopMomentumBasis> = vec![].into();
+        for forest in self.underlying.all_spanning_forests_of(subgraph) {
+            let mut lmb = self
+                .underlying
+                .lmb_impl(subgraph.included(), &forest, externals.clone())
+                .unwrap_or_else(|err| {
+                    panic!("Failed to build loop momentum basis from spanning forest:\n{err}")
+                });
+            self.canonicalize_lmb_external_order(&mut lmb);
+            lmbs.push(lmb);
+        }
         lmbs
     }
 
@@ -1602,8 +1635,9 @@ pub mod test {
 
     use crate::{
         dot,
-        graph::{Graph, LMBext, LmbError, parse::IntoGraph},
+        graph::{FeynmanGraph, Graph, LMBext, LmbError, parse::IntoGraph},
         initialisation::test_initialise,
+        momentum::SignOrZero,
     };
 
     static SHRUNKEN_LMB_TEST_INIT: std::sync::Once = std::sync::Once::new();
@@ -1638,6 +1672,41 @@ pub mod test {
             }, {
                 insta::assert_snapshot!(g.dot_lmb_of(&g.full_filter(), &g.loop_momentum_basis));
             });
+        }
+    }
+
+    #[test]
+    fn generated_lmbs_do_not_use_dummy_external_carriers() {
+        test_initialise().unwrap();
+        let g: Graph = dot!(digraph{
+            ext [style=invis]
+            edge[num=1 mass=1]
+            node[num=1]
+            ext->v1:0[id=0 is_dummy=true]
+            ext->v1:1[id=1]
+            v1->v2[id=2]
+            v2->v1[id=3]
+            ext->v2:2[id=4]
+        })
+        .unwrap();
+
+        let lmbs = g.generate_loop_momentum_bases_of(&g.no_dummy());
+        assert!(!lmbs.is_empty());
+
+        for lmb in lmbs {
+            assert_eq!(
+                lmb.ext_edges[crate::momentum::sample::ExternalIndex(0)],
+                EdgeIndex::from(0)
+            );
+
+            for edge_id in [1, 2, 3, 4].map(EdgeIndex::from) {
+                assert_eq!(
+                    lmb.edge_signatures[edge_id].external
+                        [crate::momentum::sample::ExternalIndex(0)],
+                    SignOrZero::Zero,
+                    "non-dummy edge {edge_id} uses the dummy external as a generated LMB carrier"
+                );
+            }
         }
     }
 
