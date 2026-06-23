@@ -4,7 +4,7 @@
 # Usual run sequence:
 #
 #   ./target/dev-optim/gammaloop --clean-state examples/cli/qq_hhh_2L/qq_hhh_euclidean_2L.toml quit
-#   ./target/dev-optim/gammaloop -o -s ./examples/cli/qq_hhh_2L/state_euclidean_ecm1000_t0p5 run generate_diagrams generate_integrands integrate
+#   ./target/dev-optim/gammaloop -o -s ./examples/cli/qq_hhh_2L/state_euclidean run generate_diagrams generate_integrands integrate
 #
 # The process has nine external momenta:
 #   Q(0) Q(1) Q(2) Q(3) -> Q(4) Q(5) Q(6) Q(7) Q(8)
@@ -19,7 +19,7 @@ commands = []
 
 [cli_settings]
 [cli_settings.state]
-folder = "./examples/cli/qq_hhh_2L/state_euclidean_ecm1000_t0p5"
+folder = "./examples/cli/qq_hhh_2L/state_euclidean"
 name = "qq_hhh_euclidean_2L"
 
 # These defaults are visible during `generate existing`, before process-specific
@@ -33,9 +33,6 @@ generate_events = false
 store_additional_weights_in_event = false
 disable_flux_factor = false
 integral_unit = "none"
-
-[default_runtime_settings.kinematics]
-e_cm = 1000.0
 
 [default_runtime_settings.kinematics.externals]
 type = "constant"
@@ -82,8 +79,8 @@ n_start = 1500000
 n_increase = 0
 n_max = 10000000000
 integrated_phase = "imag"
-target_relative_accuracy = 1.0e-1
-seed = 1337
+target_relative_accuracy = 1.0e-2
+seed = 762500
 
 [[command_blocks]]
 name = "generation_settings"
@@ -135,9 +132,6 @@ commands = [
     "set model ymt=750.0",
     "set process -p qq_hhh_2L -i subtracted kv subtraction.disable_threshold_subtraction=false",
     """set process -p qq_hhh_2L -i subtracted string '
-[kinematics]
-e_cm = 1000.0
-
 [kinematics.externals]
 type = "constant"
 [kinematics.externals.data]
@@ -198,11 +192,12 @@ name = "integrate"
 commands = [
     "run runtime",
     "run sampling",
-    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1500000 integrator.n_increase=0 integrator.n_max=10000000000 integrator.seed=1337 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-1",
-    """integrate -p qq_hhh_2L -i subtracted --n-cores 8 --batch-size 1024
-        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/euclidean_mt750_ecm1000_t0p5_sliver100_hsigma1_sfm_seed1337
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1500000 integrator.n_increase=0 integrator.n_max=10000000000 integrator.seed=1337 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 25 --batch-size 1024
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/euclidean_mt750_t0p5_sliver100_hsigma1_sfm
         --renderer ratatui
         --show-phase both
+        --target -2.9e-3 -1.23e-3
         --show-max-weight-info
         --show-max-weight-info-for-discrete-bins
         --show-top-discrete-grid

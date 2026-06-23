@@ -122,9 +122,9 @@ commands = [
 graphs = "monte_carlo"
 orientations = "summed"
 lmb_multichanneling = true
-lmb_channels = "monte_carlo"
+lmb_channels = "summed"
 lmb_channel_weight = "inverse_jacobian"
-coordinate_system = "spherical_common_radial"
+coordinate_system = "spherical"
 mapping = "linear"
 b = 1.0
 '""",
@@ -135,8 +135,8 @@ name = "integrate"
 commands = [
     "run runtime",
     "run sampling",
-    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1000000 integrator.n_increase=1000000 integrator.n_max=10000000000 integrator.seed=271100 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-2",
-    """integrate -p qq_hhh_2L -i subtracted --n-cores 3 --batch-size 1024
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1500000 integrator.n_increase=0 integrator.n_max=10000000000 integrator.seed=1337 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 15 --batch-size 1024
         --workspace-path ./examples/cli/qq_hhh_2L/workspaces/integrate_t4_sliver30_hsigma1_functionmap
         --renderer ratatui
         --show-phase both
