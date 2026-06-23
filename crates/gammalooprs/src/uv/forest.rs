@@ -25,7 +25,7 @@ use linnet::half_edge::{involution::HedgePair, subgraph::SubSetOps};
 use vakint::Vakint;
 
 use super::{
-    RenormalizationPart, UVgenerationSettings,
+    RenormalizationPart, UVgenerationSettings, UltravioletGraph,
     approx::Approximation,
     poset::{DAG, DagNode},
 };
@@ -308,7 +308,11 @@ impl Forest {
         Ok(())
     }
 
-    pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<RenormalizationPart> {
+    pub(crate) fn pole_part_of_ends(
+        &self,
+        graph: &Graph,
+        pole_part: bool,
+    ) -> Result<RenormalizationPart> {
         let mut sum = Atom::Zero;
 
         let wild = Atom::var(W_.x___);
@@ -383,23 +387,20 @@ impl Forest {
             );
             sum += atom;
         }
-        // let n_loops = graph.n_loops(&graph.full_filter());
-        // let pole_stripped = sum
-        //     .series(
-        //         GS.dim_epsilon,
-        //         Atom::Zero,
-        //         (n_loops as i64 + 1).into(),
-        //         true,
-        //     )
-        //     .unwrap();
+        if pole_part {
+            let n_loops = graph.n_loops(&graph.full_filter());
+            let pole_stripped = sum
+                .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
+                .unwrap();
 
-        // let mut sum = Atom::Zero;
+            sum = Atom::Zero;
 
-        // for (power, p) in pole_stripped.terms() {
-        //     if power < 0 {
-        //         sum += p * Atom::var(GS.dim_epsilon).pow(power);
-        //     }
-        // }
+            for (power, p) in pole_stripped.terms() {
+                if power < 0 {
+                    sum += p * Atom::var(GS.dim_epsilon).pow(power);
+                }
+            }
+        }
         Ok(RenormalizationPart::legacy(
             sum.replace_multiple(&replacements)
                 .replace(GS.m_uv_int)

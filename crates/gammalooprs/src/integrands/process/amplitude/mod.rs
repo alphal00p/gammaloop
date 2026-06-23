@@ -1284,11 +1284,10 @@ impl AmplitudeIntegrand {
                                         * F::from_f64(*sign as f64)
                                 })
                                 .reduce(|acc, x| acc + x)
-                                .unwrap_or_else(|| zero_vector.clone());
+                                .unwrap_or(zero_vector);
                             let shift_vector_sq = shift_vector.norm_squared();
-                            let existence_margin = &shift_part * &shift_part
-                                - &shift_vector_sq
-                                - &mass_sum * &mass_sum;
+                            let existence_margin =
+                                shift_part * shift_part - shift_vector_sq - mass_sum * mass_sum;
                             let lmb_reps = graph.integrand_replacement(
                                 &graph.full_filter(),
                                 &graph.loop_momentum_basis,

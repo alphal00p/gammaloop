@@ -631,14 +631,14 @@ impl AmplitudeGraph {
                 &OrientationPattern::default(),
             )?;
 
-            forest.pole_part_of_ends(&self.graph)
+            forest.pole_part_of_ends(&self.graph, settings.pole_part)
         } else {
             let cuts = CutStructure::empty(&self.graph);
             let wood = NewWood::new(cuts, &self.graph, settings);
             let mut forest = wood.unfold();
             forest.integrate(&self.graph, crate::utils::vakint()?, settings)?;
 
-            forest.pole_part_of_ends(&self.graph)
+            forest.pole_part_of_ends(&self.graph, settings.pole_part)
         }
     }
 

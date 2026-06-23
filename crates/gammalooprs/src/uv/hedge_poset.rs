@@ -485,7 +485,12 @@ impl OperationNode {
                 let (current, given) = wood.current_given_pair(op.data, order);
                 order += 1;
                 compute_store.record_kernel_hit();
-                mul *= -integrated_orchestrator.kernel(&uvctx, &current, &given, &acc)?;
+                let integrated = integrated_orchestrator.kernel(&uvctx, &current, &given, &acc)?;
+                if graph.n_loops(current.subgraph()) > 1 {
+                    mul *= integrated;
+                } else {
+                    mul *= -integrated;
+                }
             }
 
             acc = mul
@@ -771,7 +776,11 @@ impl Forests {
     //     Ok(())
     // }
 
-    pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<RenormalizationPart> {
+    pub(crate) fn pole_part_of_ends(
+        &self,
+        graph: &Graph,
+        pole_part: bool,
+    ) -> Result<RenormalizationPart> {
         let mut sum = Atom::Zero;
 
         let wild = Atom::var(W_.x___);
@@ -809,6 +818,21 @@ impl Forests {
                expr = % atom.log_print(None),"Term"
             );
             sum += atom;
+        }
+
+        if pole_part {
+            let n_loops = graph.n_loops(&graph.full_filter());
+            let pole_stripped = sum
+                .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
+                .unwrap();
+
+            sum = Atom::Zero;
+
+            for (power, p) in pole_stripped.terms() {
+                if power < 0 {
+                    sum += p * Atom::var(GS.dim_epsilon).pow(power);
+                }
+            }
         }
 
         Ok(RenormalizationPart::new(

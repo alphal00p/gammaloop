@@ -78,7 +78,7 @@ impl Esurface {
         })
     }
     pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
-        self.to_atom_impl(cut_edges, |edge| external_energy_atom_from_index(edge))
+        self.to_atom_impl(cut_edges, external_energy_atom_from_index)
     }
 
     pub(crate) fn to_atom_in_lmb(&self, cut_edges: &[EdgeIndex], lmb: &LoopMomentumBasis) -> Atom {

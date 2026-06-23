@@ -633,13 +633,13 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                                 .external_moms(),
                         );
                         format!(
-                            "existing={} group={} raised={} local={} edges={:?} value={} inside={}",
+                            "existing={} group={} raised={} local={} edges={:?} value={:+16e} inside={}",
                             usize::from(existing_esurface_id),
                             group_esurface_id.0,
                             raised_esurface_id.0,
                             esurface_id.0,
                             esurface.energies,
-                            format!("{:+16e}", value),
+                            value,
                             value < value.zero()
                         )
                     }

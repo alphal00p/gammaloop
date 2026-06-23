@@ -477,17 +477,25 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
                 let pole_part = if given.subgraph().is_empty() {
                     integrand.clone()
                 } else {
-                    // Nested integrated branches receive finite_part - full, i.e. minus the pole part.
-                    -self.series_and_truncate(ctx, current, given, integrand)?
+                    // Nested integrated branches use the pole part directly for final pole-part
+                    // computations. Ordinary integrated CT generation inserts finite_part - full,
+                    // i.e. minus the pole part.
+                    let pole_part = self.series_and_truncate(ctx, current, given, integrand)?;
+                    if ctx.settings.pole_part {
+                        pole_part
+                    } else {
+                        -pole_part
+                    }
                 };
                 let with_added_expr = self.start(ctx, current, given, &pole_part)?;
                 let top = self.t(ctx, current, given, &with_added_expr)?;
-                let integrated = self.integrate(ctx, current, given, &top)?;
+                let result = self.integrate(ctx, current, given, &top)?;
+
                 debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #result;
-                    log.result = integrated,
+                    log.result = result,
                     "Integrated UV after integrate_and_truncate"
                 );
-                Ok(integrated)
+                Ok(result)
             }
             ApproximationType::IR => Err(eyre!("Not yet implemented IR")),
             ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),

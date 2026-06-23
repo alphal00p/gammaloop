@@ -36,6 +36,8 @@ struct RepresentativeScore {
 pub(crate) struct FinalIntegrand<'a> {
     valid_orientations: &'a [EdgeVec<Orientation>],
     orientation_pattern: &'a OrientationPattern,
+    uv_marker: Option<&'a Atom>,
+    tag_local_terms: bool,
 }
 
 pub(crate) struct LocalizedIntegratedCt {
@@ -72,10 +74,14 @@ impl<'a> FinalIntegrand<'a> {
     pub(crate) fn new(
         valid_orientations: &'a [EdgeVec<Orientation>],
         orientation_pattern: &'a OrientationPattern,
+        uv_marker: Option<&'a Atom>,
+        tag_local_terms: bool,
     ) -> Self {
         Self {
             valid_orientations,
             orientation_pattern,
+            uv_marker,
+            tag_local_terms,
         }
     }
 
@@ -453,8 +459,6 @@ impl<'a> FinalIntegrand<'a> {
         local_sign: Sign,
         integrated_4d: &ApproxOp,
         cutset: &CutSet,
-        uv_marker: Option<&Atom>,
-        tag_local_terms: bool,
     ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let global_num = graph.global_atom();
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -480,8 +484,8 @@ impl<'a> FinalIntegrand<'a> {
         {
             let mut term_started = std::time::Instant::now();
             let mut cff;
-            if let Some(marker) = uv_marker {
-                let local_term = if tag_local_terms {
+            if let Some(marker) = self.uv_marker {
+                let local_term = if self.tag_local_terms {
                     local * function!(GS.uv_local, marker.clone())
                 } else {
                     local.clone()
@@ -492,7 +496,7 @@ impl<'a> FinalIntegrand<'a> {
                     stage = "final_integrand_cff_inputs",
                     cut_index = ?local_index,
                     local_sign = ?local_sign,
-                    tag_local_terms,
+                    tag_local_terms = self.tag_local_terms,
                     log.local = local_term,
                     log.integrated = integrated_term,
                     log.cff_before_replacements = cff,
@@ -504,7 +508,7 @@ impl<'a> FinalIntegrand<'a> {
                     stage = "final_integrand_cff_inputs",
                     cut_index = ?local_index,
                     local_sign = ?local_sign,
-                    tag_local_terms,
+                    tag_local_terms = self.tag_local_terms,
                     log.local = local,
                     log.integrated = integ,
                     log.cff_before_replacements = cff,

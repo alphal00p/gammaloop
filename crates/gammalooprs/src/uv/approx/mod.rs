@@ -307,15 +307,19 @@ impl Approximation {
                     .expr(&graph.full_filter())
             });
             self.final_integrand = Some(
-                FinalIntegrand::new(valid_orientations, orientation_pattern).build(
+                FinalIntegrand::new(
+                    valid_orientations,
+                    orientation_pattern,
+                    uv_marker.as_ref(),
+                    true,
+                )
+                .build(
                     graph,
                     self,
                     &local_terms,
                     local_sign,
                     &self.integrated_4d,
                     cuts,
-                    uv_marker.as_ref(),
-                    true,
                 )?,
             );
         }
@@ -456,7 +460,8 @@ impl Approximation {
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Loaded parent local 3D UV CT"
         );
-        let final_integrand = FinalIntegrand::new(valid_orientations, orientation_pattern);
+        let final_integrand =
+            FinalIntegrand::new(valid_orientations, orientation_pattern, None, false);
 
         let localize_started = std::time::Instant::now();
         let integrated_t = final_integrand.localized_integrated_ct(
@@ -582,15 +587,19 @@ impl Approximation {
                 Some(tagged_integrands) => tagged_integrands,
                 None => &local_terms,
             };
-            final_integrand.build(
+            FinalIntegrand::new(
+                valid_orientations,
+                orientation_pattern,
+                uv_marker.as_ref(),
+                false,
+            )
+            .build(
                 graph,
                 self,
                 final_local_terms,
                 local_sign,
                 &self.integrated_4d,
                 cuts,
-                uv_marker.as_ref(),
-                false,
             )?
         });
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
