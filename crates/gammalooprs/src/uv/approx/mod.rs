@@ -387,7 +387,6 @@ impl Approximation {
             integrand_count = current.len(),
             "Computing integrated UV CT"
         );
-        let integrated_loop_count = graph.n_loops(self.spinney.filter());
         let integrands = current
             .iter()
             .map(|(index, a)| {
@@ -400,12 +399,7 @@ impl Approximation {
                     elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
                     "Computed integrated UV CT term"
                 );
-                let signed_integrated = if integrated_loop_count > 1 {
-                    integrated
-                } else {
-                    -integrated
-                };
-                Ok((*index, signed_integrated))
+                Ok((*index, integrated))
             })
             .collect::<Result<BTreeMap<_, _>>>()?;
 
@@ -417,7 +411,6 @@ impl Approximation {
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "compute_integrated_done",
             integrand_count = current.len(),
-            integrated_loop_count,
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Computed integrated UV CT"
         );

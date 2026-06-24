@@ -972,6 +972,7 @@ impl AmplitudeGraph {
         //         .with(function!(vk_mom, i as i64 + 1, W_.x___));
         // }
 
+        let direct_loop_measure_normalization = Atom::one();
         let mut vakint_integrand = to_vakint_integrand(
             &four_dimensional_integrand,
             &self.graph,
@@ -979,6 +980,7 @@ impl AmplitudeGraph {
             &self.graph.empty_subgraph::<SuBitGraph>(),
             config.settings,
             false,
+            &direct_loop_measure_normalization,
         );
 
         vakint_integrand.canonicalize(&true_settings, &config.vakint.topologies, false)?;

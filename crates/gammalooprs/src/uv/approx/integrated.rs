@@ -279,6 +279,10 @@ impl Integrated<'_> {
             log.integrand = integrand,
             "Integrating and truncating"
         );
+        // Integrated UV CTs are compared against local CFF terms. The CFF supplies the
+        // GammaLoop loop-measure phase for unintegrated loops; fully integrated loops must
+        // carry the corresponding GammaLoop/Vakint convention factor in the Vakint term.
+        let integrated_uv_loop_measure_normalization = -Atom::one();
         let mut integrand_vakint = to_vakint_integrand(
             integrand,
             graph,
@@ -286,6 +290,7 @@ impl Integrated<'_> {
             given.subgraph(),
             &settings.vakint,
             true,
+            &integrated_uv_loop_measure_normalization,
         );
 
         for (term_index, t) in integrand_vakint.0.iter().enumerate() {
@@ -477,9 +482,10 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
                 let pole_part = if given.subgraph().is_empty() {
                     integrand.clone()
                 } else {
-                    // Nested integrated branches use the pole part directly for final pole-part
-                    // computations. Ordinary integrated CT generation inserts finite_part - full,
-                    // i.e. minus the pole part.
+                    // In ordinary CT generation nested integrated insertions enter as
+                    // finite - full, i.e. minus their pole part. In pole-part mode the
+                    // terminal forest sum performs the projection, so keep the pole part
+                    // itself here.
                     let pole_part = self.series_and_truncate(ctx, current, given, integrand)?;
                     if ctx.settings.pole_part {
                         pole_part
@@ -521,6 +527,7 @@ pub(crate) fn to_vakint_integrand<
     dependent_subgraph: &SS,
     settings: &VakintSettings,
     substitute_masses_to_m_uv: bool,
+    loop_measure_normalization: &Atom,
 ) -> VakintExpression {
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
@@ -1013,7 +1020,21 @@ pub(crate) fn to_vakint_integrand<
         //     term
         // );
 
-        t.numerator *= parse!(&settings.additional_normalization).pow(nloops);
+        let additional_normalization = parse!(&settings.additional_normalization);
+        let loop_normalization =
+            loop_measure_normalization.clone() * additional_normalization.clone();
+        t.numerator *= loop_normalization.pow(nloops);
+        debug_tags!(#uv, #integrated, #vakint, #trace;
+            stage = "to_vakint_integrand_term_after_loop_normalization",
+            term_index = %term_index,
+            reduced = %reduced_label,
+            dependent_subgraph = %dependent_subgraph_label,
+            nloops = nloops,
+            log.loop_measure_normalization = loop_measure_normalization,
+            log.additional_normalization = additional_normalization,
+            log.numerator = t.numerator,
+            "Vakint trace after loop normalization"
+        );
 
         // Vakint needs explicit tensor indices; only translate metric shorthands
         // to dot notation here, without reintroducing Schoonschip rank-1 factors.
