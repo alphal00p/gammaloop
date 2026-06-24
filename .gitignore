@@ -47,6 +47,10 @@ examples/cli/epem_a_ttxh/NNLO
 examples/**/*state*/
 examples/**/OLD_*
 examples/**/gammaloop_state/
+examples/cli/a_a/**
+!examples/cli/a_a/
+!examples/cli/a_a/*/
+!examples/cli/a_a/*/a_a.toml
 integration-tests/workspace/
 crates/integration-tests/workspace/
 tests/artifacts/
