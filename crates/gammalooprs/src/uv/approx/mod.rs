@@ -70,12 +70,10 @@ pub trait ApproxKernel {
 pub enum ApproxOp {
     NotComputed,
     Union {
-        sign: Sign,
         t_args: Vec<IntegrandExpr>,
         subgraphs: Vec<InternalSubGraph>,
     },
     Dependent {
-        sign: Sign,
         t_arg: IntegrandExpr,
         subgraph: InternalSubGraph,
     },
@@ -362,7 +360,6 @@ impl Approximation {
                 t_arg: IntegrandExpr {
                     integrands: BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
                 },
-                sign: Sign::Positive,
                 subgraph: unsafe {
                     InternalSubGraph::new_unchecked(self.reduced_subgraph(dependent))
                 },
@@ -372,7 +369,7 @@ impl Approximation {
 
         let ctx = UVCtx { graph, settings };
 
-        let Some((current, sign)) = &dependent.integrated_4d.expr() else {
+        let Some(current) = &dependent.integrated_4d.expr() else {
             return Err(eyre!("integrated_4d not computed"));
         };
 
@@ -390,6 +387,7 @@ impl Approximation {
             integrand_count = current.len(),
             "Computing integrated UV CT"
         );
+        let integrated_loop_count = graph.n_loops(self.spinney.filter());
         let integrands = current
             .iter()
             .map(|(index, a)| {
@@ -402,19 +400,17 @@ impl Approximation {
                     elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
                     "Computed integrated UV CT term"
                 );
-                Ok((*index, integrated))
+                let signed_integrated = if integrated_loop_count > 1 {
+                    integrated
+                } else {
+                    -integrated
+                };
+                Ok((*index, signed_integrated))
             })
             .collect::<Result<BTreeMap<_, _>>>()?;
 
-        let integrated_loop_count = graph.n_loops(self.spinney.filter());
-        let output_sign = if integrated_loop_count > 1 {
-            *sign
-        } else {
-            -*sign
-        };
         self.integrated_4d = ApproxOp::Dependent {
             t_arg: IntegrandExpr { integrands },
-            sign: output_sign,
             subgraph: unsafe { InternalSubGraph::new_unchecked(self.reduced_subgraph(dependent)) },
         };
 
@@ -422,8 +418,6 @@ impl Approximation {
             stage = "compute_integrated_done",
             integrand_count = current.len(),
             integrated_loop_count,
-            parent_sign = ?sign,
-            output_sign = ?output_sign,
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Computed integrated UV CT"
         );
@@ -625,7 +619,7 @@ impl Approximation {
 }
 
 impl ApproxOp {
-    pub(crate) fn expr(&self) -> Option<(BTreeMap<CutCFFIndex, Atom>, Sign)> {
+    pub(crate) fn expr(&self) -> Option<BTreeMap<CutCFFIndex, Atom>> {
         match self {
             ApproxOp::NotComputed => None,
             ApproxOp::Union { .. } => {
@@ -634,11 +628,11 @@ impl ApproxOp {
                     "Should not call expr on a union approximation, need to compute the union first"
                 );
             }
-            ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.integrands.clone(), *sign)),
-            ApproxOp::Root => Some((
-                BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::num(1))]),
-                Sign::Positive,
-            )),
+            ApproxOp::Dependent { t_arg, .. } => Some(t_arg.integrands.clone()),
+            ApproxOp::Root => Some(BTreeMap::from([(
+                CutCFFIndex::new_all_none(),
+                Atom::num(1),
+            )])),
         }
     }
 }

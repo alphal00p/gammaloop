@@ -485,12 +485,7 @@ impl OperationNode {
                 let (current, given) = wood.current_given_pair(op.data, order);
                 order += 1;
                 compute_store.record_kernel_hit();
-                let integrated = integrated_orchestrator.kernel(&uvctx, &current, &given, &acc)?;
-                if graph.n_loops(current.subgraph()) > 1 {
-                    mul *= integrated;
-                } else {
-                    mul *= -integrated;
-                }
+                mul *= -integrated_orchestrator.kernel(&uvctx, &current, &given, &acc)?;
             }
 
             acc = mul

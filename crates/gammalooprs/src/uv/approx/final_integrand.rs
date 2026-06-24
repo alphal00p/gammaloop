@@ -265,32 +265,24 @@ impl<'a> FinalIntegrand<'a> {
     }
 
     fn finite_integrated_ct(&self, integrated_4d: &ApproxOp) -> Atom {
-        let (mut t4, t4_sign) = match integrated_4d {
-            ApproxOp::Root => (
-                BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
-                Sign::Positive,
-            ),
-            _ => integrated_4d.expr().unwrap_or((
-                BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
-                Sign::Positive,
-            )),
+        let mut t4 = match integrated_4d {
+            ApproxOp::Root => BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)]),
+            _ => integrated_4d
+                .expr()
+                .unwrap_or(BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)])),
         };
         if t4.len() != 1 {
             panic!("Should only have one t_arg for the 4d approximation");
         }
 
-        let signed_t4 = t4
-            .remove(&CutCFFIndex::new_all_none())
-            .map(|t4| t4_sign * t4)
-            .unwrap();
-        let finite = signed_t4
+        let t4 = t4.remove(&CutCFFIndex::new_all_none()).unwrap();
+        let finite = t4
             .series(GS.dim_epsilon, Atom::Zero, 0)
             .unwrap()
             .coefficient((0, 1).into());
         debug_tags!(#generation, #profile, #uv, #integrated, #local, #trace;
             stage = "finite_integrated_ct",
-            t4_sign = ?t4_sign,
-            log.signed_t4 = signed_t4,
+            log.t4 = t4,
             log.finite = finite,
             "Extracted finite integrated UV CT"
         );
@@ -308,7 +300,6 @@ impl<'a> FinalIntegrand<'a> {
         graph: &mut Graph,
         integrated_node: &S,
         finite_ct: &Atom,
-        integrated_sign: Sign,
         cuts: &CutSet,
     ) -> Result<LocalizedIntegratedCt> {
         debug_tags!(#uv; log.expr = finite_ct, "Localizing integrated UV CT");
@@ -334,7 +325,6 @@ impl<'a> FinalIntegrand<'a> {
         debug_tags!(#generation, #profile, #uv, #integrated, #local, #summary;
             stage = "localize_integrated_ct_forest_overlap",
             integrated_loop_count,
-            integrated_sign = ?integrated_sign,
             "Applied integrated UV forest-overlap addback rule"
         );
         let cff = graph.cff(
@@ -433,17 +423,13 @@ impl<'a> FinalIntegrand<'a> {
         //     }
         // }
 
-        let integrated_sign = integrated_4d
-            .expr()
-            .map(|(_, sign)| sign)
-            .unwrap_or(Sign::Positive);
         debug_tags!(
             #uv;
             log.finite = finite,
             "Computing localized integrated UV CT",
         );
 
-        self.localize_integrated_ct(graph, integrated_node, &finite, integrated_sign, cuts)
+        self.localize_integrated_ct(graph, integrated_node, &finite, cuts)
     }
 
     #[debug_instrument(

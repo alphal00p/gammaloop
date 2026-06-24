@@ -324,7 +324,7 @@ impl Forest {
                 continue;
             }
 
-            let (atom, sign) = n.data.integrated_4d.expr().ok_or(eyre!(
+            let atom = n.data.integrated_4d.expr().ok_or(eyre!(
                 "Integrated pole part not computed for {} of graph {}",
                 n.data
                     .simple_approx
@@ -334,9 +334,7 @@ impl Forest {
                 graph.name
             ))?;
 
-            let mut atom = atom[&CutCFFIndex::new_all_none()].clone();
-
-            atom = sign * atom;
+            let atom = atom[&CutCFFIndex::new_all_none()].clone();
 
             // debug!(
             //     forest_term=%
