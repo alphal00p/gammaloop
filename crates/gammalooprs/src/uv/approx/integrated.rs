@@ -279,10 +279,10 @@ impl Integrated<'_> {
             log.integrand = integrand,
             "Integrating and truncating"
         );
-        // Integrated UV CTs are compared against local CFF terms. The CFF supplies the
-        // GammaLoop loop-measure phase for unintegrated loops; fully integrated loops must
-        // carry the corresponding GammaLoop/Vakint convention factor in the Vakint term.
-        let integrated_uv_loop_measure_normalization = -Atom::one();
+        // Match the vacuum result to the unintegrated CFF loop measure through
+        // Vakint's configured per-loop normalization hook. Forest-subtraction
+        // signs are folded into the expression at the integrated CT composition
+        // sites.
         let mut integrand_vakint = to_vakint_integrand(
             integrand,
             graph,
@@ -290,7 +290,6 @@ impl Integrated<'_> {
             given.subgraph(),
             &settings.vakint,
             true,
-            &integrated_uv_loop_measure_normalization,
         );
 
         for (term_index, t) in integrand_vakint.0.iter().enumerate() {
@@ -527,7 +526,6 @@ pub(crate) fn to_vakint_integrand<
     dependent_subgraph: &SS,
     settings: &VakintSettings,
     substitute_masses_to_m_uv: bool,
-    loop_measure_normalization: &Atom,
 ) -> VakintExpression {
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
@@ -1021,16 +1019,13 @@ pub(crate) fn to_vakint_integrand<
         // );
 
         let additional_normalization = parse!(&settings.additional_normalization);
-        let loop_normalization =
-            loop_measure_normalization.clone() * additional_normalization.clone();
-        t.numerator *= loop_normalization.pow(nloops);
+        t.numerator *= additional_normalization.clone().pow(nloops);
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_loop_normalization",
             term_index = %term_index,
             reduced = %reduced_label,
             dependent_subgraph = %dependent_subgraph_label,
             nloops = nloops,
-            log.loop_measure_normalization = loop_measure_normalization,
             log.additional_normalization = additional_normalization,
             log.numerator = t.numerator,
             "Vakint trace after loop normalization"

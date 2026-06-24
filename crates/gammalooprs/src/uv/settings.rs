@@ -8,7 +8,7 @@ use crate::utils::{
     serde_utils::{
         IsDefault, is_default_form_path, is_default_pysecdec_relative_precision,
         is_default_python_path, is_default_vakint_evaluation_methods,
-        is_default_vakint_normalization, is_false, is_one_string, is_true, is_usize,
+        is_default_vakint_normalization, is_false, is_minus_one_string, is_true, is_usize,
     },
 };
 use bincode_trait_derive::{Decode, Encode};
@@ -238,7 +238,7 @@ pub struct VakintSettings {
     pub temporary_directory: Option<String>,
     #[serde(skip_serializing_if = "is_default_vakint_normalization")]
     pub normalization: String,
-    #[serde(skip_serializing_if = "is_one_string")]
+    #[serde(skip_serializing_if = "is_minus_one_string")]
     pub additional_normalization: String,
 }
 
@@ -318,7 +318,7 @@ impl Default for VakintSettings {
             clean_tmp_dir: true,
             temporary_directory: None,
             normalization: "MSbar".to_string(),
-            additional_normalization: "1".to_string(),
+            additional_normalization: "-1".to_string(),
         }
     }
 }

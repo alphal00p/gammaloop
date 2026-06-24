@@ -486,6 +486,11 @@ impl OperationNode {
                 order += 1;
                 compute_store.record_kernel_hit();
                 let integrated = integrated_orchestrator.kernel(&uvctx, &current, &given, &acc)?;
+                let integrated = if given.subgraph().is_empty() {
+                    integrated
+                } else {
+                    -integrated
+                };
                 mul *= integrated;
             }
 

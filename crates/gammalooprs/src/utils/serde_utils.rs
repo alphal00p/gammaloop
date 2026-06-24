@@ -318,8 +318,8 @@ pub fn is_default_vakint_normalization(val: &String) -> bool {
     show_defaults_helper(val == "MSbar")
 }
 
-pub fn is_one_string(val: &String) -> bool {
-    show_defaults_helper(val == "1")
+pub fn is_minus_one_string(val: &String) -> bool {
+    show_defaults_helper(val == "-1")
 }
 
 pub fn is_float<const D: i64>(val: &f64) -> bool {

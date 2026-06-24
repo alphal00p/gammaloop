@@ -318,8 +318,8 @@ impl<'a> FinalIntegrand<'a> {
 
         let to_contract = integrated_node.subgraph();
         let integrated_loop_count = graph.n_loops(to_contract);
-        // Keep finite addbacks for nested multi-loop entries. Integrated expressions are already
-        // in the GammaLoop loop-integration convention, so dropping the localized finite
+        // Keep finite addbacks for nested multi-loop entries. Integrated expressions carry
+        // their forest-composition signs where needed, so dropping the localized finite
         // representative here removes the Tint(T(...)) terms.
         let finite_ct = finite_ct.clone();
         debug_tags!(#generation, #profile, #uv, #integrated, #local, #summary;

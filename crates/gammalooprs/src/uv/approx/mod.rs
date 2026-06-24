@@ -393,6 +393,11 @@ impl Approximation {
                 let term_started = std::time::Instant::now();
                 let integrated =
                     Integrated::new(vakint.0, vakint.1).kernel(&ctx, self, dependent, a)?;
+                let integrated = if dependent.subgraph().is_empty() {
+                    integrated
+                } else {
+                    -integrated
+                };
                 debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                     stage = "compute_integrated_kernel_done",
                     cut_index = ?index,
