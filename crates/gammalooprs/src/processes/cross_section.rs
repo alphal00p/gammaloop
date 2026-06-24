@@ -1114,12 +1114,20 @@ impl CrossSectionGraph {
             - self.graph.initial_state_cut.nedges(&self.graph);
 
         let loop_3 = loop_number as i64 * 3;
-        let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).pow(loop_3 - 1); // multiply with 2pi from energy conservation delta
+        let energy_conservation_delta_factor = Atom::num(2) * Atom::var(GS.pi);
+
+        crate::debug_tags!(#generation, #normalization, #lu, #graph, #summary;
+            stage = "cross_section_lu_prefactor",
+            graph = %self.graph.name,
+            loop_number,
+            loop_3,
+            "Cross-section LU prefactor normalization"
+        );
 
         let tstar = Atom::var(GS.rescale_star);
         let tsrat_pow = tstar.pow(loop_3);
         let hfunction = Atom::var(GS.hfunction_lu_cut);
-        tsrat_pow * hfunction / factors_of_pi
+        tsrat_pow * hfunction * energy_conservation_delta_factor
     }
 
     fn single_th_prefactor_helper_atom(
