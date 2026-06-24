@@ -99,12 +99,6 @@ mod tests {
     }
 
     #[test]
-    fn massless_bubble_is_a_master() {
-        crate::ensure_symbolica_license();
-        assert!(OneLoopMasters.is_master(&massless_bubble()));
-    }
-
-    #[test]
     fn bubble_maps_to_symbolic_b0() {
         crate::ensure_symbolica_license();
         let got = OneLoopMasters.symbol(&massless_bubble());

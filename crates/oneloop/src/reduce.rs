@@ -21,8 +21,8 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
     let mass = |i: usize| family.propagators[i].mass_sq.clone();
     let exponents = &family.targets[0].propagator_exponents;
 
-    if family.numerator != Atom::num(1) && family.propagators.len() != 2 {
-        todo!("numerator reduction for bubble only so far");
+    if family.numerator != Atom::num(1) && !matches!(family.propagators.len(), 2..=4) {
+        todo!("numerator reduction supports bubble/triangle/box");
     }
 
     let terms = match family.propagators.len() {
@@ -63,33 +63,72 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
             push_nonzero(&mut terms, c_a2, MasterIntegral::Tadpole { m_sq: m2_sq });
             terms
         }
-        3 => reduce_triangle(
-            exponents[0],
-            exponents[1],
-            exponents[2],
-            &inv(0),
-            &inv(1),
-            &inv(2),
-            &mass(0),
-            &mass(1),
-            &mass(2),
-        ),
-        4 => reduce_box(
-            exponents[0],
-            exponents[1],
-            exponents[2],
-            exponents[3],
-            &inv(0),
-            &inv(1),
-            &inv(2),
-            &inv(3),
-            &inv(4),
-            &inv(5),
-            &mass(0),
-            &mass(1),
-            &mass(2),
-            &mass(3),
-        ),
+        3 => {
+            if family.numerator == Atom::num(1) {
+                reduce_triangle(
+                    exponents[0],
+                    exponents[1],
+                    exponents[2],
+                    &inv(0),
+                    &inv(1),
+                    &inv(2),
+                    &mass(0),
+                    &mass(1),
+                    &mass(2),
+                )
+            } else {
+                triangle_numerator(
+                    &family.numerator,
+                    exponents[0],
+                    exponents[1],
+                    exponents[2],
+                    &inv(0),
+                    &inv(1),
+                    &inv(2),
+                    &mass(0),
+                    &mass(1),
+                    &mass(2),
+                )
+            }
+        }
+        4 => {
+            if family.numerator == Atom::num(1) {
+                reduce_box(
+                    exponents[0],
+                    exponents[1],
+                    exponents[2],
+                    exponents[3],
+                    &inv(0),
+                    &inv(1),
+                    &inv(2),
+                    &inv(3),
+                    &inv(4),
+                    &inv(5),
+                    &mass(0),
+                    &mass(1),
+                    &mass(2),
+                    &mass(3),
+                )
+            } else {
+                box_numerator(
+                    &family.numerator,
+                    exponents[0],
+                    exponents[1],
+                    exponents[2],
+                    exponents[3],
+                    &inv(0),
+                    &inv(1),
+                    &inv(2),
+                    &inv(3),
+                    &inv(4),
+                    &inv(5),
+                    &mass(0),
+                    &mass(1),
+                    &mass(2),
+                    &mass(3),
+                )
+            }
+        }
         n => todo!("scalar reduction for {n}-propagator families"),
     };
 
@@ -606,6 +645,186 @@ fn bubble_numerator(
     )
 }
 
+// Reduce a triangle with a rank-1 numerator.
+#[allow(clippy::too_many_arguments)]
+fn triangle_numerator(
+    numerator: &Atom,
+    a1: i32,
+    a2: i32,
+    a3: i32,
+    s1: &Atom,
+    s2: &Atom,
+    s3: &Atom,
+    m1: &Atom,
+    m2: &Atom,
+    m3: &Atom,
+) -> Vec<(Atom, MasterIntegral)> {
+    let k = Atom::var(S.k);
+    let q1 = Atom::var(S.q1);
+    let q2 = Atom::var(S.q2);
+    let den1 = symbol!("oneloop::den1");
+    let den2 = symbol!("oneloop::den2");
+    let den3 = symbol!("oneloop::den3");
+    let d1 = Atom::var(den1);
+    let d2 = Atom::var(den2);
+    let d3 = Atom::var(den3);
+    let two = Atom::num(2);
+
+    //  l.l = D1+m1 ;  l.q1 = (D2-D1-m1+m2-s1)/2 ;  l.q2 = (D3-D2-m2+m3+s1-s3)/2
+    //  q1.q1 = s1 ;  q2.q2 = s2 ;  q1.q2 = (s3-s1-s2)/2
+    let n = numerator
+        .replace(function!(S.dot, &k, &k).to_pattern())
+        .with(&d1 + m1)
+        .replace(function!(S.dot, &k, &q1).to_pattern())
+        .with((&d2 - &d1 - m1 + m2 - s1) / &two)
+        .replace(function!(S.dot, &k, &q2).to_pattern())
+        .with((&d3 - &d2 - m2 + m3 + s1 - s3) / &two)
+        .replace(function!(S.dot, &q1, &q1).to_pattern())
+        .with(s1.clone())
+        .replace(function!(S.dot, &q2, &q2).to_pattern())
+        .with(s2.clone())
+        .replace(function!(S.dot, &q1, &q2).to_pattern())
+        .with((s3 - s1 - s2) / &two);
+
+    let c_den1 = n.derivative(den1);
+    let c_den2 = n.derivative(den2);
+    let c_den3 = n.derivative(den3);
+    let c_const = n
+        .replace(d1.to_pattern())
+        .with(Atom::Zero)
+        .replace(d2.to_pattern())
+        .with(Atom::Zero)
+        .replace(d3.to_pattern())
+        .with(Atom::Zero);
+
+    let mut acc: Vec<(Atom, MasterIntegral)> = Vec::new();
+    add_scaled(
+        &mut acc,
+        &c_const,
+        reduce_triangle(a1, a2, a3, s1, s2, s3, m1, m2, m3),
+    );
+    add_scaled(
+        &mut acc,
+        &c_den1,
+        reduce_triangle(a1 - 1, a2, a3, s1, s2, s3, m1, m2, m3),
+    );
+    add_scaled(
+        &mut acc,
+        &c_den2,
+        reduce_triangle(a1, a2 - 1, a3, s1, s2, s3, m1, m2, m3),
+    );
+    add_scaled(
+        &mut acc,
+        &c_den3,
+        reduce_triangle(a1, a2, a3 - 1, s1, s2, s3, m1, m2, m3),
+    );
+    acc
+}
+
+// Reduce a box with a rank-1 numerator.
+#[allow(clippy::too_many_arguments)]
+fn box_numerator(
+    numerator: &Atom,
+    a1: i32,
+    a2: i32,
+    a3: i32,
+    a4: i32,
+    p1: &Atom,
+    p2: &Atom,
+    p3: &Atom,
+    p4: &Atom,
+    s: &Atom,
+    t: &Atom,
+    m1: &Atom,
+    m2: &Atom,
+    m3: &Atom,
+    m4: &Atom,
+) -> Vec<(Atom, MasterIntegral)> {
+    let k = Atom::var(S.k);
+    let q1 = Atom::var(S.q1);
+    let q2 = Atom::var(S.q2);
+    let q3 = Atom::var(S.q3);
+    let den1 = symbol!("oneloop::den1");
+    let den2 = symbol!("oneloop::den2");
+    let den3 = symbol!("oneloop::den3");
+    let den4 = symbol!("oneloop::den4");
+    let d1 = Atom::var(den1);
+    let d2 = Atom::var(den2);
+    let d3 = Atom::var(den3);
+    let d4 = Atom::var(den4);
+    let two = Atom::num(2);
+
+    let q12 = (s - p1 - p2) / &two;
+    let q23 = (t - p2 - p3) / &two;
+    let q13 = (p4 - p1 - p2 - p3) / &two - &q12 - &q23;
+
+    //  l.l = D1+m1 ;  l.q1 = (D2-D1-m1+m2-p1)/2
+    //  l.q2 = (D3-D2-m2+m3+p1-s)/2 ;  l.q3 = (D4-D3-m3+m4-p4+s)/2
+    let n = numerator
+        .replace(function!(S.dot, &k, &k).to_pattern())
+        .with(&d1 + m1)
+        .replace(function!(S.dot, &k, &q1).to_pattern())
+        .with((&d2 - &d1 - m1 + m2 - p1) / &two)
+        .replace(function!(S.dot, &k, &q2).to_pattern())
+        .with((&d3 - &d2 - m2 + m3 + p1 - s) / &two)
+        .replace(function!(S.dot, &k, &q3).to_pattern())
+        .with((&d4 - &d3 - m3 + m4 - p4 + s) / &two)
+        .replace(function!(S.dot, &q1, &q1).to_pattern())
+        .with(p1.clone())
+        .replace(function!(S.dot, &q2, &q2).to_pattern())
+        .with(p2.clone())
+        .replace(function!(S.dot, &q3, &q3).to_pattern())
+        .with(p3.clone())
+        .replace(function!(S.dot, &q1, &q2).to_pattern())
+        .with(q12.clone())
+        .replace(function!(S.dot, &q2, &q3).to_pattern())
+        .with(q23.clone())
+        .replace(function!(S.dot, &q1, &q3).to_pattern())
+        .with(q13.clone());
+
+    let c_den1 = n.derivative(den1);
+    let c_den2 = n.derivative(den2);
+    let c_den3 = n.derivative(den3);
+    let c_den4 = n.derivative(den4);
+    let c_const = n
+        .replace(d1.to_pattern())
+        .with(Atom::Zero)
+        .replace(d2.to_pattern())
+        .with(Atom::Zero)
+        .replace(d3.to_pattern())
+        .with(Atom::Zero)
+        .replace(d4.to_pattern())
+        .with(Atom::Zero);
+
+    let mut acc: Vec<(Atom, MasterIntegral)> = Vec::new();
+    add_scaled(
+        &mut acc,
+        &c_const,
+        reduce_box(a1, a2, a3, a4, p1, p2, p3, p4, s, t, m1, m2, m3, m4),
+    );
+    add_scaled(
+        &mut acc,
+        &c_den1,
+        reduce_box(a1 - 1, a2, a3, a4, p1, p2, p3, p4, s, t, m1, m2, m3, m4),
+    );
+    add_scaled(
+        &mut acc,
+        &c_den2,
+        reduce_box(a1, a2 - 1, a3, a4, p1, p2, p3, p4, s, t, m1, m2, m3, m4),
+    );
+    add_scaled(
+        &mut acc,
+        &c_den3,
+        reduce_box(a1, a2, a3 - 1, a4, p1, p2, p3, p4, s, t, m1, m2, m3, m4),
+    );
+    add_scaled(
+        &mut acc,
+        &c_den4,
+        reduce_box(a1, a2, a3, a4 - 1, p1, p2, p3, p4, s, t, m1, m2, m3, m4),
+    );
+    acc
+}
+
 #[cfg(test)]
 mod tests {
     use super::reduce;
@@ -832,6 +1051,64 @@ mod tests {
     }
 
     #[test]
+    fn triangle_with_linear_numerator_reduces_to_masters() {
+        crate::ensure_symbolica_license();
+        let s1 = Atom::var(symbol!("oneloop::s1"));
+        let s2 = Atom::var(symbol!("oneloop::s2"));
+        let s3 = Atom::var(symbol!("oneloop::s3"));
+        let m1 = Atom::var(symbol!("oneloop::m1sq"));
+        let m2 = Atom::var(symbol!("oneloop::m2sq"));
+        let m3 = Atom::var(symbol!("oneloop::m3sq"));
+        // numerator = 2*(l.q1) - (l.q2) + (l.l)
+        let numerator = Atom::num(2) * function!(S.dot, Atom::var(S.k), Atom::var(S.q1))
+            - function!(S.dot, Atom::var(S.k), Atom::var(S.q2))
+            + function!(S.dot, Atom::var(S.k), Atom::var(S.k));
+        let fam = IntegralFamily {
+            propagators: vec![
+                Propagator {
+                    momentum: Atom::Zero,
+                    mass_sq: m1,
+                },
+                Propagator {
+                    momentum: Atom::Zero,
+                    mass_sq: m2,
+                },
+                Propagator {
+                    momentum: Atom::Zero,
+                    mass_sq: m3,
+                },
+            ],
+            isps: vec![],
+            kinematics: Kinematics {
+                invariants: vec![s1, s2, s3],
+                masses_sq: vec![],
+            },
+            targets: vec![Integral {
+                propagator_exponents: vec![1, 1, 1],
+                isp_exponents: vec![],
+            }],
+            numerator,
+        };
+        let r = reduce(&fam);
+        assert!(
+            r.terms
+                .iter()
+                .any(|(_, m)| matches!(m, MasterIntegral::Triangle { .. }))
+        );
+        assert!(
+            r.terms
+                .iter()
+                .any(|(_, m)| matches!(m, MasterIntegral::Bubble { .. }))
+        );
+        assert!(r.terms.iter().all(|(_, m)| matches!(
+            m,
+            MasterIntegral::Triangle { .. }
+                | MasterIntegral::Bubble { .. }
+                | MasterIntegral::Tadpole { .. }
+        )));
+    }
+
+    #[test]
     fn scalar_triangle_reduces_to_unit_c0() {
         crate::ensure_symbolica_license();
         let r = reduce(&scalar_family(
@@ -916,6 +1193,64 @@ mod tests {
                 .iter()
                 .all(|(_, m)| !matches!(m, MasterIntegral::Box { .. }))
         );
+    }
+
+    #[test]
+    fn box_with_linear_numerator_reduces_to_masters() {
+        crate::ensure_symbolica_license();
+        let [p1, p2, p3, p4, s, t, m1, m2, m3, m4] = box_syms();
+        // numerator = (l.q1) + 3*(l.q3) - 2*(l.l)
+        let numerator = function!(S.dot, Atom::var(S.k), Atom::var(S.q1))
+            + Atom::num(3) * function!(S.dot, Atom::var(S.k), Atom::var(S.q3))
+            - Atom::num(2) * function!(S.dot, Atom::var(S.k), Atom::var(S.k));
+        let fam = IntegralFamily {
+            propagators: vec![
+                Propagator {
+                    momentum: Atom::Zero,
+                    mass_sq: m1,
+                },
+                Propagator {
+                    momentum: Atom::Zero,
+                    mass_sq: m2,
+                },
+                Propagator {
+                    momentum: Atom::Zero,
+                    mass_sq: m3,
+                },
+                Propagator {
+                    momentum: Atom::Zero,
+                    mass_sq: m4,
+                },
+            ],
+            isps: vec![],
+            kinematics: Kinematics {
+                invariants: vec![p1, p2, p3, p4, s, t],
+                masses_sq: vec![],
+            },
+            targets: vec![Integral {
+                propagator_exponents: vec![1, 1, 1, 1],
+                isp_exponents: vec![],
+            }],
+            numerator,
+        };
+        let r = reduce(&fam);
+        assert!(
+            r.terms
+                .iter()
+                .any(|(_, m)| matches!(m, MasterIntegral::Box { .. }))
+        );
+        assert!(
+            r.terms
+                .iter()
+                .any(|(_, m)| matches!(m, MasterIntegral::Triangle { .. }))
+        );
+        assert!(r.terms.iter().all(|(_, m)| matches!(
+            m,
+            MasterIntegral::Box { .. }
+                | MasterIntegral::Triangle { .. }
+                | MasterIntegral::Bubble { .. }
+                | MasterIntegral::Tadpole { .. }
+        )));
     }
 
     #[test]
