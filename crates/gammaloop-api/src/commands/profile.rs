@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::{
     completion::CompletionArgExt,
-    state::{ProcessListExt, ProcessRef, State},
+    state::{ProcessRef, State},
     CLISettings,
 };
 use color_eyre::Result;
@@ -40,16 +40,16 @@ pub struct UltraVioletProfile {
         short = 'p',
         long = "process",
         value_name = "PROCESS",
-        completion_process_selector(crate::completion::SelectorKind::Amplitude)
+        completion_process_selector(crate::completion::SelectorKind::Any)
     )]
     pub process: Option<ProcessRef>,
 
-    /// The amplitude name to inspect
+    /// The integrand name to inspect
     #[arg(
         short = 'i',
         long = "integrand-name",
         value_name = "NAME",
-        completion_integrand_selector(crate::completion::SelectorKind::Amplitude)
+        completion_integrand_selector(crate::completion::SelectorKind::Any)
     )]
     pub integrand_name: Option<String>,
 
@@ -239,17 +239,43 @@ impl Profile {
                 let (process_id, integrand_name) =
                     state.find_integrand_ref(process.as_ref(), integrand_name.as_ref())?;
                 let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
-                let process_ref = ProcessRef::Id(process_id);
-                let amplitude = state
-                    .process_list
-                    .get_amplitude_mut_ref(Some(&process_ref), Some(&integrand_name))?;
-
-                let integrand = amplitude.integrand.as_mut().ok_or(eyre!(
-                    "Integrand {} has not yet been generated, but exists",
-                    amplitude.name
-                ))?;
-                integrand.warm_up(&model)?;
-                let default_uv_ray_norm = integrand.get_settings().kinematics.e_cm;
+                let default_uv_ray_norm = {
+                    let process = &mut state.process_list.processes[process_id];
+                    match &mut process.collection {
+                        ProcessCollection::Amplitudes(amplitudes) => {
+                            let amplitude =
+                                amplitudes.get_mut(&integrand_name).ok_or_else(|| {
+                                    eyre!(
+                                        "No amplitude named '{}' in process '{}'",
+                                        integrand_name,
+                                        process.definition.folder_name
+                                    )
+                                })?;
+                            let integrand = amplitude.integrand.as_mut().ok_or(eyre!(
+                                "Integrand {} has not yet been generated, but exists",
+                                amplitude.name
+                            ))?;
+                            integrand.warm_up(&model)?;
+                            integrand.get_settings().kinematics.e_cm
+                        }
+                        ProcessCollection::CrossSections(cross_sections) => {
+                            let cross_section =
+                                cross_sections.get_mut(&integrand_name).ok_or_else(|| {
+                                    eyre!(
+                                        "No cross section named '{}' in process '{}'",
+                                        integrand_name,
+                                        process.definition.folder_name
+                                    )
+                                })?;
+                            let integrand = cross_section.integrand.as_mut().ok_or(eyre!(
+                                "Integrand {} has not yet been generated, but exists",
+                                cross_section.name
+                            ))?;
+                            integrand.warm_up(&model)?;
+                            integrand.get_settings().kinematics.e_cm
+                        }
+                    }
+                };
 
                 let fixed_uv_ray = if uv_ray_directions.is_empty() {
                     None
@@ -280,7 +306,32 @@ impl Profile {
                     fixed_uv_ray,
                     ..Default::default()
                 };
-                let profile_res = amplitude.profile(&model, &profile_settings)?.analyse();
+                let profile_res = {
+                    let process = &mut state.process_list.processes[process_id];
+                    match &mut process.collection {
+                        ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                            .get_mut(&integrand_name)
+                            .ok_or_else(|| {
+                                eyre!(
+                                    "No amplitude named '{}' in process '{}'",
+                                    integrand_name,
+                                    process.definition.folder_name
+                                )
+                            })?
+                            .profile(&model, &profile_settings)?,
+                        ProcessCollection::CrossSections(cross_sections) => cross_sections
+                            .get_mut(&integrand_name)
+                            .ok_or_else(|| {
+                                eyre!(
+                                    "No cross section named '{}' in process '{}'",
+                                    integrand_name,
+                                    process.definition.folder_name
+                                )
+                            })?
+                            .profile(&model, &profile_settings)?,
+                    }
+                }
+                .analyse();
 
                 for t in profile_res.tables_per_graph(-0.9) {
                     info!("\n{}", t);

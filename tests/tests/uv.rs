@@ -1642,52 +1642,50 @@ mod slow {
         Ok(())
     }
 }
-mod failing {
-    use super::*;
+#[test]
+fn epem_a_ddx_xs_nlo_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "uv/epem_a_ddx_xs_nlo",
+        test_name: "epem_a_ddx_xs_nlo",
+        process: "epem_a_ddx",
+        integrand_name: "NLO",
+        integrator: DEFAULT_INTEGRATED_UV_INTEGRATOR,
+        original_m_uv: 20.0,
+        shifted_m_uv: 7.0,
+        original_renormalization_localization_scale: 5.0,
+        shifted_renormalization_localization_scale: 25.0,
+        original_mu_r: 3.0,
+        shifted_mu_r: 9.0,
+        skip_uv_profile: true,
+        targets: IntegratedUvTargets {
+            integrated: Some(Complex::new(F(0.0), F(1.163e-3))),
+        },
+        integrated_ct_relative_error_limit: None,
+        check_mu_r_dependence: false,
+    });
+}
 
-    #[test]
-    fn epem_a_ddx_xs_nlo_uv() {
-        run_single_integrated_uv_case(&IntegratedUvCase {
-            run_card: "uv/epem_a_ddx_xs_nlo",
-            test_name: "epem_a_ddx_xs_nlo",
-            process: "epem_a_ddx",
-            integrand_name: "NLO",
-            integrator: DEFAULT_INTEGRATED_UV_INTEGRATOR,
-            original_m_uv: 20.0,
-            shifted_m_uv: 7.0,
-            original_renormalization_localization_scale: 5.0,
-            shifted_renormalization_localization_scale: 25.0,
-            original_mu_r: 3.0,
-            shifted_mu_r: 9.0,
-            skip_uv_profile: true,
-            targets: IntegratedUvTargets {
-                integrated: Some(Complex::new(F(0.0), F(1.163e-3))),
-            },
-            integrated_ct_relative_error_limit: None,
-            check_mu_r_dependence: true,
-        });
-    }
+#[test]
+fn epem_a_tth_nlo_uv() -> Result<()> {
+    let state_path = get_tests_workspace_path().join("epem_a_tth_nlo_example");
+    let mut cli = get_example_cli(
+        "epem_a_ttxh/NLO/epem_a_tth_NLO.toml",
+        &["generate_diagrams"],
+        Some(state_path.clone()),
+        None,
+        true,
+    )?;
 
-    #[test]
-    fn epem_a_tth_nlo_uv() -> Result<()> {
-        let state_path = get_tests_workspace_path().join("epem_a_tth_nlo_example");
-        let mut cli = get_example_cli(
-            "epem_a_ttxh/NLO/epem_a_tth_NLO.toml",
-            &["generate_diagrams"],
-            Some(state_path.clone()),
-            None,
-            true,
-        )?;
+    cli.run_command("run generate_diagrams generate_integrands")?;
+    let res = Profile::UltraViolet(UltraVioletProfile {
+        process: Some(ProcessRef::Unqualified("epem_a_tth".to_string())),
+        integrand_name: Some("NLO".to_string()),
+        ..Default::default()
+    })
+    .run(&mut cli.state, &cli.cli_settings)?;
 
-        cli.run_command("run generate_diagrams generate_integrands")?;
-        let res = Profile::UltraViolet(UltraVioletProfile {
-            ..Default::default()
-        })
-        .run(&mut cli.state, &cli.cli_settings)?;
-
-        let uv = res.unwrap_uv();
-        assert_eq!(uv.pass_fail(-0.9).failed, 0);
-        clean_test(&state_path);
-        Ok(())
-    }
+    let uv = res.unwrap_uv();
+    assert_eq!(uv.pass_fail(-0.9).failed, 0);
+    clean_test(&state_path);
+    Ok(())
 }
