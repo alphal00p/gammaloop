@@ -777,11 +777,7 @@ impl Forests {
     //     Ok(())
     // }
 
-    pub(crate) fn pole_part_of_ends(
-        &self,
-        graph: &Graph,
-        pole_part: bool,
-    ) -> Result<RenormalizationPart> {
+    pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<RenormalizationPart> {
         let mut sum = Atom::Zero;
 
         let wild = Atom::var(W_.x___);
@@ -821,18 +817,16 @@ impl Forests {
             sum += atom;
         }
 
-        if pole_part {
-            let n_loops = graph.n_loops(&graph.full_filter());
-            let pole_stripped = sum
-                .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
-                .unwrap();
+        let n_loops = graph.n_loops(&graph.full_filter());
+        let pole_stripped = sum
+            .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
+            .unwrap();
 
-            sum = Atom::Zero;
+        sum = Atom::Zero;
 
-            for (power, p) in pole_stripped.terms() {
-                if power < 0 {
-                    sum += p * Atom::var(GS.dim_epsilon).pow(power);
-                }
+        for (power, p) in pole_stripped.terms() {
+            if power < 0 {
+                sum += p * Atom::var(GS.dim_epsilon).pow(power);
             }
         }
 

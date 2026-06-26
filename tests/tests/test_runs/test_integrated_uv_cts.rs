@@ -17,11 +17,11 @@ const INSPECT_POINT: [f64; 3] = [
 ];
 
 fn bubble_no_integrated_inspect_f64_target() -> Complex<f64> {
-    Complex::new(-1.580_657_072_640_913e-3, 0.0)
+    Complex::new(0., 1.580_657_072_640_913e-3)
 }
 
 fn bubble_integrated_inspect_f64_target() -> Complex<f64> {
-    Complex::new(1.585_638_298_408_533e-3, 0.0)
+    Complex::new(0., 7.646536622408714)
 }
 
 fn bubble_no_integrated_inspect_arb_target() -> Result<Complex<F<ArbPrec>>> {

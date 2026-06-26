@@ -298,11 +298,19 @@ pub struct SpecArgs {
     pub graph_prefix: Option<String>,
 
     /// Global prefactor projector (Symbolica atom string)
-    #[arg(long = "global-prefactor-projector", value_name = "ATOM")]
+    #[arg(
+        long = "global-prefactor-projector",
+        value_name = "ATOM",
+        allow_hyphen_values = true
+    )]
     pub global_prefactor_projector: Option<String>,
 
     /// Global prefactor numerator (Symbolica atom string)
-    #[arg(long = "global-prefactor-num", value_name = "ATOM")]
+    #[arg(
+        long = "global-prefactor-num",
+        value_name = "ATOM",
+        allow_hyphen_values = true
+    )]
     pub global_prefactor_num: Option<String>,
 
     /// Fast cut filter switch multiplicity

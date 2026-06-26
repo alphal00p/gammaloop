@@ -638,7 +638,7 @@ impl AmplitudeGraph {
             let mut forest = wood.unfold();
             forest.integrate(&self.graph, crate::utils::vakint()?, settings)?;
 
-            forest.pole_part_of_ends(&self.graph, settings.pole_part)
+            forest.pole_part_of_ends(&self.graph)
         }
     }
 

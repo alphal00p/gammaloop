@@ -4,7 +4,7 @@ use gammalooprs::{
     initialisation::test_initialise,
     model::Model,
     processes::{Amplitude, AmplitudeGraph},
-    utils::{load_generic_model, symbolica_ext::LogPrint},
+    utils::{GS, load_generic_model, symbolica_ext::LogPrint},
     uv::{
         RenormalizationPart, UVgenerationSettings,
         settings::{AlphaLoopSettings, MATADSettings, VakintSettings},
@@ -27,7 +27,7 @@ fn finite_part_uv_settings() -> UVgenerationSettings {
      𝑖*(𝜋^((4-2*eps)/2))
   * (exp(-EulerGamma))^(eps)\
   * (exp(-logmUVmu-log_mu_sq))^(eps)\
-  )^(-1*n_loops)",
+  )^(-1*(n_loops))",
         default_namespace = "vakint"
     );
     UVgenerationSettings {
@@ -44,7 +44,7 @@ fn finite_part_uv_settings() -> UVgenerationSettings {
 pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
     (model
         .apply_parameter_replacement_rules(
-            &model.apply_coupling_replacement_rules(&atom.simplify_color().expand()),
+            &model.apply_coupling_replacement_rules(&-atom.simplify_color().expand()),
         )
         .replace(parse_lit!(gammalooprs::dim))
         .with(parse_lit!(4))
@@ -60,6 +60,9 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .replace(parse!("UFO::aS"))
         .with(parse!("gs").pow(2) / (Atom::var(Symbol::PI) * 4)))
     .expand_num()
+    .collect_factors()
+    .collect_num()
+    .collect_symbol::<i16>(GS.dim_epsilon)
     .collect_factors()
     // .coefficient_list::<i8>(&[Atom::var(GS.dim_epsilon)])
     // .iter()
@@ -136,7 +139,7 @@ fn finite_part_quark_lo() {
     println!("ren part: {:>}", a.log_print(Some(80)));
     insta::assert_snapshot!(
         align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"-4/3*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
+        .to_bare_ordered_string(),@"CF*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
     // -1 * target
 }
@@ -455,7 +458,7 @@ fn finite_part_ghost_2loop() {
     let a = amp.graphs[0].renormalization_part(&settings).unwrap();
     //p1.p1*i_*gs^4*CA^2*rat( - 3/16*ep^-2 + 5/32*ep^-1)
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3𝑖+5𝑖/2*ε)*1/16*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)");
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3𝑖/16+5𝑖/32*ε)*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)");
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[0], a, &new_settings);
     insta::assert_snapshot!(
         stats.to_string(),
@@ -465,7 +468,7 @@ fn finite_part_ghost_2loop() {
     //p1.p1*i_*gs^4*CA^2*rat( - 1/16*ep^-2 + 1/32*ep^-1)
     let a = amp.graphs[1].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/2*ε+1𝑖)*1/16*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/32*ε+1𝑖/16)*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     ); //-1 * target
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[1], a, &new_settings);
     insta::assert_snapshot!(
@@ -476,7 +479,7 @@ fn finite_part_ghost_2loop() {
     //p1.p1*i_*gs^4*CA^2*rat( - 1/8*ep^-2 + 1/16*ep^-1)
     let a = amp.graphs[2].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖*ε+2𝑖)*1/16*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/16*ε+1𝑖/8)*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     ); //-1 * target
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[2], a, &new_settings);
     insta::assert_snapshot!(
@@ -488,7 +491,7 @@ fn finite_part_ghost_2loop() {
     let a = amp.graphs[3].renormalization_part(&settings).unwrap();
     // Sign-flipped relative to the main snapshot after schoonschip-aware dot normalization.
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-168𝑖*ε+48𝑖)*1/64*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-21𝑖/8*ε+3𝑖/4)*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[3], a, &new_settings);
     insta::assert_snapshot!(
@@ -499,7 +502,7 @@ fn finite_part_ghost_2loop() {
     //p1.p1*i_*gs^4*CA^2*rat( - 5/8*ep^-2 + 35/48*ep^-1)
     let a = amp.graphs[4].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(10𝑖+37𝑖/3*ε)*1/16*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(37𝑖/48*ε+5𝑖/8)*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     ); //-1/2 * target
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[4], a, &new_settings);
     insta::assert_snapshot!(

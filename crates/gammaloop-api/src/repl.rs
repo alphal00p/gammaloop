@@ -4536,7 +4536,7 @@ mod tests {
         let uv_values = completion_values("profile ultra-violet -i ", &completion_state);
         assert!(uv_values.contains(&"LO".to_string()));
         assert!(uv_values.contains(&"virtual".to_string()));
-        assert!(!uv_values.contains(&"subtracted".to_string()));
+        assert!(uv_values.contains(&"subtracted".to_string()));
 
         let ir_values = completion_values("profile bulk -i ", &completion_state);
         assert!(ir_values.contains(&"LO".to_string()));
@@ -4553,7 +4553,7 @@ mod tests {
 
         let uv_values = completion_values("profile ultra-violet -p e", &completion_state);
         assert!(uv_values.contains(&"epem_a_tth".to_string()));
-        assert!(!uv_values.contains(&"epem_xs".to_string()));
+        assert!(uv_values.contains(&"epem_xs".to_string()));
 
         let ir_values = completion_values("profile bulk -p e", &completion_state);
         assert!(ir_values.contains(&"epem_xs".to_string()));
