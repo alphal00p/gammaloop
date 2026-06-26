@@ -1,6 +1,11 @@
 use std::sync::LazyLock;
 
-use crate::{IndexTooling, color::SelectiveExpand, metric::MetricSimplifier, rep_symbols::RS};
+use crate::{
+    IndexTooling,
+    color::SelectiveExpand,
+    metric::{MetricSimplifier, not_slot},
+    rep_symbols::RS,
+};
 use eyre::Result;
 use spenso::{
     network::library::symbolic::{ETS, ExplicitKey},
@@ -32,6 +37,7 @@ pub struct GammaLibrary {
     pub projm: Symbol,
     pub gamma5: Symbol,
     pub sigma: Symbol,
+    pub pslash: Symbol,
 }
 
 impl GammaLibrary {
@@ -377,6 +383,63 @@ pub static AGS: LazyLock<GammaLibrary> = LazyLock::new(|| GammaLibrary {
         }
     ),
     sigma: symbol!("spenso::sigma"),
+    pslash: symbol!(
+        "spenso::pslash",
+        print = |a, opt| {
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let settings = SpensoPrintSettings::from(i);
+                    let SpensoPrintSettings {
+                        parens,
+                        symbol_scripts,
+                        commas,
+                        ..
+                    } = settings;
+
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+                    if f.get_nargs() != 3 {
+                        return None;
+                    }
+                    let mut args = f.iter();
+                    let mom = args.next().unwrap();
+                    let i = args.next().unwrap();
+                    let j = args.next().unwrap();
+
+                    let mut momstr = String::new();
+                    mom.format(&mut momstr, opt, PrintState::new()).unwrap();
+                    let mut out = String::new();
+                    let mut chars = momstr.chars();
+                    if let Some(first) = chars.next() {
+                        out.push(first);
+                        out.push('\u{0338}');
+                        out.extend(chars);
+                    }
+
+                    if symbol_scripts {
+                        out.push('^');
+                    }
+                    if parens {
+                        out.push('(');
+                    }
+                    i.format(&mut out, opt, PrintState::new()).unwrap();
+                    if commas {
+                        out.push(',');
+                    } else {
+                        out.push(' ');
+                    }
+                    j.format(&mut out, opt, PrintState::new()).unwrap();
+                    if parens {
+                        out.push(')');
+                    }
+
+                    Some(out)
+                }
+                _ => None,
+            }
+        }
+    ),
     gamma0: symbol!("spenso::gamma0";Real,Symmetric;print = |a, opt| {
         match opt.custom_print_mode {
             Some(("spenso", i)) => {
@@ -980,6 +1043,31 @@ pub fn gamma_simplify_impl(expr: AtomView) -> Atom {
         .iter()
         .fold(Atom::Zero, |a, (c, s)| a + c * s)
 }
+
+/// `γ(i, j, mink(d, μ)) · MOM(x…, mink(d, μ))  ->  pslash(MOM(x…), i, j)`
+pub fn to_pslash_impl(expr: AtomView, momenta: &[Symbol]) -> Atom {
+    let mut reps = vec![];
+    for &mom in momenta {
+        let mu = Minkowski {}.to_symbolic([RS.a_, RS.b_]);
+        reps.push(
+            Replacement::new(
+                (function!(AGS.gamma, RS.i_, RS.j_, mu.clone())
+                    * function!(mom, RS.x___, mu.clone()))
+                .to_pattern(),
+                function!(AGS.pslash, function!(mom, RS.x___), RS.i_, RS.j_),
+            )
+            .with_conditions(not_slot(RS.x___)),
+        );
+    }
+
+    let mut atom = Atom::new();
+    let mut expr = expr.expand();
+    while expr.replace_multiple_into(&reps, &mut atom) {
+        std::mem::swap(&mut expr, &mut atom);
+    }
+    expr
+}
+
 /// Trait for simplifying expressions involving Dirac gamma matrices using Clifford algebra.
 ///
 /// Implementors provide a method to apply gamma matrix identities, such as
@@ -995,6 +1083,11 @@ pub trait GammaSimplifier {
     /// An [`Atom`] representing the expression after gamma matrix simplification.
     fn simplify_gamma(&self) -> Atom;
 
+    /// Collapse open gamma·momentum lines (`γ^μ p_μ`) into Feynman slash `pslash(p, i, j)`.
+    /// `momenta` is the allow-list of momentum symbols to slash (e.g. the edge/external/loop
+    /// momentum symbols); only functions with one of these heads are collapsed.
+    fn to_pslash(&self, momenta: &[Symbol]) -> Atom;
+
     fn simplify_gamma0(&self) -> Atom;
 
     fn simplify_gamma_conj<Aind: DummyAind + ParseableAind>(&self) -> eyre::Result<Atom>;
@@ -1003,6 +1096,10 @@ pub trait GammaSimplifier {
 impl GammaSimplifier for Atom {
     fn simplify_gamma(&self) -> Atom {
         gamma_simplify_impl(self.as_atom_view())
+    }
+
+    fn to_pslash(&self, momenta: &[Symbol]) -> Atom {
+        to_pslash_impl(self.as_atom_view(), momenta)
     }
 
     fn simplify_gamma0(&self) -> Atom {
@@ -1017,6 +1114,10 @@ impl GammaSimplifier for Atom {
 impl GammaSimplifier for AtomView<'_> {
     fn simplify_gamma(&self) -> Atom {
         gamma_simplify_impl(self.as_atom_view())
+    }
+
+    fn to_pslash(&self, momenta: &[Symbol]) -> Atom {
+        to_pslash_impl(self.as_atom_view(), momenta)
     }
 
     fn simplify_gamma0(&self) -> Atom {
@@ -1261,6 +1362,60 @@ mod test {
         );
 
         println!("{}", expr.simplify_gamma())
+    }
+
+    #[test]
+    fn to_pslash_collapses_open_lines_and_leaves_closed_chains() {
+        initialize();
+        let _ = &*AGS;
+
+        let expr = parse_lit!(
+            gamma(bis(4, l(1)), bis(4, l(2)), mink(dim, l(99)))
+                * P(2, mink(dim, l(99)))
+                * gamma(bis(4, l(3)), bis(4, l(4)), mink(dim, l(5)))
+                * gamma(bis(4, l(4)), bis(4, l(3)), mink(dim, l(5))),
+            default_namespace = "spenso"
+        );
+        let want = parse_lit!(
+            pslash(P(2), bis(4, l(1)), bis(4, l(2)))
+                * gamma(bis(4, l(3)), bis(4, l(4)), mink(dim, l(5)))
+                * gamma(bis(4, l(4)), bis(4, l(3)), mink(dim, l(5))),
+            default_namespace = "spenso"
+        );
+        assert_eq!(
+            expr.to_pslash(&[symbol!("spenso::P")]),
+            want,
+            "open γ·P should slash; the closed γγ chain must remain"
+        );
+    }
+
+    #[test]
+    fn to_pslash_then_render_produces_slash_without_dummy_index() {
+        initialize();
+        let _ = &*AGS;
+
+        let expr = parse_lit!(
+            gamma(bis(4, l(1)), bis(4, l(2)), mink(dim, l(99))) * P(2, mink(dim, l(99))),
+            default_namespace = "spenso"
+        );
+        let rendered = expr
+            .to_pslash(&[symbol!("spenso::P")])
+            .printer(SpensoPrintSettings::typst().typst_symbolica())
+            .to_string();
+        println!("rendered: {rendered}");
+
+        assert!(
+            rendered.contains('\u{0338}'),
+            "expected a Feynman slash (U+0338), got: {rendered}"
+        );
+        assert!(
+            !rendered.contains("pslash"),
+            "raw symbol name leaked into the render: {rendered}"
+        );
+        assert!(
+            !rendered.contains("99"),
+            "dummy mink index should be consumed, got: {rendered}"
+        );
     }
 
     #[test]

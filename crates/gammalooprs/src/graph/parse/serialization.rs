@@ -45,6 +45,9 @@ impl Graph {
                 num = num.simplify_gamma();
             }
 
+            // Collapse open γ·momentum fermion lines into Feynman-slash form (p̸) for display.
+            num = num.to_pslash(&[GS.emr_mom, GS.external_mom, GS.loop_mom]);
+
             dotgraph.global_data.statements.insert(
                 "full_num".into(),
                 num.printer(SpensoPrintSettings::typst().typst_symbolica())
