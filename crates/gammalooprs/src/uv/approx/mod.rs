@@ -19,7 +19,7 @@ use std::{collections::BTreeMap, hash::Hash};
 use tracing::debug;
 
 use symbolica::{
-    atom::{Atom, AtomOrView, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, Symbol},
     function, symbol,
 };
 
@@ -398,6 +398,7 @@ impl Approximation {
                 } else {
                     -integrated
                 };
+                let integrated = integrated.replace(GS.m_uv).with(GS.m_uv_int);
                 debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                     stage = "compute_integrated_kernel_done",
                     cut_index = ?index,

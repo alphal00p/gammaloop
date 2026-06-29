@@ -891,7 +891,7 @@ pub(crate) fn to_vakint_integrand<
                     graph.node_id(sink).0
                 ),
                 &e.data.mom,
-                &e.data.mass.pow(2),
+                &e.data.mass.pow(2).replace(GS.m_uv).with(GS.m_uv_int),
                 e.data.power
             )
         }

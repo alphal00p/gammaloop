@@ -153,8 +153,10 @@ pub struct GammaloopSymbols {
     pub pi: Symbol,
 
     //Parameters for UV renormalization and localization
-    /// UV renormalization scale factor used for both expansion and integrated vacuum masses.
+    /// UV renormalization scale factor used in expansion terms.
     pub m_uv: Symbol,
+    /// Internal UV vacuum mass marker for stored integrated counterterms.
+    pub m_uv_int: Symbol,
     /// UV localization scale factor
     pub renormalization_localization_scale: Symbol,
     pub mu_r_sq: Symbol,
@@ -709,6 +711,25 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                     let SpensoPrintSettings { .. } = SpensoPrintSettings::from(*i as usize);
                     if SpensoPrintSettings::from(*i as usize).is_typst() {
                         Some("m_\"UV\"".to_string())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        }
+    ),
+    m_uv_int: symbol!(
+        "mUVI",
+        print = |a, opt, _state| {
+            let AtomView::Var(_a) = a else {
+                return None;
+            };
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(i)) => {
+                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(*i as usize);
+                    if SpensoPrintSettings::from(*i as usize).is_typst() {
+                        Some("m_\"UVI\"".to_string())
                     } else {
                         None
                     }

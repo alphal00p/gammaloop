@@ -697,6 +697,7 @@ impl Forests {
                 vakint,
                 settings,
             )?;
+            let integrand = integrand.replace(GS.m_uv).with(GS.m_uv_int);
 
             self.compute_store
                 .entry(self.graph[*nidx].clone())
@@ -861,7 +862,9 @@ impl Forests {
         }
 
         Ok(RenormalizationPart::new(
-            sum.replace_multiple(&replacements),
+            sum.replace_multiple(&replacements)
+                .replace(GS.m_uv_int)
+                .with(GS.m_uv),
             self.compute_store.kernel_hits,
             self.graph.n_nodes(),
         ))
