@@ -288,8 +288,6 @@ impl<'a> FinalIntegrand<'a> {
         );
 
         finite
-            .replace(GS.m_uv_int)
-            .with(GS.m_uv)
             .map_mink_dim(4)
             .replace(function!(symbol!("vakint::g"), W_.a__))
             .with(function!(symbol!("spenso::g"), W_.a__))

@@ -26,6 +26,7 @@ use vakint::Vakint;
 
 use crate::{
     cff::CutCFFIndex,
+    debug_tags,
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet, parse::string_utils::ToOrderedSimple},
     settings::global::OrientationPattern,
     utils::{GS, W_, symbolica_ext::LogPrint},
@@ -485,12 +486,31 @@ impl OperationNode {
                 let (current, given) = wood.current_given_pair(op.data, order);
                 order += 1;
                 compute_store.record_kernel_hit();
-                let integrated = integrated_orchestrator.kernel(&uvctx, &current, &given, &acc)?;
+                let raw_integrated =
+                    integrated_orchestrator.kernel(&uvctx, &current, &given, &acc)?;
+                debug_tags!(#generation, #uv, #graph, #term;
+                    key = %self,
+                    op = %op.data,
+                    current = %current.log_display(),
+                    given = %given.log_display(),
+                    given_empty = given.subgraph().is_empty(),
+                    expr = %raw_integrated.log_print(None),
+                    "Hedge integrated kernel raw"
+                );
                 let integrated = if given.subgraph().is_empty() {
-                    integrated
+                    raw_integrated
                 } else {
-                    -integrated
+                    -raw_integrated
                 };
+                debug_tags!(#generation, #uv, #graph, #term;
+                    key = %self,
+                    op = %op.data,
+                    current = %current.log_display(),
+                    given = %given.log_display(),
+                    given_empty = given.subgraph().is_empty(),
+                    expr = %integrated.log_print(None),
+                    "Hedge integrated kernel signed"
+                );
                 mul *= integrated;
             }
 
@@ -801,6 +821,11 @@ impl Forests {
                 key=%key,
                expr = % atom.expand_num().log_print(None),"Term before simplification"
             );
+            debug_tags!(#generation, #uv, #graph, #term;
+                key = %key,
+                expr = % atom.expand_num().log_print(None),
+                "Hedge term before simplification"
+            );
 
             let atom = (atom
                 * &graph.global_prefactor.projector
@@ -813,6 +838,11 @@ impl Forests {
             debug!(
                 key=%key,
                expr = % atom.log_print(None),"Term"
+            );
+            debug_tags!(#generation, #uv, #graph, #term;
+                key = %key,
+                expr = % atom.log_print(None),
+                "Hedge term"
             );
             sum += atom;
         }
@@ -831,9 +861,7 @@ impl Forests {
         }
 
         Ok(RenormalizationPart::new(
-            sum.replace_multiple(&replacements)
-                .replace(GS.m_uv_int)
-                .with(GS.m_uv),
+            sum.replace_multiple(&replacements),
             self.compute_store.kernel_hits,
             self.graph.n_nodes(),
         ))

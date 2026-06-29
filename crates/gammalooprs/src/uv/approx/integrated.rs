@@ -66,6 +66,7 @@ impl Graph {
         }
 
         let tsquare = Atom::var(GS.rescale).pow(2);
+        let m_uv_sq = Atom::var(GS.m_uv).pow(2);
 
         debug_tags!(#uv, #integrated, #inspect;
             log.res = atomarg,
@@ -77,9 +78,8 @@ impl Graph {
                 GS.den(
                     W_.a_,
                     W_.mom_,
-                    &tsquare * Atom::var(W_.mass_) + Atom::var(GS.m_uv).pow(2),
-                    Atom::var(W_.prop_) * &tsquare + Atom::var(GS.m_uv).pow(2) * &tsquare
-                        - (Atom::var(GS.m_uv)).pow(2),
+                    &tsquare * Atom::var(W_.mass_) + m_uv_sq.clone(),
+                    Atom::var(W_.prop_) * &tsquare + m_uv_sq.clone() * &tsquare - m_uv_sq,
                 ) / &tsquare,
             )
             .replace(function!(GS.den, W_.a_, W_.mom_, W_.a___))
@@ -415,6 +415,7 @@ impl Integrated<'_> {
 
         res = res
             .simplify_metrics()
+            .metric_shorthand_to_dot()
             .replace(GS.dim)
             .max_level(0)
             .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
@@ -890,7 +891,7 @@ pub(crate) fn to_vakint_integrand<
                     graph.node_id(sink).0
                 ),
                 &e.data.mom,
-                &e.data.mass.pow(2).replace(GS.m_uv).with(GS.m_uv_int),
+                &e.data.mass.pow(2),
                 e.data.power
             )
         }

@@ -385,6 +385,7 @@ impl Forest {
             );
             sum += atom;
         }
+
         if pole_part {
             let n_loops = graph.n_loops(&graph.full_filter());
             let pole_stripped = sum
@@ -400,9 +401,7 @@ impl Forest {
             }
         }
         Ok(RenormalizationPart::legacy(
-            sum.replace_multiple(&replacements)
-                .replace(GS.m_uv_int)
-                .with(GS.m_uv),
+            sum.replace_multiple(&replacements),
         ))
     }
 
