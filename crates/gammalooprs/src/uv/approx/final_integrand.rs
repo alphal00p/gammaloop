@@ -593,7 +593,7 @@ impl<'a> FinalIntegrand<'a> {
                 cut_index = ?local_index,
                 "Applied final UV parametric replacements"
             );
-            integrands.insert(*local_index, resnum);
+            integrands.insert(*local_index, resnum.replace(GS.m_uv_int).with(GS.m_uv));
         }
 
         Ok(integrands)
