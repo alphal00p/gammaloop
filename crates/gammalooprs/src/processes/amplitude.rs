@@ -1547,7 +1547,6 @@ pub(crate) fn threshold_counterterm_helper_atom(order: u8, loop_number: usize) -
             .with(GS.radius_star_left)
     });
 
-    let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).pow(loop_3);
     let i = Atom::i();
 
     let radius = Atom::var(GS.radius_left);
@@ -1561,15 +1560,16 @@ pub(crate) fn threshold_counterterm_helper_atom(order: u8, loop_number: usize) -
 
     let jacobian_ratio = (Atom::one() / &radius).pow(loop_3 - 1);
 
-    let local_prefactor = &jacobian_ratio / &factors_of_pi
-        * (uv_damp_plus / &delta_r_plus + uv_damp_minus / &delta_r_minus);
+    let local_prefactor =
+        &jacobian_ratio * (uv_damp_plus / &delta_r_plus + uv_damp_minus / &delta_r_minus);
 
-    let integrated_prefactor = -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / &factors_of_pi;
+    let integrated_prefactor = -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction;
 
     let mut result = (local_prefactor + integrated_prefactor) * laurent_coeffs.next().unwrap();
 
     for pow in 2..=order {
-        result += laurent_coeffs.next().unwrap() * &jacobian_ratio / &factors_of_pi
+        result += laurent_coeffs.next().unwrap()
+            * &jacobian_ratio
             * (Atom::one() / delta_r_plus.pow(pow as i64)
                 + Atom::one() / delta_r_minus.pow(pow as i64));
     }
