@@ -86,9 +86,7 @@ impl Esurface {
             lmb.edge_signatures[edge].external.iter_enumerated().fold(
                 Atom::Zero,
                 |sum, (external_index, sign)| {
-                    let atom = external_energy_atom_from_index(EdgeIndex::from(usize::from(
-                        external_index,
-                    )));
+                    let atom = external_energy_atom_from_index(lmb.ext_edges[external_index]);
                     match sign {
                         SignOrZero::Zero => sum,
                         SignOrZero::Plus => sum + atom,
@@ -1109,30 +1107,30 @@ mod tests {
     }
 
     #[test]
-    fn to_atom_in_lmb_uses_external_slots_not_carrier_edges() {
-        let dummy_graph = dummy_hedge_graph(7);
+    fn to_atom_in_lmb_uses_canonical_external_edges_not_carrier_edges() {
+        let dummy_graph = dummy_hedge_graph(9);
         let mut edge_signatures = dummy_graph
             .new_edgevec_from_iter(
-                (0..7).map(|_| LoopExtSignature::from((Vec::<isize>::new(), vec![0]))),
+                (0..9).map(|_| LoopExtSignature::from((Vec::<isize>::new(), vec![0, 0]))),
             )
             .unwrap();
-        edge_signatures[EdgeIndex::from(6)] =
-            LoopExtSignature::from((Vec::<isize>::new(), vec![1]));
+        edge_signatures[EdgeIndex::from(8)] =
+            LoopExtSignature::from((Vec::<isize>::new(), vec![0, 1]));
         let lmb = LoopMomentumBasis {
             tree: SuBitGraph::empty(0),
             loop_edges: vec![].into(),
-            ext_edges: vec![EdgeIndex::from(6)].into(),
+            ext_edges: vec![EdgeIndex::from(2), EdgeIndex::from(6)].into(),
             edge_signatures,
         };
         let esurface = Esurface {
             energies: vec![],
-            external_shift: vec![(EdgeIndex::from(6), -1)],
+            external_shift: vec![(EdgeIndex::from(8), -1)],
             vertex_set: VertexSet::dummy(),
         };
 
         let atom = esurface.to_atom_in_lmb(&[], &lmb).expand();
         let expected =
-            (Atom::num(-1) * external_energy_atom_from_index(EdgeIndex::from(0))).expand();
+            (Atom::num(-1) * external_energy_atom_from_index(EdgeIndex::from(6))).expand();
 
         assert_eq!(atom.to_canonical_string(), expected.to_canonical_string());
     }
