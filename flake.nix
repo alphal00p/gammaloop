@@ -728,7 +728,6 @@
 
       clinnet-cli = craneLib.buildPackage (ciArgs
         // {
-          inherit cargoArtifacts;
           pname = "clinnet";
           inherit (clinnetMeta) version;
           cargoBuildCommand = "cargo build --profile ${ciCargoProfile}";
