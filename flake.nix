@@ -98,6 +98,13 @@
         ./crates/spenso
       ];
 
+      integrationTestTargetSources = lib.fileset.unions [
+        ./tests/resources
+        ./tests/tests
+      ];
+
+      nonIntegrationCargoSources = lib.fileset.difference cargoSources integrationTestTargetSources;
+
       workspaceBuildSrc = lib.fileset.toSource {
         root = workspaceRoot;
         fileset = lib.fileset.unions [
@@ -118,6 +125,16 @@
           nonCargoBuildSources
           snapshotSources
           ./tests
+          ./examples/cli
+        ];
+      };
+
+      workspaceNonIntegrationTestSrc = lib.fileset.toSource {
+        root = workspaceRoot;
+        fileset = lib.fileset.unions [
+          nonIntegrationCargoSources
+          nonCargoBuildSources
+          snapshotSources
           ./examples/cli
         ];
       };
@@ -468,6 +485,14 @@
             autoCargoTargetPaths;
         });
 
+      workspaceBuildArtifacts = craneLib.cargoBuild (ciArgs
+        // {
+          inherit cargoArtifacts;
+          pname = "gammaloop-workspace-build-artifacts";
+          src = workspaceNonIntegrationTestSrc;
+          cargoExtraArgs = "--locked --workspace --exclude gammaloop-integration-tests --tests";
+        });
+
       symbolicaCrateArgs = usesSymbolica:
         lib.optionalAttrs usesSymbolica {
           preBuild = licensePreCheck;
@@ -569,50 +594,72 @@
       nextestArchiveFileName = "archive.tar.zst";
 
       nextestPackageFilter = packages: "-E ${lib.escapeShellArg (lib.concatMapStringsSep " | " (package: "package(${package})") packages)}";
+      nextestPackageSelection = packages: lib.concatMapStringsSep " " (package: "-p ${lib.escapeShellArg package}") packages;
+      nextestSrcFor = target:
+        if target.name == "integration"
+        then workspaceTestSrc
+        else workspaceNonIntegrationTestSrc;
 
       # NixCI dependency shape:
-      # Build the nextest archive once, then make each split package-group check
-      # run from that archive. This keeps the current shard-level reporting while
-      # avoiding repeated `cargo test --no-run` builds in each shard derivation.
-      nextestArchive = craneLib.mkCargoDerivation (ciArgs
-        // {
-          inherit cargoArtifacts;
-          src = workspaceTestSrc;
-          pname = "gammaloop-nextest-archive";
-          nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.cargo-nextest pkgs.form];
-          doCheck = true;
-          doInstallCargoArtifacts = false;
-          buildPhaseCargoCommand = ''
-            cargo nextest --version
-          '';
-          checkPhaseCargoCommand = ''
-            export CARGO_TARGET_DIR="$PWD/target"
-            cat > nextest-nix.toml <<EOF
-            [store]
-            dir = "$PWD/target/nextest"
+      # Build one nextest archive per split package group, then make each
+      # package-group check run from its matching archive. This keeps shard-level
+      # reporting while avoiding a full workspace test-binary archive rebuild
+      # when only one package group changes.
+      nextestArchiveFor = target:
+        craneLib.mkCargoDerivation (ciArgs
+          // {
+            cargoArtifacts = workspaceBuildArtifacts;
+            src = nextestSrcFor target;
+            pname = "gammaloop-nextest-archive-${target.name}";
+            nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.cargo-nextest pkgs.form];
+            doCheck = true;
+            doInstallCargoArtifacts = false;
+            buildPhaseCargoCommand = ''
+              cargo nextest --version
+            '';
+            checkPhaseCargoCommand = ''
+              export CARGO_TARGET_DIR="$PWD/target"
+              cat > nextest-nix.toml <<EOF
+              [store]
+              dir = "$PWD/target/nextest"
 
-            EOF
-            cat ${workspaceTestSrc}/.config/nextest.toml >> nextest-nix.toml
-            cargo nextest archive \
-              ''${CARGO_PROFILE:+--cargo-profile $CARGO_PROFILE} \
-              --target-dir "$CARGO_TARGET_DIR" \
-              --config-file "$PWD/nextest-nix.toml" \
-              --locked --manifest-path ${workspaceTestSrc}/Cargo.toml --workspace ${nextestArchiveExtraArgs} \
-              --archive-format tar-zst \
-              --archive-file ${nextestArchiveFileName}
-          '';
-          installPhaseCommand = ''
-            mkdir -p "$out"
-            cp ${nextestArchiveFileName} "$out/${nextestArchiveFileName}"
-          '';
-        });
+              EOF
+              cat "$PWD/.config/nextest.toml" >> nextest-nix.toml
+              cargo nextest archive \
+                ''${CARGO_PROFILE:+--cargo-profile $CARGO_PROFILE} \
+                --target-dir "$CARGO_TARGET_DIR" \
+                --config-file "$PWD/nextest-nix.toml" \
+                --locked --manifest-path "$PWD/Cargo.toml" \
+                ${nextestPackageSelection target.packages} ${nextestArchiveExtraArgs} \
+                --archive-format tar-zst \
+                --archive-file ${nextestArchiveFileName}
+            '';
+            installPhaseCommand = ''
+              mkdir -p "$out"
+              cp ${nextestArchiveFileName} "$out/${nextestArchiveFileName}"
+            '';
+          });
+
+      nextestArchives = lib.listToAttrs (map (target: {
+          name = "gammaloop-nextest-archive-${target.name}";
+          value = nextestArchiveFor target;
+        })
+        checkedNextestPackageGroups);
+
+      nextestArchiveForTarget = target: nextestArchives."gammaloop-nextest-archive-${target.name}";
+
+      nextestArchiveAggregate = pkgs.linkFarm "gammaloop-nextest-archive" (map (target: {
+          name = target.name;
+          path = nextestArchiveForTarget target;
+        })
+        checkedNextestPackageGroups);
 
       nextestCheckFor = target:
         craneLib.mkCargoDerivation (ciArgs
           // {
             cargoArtifacts = null;
             cargoVendorDir = null;
-            src = workspaceTestSrc;
+            src = nextestSrcFor target;
             pname = "gammaloop-nextest-${target.name}";
             nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.cargo-nextest pkgs.form];
             doCheck = true;
@@ -624,11 +671,11 @@
               dir = "$PWD/target/nextest"
 
               EOF
-              cat ${workspaceTestSrc}/.config/nextest.toml >> nextest-nix.toml
+              cat "$PWD/.config/nextest.toml" >> nextest-nix.toml
 
               set +e
               cargo nextest run \
-                --archive-file ${nextestArchive}/${nextestArchiveFileName} \
+                --archive-file ${nextestArchiveForTarget target}/${nextestArchiveFileName} \
                 --archive-format tar-zst \
                 --config-file "$PWD/nextest-nix.toml" \
                 --workspace-remap . \
@@ -664,8 +711,9 @@
 
       nextestChecks =
         {
-          gammaloop-nextest-archive = nextestArchive;
+          gammaloop-nextest-archive = nextestArchiveAggregate;
         }
+        // nextestArchives
         // lib.listToAttrs (map (target: {
             name = "gammaloop-nextest-${target.name}";
             value = nextestCheckFor target;
@@ -787,7 +835,7 @@
           default = gammaloop-cli;
           gammaloop = gammaloop-cli;
           inherit linnest-wasm linnestWasmCargoArtifacts;
-          inherit cargoArtifacts;
+          inherit cargoArtifacts workspaceBuildArtifacts;
           "nix-ci-passed" = nixCiPassed;
         }
         // impureCheckRunnerPackages
