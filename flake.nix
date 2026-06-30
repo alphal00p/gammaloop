@@ -135,6 +135,7 @@
           nonIntegrationCargoSources
           nonCargoBuildSources
           snapshotSources
+          ./tests/resources
           ./examples/cli
         ];
       };
@@ -162,12 +163,14 @@
       in
         crateMemberDirs ++ ["tests"];
 
-      workspaceMemberPackages =
-        map (
-          member:
-            (builtins.fromTOML (builtins.readFile (workspaceRoot + "/${member}/Cargo.toml"))).package.name
-        )
-        workspaceMemberDirs;
+      workspaceMemberPackageDirs =
+        lib.listToAttrs (map (member: {
+            name = (builtins.fromTOML (builtins.readFile (workspaceRoot + "/${member}/Cargo.toml"))).package.name;
+            value = member;
+          })
+          workspaceMemberDirs);
+
+      workspaceMemberPackages = builtins.attrNames workspaceMemberPackageDirs;
 
       autoCargoTargetDirs =
         lib.concatMap (
@@ -224,6 +227,33 @@
         );
       };
 
+      crate2nixSourceRootFiles = [
+        ./Cargo.lock
+        ./Cargo.toml
+      ];
+
+      crate2nixSourceWith = fileset:
+        lib.fileset.toSource {
+          root = workspaceRoot;
+          fileset = lib.fileset.unions (crate2nixSourceRootFiles ++ fileset);
+        };
+
+      crate2nixGammaloopApiSrc = crate2nixSourceWith [
+        ./crates/gammaloop-api
+        ./assets
+      ];
+
+      crate2nixGammalooprsSrc = crate2nixSourceWith [
+        ./crates/gammalooprs
+        ./assets
+      ];
+
+      crate2nixIntegrationTestsSrc = crate2nixSourceWith [
+        ./tests
+        ./assets
+        ./examples/cli
+      ];
+
       dummyCargoTarget = pkgs.writeText "crane-dummy-cargo-target.rs" ''
         #![allow(clippy::all)]
         #![allow(dead_code)]
@@ -264,6 +294,9 @@
         pkgs.openssl
         pkgs.stdenv.cc.cc.lib
       ];
+      nextestPython = pkgs.python313.withPackages (pythonPackages: [
+        pythonPackages.numpy
+      ]);
 
       # Common arguments can be set here to avoid repeating them later
       commonArgs = {
@@ -328,6 +361,113 @@
           exit 1
         fi
       '';
+
+      crate2nixCommonOverride = old: {
+        nativeBuildInputs = (old.nativeBuildInputs or []) ++ (commonArgs.nativeBuildInputs or []);
+        buildInputs = (old.buildInputs or []) ++ (commonArgs.buildInputs or []);
+
+        CC = nixCc;
+        CXX = nixCxx;
+        CARGO_CRATE_NAME = lib.replaceStrings [ "-" ] [ "_" ] old.crateName;
+        "${cargoLinkerVar}" = nixCc;
+        RUSTFLAGS = "-C linker=${nixCc}";
+
+        LD_LIBRARY_PATH = runtimeLibPath;
+        DYLD_LIBRARY_PATH = runtimeLibPath;
+        PYO3_PYTHON = "${pkgs.python313}/bin/python3";
+        PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
+        SYMBOLICA_OEM_LICENSE = "SYMBOLICA_OEM_GAMMALOOP";
+      };
+
+      crate2nixSourceOverride = old: src: workspace_member:
+        (crate2nixCommonOverride old)
+        // {
+          inherit src workspace_member;
+        };
+
+      crate2nixSymbolicaGitHeadOverride = old:
+        (crate2nixCommonOverride old)
+        // {
+          postPatch =
+            (old.postPatch or "")
+            + ''
+              mkdir -p .git
+              printf 'ref: refs/heads/nix-vendor\n' > .git/HEAD
+            '';
+        };
+
+      crate2nixWorkspaceCrateOverrides = lib.genAttrs workspaceMemberPackages (_: crate2nixCommonOverride);
+
+      crate2nixDefaultCrateOverrides =
+        pkgs.defaultCrateOverrides
+        // crate2nixWorkspaceCrateOverrides
+        // {
+          "gammaloop-api" = old: crate2nixSourceOverride old crate2nixGammaloopApiSrc "crates/gammaloop-api";
+          "gammalooprs" = old: crate2nixSourceOverride old crate2nixGammalooprsSrc "crates/gammalooprs";
+          "gammaloop-integration-tests" = old: crate2nixSourceOverride old crate2nixIntegrationTestsSrc "tests";
+          "gmp-mpfr-sys" = crate2nixCommonOverride;
+          "pyo3-build-config" = crate2nixCommonOverride;
+          "rug" = old:
+            (crate2nixCommonOverride old)
+            // {
+              DEP_GMP_LIMB_BITS = "64";
+            };
+          "symbolica" = crate2nixSymbolicaGitHeadOverride;
+          "graphica" = crate2nixSymbolicaGitHeadOverride;
+          "numerica" = crate2nixSymbolicaGitHeadOverride;
+        };
+
+      crate2nixBuildRustCrateForPkgs = pkgs':
+        pkgs'.buildRustCrate.override {
+          rustc = ciToolchain;
+          cargo = ciToolchain;
+        };
+
+      crate2nixPackageSet = import ./Cargo.nix {
+        inherit pkgs;
+        release = true;
+        buildRustCrateForPkgs = crate2nixBuildRustCrateForPkgs;
+        defaultCrateOverrides = crate2nixDefaultCrateOverrides;
+      };
+
+      crate2nixWorkspaceMembers = crate2nixPackageSet.workspaceMembers;
+      crate2nixBuild = package: crate2nixWorkspaceMembers.${package}.build;
+      crate2nixBuildWithFeatures = package: features:
+        (crate2nixBuild package).override {
+          inherit features;
+        };
+
+      gammaloop-cli = crate2nixBuildWithFeatures "gammaloop-api" ["default"];
+      gammaloop-python-lib = crate2nixBuildWithFeatures "gammaloop-api" [
+        "python_abi"
+        "pyo3-extension-module"
+      ];
+      gammaloop-python-lib-output = lib.getLib gammaloop-python-lib;
+      pythonSitePackages = "${pkgs.python313.sitePackages}";
+      gammaloop-python-module = pkgs.runCommand "gammaloop-python-module" {} ''
+        mkdir -p "$out/${pythonSitePackages}/gammaloop"
+        cp ${crate2nixGammaloopApiSrc}/crates/gammaloop-api/python/gammaloop/__init__.py \
+          "$out/${pythonSitePackages}/gammaloop/__init__.py"
+
+        extension="$(
+          find ${gammaloop-python-lib-output} -type f \
+            \( -name 'libgammaloop_api*.so' -o -name 'gammaloop_api*.so' -o -name 'libgammaloop_api*.dylib' -o -name 'gammaloop_api*.dylib' \) \
+            | sort \
+            | head -n 1
+        )"
+        if [ -z "$extension" ]; then
+          echo "Could not find crate2nix-built gammaloop-api Python extension in ${gammaloop-python-lib-output}" >&2
+          exit 1
+        fi
+        cp "$extension" "$out/${pythonSitePackages}/gammaloop/_gammaloop.so"
+      '';
+      clinnet-cli = crate2nixBuildWithFeatures "clinnet" ["default"];
+
+      crate2nixPackageOutputs = lib.listToAttrs (map (package: {
+          name = "crate-${package}";
+          value = crate2nixBuild package;
+        })
+        workspaceMemberPackages);
 
       nextestProfile = "ci_gammaloop";
       nextestJunitPath = "target/nextest/${nextestProfile}/junit.xml";
@@ -528,17 +668,6 @@
           '';
         });
 
-      gammaloop-cli = craneLib.buildPackage (ciArgs
-        // {
-          inherit cargoArtifacts;
-          buildType = ciCargoProfile;
-          doCheck = false;
-          pname = "gammaloop";
-          inherit (apiMeta) version;
-          cargoBuildCommand = "cargo build --profile ${ciCargoProfile}";
-          cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
-        });
-
       nextestPackageGroups = [
         {
           name = "core";
@@ -589,139 +718,396 @@
         missingNextestPackages == [] && extraNextestPackages == []
       ) "nextest split package coverage mismatch: missing [${lib.concatStringsSep ", " missingNextestPackages}], extra [${lib.concatStringsSep ", " extraNextestPackages}]"; nextestPackageGroups;
 
+      nextestTargetTriple = pkgs.stdenv.hostPlatform.rust.rustcTargetSpec or pkgs.stdenv.hostPlatform.config;
+      nextestRustLibDir = "${ciToolchain}/lib/rustlib/${nextestTargetTriple}/lib";
+
       nextestBaseExtraArgs = "--profile ${nextestProfile} --no-fail-fast --final-status-level fail --no-tests=pass";
-      nextestArchiveExtraArgs = "--profile ${nextestProfile}";
-      nextestArchiveFileName = "archive.tar.zst";
 
       nextestPackageFilter = packages: "-E ${lib.escapeShellArg (lib.concatMapStringsSep " | " (package: "package(${package})") packages)}";
-      nextestPackageSelection = packages: lib.concatMapStringsSep " " (package: "-p ${lib.escapeShellArg package}") packages;
       nextestSrcFor = target:
         if target.name == "integration"
         then workspaceTestSrc
         else workspaceNonIntegrationTestSrc;
 
-      # NixCI dependency shape:
-      # Build one nextest archive per split package group, then make each
-      # package-group check run from its matching archive. This keeps shard-level
-      # reporting while avoiding a full workspace test-binary archive rebuild
-      # when only one package group changes.
-      nextestArchiveFor = target:
-        craneLib.mkCargoDerivation (ciArgs
+      crate2nixReplacePackageDependency = dependencyName: newPackageId: dependencies:
+        map (
+          dependency:
+            if dependency.name == dependencyName
+            then dependency // {packageId = newPackageId;}
+            else dependency
+        )
+        dependencies;
+
+      crate2nixTestSharedSources = [
+        ./.config
+        ./assets
+        ./crates/clinnet/templates
+        ./crates/vakint/form_src
+        ./crates/vakint/templates
+        ./examples/cli
+        ./tests/resources
+      ];
+
+      crate2nixTestSrcForPackage = package:
+        crate2nixSourceWith (
+          [
+            (workspaceRoot + "/${workspaceMemberPackageDirs.${package}}")
+          ]
+          ++ crate2nixTestSharedSources
+        );
+
+      crate2nixTestCrateConfigs = let
+        crates = crate2nixPackageSet.internal.crates;
+        workspaceTestCrates = lib.genAttrs workspacePackages (package:
+          crates.${package}
           // {
-            cargoArtifacts = workspaceBuildArtifacts;
-            src = nextestSrcFor target;
-            pname = "gammaloop-nextest-archive-${target.name}";
-            nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.cargo-nextest pkgs.form];
-            doCheck = true;
-            doInstallCargoArtifacts = false;
-            buildPhaseCargoCommand = ''
-              cargo nextest --version
-            '';
-            checkPhaseCargoCommand = ''
-              export CARGO_TARGET_DIR="$PWD/target"
-              cat > nextest-nix.toml <<EOF
-              [store]
-              dir = "$PWD/target/nextest"
-
-              EOF
-              cat "$PWD/.config/nextest.toml" >> nextest-nix.toml
-              cargo nextest archive \
-                ''${CARGO_PROFILE:+--cargo-profile $CARGO_PROFILE} \
-                --target-dir "$CARGO_TARGET_DIR" \
-                --config-file "$PWD/nextest-nix.toml" \
-                --locked --manifest-path "$PWD/Cargo.toml" \
-                ${nextestPackageSelection target.packages} ${nextestArchiveExtraArgs} \
-                --archive-format tar-zst \
-                --archive-file ${nextestArchiveFileName}
-            '';
-            installPhaseCommand = ''
-              mkdir -p "$out"
-              cp ${nextestArchiveFileName} "$out/${nextestArchiveFileName}"
-            '';
+            src = crate2nixTestSrcForPackage package;
+            workspace_member = workspaceMemberPackageDirs.${package};
           });
+      in
+        crates
+        // workspaceTestCrates
+        // {
+          "linnet-nontest" = workspaceTestCrates."linnet";
+          "linnest-for-linnet-test" =
+            workspaceTestCrates."linnest"
+            // {
+              dependencies = crate2nixReplacePackageDependency "linnet" "linnet-nontest" workspaceTestCrates."linnest".dependencies;
+            };
+          "linnet" =
+            workspaceTestCrates."linnet"
+            // {
+              devDependencies = crate2nixReplacePackageDependency "linnest" "linnest-for-linnet-test" workspaceTestCrates."linnet".devDependencies;
+            };
+          "spenso-macros-nontest" = workspaceTestCrates."spenso-macros";
+          "spenso-for-spenso-macros-test" =
+            workspaceTestCrates."spenso"
+            // {
+              dependencies = crate2nixReplacePackageDependency "spenso-macros" "spenso-macros-nontest" workspaceTestCrates."spenso".dependencies;
+            };
+          "spenso-macros" =
+            workspaceTestCrates."spenso-macros"
+            // {
+              devDependencies = crate2nixReplacePackageDependency "spenso" "spenso-for-spenso-macros-test" workspaceTestCrates."spenso-macros".devDependencies;
+            };
+        };
 
-      nextestArchives = lib.listToAttrs (map (target: {
-          name = "gammaloop-nextest-archive-${target.name}";
-          value = nextestArchiveFor target;
+      crate2nixTestBuildRustCrateForPkgs = pkgs':
+        (crate2nixBuildRustCrateForPkgs pkgs').override {
+          defaultCrateOverrides = crate2nixDefaultCrateOverrides;
+        };
+
+      crate2nixBuiltTestCratesFor = package:
+        crate2nixPackageSet.internal.builtRustCratesWithFeatures {
+          packageId = package;
+          features = ["default"];
+          crateConfigs = crate2nixTestCrateConfigs;
+          buildRustCrateForPkgsFunc = crate2nixTestBuildRustCrateForPkgs;
+          runTests = true;
+        };
+
+      crate2nixTestBinaryCrateFor = package:
+        (crate2nixBuiltTestCratesFor package).crates.${package}.override (old: {
+          buildTests = true;
+          preBuild =
+            (old.preBuild or "")
+            + lib.optionalString (crate2nixTestCrateConfigs.${package}.procMacro or false) ''
+              # buildRustCrate wires the current crate as an rlib for integration
+              # tests. Proc-macro crates emit a build-platform shared library
+              # instead, so correct the self --extern path for those tests.
+              build_lib() {
+                lib_src=$1
+                echo_build_heading $lib_src "$LIB_NAME"
+
+                noisily rustc \
+                  --crate-name $CRATE_NAME \
+                  $lib_src \
+                  --out-dir target/lib \
+                  -L dependency=target/deps \
+                  --cap-lints allow \
+                  $LINK \
+                  $EXTRA_LINK_ARGS \
+                  $EXTRA_LINK_ARGS_LIB \
+                  $LIB_RUSTC_OPTS \
+                  $BUILD_OUT_DIR \
+                  $EXTRA_BUILD \
+                  $EXTRA_FEATURES \
+                  $EXTRA_RUSTC_FLAGS \
+                  --color $colors
+
+                if [ -e target/lib/lib$CRATE_NAME-$metadata$LIB_EXT ]; then
+                  EXTRA_LIB=" --extern $CRATE_NAME=target/lib/lib$CRATE_NAME-$metadata$LIB_EXT"
+                else
+                  EXTRA_LIB=" --extern $CRATE_NAME=target/lib/lib$CRATE_NAME-$metadata.rlib"
+                fi
+              }
+            '';
+        });
+
+      crate2nixTestBinaryCrates = lib.genAttrs workspacePackages crate2nixTestBinaryCrateFor;
+
+      crate2nixTestBinaryPackageOutputs = lib.listToAttrs (map (package: {
+          name = "crate-test-binaries-${package}";
+          value = crate2nixTestBinaryCrates.${package};
+        })
+        workspacePackages);
+
+      nextestCargoMetadata = pkgs.runCommand "gammaloop-nextest-cargo-metadata.json" {
+        nativeBuildInputs = [ciToolchain];
+      } ''
+        cp -R ${workspaceTestSrc} source
+        chmod -R u+w source
+        cd source
+        cargo metadata --format-version 1 --no-deps > "$out"
+      '';
+
+      nextestBinarySetFor = target: let
+        packageNamesFile = pkgs.writeText "gammaloop-nextest-packages-${target.name}.json" (builtins.toJSON target.packages);
+        testCratePathsFile = pkgs.writeText "gammaloop-nextest-test-crates-${target.name}.json" (builtins.toJSON (lib.genAttrs target.packages (package: "${crate2nixTestBinaryCrates.${package}}")));
+      in
+        pkgs.runCommand "gammaloop-nextest-binaries-${target.name}" {
+          nativeBuildInputs = [pkgs.python3];
+          packageNames = packageNamesFile;
+          testCratePaths = testCratePathsFile;
+          cargoMetadata = nextestCargoMetadata;
+          rustLibDir = nextestRustLibDir;
+          targetTriple = nextestTargetTriple;
+        } ''
+          mkdir -p "$out/target/debug/deps"
+          export OUT_DIR="$out"
+          python3 <<'PY'
+          import json
+          import os
+          import shutil
+          import stat
+          import sys
+          from pathlib import Path
+
+          out = Path(os.environ["OUT_DIR"])
+          target_dir = out / "target"
+          deps_dir = target_dir / "debug" / "deps"
+
+          with open(os.environ["cargoMetadata"], "r", encoding="utf-8") as handle:
+              metadata = json.load(handle)
+          with open(os.environ["packageNames"], "r", encoding="utf-8") as handle:
+              package_names = json.load(handle)
+          with open(os.environ["testCratePaths"], "r", encoding="utf-8") as handle:
+              test_crate_paths = json.load(handle)
+
+          metadata["target_directory"] = str(target_dir)
+          metadata["build_directory"] = str(target_dir)
+          with open(out / "cargo-metadata.json", "w", encoding="utf-8") as handle:
+              json.dump(metadata, handle, separators=(",", ":"))
+
+          packages_by_name = {package["name"]: package for package in metadata["packages"]}
+
+          def nextest_kind(kinds):
+              if any(kind in kinds for kind in ("lib", "rlib", "cdylib", "proc-macro")):
+                  return "lib"
+              for kind in ("bin", "test", "bench", "example"):
+                  if kind in kinds:
+                      return kind
+              return None
+
+          def executable_files(test_dir):
+              if not test_dir.exists():
+                  return []
+              return [path for path in sorted(test_dir.iterdir()) if path.is_file() and os.access(path, os.X_OK)]
+
+          def find_binary(files, package_name, target_name, kind):
+              names = [target_name, target_name.replace("-", "_")]
+              if kind == "lib":
+                  names.extend([package_name, package_name.replace("-", "_")])
+              candidates = []
+              for name in dict.fromkeys(names):
+                  candidates.extend(path for path in files if path.name == name or path.name.startswith(f"{name}-"))
+              unique = []
+              seen = set()
+              for candidate in candidates:
+                  if candidate not in seen:
+                      unique.append(candidate)
+                      seen.add(candidate)
+              exact = [path for path in unique if path.name in names]
+              if len(exact) == 1:
+                  return exact[0]
+              if len(unique) == 1:
+                  return unique[0]
+              if unique:
+                  return sorted(unique, key=lambda path: (len(path.name), path.name))[0]
+              return None
+
+          rust_binaries = {}
+          missing = []
+          for package_name in package_names:
+              package = packages_by_name[package_name]
+              test_dir = Path(test_crate_paths[package_name]) / "tests"
+              files = executable_files(test_dir)
+              for target in package["targets"]:
+                  if not target.get("test", False):
+                      continue
+                  kind = nextest_kind(target["kind"])
+                  if kind is None:
+                      continue
+                  source = find_binary(files, package_name, target["name"], kind)
+                  if source is None:
+                      missing.append(f"{package_name}:{target['name']} ({'/'.join(target['kind'])}) in {test_dir}")
+                      continue
+                  binary_id = f"{package_name}::{target['name']}"
+                  safe_binary_id = binary_id.replace("/", "_").replace(":", "_")
+                  destination = deps_dir / f"{safe_binary_id}-{source.name}"
+                  shutil.copy2(source, destination)
+                  destination.chmod(destination.stat().st_mode | stat.S_IXUSR)
+                  rust_binaries[binary_id] = {
+                      "binary-id": binary_id,
+                      "binary-name": target["name"],
+                      "package-id": package["id"],
+                      "kind": kind,
+                      "binary-path": str(destination),
+                      "build-platform": "target",
+                  }
+
+          if missing:
+              print("missing crate2nix test binaries for nextest metadata:", file=sys.stderr)
+              for item in missing:
+                  print(f"  - {item}", file=sys.stderr)
+              sys.exit(1)
+
+          build_meta = {
+              "target-directory": str(target_dir),
+              "base-output-directories": ["debug"],
+              "non-test-binaries": {},
+              "build-script-out-dirs": {},
+              "linked-paths": [],
+              "platforms": {
+                  "host": {
+                      "platform": {
+                          "triple": os.environ["targetTriple"],
+                          "target-features": "unknown",
+                      },
+                      "libdir": {
+                          "status": "available",
+                          "path": os.environ["rustLibDir"],
+                      },
+                  },
+                  "targets": [],
+              },
+              "target-platforms": [
+                  {
+                      "triple": os.environ["targetTriple"],
+                      "target-features": "unknown",
+                  }
+              ],
+              "target-platform": None,
+          }
+          binaries_metadata = {
+              "rust-build-meta": build_meta,
+              "rust-binaries": rust_binaries,
+          }
+          with open(out / "binaries-metadata.json", "w", encoding="utf-8") as handle:
+              json.dump(binaries_metadata, handle, separators=(",", ":"))
+          PY
+        '';
+
+      nextestBinarySets = lib.listToAttrs (map (target: {
+          name = "gammaloop-nextest-binaries-${target.name}";
+          value = nextestBinarySetFor target;
         })
         checkedNextestPackageGroups);
 
-      nextestArchiveForTarget = target: nextestArchives."gammaloop-nextest-archive-${target.name}";
+      nextestBinarySetForTarget = target: nextestBinarySets."gammaloop-nextest-binaries-${target.name}";
 
-      nextestArchiveAggregate = pkgs.linkFarm "gammaloop-nextest-archive" (map (target: {
+      nextestBinarySetAggregate = pkgs.linkFarm "gammaloop-nextest-binaries" (map (target: {
           name = target.name;
-          path = nextestArchiveForTarget target;
+          path = nextestBinarySetForTarget target;
         })
         checkedNextestPackageGroups);
 
       nextestCheckFor = target:
-        craneLib.mkCargoDerivation (ciArgs
-          // {
-            cargoArtifacts = null;
-            cargoVendorDir = null;
-            src = nextestSrcFor target;
-            pname = "gammaloop-nextest-${target.name}";
-            nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.cargo-nextest pkgs.form];
-            doCheck = true;
-            checkPhase = ''
-              runHook preCheck
+        pkgs.stdenv.mkDerivation ({
+          pname = "gammaloop-nextest-${target.name}";
+          version = "0.1.0";
+          src = nextestSrcFor target;
+          nativeBuildInputs =
+            [ciToolchain pkgs.cargo-nextest pkgs.form]
+            ++ lib.optionals (target.name == "integration") [nextestPython];
+          dontConfigure = true;
+          dontBuild = true;
+          doCheck = true;
+          dontFixup = true;
+          LD_LIBRARY_PATH = runtimeLibPath;
+          DYLD_LIBRARY_PATH = runtimeLibPath;
+          RUST_BACKTRACE = "1";
+          RUST_LIB_BACKTRACE = "1";
+          SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+          preCheck = ''
+            ${licensePreCheck}
+            # crate2nix-built test binaries run under nextest with the workspace
+            # root as cwd, while insta snapshots are stored under each crate src.
+            # Mirror those snapshot directories into the workspace-level src tree
+            # in the disposable Nix build directory so insta can find them.
+            if [ -d crates ]; then
+              while IFS= read -r snapshots; do
+                rel="''${snapshots#crates/*/src/}"
+                mkdir -p "src/$rel"
+                cp -R "$snapshots/." "src/$rel/"
+              done < <(find crates -type d -name snapshots | sort)
+            fi
+          '';
+          checkPhase = ''
+            runHook preCheck
 
-              cat > nextest-nix.toml <<EOF
-              [store]
-              dir = "$PWD/target/nextest"
+            cp -R ${nextestBinarySetForTarget target}/target target
+            chmod -R u+w target
 
-              EOF
-              cat "$PWD/.config/nextest.toml" >> nextest-nix.toml
+            cat > nextest-nix.toml <<EOF
+            [store]
+            dir = "$PWD/target/nextest"
 
-              set +e
-              cargo nextest run \
-                --archive-file ${nextestArchiveForTarget target}/${nextestArchiveFileName} \
-                --archive-format tar-zst \
-                --config-file "$PWD/nextest-nix.toml" \
-                --workspace-remap . \
-                ${nextestPackageFilter target.packages} ${nextestBaseExtraArgs}
-              nextest_status=$?
-              set -e
+            EOF
+            cat "$PWD/.config/nextest.toml" >> nextest-nix.toml
 
-              ${nextestFailureSummary}/bin/nextest-failure-summary ${lib.escapeShellArg nextestJunitPath} || true
+            set +e
+            cargo nextest run \
+              --cargo-metadata ${nextestBinarySetForTarget target}/cargo-metadata.json \
+              --binaries-metadata ${nextestBinarySetForTarget target}/binaries-metadata.json \
+              --target-dir-remap "$PWD/target" \
+              --workspace-remap "$PWD" \
+              --config-file "$PWD/nextest-nix.toml" \
+              ${nextestPackageFilter target.packages} ${nextestBaseExtraArgs}
+            nextest_status=$?
+            set -e
 
-              runHook postCheck
-              if [ "$nextest_status" -ne 0 ]; then
-                exit "$nextest_status"
-              fi
-            '';
-            buildPhaseCargoCommand = ''
-              cargo nextest --version
-            '';
-            installPhaseCommand = ''
-              mkdir -p "$out"
-            '';
-            doInstallCargoArtifacts = false;
-            CARGO_PROFILE = "";
-            RUST_BACKTRACE = "1";
-            RUST_LIB_BACKTRACE = "1";
-          }
-          // {
-            preCheck = ''
-              ${licensePreCheck}
-              export INSTA_WORKSPACE_ROOT="$PWD"
-            '';
-            SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-          });
+            ${nextestFailureSummary}/bin/nextest-failure-summary ${lib.escapeShellArg nextestJunitPath} || true
+
+            runHook postCheck
+            if [ "$nextest_status" -ne 0 ]; then
+              exit "$nextest_status"
+            fi
+          '';
+          installPhase = ''
+            mkdir -p "$out"
+          '';
+        } // lib.optionalAttrs (target.name == "integration") {
+          PYO3_PYTHON = "${nextestPython}/bin/python3";
+          PYTHON = "${nextestPython}/bin/python3";
+          PYTHONPATH = "${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}";
+        });
+
+      nextestRunChecks = lib.listToAttrs (map (target: {
+          name = "gammaloop-nextest-${target.name}";
+          value = nextestCheckFor target;
+        })
+        checkedNextestPackageGroups);
 
       nextestChecks =
         {
-          gammaloop-nextest-archive = nextestArchiveAggregate;
+          gammaloop-nextest-binaries = nextestBinarySetAggregate;
         }
-        // nextestArchives
-        // lib.listToAttrs (map (target: {
-            name = "gammaloop-nextest-${target.name}";
-            value = nextestCheckFor target;
-          })
-          checkedNextestPackageGroups);
+        // nextestBinarySets
+        // nextestRunChecks;
 
       nextestAggregate = pkgs.runCommand "gammaloop-nextest" {} ''
-        ${lib.concatMapStringsSep "\n" (check: "test -d ${check}") (builtins.attrValues nextestChecks)}
+        ${lib.concatMapStringsSep "\n" (check: "test -d ${check}") (builtins.attrValues nextestRunChecks)}
         mkdir -p "$out"
       '';
 
@@ -734,10 +1120,6 @@
           {
             runnerAttr = "nix-ci-check-gammaloop-nextest";
             checkAttr = "gammaloop-nextest";
-          }
-          {
-            runnerAttr = "nix-ci-check-gammaloop-nextest-archive";
-            checkAttr = "gammaloop-nextest-archive";
           }
         ]
         ++ map (target: {
@@ -773,14 +1155,6 @@
         '';
       };
 
-      clinnet-cli = craneLib.buildPackage (ciArgs
-        // {
-          pname = "clinnet";
-          inherit (clinnetMeta) version;
-          cargoBuildCommand = "cargo build --profile ${ciCargoProfile}";
-          cargoExtraArgs = "--locked -p clinnet --bin linnet";
-          doCheck = false;
-        });
     in {
       checks =
         {
@@ -834,10 +1208,14 @@
         {
           default = gammaloop-cli;
           gammaloop = gammaloop-cli;
+          inherit clinnet-cli;
+          "gammaloop-python-module" = gammaloop-python-module;
           inherit linnest-wasm linnestWasmCargoArtifacts;
           inherit cargoArtifacts workspaceBuildArtifacts;
           "nix-ci-passed" = nixCiPassed;
         }
+        // crate2nixPackageOutputs
+        // crate2nixTestBinaryPackageOutputs
         // impureCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
           gammaloop-llvm-coverage = craneLib.cargoLlvmCov (commonArgs
@@ -851,9 +1229,11 @@
       apps = {
         default = flake-utils.lib.mkApp {
           drv = gammaloop-cli;
+          exePath = "/bin/gammaloop";
         };
         gammaloop = flake-utils.lib.mkApp {
           drv = gammaloop-cli;
+          exePath = "/bin/gammaloop";
         };
       };
 
