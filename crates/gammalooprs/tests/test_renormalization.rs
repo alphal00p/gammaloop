@@ -491,7 +491,7 @@ fn finite_part_ghost_2loop() {
     let a = amp.graphs[3].renormalization_part(&settings).unwrap();
     // Sign-flipped relative to the main snapshot after schoonschip-aware dot normalization.
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-21𝑖/8*ε+3𝑖/4)*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-5𝑖/8*ε+3𝑖/4)*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[3], a, &new_settings);
     insta::assert_snapshot!(
@@ -502,7 +502,7 @@ fn finite_part_ghost_2loop() {
     //p1.p1*i_*gs^4*CA^2*rat( - 5/8*ep^-2 + 35/48*ep^-1)
     let a = amp.graphs[4].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(37𝑖/48*ε+5𝑖/8)*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-35𝑖/48*ε+5𝑖/8)*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     ); //-1/2 * target
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[4], a, &new_settings);
     insta::assert_snapshot!(
@@ -513,7 +513,7 @@ fn finite_part_ghost_2loop() {
     //p1.p1*i_*gs^4*CA^2*rat(1/24*ep^-1)
     let a = amp.graphs[5].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"-5𝑖/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"-1𝑖/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[5], a, &new_settings);
     insta::assert_snapshot!(
@@ -556,7 +556,7 @@ fn finit_part_ghlo() {
     // Sign-flipped relative to the main snapshot after schoonschip-aware dot normalization.
     insta::assert_snapshot!(
         align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"-1/2*CA*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
+        .to_bare_ordered_string(),@"1/2*CA*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
 }
 
