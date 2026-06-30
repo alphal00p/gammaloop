@@ -28,6 +28,7 @@ in {
     "packages.${system}.default" = ["packages.${system}.gammaloop"];
     "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoArtifacts"];
     "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoArtifacts"];
+    "checks.${system}.gammaloop-nextest-archive" = ["packages.${system}.cargoArtifacts"];
     "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];
     "checks.${system}.linnest-wasm" = ["packages.${system}.linnest-wasm"];
     "packages.${system}.gammaloop-llvm-coverage" = ["packages.${system}.gammaloop"];

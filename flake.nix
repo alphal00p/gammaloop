@@ -183,6 +183,30 @@
         autoCargoTargetDirs
       );
 
+      workspaceDependencyManifestFiles =
+        [
+          ./Cargo.lock
+          ./Cargo.toml
+        ]
+        ++ map (member: workspaceRoot + "/${member}/Cargo.toml") workspaceMemberDirs;
+
+      workspaceDependencyBuildScripts =
+        lib.filter builtins.pathExists (
+          [./build.rs]
+          ++ map (member: workspaceRoot + "/${member}/build.rs") workspaceMemberDirs
+        );
+
+      workspaceDependencySrc = lib.fileset.toSource {
+        root = workspaceRoot;
+        fileset = lib.fileset.unions (
+          workspaceDependencyManifestFiles
+          ++ workspaceDependencyBuildScripts
+          ++ [
+            ./tests/resources/fjcore
+          ]
+        );
+      };
+
       dummyCargoTarget = pkgs.writeText "crane-dummy-cargo-target.rs" ''
         #![allow(clippy::all)]
         #![allow(dead_code)]
@@ -431,10 +455,12 @@
 
       # Crane's documented workspace pattern is to build one shared dependency cache and
       # reuse it across workspace lint/test/doc/package checks.
+      # Keep this input to manifests and build-script inputs so source-only commits
+      # can reuse the dependency artifact from the NixCI cache.
       cargoArtifacts = craneLib.buildDepsOnly (ciArgs
         // {
           pname = "gammaloop-workspace-deps";
-          src = workspaceTestSrc;
+          src = workspaceDependencySrc;
           extraDummyScript =
             lib.concatMapStringsSep "\n" (path: ''
               install -D -m 0644 ${dummyCargoTarget} "$out/${path}"
