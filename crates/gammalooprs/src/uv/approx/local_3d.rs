@@ -305,7 +305,8 @@ impl Local3DApproximation {
                 function!(
                     GS.ose,
                     eid,
-                    (GS.m_uv * GS.m_uv * GS.rescale * GS.rescale + W_.prop_ - GS.m_uv * GS.m_uv)
+                    (GS.m_uv_expansion * GS.m_uv_expansion * GS.rescale * GS.rescale + W_.prop_
+                        - GS.m_uv_expansion * GS.m_uv_expansion)
                         / GS.rescale
                         / GS.rescale
                 ) * GS.rescale

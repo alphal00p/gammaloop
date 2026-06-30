@@ -402,8 +402,8 @@ impl Forest {
         }
         Ok(RenormalizationPart::legacy(
             sum.replace_multiple(&replacements)
-                .replace(GS.m_uv_int)
-                .with(GS.m_uv),
+                .replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum),
         ))
     }
 

@@ -153,10 +153,16 @@ pub struct GammaloopSymbols {
     pub pi: Symbol,
 
     //Parameters for UV renormalization and localization
-    /// UV renormalization scale factor used in expansion terms.
-    pub m_uv: Symbol,
-    /// Internal UV vacuum mass marker for stored integrated counterterms.
-    pub m_uv_int: Symbol,
+    /// UV mass used only as the auxiliary expansion/deformation scale in local UV series.
+    ///
+    /// This symbol prints as `mUVexp`. Public runtime output should not depend on this
+    /// name after the endpoint mass-role collapse.
+    pub m_uv_expansion: Symbol,
+    /// UV vacuum mass used by integrated counterterms and the vacuum-integral basis.
+    ///
+    /// This symbol prints as `mUV` and is the public symbolic representative of the
+    /// `general.m_uv` runtime setting.
+    pub m_uv_vacuum: Symbol,
     /// UV localization scale factor
     pub renormalization_localization_scale: Symbol,
     pub mu_r_sq: Symbol,
@@ -700,7 +706,26 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     sign: symbol!("σ"; Scalar),
     selected: symbol!("selected"),
     theta: symbol!("θ"),
-    m_uv: symbol!(
+    m_uv_expansion: symbol!(
+        "mUVexp",
+        print = |a, opt, _state| {
+            let AtomView::Var(_a) = a else {
+                return None;
+            };
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(i)) => {
+                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(*i as usize);
+                    if SpensoPrintSettings::from(*i as usize).is_typst() {
+                        Some("m_\"UVexp\"".to_string())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        }
+    ),
+    m_uv_vacuum: symbol!(
         "mUV",
         print = |a, opt, _state| {
             let AtomView::Var(_a) = a else {
@@ -711,25 +736,6 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                     let SpensoPrintSettings { .. } = SpensoPrintSettings::from(*i as usize);
                     if SpensoPrintSettings::from(*i as usize).is_typst() {
                         Some("m_\"UV\"".to_string())
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            }
-        }
-    ),
-    m_uv_int: symbol!(
-        "mUVI",
-        print = |a, opt, _state| {
-            let AtomView::Var(_a) = a else {
-                return None;
-            };
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(i)) => {
-                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(*i as usize);
-                    if SpensoPrintSettings::from(*i as usize).is_typst() {
-                        Some("m_\"UVI\"".to_string())
                     } else {
                         None
                     }

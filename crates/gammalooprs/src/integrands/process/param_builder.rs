@@ -245,7 +245,9 @@ impl GammaLoopPairs {
         additional_params: T,
     ) -> (Self, usize) {
         let mut pairs = GammaLoopPairs {
-            m_uv: ParamValuePairs::default_from_symbol(GS.m_uv),
+            m_uv: [Atom::var(GS.m_uv_vacuum), Atom::var(GS.m_uv_expansion)]
+                .into_iter()
+                .collect(),
             renormalization_localization_scale: ParamValuePairs::default_from_symbol(
                 GS.renormalization_localization_scale,
             ),
@@ -1244,11 +1246,20 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     #[inline]
     pub(crate) fn m_uv_value(&mut self, m_uv: Complex<F<T>>) {
-        debug_assert!(self.pairs.m_uv.value_range.len() == 1);
+        debug_assert!(self.pairs.m_uv.value_range.len() == 2);
 
         for (index, values) in self.values.iter_mut().enumerate() {
             let multiplicative_offset = index + 1;
-            values[self.pairs.m_uv.value_range.start * multiplicative_offset] = m_uv.clone();
+            let mut start = self.pairs.m_uv.value_range.start * multiplicative_offset;
+            for _ in self.pairs.m_uv.value_range.clone() {
+                values[start] = m_uv.clone();
+                start += multiplicative_offset;
+            }
+            debug_assert_eq!(
+                start,
+                self.pairs.m_uv.value_range.end * multiplicative_offset,
+                "Not filled up UV mass params"
+            );
         }
     }
     #[inline]

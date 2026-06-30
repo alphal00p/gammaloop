@@ -798,7 +798,7 @@ impl AmplitudeGraph {
 
     //      param_builder.model_parameters_atom(model);
 
-    //      param_builder.m_uv_atom(Atom::var(GS.m_uv));
+    //      param_builder.m_uv_atom(Atom::var(GS.m_uv_vacuum));
 
     //      param_builder.mu_r_sq_atom(Atom::var(GS.mu_r_sq));
 

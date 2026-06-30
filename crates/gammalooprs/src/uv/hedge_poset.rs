@@ -831,8 +831,8 @@ impl Forests {
 
         Ok(RenormalizationPart::new(
             sum.replace_multiple(&replacements)
-                .replace(GS.m_uv_int)
-                .with(GS.m_uv),
+                .replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum),
             self.compute_store.kernel_hits,
             self.graph.n_nodes(),
         ))
