@@ -605,7 +605,6 @@
             mkdir -p "$out"
             cp ${nextestArchiveFileName} "$out/${nextestArchiveFileName}"
           '';
-          SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
         });
 
       nextestCheckFor = target:
