@@ -1250,7 +1250,7 @@ impl AmplitudeGraph {
                     right_th_cut: None,
                 },
                 union: cut_union,
-                canonicalize_external_shifts: true,
+                canonicalize_external_shifts: false,
             };
 
             cuts.push(cutset);
