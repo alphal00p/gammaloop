@@ -62,7 +62,7 @@ pub struct UltraVioletProfile {
     pub min_scale_exponent: f64,
 
     /// Maximum scaling factor
-    #[arg(long = "max-scaling", default_value_t = 5.0)]
+    #[arg(long = "max-scaling", default_value_t = 6.0)]
     pub max_scale_exponent: f64,
 
     /// Use f128 precision for evaluation
@@ -179,8 +179,8 @@ impl Default for UltraVioletProfile {
             process: None,
             integrand_name: None,
             n_points: 20,
-            min_scale_exponent: 1.0,
-            max_scale_exponent: 2.0,
+            min_scale_exponent: 3.0,
+            max_scale_exponent: 6.0,
             use_f128: false,
             analyse_analytically: false,
             per_orientation: false,
