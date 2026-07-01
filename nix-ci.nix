@@ -82,6 +82,7 @@ let
   nextestBinaryChecks = [
     "checks.${system}.gammaloop-nextest-binaries-core"
     "checks.${system}.gammaloop-nextest-binaries-integration"
+    "checks.${system}.gammaloop-nextest-binaries-python-api"
     "checks.${system}.gammaloop-nextest-binaries-linnet"
     "checks.${system}.gammaloop-nextest-binaries-spenso"
     "checks.${system}.gammaloop-nextest-binaries-vakint"
@@ -108,6 +109,7 @@ let
         "packages.${system}.crate-test-binaries-gammalooprs"
       ];
       "checks.${system}.gammaloop-nextest-binaries-integration" = ["packages.${system}.crate-test-binaries-gammaloop-integration-tests"];
+      "checks.${system}.gammaloop-nextest-binaries-python-api" = ["packages.${system}.crate-test-binaries-gammaloop-integration-tests"];
       "checks.${system}.gammaloop-nextest-binaries-linnet" = [
         "packages.${system}.crate-test-binaries-clinnet"
         "packages.${system}.crate-test-binaries-linnet"
@@ -133,6 +135,10 @@ let
       "packages.${system}.nix-ci-check-gammaloop-nextest-core" = ["checks.${system}.gammaloop-nextest-binaries-core"];
       "packages.${system}.nix-ci-check-gammaloop-nextest-integration" = [
         "checks.${system}.gammaloop-nextest-binaries-integration"
+        "packages.${system}.gammaloop-python-module"
+      ];
+      "packages.${system}.nix-ci-check-gammaloop-nextest-python-api" = [
+        "checks.${system}.gammaloop-nextest-binaries-python-api"
         "packages.${system}.gammaloop-python-module"
       ];
       "packages.${system}.nix-ci-check-gammaloop-nextest-linnet" = ["checks.${system}.gammaloop-nextest-binaries-linnet"];
@@ -188,6 +194,7 @@ in {
       "checks.${system}.gammaloop-nextest-binaries"
       "checks.${system}.gammaloop-nextest-core"
       "checks.${system}.gammaloop-nextest-integration"
+      "checks.${system}.gammaloop-nextest-python-api"
       "checks.${system}.gammaloop-nextest-linnet"
       "checks.${system}.gammaloop-nextest-spenso"
       "checks.${system}.gammaloop-nextest-vakint"
@@ -229,6 +236,13 @@ in {
 
     gammaloop-nextest-integration = {
       package = "packages.${system}.nix-ci-check-gammaloop-nextest-integration";
+      system = system;
+      in-repo = true;
+      secrets = ["SYMBOLICA_LICENSE"];
+    };
+
+    gammaloop-nextest-python-api = {
+      package = "packages.${system}.nix-ci-check-gammaloop-nextest-python-api";
       system = system;
       in-repo = true;
       secrets = ["SYMBOLICA_LICENSE"];

@@ -720,6 +720,11 @@
           packages = ["gammaloop-integration-tests"];
         }
         {
+          name = "python-api";
+          packages = ["gammaloop-integration-tests"];
+          filter = "package(gammaloop-integration-tests) & binary(test_python_api)";
+        }
+        {
           name = "linnet";
           packages = [
             "clinnet"
@@ -761,8 +766,13 @@
       nextestBaseExtraArgs = "--profile ${nextestProfile} --no-fail-fast --final-status-level fail --no-tests=pass";
 
       nextestPackageFilter = packages: "-E ${lib.escapeShellArg (lib.concatMapStringsSep " | " (package: "package(${package})") packages)}";
+      nextestFilterFor = target:
+        if target ? filter
+        then "-E ${lib.escapeShellArg target.filter}"
+        else nextestPackageFilter target.packages;
+      nextestUsesIntegrationTests = target: builtins.elem "gammaloop-integration-tests" target.packages;
       nextestSrcFor = target:
-        if target.name == "integration"
+        if nextestUsesIntegrationTests target
         then workspaceTestSrc
         else workspaceNonIntegrationTestSrc;
 
@@ -1072,7 +1082,7 @@
           src = nextestSrcFor target;
           nativeBuildInputs =
             [ciToolchain pkgs.cargo-nextest pkgs.form]
-            ++ lib.optionals (target.name == "integration") [nextestPython];
+            ++ lib.optionals (nextestUsesIntegrationTests target) [nextestPython];
           dontConfigure = true;
           dontBuild = true;
           doCheck = true;
@@ -1116,7 +1126,7 @@
               --target-dir-remap "$PWD/target" \
               --workspace-remap "$PWD" \
               --config-file "$PWD/nextest-nix.toml" \
-              ${nextestPackageFilter target.packages} ${nextestBaseExtraArgs}
+              ${nextestFilterFor target} ${nextestBaseExtraArgs}
             nextest_status=$?
             set -e
 
@@ -1130,7 +1140,7 @@
           installPhase = ''
             mkdir -p "$out"
           '';
-        } // lib.optionalAttrs (target.name == "integration") {
+        } // lib.optionalAttrs (nextestUsesIntegrationTests target) {
           PYO3_PYTHON = "${nextestPython}/bin/python3";
           PYTHON = "${nextestPython}/bin/python3";
           PYTHONPATH = "${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}";
