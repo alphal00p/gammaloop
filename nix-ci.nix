@@ -32,10 +32,45 @@ let
   crate2nixCiPrebuildAttr = "packages.${system}.crate2nix-ci-prebuild";
   workspaceCratePackageAttrs = map cratePackageAttr (builtins.attrNames workspaceMembers);
   workspaceCrateTestBinaryAttrs = map crateTestBinaryAttr (builtins.attrNames workspaceMembers);
+  mergeDependencySets = sets: let
+    attrs = unique (builtins.concatLists (map builtins.attrNames sets));
+  in
+    builtins.listToAttrs (map (attr: {
+        name = attr;
+        value = unique (builtins.concatLists (map (set: set.${attr} or []) sets));
+      })
+      attrs);
+  workspaceDependencySections = manifest: [
+    (manifest.dependencies or {})
+    (manifest."build-dependencies" or {})
+  ];
+  workspaceDependencyPackageName = name: spec:
+    if builtins.isAttrs spec && spec ? package
+    then spec.package
+    else name;
+  workspaceDependencyNamesInSection = section:
+    builtins.filter (package: builtins.hasAttr package workspaceMembers) (
+      map (name: workspaceDependencyPackageName name section.${name})
+      (builtins.attrNames section)
+    );
+  workspaceDependencyNamesFor = manifest:
+    unique (builtins.concatLists (map workspaceDependencyNamesInSection (workspaceDependencySections manifest)));
+  workspaceCrateTestBinaryDependencies = builtins.listToAttrs (
+    builtins.filter (entry: entry.value != []) (map (package: {
+        name = crateTestBinaryAttr package;
+        value = map crateTestBinaryAttr (workspaceDependencyNamesFor workspaceMembers.${package}.manifest);
+      })
+      (builtins.attrNames workspaceMembers))
+  );
+  workspaceCrateTestBinaryDependencyEdges = builtins.concatLists (map (dependent:
+      map (dependency: {
+        inherit dependency dependent;
+      })
+      (workspaceCrateTestBinaryDependencies.${dependent} or []))
+    (builtins.attrNames workspaceCrateTestBinaryDependencies));
   crate2nixCiPrebuildDependentAttrs =
     workspaceCrateTestBinaryAttrs
     ++ [
-      "packages.${system}.clinnet-cli"
       "packages.${system}.gammaloop"
       "packages.${system}.gammaloop-python-module"
     ];
@@ -51,9 +86,10 @@ let
     "checks.${system}.gammaloop-nextest-binaries-spenso"
     "checks.${system}.gammaloop-nextest-binaries-vakint"
   ];
-  dependencies =
+  dependencies = mergeDependencySets [
     crate2nixCiPrebuildDependencies
-    // {
+    workspaceCrateTestBinaryDependencies
+    {
       "packages.${system}.gammaloop" = [
         "checks.${system}.gammaloop-fmt"
         "devShells.${system}.default"
@@ -62,7 +98,6 @@ let
       "checks.${system}.gammaloop" = ["packages.${system}.gammaloop"];
       "packages.${system}.default" = ["packages.${system}.gammaloop"];
       "packages.${system}.gammaloop-python-module" = [crate2nixCiPrebuildAttr];
-      "packages.${system}.clinnet-cli" = [crate2nixCiPrebuildAttr];
       "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoArtifacts"];
       "packages.${system}.workspaceBuildArtifacts" = ["packages.${system}.cargoArtifacts"];
@@ -103,12 +138,24 @@ let
       "packages.${system}.nix-ci-check-gammaloop-nextest-linnet" = ["checks.${system}.gammaloop-nextest-binaries-linnet"];
       "packages.${system}.nix-ci-check-gammaloop-nextest-spenso" = ["checks.${system}.gammaloop-nextest-binaries-spenso"];
       "packages.${system}.nix-ci-check-gammaloop-nextest-vakint" = ["checks.${system}.gammaloop-nextest-binaries-vakint"];
-    };
+    }
+  ];
   missingCrate2nixCiPrebuildEdges =
     builtins.filter (
       attr: !(builtins.elem crate2nixCiPrebuildAttr (dependencies.${attr} or []))
     )
     crate2nixCiPrebuildDependentAttrs;
+  missingWorkspaceCrateTestBinaryEdges =
+    builtins.filter (
+      edge: !(builtins.elem edge.dependency (dependencies.${edge.dependent} or []))
+    )
+    workspaceCrateTestBinaryDependencyEdges;
+  reciprocalWorkspaceCrateTestBinaryEdges =
+    builtins.filter (
+      edge: builtins.elem edge.dependent (workspaceCrateTestBinaryDependencies.${edge.dependency} or [])
+    )
+    workspaceCrateTestBinaryDependencyEdges;
+  formatDependencyEdge = edge: "${edge.dependency} -> ${edge.dependent}";
   selfDependencies =
     builtins.filter (
       attr: builtins.elem attr (dependencies.${attr} or [])
@@ -122,6 +169,10 @@ let
   validatedDependencies =
     assert missingCrate2nixCiPrebuildEdges == []
     || builtins.throw "missing ${crate2nixCiPrebuildAttr} dependency edges for: ${builtins.concatStringsSep ", " missingCrate2nixCiPrebuildEdges}";
+    assert missingWorkspaceCrateTestBinaryEdges == []
+    || builtins.throw "manual NixCI dependency graph is missing workspace crate-test-binary dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge missingWorkspaceCrateTestBinaryEdges)}";
+    assert reciprocalWorkspaceCrateTestBinaryEdges == []
+    || builtins.throw "manual NixCI dependency graph contains reciprocal workspace crate-test-binary dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge reciprocalWorkspaceCrateTestBinaryEdges)}";
     assert selfDependencies == []
     || builtins.throw "manual NixCI dependency graph contains self dependencies: ${builtins.concatStringsSep ", " selfDependencies}";
     assert mentionedWorkspaceCratePackageAttrs == []
@@ -151,7 +202,12 @@ in {
   # automatic discovery asks NixCI to compute derivation paths for many
   # package/check attrs during `show`, including attrs listed in doNotBuild.
   # The manual graph below prebuilds the crate2nix Symbolica closure before
-  # crate jobs fan out, and keeps impure Symbolica users behind test runners.
+  # crate jobs fan out, orders crate test-binary jobs by regular workspace
+  # dependencies, and keeps impure Symbolica users behind test runners.
+  # Test-only workspace dependencies are deliberately omitted: the flake has
+  # synthetic crate2nix package IDs to break the linnet/linnest and
+  # spenso-macros/spenso dev-dependency cycles, but those synthetic crates are
+  # not exposed as NixCI jobs.
   # See https://nix-ci.com/documentation/automatic-dependency-discovery
   # and https://nix-ci.com/documentation/manually-specified-dependencies
   dependency-discovery.enable = false;
