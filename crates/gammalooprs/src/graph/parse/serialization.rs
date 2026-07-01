@@ -1,5 +1,7 @@
 use idenso::{
-    color::ColorSimplifier, dirac::GammaSimplifier, shorthands::metric::MetricSimplifier,
+    color::{ColorSimplifier, ColorSimplifySettings},
+    dirac::GammaSimplifier,
+    shorthands::metric::MetricSimplifier,
 };
 use linnet::{
     half_edge::{
@@ -40,7 +42,9 @@ impl Graph {
                 .simplify_metrics();
 
             if settings.do_color_algebra {
-                num = num.simplify_color();
+                num = num.simplify_color_with(
+                    ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                );
             }
 
             if settings.do_gamma_algebra {

@@ -37,7 +37,7 @@ fn two_generator_trace_normalizes_to_tr_metric() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"TR*g(coad(-1+Nc^2,a),coad(-1+Nc^2,b))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"g(coad(-1+Nc^2,a),coad(-1+Nc^2,b))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn fierz_generator_contraction() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(expr.simplify_color().expand().simplify_metrics().to_bare_ordered_string(), @"-1*Nc^(-1)*TR*g(cof(Nc,i),dind(cof(Nc,j)))*g(cof(Nc,k),dind(cof(Nc,l)))+TR*g(cof(Nc,i),dind(cof(Nc,l)))*g(cof(Nc,k),dind(cof(Nc,j)))");
+    assert_snapshot!(expr.simplify_color().expand().simplify_metrics().to_bare_ordered_string(), @"-1*Nc^(-1)*g(cof(Nc,i),dind(cof(Nc,j)))*g(cof(Nc,k),dind(cof(Nc,l)))*idx(2,cof(Nc))+g(cof(Nc,i),dind(cof(Nc,l)))*g(cof(Nc,k),dind(cof(Nc,j)))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn separated_generator_casimir_shortcut() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(expr.simplify_color().simplify_metrics().to_bare_ordered_string(), @"-1*Nc^(-1)*TR*t(coad(-1+Nc^2,b),cof(Nc,i),dind(cof(Nc,l)))");
+    assert_snapshot!(expr.simplify_color().simplify_metrics().to_bare_ordered_string(), @"-1/2*cas(2,coad(-1+Nc^2))*t(coad(-1+Nc^2,b),cof(Nc,i),dind(cof(Nc,l)))+cas(2,cof(Nc))*t(coad(-1+Nc^2,b),cof(Nc,i),dind(cof(Nc,l)))");
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn chain_two_generator_trace_normalizes() {
         color_t!(slot!(r.coad_na, b)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"TR*g(coad(NA,a),coad(NA,b))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"g(coad(NA,a),coad(NA,b))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn three_generator_trace_terminal() {
         color_t!(slot!(r.coad_na, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*TR*f(coad(NA,a),coad(NA,b),coad(NA,c))+trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,c),in,out)))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*f(coad(NA,a),coad(NA,b),coad(NA,c))*idx(2,cof(Nc))+trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,c),in,out)))");
 }
 
 #[test]
@@ -118,7 +118,7 @@ fn adjacent_generator_casimir_chain() {
         color_t!(slot!(r.coad_na, a)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"CF*g(cof(Nc,i),dind(cof(Nc,k)))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,cof(Nc))*g(cof(Nc,i),dind(cof(Nc,k)))");
 }
 
 #[test]
@@ -133,7 +133,7 @@ fn separated_generator_casimir_trace() {
         color_t!(slot!(r.coad_na, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"(-1/2*CA+CF)*TR*g(coad(NA,b),coad(NA,c))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(NA))*g(coad(NA,b),coad(NA,c))*idx(2,cof(Nc))+cas(2,cof(Nc))*g(coad(NA,b),coad(NA,c))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -144,7 +144,7 @@ fn two_f_loop_contracts_to_ca_metric() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"CA*g(coad(NA,a),coad(NA,b))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(NA))*g(coad(NA,a),coad(NA,b))");
 }
 
 #[test]
@@ -157,7 +157,7 @@ fn three_f_loop_contracts_to_ca_f() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1/2*CA*f(coad(NA,e),coad(NA,f_),coad(NA,g_))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1/2*cas(2,coad(NA))*f(coad(NA,e),coad(NA,f_),coad(NA,g_))");
 }
 
 #[test]
@@ -173,7 +173,7 @@ fn four_f_closed_ghost_topology_preserves_antisymmetric_orientation() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1/2*CA^2");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"(cas(2,coad(8)))^2*1/2");
 }
 
 #[test]
@@ -197,7 +197,7 @@ fn factored_four_f_closed_ghost_topology_preserves_antisymmetric_orientation() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"3/16*CA^2*y+5/32*CA^2*x");
+    assert_snapshot!(expr.simplify_color().expand().to_bare_ordered_string(), @"(cas(2,coad(8)))^2*3/16*y+(cas(2,coad(8)))^2*5/32*x");
 }
 
 #[test]
@@ -215,7 +215,7 @@ fn mixed_trace_structure_contraction() {
         slot!(r.coad_na, c),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*CA*TR*g(coad(NA,c),coad(NA,d))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*cas(2,coad(NA))*g(coad(NA,c),coad(NA,d))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -227,7 +227,7 @@ fn symmetric_invariant_d33_partial_contraction() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"NA^(-1)*d33(sym_x,sym_y)*g(coad(NA,c),coad(NA,d_))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"NA^(-1)*g(coad(NA,c),coad(NA,d_))*gram(3,sym_x,sym_y)");
 }
 
 #[test]
@@ -242,7 +242,7 @@ fn four_generator_trace_terminal() {
         color_t!(slot!(r.coad_na, d)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/6*TR*f(coad(NA,a),coad(NA,c),coad(NA,x))*f(coad(NA,b),coad(NA,d),coad(NA,x))+1/3*TR*f(coad(NA,a),coad(NA,d),coad(NA,x))*f(coad(NA,b),coad(NA,c),coad(NA,x))+1𝑖/2*f(coad(NA,a),coad(NA,b),coad(NA,x))*trace(cof(Nc),sym(t(coad(NA,c),in,out),t(coad(NA,d),in,out),t(coad(NA,x),in,out)))+1𝑖/2*f(coad(NA,c),coad(NA,d),coad(NA,x))*trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,x),in,out)))+trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,c),in,out),t(coad(NA,d),in,out)))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/6*f(coad(NA,a),coad(NA,c),coad(NA,x))*f(coad(NA,b),coad(NA,d),coad(NA,x))*idx(2,cof(Nc))+1/3*f(coad(NA,a),coad(NA,d),coad(NA,x))*f(coad(NA,b),coad(NA,c),coad(NA,x))*idx(2,cof(Nc))+1𝑖/2*f(coad(NA,a),coad(NA,b),coad(NA,x))*trace(cof(Nc),sym(t(coad(NA,c),in,out),t(coad(NA,d),in,out),t(coad(NA,x),in,out)))+1𝑖/2*f(coad(NA,c),coad(NA,d),coad(NA,x))*trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,x),in,out)))+trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,c),in,out),t(coad(NA,d),in,out)))");
 }
 
 // FORM's repository includes a valgrind-oriented size-5 port of color.h's
