@@ -14,7 +14,6 @@ use symbolica::{
     coefficient::CoefficientView,
     function,
     id::{Context, Replacement},
-    symbol,
     utils::Settable,
 };
 
@@ -25,7 +24,6 @@ use crate::{
 };
 
 use super::{CS, ColorSimplifier, ColorSimplifySettings};
-use crate::rep_symbols::RS;
 
 static TRACE_TERMINALS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
     [Replacement::new(
@@ -42,16 +40,11 @@ pub fn color_simplify_impl(expression: AtomView<'_>) -> Atom {
 
 /// Applies SU(N) simplification rules with explicit chain/trace settings.
 pub fn color_simplify_with_impl(expression: AtomView<'_>, settings: ColorSimplifySettings) -> Atom {
-    ColorAlgebraSimplifier {
-        settings,
-        fundamental_dimension: find_fundamental_dimension(expression),
-    }
-    .run(expression)
+    ColorAlgebraSimplifier { settings }.run(expression)
 }
 
 struct ColorAlgebraSimplifier {
     settings: ColorSimplifySettings,
-    fundamental_dimension: Option<Atom>,
 }
 
 impl ColorAlgebraSimplifier {
@@ -61,7 +54,12 @@ impl ColorAlgebraSimplifier {
         loop {
             let next = self.apply_once(current.as_view());
             if next == current {
-                return restore_explicit_default_generator_chains(next).simplify_metrics();
+                let simplified = restore_explicit_default_generator_chains(next).simplify_metrics();
+                return if self.settings.substitute_cof_dimension_invariants {
+                    simplified.to_cof_dimension_invariants()
+                } else {
+                    simplified
+                };
             }
             current = next;
         }
@@ -186,7 +184,8 @@ impl ColorAlgebraSimplifier {
             }
 
             return Some(
-                Atom::var(CS.cf) * chain_with_removed_range(&start, &end, &factors, i, i + 2),
+                fundamental_casimir(fundamental_chain_dimension(&start, &end)?)
+                    * chain_with_removed_range(&start, &end, &factors, i, i + 2),
             );
         }
 
@@ -248,14 +247,14 @@ impl ColorAlgebraSimplifier {
         match generators.as_slice() {
             // Tr(T^a) -> 0.
             [_] => Some(Atom::Zero),
-            // Tr(T^a T^b) -> TR g^{ab}.
-            [a, b] => Some(Atom::var(CS.tr) * color_metric(a.clone(), b.clone())),
+            // Tr(T^a T^b) -> idx(2,rep) g^{ab}.
+            [a, b] => Some(quadratic_index(rep.clone()) * color_metric(a.clone(), b.clone())),
             // Tr(T^a T^b T^c) ->
-            //   Tr(sym(T^a,T^b,T^c)) + i/2 TR f^{abc}.
+            //   Tr(sym(T^a,T^b,T^c)) + i/2 idx(2,rep) f^{abc}.
             [a, b, c] => Some(
                 color_symmetric_trace(&rep, [a.clone(), b.clone(), c.clone()])
                     + Atom::i() * Atom::num(1) / Atom::num(2)
-                        * Atom::var(CS.tr)
+                        * quadratic_index(rep.clone())
                         * color_f!(a.clone(), b.clone(), c.clone()),
             ),
             [a, b, c, d] => Self::simplify_four_generator_trace_terminal(&rep, a, b, c, d),
@@ -276,9 +275,9 @@ impl ColorAlgebraSimplifier {
             }
 
             // Adjacent equal generators inside a fundamental trace:
-            // Tr(... T^a T^a ...) -> CF Tr(...).
+            // Tr(... T^a T^a ...) -> cas(2,rep) Tr(...).
             return Some(
-                Atom::var(CS.cf)
+                quadratic_casimir(rep.clone())
                     * trace_with_factors(rep.clone(), factors_excluding_range(factors, i, i + 2)),
             );
         }
@@ -320,11 +319,11 @@ impl ColorAlgebraSimplifier {
             return match args.as_slice() {
                 // Tr(antisym(T^a,T^b)) is the trace of a commutator.
                 [_, _] => Some(Atom::Zero),
-                // Tr(antisym(T^a,T^b,T^c)) -> i/2 TR f^{abc}.
+                // Tr(antisym(T^a,T^b,T^c)) -> i/2 idx(2,rep) f^{abc}.
                 [a, b, c] => Some(
                     prefactor
                         * Atom::i()
-                        * Atom::var(CS.tr)
+                        * quadratic_index(rep.clone())
                         * color_f!(a.clone(), b.clone(), c.clone())
                         / Atom::num(2),
                 ),
@@ -369,9 +368,11 @@ impl ColorAlgebraSimplifier {
             }
 
             // Separated equal generators with one generator between them:
-            // Tr(... T^a T^b T^a ...) -> (CF - CA/2) Tr(... T^b ...).
+            // Tr(... T^a T^b T^a ...) -> (cas(2,rep) - cas(2,adj)/2) Tr(... T^b ...).
             return Some(
-                (Atom::var(CS.cf) - Atom::var(CS.ca) / Atom::num(2))
+                (quadratic_casimir(rep.clone())
+                    - adjoint_casimir_for_dimension(color_adjoint_dimension(&left)?)
+                        / Atom::num(2))
                     * trace_with_factors(
                         rep.clone(),
                         factors_excluding_indices(factors, &[i, i + 2]),
@@ -398,12 +399,8 @@ impl ColorAlgebraSimplifier {
                 continue;
             }
 
-            let coefficient =
-                if is_default_fundamental_chain(start, end) && is_default_adjoint_slot(&left) {
-                    -Atom::var(CS.tr) / Atom::var(CS.nc)
-                } else {
-                    Atom::var(CS.cf) - Atom::var(CS.ca) / Atom::num(2)
-                };
+            let coefficient = fundamental_casimir(fundamental_chain_dimension(start, end)?)
+                - adjoint_casimir_for_dimension(color_adjoint_dimension(&left)?) / Atom::num(2);
 
             return Some(
                 coefficient
@@ -438,10 +435,10 @@ impl ColorAlgebraSimplifier {
                 + Atom::i() / Atom::num(2)
                     * color_symmetric_trace(rep, [c.clone(), d.clone(), x.clone()])
                     * color_f!(a.clone(), b.clone(), x.clone())
-                - Atom::var(CS.tr) / Atom::num(6)
+                - quadratic_index(rep.clone()) / Atom::num(6)
                     * color_f!(a.clone(), c.clone(), x.clone())
                     * color_f!(b.clone(), d.clone(), x.clone())
-                + Atom::var(CS.tr) / Atom::num(3)
+                + quadratic_index(rep.clone()) / Atom::num(3)
                     * color_f!(a.clone(), d.clone(), x.clone())
                     * color_f!(b.clone(), c.clone(), x.clone()),
         )
@@ -601,9 +598,10 @@ impl ColorAlgebraSimplifier {
                             &[right_before, right_after],
                         );
 
-                        let replacement = Atom::var(CS.tr)
+                        let dimension = left_dimension.to_owned();
+                        let replacement = fundamental_index(dimension.clone())
                             * (crossed_left * crossed_right
-                                - uncrossed_left * uncrossed_right / left_dimension);
+                                - uncrossed_left * uncrossed_right / dimension);
 
                         return Some(product.replacing_pair(left_index, right_index, replacement));
                     }
@@ -635,16 +633,7 @@ impl ColorAlgebraSimplifier {
 
         let args = structure_constant_args(base)?;
         let dimension = color_structure_dimension(&args)?;
-        Some(self.adjoint_casimir() * dimension)
-    }
-
-    fn adjoint_casimir(&self) -> Atom {
-        match &self.fundamental_dimension {
-            Some(dimension) if dimension != &Atom::var(CS.nc) => {
-                Atom::num(2) * Atom::var(CS.tr) * dimension
-            }
-            _ => Atom::var(CS.ca),
-        }
+        Some(adjoint_casimir_for_dimension(dimension.clone()) * dimension)
     }
 
     fn simplify_trace_structure_product(&self, product: &ProductView) -> Option<Atom> {
@@ -676,7 +665,11 @@ impl ColorAlgebraSimplifier {
                 };
 
                 // f^{abx} Tr(T^a T^b rest) -> i CA/2 Tr(T^x rest).
-                let replacement = structure_prefactor * Atom::i() * self.adjoint_casimir()
+                let replacement = structure_prefactor
+                    * Atom::i()
+                    * adjoint_casimir_for_dimension(
+                        color_adjoint_dimension(&target).unwrap_or_else(default_adjoint_dimension),
+                    )
                     / Atom::num(2)
                     * trace!(
                         trace.rep.to_owned();
@@ -718,8 +711,13 @@ impl ColorAlgebraSimplifier {
                         continue;
                     };
 
-                    let coefficient =
-                        structure_prefactor * Atom::i() * self.adjoint_casimir() / Atom::num(2);
+                    let coefficient = structure_prefactor
+                        * Atom::i()
+                        * adjoint_casimir_for_dimension(
+                            color_adjoint_dimension(&target)
+                                .unwrap_or_else(default_adjoint_dimension),
+                        )
+                        / Atom::num(2);
                     let chain_factors = chain
                         .factors
                         .iter()
@@ -796,9 +794,11 @@ impl ColorAlgebraSimplifier {
                     continue;
                 };
                 let right = right_structure.args.map(|arg| arg.to_owned());
-                let Some(replacement) =
-                    two_structure_loop_contraction(&left, &right, self.adjoint_casimir())
-                else {
+                let Some(replacement) = two_structure_loop_contraction(
+                    &left,
+                    &right,
+                    adjoint_casimir_for_dimension(color_structure_dimension(&left)?),
+                ) else {
                     continue;
                 };
                 return Some(product.replacing_pair(left_index, right_index, replacement));
@@ -842,8 +842,9 @@ impl ColorAlgebraSimplifier {
             let [a, b, c] = externals.as_slice() else {
                 continue;
             };
-            let replacement =
-                self.adjoint_casimir() / Atom::num(2) * color_f!(a.clone(), b.clone(), c.clone());
+            let replacement = adjoint_casimir_for_dimension(color_structure_dimension(&f_args[0])?)
+                / Atom::num(2)
+                * color_f!(a.clone(), b.clone(), c.clone());
             let mut excluded = vec![false; product.factors.len()];
             for index in indices {
                 excluded[index] = true;
@@ -1332,25 +1333,6 @@ fn representation_slot(slot: AtomView, symbol: Symbol) -> Option<(Atom, Atom)> {
     Some((args[0].clone(), args[1].clone()))
 }
 
-fn find_fundamental_dimension(expression: AtomView<'_>) -> Option<Atom> {
-    let generator_pattern =
-        color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]).to_pattern();
-    let mut fundamental_dimension = None;
-
-    for matched in expression.pattern_match(&generator_pattern, None, None) {
-        let candidate = matched[&CS.nc_].clone();
-        if let Some(existing) = &fundamental_dimension {
-            if existing != &candidate {
-                panic!("Mismatched Nc values in expression")
-            }
-        } else {
-            fundamental_dimension = Some(candidate);
-        }
-    }
-
-    fundamental_dimension
-}
-
 fn trace_terminal_dimension(rep: AtomView) -> Option<Atom> {
     let trace = trace!(rep.to_owned());
     let simplified = trace.replace_multiple_repeat(TRACE_TERMINALS.as_ref());
@@ -1383,6 +1365,34 @@ fn color_metric(left: Atom, right: Atom) -> Atom {
     function!(ETS.metric, left, right)
 }
 
+fn quadratic_casimir(rep: Atom) -> Atom {
+    CS.cas(Atom::num(2), rep)
+}
+
+fn quadratic_index(rep: Atom) -> Atom {
+    CS.idx(Atom::num(2), rep)
+}
+
+fn fundamental_rep(dimension: Atom) -> Atom {
+    ColorFundamental {}.to_symbolic([dimension])
+}
+
+fn adjoint_rep(dimension: Atom) -> Atom {
+    ColorAdjoint {}.to_symbolic([dimension])
+}
+
+fn fundamental_casimir(dimension: Atom) -> Atom {
+    quadratic_casimir(fundamental_rep(dimension))
+}
+
+fn fundamental_index(dimension: Atom) -> Atom {
+    quadratic_index(fundamental_rep(dimension))
+}
+
+fn adjoint_casimir_for_dimension(dimension: Atom) -> Atom {
+    quadratic_casimir(adjoint_rep(dimension))
+}
+
 fn color_symmetric_trace(rep: &Atom, factors: impl IntoIterator<Item = Atom>) -> Atom {
     let sym_factors = factors
         .into_iter()
@@ -1392,15 +1402,7 @@ fn color_symmetric_trace(rep: &Atom, factors: impl IntoIterator<Item = Atom>) ->
 }
 
 fn color_symmetric_product(rank: usize, left_rep: Atom, right_rep: Atom) -> Atom {
-    function!(color_symmetric_product_symbol(rank), left_rep, right_rep)
-}
-
-fn color_symmetric_product_symbol(rank: usize) -> Symbol {
-    if rank == 3 {
-        CS.d33
-    } else {
-        symbol!(format!("spenso::d{rank}{rank}"))
-    }
+    CS.gram(Atom::num(rank as i64), left_rep, right_rep)
 }
 
 fn fundamental_chain_dimension(start: &Atom, end: &Atom) -> Option<Atom> {
@@ -1565,6 +1567,9 @@ fn atom_contains_color_node(expr: AtomView<'_>) -> bool {
             symbol == CS.f
                 || symbol == CS.d
                 || symbol == CS.t
+                || symbol == CS.gram
+                || symbol == CS.cas
+                || symbol == CS.idx
                 || symbol == T.chain
                 || shadowing::trace_parts(f).is_some()
                 || f.iter().any(atom_contains_color_node)

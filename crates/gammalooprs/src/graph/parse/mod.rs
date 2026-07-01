@@ -28,7 +28,10 @@ use crate::{
     uv::{UltravioletGraph, uv_graph::UVE},
 };
 use ahash::{AHashMap, AHashSet};
-use idenso::{color::ColorSimplifier, tensor::SymbolicNetParse};
+use idenso::{
+    color::{ColorSimplifier, ColorSimplifySettings},
+    tensor::SymbolicNetParse,
+};
 
 use color_eyre::{Report, Result, Section};
 
@@ -816,7 +819,9 @@ impl Graph {
             * &self.global_prefactor.num
             * &self.global_prefactor.projector
             * &self.overall_factor;
-        let color_simplified = full_num.as_view().simplify_color();
+        let color_simplified = full_num
+            .as_view()
+            .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants());
         if !full_num.is_zero() && color_simplified.is_zero() {
             warn!(
                 "Full numerator for graph '{}' becomes zero after color algebra. The graph/projector color structure likely annihilates the amplitude.",

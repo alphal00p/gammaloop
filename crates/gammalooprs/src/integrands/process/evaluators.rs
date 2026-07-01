@@ -2,7 +2,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use eyre::{Context, eyre};
 use idenso::{
-    color::ColorSimplifier,
+    color::{ColorSimplifier, ColorSimplifySettings},
     dirac::GammaSimplifier,
     shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
@@ -584,7 +584,9 @@ impl EvaluatorStack {
                 // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
                 let instant = std::time::Instant::now();
                 let network_input = if settings.do_algebra {
-                    let color_simplified = a.as_atom_view().simplify_color();
+                    let color_simplified = a.as_atom_view().simplify_color_with(
+                        ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                    );
                     let gamma_simplified = color_simplified.simplify_gamma();
                     crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
                         stage = "evaluator_stack_parse_atom_after_simplify_gamma",

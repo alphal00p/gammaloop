@@ -1,5 +1,5 @@
 use idenso::IndexTooling;
-use idenso::color::{CS, ColorSimplifier};
+use idenso::color::{CS, ColorSimplifier, ColorSimplifySettings};
 use idenso::dirac::{AGS, GammaSimplifier};
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
@@ -4134,8 +4134,15 @@ impl ProcessDefinition {
                             debug!(num = %numerator.state.expr.to_ordered_simple(),"Initial numerator",);
 
                             // println!("HEEEEy");
-                            let numerator_color_simplified =
-                                numerator.clone().get_single_atom().unwrap().to_param_color().simplify_color();
+                            let numerator_color_simplified = numerator
+                                .clone()
+                                .get_single_atom()
+                                .unwrap()
+                                .to_param_color()
+                                .simplify_color_with(
+                                    ColorSimplifySettings::default()
+                                        .with_cof_dimension_invariants(),
+                                );
 
                             // println!("numerator_color_simplified=\n{}",numerator_color_simplified.to_plain_string());
 
