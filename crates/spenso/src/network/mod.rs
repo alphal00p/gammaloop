@@ -2529,7 +2529,7 @@ where
                     return Ok(ExecutionResult::Val(Cow::Owned(tensor_terms_owned(terms)?)));
                 }
                 NetworkLeaf::LibraryKey { .. } => {
-                    let less = self.graph.get_lib_data(lib, nodeid).unwrap();
+                    let less = self.graph.get_lib_data(lib, nodeid)?;
                     return Ok(ExecutionResult::Val(Cow::Owned(less)));
                 }
                 NetworkLeaf::LocalTensor(_) | NetworkLeaf::Scalar(_) => {}
@@ -2543,7 +2543,7 @@ where
                 TensorOrScalarOrKey::Tensor { tensor, .. } => Cow::Borrowed(tensor),
                 TensorOrScalarOrKey::Scalar(s) => Cow::Owned(T::new_scalar(s.clone().into())),
                 TensorOrScalarOrKey::Key { nodeid, .. } => {
-                    let less = self.graph.get_lib_data(lib, nodeid).unwrap();
+                    let less = self.graph.get_lib_data(lib, nodeid)?;
 
                     Cow::Owned(less)
                 }
@@ -3058,7 +3058,7 @@ fn log_sum_leaf_atom_shapes<K, FK, Aind, Store, LT, L>(
     LT: LibraryTensor + Clone,
     L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
     K: Display + Debug,
-    FK: Debug,
+    FK: Display + Debug,
     Aind: AbsInd,
     LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
@@ -3114,12 +3114,11 @@ fn log_sum_leaf_atom_shapes<K, FK, Aind, Store, LT, L>(
                 ("tensor_term_sum", stats)
             }
             NetworkLeaf::LibraryKey { .. } => {
-                let tensor = Store::Tensor::from(
-                    graph
-                        .get_lib_data::<_, LT, L>(lib, *node_id)
-                        .expect("library target leaf should resolve to library data"),
-                );
-                ("library", tensor.atom_sum_shape_stats(include_bytes))
+                let stats = graph
+                    .get_lib_data::<_, LT, L>(lib, *node_id)
+                    .map(|data| Store::Tensor::from(data).atom_sum_shape_stats(include_bytes))
+                    .unwrap_or_default();
+                ("library", stats)
             }
         };
         leaf_stats.push((offset, kind, stats));
@@ -3306,7 +3305,7 @@ where
     LT: LibraryTensor + Clone,
     L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
     K: Display + Debug,
-    FK: Debug,
+    FK: Display + Debug,
     Aind: AbsInd,
     LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
@@ -3327,7 +3326,8 @@ where
             NetworkLeaf::TensorTerm(term) => terms.push(term.clone()),
             NetworkLeaf::TensorTermSum(indices) => terms.extend(indices.iter().cloned()),
             NetworkLeaf::LibraryKey { .. } => {
-                let tensor = Store::Tensor::from(graph.get_lib_data::<_, LT, L>(lib, *node_id)?);
+                let tensor =
+                    Store::Tensor::from(graph.get_lib_data::<_, LT, L>(lib, *node_id).ok()?);
                 terms.push(TensorTerm::tensor(store.push_tensor(tensor)));
             }
         }
@@ -4257,12 +4257,9 @@ where
         NetworkNode::Leaf(NetworkLeaf::LocalTensor(local)) => {
             store.tensor(*local).internal_contract()
         }
-        NetworkNode::Leaf(NetworkLeaf::LibraryKey { .. }) => Store::Tensor::from(
-            graph
-                .get_lib_data(lib, node)
-                .expect("library node selected for trace must have library data"),
-        )
-        .internal_contract(),
+        NetworkNode::Leaf(NetworkLeaf::LibraryKey { .. }) => {
+            Store::Tensor::from(graph.get_lib_data(lib, node)?).internal_contract()
+        }
         NetworkNode::Leaf(NetworkLeaf::TensorSum(indices)) => {
             let materialized = materialize_tensor_sum::<K, Aind, Store>(store, indices, None);
             let NetworkLeaf::LocalTensor(local) = materialized else {
@@ -4346,12 +4343,9 @@ where
         NetworkNode::Leaf(NetworkLeaf::LocalTensor(local)) => {
             store.tensor(*local).internal_contract()
         }
-        NetworkNode::Leaf(NetworkLeaf::LibraryKey { .. }) => Store::Tensor::from(
-            graph
-                .get_lib_data(lib, node)
-                .expect("library node selected for trace must have library data"),
-        )
-        .internal_contract(),
+        NetworkNode::Leaf(NetworkLeaf::LibraryKey { .. }) => {
+            Store::Tensor::from(graph.get_lib_data(lib, node)?).internal_contract()
+        }
         NetworkNode::Leaf(NetworkLeaf::TensorSum(indices)) => {
             let materialized = materialize_tensor_sum::<K, Aind, Store>(store, indices, None);
             let NetworkLeaf::LocalTensor(local) = materialized else {
@@ -4540,7 +4534,7 @@ where
                             NetworkLeaf::Scalar(pos.into())
                         }
                         NetworkLeaf::LibraryKey { .. } => {
-                            let inds = graph.get_lib_data(lib, child_id).unwrap();
+                            let inds = graph.get_lib_data(lib, child_id)?;
 
                             let t = Store::Tensor::from(inds).neg();
                             let pos = self.push_tensor(t);
@@ -4874,7 +4868,7 @@ where
                                         accumulator += self.tensor(index).refer();
                                     }
                                     NetworkLeaf::LibraryKey { .. } => {
-                                        let with_index = graph.get_lib_data(lib, *nid).unwrap();
+                                        let with_index = graph.get_lib_data(lib, *nid)?;
 
                                         accumulator += with_index;
                                     }
@@ -4888,7 +4882,7 @@ where
                         }
                     }
                     NetworkLeaf::LibraryKey { .. } => {
-                        let inds = graph.get_lib_data(lib, *nf).unwrap();
+                        let inds = graph.get_lib_data(lib, *nf)?;
                         let mut accumulator = Store::Tensor::from(inds);
                         for (offset, (nid, t)) in targets[1..].iter().enumerate() {
                             let add_start = std::time::Instant::now();
@@ -4927,7 +4921,7 @@ where
                                     accumulator += self.tensor(index).refer();
                                 }
                                 NetworkLeaf::LibraryKey { .. } => {
-                                    let with = graph.get_lib_data(lib, *nid).unwrap();
+                                    let with = graph.get_lib_data(lib, *nid)?;
                                     accumulator += with;
                                 }
                             }
@@ -4973,7 +4967,7 @@ where
                             NetworkLeaf::Scalar(pos.into())
                         }
                         NetworkLeaf::LibraryKey { .. } => {
-                            let inds = graph.get_lib_data(lib, child_id).unwrap();
+                            let inds = graph.get_lib_data(lib, child_id)?;
                             let t = fn_lib.apply(&f, Store::Tensor::from(inds))?;
                             let pos = self.push_tensor(t);
                             NetworkLeaf::LocalTensor(pos)
@@ -5057,7 +5051,7 @@ where
                             }
                         }
                         NetworkLeaf::LibraryKey { key, indices } => {
-                            let inds = graph.get_lib_data(lib, child_id).unwrap();
+                            let inds = graph.get_lib_data(lib, child_id)?;
                             let mut t = Store::Tensor::from(inds);
 
                             match pow {

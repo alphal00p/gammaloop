@@ -654,27 +654,31 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         &self,
         lib: &L,
         nodeid: NodeIndex,
-    ) -> Option<LT::WithIndices>
+    ) -> Result<LT::WithIndices, TensorNetworkError<K, FK>>
     where
         K: Display + Debug,
+        FK: Display,
         LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
         if let NetworkNode::Leaf(NetworkLeaf::LibraryKey { key, indices }) = &self.graph[nodeid] {
-            let libt = lib.get(&key.structure).unwrap();
+            let libt = lib.get(&key.structure)?;
             let mappingperm = &key.index_permutation;
             let mut inds = indices.clone();
 
             // println!("Mapping perm: {mappingperm}");
             mappingperm.apply_slice_in_place_inv(&mut inds);
             // println!("Inds: {inds:?}");
-            let libt_with_indices = libt.structure.with_indices(&inds).unwrap();
+            let libt_with_indices = libt.structure.with_indices(&inds)?;
             // libt_with_indices.index_permutation = k.index_permutation.clone();
 
-            Some(libt_with_indices.permute_inds())
+            Ok(libt_with_indices.permute_inds())
         } else {
-            None
+            Err(TensorNetworkError::Other(eyre::eyre!(
+                "expected library key node while materializing library data, found {}",
+                self.graph[nodeid]
+            )))
         }
     }
 

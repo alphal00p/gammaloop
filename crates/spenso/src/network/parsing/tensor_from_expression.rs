@@ -141,10 +141,11 @@ where
             ExecutionResult::Val(TensorOrScalarOrKey::Scalar(scalar)) => {
                 Ok(T::new_scalar(scalar.clone().into()))
             }
-            ExecutionResult::Val(TensorOrScalarOrKey::Key { nodeid, .. }) => Ok(network
-                .graph
-                .get_lib_data::<S, Lib::LibraryTensor, Lib>(tensor_library, nodeid)
-                .unwrap()),
+            ExecutionResult::Val(TensorOrScalarOrKey::Key { nodeid, .. }) => {
+                Ok(network
+                    .graph
+                    .get_lib_data::<S, Lib::LibraryTensor, Lib>(tensor_library, nodeid)?)
+            }
             ExecutionResult::One => {
                 let one: Sc = Atom::num(1).as_view().try_into()?;
                 Ok(T::new_scalar(one.into()))

@@ -710,7 +710,13 @@ where
                     Self::try_from_view_impl(a, state.clone(), library, function_library, settings)
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(n_muls.pop().unwrap().n_mul(n_muls))
+            let Some(first) = n_muls.pop() else {
+                return Err(TensorNetworkError::Other(eyre::eyre!(
+                    "empty bracket expression {}",
+                    value.as_view()
+                )));
+            };
+            Ok(first.n_mul(n_muls))
         } else if symbol.has_tag(&SPENSO_TAG.broadcast) {
             Self::parse_broadcast_function::<S, Lib, FunLib>(
                 value,

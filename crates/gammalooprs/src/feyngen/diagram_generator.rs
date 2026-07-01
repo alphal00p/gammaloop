@@ -12,8 +12,8 @@ use rayon::prelude::*;
 
 use spenso::network::library::LibraryTensor;
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
-use spenso::network::parsing::ParseSettings;
-use spenso::network::{Sequential, SmallestDegree};
+use spenso::network::parsing::{ParseSettings, ShorthandParsing};
+use spenso::network::{MinResultRank, Sequential};
 
 // use spenso::network::Network;
 
@@ -5060,6 +5060,10 @@ impl ProcessedNumeratorForComparison {
                 };
 
                 let mut numerators = vec![numerator];
+                let sample_parse_settings = ParseSettings {
+                    shorthand_parsing: ShorthandParsing::expand_schoonschip_only(),
+                    ..Default::default()
+                };
 
                 if settings
                     .generation
@@ -5083,20 +5087,49 @@ impl ProcessedNumeratorForComparison {
 
                     let sample_evaluations = samples
                     .iter()
-                    .map(|(reps, lib)| {
+                    .enumerate()
+                    .map(|(sample_index, (reps, lib))| {
                         let mut sample_evaluation = expanded
                             .iter()
-                            .map(|(c, l)| {
+                            .enumerate()
+                            .try_fold(Atom::Zero, |acc, (term_index, (c, l))| {
+                                let context = || {
+                                    format!(
+                                        "while evaluating numerator sample for graph '{}' (diagram id {}, sample {}, expanded color term {}, color_len={}, lorentz_len={})",
+                                        graph.name,
+                                        diagram_id,
+                                        sample_index,
+                                        term_index,
+                                        c.to_plain_string().len(),
+                                        l.to_plain_string().len()
+                                    )
+                                };
                                 debug!("Sample evaluation inputs c:{c},l:{l}");
-                                let mut net = ParamParsingNet::try_from_view(l.as_view(), lib,&ParseSettings::default()).unwrap();
+                                let mut net = ParamParsingNet::try_from_view(
+                                    l.as_view(),
+                                    lib,
+                                    &sample_parse_settings,
+                                )
+                                .map_err(|source| {
+                                    FeynGenError::Eyre(eyre!(source).wrap_err(context()))
+                                })?;
                                 net.store
                                     .scalar
                                     .iter_mut()
                                     .for_each(|a| *a = a.replace_multiple(reps));
 
                                 // debug!(net=?net.dot_pretty());
-                                net.execute::<Sequential, SmallestDegree, _, _,_>(lib,PARAM_FUN_LIB.deref())
-                                    .unwrap_or_else(|_| panic!("failed to execute net:{}", net.dot_pretty()));
+                                net.execute::<Sequential, MinResultRank, _, _, _>(
+                                    lib,
+                                    PARAM_FUN_LIB.deref(),
+                                )
+                                .map_err(|source| {
+                                    FeynGenError::Eyre(eyre!(source).wrap_err(format!(
+                                        "{}; failed tensor-network execution for net:\n{}",
+                                        context(),
+                                        net.dot_pretty()
+                                    )))
+                                })?;
 
                                 // let c = ProcessDefinition::substitute_color_factors(c.as_view())
                                 //     .expand();
@@ -5109,9 +5142,16 @@ impl ProcessedNumeratorForComparison {
                                 }
 
                                 let scalar:Atom = scalar
-                                    .unwrap_or_else(|_| panic!("Expected scalar for c:{c} l:{l} that yields net:{} for graph {}",
-                                        net.dot_pretty()
-                                        ,graph.debug_dot()))
+                                    .map_err(|source| {
+                                        FeynGenError::Eyre(
+                                            eyre!(source).wrap_err(format!(
+                                                "{}; expected scalar from net:\n{}\nfor graph:\n{}",
+                                                context(),
+                                                net.dot_pretty(),
+                                                graph.debug_dot()
+                                            )),
+                                        )
+                                    })?
                                     .into();
 
                                 // println!("Trying to canonize:{c}");
@@ -5122,25 +5162,25 @@ impl ProcessedNumeratorForComparison {
                                 );
 
                                 debug!(evaluated=%a.printer(LOGPRINTOPTS.clone()),"evaluated{}",a.floatify(13).printer(LOGPRINTOPTS.clone()));
-                                a
-                            })
-                            .fold(Atom::Zero, |acc, l| acc + l);
+                                Ok::<_, FeynGenError>(acc + a)
+                            })?;
 
                         if EXPAND_NUMERICAL_SAMPLES_BEFORE_COMPARISON {
                             sample_evaluation = sample_evaluation.expand();
                         }
                         // TODO: optimize the above by instead directly storing "a.to_polynomial(&Q_I.clone(), None)" in the sample record, and not the expanded atom.
                         // Only do that for the if-branch below though.
-                        if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL || !matches!(numerator_aware_isomorphism_grouping,NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(_))
+                        let sample_evaluation = if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL || !matches!(numerator_aware_isomorphism_grouping,NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(_))
                         {
                             sample_evaluation
                         } else {
                             // When not looking at the ratio of samples as a rational polynomial, we must make sure to collect all common coefficients first
                             // with `collect_factors()` to ensure that common factors get simplified when looking at ratios.
                             sample_evaluation.collect_factors()
-                        }
+                        };
+                        Ok(sample_evaluation)
                     })
-                    .collect();
+                    .collect::<Result<Vec<_>, FeynGenError>>()?;
 
                     sample_evals.push_back(sample_evaluations);
                 }
