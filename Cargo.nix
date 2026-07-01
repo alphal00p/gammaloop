@@ -687,6 +687,102 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
+      "astro-float" = rec {
+        crateName = "astro-float";
+        version = "0.9.5";
+        edition = "2021";
+        sha256 = "1v61fg9s30rgkrv120zdanqdhidzpslfcxzvsxdbcny0f744q0wn";
+        libName = "astro_float";
+        authors = [
+          "stencillogic <stencillogic@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "astro-float-macro";
+            packageId = "astro-float-macro";
+          }
+          {
+            name = "astro-float-num";
+            packageId = "astro-float-num";
+            usesDefaultFeatures = false;
+          }
+        ];
+        features = {
+          "default" = [ "std" "random" "serde" ];
+          "random" = [ "astro-float-num/random" ];
+          "serde" = [ "astro-float-num/serde" ];
+          "std" = [ "astro-float-num/std" ];
+        };
+        resolvedDefaultFeatures = [ "serde" "std" ];
+      };
+      "astro-float-macro" = rec {
+        crateName = "astro-float-macro";
+        version = "0.4.5";
+        edition = "2021";
+        sha256 = "0qw98gnjcbvpr1rhcwwqywsiy2bysw54f4z7p4jznx2svzvf1kq5";
+        procMacro = true;
+        libName = "astro_float_macro";
+        authors = [
+          "stencillogic <stencillogic@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "astro-float-num";
+            packageId = "astro-float-num";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "proc-macro2";
+            packageId = "proc-macro2";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "quote";
+            packageId = "quote";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "syn";
+            packageId = "syn 1.0.109";
+            usesDefaultFeatures = false;
+            features = [ "parsing" "proc-macro" "full" "extra-traits" "printing" ];
+          }
+        ];
+
+      };
+      "astro-float-num" = rec {
+        crateName = "astro-float-num";
+        version = "0.3.6";
+        edition = "2021";
+        sha256 = "0jjmjzm6ldaf95kgyj7vjw9qiblai20wpa9p9yqf00hxl6n7v246";
+        libName = "astro_float_num";
+        authors = [
+          "stencillogic <stencillogic@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "itertools";
+            packageId = "itertools 0.10.5";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "lazy_static";
+            packageId = "lazy_static";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            optional = true;
+          }
+        ];
+        features = {
+          "default" = [ "std" "random" "serde" ];
+          "random" = [ "dep:rand" ];
+          "serde" = [ "dep:serde" ];
+        };
+        resolvedDefaultFeatures = [ "serde" "std" ];
+      };
       "atomic" = rec {
         crateName = "atomic";
         version = "0.6.1";
@@ -4639,7 +4735,7 @@ rec {
             name = "symbolica";
             packageId = "symbolica";
             usesDefaultFeatures = false;
-            features = [ "bincode" "serde" ];
+            features = [ "gmp" "bincode" "serde" ];
           }
           {
             name = "sysinfo";
@@ -4784,7 +4880,7 @@ rec {
             name = "symbolica";
             packageId = "symbolica";
             usesDefaultFeatures = false;
-            features = [ "bincode" "serde" ];
+            features = [ "gmp" "bincode" "serde" ];
           }
           {
             name = "tabled";
@@ -4873,6 +4969,7 @@ rec {
             packageId = "symbolica";
             optional = true;
             usesDefaultFeatures = false;
+            features = [ "gmp" ];
           }
           {
             name = "tabled";
@@ -5124,7 +5221,7 @@ rec {
             name = "symbolica";
             packageId = "symbolica";
             usesDefaultFeatures = false;
-            features = [ "bincode" "serde" ];
+            features = [ "gmp" "bincode" "serde" ];
           }
           {
             name = "tabled";
@@ -5498,13 +5595,13 @@ rec {
       };
       "graphica" = rec {
         crateName = "graphica";
-        version = "2.0.0";
+        version = "2.1.0";
         edition = "2024";
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/symbolica-dev/symbolica";
-          rev = "f52eea647e937716c8e45017ba08cbf207669467";
-          sha256 = "11906053qfv71ms1x0zk5a95lj9qxjyqwbg3yllb3kh29vbr7rr9";
+          rev = "9135b4091505276baa11ef262fe1165f2b95ea33";
+          sha256 = "1c5289xgwggk61fzsqg0hd6yzc3w6fr44mlwyvm82g5cbpdyf09q";
         };
         authors = [
           "Ben Ruijl <ben@symbolica.io>"
@@ -5521,6 +5618,7 @@ rec {
           {
             name = "numerica";
             packageId = "numerica";
+            usesDefaultFeatures = false;
           }
           {
             name = "rand";
@@ -5529,8 +5627,12 @@ rec {
         ];
         features = {
           "bincode" = [ "dep:bincode" "dep:bincode-trait-derive" ];
+          "default" = [ "gmp" ];
+          "gmp" = [ "numerica/gmp" ];
+          "no_gmp" = [ "numerica/no_gmp" ];
           "serde" = [ "dep:serde" ];
         };
+        resolvedDefaultFeatures = [ "gmp" ];
       };
       "gungraun" = rec {
         crateName = "gungraun";
@@ -6134,6 +6236,7 @@ rec {
             name = "symbolica";
             packageId = "symbolica";
             usesDefaultFeatures = false;
+            features = [ "gmp" ];
           }
           {
             name = "thiserror";
@@ -7258,6 +7361,7 @@ rec {
             packageId = "symbolica";
             optional = true;
             usesDefaultFeatures = false;
+            features = [ "gmp" ];
           }
           {
             name = "thiserror";
@@ -7513,6 +7617,166 @@ rec {
         features = {
         };
         resolvedDefaultFeatures = [ "default" ];
+      };
+      "malachite-base" = rec {
+        crateName = "malachite-base";
+        version = "0.7.1";
+        edition = "2024";
+        crateBin = [];
+        sha256 = "09c72vqcggls94n1xf2nzqfdfm656s3xra1kzl2nkmhswi4j799h";
+        libName = "malachite_base";
+        authors = [
+          "Mikhail Hogrefe <mikhailhogrefe@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "hashbrown";
+            packageId = "hashbrown 0.16.1";
+            usesDefaultFeatures = false;
+            features = [ "default-hasher" "inline-more" ];
+          }
+          {
+            name = "itertools";
+            packageId = "itertools 0.14.0";
+            usesDefaultFeatures = false;
+            features = [ "use_alloc" ];
+          }
+          {
+            name = "libm";
+            packageId = "libm";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "ryu";
+            packageId = "ryu";
+            usesDefaultFeatures = false;
+          }
+        ];
+        features = {
+          "bin_build" = [ "walkdir" "test_build" ];
+          "clap" = [ "dep:clap" ];
+          "default" = [ "std" ];
+          "getrandom" = [ "dep:getrandom" ];
+          "gnuplot" = [ "dep:gnuplot" ];
+          "rand" = [ "dep:rand" ];
+          "rand_chacha" = [ "dep:rand_chacha" ];
+          "random" = [ "sha3" "rand" "rand_chacha" "getrandom" ];
+          "sha3" = [ "dep:sha3" ];
+          "std" = [ "itertools/use_std" ];
+          "test_build" = [ "gnuplot" "time" "clap" "random" "itertools/use_std" ];
+          "time" = [ "dep:time" ];
+          "walkdir" = [ "dep:walkdir" ];
+        };
+        resolvedDefaultFeatures = [ "std" ];
+      };
+      "malachite-nz" = rec {
+        crateName = "malachite-nz";
+        version = "0.7.1";
+        edition = "2024";
+        crateBin = [];
+        sha256 = "19j1pgjjrgknki5v2cr1m1g9sgwk0vavhd0cgcjxai8n409961p3";
+        libName = "malachite_nz";
+        authors = [
+          "Mikhail Hogrefe <mikhailhogrefe@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "itertools";
+            packageId = "itertools 0.14.0";
+            usesDefaultFeatures = false;
+            features = [ "use_alloc" ];
+          }
+          {
+            name = "libm";
+            packageId = "libm";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "malachite-base";
+            packageId = "malachite-base";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "alloc" "derive" ];
+          }
+          {
+            name = "wide";
+            packageId = "wide 0.8.3";
+          }
+        ];
+        features = {
+          "bin_build" = [ "test_build" ];
+          "default" = [ "std" ];
+          "doc-images" = [ "embed-doc-image" ];
+          "embed-doc-image" = [ "dep:embed-doc-image" ];
+          "enable_pyo3" = [ "pyo3" "pyo3-build-config" ];
+          "enable_serde" = [ "serde" ];
+          "indoc" = [ "dep:indoc" ];
+          "num" = [ "dep:num" ];
+          "pyo3" = [ "dep:pyo3" ];
+          "pyo3-build-config" = [ "dep:pyo3-build-config" ];
+          "random" = [ "malachite-base/random" ];
+          "rug" = [ "dep:rug" ];
+          "serde" = [ "dep:serde" ];
+          "serde_json" = [ "dep:serde_json" ];
+          "std" = [ "malachite-base/std" ];
+          "test_build" = [ "malachite-base/test_build" "random" "serde" "serde_json" "num" "rug" "pyo3" "pyo3-build-config" "indoc" ];
+        };
+        resolvedDefaultFeatures = [ "default" "enable_serde" "serde" "std" ];
+      };
+      "malachite-q" = rec {
+        crateName = "malachite-q";
+        version = "0.7.1";
+        edition = "2024";
+        crateBin = [];
+        sha256 = "172c6jn57fqnqszwa6kpibdg8pgfgas7y36gjq1nsxfrq1j9fm6j";
+        libName = "malachite_q";
+        authors = [
+          "Mikhail Hogrefe <mikhailhogrefe@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "itertools";
+            packageId = "itertools 0.14.0";
+            usesDefaultFeatures = false;
+            features = [ "use_alloc" ];
+          }
+          {
+            name = "malachite-base";
+            packageId = "malachite-base";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "malachite-nz";
+            packageId = "malachite-nz";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "alloc" "derive" ];
+          }
+        ];
+        features = {
+          "32_bit_limbs" = [ "malachite-nz/32_bit_limbs" ];
+          "bin_build" = [ "test_build" ];
+          "default" = [ "std" ];
+          "enable_serde" = [ "serde" "malachite-nz/enable_serde" ];
+          "num" = [ "dep:num" ];
+          "random" = [ "malachite-base/random" "malachite-nz/random" ];
+          "rug" = [ "dep:rug" ];
+          "serde" = [ "dep:serde" ];
+          "serde_json" = [ "dep:serde_json" ];
+          "std" = [ "malachite-base/std" "malachite-nz/std" ];
+          "test_build" = [ "malachite-base/test_build" "malachite-nz/test_build" "random" "serde" "serde_json" "num" "rug" ];
+        };
+        resolvedDefaultFeatures = [ "default" "enable_serde" "serde" "std" ];
       };
       "maplit" = rec {
         crateName = "maplit";
@@ -8442,13 +8706,13 @@ rec {
       };
       "numerica" = rec {
         crateName = "numerica";
-        version = "2.0.0";
+        version = "2.1.0";
         edition = "2024";
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/symbolica-dev/symbolica";
-          rev = "f52eea647e937716c8e45017ba08cbf207669467";
-          sha256 = "11906053qfv71ms1x0zk5a95lj9qxjyqwbg3yllb3kh29vbr7rr9";
+          rev = "9135b4091505276baa11ef262fe1165f2b95ea33";
+          sha256 = "1c5289xgwggk61fzsqg0hd6yzc3w6fr44mlwyvm82g5cbpdyf09q";
         };
         authors = [
           "Ben Ruijl <ben@symbolica.io>"
@@ -8457,6 +8721,13 @@ rec {
           {
             name = "ahash";
             packageId = "ahash";
+          }
+          {
+            name = "astro-float";
+            packageId = "astro-float";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "std" ];
           }
           {
             name = "bincode";
@@ -8479,6 +8750,16 @@ rec {
           {
             name = "itertools";
             packageId = "itertools 0.14.0";
+          }
+          {
+            name = "malachite-nz";
+            packageId = "malachite-nz";
+            optional = true;
+          }
+          {
+            name = "malachite-q";
+            packageId = "malachite-q";
+            optional = true;
           }
           {
             name = "num-traits";
@@ -8513,6 +8794,7 @@ rec {
           {
             name = "rug";
             packageId = "rug";
+            optional = true;
           }
           {
             name = "serde";
@@ -8539,14 +8821,17 @@ rec {
         ];
         features = {
           "bincode" = [ "dep:bincode" "dep:bincode-trait-derive" ];
+          "default" = [ "gmp" ];
+          "gmp" = [ "dep:rug" ];
+          "no_gmp" = [ "dep:astro-float" "dep:malachite-base" "dep:malachite-nz" "dep:malachite-q" ];
           "numpy" = [ "dep:numpy" ];
           "pyo3" = [ "dep:pyo3" ];
           "pyo3-stub-gen" = [ "dep:pyo3-stub-gen" ];
           "python" = [ "pyo3" "numpy" ];
           "python_stubgen" = [ "python" "pyo3-stub-gen" ];
-          "serde" = [ "dep:serde" "rug/serde" ];
+          "serde" = [ "dep:serde" "astro-float?/serde" "rug?/serde" "malachite-nz?/enable_serde" "malachite-q?/enable_serde" ];
         };
-        resolvedDefaultFeatures = [ "bincode" "numpy" "pyo3" "pyo3-stub-gen" "python" "python_stubgen" "serde" ];
+        resolvedDefaultFeatures = [ "bincode" "gmp" "numpy" "pyo3" "pyo3-stub-gen" "python" "python_stubgen" "serde" ];
       };
       "numpy" = rec {
         crateName = "numpy";
@@ -12128,6 +12413,26 @@ rec {
         };
         resolvedDefaultFeatures = [ "bytemuck" "default" ];
       };
+      "safe_arch 0.9.3" = rec {
+        crateName = "safe_arch";
+        version = "0.9.3";
+        edition = "2018";
+        sha256 = "1pfz0zib1xrfzklksan08hyw9spi9h3z40zsf1vpbzi9bk41d5b2";
+        authors = [
+          "Lokathor <zefria@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "bytemuck";
+            packageId = "bytemuck";
+            optional = true;
+          }
+        ];
+        features = {
+          "bytemuck" = [ "dep:bytemuck" ];
+        };
+        resolvedDefaultFeatures = [ "bytemuck" "default" ];
+      };
       "safe_arch 1.0.0" = rec {
         crateName = "safe_arch";
         version = "1.0.0";
@@ -13379,7 +13684,7 @@ rec {
             packageId = "symbolica";
             optional = true;
             usesDefaultFeatures = false;
-            features = [ "bincode" "serde" ];
+            features = [ "gmp" "bincode" "serde" ];
           }
           {
             name = "tabled";
@@ -13447,6 +13752,7 @@ rec {
             name = "symbolica";
             packageId = "symbolica";
             usesDefaultFeatures = false;
+            features = [ "gmp" ];
           }
           {
             name = "xpct";
@@ -13491,6 +13797,7 @@ rec {
             packageId = "symbolica";
             optional = true;
             usesDefaultFeatures = false;
+            features = [ "gmp" ];
           }
           {
             name = "syn";
@@ -13569,7 +13876,7 @@ rec {
             name = "symbolica";
             packageId = "symbolica";
             usesDefaultFeatures = false;
-            features = [ "bincode" "python_export" "serde" ];
+            features = [ "gmp" "bincode" "python_export" "serde" ];
           }
           {
             name = "thiserror";
@@ -13844,13 +14151,13 @@ rec {
       };
       "symbolica" = rec {
         crateName = "symbolica";
-        version = "2.0.0";
+        version = "2.1.0";
         edition = "2024";
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/symbolica-dev/symbolica";
-          rev = "f52eea647e937716c8e45017ba08cbf207669467";
-          sha256 = "11906053qfv71ms1x0zk5a95lj9qxjyqwbg3yllb3kh29vbr7rr9";
+          rev = "9135b4091505276baa11ef262fe1165f2b95ea33";
+          sha256 = "1c5289xgwggk61fzsqg0hd6yzc3w6fr44mlwyvm82g5cbpdyf09q";
         };
         authors = [
           "Ben Ruijl <ben@symbolica.io>"
@@ -13893,6 +14200,7 @@ rec {
           {
             name = "graphica";
             packageId = "graphica";
+            usesDefaultFeatures = false;
           }
           {
             name = "inventory";
@@ -13905,6 +14213,7 @@ rec {
           {
             name = "numerica";
             packageId = "numerica";
+            usesDefaultFeatures = false;
           }
           {
             name = "numpy";
@@ -13944,6 +14253,7 @@ rec {
           {
             name = "rug";
             packageId = "rug";
+            optional = true;
           }
           {
             name = "self_cell";
@@ -13987,10 +14297,12 @@ rec {
         ];
         features = {
           "bincode" = [ "dep:bincode" "dep:bincode-trait-derive" "numerica/bincode" ];
-          "default" = [ "tracing_max_level_info" "faster_alloc" ];
+          "default" = [ "tracing_max_level_info" "faster_alloc" "gmp" ];
           "faster_alloc" = [ "mimalloc" ];
+          "gmp" = [ "dep:rug" "numerica/gmp" "graphica/gmp" ];
           "mathematica_api" = [ "wolfram-library-link" ];
           "mimalloc" = [ "dep:mimalloc" ];
+          "no_gmp" = [ "numerica/no_gmp" "graphica/no_gmp" ];
           "numpy" = [ "dep:numpy" ];
           "pyo3" = [ "dep:pyo3" ];
           "pyo3-log" = [ "dep:pyo3-log" ];
@@ -14000,11 +14312,11 @@ rec {
           "python_api" = [ "pyo3/extension-module" "numpy" "bincode" "pyo3-log" "tracing/log" "pyo3-stub-gen-derive" "numerica/python" ];
           "python_export" = [ "pyo3" "numpy" "bincode" "pyo3-stub-gen-derive" "numerica/python" ];
           "python_stubgen" = [ "python_export" "pyo3-stub-gen" "numerica/python_stubgen" ];
-          "serde" = [ "dep:serde" "rug/serde" "numerica/serde" ];
+          "serde" = [ "dep:serde" "rug?/serde" "numerica/serde" ];
           "tracing_max_level_info" = [ "tracing/release_max_level_info" ];
           "wolfram-library-link" = [ "dep:wolfram-library-link" ];
         };
-        resolvedDefaultFeatures = [ "bincode" "numpy" "pyo3" "pyo3-stub-gen" "pyo3-stub-gen-derive" "python_export" "python_stubgen" "serde" "tracing_max_level_info" ];
+        resolvedDefaultFeatures = [ "bincode" "gmp" "numpy" "pyo3" "pyo3-stub-gen" "pyo3-stub-gen-derive" "python_export" "python_stubgen" "serde" "tracing_max_level_info" ];
       };
       "symjit" = rec {
         crateName = "symjit";
@@ -14409,7 +14721,7 @@ rec {
           }
           {
             name = "windows-sys";
-            packageId = "windows-sys 0.59.0";
+            packageId = "windows-sys 0.61.2";
             target = { target, features }: (target."windows" or false);
             features = [ "Win32_Foundation" "Win32_System_Console" ];
           }
@@ -16392,7 +16704,7 @@ rec {
             name = "symbolica";
             packageId = "symbolica";
             usesDefaultFeatures = false;
-            features = [ "tracing_max_level_info" ];
+            features = [ "gmp" "tracing_max_level_info" ];
           }
           {
             name = "thiserror";
@@ -17773,6 +18085,31 @@ rec {
           "serde" = [ "dep:serde" ];
         };
         resolvedDefaultFeatures = [ "std" ];
+      };
+      "wide 0.8.3" = rec {
+        crateName = "wide";
+        version = "0.8.3";
+        edition = "2018";
+        sha256 = "1277lyj1q3sb3gf1fg7ys430xaq9xb0gdz4fqi4n2y744s6r1jhk";
+        authors = [
+          "Lokathor <zefria@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "bytemuck";
+            packageId = "bytemuck";
+          }
+          {
+            name = "safe_arch";
+            packageId = "safe_arch 0.9.3";
+            features = [ "bytemuck" ];
+          }
+        ];
+        features = {
+          "default" = [ "std" ];
+          "serde" = [ "dep:serde" ];
+        };
+        resolvedDefaultFeatures = [ "default" "std" ];
       };
       "wide 1.3.0" = rec {
         crateName = "wide";

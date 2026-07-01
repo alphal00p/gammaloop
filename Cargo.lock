@@ -198,6 +198,39 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
+name = "astro-float"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96034cc871c05bb65ad7fb77e6a8bebf45d8b055ed0311769e2f83a1d373c1ec"
+dependencies = [
+ "astro-float-macro",
+ "astro-float-num",
+]
+
+[[package]]
+name = "astro-float-macro"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05cfe0f6df5a74fb25b9e713470ad77e091f35f798730673c8772f26ed438963"
+dependencies = [
+ "astro-float-num",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "astro-float-num"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86887daca11d02e0b04f37a9cb81888aae881397fb48ff66494e356aea97554a"
+dependencies = [
+ "itertools 0.10.5",
+ "lazy_static",
+ "serde",
+]
+
+[[package]]
 name = "atomic"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1731,8 +1764,8 @@ dependencies = [
 
 [[package]]
 name = "graphica"
-version = "2.0.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=main#f52eea647e937716c8e45017ba08cbf207669467"
+version = "2.1.0"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=main#9135b4091505276baa11ef262fe1165f2b95ea33"
 dependencies = [
  "ahash",
  "dyn-clone",
@@ -2391,6 +2424,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "malachite-base"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30a52349e41ad66905fd33a8dc8736c554d71cfe56b81e2c499abec7f0168725"
+dependencies = [
+ "hashbrown 0.16.1",
+ "itertools 0.14.0",
+ "libm",
+ "ryu",
+]
+
+[[package]]
+name = "malachite-nz"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3069312201645d5257b0c34b8d506933f9d5ea82133b14b9c76be2ce5bb41a6"
+dependencies = [
+ "itertools 0.14.0",
+ "libm",
+ "malachite-base",
+ "serde",
+ "wide 0.8.3",
+]
+
+[[package]]
+name = "malachite-q"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2549764c0d9756d0396cf0c7fb47aee5df4da8a771ac5bfc616bb53ac344c9c"
+dependencies = [
+ "itertools 0.14.0",
+ "malachite-base",
+ "malachite-nz",
+ "serde",
+]
+
+[[package]]
 name = "maplit"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2683,15 +2753,18 @@ dependencies = [
 
 [[package]]
 name = "numerica"
-version = "2.0.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=main#f52eea647e937716c8e45017ba08cbf207669467"
+version = "2.1.0"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=main#9135b4091505276baa11ef262fe1165f2b95ea33"
 dependencies = [
  "ahash",
+ "astro-float",
  "bincode 2.0.1",
  "bincode-trait-derive",
  "colored 3.1.1",
  "dyn-clone",
  "itertools 0.14.0",
+ "malachite-nz",
+ "malachite-q",
  "num-traits",
  "numpy",
  "pyo3",
@@ -3827,6 +3900,15 @@ dependencies = [
 
 [[package]]
 name = "safe_arch"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "629516c85c29fe757770fa03f2074cf1eac43d44c02a3de9fc2ef7b0e207dfdd"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
+name = "safe_arch"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f7caad094bd561859bcd467734a720c3c1f5d1f338995351fefe2190c45efed"
@@ -4392,8 +4474,8 @@ dependencies = [
 
 [[package]]
 name = "symbolica"
-version = "2.0.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=main#f52eea647e937716c8e45017ba08cbf207669467"
+version = "2.1.0"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=main#9135b4091505276baa11ef262fe1165f2b95ea33"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -4552,7 +4634,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix 1.1.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5569,6 +5651,16 @@ checksum = "0ce5da8ecb62bcd8ec8b7ea19f69a51275e91299be594ea5cc6ef7819e16cd03"
 dependencies = [
  "bytemuck",
  "safe_arch 0.7.4",
+]
+
+[[package]]
+name = "wide"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13ca908d26e4786149c48efcf6c0ea09ab0e06d1fe3c17dc1b4b0f1ca4a7e788"
+dependencies = [
+ "bytemuck",
+ "safe_arch 0.9.3",
 ]
 
 [[package]]

@@ -32,7 +32,7 @@ use spenso::network::{
 use spenso::shadowing::TensorCollectExt;
 use spenso::tensors::{data::HasTensorData, parametric::ParamOrConcrete};
 use symbolica::{
-    atom::{Atom, AtomView},
+    atom::{Atom, AtomCore, AtomView},
     id::AliasedAtom,
     parser::ParseSettings as SymbolicaParseSettings,
     wrap_input,
