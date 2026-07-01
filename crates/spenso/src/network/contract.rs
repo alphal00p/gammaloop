@@ -536,11 +536,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 let source = operand.source.ok_or_else(|| {
                     TensorNetworkError::Other(eyre!("library product operand lost source node"))
                 })?;
-                let tensor = graph.get_lib_data(lib, source).ok_or_else(|| {
-                    TensorNetworkError::Other(eyre!(
-                        "failed to materialize library product operand"
-                    ))
-                })?;
+                let tensor = graph.get_lib_data(lib, source)?;
                 let index = executor.push_tensor(T::from(tensor));
                 operand.leaf = NetworkLeaf::LocalTensor(index);
             }
@@ -948,11 +944,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 let source = self.operands[operand].source.ok_or_else(|| {
                     TensorNetworkError::Other(eyre!("library product operand lost source node"))
                 })?;
-                let tensor = graph.get_lib_data(lib, source).ok_or_else(|| {
-                    TensorNetworkError::Other(eyre!(
-                        "failed to materialize library product operand"
-                    ))
-                })?;
+                let tensor = graph.get_lib_data(lib, source)?;
                 tensor
                     .scalar_mul(&scalar)
                     .ok_or(TensorNetworkError::FailedScalarMul)?
