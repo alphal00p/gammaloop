@@ -436,15 +436,42 @@
         (crate2nixBuildDefault package).override {
           inherit features;
         };
-      crate2nixCiFeatureSets = {
+      crate2nixRootFeatures = package: crate2nixPackageSet.internal.crates.${package}.features or {};
+      crate2nixRootFeatureIf = package: feature:
+        lib.optional (builtins.hasAttr feature (crate2nixRootFeatures package)) feature;
+      crate2nixCiCommonFeaturesFor = package:
+        ["default"] ++ lib.concatMap (crate2nixRootFeatureIf package) ["bincode" "serde"];
+      crate2nixCiExtraFeatureSets = {
         "gammaloop-tracing-filter" = ["clap" "symbolica"];
-        idenso = ["bincode" "reference-cases"];
-        linnet = ["default" "bincode" "drawing" "symbolica"];
+        idenso = ["reference-cases"];
+        linnet = ["symbolica"];
         spenso = ["shadowing"];
         "spenso-macros" = ["shadowing"];
       };
-      crate2nixCiFeaturesFor = package: crate2nixCiFeatureSets.${package} or ["default"];
+      crate2nixCiFeaturesFor = package:
+        sortedUnique (crate2nixCiCommonFeaturesFor package ++ (crate2nixCiExtraFeatureSets.${package} or []));
       crate2nixBuild = package: crate2nixBuildWithFeatures package (crate2nixCiFeaturesFor package);
+      crate2nixCiDependencyRoots = [
+        {
+          name = "symbolica";
+          packageId = "symbolica";
+          features = [];
+        }
+        {
+          name = "symbolica-bincode-serde";
+          packageId = "symbolica";
+          features = ["bincode" "serde"];
+        }
+        {
+          name = "symbolica-tracing";
+          packageId = "symbolica";
+          features = ["tracing_max_level_info"];
+        }
+      ];
+      crate2nixCiDependencyRoot = root:
+        crate2nixPackageSet.internal.buildRustCrateWithFeatures {
+          inherit (root) packageId features;
+        };
 
       gammaloop-cli = crate2nixBuildWithFeatures "gammaloop-api" ["default"];
       gammaloop-python-lib = crate2nixBuildWithFeatures "gammaloop-api" [
@@ -477,11 +504,11 @@
           value = crate2nixBuild package;
         })
         workspaceMemberPackages);
-      crate2nixCiPrebuild = pkgs.linkFarm "gammaloop-crate2nix-ci-prebuild" (map (package: {
-          name = "crate-${package}";
-          path = crate2nixBuild package;
+      crate2nixCiPrebuild = pkgs.linkFarm "gammaloop-crate2nix-ci-prebuild" (map (root: {
+          inherit (root) name;
+          path = crate2nixCiDependencyRoot root;
         })
-        workspaceMemberPackages);
+        crate2nixCiDependencyRoots);
 
       nextestProfile = "ci_gammaloop";
       nextestJunitPath = "target/nextest/${nextestProfile}/junit.xml";
