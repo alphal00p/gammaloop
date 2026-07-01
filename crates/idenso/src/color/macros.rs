@@ -208,3 +208,56 @@ macro_rules! color_d33 {
         )
     };
 }
+
+/// Builds a degree-k Gram invariant `gram(k,left,right)`.
+#[macro_export]
+macro_rules! color_gram {
+    ($degree:expr, $left:expr, $right:expr $(,)?) => {
+        $crate::color::CS.gram(
+            spenso::shadowing::IntoAtom::into_atom($degree),
+            spenso::shadowing::IntoAtom::into_atom($left),
+            spenso::shadowing::IntoAtom::into_atom($right),
+        )
+    };
+}
+
+/// Builds a degree-k Casimir eigenvalue `cas(k,rep)`.
+#[macro_export]
+macro_rules! color_cas {
+    ($degree:expr, $rep:expr $(,)?) => {
+        $crate::color::CS.cas(
+            spenso::shadowing::IntoAtom::into_atom($degree),
+            spenso::shadowing::IntoAtom::into_atom($rep),
+        )
+    };
+}
+
+/// Builds a degree-k Dynkin index `idx(k,rep)`.
+#[macro_export]
+macro_rules! color_idx {
+    ($degree:expr, $rep:expr $(,)?) => {
+        $crate::color::CS.idx(
+            spenso::shadowing::IntoAtom::into_atom($degree),
+            spenso::shadowing::IntoAtom::into_atom($rep),
+        )
+    };
+}
+
+/// Builds `STrT(rep, a, b, ...)` as `trace(rep, sym(T^a, T^b, ...))`.
+#[macro_export]
+macro_rules! color_str_t {
+    ($rep:expr $(, $arg:expr)+ $(,)?) => {
+        $crate::color::CS.symmetric_generator_trace(
+            spenso::shadowing::IntoAtom::into_atom($rep),
+            vec![$(spenso::shadowing::IntoAtom::into_atom($arg)),+],
+        )
+    };
+}
+
+/// Alias for [`color_str_t!`].
+#[macro_export]
+macro_rules! STrT {
+    ($($args:tt)*) => {
+        $crate::color_str_t!($($args)*)
+    };
+}

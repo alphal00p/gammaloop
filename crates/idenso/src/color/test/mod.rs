@@ -1,5 +1,5 @@
 use insta::assert_snapshot;
-use spenso::network::parsing::StructureFromAtom;
+use spenso::network::parsing::{ParseSettings, StructureFromAtom};
 use spenso::network::tags::SPENSO_TAG;
 use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use spenso::structure::IndexlessNamedStructure;
@@ -29,9 +29,9 @@ use symbolica::{id::Pattern, parse, parse_lit};
 use crate::dirac::PS;
 use crate::selective_expand::SelectiveExpand;
 use crate::shorthands::schoonschip::Schoonschip;
-use crate::tensor::SymbolicTensor;
+use crate::tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor};
 use crate::{Cookable, IndexTooling, dirac::GammaSimplifier, shorthands::metric::MetricSimplifier};
-use crate::{color_f, color_t, f};
+use crate::{color_cas, color_f, color_gram, color_idx, color_str_t, color_t, f};
 
 use super::*;
 
@@ -95,7 +95,7 @@ fn test_color_simplification() {
     );
     let simplified = atom.simplify_color();
 
-    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-1+Nc^2)*CA");
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-1+Nc^2)*cas(2,coad(-1+Nc^2))");
 }
 
 #[test]
@@ -105,7 +105,7 @@ fn two_fs() {
     let atom = f!(3, 1, 5) * f!(3, 5, 1);
     let simplified = atom.simplify_color();
 
-    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-1+Nc^2)*-1*CA");
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-1+Nc^2)*-1*cas(2,coad(-1+Nc^2))");
 }
 
 #[test]
@@ -174,6 +174,120 @@ fn color_structure_macro_accepts_gamma_style_index_shorthands() {
 }
 
 #[test]
+fn color_invariant_macros_build_scalar_heads() {
+    test_initialize();
+    let n = Atom::var(CS.nc);
+    let default_adjoint_dimension = n.clone().pow(Atom::num(2)) - Atom::num(1);
+    let cof_n = ColorFundamental {}.to_symbolic([n.clone()]);
+    let a = ColorAdjoint {}.to_symbolic([default_adjoint_dimension.clone(), Atom::var(s!(a))]);
+    let b = ColorAdjoint {}.to_symbolic([default_adjoint_dimension, Atom::var(s!(b))]);
+
+    assert_eq!(
+        color_cas!(2, cof_n.clone()),
+        CS.cas(Atom::num(2), cof_n.clone())
+    );
+    assert_eq!(
+        color_idx!(2, cof_n.clone()),
+        CS.idx(Atom::num(2), cof_n.clone())
+    );
+    assert_eq!(
+        color_gram!(3, cof_n.clone(), cof_n.clone()),
+        CS.gram(Atom::num(3), cof_n.clone(), cof_n.clone())
+    );
+    assert_eq!(
+        color_str_t!(cof_n.clone(), a.clone(), b.clone()),
+        trace!(
+            cof_n.clone(),
+            sym!(color_t!(a.clone()), color_t!(b.clone()))
+        )
+    );
+
+    let expr = color_cas!(2, cof_n.clone())
+        * color_idx!(2, cof_n.clone())
+        * color_gram!(3, cof_n.clone(), cof_n);
+    let net = expr
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    assert!(net.graph.dangling_indices().is_empty());
+    assert_eq!(net.simple_execute::<()>(), expr);
+}
+
+#[test]
+fn color_invariant_print_special_cases_are_compact() {
+    test_initialize();
+    let cof_n = ColorFundamental {}.to_symbolic([Atom::var(CS.nc)]);
+
+    let mut compact = SpensoPrintSettings::compact().nice_symbolica();
+    compact.color_builtin_symbols = false;
+    assert_eq!(
+        color_cas!(2, cof_n.clone()).printer(compact).to_string(),
+        "CF"
+    );
+
+    let typst = SpensoPrintSettings::typst().typst_symbolica();
+    assert_eq!(color_cas!(2, cof_n).printer(typst).to_string(), "C_F");
+}
+
+#[test]
+fn cof_dimension_invariant_rules_substitute_supported_fundamental_cases() {
+    test_initialize();
+    let n = Atom::var(CS.nc);
+    let default_adjoint_dimension = n.clone().pow(Atom::num(2)) - Atom::num(1);
+    let cof_n = ColorFundamental {}.to_symbolic([n.clone()]);
+    let coad_n = ColorAdjoint {}.to_symbolic([default_adjoint_dimension]);
+
+    assert_eq!(
+        color_idx!(2, cof_n.clone()).to_cof_dimension_invariants(),
+        Atom::num(1) / Atom::num(2)
+    );
+    assert_eq!(
+        color_cas!(2, cof_n.clone())
+            .to_cof_dimension_invariants()
+            .expand(),
+        ((n.clone().pow(Atom::num(2)) - Atom::num(1)) / (Atom::num(2) * n.clone())).expand()
+    );
+    assert_eq!(
+        color_cas!(2, coad_n).to_cof_dimension_invariants(),
+        n.clone()
+    );
+    assert_eq!(
+        color_cas!(2, ColorAdjoint {}.to_symbolic([Atom::var(CS.na)]))
+            .to_cof_dimension_invariants(),
+        n.clone()
+    );
+    assert_eq!(
+        color_cas!(2, ColorAdjoint {}.to_symbolic([Atom::num(8)])).to_cof_dimension_invariants(),
+        Atom::num(3)
+    );
+    assert_eq!(
+        (Atom::var(CS.ca) * Atom::var(CS.tr) * Atom::var(CS.na))
+            .to_cof_dimension_invariants()
+            .expand(),
+        (n.clone() * (Atom::num(1) / Atom::num(2)) * (n.clone().pow(Atom::num(2)) - Atom::num(1)))
+            .expand()
+    );
+
+    let gram_three = color_gram!(3, cof_n.clone(), cof_n.clone())
+        .to_cof_dimension_invariants()
+        .expand();
+    let expected_three = ((n.clone().pow(Atom::num(2)) - Atom::num(1))
+        * (n.clone().pow(Atom::num(2)) - Atom::num(4))
+        / (Atom::num(16) * n.clone()))
+    .expand();
+    assert_eq!(gram_three, expected_three);
+
+    let gram_four = color_gram!(4, cof_n.clone(), cof_n)
+        .to_cof_dimension_invariants()
+        .expand();
+    let n_squared = n.clone().pow(Atom::num(2));
+    let expected_four = ((n_squared.clone() - Atom::num(1))
+        * (n_squared.clone().pow(Atom::num(2)) - Atom::num(6) * n_squared + Atom::num(18))
+        / (Atom::num(96) * n.pow(Atom::num(2))))
+    .expand();
+    assert_eq!(gram_four, expected_four);
+}
+
+#[test]
 fn color_structure_symbol_is_antisymmetric() {
     test_initialize();
     let r = TestReps::new();
@@ -197,7 +311,7 @@ fn permuted_structure_constant_square_simplifies_with_sign() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(atom.simplify_color().to_bare_ordered_string(), @"-8*CA");
+    assert_snapshot!(atom.simplify_color().to_bare_ordered_string(), @"-8*cas(2,coad(8))");
 }
 
 #[test]
@@ -286,7 +400,7 @@ fn three_loop_pole_part_color() {
 
     let color_zero_candidate = input.cook_indices().simplify_color().collect_color();
 
-    assert_snapshot!(&color_zero_candidate.collect_symbol::<i16>(SPENSO_TAG.dot).to_bare_ordered_string(),@"(((-16+-26*eps^2+-8/3*eps^2*𝜋^2+56/3*eps)*1/128*CA^2*eps^(-3)*gs^6+(-88/3*eps+16+26*eps^2+8/3*eps^2*𝜋^2)*-1/128*CA^2*eps^(-3)*gs^6)*16*CA+(-16+-26*eps^2+-8/3*eps^2*𝜋^2+88/3*eps)*-1/8*CA^3*eps^(-3)*gs^6+(-16/3*eps^2*𝜋^2+-32+-52*eps^2+176/3*eps)*1/8*CA^3*eps^(-3)*gs^6+(-16/3*eps^2*𝜋^2+-32+-52*eps^2+48*eps)*1/4*CA^3*eps^(-3)*gs^6)*dot(P(0,mink(4)),P(0,mink(4)))");
+    assert_snapshot!(&color_zero_candidate.collect_symbol::<i16>(SPENSO_TAG.dot).to_bare_ordered_string(),@"(((-16+-26*eps^2+-8/3*eps^2*𝜋^2+56/3*eps)*1/128*CA*eps^(-3)*gs^6+(-88/3*eps+16+26*eps^2+8/3*eps^2*𝜋^2)*-1/128*CA*eps^(-3)*gs^6)*16+(-16+-26*eps^2+-8/3*eps^2*𝜋^2+88/3*eps)*-1/8*CA*eps^(-3)*gs^6+(-16/3*eps^2*𝜋^2+-32+-52*eps^2+176/3*eps)*1/8*CA*eps^(-3)*gs^6+(-16/3*eps^2*𝜋^2+-32+-52*eps^2+48*eps)*1/4*CA*eps^(-3)*gs^6)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))");
 
     let input = parse_lit!(
         ((8 * eps + 8 / 3) * 1 / 64
@@ -432,7 +546,7 @@ fn antisymmetric_three_generator_trace_reduces_to_structure_constant() {
         )
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*TR*f(coad(NA,a),coad(NA,b),coad(NA,c))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*f(coad(NA,a),coad(NA,b),coad(NA,c))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -445,7 +559,7 @@ fn antisymmetric_trace_commutator_reduces_before_terminal_trace() {
         color_t!(slot!(r.coad_na, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*TR*f(coad(NA,a),coad(NA,b),coad(NA,c))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*f(coad(NA,a),coad(NA,b),coad(NA,c))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -458,7 +572,7 @@ fn antisymmetric_trace_commutator_preserves_projector_sign() {
         color_t!(slot!(r.coad_na, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1𝑖/2*TR*f(coad(NA,a),coad(NA,b),coad(NA,c))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1𝑖/2*f(coad(NA,a),coad(NA,b),coad(NA,c))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -553,7 +667,8 @@ fn color_cross_chain_fierz_handles_longer_open_chains() {
         color_t!(slot!(r.coad_na, a)),
         color_t!(slot!(r.coad_na, c)),
     );
-    let expected = Atom::var(CS.tr)
+    let index = color_idx!(2, ColorFundamental {}.to_symbolic([Atom::var(s!(Nc))]));
+    let expected = index.clone()
         * chain!(
             slot!(r.cof_nc, i),
             slot!(r.cof_nc.dual(), l),
@@ -564,7 +679,7 @@ fn color_cross_chain_fierz_handles_longer_open_chains() {
             slot!(r.cof_nc.dual(), j),
             color_t!(slot!(r.coad_na, b)),
         )
-        - Atom::var(CS.tr)
+        - index
             * chain!(
                 slot!(r.cof_nc, i),
                 slot!(r.cof_nc.dual(), j),
@@ -604,7 +719,7 @@ fn symmetric_trace_d33_partial_contraction() {
         )
     );
 
-    assert_snapshot!((left * right).simplify_color().to_bare_ordered_string(), @"NA^(-1)*d33(cof(Nc),cof(Nc))*g(coad(NA,c),coad(NA,d))");
+    assert_snapshot!((left * right).simplify_color().to_bare_ordered_string(), @"NA^(-1)*g(coad(NA,c),coad(NA,d))*gram(3,cof(Nc),cof(Nc))");
 }
 
 #[test]
@@ -630,7 +745,7 @@ fn symmetric_trace_d44_partial_contraction() {
         )
     );
 
-    assert_snapshot!((left * right).simplify_color().to_bare_ordered_string(), @"NA^(-1)*d44(cof(Nc),cof(Nc))*g(coad(NA,d),coad(NA,e))");
+    assert_snapshot!((left * right).simplify_color().to_bare_ordered_string(), @"NA^(-1)*g(coad(NA,d),coad(NA,e))*gram(4,cof(Nc),cof(Nc))");
 }
 
 #[test]
@@ -656,7 +771,7 @@ fn symmetric_trace_d44_full_contraction() {
         )
     );
 
-    assert_snapshot!((left * right).simplify_color().to_bare_ordered_string(), @"d44(cof(Nc),cof(Nc))");
+    assert_snapshot!((left * right).simplify_color().to_bare_ordered_string(), @"gram(4,cof(Nc),cof(Nc))");
 }
 
 mod feyncalc_reference;
@@ -1004,7 +1119,7 @@ fn ratio_simplify() {
 
     let simplified = expr.cook_indices().simplify_color();
 
-    assert_snapshot!(simplified.collect_color_constants().collect_factors().to_bare_ordered_string(), @"-1𝑖*G^4*TR^2*ahaha*ee^2*ohoho");
+    assert_snapshot!(simplified.collect_color_constants().collect_factors().to_bare_ordered_string(), @"-1𝑖/2*G^4*cas(2,coad(ohoho))*ee^2*idx(2,cof(ahaha))*ohoho");
 }
 
 #[test]
@@ -1026,7 +1141,7 @@ fn structure_pair_with_closed_generator_chain_matches_form() {
 
     assert_snapshot!(
         expr.simplify_color().to_bare_ordered_string(),
-        @"(-1+Nc^2)*-1*CA*TR"
+        @"(-1+Nc^2)*-1*cas(2,coad(-1+Nc^2))*idx(2,cof(Nc))"
     );
 }
 

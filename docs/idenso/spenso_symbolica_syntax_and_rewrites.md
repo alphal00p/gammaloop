@@ -260,15 +260,25 @@ variadic tails from swallowing structural slots.
 idenso adds domain-specific expression macros for common Dirac objects:
 `gamma!`, `gamma0!`, `gamma5!`, `u!`, and `v!`. It also has the Levi-Civita
 builder `epsilon!` and color builders `color_t!`, `t!`, `color_f!`, `f!`,
-`color_d!`, and `color_d33!`. The color generator and structure-constant
-macros follow the same pattern and bracket conventions as `gamma!`:
-`RS.a__`-style pattern variables become symbolic representation arguments, and
-bracketed forms such as `[CS.adj_, RS.a_]` spell out representation arguments
-explicitly. Numeric literals become default-dimension slots, while bare Rust
-identifiers are treated as expressions so local slot bindings are used as-is.
-Use these in tests and examples when they make the expression read like the
-algebra. In generic rewrite rules, still match the structural class with Spenso
-tag patterns when the rule is not specific to one concrete head.
+`color_d!`, `color_d33!`, `color_gram!`, `color_cas!`, `color_idx!`, and
+`color_str_t!` (`STrT!`). The color generator and structure-constant macros
+follow the same pattern and bracket conventions as `gamma!`: `RS.a__`-style
+pattern variables become symbolic representation arguments, and bracketed forms
+such as `[CS.adj_, RS.a_]` spell out representation arguments explicitly.
+Numeric literals become default-dimension slots, while bare Rust identifiers are
+treated as expressions so local slot bindings are used as-is. Use these in tests
+and examples when they make the expression read like the algebra. In generic
+rewrite rules, still match the structural class with Spenso tag patterns when
+the rule is not specific to one concrete head.
+
+Color simplification emits scalar invariant heads `idx(k, rep)`,
+`cas(k, rep)`, and `gram(k, rep_left, rep_right)` for Dynkin indices, Casimir
+eigenvalues, and contracted symmetric traces. These heads are plain scalar
+Symbolica functions even though their arguments include stripped
+representations, so TensorNetwork parsing should not treat them as tensor
+leaves. Call `ColorSimplifySettings::default().with_cof_dimension_invariants()`
+when a caller needs supported `cof(N)` cases rewritten to explicit dimension
+formulas before numeric evaluation or graph grouping.
 
 ## Rust Rewrite Idioms
 
