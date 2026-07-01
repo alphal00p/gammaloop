@@ -1,5 +1,12 @@
 let
   system = "x86_64-linux";
+  nextestBinaryChecks = [
+    "checks.${system}.gammaloop-nextest-binaries-core"
+    "checks.${system}.gammaloop-nextest-binaries-integration"
+    "checks.${system}.gammaloop-nextest-binaries-linnet"
+    "checks.${system}.gammaloop-nextest-binaries-spenso"
+    "checks.${system}.gammaloop-nextest-binaries-vakint"
+  ];
 in {
   systems = [system];
   doNotBuild = [
@@ -28,10 +35,15 @@ in {
     "packages.${system}.nix-ci-check-gammaloop-nextest-vakint"
   ];
   fail-fast = false;
-  # We specify dependencies manually
+  # Use NixCI's discovered build graph for normal outputs, then add only the
+  # dependencies NixCI cannot infer from impure runner packages that call back
+  # into `nix build --impure`.
   # See https://nix-ci.com/documentation/automatic-dependency-discovery
   # and https://nix-ci.com/documentation/manually-specified-dependencies
-  dependency-discovery.enable = false;
+  dependency-discovery = {
+    enable = true;
+    synchronous = true;
+  };
   dependencies = {
     "packages.${system}.gammaloop" = [
       "checks.${system}.gammaloop-fmt"
@@ -64,28 +76,19 @@ in {
       "packages.${system}.crate-test-binaries-spynso3"
     ];
     "checks.${system}.gammaloop-nextest-binaries-vakint" = ["packages.${system}.crate-test-binaries-vakint"];
-    "checks.${system}.gammaloop-nextest-binaries" = [
-      "checks.${system}.gammaloop-nextest-binaries-core"
-      "checks.${system}.gammaloop-nextest-binaries-integration"
-      "checks.${system}.gammaloop-nextest-binaries-linnet"
-      "checks.${system}.gammaloop-nextest-binaries-spenso"
-      "checks.${system}.gammaloop-nextest-binaries-vakint"
-    ];
-    "checks.${system}.gammaloop-nextest-core" = ["checks.${system}.gammaloop-nextest-binaries-core"];
-    "checks.${system}.gammaloop-nextest-integration" = [
-      "checks.${system}.gammaloop-nextest-binaries-integration"
-      "packages.${system}.gammaloop-python-module"
-    ];
-    "checks.${system}.gammaloop-nextest-linnet" = ["checks.${system}.gammaloop-nextest-binaries-linnet"];
-    "checks.${system}.gammaloop-nextest-spenso" = ["checks.${system}.gammaloop-nextest-binaries-spenso"];
-    "checks.${system}.gammaloop-nextest-vakint" = ["checks.${system}.gammaloop-nextest-binaries-vakint"];
+    "checks.${system}.gammaloop-nextest-binaries" = nextestBinaryChecks;
     "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];
     "checks.${system}.linnest-wasm" = ["packages.${system}.linnest-wasm"];
     "packages.${system}.gammaloop-llvm-coverage" = ["packages.${system}.gammaloop"];
     "packages.${system}.nix-ci-check-gammaloop-doctest" = ["packages.${system}.cargoArtifacts"];
-    "packages.${system}.nix-ci-check-gammaloop-nextest" = ["checks.${system}.gammaloop-nextest-binaries"];
+    "packages.${system}.nix-ci-check-gammaloop-nextest" =
+      nextestBinaryChecks
+      ++ ["packages.${system}.gammaloop-python-module"];
     "packages.${system}.nix-ci-check-gammaloop-nextest-core" = ["checks.${system}.gammaloop-nextest-binaries-core"];
-    "packages.${system}.nix-ci-check-gammaloop-nextest-integration" = ["checks.${system}.gammaloop-nextest-binaries-integration"];
+    "packages.${system}.nix-ci-check-gammaloop-nextest-integration" = [
+      "checks.${system}.gammaloop-nextest-binaries-integration"
+      "packages.${system}.gammaloop-python-module"
+    ];
     "packages.${system}.nix-ci-check-gammaloop-nextest-linnet" = ["checks.${system}.gammaloop-nextest-binaries-linnet"];
     "packages.${system}.nix-ci-check-gammaloop-nextest-spenso" = ["checks.${system}.gammaloop-nextest-binaries-spenso"];
     "packages.${system}.nix-ci-check-gammaloop-nextest-vakint" = ["checks.${system}.gammaloop-nextest-binaries-vakint"];
