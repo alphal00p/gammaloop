@@ -64,6 +64,15 @@ const SUNRISE_INTEGRATED_UV_INTEGRATOR: IntegratedUvIntegratorSettings =
         n_cores: 1,
     };
 
+const EPEM_A_BBX_INTEGRATED_UV_INTEGRATOR: IntegratedUvIntegratorSettings =
+    IntegratedUvIntegratorSettings {
+        target_relative_accuracy: 0.01,
+        n_start: 50_000,
+        n_increase: 0,
+        n_max: 400_000,
+        n_cores: 1,
+    };
+
 #[derive(Default)]
 struct IntegratedUvTargets {
     integrated: Option<Complex<F<f64>>>,
@@ -1175,7 +1184,7 @@ fn epem_a_bbx_amp_uv() {
         test_name: "epem_a_bbx_amp",
         process: "epem_a_bbx",
         integrand_name: "epem_a_bbx",
-        integrator: DEFAULT_INTEGRATED_UV_INTEGRATOR,
+        integrator: EPEM_A_BBX_INTEGRATED_UV_INTEGRATOR,
         original_m_uv: 0.2,
         shifted_m_uv: 0.5,
         original_renormalization_localization_scale: 0.2,
