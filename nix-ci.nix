@@ -1,6 +1,5 @@
 let
   system = "x86_64-linux";
-  mapAttrsToList = f: attrs: map (name: f name attrs.${name}) (builtins.attrNames attrs);
   unique = values:
     builtins.attrNames (builtins.listToAttrs (map (value: {
         name = value;
@@ -28,52 +27,23 @@ let
       };
     })
     workspaceMemberDirs);
-  workspaceDependencyName = name: dependency:
-    if builtins.isAttrs dependency && dependency ? package
-    then dependency.package
-    else name;
-  workspaceDependenciesForSections = sections: manifest:
-    unique (builtins.filter (dependency: builtins.hasAttr dependency workspaceMembers) (
-      builtins.concatLists (map (section: let
-          dependencies = manifest.${section} or {};
-        in
-          map (name: workspaceDependencyName name dependencies.${name}) (builtins.attrNames dependencies))
-        sections)
-    ));
-  workspaceCrateBuildDeps = builtins.mapAttrs (_: member:
-    workspaceDependenciesForSections ["dependencies" "build-dependencies"] member.manifest)
-  workspaceMembers;
-  workspaceCrateTestDeps = builtins.mapAttrs (_: member:
-    workspaceDependenciesForSections ["dependencies" "build-dependencies" "dev-dependencies"] member.manifest)
-  workspaceMembers;
   cratePackageAttr = package: "packages.${system}.crate-${package}";
   crateTestBinaryAttr = package: "packages.${system}.crate-test-binaries-${package}";
   crate2nixCiPrebuildAttr = "packages.${system}.crate2nix-ci-prebuild";
   workspaceCratePackageAttrs = map cratePackageAttr (builtins.attrNames workspaceMembers);
   workspaceCrateTestBinaryAttrs = map crateTestBinaryAttr (builtins.attrNames workspaceMembers);
-  crate2nixCiPrebuildDependentAttrs = workspaceCratePackageAttrs ++ workspaceCrateTestBinaryAttrs;
-  workspaceCratePackageDependencies =
-    builtins.listToAttrs (mapAttrsToList (package: dependencies: {
-        name = cratePackageAttr package;
-        value = map cratePackageAttr dependencies;
-      })
-      workspaceCrateBuildDeps);
-  workspaceCrateTestBinaryDependencies =
-    builtins.listToAttrs (mapAttrsToList (package: dependencies: {
-        name = crateTestBinaryAttr package;
-        value = [(cratePackageAttr package)] ++ map cratePackageAttr dependencies;
-      })
-      workspaceCrateTestDeps);
-  crate2nixCiPrebuildDependencies =
-    builtins.listToAttrs (map (attr: {
-        name = attr;
-        value = unique (
-          [crate2nixCiPrebuildAttr]
-          ++ (workspaceCratePackageDependencies.${attr} or [])
-          ++ (workspaceCrateTestBinaryDependencies.${attr} or [])
-        );
-      })
-      crate2nixCiPrebuildDependentAttrs);
+  crate2nixCiPrebuildDependentAttrs =
+    workspaceCrateTestBinaryAttrs
+    ++ [
+      "packages.${system}.clinnet-cli"
+      "packages.${system}.gammaloop"
+      "packages.${system}.gammaloop-python-module"
+    ];
+  crate2nixCiPrebuildDependencies = builtins.listToAttrs (map (attr: {
+      name = attr;
+      value = [crate2nixCiPrebuildAttr];
+    })
+    crate2nixCiPrebuildDependentAttrs);
   nextestBinaryChecks = [
     "checks.${system}.gammaloop-nextest-binaries-core"
     "checks.${system}.gammaloop-nextest-binaries-integration"
@@ -87,12 +57,12 @@ let
       "packages.${system}.gammaloop" = [
         "checks.${system}.gammaloop-fmt"
         "devShells.${system}.default"
-        "packages.${system}.crate-gammaloop-api"
+        crate2nixCiPrebuildAttr
       ];
       "checks.${system}.gammaloop" = ["packages.${system}.gammaloop"];
       "packages.${system}.default" = ["packages.${system}.gammaloop"];
-      "packages.${system}.gammaloop-python-module" = ["packages.${system}.crate-gammaloop-api"];
-      "packages.${system}.clinnet-cli" = ["packages.${system}.crate-clinnet"];
+      "packages.${system}.gammaloop-python-module" = [crate2nixCiPrebuildAttr];
+      "packages.${system}.clinnet-cli" = [crate2nixCiPrebuildAttr];
       "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoArtifacts"];
       "packages.${system}.workspaceBuildArtifacts" = ["packages.${system}.cargoArtifacts"];
@@ -144,29 +114,38 @@ let
       attr: builtins.elem attr (dependencies.${attr} or [])
     )
     (builtins.attrNames dependencies);
+  mentionedWorkspaceCratePackageAttrs =
+    unique (builtins.filter (
+        attr: builtins.elem attr workspaceCratePackageAttrs
+      )
+      ((builtins.attrNames dependencies) ++ builtins.concatLists (builtins.attrValues dependencies)));
   validatedDependencies =
     assert missingCrate2nixCiPrebuildEdges == []
     || builtins.throw "missing ${crate2nixCiPrebuildAttr} dependency edges for: ${builtins.concatStringsSep ", " missingCrate2nixCiPrebuildEdges}";
     assert selfDependencies == []
     || builtins.throw "manual NixCI dependency graph contains self dependencies: ${builtins.concatStringsSep ", " selfDependencies}";
+    assert mentionedWorkspaceCratePackageAttrs == []
+    || builtins.throw "manual NixCI dependency graph still mentions standalone workspace crate packages: ${builtins.concatStringsSep ", " mentionedWorkspaceCratePackageAttrs}";
       dependencies;
 in {
   systems = [system];
-  doNotBuild = [
-    "checks.${system}.gammaloop-doctest"
-    "checks.${system}.gammaloop-nextest"
-    "checks.${system}.gammaloop-nextest-binaries"
-    "checks.${system}.gammaloop-nextest-core"
-    "checks.${system}.gammaloop-nextest-integration"
-    "checks.${system}.gammaloop-nextest-linnet"
-    "checks.${system}.gammaloop-nextest-spenso"
-    "checks.${system}.gammaloop-nextest-vakint"
-    "packages.${system}.default"
-    "packages.${system}.cargoArtifacts"
-    "packages.${system}.workspaceBuildArtifacts"
-    "packages.${system}.gammaloop-llvm-coverage"
-    "packages.${system}.nix-ci-check-gammaloop-nextest"
-  ];
+  doNotBuild =
+    workspaceCratePackageAttrs
+    ++ [
+      "checks.${system}.gammaloop-doctest"
+      "checks.${system}.gammaloop-nextest"
+      "checks.${system}.gammaloop-nextest-binaries"
+      "checks.${system}.gammaloop-nextest-core"
+      "checks.${system}.gammaloop-nextest-integration"
+      "checks.${system}.gammaloop-nextest-linnet"
+      "checks.${system}.gammaloop-nextest-spenso"
+      "checks.${system}.gammaloop-nextest-vakint"
+      "packages.${system}.default"
+      "packages.${system}.cargoArtifacts"
+      "packages.${system}.workspaceBuildArtifacts"
+      "packages.${system}.gammaloop-llvm-coverage"
+      "packages.${system}.nix-ci-check-gammaloop-nextest"
+    ];
   fail-fast = false;
   # Keep dependency discovery manual. With the generated crate2nix outputs,
   # automatic discovery asks NixCI to compute derivation paths for many

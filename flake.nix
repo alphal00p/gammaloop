@@ -422,6 +422,10 @@
           rustc = ciToolchain;
           cargo = ciToolchain;
         };
+      crate2nixBuildRustCrateWithDefaultOverridesForPkgs = pkgs':
+        (crate2nixBuildRustCrateForPkgs pkgs').override {
+          defaultCrateOverrides = crate2nixDefaultCrateOverrides;
+        };
 
       crate2nixPackageSet = import ./Cargo.nix {
         inherit pkgs;
@@ -451,27 +455,34 @@
       crate2nixCiFeaturesFor = package:
         sortedUnique (crate2nixCiCommonFeaturesFor package ++ (crate2nixCiExtraFeatureSets.${package} or []));
       crate2nixBuild = package: crate2nixBuildWithFeatures package (crate2nixCiFeaturesFor package);
-      crate2nixCiDependencyRoots = [
-        {
-          name = "symbolica";
-          packageId = "symbolica";
-          features = [];
-        }
-        {
-          name = "symbolica-bincode-serde";
-          packageId = "symbolica";
-          features = ["bincode" "serde"];
-        }
-        {
-          name = "symbolica-tracing";
-          packageId = "symbolica";
-          features = ["tracing_max_level_info"];
-        }
-      ];
-      crate2nixCiDependencyRoot = root:
-        crate2nixPackageSet.internal.buildRustCrateWithFeatures {
-          inherit (root) packageId features;
+      crate2nixCiSanitizePackageId = packageId: lib.replaceStrings [" "] ["-"] packageId;
+      crate2nixCiPackageIdIsWorkspaceLike = crateConfigs: packageId:
+        builtins.hasAttr (crateConfigs.${packageId}.crateName or packageId) crate2nixWorkspaceMembers;
+      crate2nixCiExternalDependencyEntriesFor = context: let
+        rootPackageId = context.packageId;
+        features = context.features or crate2nixCiFeaturesFor rootPackageId;
+        crateConfigs = context.crateConfigs or crate2nixPackageSet.internal.crates;
+        buildRustCrateForPkgsFunc =
+          context.buildRustCrateForPkgsFunc or crate2nixBuildRustCrateWithDefaultOverridesForPkgs;
+        runTests = context.runTests or false;
+        target = crate2nixPackageSet.internal.makeDefaultTarget pkgs.stdenv.hostPlatform // {test = runTests;};
+        reachablePackageFeatures = crate2nixPackageSet.internal.mergePackageFeatures {
+          packageId = rootPackageId;
+          inherit crateConfigs features target runTests;
         };
+        builtCrates = crate2nixPackageSet.internal.builtRustCratesWithFeatures {
+          packageId = rootPackageId;
+          inherit crateConfigs features buildRustCrateForPkgsFunc runTests;
+        };
+        externalPackageIds = builtins.filter (
+          packageId: !(crate2nixCiPackageIdIsWorkspaceLike crateConfigs packageId)
+        ) (builtins.attrNames reachablePackageFeatures);
+      in
+        map (packageId: {
+          name = "${context.name}-${crate2nixCiSanitizePackageId packageId}";
+          path = builtCrates.crates.${packageId};
+        })
+        externalPackageIds;
 
       gammaloop-cli = crate2nixBuildWithFeatures "gammaloop-api" ["default"];
       gammaloop-python-lib = crate2nixBuildWithFeatures "gammaloop-api" [
@@ -504,11 +515,6 @@
           value = crate2nixBuild package;
         })
         workspaceMemberPackages);
-      crate2nixCiPrebuild = pkgs.linkFarm "gammaloop-crate2nix-ci-prebuild" (map (root: {
-          inherit (root) name;
-          path = crate2nixCiDependencyRoot root;
-        })
-        crate2nixCiDependencyRoots);
 
       nextestProfile = "ci_gammaloop";
       nextestJunitPath = "target/nextest/${nextestProfile}/junit.xml";
@@ -834,9 +840,7 @@
         };
 
       crate2nixTestBuildRustCrateForPkgs = pkgs':
-        (crate2nixBuildRustCrateForPkgs pkgs').override {
-          defaultCrateOverrides = crate2nixDefaultCrateOverrides;
-        };
+        crate2nixBuildRustCrateWithDefaultOverridesForPkgs pkgs';
 
       crate2nixBuiltTestCratesFor = package:
         crate2nixPackageSet.internal.builtRustCratesWithFeatures {
@@ -892,6 +896,39 @@
           value = crate2nixTestBinaryCrates.${package};
         })
         workspacePackages);
+
+      crate2nixCiPackageDependencyContexts =
+        map (package: {
+          name = "package-${package}";
+          packageId = package;
+        })
+        workspaceMemberPackages;
+      crate2nixCiTestDependencyContexts =
+        map (package: {
+          name = "test-${package}";
+          packageId = package;
+          crateConfigs = crate2nixTestCrateConfigs;
+          buildRustCrateForPkgsFunc = crate2nixTestBuildRustCrateForPkgs;
+          runTests = true;
+        })
+        workspacePackages;
+      crate2nixCiPythonDependencyContexts = [
+        {
+          name = "python-gammaloop-api";
+          packageId = "gammaloop-api";
+          features = [
+            "python_abi"
+            "pyo3-extension-module"
+          ];
+        }
+      ];
+      crate2nixCiDependencyContexts =
+        crate2nixCiPackageDependencyContexts
+        ++ crate2nixCiTestDependencyContexts
+        ++ crate2nixCiPythonDependencyContexts;
+      crate2nixCiPrebuild = pkgs.linkFarm "gammaloop-crate2nix-ci-prebuild" (
+        lib.concatMap crate2nixCiExternalDependencyEntriesFor crate2nixCiDependencyContexts
+      );
 
       nextestCargoMetadata = pkgs.runCommand "gammaloop-nextest-cargo-metadata.json" {
         nativeBuildInputs = [ciToolchain];
@@ -1195,7 +1232,6 @@
           echo "All NixCI build and test jobs passed."
         '';
       };
-
     in {
       checks =
         {
