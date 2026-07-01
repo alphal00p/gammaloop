@@ -5,7 +5,7 @@ use std::{
 
 use ahash::{HashMap, HashMapExt};
 use idenso::{
-    color::CS,
+    color::{CS, ColorSimplifier},
     epsilon::EPSILON_SYMBOL,
     reference_cases::{ReferenceCase, reference_cases},
 };
@@ -660,7 +660,10 @@ fn is_numerically_small(value: AtomView, tolerance: f64) -> bool {
 
 #[track_caller]
 fn evaluate(expression: Atom, constants: &HashMap<Atom, Complex64>) -> ValidationEvaluation {
-    let expression = expression.expand_projectors().expand();
+    let expression = expression
+        .expand_projectors()
+        .to_cof_dimension_invariants()
+        .expand();
 
     evaluate_term(expression, constants)
 }

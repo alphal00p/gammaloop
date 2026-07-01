@@ -1,6 +1,6 @@
 ---
 source: crates/idenso/src/reference_cases.rs
-assertion_line: 503
+assertion_line: 490
 expression: snapshot
 ---
 dirac_form_two_gamma_trace [Dirac4, GammaDefault, enabled]
@@ -40,28 +40,28 @@ color_form_one_generator_trace [ColorSu3, ColorDefault, enabled]
 0
 
 color_form_two_generator_trace [ColorSu3, ColorDefault, enabled]
-TR*g(coad(8,a),coad(8,b))
+g(coad(8,a),coad(8,b))*idx(2,cof(3))
 
 color_form_fierz_generator_contraction [ColorSu3, ColorDefault, enabled]
--1/3*TR*g(cof(3,i),dind(cof(3,j)))*g(cof(3,k),dind(cof(3,l)))+TR*g(cof(3,i),dind(cof(3,l)))*g(cof(3,k),dind(cof(3,j)))
+-1/3*g(cof(3,i),dind(cof(3,j)))*g(cof(3,k),dind(cof(3,l)))*idx(2,cof(3))+g(cof(3,i),dind(cof(3,l)))*g(cof(3,k),dind(cof(3,j)))*idx(2,cof(3))
 
 color_feyncalc_open_chain_separated_casimir_id2 [ColorSu3, ColorDefault, enabled]
-(-1/2*CA+CF)*chain(cof(3,i),dind(cof(3,j)),t(coad(8,b),in,out))
+-1/2*cas(2,coad(8))*chain(cof(3,i),dind(cof(3,j)),t(coad(8,b),in,out))+cas(2,cof(3))*chain(cof(3,i),dind(cof(3,j)),t(coad(8,b),in,out))
 
 color_feyncalc_structure_loop_to_adjoint_delta_id3 [ColorSu3, ColorDefault, enabled]
-CA*g(coad(8,a),coad(8,b))
+cas(2,coad(8))*g(coad(8,a),coad(8,b))
 
 color_feyncalc_structure_times_open_chain_id4 [ColorSu3, ColorDefault, enabled]
-1𝑖/2*CA*chain(cof(3,i),dind(cof(3,j)),t(coad(8,a),in,out))
+1𝑖/2*cas(2,coad(8))*chain(cof(3,i),dind(cof(3,j)),t(coad(8,a),in,out))
 
 color_feyncalc_delta_closes_doubled_two_generator_chain_id18 [ColorSu3, ColorDefault, enabled]
-2*TR*g(coad(8,i),coad(8,j))
+2*g(coad(8,i),coad(8,j))*idx(2,cof(3))
 
 color_feyncalc_three_generator_trace_terminal_id30 [ColorSu3, ColorDefault, enabled]
-1𝑖/2*TR*f(coad(8,i),coad(8,j),coad(8,k))+trace(cof(3),sym(t(coad(8,i),in,out),t(coad(8,j),in,out),t(coad(8,k),in,out)))
+1𝑖/2*f(coad(8,i),coad(8,j),coad(8,k))*idx(2,cof(3))+trace(cof(3),sym(t(coad(8,i),in,out),t(coad(8,j),in,out),t(coad(8,k),in,out)))
 
 color_feyncalc_repeated_trace_pair_id52 [ColorSu3, ColorDefault, enabled]
-(-1/2*CA+CF)*8*TR
+-4*cas(2,coad(8))*idx(2,cof(3))+8*cas(2,cof(3))*idx(2,cof(3))
 
 color_form_four_generator_trace_terminal [ColorSu3, ColorDefault, enabled]
--1/6*TR*f(coad(8,a),coad(8,c),coad(8,x))*f(coad(8,b),coad(8,d),coad(8,x))+1/3*TR*f(coad(8,a),coad(8,d),coad(8,x))*f(coad(8,b),coad(8,c),coad(8,x))+1𝑖/2*f(coad(8,a),coad(8,b),coad(8,x))*trace(cof(3),sym(t(coad(8,c),in,out),t(coad(8,d),in,out),t(coad(8,x),in,out)))+1𝑖/2*f(coad(8,c),coad(8,d),coad(8,x))*trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,x),in,out)))+trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out),t(coad(8,d),in,out)))
+-1/6*f(coad(8,a),coad(8,c),coad(8,x))*f(coad(8,b),coad(8,d),coad(8,x))*idx(2,cof(3))+1/3*f(coad(8,a),coad(8,d),coad(8,x))*f(coad(8,b),coad(8,c),coad(8,x))*idx(2,cof(3))+1𝑖/2*f(coad(8,a),coad(8,b),coad(8,x))*trace(cof(3),sym(t(coad(8,c),in,out),t(coad(8,d),in,out),t(coad(8,x),in,out)))+1𝑖/2*f(coad(8,c),coad(8,d),coad(8,x))*trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,x),in,out)))+trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out),t(coad(8,d),in,out)))
