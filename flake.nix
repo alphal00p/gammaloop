@@ -431,11 +431,20 @@
       };
 
       crate2nixWorkspaceMembers = crate2nixPackageSet.workspaceMembers;
-      crate2nixBuild = package: crate2nixWorkspaceMembers.${package}.build;
+      crate2nixBuildDefault = package: crate2nixWorkspaceMembers.${package}.build;
       crate2nixBuildWithFeatures = package: features:
-        (crate2nixBuild package).override {
+        (crate2nixBuildDefault package).override {
           inherit features;
         };
+      crate2nixCiFeatureSets = {
+        "gammaloop-tracing-filter" = ["clap" "symbolica"];
+        idenso = ["bincode" "reference-cases"];
+        linnet = ["default" "bincode" "drawing" "symbolica"];
+        spenso = ["shadowing"];
+        "spenso-macros" = ["shadowing"];
+      };
+      crate2nixCiFeaturesFor = package: crate2nixCiFeatureSets.${package} or ["default"];
+      crate2nixBuild = package: crate2nixBuildWithFeatures package (crate2nixCiFeaturesFor package);
 
       gammaloop-cli = crate2nixBuildWithFeatures "gammaloop-api" ["default"];
       gammaloop-python-lib = crate2nixBuildWithFeatures "gammaloop-api" [
@@ -466,6 +475,11 @@
       crate2nixPackageOutputs = lib.listToAttrs (map (package: {
           name = "crate-${package}";
           value = crate2nixBuild package;
+        })
+        workspaceMemberPackages);
+      crate2nixCiPrebuild = pkgs.linkFarm "gammaloop-crate2nix-ci-prebuild" (map (package: {
+          name = "crate-${package}";
+          path = crate2nixBuild package;
         })
         workspaceMemberPackages);
 
@@ -800,7 +814,7 @@
       crate2nixBuiltTestCratesFor = package:
         crate2nixPackageSet.internal.builtRustCratesWithFeatures {
           packageId = package;
-          features = ["default"];
+          features = crate2nixCiFeaturesFor package;
           crateConfigs = crate2nixTestCrateConfigs;
           buildRustCrateForPkgsFunc = crate2nixTestBuildRustCrateForPkgs;
           runTests = true;
@@ -1211,6 +1225,7 @@
           inherit clinnet-cli;
           "gammaloop-python-module" = gammaloop-python-module;
           inherit linnest-wasm linnestWasmCargoArtifacts;
+          "crate2nix-ci-prebuild" = crate2nixCiPrebuild;
           inherit cargoArtifacts workspaceBuildArtifacts;
           "nix-ci-passed" = nixCiPassed;
         }

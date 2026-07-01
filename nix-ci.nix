@@ -48,6 +48,10 @@ let
   workspaceMembers;
   cratePackageAttr = package: "packages.${system}.crate-${package}";
   crateTestBinaryAttr = package: "packages.${system}.crate-test-binaries-${package}";
+  crate2nixCiPrebuildAttr = "packages.${system}.crate2nix-ci-prebuild";
+  workspaceCratePackageAttrs = map cratePackageAttr (builtins.attrNames workspaceMembers);
+  workspaceCrateTestBinaryAttrs = map crateTestBinaryAttr (builtins.attrNames workspaceMembers);
+  crate2nixCiPrebuildDependentAttrs = workspaceCratePackageAttrs ++ workspaceCrateTestBinaryAttrs;
   workspaceCratePackageDependencies =
     builtins.listToAttrs (mapAttrsToList (package: dependencies: {
         name = cratePackageAttr package;
@@ -60,6 +64,16 @@ let
         value = [(cratePackageAttr package)] ++ map cratePackageAttr dependencies;
       })
       workspaceCrateTestDeps);
+  crate2nixCiPrebuildDependencies =
+    builtins.listToAttrs (map (attr: {
+        name = attr;
+        value = unique (
+          [crate2nixCiPrebuildAttr]
+          ++ (workspaceCratePackageDependencies.${attr} or [])
+          ++ (workspaceCrateTestBinaryDependencies.${attr} or [])
+        );
+      })
+      crate2nixCiPrebuildDependentAttrs);
   nextestBinaryChecks = [
     "checks.${system}.gammaloop-nextest-binaries-core"
     "checks.${system}.gammaloop-nextest-binaries-integration"
@@ -67,35 +81,8 @@ let
     "checks.${system}.gammaloop-nextest-binaries-spenso"
     "checks.${system}.gammaloop-nextest-binaries-vakint"
   ];
-in {
-  systems = [system];
-  doNotBuild = [
-    "checks.${system}.gammaloop-doctest"
-    "checks.${system}.gammaloop-nextest"
-    "checks.${system}.gammaloop-nextest-binaries"
-    "checks.${system}.gammaloop-nextest-core"
-    "checks.${system}.gammaloop-nextest-integration"
-    "checks.${system}.gammaloop-nextest-linnet"
-    "checks.${system}.gammaloop-nextest-spenso"
-    "checks.${system}.gammaloop-nextest-vakint"
-    "packages.${system}.default"
-    "packages.${system}.cargoArtifacts"
-    "packages.${system}.workspaceBuildArtifacts"
-    "packages.${system}.gammaloop-llvm-coverage"
-    "packages.${system}.nix-ci-check-gammaloop-nextest"
-  ];
-  fail-fast = false;
-  # Keep dependency discovery manual. With the generated crate2nix outputs,
-  # automatic discovery asks NixCI to compute derivation paths for many
-  # package/check attrs during `show`, including attrs listed in doNotBuild.
-  # The manual graph below keeps impure Symbolica users behind test runners
-  # while still prebuilding the pure binaries those runners need.
-  # See https://nix-ci.com/documentation/automatic-dependency-discovery
-  # and https://nix-ci.com/documentation/manually-specified-dependencies
-  dependency-discovery.enable = false;
   dependencies =
-    workspaceCratePackageDependencies
-    // workspaceCrateTestBinaryDependencies
+    crate2nixCiPrebuildDependencies
     // {
       "packages.${system}.gammaloop" = [
         "checks.${system}.gammaloop-fmt"
@@ -147,6 +134,49 @@ in {
       "packages.${system}.nix-ci-check-gammaloop-nextest-spenso" = ["checks.${system}.gammaloop-nextest-binaries-spenso"];
       "packages.${system}.nix-ci-check-gammaloop-nextest-vakint" = ["checks.${system}.gammaloop-nextest-binaries-vakint"];
     };
+  missingCrate2nixCiPrebuildEdges =
+    builtins.filter (
+      attr: !(builtins.elem crate2nixCiPrebuildAttr (dependencies.${attr} or []))
+    )
+    crate2nixCiPrebuildDependentAttrs;
+  selfDependencies =
+    builtins.filter (
+      attr: builtins.elem attr (dependencies.${attr} or [])
+    )
+    (builtins.attrNames dependencies);
+  validatedDependencies =
+    assert missingCrate2nixCiPrebuildEdges == []
+    || builtins.throw "missing ${crate2nixCiPrebuildAttr} dependency edges for: ${builtins.concatStringsSep ", " missingCrate2nixCiPrebuildEdges}";
+    assert selfDependencies == []
+    || builtins.throw "manual NixCI dependency graph contains self dependencies: ${builtins.concatStringsSep ", " selfDependencies}";
+      dependencies;
+in {
+  systems = [system];
+  doNotBuild = [
+    "checks.${system}.gammaloop-doctest"
+    "checks.${system}.gammaloop-nextest"
+    "checks.${system}.gammaloop-nextest-binaries"
+    "checks.${system}.gammaloop-nextest-core"
+    "checks.${system}.gammaloop-nextest-integration"
+    "checks.${system}.gammaloop-nextest-linnet"
+    "checks.${system}.gammaloop-nextest-spenso"
+    "checks.${system}.gammaloop-nextest-vakint"
+    "packages.${system}.default"
+    "packages.${system}.cargoArtifacts"
+    "packages.${system}.workspaceBuildArtifacts"
+    "packages.${system}.gammaloop-llvm-coverage"
+    "packages.${system}.nix-ci-check-gammaloop-nextest"
+  ];
+  fail-fast = false;
+  # Keep dependency discovery manual. With the generated crate2nix outputs,
+  # automatic discovery asks NixCI to compute derivation paths for many
+  # package/check attrs during `show`, including attrs listed in doNotBuild.
+  # The manual graph below prebuilds the crate2nix Symbolica closure before
+  # crate jobs fan out, and keeps impure Symbolica users behind test runners.
+  # See https://nix-ci.com/documentation/automatic-dependency-discovery
+  # and https://nix-ci.com/documentation/manually-specified-dependencies
+  dependency-discovery.enable = false;
+  dependencies = validatedDependencies;
   test = {
     gammaloop-doctest = {
       package = "packages.${system}.nix-ci-check-gammaloop-doctest";
