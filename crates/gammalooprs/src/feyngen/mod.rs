@@ -21,6 +21,8 @@ use crate::{graph::LmbError, model::Model};
 
 #[derive(Error, Debug)]
 pub enum FeynGenError {
+    #[error("generation interrupted by user")]
+    Interrupted,
     #[error("{0}")]
     GenericError(String),
     #[error("failed to build loop momentum basis for graph '{graph_name}'")]
