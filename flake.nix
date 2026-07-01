@@ -388,6 +388,10 @@
       crate2nixSymbolicaGitHeadOverride = old:
         (crate2nixCommonOverride old)
         // {
+          # GammaLoop only depends on Symbolica as a library. Declaring an empty
+          # binary set keeps buildRustCrate from auto-detecting Symbolica's CLI
+          # and putting it in the default out output for every feature set.
+          crateBin = [];
           postPatch =
             (old.postPatch or "")
             + ''
