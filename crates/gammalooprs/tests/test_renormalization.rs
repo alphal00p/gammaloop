@@ -592,28 +592,6 @@ mod failing {
     }
 
     #[test]
-    #[ignore = "reproduces the generated renormalization sum before alignment"]
-    fn finite_part_ghost_3loop_renormalization_sum_origin_mwe() {
-        test_initialise().unwrap();
-
-        let model = load_generic_model("sm");
-        let graphs: Vec<Graph> = Graph::from_path(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
-            ),
-            &model,
-        )
-        .unwrap();
-
-        let mut amp = Amplitude::from_graph_list("bub", graphs).unwrap();
-        assert_eq!(amp.graphs[0].graph.name, "d1");
-        let _ = amp.graphs[0]
-            .renormalization_part(&ghost_3loop_settings())
-            .unwrap();
-    }
-
-    #[test]
     fn finite_part_ghost_3loop() {
         test_initialise().unwrap();
 

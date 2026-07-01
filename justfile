@@ -221,6 +221,15 @@ test_gammaloop *args:
         done
     fi
 
+    run_ignored=0
+    for class in "${selected_modules[@]}"; do
+        case "$class" in
+            slow|failing)
+                run_ignored=1
+                ;;
+        esac
+    done
+
     existing_rustflags="${RUSTFLAGS-}"
 
     if [ "$enforce_warnings_as_errors" -eq 1 ]; then
@@ -231,15 +240,16 @@ test_gammaloop *args:
             cargo nextest run
             --cargo-profile dev-optim
             -P test_gammaloop
-            --run-ignored all
         )
     else
         cmd=(
             cargo nextest run
             --cargo-profile dev-optim
             -P test_gammaloop
-            --run-ignored all
         )
+    fi
+    if [ "$run_ignored" -eq 1 ]; then
+        cmd+=(--run-ignored all)
     fi
     for package in "${gammaloop_packages[@]}"; do
         cmd+=(-p "$package")

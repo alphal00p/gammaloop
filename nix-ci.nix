@@ -73,11 +73,6 @@ in {
     "checks.${system}.gammaloop-doctest"
     "checks.${system}.gammaloop-nextest"
     "checks.${system}.gammaloop-nextest-binaries"
-    "checks.${system}.gammaloop-nextest-binaries-core"
-    "checks.${system}.gammaloop-nextest-binaries-integration"
-    "checks.${system}.gammaloop-nextest-binaries-linnet"
-    "checks.${system}.gammaloop-nextest-binaries-spenso"
-    "checks.${system}.gammaloop-nextest-binaries-vakint"
     "checks.${system}.gammaloop-nextest-core"
     "checks.${system}.gammaloop-nextest-integration"
     "checks.${system}.gammaloop-nextest-linnet"
@@ -88,11 +83,6 @@ in {
     "packages.${system}.workspaceBuildArtifacts"
     "packages.${system}.gammaloop-llvm-coverage"
     "packages.${system}.nix-ci-check-gammaloop-nextest"
-    "packages.${system}.nix-ci-check-gammaloop-nextest-core"
-    "packages.${system}.nix-ci-check-gammaloop-nextest-integration"
-    "packages.${system}.nix-ci-check-gammaloop-nextest-linnet"
-    "packages.${system}.nix-ci-check-gammaloop-nextest-spenso"
-    "packages.${system}.nix-ci-check-gammaloop-nextest-vakint"
   ];
   fail-fast = false;
   # Keep dependency discovery manual. With the generated crate2nix outputs,

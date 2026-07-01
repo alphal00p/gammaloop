@@ -1189,10 +1189,6 @@ fn epem_a_bbx_amp_uv() {
     });
 }
 
-const AA_AA_2L_GRAPHS: &[&str] = &[
-    "GL00", "GL01", "GL03", "GL05", "GL06", "GL08", "GL12", "GL14", "GL16", "GL17", "GL18",
-];
-
 const AA_AA_2L_UV_RICH_INSPECT: GraphUvRichInspectCase = GraphUvRichInspectCase {
     name: "aa_aa 2L",
     test_prefix: "aa_aa_2l",
@@ -1201,7 +1197,6 @@ const AA_AA_2L_UV_RICH_INSPECT: GraphUvRichInspectCase = GraphUvRichInspectCase 
     run_card: "uv/aa_aa_2l_rich_inspect.toml",
     graph_block_prefix: "generate_",
     target_file: "aa_aa_2l_uv_inspect_event_targets.json",
-    graphs: AA_AA_2L_GRAPHS,
 };
 
 #[derive(Clone, Copy)]
@@ -1225,7 +1220,6 @@ struct GraphUvRichInspectCase {
     run_card: &'static str,
     graph_block_prefix: &'static str,
     target_file: &'static str,
-    graphs: &'static [&'static str],
 }
 
 impl GraphUvRichInspectCase {
@@ -1434,21 +1428,6 @@ impl GraphUvRichInspectCase {
         clean_test(&cli.cli_settings.state.folder);
         Ok(())
     }
-
-    fn collect_rich_inspect_records(&self) -> Result<Vec<Value>> {
-        let mut records = Vec::new();
-        for graph in self.graphs {
-            let test_name = format!("{}_target_writer", self.graph_test_name(graph));
-            let mut cli = self.setup_graph_cli(graph, &test_name)?;
-            let point_process = self.process_name(graph, INTEGRATED_UV_RICH_INSPECT_MODE);
-            let point = self.momentum_point(&cli, &point_process)?;
-            for mode in UV_RICH_INSPECT_MODES.iter().copied() {
-                records.push(self.rich_inspect_record(&mut cli, graph, mode, &point)?);
-            }
-            clean_test(&cli.cli_settings.state.folder);
-        }
-        Ok(records)
-    }
 }
 
 fn complex_json(value: Complex<F<f64>>) -> Value {
@@ -1543,18 +1522,6 @@ mod slow {
         aa_aa_2l_gl16_uv_profile_and_rich_inspect => "GL16",
         aa_aa_2l_gl17_uv_profile_and_rich_inspect => "GL17",
         aa_aa_2l_gl18_uv_profile_and_rich_inspect => "GL18",
-    }
-
-    #[test]
-    #[ignore = "target writer"]
-    #[serial_test::serial]
-    fn write_aa_aa_2l_uv_inspect_event_targets() -> Result<()> {
-        let records = AA_AA_2L_UV_RICH_INSPECT.collect_rich_inspect_records()?;
-        fs::write(
-            AA_AA_2L_UV_RICH_INSPECT.target_path(),
-            format!("{}\n", serde_json::to_string_pretty(&records)?),
-        )?;
-        Ok(())
     }
 
     #[test]

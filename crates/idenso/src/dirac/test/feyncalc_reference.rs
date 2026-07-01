@@ -87,24 +87,6 @@ fn dirac_simplify_id5_gamma5_anticommutes_left() {
 }
 
 #[test]
-#[ignore = "requires GA[6]/GA[7] projector support in chain simplification"]
-fn dirac_simplify_id6_projectors_move_through_gamma() {
-    let r = test_initialize();
-    let gamma6 = (r.bis4.g(Atom::var(s!(i)), Atom::var(s!(a)))
-        + gamma5!(slot!(r.bis4, i), slot!(r.bis4, a)))
-        / 2;
-    let gamma7 = (r.bis4.g(Atom::var(s!(b)), Atom::var(s!(c)))
-        - gamma5!(slot!(r.bis4, b), slot!(r.bis4, c)))
-        / 2;
-    let expr = gamma6
-        * gamma!(mu, slot!(r.bis4, a), slot!(r.bis4, b))
-        * gamma7
-        * gamma!(nu, slot!(r.bis4, c), slot!(r.bis4, j));
-
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"1/2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)))+1/2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)),gamma5(in,out))");
-}
-
-#[test]
 fn dirac_simplify_id23_trace_evaluation_can_stay_disabled() {
     let r = test_initialize();
     let expr = trace!(

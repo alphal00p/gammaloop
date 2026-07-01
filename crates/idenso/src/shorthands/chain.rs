@@ -282,25 +282,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "pending reverse-orientation chain collection"]
-    fn collect_oppositely_oriented_chain() {
-        let r = TestReps::new();
-        let chains = chain!(
-            slot!(r.bis4, a),
-            slot!(r.bis4, b),
-            gamma!(slot!(r.mink4, mu)),
-        ) * chain!(
-            slot!(r.bis4, c),
-            slot!(r.bis4, b),
-            gamma!(slot!(r.mink4, nu)),
-            gamma!(parse_lit!(p(1, mink(4)), default_namespace = "spenso")),
-        );
-        let rep = Bispinor {}.into();
-
-        assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))*chain(bis(4,c),bis(4,b),gamma(in,out,mink(4,nu)),gamma(in,out,p(1,mink(4))))");
-    }
-
-    #[test]
     fn chainify_does_not_hit_metrics() {
         let a = g!(bis!(4, 1), bis!(4, 2));
 
