@@ -902,8 +902,8 @@
         workspacePackages);
 
       crate2nixCiSymbolicaFeatureSets = [
-        ["bincode" "serde" "tracing_max_level_info"]
-        ["bincode" "python_export" "serde"]
+        ["bincode" "gmp" "serde" "tracing_max_level_info"]
+        ["bincode" "gmp" "python_export" "serde"]
       ];
       crate2nixCiPrebuild = pkgs.linkFarm "gammaloop-crate2nix-ci-prebuild" (
         crate2nixCiDependencyEntriesFor "symbolica" crate2nixCiSymbolicaFeatureSets
