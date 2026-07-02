@@ -16,7 +16,10 @@ use crate::{
 use color_eyre::Result;
 use eyre::eyre;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
-use idenso::{color::ColorSimplifier, shorthands::metric::MetricSimplifier};
+use idenso::{
+    color::{ColorSimplifier, ColorSimplifySettings},
+    shorthands::metric::MetricSimplifier,
+};
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Orientation},
     subgraph::{SuBitGraph, SubSetOps},
@@ -566,7 +569,9 @@ impl<'a> FinalIntegrand<'a> {
             resnum = color_simplify_input
                 .collect_factors()
                 .simplify_metrics()
-                .simplify_color();
+                .simplify_color_with(
+                    ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                );
             debug_tags!(#generation, #algebra,#color, #uv, #graph, #term, #summary;
                 stage = "final_integrand_color_simplify_done",
                 cut_index = ?local_index,

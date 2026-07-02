@@ -6,7 +6,10 @@ use std::{
 use ahash::AHashMap;
 use eyre::eyre;
 use gammaloop_tracing_filter::LogMessage;
-use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
+use idenso::{
+    color::{ColorSimplifier, ColorSimplifySettings},
+    shorthands::schoonschip::Schoonschip,
+};
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NoData, NodeIndex,
@@ -805,7 +808,9 @@ impl Forests {
                 * &graph.global_prefactor.projector
                 * &graph.global_prefactor.num
                 * &graph.overall_factor)
-                .simplify_color()
+                .simplify_color_with(
+                    ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                )
                 .expand_num()
                 .to_dots();
 

@@ -256,7 +256,7 @@ impl IndexTooling for Atom {
 #[cfg(test)]
 mod syntax_macro_tests {
     #[allow(unused_imports)]
-    use crate::{bis, coad, coaf, cof, color_d, color_d33, f, t};
+    use crate::{bis, coad, coaf, cof, color_d, f, t};
     use spenso::shadowing::symbolica_utils::AtomCoreExt;
 
     #[test]
@@ -280,7 +280,6 @@ mod syntax_macro_tests {
         insta::assert_snapshot!(t!(a.clone()).to_bare_ordered_string(), @"t(coad(Na,a),in,out)");
         insta::assert_snapshot!(f!(a.clone(), b.clone(), c.clone()).to_bare_ordered_string(), @"f(coad(Na,a),coad(Na,b),coad(Na,c))");
         insta::assert_snapshot!(color_d!(coad!(Na), a, b, c).to_bare_ordered_string(), @"d(coad(Na),coad(Na,a),coad(Na,b),coad(Na,c))");
-        insta::assert_snapshot!(color_d33!(coad!(Na), coad!(Na)).to_bare_ordered_string(), @"d33(coad(Na),coad(Na))");
     }
 }
 
