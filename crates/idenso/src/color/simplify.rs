@@ -33,23 +33,13 @@ static TRACE_TERMINALS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
     )]
 });
 
-/// Applies SU(N) simplification rules to raw color tensors and chain/trace form.
-pub fn color_simplify_impl(expression: AtomView<'_>) -> Atom {
-    color_simplify_with_impl(expression, ColorSimplifySettings::default())
-}
-
-/// Applies SU(N) simplification rules with explicit chain/trace settings.
-pub fn color_simplify_with_impl(expression: AtomView<'_>, settings: ColorSimplifySettings) -> Atom {
-    ColorAlgebraSimplifier { settings }.run(expression)
-}
-
-struct ColorAlgebraSimplifier {
-    settings: ColorSimplifySettings,
+pub(crate) struct ColorAlgebraSimplifier {
+    pub settings: ColorSimplifySettings,
 }
 
 impl ColorAlgebraSimplifier {
-    fn run(&self, expression: AtomView<'_>) -> Atom {
-        let mut current = expression.to_owned().simplify_metrics();
+    pub(crate) fn run(&self, expression: AtomView<'_>) -> Atom {
+        let mut current = expression.simplify_metrics();
 
         loop {
             let next = self.apply_once(current.as_view());
@@ -641,15 +631,9 @@ impl ColorAlgebraSimplifier {
             let Some(trace) = &trace_factor.trace else {
                 continue;
             };
-            let [first, second, rest @ ..] = trace.factors.as_slice() else {
+            if trace.factors.len() < 2 {
                 continue;
-            };
-            let Some(a) = color_generator_adjoint_view(*first) else {
-                continue;
-            };
-            let Some(b) = color_generator_adjoint_view(*second) else {
-                continue;
-            };
+            }
 
             for (f_index, f_factor) in product.factors.iter().enumerate() {
                 if f_index == trace_index {
@@ -658,25 +642,40 @@ impl ColorAlgebraSimplifier {
                 let Some(structure) = &f_factor.structure else {
                     continue;
                 };
-                let Some((target, structure_prefactor)) =
-                    Self::structure_target_for_generator_pair(&structure.args, &a, &b)
-                else {
-                    continue;
-                };
 
-                // f^{abx} Tr(T^a T^b rest) -> i CA/2 Tr(T^x rest).
-                let replacement = structure_prefactor
-                    * Atom::i()
-                    * adjoint_casimir_for_dimension(
-                        color_adjoint_dimension(&target).unwrap_or_else(default_adjoint_dimension),
-                    )
-                    / Atom::num(2)
-                    * trace!(
-                        trace.rep.to_owned();
-                        std::iter::once(color_t!(target))
-                            .chain(rest.iter().map(|factor| factor.to_owned()))
-                    );
-                return Some(product.replacing_pair(trace_index, f_index, replacement));
+                for pair_index in 0..trace.factors.len() {
+                    let first = trace.factors[pair_index];
+                    let second = trace.factors[(pair_index + 1) % trace.factors.len()];
+                    let Some(a) = color_generator_adjoint_view(first) else {
+                        continue;
+                    };
+                    let Some(b) = color_generator_adjoint_view(second) else {
+                        continue;
+                    };
+                    let Some((target, structure_prefactor)) =
+                        Self::structure_target_for_generator_pair(&structure.args, &a, &b)
+                    else {
+                        continue;
+                    };
+
+                    let rest = (0..trace.factors.len() - 2).map(|offset| {
+                        trace.factors[(pair_index + 2 + offset) % trace.factors.len()].to_owned()
+                    });
+                    let replacement_factors = std::iter::once(color_t!(target.clone()))
+                        .chain(rest)
+                        .collect::<Vec<_>>();
+
+                    // f^{abx} Tr(T^a T^b rest) -> i CA/2 Tr(T^x rest).
+                    let replacement = structure_prefactor
+                        * Atom::i()
+                        * adjoint_casimir_for_dimension(
+                            color_adjoint_dimension(&target)
+                                .unwrap_or_else(default_adjoint_dimension),
+                        )
+                        / Atom::num(2)
+                        * trace_with_factors(trace.rep.to_owned(), replacement_factors);
+                    return Some(product.replacing_pair(trace_index, f_index, replacement));
+                }
             }
         }
 

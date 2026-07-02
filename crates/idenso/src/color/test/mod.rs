@@ -589,6 +589,91 @@ fn antisymmetric_chain_commutator_reduces_to_structure_constant() {
 }
 
 #[test]
+fn cyclic_trace_structure_product_scans_nonleading_pairs() {
+    test_initialize();
+    let r = TestReps::new();
+    let expr = trace!(
+        &r.cof_nc,
+        color_t!(slot!(r.coad_na, a)),
+        color_t!(slot!(r.coad_na, b)),
+        color_t!(slot!(r.coad_na, c)),
+        color_t!(slot!(r.coad_na, d)),
+        color_t!(slot!(r.coad_na, b)),
+    ) * color_f!(
+        slot!(r.coad_na, a),
+        slot!(r.coad_na, d),
+        slot!(r.coad_na, c),
+    );
+
+    let simplified =
+        expr.simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants());
+    let simplified = simplified.to_bare_ordered_string();
+
+    assert!(
+        !simplified.contains("trace(") && !simplified.contains("t(") && !simplified.contains("f("),
+        "expected closed color structure to reduce to scalar invariants, got {simplified}"
+    );
+}
+
+#[test]
+fn trace_structure_product_orientation_sign_cancels() {
+    test_initialize();
+    let r = TestReps::new();
+    let expr = color_f!(
+        slot!(r.coad_na, q),
+        slot!(r.coad_na, a),
+        slot!(r.coad_na, b),
+    ) * (trace!(
+        &r.cof_nc,
+        color_t!(slot!(r.coad_na, a)),
+        color_t!(slot!(r.coad_na, b)),
+        color_t!(slot!(r.coad_na, c)),
+    ) + trace!(
+        &r.cof_nc,
+        color_t!(slot!(r.coad_na, b)),
+        color_t!(slot!(r.coad_na, a)),
+        color_t!(slot!(r.coad_na, c)),
+    ));
+
+    assert_color_zero(expr);
+}
+
+#[test]
+fn expand_color_keeps_closed_traces_on_color_side() {
+    test_initialize();
+    let r = TestReps::new();
+    let trace_factor = trace!(
+        &r.cof_nc,
+        color_t!(slot!(r.coad_na, a)),
+        color_t!(slot!(r.coad_na, b)),
+        color_t!(slot!(r.coad_na, c)),
+    );
+    let expr = Atom::var(s!(x))
+        * trace_factor
+        * color_f!(
+            slot!(r.coad_na, a),
+            slot!(r.coad_na, b),
+            slot!(r.coad_na, c),
+        );
+
+    let expanded = expr.expand_color();
+
+    assert_eq!(expanded.len(), 1);
+    let (color_factor, residual) = &expanded[0];
+    let color_factor = color_factor.to_bare_ordered_string();
+    assert!(
+        color_factor.contains("trace(") && color_factor.contains("f("),
+        "expected closed trace and structure constant to stay in color factor, got {color_factor}"
+    );
+    let residual = residual.to_bare_ordered_string();
+    assert_eq!(
+        residual, "x",
+        "expected residual factor to be color-free, got {}",
+        residual,
+    );
+}
+
+#[test]
 fn color_simplify_defaults_match_simplify_color() {
     test_initialize();
     let r = TestReps::new();
