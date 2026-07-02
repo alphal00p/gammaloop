@@ -464,19 +464,20 @@
         if features == []
         then "plain"
         else lib.concatStringsSep "-" features;
-      crate2nixCiPrebuildCrateFor = packageId: features:
+      crate2nixCiPrebuildCrateFor = rootPackageId: rootFeatures: packageId:
         (crate2nixPackageSet.internal.builtRustCratesWithFeatures {
-          inherit packageId features;
+          packageId = rootPackageId;
+          features = rootFeatures;
           buildRustCrateForPkgsFunc = crate2nixBuildRustCrateWithDefaultOverridesForPkgs;
           runTests = false;
         })
         .crates.${packageId};
-      crate2nixCiDependencyEntriesFor = packageId: featureSets:
-        map (features: {
-          name = "${crate2nixCiSanitizePackageId packageId}-${crate2nixCiFeatureSetName features}";
-          path = crate2nixCiPrebuildCrateFor packageId features;
+      crate2nixCiDependencyEntriesFor = rootPackageId: rootFeatures: packageIds:
+        map (packageId: {
+          name = "${crate2nixCiSanitizePackageId rootPackageId}-${crate2nixCiFeatureSetName rootFeatures}-${crate2nixCiSanitizePackageId packageId}";
+          path = crate2nixCiPrebuildCrateFor rootPackageId rootFeatures packageId;
         })
-        featureSets;
+        packageIds;
 
       gammaloop-cli = crate2nixBuildWithFeatures "gammaloop-api" ["default"];
       gammaloop-python-lib = crate2nixBuildWithFeatures "gammaloop-api" [
@@ -901,12 +902,34 @@
         })
         workspacePackages);
 
-      crate2nixCiSymbolicaFeatureSets = [
-        ["bincode" "gmp" "serde" "tracing_max_level_info"]
-        ["bincode" "gmp" "python_export" "serde"]
+      crate2nixCiPrebuildRoots = [
+        {
+          packageId = "gammaloop-api";
+          features = ["default"];
+          packageIds = ["symbolica"];
+        }
+        {
+          packageId = "gammaloop-api";
+          features = ["python_abi" "pyo3-extension-module"];
+          packageIds = ["symbolica"];
+        }
       ];
+      # Only prebuild test-root Symbolica variants that are reused by more than one CI job.
+      crate2nixCiPrebuildSharedTestRoots = [
+        "gammaloop-integration-tests"
+      ];
+      crate2nixCiPrebuildSharedTestDependencyEntries = map (package: {
+        name = "test-${crate2nixCiSanitizePackageId package}-symbolica";
+        path = (crate2nixBuiltTestCratesFor package).crates.symbolica;
+      })
+      crate2nixCiPrebuildSharedTestRoots;
       crate2nixCiPrebuild = pkgs.linkFarm "gammaloop-crate2nix-ci-prebuild" (
-        crate2nixCiDependencyEntriesFor "symbolica" crate2nixCiSymbolicaFeatureSets
+        lib.concatMap (
+          root:
+            crate2nixCiDependencyEntriesFor root.packageId root.features root.packageIds
+        )
+        crate2nixCiPrebuildRoots
+        ++ crate2nixCiPrebuildSharedTestDependencyEntries
       );
 
       nextestCargoMetadata = pkgs.runCommand "gammaloop-nextest-cargo-metadata.json" {
