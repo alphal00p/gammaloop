@@ -63,8 +63,6 @@ pub struct ColorSymbols {
     pub f: Symbol,
     /// The symmetric color invariant symbol.
     pub d: Symbol,
-    /// The contracted rank-three symmetric invariant symbol.
-    pub d33: Symbol,
     /// The degree-k Gram invariant symbol for two symmetric traces.
     pub gram: Symbol,
     /// The degree-k Casimir eigenvalue symbol.
@@ -122,17 +120,6 @@ impl ColorSymbols {
             .finish()
     }
 
-    pub fn d33<'a, 'b>(
-        &self,
-        left: impl Into<AtomOrView<'a>>,
-        right: impl Into<AtomOrView<'b>>,
-    ) -> Atom {
-        FunctionBuilder::new(self.d33)
-            .add_arg(left)
-            .add_arg(right)
-            .finish()
-    }
-
     pub fn gram<D: IntoAtom, L: IntoAtom, R: IntoAtom>(
         &self,
         degree: D,
@@ -177,7 +164,7 @@ impl ColorSymbols {
         let _ = self.t;
         let _ = self.f;
         let _ = self.d;
-        let _ = self.d33;
+
         let _ = self.gram;
         let _ = self.cas;
         let _ = self.idx;
@@ -528,7 +515,6 @@ pub static CS, CS_INNER: ColorSymbols = || {
         ca: symbol!("spenso::CA";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
         cf: symbol!("spenso::CF";Real; eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(4,3).to_multi_prec_float(prec).into()))),
         d: tensor_symbol!("spenso::d"),
-        d33: tensor_symbol!("spenso::d33"),
         gram: symbol!("spenso::gram"; Real; print = |a, opt, _state| {
             print_color_invariant(a, opt, ColorInvariantPrintKind::Gram)
         }),
@@ -760,7 +746,6 @@ impl ColorSimplifier for AtomView<'_> {
         )
         .to_pattern();
         let color_d_pat = function!(CS.d, RS.a___).to_pattern();
-        let color_d33_pat = function!(CS.d33, RS.a___).to_pattern();
         let color_gram_pat = function!(CS.gram, RS.a___).to_pattern();
         let color_cas_pat = function!(CS.cas, RS.a___).to_pattern();
         let color_idx_pat = function!(CS.idx, RS.a___).to_pattern();
@@ -772,7 +757,6 @@ impl ColorSimplifier for AtomView<'_> {
             color_trace_pat,
             color_chain_pat,
             color_d_pat,
-            color_d33_pat,
             color_gram_pat,
             color_cas_pat,
             color_idx_pat,

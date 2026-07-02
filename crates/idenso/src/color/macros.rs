@@ -198,17 +198,6 @@ macro_rules! color_d {
     };
 }
 
-/// Builds a contracted symmetric color invariant `d33(left,right)`.
-#[macro_export]
-macro_rules! color_d33 {
-    ($left:expr, $right:expr $(,)?) => {
-        $crate::color::CS.d33(
-            spenso::shadowing::IntoAtom::into_atom($left),
-            spenso::shadowing::IntoAtom::into_atom($right),
-        )
-    };
-}
-
 /// Builds a degree-k Gram invariant `gram(k,left,right)`.
 #[macro_export]
 macro_rules! color_gram {
