@@ -23,6 +23,7 @@ use symbolica::{
 };
 
 use crate::{
+    color::{casimir::CofDimensionInvariantRewriter, simplify::ColorAlgebraSimplifier},
     representations::{ColorAntiFundamental, ColorSextet},
     selective_expand::SelectiveExpand,
     shorthands::metric::PermuteWithMetric,
@@ -37,7 +38,6 @@ mod macros;
 mod simplify;
 
 pub use conjugate::color_conj_impl;
-pub use simplify::{color_simplify_impl, color_simplify_with_impl};
 
 #[derive(Debug)]
 pub enum ColorError {
@@ -683,7 +683,7 @@ impl ColorSimplifier for Atom {
     }
 
     fn to_cof_dimension_invariants(&self) -> Atom {
-        casimir::cof_dimension_invariants_impl(self.as_atom_view())
+        CofDimensionInvariantRewriter.run(self.as_atom_view())
     }
 
     fn expand_color(&self) -> Vec<(Atom, Atom)> {
@@ -713,7 +713,7 @@ impl ColorSimplifier for AtomView<'_> {
     }
 
     fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom {
-        color_simplify_with_impl(self.as_atom_view(), settings)
+        ColorAlgebraSimplifier { settings }.run(*self)
     }
 
     fn collect_color_constants(&self) -> Atom {
@@ -743,7 +743,7 @@ impl ColorSimplifier for AtomView<'_> {
     }
 
     fn to_cof_dimension_invariants(&self) -> Atom {
-        casimir::cof_dimension_invariants_impl(self.as_atom_view())
+        CofDimensionInvariantRewriter.run(self.as_atom_view())
     }
 
     fn expand_color(&self) -> Vec<(Atom, Atom)> {
@@ -751,11 +751,35 @@ impl ColorSimplifier for AtomView<'_> {
         let coaf = ColorFundamental {}.dual();
         let coad = ColorAdjoint {};
 
+        let color_trace_pat = function!(T.trace, cof.to_symbolic([RS.b__]), RS.a___).to_pattern();
+        let color_chain_pat = function!(
+            T.chain,
+            cof.to_symbolic([RS.b__]),
+            coaf.to_symbolic([RS.c__]),
+            RS.a___
+        )
+        .to_pattern();
+        let color_d_pat = function!(CS.d, RS.a___).to_pattern();
+        let color_d33_pat = function!(CS.d33, RS.a___).to_pattern();
+        let color_gram_pat = function!(CS.gram, RS.a___).to_pattern();
+        let color_cas_pat = function!(CS.cas, RS.a___).to_pattern();
+        let color_idx_pat = function!(CS.idx, RS.a___).to_pattern();
         let cof_pat = function!(RS.f_, RS.a___, cof.to_symbolic([RS.b__]), RS.c___).to_pattern();
         let coaf_pat = function!(RS.f_, RS.a___, coaf.to_symbolic([RS.b__]), RS.c___).to_pattern();
         let coad_pat = function!(RS.f_, RS.a___, coad.to_symbolic([RS.b__]), RS.c___).to_pattern();
 
-        self.expand_in_patterns(&[cof_pat, coad_pat, coaf_pat])
+        self.expand_in_patterns(&[
+            color_trace_pat,
+            color_chain_pat,
+            color_d_pat,
+            color_d33_pat,
+            color_gram_pat,
+            color_cas_pat,
+            color_idx_pat,
+            cof_pat,
+            coad_pat,
+            coaf_pat,
+        ])
     }
 
     // fn canonize_color(&self) -> Atom {

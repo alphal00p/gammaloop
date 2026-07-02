@@ -13,10 +13,6 @@ pub(super) fn color_casimir_basis_impl(
     ColorCasimirRewriter { settings }.run(expression)
 }
 
-pub(super) fn cof_dimension_invariants_impl(expression: AtomView<'_>) -> Atom {
-    CofDimensionInvariantRewriter.run(expression)
-}
-
 struct ColorCasimirRewriter {
     settings: ColorCasimirSettings,
 }
@@ -131,18 +127,15 @@ impl ColorCasimirRewriter {
     }
 }
 
-struct CofDimensionInvariantRewriter;
+pub struct CofDimensionInvariantRewriter;
 
 impl CofDimensionInvariantRewriter {
-    fn run(&self, expression: AtomView<'_>) -> Atom {
-        expression
-            .to_owned()
-            .replace_map(|arg, _context, out| {
-                if let Some(replacement) = self.rewrite_node(arg) {
-                    **out = replacement;
-                }
-            })
-            .collect_tensors()
+    pub(crate) fn run(&self, expression: AtomView<'_>) -> Atom {
+        expression.to_owned().replace_map(|arg, _context, out| {
+            if let Some(replacement) = self.rewrite_node(arg) {
+                **out = replacement;
+            }
+        })
     }
 
     fn rewrite_node(&self, arg: AtomView<'_>) -> Option<Atom> {
