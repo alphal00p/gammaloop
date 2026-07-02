@@ -139,7 +139,7 @@ fn finite_part_quark_lo() {
     println!("ren part: {:>}", a.log_print(Some(80)));
     insta::assert_snapshot!(
         align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"CF*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
+        .to_bare_ordered_string(),@"cas(2,cof(3))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
     // -1 * target
 }
@@ -458,7 +458,7 @@ fn finite_part_ghost_2loop() {
     let a = amp.graphs[0].renormalization_part(&settings).unwrap();
     //p1.p1*i_*gs^4*CA^2*rat( - 3/16*ep^-2 + 5/32*ep^-1)
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3𝑖/16+5𝑖/32*ε)*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)");
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3𝑖/16+5𝑖/32*ε)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)");
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[0], a, &new_settings);
     insta::assert_snapshot!(
         stats.to_string(),
@@ -468,7 +468,7 @@ fn finite_part_ghost_2loop() {
     //p1.p1*i_*gs^4*CA^2*rat( - 1/16*ep^-2 + 1/32*ep^-1)
     let a = amp.graphs[1].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/32*ε+1𝑖/16)*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/32*ε+1𝑖/16)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     ); //-1 * target
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[1], a, &new_settings);
     insta::assert_snapshot!(
@@ -479,7 +479,7 @@ fn finite_part_ghost_2loop() {
     //p1.p1*i_*gs^4*CA^2*rat( - 1/8*ep^-2 + 1/16*ep^-1)
     let a = amp.graphs[2].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/16*ε+1𝑖/8)*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/16*ε+1𝑖/8)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     ); //-1 * target
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[2], a, &new_settings);
     insta::assert_snapshot!(
@@ -491,7 +491,7 @@ fn finite_part_ghost_2loop() {
     let a = amp.graphs[3].renormalization_part(&settings).unwrap();
     // Sign-flipped relative to the main snapshot after schoonschip-aware dot normalization.
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-5𝑖/8*ε+3𝑖/4)*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-5𝑖/12*ε+1𝑖/2)*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*idx(2,cof(3))*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[3], a, &new_settings);
     insta::assert_snapshot!(
@@ -502,7 +502,7 @@ fn finite_part_ghost_2loop() {
     //p1.p1*i_*gs^4*CA^2*rat( - 5/8*ep^-2 + 35/48*ep^-1)
     let a = amp.graphs[4].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-35𝑖/48*ε+5𝑖/8)*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-35𝑖/48*ε+5𝑖/8)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     ); //-1/2 * target
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[4], a, &new_settings);
     insta::assert_snapshot!(
@@ -513,7 +513,7 @@ fn finite_part_ghost_2loop() {
     //p1.p1*i_*gs^4*CA^2*rat(1/24*ep^-1)
     let a = amp.graphs[5].renormalization_part(&settings).unwrap();
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"-1𝑖/24*CA^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(cas(2,coad(8)))^2*-1𝑖/24*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[5], a, &new_settings);
     insta::assert_snapshot!(
@@ -556,7 +556,7 @@ fn finit_part_ghlo() {
     // Sign-flipped relative to the main snapshot after schoonschip-aware dot normalization.
     insta::assert_snapshot!(
         align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"1/2*CA*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
+        .to_bare_ordered_string(),@"1/2*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
 }
 

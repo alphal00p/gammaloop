@@ -1060,7 +1060,7 @@ fn cp_fix_from_symbolica()->Result<()>{
     // Choose the model to consider
     cli.run_command("import model sm-default.json")?;
 
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,-9*G^2*Nc^(-1)*TR*ee^(-2)+9*G^2*Nc*TR*ee^(-2),-1)+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,-9*G^2*Nc^(-1)*TR*ee^(-2)+9*G^2*Nc*TR*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-12*G^2*ee^(-2)+-18*G^2*Nc*TR*ee^(-2)+18*G^2*Nc^(-1)*TR*ee^(-2)");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-12*G^2*ee^(-2)+-9*G^2*Nc*ee^(-2)+9*G^2*Nc^(-1)*ee^(-2)");//good
     Ok(())
 }
 
