@@ -344,18 +344,16 @@ impl EvaluatorStack {
         count
     }
 
-    #[instrument(
-        skip_all,
-          fields(
-           indicatif.pb_show = true, indicatif.pb_msg = "Generating Single Parametric Evaluator",
-          )
-      )]
+    #[instrument(skip_all)]
     fn new_single_parametric<A: AtomCore>(
         parametric_atom: &[A],
         param_builder: &ParamBuilder,
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
+        let _progress_guard = crate::processes::enter_detailed_progress_span(
+            "Generating Single Parametric Evaluator",
+        );
         let opt_settings = settings.optimization_settings();
 
         GenericEvaluator::new_from_builder(
@@ -368,12 +366,7 @@ impl EvaluatorStack {
             settings,
         )
     }
-    #[instrument(
-        skip_all,
-          fields(
-           indicatif.pb_show = true, indicatif.pb_msg = "Generating Iterative Evaluator",
-          )
-      )]
+    #[instrument(skip_all)]
     fn new_iterative<A: AtomCore>(
         parametric_atom: &[A],
         param_builder: &ParamBuilder,
@@ -381,6 +374,8 @@ impl EvaluatorStack {
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(GenericEvaluator, usize)> {
+        let _progress_guard =
+            crate::processes::enter_detailed_progress_span("Generating Iterative Evaluator");
         // let  n_orientations=;
 
         Ok((
@@ -401,12 +396,7 @@ impl EvaluatorStack {
         ))
     }
 
-    #[instrument(
-        skip_all,
-          fields(
-           indicatif.pb_show = true, indicatif.pb_msg = "Generating Summed Function Map Evaluator",
-          )
-      )]
+    #[instrument(skip_all)]
     fn new_summed_function_map<A: AtomCore>(
         atoms: &[A],
         param_builder: &ParamBuilder,
@@ -414,6 +404,9 @@ impl EvaluatorStack {
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
+        let _progress_guard = crate::processes::enter_detailed_progress_span(
+            "Generating Summed Function Map Evaluator",
+        );
         let params: Vec<Atom> = (&param_builder.pairs)
             .into_iter()
             .flat_map(|p| p.params.clone())
@@ -484,12 +477,7 @@ impl EvaluatorStack {
         )
     }
 
-    #[instrument(
-        skip_all,
-          fields(
-           indicatif.pb_show = true, indicatif.pb_msg = "Generating Summed Evaluator",
-          )
-      )]
+    #[instrument(skip_all)]
     fn new_summed<A: AtomCore>(
         atoms: &[A],
         param_builder: &ParamBuilder,
@@ -497,6 +485,8 @@ impl EvaluatorStack {
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
+        let _progress_guard =
+            crate::processes::enter_detailed_progress_span("Generating Summed Evaluator");
         let sum = atoms.iter().map(|atom| {
             orientations
                 .iter()
@@ -539,11 +529,7 @@ impl EvaluatorStack {
         Ok(Self::new_with_timings(atoms, param_builder, orientations, dual_shape, settings)?.0)
     }
 
-    #[instrument(
-           skip_all,
-           fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Evaluator Stack"),
-           err
-       )]
+    #[instrument(skip_all, err)]
     pub fn new_with_timings<A: AtomCore>(
         atoms: &[A],
         param_builder: &ParamBuilder,
@@ -551,6 +537,8 @@ impl EvaluatorStack {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
+        let _progress_guard =
+            crate::processes::enter_detailed_progress_span("Building Evaluator Stack");
         let started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #compile, #summary;
             stage = "evaluator_stack_new_start",
@@ -658,7 +646,13 @@ impl EvaluatorStack {
                     "Parsed evaluator network dump"
                 );
 
-                println!("Parsed: {:?}", instant.elapsed());
+                let parse_elapsed = instant.elapsed();
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_parse_elapsed",
+                    atom_index,
+                    elapsed_ms = parse_elapsed.as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
                 let instant = std::time::Instant::now();
 
                 macro_rules! execute_min_result_rank {
@@ -752,7 +746,13 @@ impl EvaluatorStack {
                     FUN_LIB.deref(),
                 )?;
 
-                println!("Executing: {:?}", instant.elapsed());
+                let execute_elapsed = instant.elapsed();
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_execute_elapsed",
+                    atom_index,
+                    elapsed_ms = execute_elapsed.as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
                 crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
                     stage = "evaluator_stack_parse_atom_execute_done",
                     atom_index,

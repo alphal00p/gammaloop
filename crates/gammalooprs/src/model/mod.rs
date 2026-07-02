@@ -805,6 +805,8 @@ pub struct SerializableParticle {
     ghost_number: isize,
     lepton_number: isize,
     y_charge: isize,
+    #[serde(default, alias = "goldstoneboson", alias = "GoldstoneBoson")]
+    goldstone: bool,
 }
 
 impl SerializableParticle {
@@ -823,6 +825,7 @@ impl SerializableParticle {
             ghost_number: particle.ghost_number,
             lepton_number: particle.lepton_number,
             y_charge: particle.y_charge,
+            goldstone: particle.goldstone,
         }
     }
 }
@@ -842,6 +845,7 @@ pub struct Particle {
     pub ghost_number: isize,
     pub lepton_number: isize,
     pub y_charge: isize,
+    pub goldstone: bool,
 }
 
 impl Particle {
@@ -1030,6 +1034,10 @@ impl Particle {
 
     pub fn is_ghost(&self) -> bool {
         self.ghost_number != 0
+    }
+
+    pub fn is_goldstone(&self) -> bool {
+        self.goldstone
     }
 
     pub fn symbolic_mass(&self) -> Atom {
@@ -1330,6 +1338,7 @@ impl Particle {
             ghost_number: particle.ghost_number,
             lepton_number: particle.lepton_number,
             y_charge: particle.y_charge,
+            goldstone: particle.goldstone,
         }
     }
 }

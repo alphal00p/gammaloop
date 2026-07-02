@@ -26,8 +26,8 @@ use crate::{
     },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
     processes::{
-        CrossSectionCut, CrossSectionGraph, CutId, GraphGenerationStats, IteratedCtCollection,
-        RaisedCutData, RaisedCutId,
+        self, CrossSectionCut, CrossSectionGraph, CutId, GraphGenerationStats,
+        IteratedCtCollection, RaisedCutData, RaisedCutId,
     },
     settings::{
         GlobalSettings, RuntimeSettings, global::FrozenCompilationMode, runtime::IntegralUnit,
@@ -645,7 +645,8 @@ impl CrossSectionGraphTerm {
         }
 
         let mut integrand = TiVec::new();
-        for integrand_for_cut in &masked_cut_parametric_integrand {
+        for (raised_cut_id, integrand_for_cut) in masked_cut_parametric_integrand.iter_enumerated()
+        {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
@@ -677,6 +678,13 @@ impl CrossSectionGraphTerm {
                 cut_integrands.insert(*cut_cff_index, evaluator_stack);
             }
             integrand.push(cut_integrands);
+            processes::cut_finished(
+                "",
+                &graph.graph.name,
+                graph.derived_data.raised_data.raised_cut_groups[raised_cut_id]
+                    .cuts
+                    .len(),
+            );
         }
 
         let mut ct_evaluators = TiVec::new();

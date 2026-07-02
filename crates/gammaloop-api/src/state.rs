@@ -1,13 +1,13 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     fs::{self},
-    io::{self},
+    io::{self, IsTerminal},
     ops::ControlFlow,
     path::{Path, PathBuf},
     str::FromStr,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     thread,
     time::{Duration, Instant},
@@ -28,22 +28,28 @@ use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::Sample;
 use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use toml::Value as TomlValue;
-use tracing::debug;
-use tracing::info;
+use tracing::{debug, info, info_span, Span};
+use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 
 use gammalooprs::{
     clear_interrupt_request,
     feyngen::GenerationType,
     graph::Graph,
     initialisation::initialise,
-    integrands::HasIntegrand,
+    integrands::{process::ProcessIntegrand, HasIntegrand},
     is_interrupt_requested,
     model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
     processes::{
         merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
-        NamedGraphGenerationReport, Process, ProcessCollection, ProcessDefinition, ProcessList,
+        GenerationProcessKind, GenerationProgressMode, GenerationProgressModeGuard,
+        GenerationProgressObserver, GenerationProgressObserverGuard, GenerationProgressPhase,
+        GraphGenerationStats, GraphGroupSelectionMode, GraphGroupSelectionPlan,
+        GraphGroupSelectionReport, GraphGroupSelectionSpec, NamedGraphGenerationReport, Process,
+        ProcessCollection, ProcessDefinition, ProcessList,
     },
-    settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
+    settings::{
+        global::GenerationSettings, runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings,
+    },
     utils::{
         serde_utils::{get_schema_folder, SmartSerde},
         tracing::{init_bench_tracing, init_test_tracing},
@@ -86,10 +92,478 @@ pub struct IntegrandGenerationSummary {
     pub reports: Vec<GeneratedGraphReport>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelectedGraphGroups {
+    pub source_process_id: usize,
+    pub source_process_name: String,
+    pub source_integrand_name: String,
+    pub process_id: usize,
+    pub process_name: String,
+    pub integrand_name: String,
+    pub report: GraphGroupSelectionReport,
+    pub copied_to_output: bool,
+    pub replaced_existing_target: bool,
+    pub removed_target_artifacts: bool,
+    pub discarded_generated_integrand: bool,
+    pub removed_generated_artifacts: bool,
+    pub removed_generation_summary: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GraphGroupSelectionTarget {
+    pub output_process_name: Option<String>,
+    pub output_integrand_name: Option<String>,
+    pub clear_existing_processes: bool,
+}
+
+impl GraphGroupSelectionTarget {
+    pub fn in_place() -> Self {
+        Self::default()
+    }
+
+    pub fn copy(
+        output_process_name: Option<String>,
+        output_integrand_name: Option<String>,
+        clear_existing_processes: bool,
+    ) -> Self {
+        Self {
+            output_process_name,
+            output_integrand_name,
+            clear_existing_processes,
+        }
+    }
+
+    fn is_copy_mode(&self) -> bool {
+        self.output_process_name.is_some() || self.output_integrand_name.is_some()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct GraphGroupSelectionContext<'a> {
+    pub generation_settings: &'a GenerationSettings,
+    pub state_folder: &'a Path,
+    pub read_only_state: bool,
+}
+
+impl<'a> GraphGroupSelectionContext<'a> {
+    pub fn new(
+        generation_settings: &'a GenerationSettings,
+        state_folder: &'a Path,
+        read_only_state: bool,
+    ) -> Self {
+        Self {
+            generation_settings,
+            state_folder,
+            read_only_state,
+        }
+    }
+}
+
+struct IntegrandCopyInsertion {
+    process_id: usize,
+    process_name: String,
+    integrand_name: String,
+    replaced_existing_target: bool,
+    removed_target_artifacts: bool,
+}
+
+struct SelectionSource {
+    process_id: usize,
+    process_name: String,
+    integrand_name: String,
+}
+
+enum IntegrandCopyPayload {
+    Amplitude(Amplitude),
+    CrossSection(CrossSection),
+}
+
+impl IntegrandCopyPayload {
+    fn rename(&mut self, new_name: &str) {
+        match self {
+            Self::Amplitude(amplitude) => {
+                amplitude.name = new_name.to_string();
+                rename_process_integrand(amplitude.integrand.as_mut(), new_name);
+            }
+            Self::CrossSection(cross_section) => {
+                cross_section.name = new_name.to_string();
+                rename_process_integrand(cross_section.integrand.as_mut(), new_name);
+            }
+        }
+    }
+
+    fn apply_graph_group_selection(&mut self, plan: &GraphGroupSelectionPlan) -> Result<()> {
+        match self {
+            Self::Amplitude(amplitude) => amplitude.apply_graph_group_selection(plan),
+            Self::CrossSection(cross_section) => cross_section.apply_graph_group_selection(plan),
+        }
+    }
+
+    fn is_compatible_with(&self, collection: &ProcessCollection) -> bool {
+        matches!(
+            (self, collection),
+            (Self::Amplitude(_), ProcessCollection::Amplitudes(_))
+                | (Self::CrossSection(_), ProcessCollection::CrossSections(_))
+        )
+    }
+
+    fn kind_name(&self) -> &'static str {
+        match self {
+            Self::Amplitude(_) => "amplitudes",
+            Self::CrossSection(_) => "cross sections",
+        }
+    }
+
+    fn into_collection(self) -> ProcessCollection {
+        match self {
+            Self::Amplitude(amplitude) => {
+                let mut collection = ProcessCollection::Amplitudes(BTreeMap::new());
+                collection.add_amplitude(amplitude);
+                collection
+            }
+            Self::CrossSection(cross_section) => {
+                let mut collection = ProcessCollection::CrossSections(BTreeMap::new());
+                collection.add_cross_section(cross_section);
+                collection
+            }
+        }
+    }
+
+    fn insert_into_process(self, process: &mut Process, process_name: &str) -> Result<()> {
+        match (self, &mut process.collection) {
+            (Self::Amplitude(amplitude), ProcessCollection::Amplitudes(amplitudes)) => {
+                amplitudes.insert(amplitude.name.clone(), amplitude);
+                Ok(())
+            }
+            (
+                Self::CrossSection(cross_section),
+                ProcessCollection::CrossSections(cross_sections),
+            ) => {
+                cross_sections.insert(cross_section.name.clone(), cross_section);
+                Ok(())
+            }
+            (payload, _) => Err(eyre!(
+                "Destination process '{}' exists but does not contain {}",
+                process_name,
+                payload.kind_name()
+            )),
+        }
+    }
+}
+
 struct GenerationMonitor {
     peak_ram_bytes: Arc<AtomicU64>,
+    current_ram_bytes: Arc<AtomicU64>,
     stop_requested: Arc<AtomicBool>,
     handle: Option<thread::JoinHandle<()>>,
+}
+
+struct AggregateGenerationProgressReporter {
+    progress_span: Span,
+    current_ram_bytes: Arc<AtomicU64>,
+    peak_ram_bytes: Arc<AtomicU64>,
+    state: Mutex<AggregateGenerationProgressState>,
+}
+
+#[derive(Default)]
+struct AggregateGenerationProgressState {
+    phase: Option<GenerationProgressPhase>,
+    kind: Option<GenerationProcessKind>,
+    process: String,
+    integrand: String,
+    total_graphs: usize,
+    done_graphs: usize,
+    total_cuts: Option<usize>,
+    done_cuts: usize,
+    discovered_st_cuts: usize,
+    discovered_valid_cuts: usize,
+    active_graphs: BTreeSet<String>,
+    last_graph: Option<String>,
+    stats: GraphGenerationStats,
+}
+
+impl AggregateGenerationProgressReporter {
+    fn new(current_ram_bytes: Arc<AtomicU64>, peak_ram_bytes: Arc<AtomicU64>) -> Arc<Self> {
+        let span = info_span!(
+            "Integrand generation",
+            indicatif.pb_show = true,
+            indicatif.pb_msg = "Starting integrand generation"
+        );
+        span.pb_set_style(&ProgressStyle::with_template(
+            "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} ({percent}%) {msg}",
+        )
+        .unwrap());
+        span.pb_start();
+        span.pb_set_length(0);
+        span.pb_set_position(0);
+        span.pb_tick();
+        Self::new_with_span(current_ram_bytes, peak_ram_bytes, span)
+    }
+
+    #[cfg(test)]
+    fn new_hidden(current_ram_bytes: Arc<AtomicU64>, peak_ram_bytes: Arc<AtomicU64>) -> Arc<Self> {
+        Self::new_with_span(current_ram_bytes, peak_ram_bytes, Span::none())
+    }
+
+    fn new_with_span(
+        current_ram_bytes: Arc<AtomicU64>,
+        peak_ram_bytes: Arc<AtomicU64>,
+        progress_span: Span,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            progress_span,
+            current_ram_bytes,
+            peak_ram_bytes,
+            state: Mutex::new(AggregateGenerationProgressState::default()),
+        })
+    }
+
+    fn fixed_field(value: &str, width: usize) -> String {
+        let mut chars = value.chars().collect::<Vec<_>>();
+        if chars.len() > width {
+            chars.truncate(width.saturating_sub(1));
+            chars.push('~');
+        }
+        format!("{:<width$}", chars.into_iter().collect::<String>())
+    }
+
+    fn progress_memory(bytes: u64) -> String {
+        const MIB: f64 = 1024.0 * 1024.0;
+        const GIB: f64 = MIB * 1024.0;
+        let value = bytes as f64;
+        if value >= GIB {
+            format!("{:>6.2} GiB", value / GIB)
+        } else {
+            format!("{:>6.0} MiB", value / MIB)
+        }
+    }
+
+    fn progress_percent(percent: f64) -> String {
+        if percent < 0.01 {
+            "0%".to_string()
+        } else if percent < 0.1 {
+            format!("{percent:.3}%")
+        } else if percent < 1.0 {
+            format!("{percent:.2}%")
+        } else if percent < 10.0 {
+            format!("{percent:.1}%")
+        } else {
+            format!("{percent:.0}%")
+        }
+    }
+
+    fn refresh(&self, state: &AggregateGenerationProgressState) {
+        self.progress_span.pb_set_length(state.total_graphs as u64);
+        self.progress_span.pb_set_position(state.done_graphs as u64);
+
+        let current_ram = Self::progress_memory(self.current_ram_bytes.load(Ordering::Relaxed));
+        let peak_ram = Self::progress_memory(self.peak_ram_bytes.load(Ordering::Relaxed));
+        let total_time = state.stats.total_time.as_secs_f64();
+        let fraction = |duration: Duration| -> f64 {
+            if total_time > 0.0 {
+                duration.as_secs_f64() * 100.0 / total_time
+            } else {
+                0.0
+            }
+        };
+        let expression_share = fraction(state.stats.expression_build_time());
+        let spenso_share = fraction(state.stats.evaluator_spenso_time);
+        let symbolica_share = fraction(state.stats.evaluator_symbolica_time);
+        let compile_share = fraction(state.stats.evaluator_compile_time);
+        let kind = match state.kind {
+            Some(GenerationProcessKind::Amplitude) => "AMP",
+            Some(GenerationProcessKind::CrossSection) => "XS",
+            None => "GEN",
+        };
+        let phase = match state.phase {
+            Some(GenerationProgressPhase::CutDiscovery) => "cuts",
+            Some(GenerationProgressPhase::GraphGeneration) => "graphs",
+            Some(GenerationProgressPhase::Backend) => "backend",
+            None => "gen",
+        };
+        let last_graph = state.last_graph.as_deref().unwrap_or("-");
+        let cut_context = match (state.phase, state.total_cuts) {
+            (Some(GenerationProgressPhase::CutDiscovery), _) => format!(
+                "{:>4}/{:<4}",
+                state.discovered_valid_cuts, state.discovered_st_cuts
+            ),
+            (_, Some(total_cuts)) => format!("{:>4}/{:<4}", state.done_cuts, total_cuts),
+            _ => format!("{:>4}/{:<4}", "-", "-"),
+        }
+        .green();
+        let phase = Self::fixed_field(phase, 7).bold().blue();
+        let kind = Self::fixed_field(kind, 3).cyan();
+        let identifier = if state.process.is_empty() {
+            state.integrand.clone()
+        } else {
+            format!("{}@{}", state.integrand, state.process)
+        };
+        let identifier = Self::fixed_field(&identifier, 24).yellow();
+        let last_graph = Self::fixed_field(last_graph, 8).green();
+        let graph_ratio = format!("{:>3}/{:<3}", state.done_graphs, state.total_graphs).green();
+        let ram = format!("{current_ram}/{peak_ram}").yellow();
+        let expr = Self::progress_percent(expression_share).magenta();
+        let spenso = Self::progress_percent(spenso_share).cyan();
+        let eval = Self::progress_percent(symbolica_share).green();
+        let compile = Self::progress_percent(compile_share).yellow();
+        self.progress_span.pb_set_message(&format!(
+            "{} {} {} | {} {} | {} {} | {} {} | {} {} | {} {} {} / {} {} / {} {} / {} {}",
+            phase,
+            kind,
+            identifier,
+            "g".bold().blue(),
+            graph_ratio,
+            "last".bold().blue(),
+            last_graph,
+            "cut".bold().blue(),
+            cut_context,
+            "ram".bold().blue(),
+            ram,
+            "time".bold().blue(),
+            "expr".bold().blue(),
+            expr,
+            "spenso".bold().blue(),
+            spenso,
+            "eval".bold().blue(),
+            eval,
+            "compile".bold().blue(),
+            compile,
+        ));
+        self.progress_span.pb_tick();
+    }
+}
+
+impl GenerationProgressObserver for AggregateGenerationProgressReporter {
+    fn begin_phase(
+        &self,
+        phase: GenerationProgressPhase,
+        kind: GenerationProcessKind,
+        process: &str,
+        integrand: &str,
+        total_graphs: usize,
+        total_cuts: Option<usize>,
+    ) {
+        let mut state = self
+            .state
+            .lock()
+            .expect("aggregate generation progress state mutex is poisoned");
+        state.phase = Some(phase);
+        state.kind = Some(kind);
+        state.process.clear();
+        state.process.push_str(process);
+        state.integrand.clear();
+        state.integrand.push_str(integrand);
+        state.total_graphs = total_graphs;
+        state.done_graphs = 0;
+        state.total_cuts = total_cuts;
+        state.done_cuts = 0;
+        state.discovered_st_cuts = 0;
+        state.discovered_valid_cuts = 0;
+        state.active_graphs.clear();
+        state.last_graph = None;
+        if phase == GenerationProgressPhase::GraphGeneration {
+            state.stats = GraphGenerationStats::default();
+        }
+        self.progress_span.pb_reset_elapsed();
+        self.refresh(&state);
+    }
+
+    fn graph_started(
+        &self,
+        _kind: GenerationProcessKind,
+        _integrand: &str,
+        graph: &str,
+        _cut_count: Option<usize>,
+    ) {
+        let mut state = self
+            .state
+            .lock()
+            .expect("aggregate generation progress state mutex is poisoned");
+        state.active_graphs.insert(graph.to_string());
+        state.last_graph = Some(graph.to_string());
+        self.refresh(&state);
+    }
+
+    fn graph_finished(
+        &self,
+        _kind: GenerationProcessKind,
+        _integrand: &str,
+        graph: &str,
+        stats: &GraphGenerationStats,
+        completed_cuts: Option<usize>,
+    ) {
+        let mut state = self
+            .state
+            .lock()
+            .expect("aggregate generation progress state mutex is poisoned");
+        state.done_graphs = state.done_graphs.saturating_add(1).min(state.total_graphs);
+        state.done_cuts += completed_cuts.unwrap_or(0);
+        state.active_graphs.remove(graph);
+        state.last_graph = Some(graph.to_string());
+        state.stats.merge_in_place(stats);
+        self.refresh(&state);
+    }
+
+    fn cuts_discovered(
+        &self,
+        _integrand: &str,
+        graph: &str,
+        st_cut_count: usize,
+        valid_cut_count: usize,
+    ) {
+        let mut state = self
+            .state
+            .lock()
+            .expect("aggregate generation progress state mutex is poisoned");
+        state.done_graphs = state.done_graphs.saturating_add(1).min(state.total_graphs);
+        state.discovered_st_cuts += st_cut_count;
+        state.discovered_valid_cuts += valid_cut_count;
+        state.last_graph = Some(graph.to_string());
+        self.refresh(&state);
+    }
+
+    fn cut_finished(&self, _integrand: &str, graph: &str, cut_count: usize) {
+        let mut state = self
+            .state
+            .lock()
+            .expect("aggregate generation progress state mutex is poisoned");
+        state.done_cuts = state.done_cuts.saturating_add(cut_count);
+        if let Some(total_cuts) = state.total_cuts {
+            state.done_cuts = state.done_cuts.min(total_cuts);
+        }
+        state.last_graph = Some(graph.to_string());
+        self.refresh(&state);
+    }
+
+    fn backend_started(&self, kind: GenerationProcessKind, integrand: &str, graph_count: usize) {
+        let mut state = self
+            .state
+            .lock()
+            .expect("aggregate generation progress state mutex is poisoned");
+        state.phase = Some(GenerationProgressPhase::Backend);
+        state.kind = Some(kind);
+        state.integrand.clear();
+        state.integrand.push_str(integrand);
+        state.total_graphs = graph_count;
+        state.done_graphs = 0;
+        state.total_cuts = None;
+        state.done_cuts = 0;
+        state.active_graphs.clear();
+        state.last_graph = None;
+        self.progress_span.pb_reset_elapsed();
+        self.refresh(&state);
+    }
+
+    fn backend_finished(&self, _kind: GenerationProcessKind, _integrand: &str, elapsed: Duration) {
+        let mut state = self
+            .state
+            .lock()
+            .expect("aggregate generation progress state mutex is poisoned");
+        state.done_graphs = state.total_graphs;
+        state.stats.total_time += elapsed;
+        state.stats.evaluator_compile_time += elapsed;
+        self.refresh(&state);
+    }
 }
 
 impl GenerationMonitor {
@@ -98,8 +572,10 @@ impl GenerationMonitor {
     fn start() -> Result<Self> {
         let pid = get_current_pid().map_err(|err| eyre!("Failed to resolve current pid: {err}"))?;
         let peak_ram_bytes = Arc::new(AtomicU64::new(0));
+        let current_ram_bytes = Arc::new(AtomicU64::new(0));
         let stop_requested = Arc::new(AtomicBool::new(false));
         let peak_ram_bytes_for_thread = Arc::clone(&peak_ram_bytes);
+        let current_ram_bytes_for_thread = Arc::clone(&current_ram_bytes);
         let stop_requested_for_thread = Arc::clone(&stop_requested);
 
         let handle = thread::Builder::new()
@@ -118,7 +594,9 @@ impl GenerationMonitor {
                         ProcessRefreshKind::nothing().with_memory(),
                     );
                     if let Some(process) = system.process(pid) {
-                        peak_ram_bytes_for_thread.fetch_max(process.memory(), Ordering::Relaxed);
+                        let memory = process.memory();
+                        current_ram_bytes_for_thread.store(memory, Ordering::Relaxed);
+                        peak_ram_bytes_for_thread.fetch_max(memory, Ordering::Relaxed);
                     }
                     thread::sleep(Self::POLL_INTERVAL);
                 }
@@ -127,9 +605,18 @@ impl GenerationMonitor {
 
         Ok(Self {
             peak_ram_bytes,
+            current_ram_bytes,
             stop_requested,
             handle: Some(handle),
         })
+    }
+
+    fn current_ram_bytes(&self) -> Arc<AtomicU64> {
+        Arc::clone(&self.current_ram_bytes)
+    }
+
+    fn peak_ram_bytes(&self) -> Arc<AtomicU64> {
+        Arc::clone(&self.peak_ram_bytes)
     }
 
     fn finish(&mut self) -> u64 {
@@ -928,6 +1415,7 @@ pub struct State {
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 const CURRENT_STATE_MANIFEST_VERSION: u32 = 1;
+const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
@@ -1081,6 +1569,137 @@ fn integrand_generation_summary_path(
         .join(&process.definition.folder_name)
         .join(integrand_name)
         .join(INTEGRAND_GENERATION_SUMMARY_FILE)
+}
+
+fn process_kind_folder(root_folder: &Path, process: &Process) -> PathBuf {
+    let process_kind_folder = match &process.collection {
+        ProcessCollection::Amplitudes(_) => "amplitudes",
+        ProcessCollection::CrossSections(_) => "cross_sections",
+    };
+
+    root_folder.join("processes").join(process_kind_folder)
+}
+
+fn process_artifact_folder(root_folder: &Path, process: &Process) -> PathBuf {
+    process_kind_folder(root_folder, process).join(&process.definition.folder_name)
+}
+
+fn integrand_artifact_folder(
+    root_folder: &Path,
+    process: &Process,
+    integrand_name: &str,
+) -> PathBuf {
+    process_artifact_folder(root_folder, process).join(integrand_name)
+}
+
+fn generated_integrand_artifact_path(
+    root_folder: &Path,
+    process: &Process,
+    integrand_name: &str,
+) -> PathBuf {
+    integrand_artifact_folder(root_folder, process, integrand_name).join("integrand")
+}
+
+fn ensure_existing_path_under_root(path: &Path, root: &Path, description: &str) -> Result<PathBuf> {
+    let canonical_root = root
+        .canonicalize()
+        .with_context(|| format!("Trying to resolve artifact cleanup root {}", root.display()))?;
+    let canonical_path = path.canonicalize().with_context(|| {
+        format!(
+            "Trying to resolve {} path {} before removal",
+            description,
+            path.display()
+        )
+    })?;
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err(eyre!(
+            "Refusing to remove {} path {} because it resolves outside {}",
+            description,
+            canonical_path.display(),
+            canonical_root.display()
+        ));
+    }
+    Ok(canonical_path)
+}
+
+fn remove_file_if_exists_under_root(path: &Path, root: &Path, description: &str) -> Result<bool> {
+    if !path.try_exists().with_context(|| {
+        format!(
+            "Trying to check whether {} path {} exists",
+            description,
+            path.display()
+        )
+    })? {
+        return Ok(false);
+    }
+    let canonical_path = ensure_existing_path_under_root(path, root, description)?;
+    fs::remove_file(path).with_context(|| {
+        format!(
+            "Trying to remove {} path {}",
+            description,
+            canonical_path.display()
+        )
+    })?;
+    Ok(true)
+}
+
+fn remove_dir_if_exists_under_root(path: &Path, root: &Path, description: &str) -> Result<bool> {
+    if !path.try_exists().with_context(|| {
+        format!(
+            "Trying to check whether {} path {} exists",
+            description,
+            path.display()
+        )
+    })? {
+        return Ok(false);
+    }
+    let canonical_path = ensure_existing_path_under_root(path, root, description)?;
+    fs::remove_dir_all(path).with_context(|| {
+        format!(
+            "Trying to remove {} path {}",
+            description,
+            canonical_path.display()
+        )
+    })?;
+    Ok(true)
+}
+
+fn remove_saved_process_artifacts(root_folder: &Path, process: &Process) -> Result<bool> {
+    let root = process_kind_folder(root_folder, process);
+    let path = process_artifact_folder(root_folder, process);
+    remove_dir_if_exists_under_root(&path, &root, "saved process artifacts")
+}
+
+fn remove_saved_integrand_artifacts(
+    root_folder: &Path,
+    process: &Process,
+    integrand_name: &str,
+) -> Result<bool> {
+    let root = process_artifact_folder(root_folder, process);
+    let path = integrand_artifact_folder(root_folder, process, integrand_name);
+    remove_dir_if_exists_under_root(&path, &root, "saved integrand artifacts")
+}
+
+fn validate_output_name(value: &str, flag_name: &str) -> Result<()> {
+    if value.trim().is_empty() {
+        return Err(eyre!("{flag_name} must not be empty"));
+    }
+    Ok(())
+}
+
+fn rename_process_integrand(integrand: Option<&mut ProcessIntegrand>, new_name: &str) {
+    let Some(integrand) = integrand else {
+        return;
+    };
+    let _ = integrand.get_mut_settings();
+    match integrand {
+        ProcessIntegrand::Amplitude(amplitude) => {
+            amplitude.data.name = new_name.to_string();
+        }
+        ProcessIntegrand::CrossSection(cross_section) => {
+            cross_section.data.name = new_name.to_string();
+        }
+    }
 }
 
 fn load_integrand_generation_summaries(
@@ -1401,6 +2020,454 @@ impl State {
         collect_integrand_info(self, process_id, &integrand_name)
     }
 
+    pub fn duplicate_integrand(
+        &mut self,
+        process: Option<&ProcessRef>,
+        integrand_name: Option<&String>,
+        output_process_name: &str,
+        output_integrand_name: &str,
+    ) -> Result<()> {
+        validate_output_name(output_process_name, "--output_process_name")?;
+        validate_output_name(output_integrand_name, "--output_integrand_name")?;
+
+        let (source_process_id, source_integrand_name) =
+            self.find_integrand_ref(process, integrand_name)?;
+        let mut payload =
+            self.cloned_integrand_payload(source_process_id, &source_integrand_name)?;
+        payload.rename(output_integrand_name);
+        self.insert_integrand_copy(
+            source_process_id,
+            output_process_name,
+            output_integrand_name,
+            payload,
+            false,
+            false,
+            None,
+            false,
+        )?;
+        Ok(())
+    }
+
+    pub fn select_integrand_graph_groups(
+        &mut self,
+        process: Option<&ProcessRef>,
+        integrand_name: Option<&String>,
+        selection: &GraphGroupSelectionSpec,
+        target: &GraphGroupSelectionTarget,
+        context: GraphGroupSelectionContext<'_>,
+    ) -> Result<SelectedGraphGroups> {
+        if target.clear_existing_processes && !target.is_copy_mode() {
+            return Err(eyre!(
+                "--clear-existing-processes requires --output_process or --output_integrand for `select`"
+            ));
+        }
+
+        let (source_process_id, source_integrand_name) =
+            self.find_integrand_ref(process, integrand_name)?;
+        let (source_process_name, plan, discarded_generated_integrand) = {
+            let process_entry = &self.process_list.processes[source_process_id];
+            let process_name = process_entry.definition.folder_name.clone();
+            match &process_entry.collection {
+                ProcessCollection::Amplitudes(amplitudes) => {
+                    if selection.has_raised_cut_rules() {
+                        return Err(eyre!(
+                            "Raised-cut signature selection can only be used with cross-section integrands."
+                        ));
+                    }
+                    if selection.mode() == GraphGroupSelectionMode::CrossSectionAmplitudeGraphs {
+                        return Err(eyre!(
+                            "`select --amplitude-graphs` can only be used with cross-section integrands."
+                        ));
+                    }
+                    let amplitude = amplitudes.get(&source_integrand_name).ok_or_else(|| {
+                        eyre!(
+                            "No amplitude named '{}' in process '{}'",
+                            source_integrand_name,
+                            process_name
+                        )
+                    })?;
+                    let plan = amplitude.plan_graph_group_selection(selection)?;
+                    amplitude.validate_graph_group_selection_plan(&plan)?;
+                    (process_name, plan, amplitude.integrand.is_some())
+                }
+                ProcessCollection::CrossSections(cross_sections) => {
+                    let cross_section =
+                        cross_sections.get(&source_integrand_name).ok_or_else(|| {
+                            eyre!(
+                                "No cross section named '{}' in process '{}'",
+                                source_integrand_name,
+                                process_name
+                            )
+                        })?;
+                    let plan = cross_section.plan_graph_group_selection_with_context(
+                        selection,
+                        &self.model,
+                        &process_entry.definition,
+                        context.generation_settings,
+                    )?;
+                    cross_section.validate_graph_group_selection_plan(&plan)?;
+                    (process_name, plan, cross_section.integrand.is_some())
+                }
+            }
+        };
+        let report = plan.report().clone();
+        let source = SelectionSource {
+            process_id: source_process_id,
+            process_name: source_process_name,
+            integrand_name: source_integrand_name,
+        };
+
+        if target.is_copy_mode() {
+            return self.select_integrand_graph_groups_to_output(
+                &source,
+                &plan,
+                report,
+                target,
+                context.state_folder,
+                context.read_only_state,
+            );
+        }
+
+        let mut removed_generated_artifacts = false;
+        let mut removed_generation_summary = false;
+        if discarded_generated_integrand {
+            if context.read_only_state {
+                return Err(eyre!(
+                    "Cannot select graph groups for generated integrand '{}' in process '{}' because this session was started with --read-only-state. Restart without --read-only-state or select before generation.",
+                    source.integrand_name,
+                    source.process_name
+                ));
+            }
+
+            let process_entry = &self.process_list.processes[source.process_id];
+            let integrand_artifact_root = integrand_artifact_folder(
+                context.state_folder,
+                process_entry,
+                &source.integrand_name,
+            );
+            let generated_artifact_path = generated_integrand_artifact_path(
+                context.state_folder,
+                process_entry,
+                &source.integrand_name,
+            );
+            removed_generated_artifacts = remove_dir_if_exists_under_root(
+                &generated_artifact_path,
+                &integrand_artifact_root,
+                "generated integrand artifact",
+            )?;
+            let generation_summary_path = integrand_generation_summary_path(
+                context.state_folder,
+                process_entry,
+                &source.integrand_name,
+            );
+            removed_generation_summary = remove_file_if_exists_under_root(
+                &generation_summary_path,
+                &integrand_artifact_root,
+                "integrand generation summary",
+            )?;
+        }
+
+        {
+            let process_entry = &mut self.process_list.processes[source.process_id];
+            match &mut process_entry.collection {
+                ProcessCollection::Amplitudes(amplitudes) => {
+                    let amplitude =
+                        amplitudes.get_mut(&source.integrand_name).ok_or_else(|| {
+                            eyre!(
+                                "No amplitude named '{}' in process '{}'",
+                                source.integrand_name,
+                                source.process_name
+                            )
+                        })?;
+                    amplitude.apply_graph_group_selection(&plan)?;
+                }
+                ProcessCollection::CrossSections(cross_sections) => {
+                    let cross_section =
+                        cross_sections
+                            .get_mut(&source.integrand_name)
+                            .ok_or_else(|| {
+                                eyre!(
+                                    "No cross section named '{}' in process '{}'",
+                                    source.integrand_name,
+                                    source.process_name
+                                )
+                            })?;
+                    cross_section.apply_graph_group_selection(&plan)?;
+                }
+            }
+        }
+
+        if discarded_generated_integrand {
+            self.generation_summaries
+                .remove(&IntegrandGenerationSummaryKey {
+                    process_id: source.process_id,
+                    integrand_name: source.integrand_name.clone(),
+                });
+        }
+
+        Ok(SelectedGraphGroups {
+            source_process_id: source.process_id,
+            source_process_name: source.process_name.clone(),
+            source_integrand_name: source.integrand_name.clone(),
+            process_id: source.process_id,
+            process_name: source.process_name,
+            integrand_name: source.integrand_name,
+            report,
+            copied_to_output: false,
+            replaced_existing_target: false,
+            removed_target_artifacts: false,
+            discarded_generated_integrand,
+            removed_generated_artifacts,
+            removed_generation_summary,
+        })
+    }
+
+    fn select_integrand_graph_groups_to_output(
+        &mut self,
+        source: &SelectionSource,
+        plan: &GraphGroupSelectionPlan,
+        report: GraphGroupSelectionReport,
+        target: &GraphGroupSelectionTarget,
+        state_folder: &Path,
+        read_only_state: bool,
+    ) -> Result<SelectedGraphGroups> {
+        let output_process_name = target
+            .output_process_name
+            .as_deref()
+            .unwrap_or(&source.process_name);
+        let output_integrand_name = target
+            .output_integrand_name
+            .as_deref()
+            .unwrap_or(&source.integrand_name);
+
+        validate_output_name(output_process_name, "--output_process")?;
+        validate_output_name(output_integrand_name, "--output_integrand")?;
+
+        if output_process_name == source.process_name
+            && output_integrand_name == source.integrand_name
+        {
+            return Err(eyre!(
+                "Copy-mode select target '{} / {}' is the selected source integrand. Omit --output_process/--output_integrand for in-place selection or choose a different output target.",
+                output_process_name,
+                output_integrand_name
+            ));
+        }
+
+        let target_process_id = self
+            .process_list
+            .processes
+            .iter()
+            .position(|process| process.definition.folder_name == output_process_name);
+        let replace_existing_process = target.output_process_name.is_some()
+            && target.clear_existing_processes
+            && target_process_id.is_some_and(|process_id| process_id != source.process_id);
+
+        let mut payload =
+            self.cloned_integrand_payload(source.process_id, &source.integrand_name)?;
+        payload.rename(output_integrand_name);
+        payload.apply_graph_group_selection(plan)?;
+
+        let insertion = self.insert_integrand_copy(
+            source.process_id,
+            output_process_name,
+            output_integrand_name,
+            payload,
+            target.clear_existing_processes,
+            replace_existing_process,
+            Some(state_folder),
+            read_only_state,
+        )?;
+
+        Ok(SelectedGraphGroups {
+            source_process_id: source.process_id,
+            source_process_name: source.process_name.clone(),
+            source_integrand_name: source.integrand_name.clone(),
+            process_id: insertion.process_id,
+            process_name: insertion.process_name,
+            integrand_name: insertion.integrand_name,
+            report,
+            copied_to_output: true,
+            replaced_existing_target: insertion.replaced_existing_target,
+            removed_target_artifacts: insertion.removed_target_artifacts,
+            discarded_generated_integrand: false,
+            removed_generated_artifacts: false,
+            removed_generation_summary: false,
+        })
+    }
+
+    fn cloned_integrand_payload(
+        &self,
+        source_process_id: usize,
+        source_integrand_name: &str,
+    ) -> Result<IntegrandCopyPayload> {
+        let source_process = &self.process_list.processes[source_process_id];
+        match &source_process.collection {
+            ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                .get(source_integrand_name)
+                .cloned()
+                .map(IntegrandCopyPayload::Amplitude)
+                .ok_or_else(|| eyre!("Missing source amplitude '{}'", source_integrand_name)),
+            ProcessCollection::CrossSections(cross_sections) => cross_sections
+                .get(source_integrand_name)
+                .cloned()
+                .map(IntegrandCopyPayload::CrossSection)
+                .ok_or_else(|| eyre!("Missing source cross section '{}'", source_integrand_name)),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn insert_integrand_copy(
+        &mut self,
+        source_process_id: usize,
+        output_process_name: &str,
+        output_integrand_name: &str,
+        payload: IntegrandCopyPayload,
+        clear_existing_processes: bool,
+        replace_existing_process: bool,
+        state_folder: Option<&Path>,
+        read_only_state: bool,
+    ) -> Result<IntegrandCopyInsertion> {
+        if let Some(destination_process_id) = self
+            .process_list
+            .processes
+            .iter()
+            .position(|process| process.definition.folder_name == output_process_name)
+        {
+            if replace_existing_process {
+                if read_only_state {
+                    return Err(eyre!(
+                        "Cannot overwrite output process '{}' because this session was started with --read-only-state.",
+                        output_process_name
+                    ));
+                }
+                let removed_target_artifacts = if let Some(state_folder) = state_folder {
+                    remove_saved_process_artifacts(
+                        state_folder,
+                        &self.process_list.processes[destination_process_id],
+                    )?
+                } else {
+                    false
+                };
+                self.remove_generation_summaries_for_process_without_shifting(
+                    destination_process_id,
+                );
+                let process = self.single_integrand_process(
+                    source_process_id,
+                    destination_process_id,
+                    output_process_name,
+                    payload,
+                );
+                self.process_list.processes[destination_process_id] = process;
+                return Ok(IntegrandCopyInsertion {
+                    process_id: destination_process_id,
+                    process_name: output_process_name.to_string(),
+                    integrand_name: output_integrand_name.to_string(),
+                    replaced_existing_target: true,
+                    removed_target_artifacts,
+                });
+            }
+
+            let target_exists = self.process_list.processes[destination_process_id]
+                .collection
+                .get_integrand_names()
+                .contains(&output_integrand_name);
+            if target_exists {
+                if !clear_existing_processes {
+                    return Err(eyre!(
+                        "An integrand '{}' already exists in process '{}'",
+                        output_integrand_name,
+                        output_process_name
+                    ));
+                }
+                if read_only_state {
+                    return Err(eyre!(
+                        "Cannot overwrite output integrand '{}' in process '{}' because this session was started with --read-only-state.",
+                        output_integrand_name,
+                        output_process_name
+                    ));
+                }
+            }
+
+            if !payload
+                .is_compatible_with(&self.process_list.processes[destination_process_id].collection)
+            {
+                return Err(eyre!(
+                    "Destination process '{}' exists but does not contain {}",
+                    output_process_name,
+                    payload.kind_name()
+                ));
+            }
+
+            let removed_target_artifacts = if target_exists {
+                if let Some(state_folder) = state_folder {
+                    remove_saved_integrand_artifacts(
+                        state_folder,
+                        &self.process_list.processes[destination_process_id],
+                        output_integrand_name,
+                    )?
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            if target_exists {
+                self.generation_summaries
+                    .remove(&IntegrandGenerationSummaryKey {
+                        process_id: destination_process_id,
+                        integrand_name: output_integrand_name.to_string(),
+                    });
+            }
+
+            payload.insert_into_process(
+                &mut self.process_list.processes[destination_process_id],
+                output_process_name,
+            )?;
+            Ok(IntegrandCopyInsertion {
+                process_id: destination_process_id,
+                process_name: output_process_name.to_string(),
+                integrand_name: output_integrand_name.to_string(),
+                replaced_existing_target: target_exists,
+                removed_target_artifacts,
+            })
+        } else {
+            let process_id = self.process_list.processes.len();
+            let process = self.single_integrand_process(
+                source_process_id,
+                process_id,
+                output_process_name,
+                payload,
+            );
+            self.process_list.add_process(process);
+            Ok(IntegrandCopyInsertion {
+                process_id,
+                process_name: output_process_name.to_string(),
+                integrand_name: output_integrand_name.to_string(),
+                replaced_existing_target: false,
+                removed_target_artifacts: false,
+            })
+        }
+    }
+
+    fn single_integrand_process(
+        &self,
+        source_process_id: usize,
+        process_id: usize,
+        process_name: &str,
+        payload: IntegrandCopyPayload,
+    ) -> Process {
+        let source_process = &self.process_list.processes[source_process_id];
+        let mut definition = source_process.definition.clone();
+        definition.folder_name = process_name.to_string();
+        definition.process_id = process_id;
+        Process {
+            definition,
+            settings_history: source_process.settings_history.clone(),
+            collection: payload.into_collection(),
+        }
+    }
+
     pub fn resolve_effective_model_parameter_card_for_settings(
         &self,
         settings: &RuntimeSettings,
@@ -1518,6 +2585,7 @@ impl State {
     ) -> Result<GenerationReports> {
         self.run_generation_with_monitor(global_settings, move |state, generation_pool| {
             let p = &mut state.process_list.processes[process_id];
+            let process_name = p.definition.folder_name.clone();
             if let Some(name) = &integrand_name {
                 let mut reports = Vec::new();
                 match &mut p.collection {
@@ -1541,6 +2609,7 @@ impl State {
                                     process_id,
                                     a.build_integrand(
                                         &state.model,
+                                        &process_name,
                                         global_settings,
                                         runtime_default,
                                         generation_pool,
@@ -1576,6 +2645,7 @@ impl State {
                                     process_id,
                                     cs.build_integrand(
                                         &state.model,
+                                        &process_name,
                                         global_settings,
                                         runtime_default,
                                         generation_pool,
@@ -1623,10 +2693,27 @@ impl State {
     {
         let generation_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(global_settings.n_cores.generate)
+            .stack_size(GENERATION_THREAD_STACK_SIZE_BYTES)
             .build()?;
         let generation_cores = generation_pool.current_num_threads();
         clear_interrupt_request();
         let mut monitor = GenerationMonitor::start()?;
+        let stderr_is_terminal = io::stderr().is_terminal();
+        let progress_mode = if generation_cores == 1 && stderr_is_terminal {
+            GenerationProgressMode::Detailed
+        } else {
+            GenerationProgressMode::Aggregate
+        };
+        let _progress_mode_guard = GenerationProgressModeGuard::set(progress_mode);
+        let _progress_observer_guard = if generation_cores > 1 && stderr_is_terminal {
+            let reporter = AggregateGenerationProgressReporter::new(
+                monitor.current_ram_bytes(),
+                monitor.peak_ram_bytes(),
+            );
+            Some(GenerationProgressObserverGuard::set(reporter))
+        } else {
+            None
+        };
         let generation_result = generation(self, &generation_pool);
         let peak_ram_bytes = monitor.finish();
         clear_interrupt_request();
@@ -1731,6 +2818,11 @@ impl State {
             updated.insert(key, summary);
         }
         self.generation_summaries = updated;
+    }
+
+    fn remove_generation_summaries_for_process_without_shifting(&mut self, process_id: usize) {
+        self.generation_summaries
+            .retain(|key, _| key.process_id != process_id);
     }
 
     pub fn export_dots(
@@ -2144,7 +3236,10 @@ mod tests {
         integrands::process::ActiveF64Backend,
         model::InputParamCard,
         momentum::{Dep, ExternalMomenta, Helicity},
-        processes::process::ProcessCollection,
+        processes::{
+            process::ProcessCollection, RaisedPropagatorScope, RaisedPropagatorSignature,
+            SelectionPolarity,
+        },
         settings::global::{CompilationMode, FrozenCompilationMode},
         settings::{
             runtime::kinematic::{improvement::PhaseSpaceImprovementSettings, Externals},
@@ -2194,6 +3289,354 @@ mod tests {
             .expect("integrand generation should succeed");
 
         state
+    }
+
+    #[test]
+    fn aggregate_generation_progress_tracks_counts_and_timings() {
+        let current_ram_bytes = Arc::new(AtomicU64::new(256 * 1024 * 1024));
+        let peak_ram_bytes = Arc::new(AtomicU64::new(512 * 1024 * 1024));
+        let reporter =
+            AggregateGenerationProgressReporter::new_hidden(current_ram_bytes, peak_ram_bytes);
+
+        reporter.begin_phase(
+            GenerationProgressPhase::GraphGeneration,
+            GenerationProcessKind::CrossSection,
+            "proc",
+            "itg",
+            2,
+            Some(3),
+        );
+        reporter.graph_started(GenerationProcessKind::CrossSection, "itg", "GL01", Some(1));
+        reporter.graph_started(GenerationProcessKind::CrossSection, "itg", "GL02", Some(2));
+        reporter.graph_finished(
+            GenerationProcessKind::CrossSection,
+            "itg",
+            "GL01",
+            &GraphGenerationStats {
+                evaluator_count: 2,
+                total_time: Duration::from_secs(4),
+                evaluator_spenso_time: Duration::from_secs(1),
+                evaluator_symbolica_time: Duration::from_secs(1),
+                evaluator_compile_time: Duration::ZERO,
+            },
+            None,
+        );
+        reporter.cut_finished("itg", "GL01", 1);
+        reporter.graph_finished(
+            GenerationProcessKind::CrossSection,
+            "itg",
+            "GL02",
+            &GraphGenerationStats {
+                evaluator_count: 3,
+                total_time: Duration::from_secs(6),
+                evaluator_spenso_time: Duration::from_secs(2),
+                evaluator_symbolica_time: Duration::ZERO,
+                evaluator_compile_time: Duration::ZERO,
+            },
+            None,
+        );
+        reporter.cut_finished("itg", "GL02", 2);
+
+        {
+            let state = reporter
+                .state
+                .lock()
+                .expect("aggregate generation progress state mutex is poisoned");
+            assert_eq!(state.done_graphs, 2);
+            assert_eq!(state.done_cuts, 3);
+            assert!(state.active_graphs.is_empty());
+            assert_eq!(state.last_graph.as_deref(), Some("GL02"));
+            assert_eq!(state.stats.evaluator_count, 5);
+            assert_eq!(state.stats.total_time, Duration::from_secs(10));
+            assert_eq!(state.stats.expression_build_time(), Duration::from_secs(6));
+            assert_eq!(state.stats.evaluator_spenso_time, Duration::from_secs(3));
+            assert_eq!(state.stats.evaluator_symbolica_time, Duration::from_secs(1));
+        }
+
+        reporter.backend_started(GenerationProcessKind::CrossSection, "itg", 2);
+        reporter.backend_finished(
+            GenerationProcessKind::CrossSection,
+            "itg",
+            Duration::from_secs(2),
+        );
+
+        let state = reporter
+            .state
+            .lock()
+            .expect("aggregate generation progress state mutex is poisoned");
+        assert_eq!(state.phase, Some(GenerationProgressPhase::Backend));
+        assert_eq!(state.done_graphs, 2);
+        assert_eq!(state.stats.total_time, Duration::from_secs(12));
+        assert_eq!(state.stats.evaluator_compile_time, Duration::from_secs(2));
+    }
+
+    #[test]
+    fn aggregate_generation_progress_formats_memory_and_time_shares() {
+        assert_eq!(
+            AggregateGenerationProgressReporter::progress_memory(512 * 1024 * 1024),
+            "   512 MiB"
+        );
+        assert_eq!(
+            AggregateGenerationProgressReporter::progress_memory(5 * 1024 * 1024 * 1024),
+            "  5.00 GiB"
+        );
+
+        assert_eq!(
+            AggregateGenerationProgressReporter::progress_percent(0.0),
+            "0%"
+        );
+        assert_eq!(
+            AggregateGenerationProgressReporter::progress_percent(0.009),
+            "0%"
+        );
+        assert_eq!(
+            AggregateGenerationProgressReporter::progress_percent(0.024),
+            "0.024%"
+        );
+        assert_eq!(
+            AggregateGenerationProgressReporter::progress_percent(0.24),
+            "0.24%"
+        );
+        assert_eq!(
+            AggregateGenerationProgressReporter::progress_percent(2.4),
+            "2.4%"
+        );
+        assert_eq!(
+            AggregateGenerationProgressReporter::progress_percent(54.0),
+            "54%"
+        );
+    }
+
+    fn build_scalar_bubble_diagram_state() -> State {
+        test_initialise().expect("test initialisation should succeed");
+        let mut state = State::new_test();
+        state.model = load_generic_model("scalars");
+        state.model_parameters = InputParamCard::default_from_model(&state.model);
+
+        let graph_path =
+            crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
+        let graphs = Graph::from_path(&graph_path, &state.model)
+            .expect("scalar bubble graph fixture should load");
+        state
+            .import_graphs(
+                graphs,
+                Some("scalar_bubble".to_string()),
+                None,
+                Some("default".to_string()),
+                false,
+                false,
+            )
+            .expect("graph import should succeed");
+        state
+    }
+
+    fn scalar_bubble_master_graph_name(state: &State, integrand_name: &str) -> String {
+        let process = &state.process_list.processes[0];
+        match &process.collection {
+            ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                .get(integrand_name)
+                .expect("amplitude should exist")
+                .graphs[0]
+                .graph
+                .name
+                .clone(),
+            ProcessCollection::CrossSections(cross_sections) => cross_sections
+                .get(integrand_name)
+                .expect("cross section should exist")
+                .supergraphs[0]
+                .graph
+                .name
+                .clone(),
+        }
+    }
+
+    #[test]
+    fn select_copy_mode_creates_pregenerated_target_without_mutating_source() {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let mut state = build_scalar_bubble_diagram_state();
+        let temp = tempdir().unwrap();
+        let graph_name = scalar_bubble_master_graph_name(&state, "default");
+        let selection = GraphGroupSelectionSpec::new().with_master_graph_names(vec![graph_name]);
+        let target = GraphGroupSelectionTarget::copy(None, Some("selected".to_string()), false);
+
+        let selected = state
+            .select_integrand_graph_groups(
+                Some(&ProcessRef::Name("scalar_bubble".to_string())),
+                Some(&"default".to_string()),
+                &selection,
+                &target,
+                GraphGroupSelectionContext::new(&GenerationSettings::default(), temp.path(), false),
+            )
+            .unwrap();
+
+        assert!(selected.copied_to_output);
+        assert_eq!(selected.process_id, 0);
+        assert_eq!(selected.integrand_name, "selected");
+        let process = &state.process_list.processes[0];
+        assert!(process
+            .collection
+            .get_integrand_names()
+            .contains(&"default"));
+        assert!(process
+            .collection
+            .get_integrand_names()
+            .contains(&"selected"));
+        match &process.collection {
+            ProcessCollection::Amplitudes(amplitudes) => {
+                assert!(amplitudes["default"].integrand.is_none());
+                assert!(amplitudes["selected"].integrand.is_none());
+                assert_eq!(amplitudes["default"].graphs.len(), 1);
+                assert_eq!(amplitudes["selected"].graphs.len(), 1);
+            }
+            ProcessCollection::CrossSections(cross_sections) => {
+                assert!(cross_sections["default"].integrand.is_none());
+                assert!(cross_sections["selected"].integrand.is_none());
+                assert_eq!(cross_sections["default"].supergraphs.len(), 1);
+                assert_eq!(cross_sections["selected"].supergraphs.len(), 1);
+            }
+        }
+    }
+
+    #[test]
+    fn select_copy_mode_rejects_and_clears_existing_target_integrand() {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let mut state = build_scalar_bubble_diagram_state();
+        let temp = tempdir().unwrap();
+        let graph_name = scalar_bubble_master_graph_name(&state, "default");
+        let selection = GraphGroupSelectionSpec::new().with_master_graph_names(vec![graph_name]);
+        let target = GraphGroupSelectionTarget::copy(None, Some("selected".to_string()), false);
+
+        state
+            .select_integrand_graph_groups(
+                Some(&ProcessRef::Name("scalar_bubble".to_string())),
+                Some(&"default".to_string()),
+                &selection,
+                &target,
+                GraphGroupSelectionContext::new(&GenerationSettings::default(), temp.path(), false),
+            )
+            .unwrap();
+        let err = state
+            .select_integrand_graph_groups(
+                Some(&ProcessRef::Name("scalar_bubble".to_string())),
+                Some(&"default".to_string()),
+                &selection,
+                &target,
+                GraphGroupSelectionContext::new(&GenerationSettings::default(), temp.path(), false),
+            )
+            .unwrap_err();
+        assert!(format!("{err}").contains("already exists"));
+
+        let process = &state.process_list.processes[0];
+        let kind_folder = match &process.collection {
+            ProcessCollection::Amplitudes(_) => "amplitudes",
+            ProcessCollection::CrossSections(_) => "cross_sections",
+        };
+        let stale_integrand_folder = temp
+            .path()
+            .join("processes")
+            .join(kind_folder)
+            .join("scalar_bubble")
+            .join("selected");
+        fs::create_dir_all(stale_integrand_folder.join("integrand")).unwrap();
+        state.generation_summaries.insert(
+            IntegrandGenerationSummaryKey {
+                process_id: 0,
+                integrand_name: "selected".to_string(),
+            },
+            IntegrandGenerationSummary {
+                peak_ram_bytes: 1,
+                reports: Vec::new(),
+            },
+        );
+
+        let clear_target =
+            GraphGroupSelectionTarget::copy(None, Some("selected".to_string()), true);
+        let selected = state
+            .select_integrand_graph_groups(
+                Some(&ProcessRef::Name("scalar_bubble".to_string())),
+                Some(&"default".to_string()),
+                &selection,
+                &clear_target,
+                GraphGroupSelectionContext::new(&GenerationSettings::default(), temp.path(), false),
+            )
+            .unwrap();
+        assert!(selected.replaced_existing_target);
+        assert!(selected.removed_target_artifacts);
+        assert!(!stale_integrand_folder.exists());
+        assert!(!state
+            .generation_summaries
+            .contains_key(&IntegrandGenerationSummaryKey {
+                process_id: 0,
+                integrand_name: "selected".to_string(),
+            }));
+
+        let err = state
+            .select_integrand_graph_groups(
+                Some(&ProcessRef::Name("scalar_bubble".to_string())),
+                Some(&"default".to_string()),
+                &selection,
+                &clear_target,
+                GraphGroupSelectionContext::new(&GenerationSettings::default(), temp.path(), true),
+            )
+            .unwrap_err();
+        assert!(format!("{err}").contains("--read-only-state"));
+    }
+
+    #[test]
+    fn select_amplitude_graphs_mode_rejects_amplitude_integrands() {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let mut state = build_scalar_bubble_diagram_state();
+        let temp = tempdir().unwrap();
+        let graph_name = scalar_bubble_master_graph_name(&state, "default");
+        let selection = GraphGroupSelectionSpec::new()
+            .with_mode(GraphGroupSelectionMode::CrossSectionAmplitudeGraphs)
+            .with_master_graph_names(vec![graph_name]);
+        let target = GraphGroupSelectionTarget::in_place();
+
+        let err = state
+            .select_integrand_graph_groups(
+                Some(&ProcessRef::Name("scalar_bubble".to_string())),
+                Some(&"default".to_string()),
+                &selection,
+                &target,
+                GraphGroupSelectionContext::new(&GenerationSettings::default(), temp.path(), false),
+            )
+            .unwrap_err();
+
+        assert!(format!("{err}").contains("--amplitude-graphs"));
+    }
+
+    #[test]
+    fn select_raised_cut_filters_reject_amplitude_integrands() {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let mut state = build_scalar_bubble_diagram_state();
+        let temp = tempdir().unwrap();
+        let selection = GraphGroupSelectionSpec::new().with_raised_cut_signatures(
+            SelectionPolarity::With,
+            RaisedPropagatorScope::All,
+            vec![RaisedPropagatorSignature::from_str("[]").unwrap()],
+        );
+        let target = GraphGroupSelectionTarget::in_place();
+
+        let err = state
+            .select_integrand_graph_groups(
+                Some(&ProcessRef::Name("scalar_bubble".to_string())),
+                Some(&"default".to_string()),
+                &selection,
+                &target,
+                GraphGroupSelectionContext::new(&GenerationSettings::default(), temp.path(), false),
+            )
+            .unwrap_err();
+
+        assert!(format!("{err}").contains("cross-section integrands"));
     }
 
     #[test]

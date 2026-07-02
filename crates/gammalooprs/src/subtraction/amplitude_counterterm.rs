@@ -111,16 +111,15 @@ impl AmplitudeCountertermAtom {
         }
     }
 
-    #[instrument(
-           skip_all,
-           fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Threshold CT Evaluator"),
-       )]
+    #[instrument(skip_all)]
     pub(crate) fn to_evaluator_with_timings(
         &self,
         param_builder: &ParamBuilder,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
         global_settings: &GlobalSettings,
     ) -> (AmplitudeCountertermEvaluator, EvaluatorBuildTimings) {
+        let _progress_guard =
+            crate::processes::enter_detailed_progress_span("Building Threshold CT Evaluator");
         let mut evaluator_stacks = BTreeMap::new();
         let mut timings = EvaluatorBuildTimings::default();
 

@@ -1,14 +1,17 @@
-use color_eyre::Result;
+use color_eyre::{Result, eyre::eyre};
 use std::fs;
 
 use gammaloop_api::state::SyncSettings;
 use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
 use gammalooprs::feyngen::diagram_generator::evaluate_sign_origin;
 use gammalooprs::processes::{
-    ProcessCollection, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
+    CycleSignature, GraphGroupSelectionSpec, GraphSelectionSignatureInventory, ProcessCollection,
+    RaisedCutSignatureInventory, RaisedPropagatorScope, RaisedPropagatorSignature,
+    SelectionPolarity, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
+    VertexSignature,
 };
 
-use gammaloop_integration_tests::{get_test_cli, get_tests_workspace_path};
+use gammaloop_integration_tests::{CLIState, get_test_cli, get_tests_workspace_path, run_commands};
 use serial_test::serial;
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -16,8 +19,19 @@ use symbolica::{
 };
 use tracing::debug;
 
-use gammaloop_integration_tests::CLIState;
 use insta::assert_snapshot;
+
+const TTH_PROCESS_NAME: &str = "epem_a_tth";
+const TTH_INTEGRAND_NAME: &str = "LO";
+const TTH_LO_ONLY_DIAGRAMS_COMMAND: &str = "generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==0 QED^2==6 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p epem_a_tth -i LO --only-diagrams";
+const DDX_AMPLITUDE_PROCESS_NAME: &str = "epem_ddx_select";
+const DDX_AMPLITUDE_INTEGRAND_NAME: &str = "LO";
+const DDX_AMPLITUDE_ONLY_DIAGRAMS_COMMAND: &str = "generate xs e+ e- > d d~ QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping -p epem_ddx_select -i LO --only-diagrams";
+const DDX_AMPLITUDE_SELECTION_OPTIONS: &str =
+    "--amplitude-graphs --with-vertices '[V_71]' --without-vertices '[V_79]'";
+const DDXG_RAISED_CUT_PROCESS_NAME: &str = "epem_ddxg_raised_cuts";
+const DDXG_RAISED_CUT_INTEGRAND_NAME: &str = "LO";
+const DDXG_RAISED_CUT_ONLY_DIAGRAMS_COMMAND: &str = "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping group_identical_graphs_up_to_sign -p epem_ddxg_raised_cuts -i LO --only-diagrams";
 
 fn count_graphs_in_processes(cli: &CLIState) -> (usize, Atom) {
     assert_eq!(cli.state.process_list.processes.len(), 1);
@@ -43,6 +57,518 @@ fn count_graphs_in_processes(cli: &CLIState) -> (usize, Atom) {
     }
     // overall_factor_sum = evaluate_overall_factor(overall_factor_sum.as_view());
     (n_graphs, overall_factor_sum)
+}
+
+fn setup_tth_select_cli(test_name: &str) -> Result<CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model sm-default.json",
+            "set global kv global.n_cores.feyngen=1 global.n_cores.generate=1 global.n_cores.compile=1 global.n_cores.integrate=1",
+            "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true",
+            r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[500.0,0.0,0.0,500.0],[500.0,0.0,0.0,-500.0]],"helicities":["summed_averaged","summed_averaged"]}}'"#,
+            "set default-runtime kv general.evaluator_method=\"SummedFunctionMap\" general.enable_cache=false general.generate_events=false general.integral_unit=\"picobarn\" subtraction.disable_threshold_subtraction=true integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.seed=1337",
+            TTH_LO_ONLY_DIAGRAMS_COMMAND,
+        ],
+    )?;
+    Ok(cli)
+}
+
+fn setup_ddx_amplitude_select_cli(test_name: &str) -> Result<CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model sm-default.json",
+            "set global kv global.n_cores.feyngen=1 global.n_cores.generate=1 global.n_cores.compile=1 global.n_cores.integrate=1",
+            "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true",
+            r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[500.0,0.0,0.0,500.0],[500.0,0.0,0.0,-500.0]],"helicities":["summed_averaged","summed_averaged"]}}'"#,
+            "set default-runtime kv general.evaluator_method=\"SummedFunctionMap\" general.enable_cache=false general.generate_events=false general.integral_unit=\"picobarn\" subtraction.disable_threshold_subtraction=true integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.seed=1337",
+            DDX_AMPLITUDE_ONLY_DIAGRAMS_COMMAND,
+        ],
+    )?;
+    Ok(cli)
+}
+
+fn setup_ddxg_raised_cut_select_cli(test_name: &str) -> Result<CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model sm-default.json",
+            "set global kv global.n_cores.feyngen=1 global.n_cores.generate=1 global.n_cores.compile=1 global.n_cores.integrate=1",
+            "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true",
+            r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[500.0,0.0,0.0,500.0],[500.0,0.0,0.0,-500.0]],"helicities":["summed_averaged","summed_averaged"]}}'"#,
+            "set default-runtime kv general.evaluator_method=\"SummedFunctionMap\" general.enable_cache=false general.generate_events=false general.integral_unit=\"picobarn\" subtraction.disable_threshold_subtraction=true integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.seed=1337",
+            DDXG_RAISED_CUT_ONLY_DIAGRAMS_COMMAND,
+        ],
+    )?;
+    Ok(cli)
+}
+
+fn tth_cross_section(cli: &CLIState) -> &gammalooprs::processes::CrossSection {
+    assert_eq!(cli.state.process_list.processes.len(), 1);
+    tth_cross_section_for(cli, TTH_PROCESS_NAME, TTH_INTEGRAND_NAME)
+}
+
+fn tth_cross_section_for<'a>(
+    cli: &'a CLIState,
+    process_name: &str,
+    integrand_name: &str,
+) -> &'a gammalooprs::processes::CrossSection {
+    let process = cli
+        .state
+        .process_list
+        .processes
+        .iter()
+        .find(|process| process.definition.folder_name == process_name)
+        .unwrap_or_else(|| panic!("process '{process_name}' should exist"));
+    match &process.collection {
+        ProcessCollection::CrossSections(cross_sections) => cross_sections
+            .get(integrand_name)
+            .expect("ttH LO cross section should exist"),
+        ProcessCollection::Amplitudes(_) => panic!("ttH LO should be a cross-section process"),
+    }
+}
+
+fn tth_master_graph_names(cli: &CLIState) -> Vec<String> {
+    master_graph_names_for(cli, TTH_PROCESS_NAME, TTH_INTEGRAND_NAME)
+}
+
+fn ddx_amplitude_master_graph_names(cli: &CLIState) -> Vec<String> {
+    master_graph_names_for(
+        cli,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+    )
+}
+
+fn master_graph_names_for(cli: &CLIState, process_name: &str, integrand_name: &str) -> Vec<String> {
+    let cross_section = tth_cross_section_for(cli, process_name, integrand_name);
+    cross_section
+        .graph_group_structure
+        .iter()
+        .map(|group| {
+            let master_graph_id = group
+                .into_iter()
+                .next()
+                .expect("graph group should contain a master graph");
+            cross_section.supergraphs[master_graph_id]
+                .graph
+                .name
+                .clone()
+        })
+        .collect()
+}
+
+fn assert_tth_diagram_count(cli: &CLIState, expected: usize) {
+    assert_tth_diagram_count_for(cli, TTH_PROCESS_NAME, TTH_INTEGRAND_NAME, expected);
+}
+
+fn assert_tth_diagram_count_for(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+    expected: usize,
+) {
+    let cross_section = tth_cross_section_for(cli, process_name, integrand_name);
+    assert_eq!(cross_section.supergraphs.len(), expected);
+    assert_eq!(cross_section.graph_group_structure.len(), expected);
+}
+
+fn assert_tth_generated_graph_count(cli: &CLIState, expected: usize) -> Result<()> {
+    assert_tth_generated_graph_count_for(cli, TTH_PROCESS_NAME, TTH_INTEGRAND_NAME, expected)
+}
+
+fn assert_tth_generated_graph_count_for(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+    expected: usize,
+) -> Result<()> {
+    let process_id = cli
+        .state
+        .process_list
+        .processes
+        .iter()
+        .position(|process| process.definition.folder_name == process_name)
+        .unwrap_or_else(|| panic!("process '{process_name}' should exist"));
+    let integrand = cli
+        .state
+        .process_list
+        .get_integrand(process_id, integrand_name)?
+        .require_generated()?;
+    assert_eq!(integrand.graph_count(), expected);
+    Ok(())
+}
+
+fn select_single_tth_graph(cli: &mut CLIState) -> Result<String> {
+    let master_graph_names = tth_master_graph_names(cli);
+    assert_eq!(
+        master_graph_names.len(),
+        2,
+        "ttH LO feyngen setup should produce exactly two graph groups before selection"
+    );
+    let selection = unique_tth_master_selection(cli)?;
+    cli.run_command(&format!(
+        "select -p {TTH_PROCESS_NAME} -i {TTH_INTEGRAND_NAME} {}",
+        selection.cli_options
+    ))?;
+    assert_tth_diagram_count(cli, 1);
+    assert_eq!(
+        tth_master_graph_names(cli),
+        vec![selection.master_graph.clone()]
+    );
+    Ok(selection.master_graph)
+}
+
+fn select_single_graph_by_raised_cuts(
+    cli: &mut CLIState,
+    process_name: &str,
+    integrand_name: &str,
+    expected_graph_groups: usize,
+    use_amplitude_graphs_flag: bool,
+) -> Result<String> {
+    let master_graph_names = master_graph_names_for(cli, process_name, integrand_name);
+    assert_eq!(
+        master_graph_names.len(),
+        expected_graph_groups,
+        "raised-cut feyngen setup should produce the expected number of graph groups before selection"
+    );
+    let selection = unique_raised_cut_selection(cli, process_name, integrand_name)?.ok_or_else(|| {
+        eyre!(
+            "feyngen setup for process '{}' integrand '{}' should provide a raised-cut signature selecting one graph group",
+            process_name,
+            integrand_name
+        )
+    })?;
+    let amplitude_graphs = if use_amplitude_graphs_flag {
+        "--amplitude-graphs "
+    } else {
+        ""
+    };
+    cli.run_command(&format!(
+        "select -p {process_name} -i {integrand_name} {amplitude_graphs}{}",
+        selection.cli_options
+    ))?;
+    assert_tth_diagram_count_for(cli, process_name, integrand_name, 1);
+    assert_eq!(
+        master_graph_names_for(cli, process_name, integrand_name),
+        vec![selection.master_graph.clone()]
+    );
+    Ok(selection.master_graph)
+}
+
+fn select_single_ddx_amplitude_graph(cli: &mut CLIState) -> Result<String> {
+    let master_graph_names = ddx_amplitude_master_graph_names(cli);
+    assert_eq!(
+        master_graph_names.len(),
+        4,
+        "e+e- -> d d~ feyngen setup should produce exactly four graph groups before selection"
+    );
+    cli.run_command(&format!(
+        "select -p {DDX_AMPLITUDE_PROCESS_NAME} -i {DDX_AMPLITUDE_INTEGRAND_NAME} {DDX_AMPLITUDE_SELECTION_OPTIONS}"
+    ))?;
+    assert_tth_diagram_count_for(
+        cli,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+        1,
+    );
+    Ok(ddx_amplitude_master_graph_names(cli)
+        .into_iter()
+        .next()
+        .expect("selection should retain one master graph"))
+}
+
+struct TthSelection {
+    master_graph: String,
+    cli_options: String,
+}
+
+fn unique_tth_master_selection(cli: &CLIState) -> Result<TthSelection> {
+    for (signature, spec) in tth_master_vertex_signature_specs(cli)? {
+        if let Some(master_graph) = selected_tth_master_for_spec(cli, &spec)? {
+            return Ok(TthSelection {
+                master_graph,
+                cli_options: format!("--with-vertices '{signature}'"),
+            });
+        }
+    }
+
+    let inventory = tth_signature_inventory(cli);
+    for (option, scope, signatures) in [
+        (
+            "--with-raised-propagator-signatures",
+            RaisedPropagatorScope::All,
+            inventory.raised_all,
+        ),
+        (
+            "--with-massive-raised-propagator-signatures",
+            RaisedPropagatorScope::Massive,
+            inventory.raised_massive,
+        ),
+        (
+            "--with-massless-raised-propagator-signatures",
+            RaisedPropagatorScope::Massless,
+            inventory.raised_massless,
+        ),
+    ] {
+        for signature in signatures {
+            let parsed_signature: RaisedPropagatorSignature = signature.parse()?;
+            let spec = GraphGroupSelectionSpec::new().with_raised_propagator_signatures(
+                SelectionPolarity::With,
+                scope,
+                vec![parsed_signature],
+            );
+            if let Some(master_graph) = selected_tth_master_for_spec(cli, &spec)? {
+                return Ok(TthSelection {
+                    master_graph,
+                    cli_options: format!("{option} '{signature}'"),
+                });
+            }
+        }
+    }
+
+    for (option, polarity) in [
+        ("--with-cycle-signatures", SelectionPolarity::With),
+        ("--without-cycle-signatures", SelectionPolarity::Without),
+    ] {
+        let inventory = tth_signature_inventory(cli);
+        for signature in inventory.cycles {
+            let parsed_signature = CycleSignature::parse(&signature, &cli.state.model)?;
+            let spec = GraphGroupSelectionSpec::new()
+                .with_cycle_signatures(polarity, vec![parsed_signature]);
+            if let Some(master_graph) = selected_tth_master_for_spec(cli, &spec)? {
+                return Ok(TthSelection {
+                    master_graph,
+                    cli_options: format!("{option} '{signature}'"),
+                });
+            }
+        }
+    }
+
+    let fallback = tth_master_graph_names(cli)
+        .into_iter()
+        .next()
+        .expect("ttH setup should have at least one master graph");
+    Ok(TthSelection {
+        master_graph: fallback.clone(),
+        cli_options: format!("--with-graph-names {fallback}"),
+    })
+}
+
+fn unique_raised_cut_selection(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+) -> Result<Option<TthSelection>> {
+    let inventory = raised_cut_signature_inventory_for(cli, process_name, integrand_name);
+    for (option, polarity, scope, signatures) in [
+        (
+            "--without-raised-cuts-signatures",
+            SelectionPolarity::Without,
+            RaisedPropagatorScope::All,
+            inventory.all.clone(),
+        ),
+        (
+            "--with-raised-cuts-signatures",
+            SelectionPolarity::With,
+            RaisedPropagatorScope::All,
+            inventory.all,
+        ),
+        (
+            "--without-massive-raised-cuts-signatures",
+            SelectionPolarity::Without,
+            RaisedPropagatorScope::Massive,
+            inventory.massive.clone(),
+        ),
+        (
+            "--with-massive-raised-cuts-signatures",
+            SelectionPolarity::With,
+            RaisedPropagatorScope::Massive,
+            inventory.massive,
+        ),
+        (
+            "--without-massless-raised-cuts-signatures",
+            SelectionPolarity::Without,
+            RaisedPropagatorScope::Massless,
+            inventory.massless.clone(),
+        ),
+        (
+            "--with-massless-raised-cuts-signatures",
+            SelectionPolarity::With,
+            RaisedPropagatorScope::Massless,
+            inventory.massless,
+        ),
+    ] {
+        for signature in signatures {
+            let parsed_signature: RaisedPropagatorSignature = signature.parse()?;
+            let spec = GraphGroupSelectionSpec::new().with_raised_cut_signatures(
+                polarity,
+                scope,
+                vec![parsed_signature],
+            );
+            if let Some(master_graph) =
+                selected_master_for_spec(cli, process_name, integrand_name, &spec)?
+            {
+                return Ok(Some(TthSelection {
+                    master_graph,
+                    cli_options: format!("{option} '{signature}'"),
+                }));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn tth_master_vertex_signature_specs(
+    cli: &CLIState,
+) -> Result<Vec<(String, GraphGroupSelectionSpec)>> {
+    let cross_section = tth_cross_section(cli);
+    cross_section
+        .graph_group_structure
+        .iter()
+        .map(|group| {
+            let master_graph_id = group
+                .into_iter()
+                .next()
+                .expect("graph group should contain a master graph");
+            let master_graph = &cross_section.supergraphs[master_graph_id].graph;
+            let mut vertex_rule_names = master_graph
+                .underlying
+                .iter_nodes()
+                .filter_map(|(_, _, vertex)| {
+                    vertex
+                        .vertex_rule
+                        .as_ref()
+                        .map(|vertex_rule| vertex_rule.name.to_string())
+                })
+                .collect::<Vec<_>>();
+            vertex_rule_names.sort();
+            let signature = format!("[{}]", vertex_rule_names.join(","));
+            let spec = GraphGroupSelectionSpec::new().with_vertex_signatures(
+                SelectionPolarity::With,
+                vec![VertexSignature::parse(&signature)?],
+            );
+            Ok((signature, spec))
+        })
+        .collect()
+}
+
+fn tth_signature_inventory(cli: &CLIState) -> GraphSelectionSignatureInventory {
+    let cross_section = tth_cross_section(cli);
+    GraphSelectionSignatureInventory::from_master_graphs(
+        cross_section.graph_group_structure.iter().map(|group| {
+            let master_graph_id = group
+                .into_iter()
+                .next()
+                .expect("graph group should contain a master graph");
+            &cross_section.supergraphs[master_graph_id].graph
+        }),
+    )
+}
+
+fn raised_cut_signature_inventory_for(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+) -> RaisedCutSignatureInventory {
+    let cross_section = tth_cross_section_for(cli, process_name, integrand_name);
+    let process = cli
+        .state
+        .process_list
+        .processes
+        .iter()
+        .find(|process| process.definition.folder_name == process_name)
+        .unwrap_or_else(|| panic!("process '{process_name}' should exist"));
+    cross_section
+        .raised_cut_signature_inventory(
+            &cli.state.model,
+            &process.definition,
+            &cli.cli_settings.global.generation,
+        )
+        .unwrap_or_else(|_| RaisedCutSignatureInventory::empty())
+}
+
+fn selected_tth_master_for_spec(
+    cli: &CLIState,
+    spec: &GraphGroupSelectionSpec,
+) -> Result<Option<String>> {
+    selected_master_for_spec(cli, TTH_PROCESS_NAME, TTH_INTEGRAND_NAME, spec)
+}
+
+fn selected_master_for_spec(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+    spec: &GraphGroupSelectionSpec,
+) -> Result<Option<String>> {
+    let cross_section = tth_cross_section_for(cli, process_name, integrand_name);
+    let process = cli
+        .state
+        .process_list
+        .processes
+        .iter()
+        .find(|process| process.definition.folder_name == process_name)
+        .unwrap_or_else(|| panic!("process '{process_name}' should exist"));
+    let plan = match cross_section.plan_graph_group_selection_with_context(
+        spec,
+        &cli.state.model,
+        &process.definition,
+        &cli.cli_settings.global.generation,
+    ) {
+        Ok(plan) => plan,
+        Err(_) => return Ok(None),
+    };
+    let [group_id] = plan.retained_group_ids() else {
+        return Ok(None);
+    };
+    let master_graph_id = cross_section.graph_group_structure[*group_id]
+        .into_iter()
+        .next()
+        .expect("graph group should contain a master graph");
+    Ok(Some(
+        cross_section.supergraphs[master_graph_id]
+            .graph
+            .name
+            .clone(),
+    ))
+}
+
+fn integrate_tth_low_stat(cli: &mut CLIState, workspace_name: &str) -> Result<()> {
+    integrate_tth_low_stat_for(cli, workspace_name, TTH_PROCESS_NAME, TTH_INTEGRAND_NAME)
+}
+
+fn integrate_tth_low_stat_for(
+    cli: &mut CLIState,
+    workspace_name: &str,
+    process_name: &str,
+    integrand_name: &str,
+) -> Result<()> {
+    let workspace_path = get_tests_workspace_path()
+        .join(workspace_name)
+        .join("integration_workspace");
+    cli.run_command(&format!(
+        "integrate -p {process_name} -i {integrand_name} --n-cores 1 --workspace-path {} --renderer tabled --batch-size 12 --no-stream-iterations --no-stream-updates --restart",
+        workspace_path.display()
+    ))
 }
 
 fn split_before_flags(s: &str) -> (&str, &str) {
@@ -156,6 +682,357 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
     );
 
     fs::remove_dir_all(workspace)?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_tth_graph_before_generation_generates_and_integrates() -> Result<()> {
+    let test_name = "select_tth_graph_before_generation_generates_and_integrates";
+    let mut cli = setup_tth_select_cli(test_name)?;
+
+    assert_tth_diagram_count(&cli, 2);
+    let selected_master = select_single_tth_graph(&mut cli)?;
+
+    cli.run_command(&format!(
+        "generate existing -p {TTH_PROCESS_NAME} -i {TTH_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count(&cli, 1)?;
+    assert_eq!(tth_master_graph_names(&cli), vec![selected_master]);
+
+    integrate_tth_low_stat(&mut cli, test_name)?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_tth_graph_after_generation_discards_and_regenerates() -> Result<()> {
+    let test_name = "select_tth_graph_after_generation_discards_and_regenerates";
+    let mut cli = setup_tth_select_cli(test_name)?;
+
+    assert_tth_diagram_count(&cli, 2);
+    cli.run_command(&format!(
+        "generate existing -p {TTH_PROCESS_NAME} -i {TTH_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count(&cli, 2)?;
+    cli.save_state()?;
+
+    let generated_artifact_path = cli
+        .cli_settings
+        .state
+        .folder
+        .join("processes")
+        .join("cross_sections")
+        .join(TTH_PROCESS_NAME)
+        .join(TTH_INTEGRAND_NAME)
+        .join("integrand");
+    assert!(generated_artifact_path.exists());
+
+    let selected_master = select_single_tth_graph(&mut cli)?;
+    assert!(
+        !generated_artifact_path.exists(),
+        "select should remove generated integrand artifacts before regeneration"
+    );
+
+    cli.run_command(&format!(
+        "generate existing -p {TTH_PROCESS_NAME} -i {TTH_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count(&cli, 1)?;
+    assert_eq!(tth_master_graph_names(&cli), vec![selected_master]);
+
+    integrate_tth_low_stat(&mut cli, test_name)?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_ddxg_graph_by_raised_cuts_before_generation_generates_and_integrates() -> Result<()> {
+    let test_name = "select_ddxg_graph_by_raised_cuts_before_generation_generates_and_integrates";
+    let mut cli = setup_ddxg_raised_cut_select_cli(test_name)?;
+
+    assert_tth_diagram_count_for(
+        &cli,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+        2,
+    );
+    let selected_master = select_single_graph_by_raised_cuts(
+        &mut cli,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+        2,
+        false,
+    )?;
+
+    cli.run_command(&format!(
+        "generate existing -p {DDXG_RAISED_CUT_PROCESS_NAME} -i {DDXG_RAISED_CUT_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count_for(
+        &cli,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+        1,
+    )?;
+    assert_eq!(
+        master_graph_names_for(
+            &cli,
+            DDXG_RAISED_CUT_PROCESS_NAME,
+            DDXG_RAISED_CUT_INTEGRAND_NAME
+        ),
+        vec![selected_master]
+    );
+
+    integrate_tth_low_stat_for(
+        &mut cli,
+        test_name,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+    )?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_ddxg_graph_by_raised_cuts_after_generation_discards_and_regenerates() -> Result<()> {
+    let test_name = "select_ddxg_graph_by_raised_cuts_after_generation_discards_and_regenerates";
+    let mut cli = setup_ddxg_raised_cut_select_cli(test_name)?;
+
+    assert_tth_diagram_count_for(
+        &cli,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+        2,
+    );
+    cli.run_command(&format!(
+        "generate existing -p {DDXG_RAISED_CUT_PROCESS_NAME} -i {DDXG_RAISED_CUT_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count_for(
+        &cli,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+        2,
+    )?;
+    cli.save_state()?;
+
+    let generated_artifact_path = cli
+        .cli_settings
+        .state
+        .folder
+        .join("processes")
+        .join("cross_sections")
+        .join(DDXG_RAISED_CUT_PROCESS_NAME)
+        .join(DDXG_RAISED_CUT_INTEGRAND_NAME)
+        .join("integrand");
+    assert!(generated_artifact_path.exists());
+
+    let selected_master = select_single_graph_by_raised_cuts(
+        &mut cli,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+        2,
+        true,
+    )?;
+    assert!(
+        !generated_artifact_path.exists(),
+        "select should remove generated integrand artifacts before regeneration"
+    );
+
+    cli.run_command(&format!(
+        "generate existing -p {DDXG_RAISED_CUT_PROCESS_NAME} -i {DDXG_RAISED_CUT_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count_for(
+        &cli,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+        1,
+    )?;
+    assert_eq!(
+        master_graph_names_for(
+            &cli,
+            DDXG_RAISED_CUT_PROCESS_NAME,
+            DDXG_RAISED_CUT_INTEGRAND_NAME
+        ),
+        vec![selected_master]
+    );
+
+    integrate_tth_low_stat_for(
+        &mut cli,
+        test_name,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+    )?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_ddx_amplitude_graph_before_generation_generates_and_integrates() -> Result<()> {
+    let test_name = "select_ddx_amplitude_graph_before_generation_generates_and_integrates";
+    let mut cli = setup_ddx_amplitude_select_cli(test_name)?;
+
+    assert_tth_diagram_count_for(
+        &cli,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+        4,
+    );
+    let selected_master = select_single_ddx_amplitude_graph(&mut cli)?;
+
+    cli.run_command(&format!(
+        "generate existing -p {DDX_AMPLITUDE_PROCESS_NAME} -i {DDX_AMPLITUDE_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count_for(
+        &cli,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+        1,
+    )?;
+    assert_eq!(
+        ddx_amplitude_master_graph_names(&cli),
+        vec![selected_master]
+    );
+
+    integrate_tth_low_stat_for(
+        &mut cli,
+        test_name,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+    )?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_ddx_amplitude_graph_after_generation_discards_and_regenerates() -> Result<()> {
+    let test_name = "select_ddx_amplitude_graph_after_generation_discards_and_regenerates";
+    let mut cli = setup_ddx_amplitude_select_cli(test_name)?;
+
+    assert_tth_diagram_count_for(
+        &cli,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+        4,
+    );
+    cli.run_command(&format!(
+        "generate existing -p {DDX_AMPLITUDE_PROCESS_NAME} -i {DDX_AMPLITUDE_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count_for(
+        &cli,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+        4,
+    )?;
+    cli.save_state()?;
+
+    let generated_artifact_path = cli
+        .cli_settings
+        .state
+        .folder
+        .join("processes")
+        .join("cross_sections")
+        .join(DDX_AMPLITUDE_PROCESS_NAME)
+        .join(DDX_AMPLITUDE_INTEGRAND_NAME)
+        .join("integrand");
+    assert!(generated_artifact_path.exists());
+
+    let selected_master = select_single_ddx_amplitude_graph(&mut cli)?;
+    assert!(
+        !generated_artifact_path.exists(),
+        "select should remove generated integrand artifacts before regeneration"
+    );
+
+    cli.run_command(&format!(
+        "generate existing -p {DDX_AMPLITUDE_PROCESS_NAME} -i {DDX_AMPLITUDE_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count_for(
+        &cli,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+        1,
+    )?;
+    assert_eq!(
+        ddx_amplitude_master_graph_names(&cli),
+        vec![selected_master]
+    );
+
+    integrate_tth_low_stat_for(
+        &mut cli,
+        test_name,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+    )?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_tth_graph_copy_before_generation_generates_and_integrates() -> Result<()> {
+    let test_name = "select_tth_graph_copy_before_generation_generates_and_integrates";
+    let mut cli = setup_tth_select_cli(test_name)?;
+    let output_process = "epem_a_tth_selected";
+    let output_integrand = "LO_selected";
+
+    assert_tth_diagram_count(&cli, 2);
+    let selection = unique_tth_master_selection(&cli)?;
+    cli.run_command(&format!(
+        "select -p {TTH_PROCESS_NAME} -i {TTH_INTEGRAND_NAME} {} --output_process {output_process} --output_integrand {output_integrand}",
+        selection.cli_options
+    ))?;
+
+    assert_tth_diagram_count(&cli, 2);
+    assert_tth_diagram_count_for(&cli, output_process, output_integrand, 1);
+    assert_eq!(
+        tth_cross_section_for(&cli, output_process, output_integrand).supergraphs[0]
+            .graph
+            .name,
+        selection.master_graph
+    );
+
+    cli.run_command(&format!(
+        "generate existing -p {output_process} -i {output_integrand}"
+    ))?;
+    assert_tth_generated_graph_count_for(&cli, output_process, output_integrand, 1)?;
+
+    integrate_tth_low_stat_for(&mut cli, test_name, output_process, output_integrand)?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_tth_graph_copy_after_generation_preserves_source_and_integrates_target() -> Result<()> {
+    let test_name = "select_tth_graph_copy_after_generation_preserves_source_and_integrates_target";
+    let mut cli = setup_tth_select_cli(test_name)?;
+    let output_integrand = "LO_selected";
+
+    assert_tth_diagram_count(&cli, 2);
+    cli.run_command(&format!(
+        "generate existing -p {TTH_PROCESS_NAME} -i {TTH_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count(&cli, 2)?;
+
+    let selection = unique_tth_master_selection(&cli)?;
+    cli.run_command(&format!(
+        "select -p {TTH_PROCESS_NAME} -i {TTH_INTEGRAND_NAME} {} --output_integrand {output_integrand}",
+        selection.cli_options
+    ))?;
+
+    assert_tth_diagram_count(&cli, 2);
+    assert_tth_generated_graph_count(&cli, 2)?;
+    assert_tth_diagram_count_for(&cli, TTH_PROCESS_NAME, output_integrand, 1);
+    assert_eq!(
+        tth_cross_section_for(&cli, TTH_PROCESS_NAME, output_integrand).supergraphs[0]
+            .graph
+            .name,
+        selection.master_graph
+    );
+
+    cli.run_command(&format!(
+        "generate existing -p {TTH_PROCESS_NAME} -i {output_integrand}"
+    ))?;
+    assert_tth_generated_graph_count_for(&cli, TTH_PROCESS_NAME, output_integrand, 1)?;
+    assert_tth_generated_graph_count(&cli, 2)?;
+
+    integrate_tth_low_stat_for(&mut cli, test_name, TTH_PROCESS_NAME, output_integrand)?;
     Ok(())
 }
 

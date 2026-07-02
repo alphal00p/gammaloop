@@ -41,8 +41,9 @@ use crate::{
     model::ArcParticle,
     momentum::{sample::ExternalIndex, signature::SignatureLike},
     processes::{
-        DotExportSettings, EvaluatorSettings, GraphGenerationStats, NamedGraphGenerationReport,
-        StandaloneExportSettings, build_derivative_structure_atom, params_for_derivative_order,
+        DotExportSettings, EvaluatorSettings, GraphGenerationStats, GraphGroupSelectionPlan,
+        GraphGroupSelectionSpec, NamedGraphGenerationReport, StandaloneExportSettings,
+        build_derivative_structure_atom, params_for_derivative_order,
     },
     settings::{
         GlobalSettings, RuntimeSettings, global::OrientationPattern, runtime::LockedRuntimeSettings,
@@ -70,6 +71,8 @@ use linnet::{
 use symbolica::{atom::Var, prelude::*};
 use tracing::{debug, info};
 use typed_index_collections::{TiVec, ti_vec};
+
+use super::generation_progress::{self, GenerationProcessKind, GenerationProgressPhase};
 
 use crate::{
     cff::esurface::EsurfaceID,
@@ -101,6 +104,134 @@ pub struct GroupDerivedData {
 }
 
 impl Amplitude {
+    pub fn plan_graph_group_selection(
+        &self,
+        spec: &GraphGroupSelectionSpec,
+    ) -> Result<GraphGroupSelectionPlan> {
+        spec.plan(&self.graph_group_structure, |graph_id| {
+            self.graphs.get(graph_id).map(|graph| &graph.graph)
+        })
+    }
+
+    pub fn validate_graph_group_selection_plan(
+        &self,
+        plan: &GraphGroupSelectionPlan,
+    ) -> Result<()> {
+        if !self.group_derived_data.is_empty()
+            && self.group_derived_data.len() != self.graph_group_structure.len()
+        {
+            return Err(eyre!(
+                "Amplitude '{}' has {} group-derived-data entries for {} graph groups.",
+                self.name,
+                self.group_derived_data.len(),
+                self.graph_group_structure.len()
+            ));
+        }
+
+        for &old_group_id in plan.retained_group_ids() {
+            plan.new_group_id_for_old(old_group_id).ok_or_else(|| {
+                eyre!(
+                    "Selection plan is missing compact group id for old group {}.",
+                    old_group_id.0
+                )
+            })?;
+            if old_group_id.0 >= self.graph_group_structure.len() {
+                return Err(eyre!(
+                    "Selection plan refers to missing graph group {}.",
+                    old_group_id.0
+                ));
+            }
+            let group = &self.graph_group_structure[old_group_id];
+            for old_graph_id in group {
+                if old_graph_id >= self.graphs.len() {
+                    return Err(eyre!(
+                        "Graph group {} refers to missing graph id {}.",
+                        old_group_id.0,
+                        old_graph_id
+                    ));
+                }
+            }
+            let master = group.master();
+            if master >= self.graphs.len() {
+                return Err(eyre!(
+                    "Graph group {} refers to missing master graph id {}.",
+                    old_group_id.0,
+                    master
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn apply_graph_group_selection(&mut self, plan: &GraphGroupSelectionPlan) -> Result<()> {
+        self.validate_graph_group_selection_plan(plan)?;
+
+        let mut old_graph_to_new_group = vec![None; self.graphs.len()];
+        let mut old_graph_is_master = vec![false; self.graphs.len()];
+        for &old_group_id in plan.retained_group_ids() {
+            let new_group_id = plan.new_group_id_for_old(old_group_id).ok_or_else(|| {
+                eyre!(
+                    "Selection plan is missing compact group id for old group {}.",
+                    old_group_id.0
+                )
+            })?;
+            let group = &self.graph_group_structure[old_group_id];
+            for old_graph_id in group {
+                old_graph_to_new_group[old_graph_id] = Some(new_group_id);
+            }
+            old_graph_is_master[group.master()] = true;
+        }
+
+        let mut new_graphs = self
+            .graphs
+            .iter()
+            .cloned()
+            .enumerate()
+            .filter_map(|(old_graph_id, mut graph)| {
+                let new_group_id = old_graph_to_new_group[old_graph_id]?;
+                graph.graph.group_id = Some(new_group_id);
+                graph.graph.is_group_master = old_graph_is_master[old_graph_id];
+                if let Some(multi_channeling_setup) = &mut graph.derived_data.multi_channeling_setup
+                {
+                    multi_channeling_setup.graph.group_id = Some(new_group_id);
+                    multi_channeling_setup.graph.is_group_master =
+                        old_graph_is_master[old_graph_id];
+                }
+                Some(graph)
+            })
+            .collect::<Vec<_>>();
+
+        let mut parsed_graphs = new_graphs
+            .iter()
+            .map(|graph| graph.graph.clone())
+            .collect::<Vec<_>>();
+        let new_graph_group_structure = complete_group_parsing(&mut parsed_graphs)?;
+        for (graph, parsed_graph) in new_graphs.iter_mut().zip(parsed_graphs) {
+            graph.graph.group_id = parsed_graph.group_id;
+            graph.graph.is_group_master = parsed_graph.is_group_master;
+            if let Some(multi_channeling_setup) = &mut graph.derived_data.multi_channeling_setup {
+                multi_channeling_setup.graph.group_id = graph.graph.group_id;
+                multi_channeling_setup.graph.is_group_master = graph.graph.is_group_master;
+            }
+        }
+
+        let new_group_derived_data = if self.group_derived_data.is_empty() {
+            TiVec::new()
+        } else {
+            plan.retained_group_ids()
+                .iter()
+                .map(|&old_group_id| self.group_derived_data[old_group_id].clone())
+                .collect::<TiVec<GroupId, _>>()
+        };
+
+        self.graphs = new_graphs;
+        self.graph_group_structure = new_graph_group_structure;
+        self.group_derived_data = new_group_derived_data;
+        self.integrand = None;
+        Ok(())
+    }
+
     pub fn export_standalone(
         &self,
         path: impl AsRef<Path>,
@@ -249,14 +380,18 @@ impl Amplitude {
         // preprocess each graph individually
         let integrand_name = self.name.clone();
 
-        let preprocess_span = info_span!("Preprocessing graphs", indicatif.pb_show = true);
-        preprocess_span.pb_set_style(&ProgressStyle::with_template(
-            "{wide_bar} {pos}/{len} {msg}",
-        )?);
-        preprocess_span.pb_set_length(self.graphs.len() as u64);
-        preprocess_span.pb_set_message("Preprocessing graphs");
-
-        let preprocess_span_enter = preprocess_span.enter();
+        let preprocess_span = if generation_progress::detailed_progress_enabled() {
+            let span = info_span!("Preprocessing graphs", indicatif.pb_show = true);
+            span.pb_set_style(&ProgressStyle::with_template(
+                "{wide_bar} {pos}/{len} {msg}",
+            )?);
+            span.pb_set_length(self.graphs.len() as u64);
+            span.pb_set_message("Preprocessing graphs");
+            Some(span)
+        } else {
+            None
+        };
+        let preprocess_span_enter = preprocess_span.as_ref().map(|span| span.enter());
 
         let preprocess_reports = thread_pool.install(|| {
             let parent = preprocess_span.clone();
@@ -266,10 +401,12 @@ impl Amplitude {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
-                    let _guard = parent.enter();
+                    let _guard = parent.as_ref().map(|span| span.enter());
                     let stats =
                         amplitude_graph.preprocess(model, settings, locked_runtime_settings);
-                    preprocess_span.pb_inc(1);
+                    if let Some(span) = &parent {
+                        span.pb_inc(1);
+                    }
 
                     let stats = stats?;
                     if crate::is_interrupted() {
@@ -296,12 +433,13 @@ impl Amplitude {
     #[instrument(
         skip_all,
           fields(
-              amplitude.name = %self.name, indicatif.pb_show = true, indicatif.pb_msg = "Generating Evaluators",
+              amplitude.name = %self.name,
           )
       )]
     pub fn build_integrand(
         &mut self,
         model: &Model,
+        process_name: &str,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
         thread_pool: &ThreadPool,
@@ -317,6 +455,14 @@ impl Amplitude {
             return Err(eyre!("Generation interrupted by user"));
         }
         let integrand_name = self.name.clone();
+        generation_progress::begin_phase(
+            GenerationProgressPhase::GraphGeneration,
+            GenerationProcessKind::Amplitude,
+            process_name,
+            &integrand_name,
+            self.graphs.len(),
+            None,
+        );
         let mut graph_reports = Vec::new();
         let terms: Vec<_> = thread_pool.install(|| {
             self.graphs
@@ -341,6 +487,14 @@ impl Amplitude {
                         group_id = %group_id.0,
                         "Generation timing milestone"
                     );
+                    generation_progress::graph_started(
+                        GenerationProcessKind::Amplitude,
+                        &integrand_name,
+                        &graph.graph.name,
+                        None,
+                    );
+                    let _progress_context_guard =
+                        generation_progress::enter_progress_context(graph.graph.name.clone());
                     let (term, mut stats) = graph.generate_term_for_graph(
                         model,
                         group_pos,
@@ -360,6 +514,13 @@ impl Amplitude {
                         group_id = %group_id.0,
                         elapsed_ms = graph_started.elapsed().as_secs_f64() * 1000.0,
                         "Generation timing milestone"
+                    );
+                    generation_progress::graph_finished(
+                        GenerationProcessKind::Amplitude,
+                        &integrand_name,
+                        &graph.graph.name,
+                        &stats,
+                        None,
                     );
                     Ok((
                         term,
@@ -411,6 +572,11 @@ impl Amplitude {
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Generation timing milestone"
         );
+        generation_progress::backend_started(
+            GenerationProcessKind::Amplitude,
+            &self.name,
+            graph_count,
+        );
         let mut amplitude_integrand = AmplitudeIntegrand {
             settings: runtime_default.into_with_modified_kinematics(
                 &self.external_signature,
@@ -446,6 +612,11 @@ impl Amplitude {
             elapsed_ms = backend_started.elapsed().as_secs_f64() * 1000.0,
             total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Generation timing milestone"
+        );
+        generation_progress::backend_finished(
+            GenerationProcessKind::Amplitude,
+            &self.name,
+            backend_started.elapsed(),
         );
         for (report, compile_time) in graph_reports.iter_mut().zip(compile_times) {
             report.stats.evaluator_compile_time += compile_time;
@@ -659,8 +830,9 @@ impl AmplitudeGraph {
         self.graph.dot_serialize_fmt(writer, settings)
     }
 
-    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Generating CFF"), err)]
+    #[instrument(skip_all, err)]
     pub(crate) fn generate_cff(&mut self, orientation_pattern: &OrientationPattern) -> Result<()> {
+        let _progress_guard = generation_progress::enter_detailed_progress_span("Generating CFF");
         let shift_rewrite = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
@@ -686,13 +858,14 @@ impl AmplitudeGraph {
         Ok(())
     }
 
-    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "preprocessing"), err)]
+    #[instrument(skip_all, err)]
     pub(crate) fn preprocess(
         &mut self,
         model: &Model,
         settings: &GenerationSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
     ) -> Result<GraphGenerationStats> {
+        let _progress_guard = generation_progress::enter_detailed_progress_span("preprocessing");
         let preprocess_started = std::time::Instant::now();
         let vk = crate::utils::vakint()?;
 
@@ -756,8 +929,10 @@ impl AmplitudeGraph {
         })
     }
 
-    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Multi-Channeling Channels"))]
+    #[instrument(skip_all)]
     fn build_multi_channeling_channels(&mut self, override_lmb_heuristics: bool) {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Multi-Channeling Channels");
         let channels = self.graph.build_multi_channeling_channels(
             self.derived_data.lmbs.as_ref().unwrap(),
             override_lmb_heuristics,
@@ -1015,16 +1190,14 @@ impl AmplitudeGraph {
         }
     }
 
-    #[instrument(
-        skip_all,
-        fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Parametric Integrand"),
-        err
-    )]
+    #[instrument(skip_all, err)]
     pub(crate) fn build_integrands(
         &mut self,
         settings: &GenerationSettings,
         vakint: &Vakint,
     ) -> Result<()> {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Parametric Integrand");
         let started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "amplitude_graph_build_integrands_start",
@@ -1130,11 +1303,7 @@ impl AmplitudeGraph {
         Ok(())
     }
 
-    #[instrument(
-        skip_all,
-        fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Threshold Counterterms"),
-        err
-    )]
+    #[instrument(skip_all, err)]
     fn build_threshold_counterterm_parametric_integrand(
         &mut self,
         settings: &GenerationSettings,
@@ -1145,6 +1314,8 @@ impl AmplitudeGraph {
         TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
         TiVec<EsurfaceID, RaisedEsurfaceId>,
     )> {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Threshold Counterterms");
         let valid_orientations: Vec<_> = self
             .derived_data
             .cff_expression
@@ -1292,8 +1463,10 @@ impl AmplitudeGraph {
         Ok((counterterms, raised_esurface_ids))
     }
 
-    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Loop Momentum Bases"))]
+    #[instrument(skip_all)]
     fn build_lmbs(&mut self) {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Loop Momentum Bases");
         let lmbs = self
             .graph
             .generate_loop_momentum_bases_of(&self.graph.no_dummy());
@@ -1301,8 +1474,10 @@ impl AmplitudeGraph {
         self.derived_data.lmbs = Some(lmbs)
     }
 
-    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Tropical Sampler"), err)]
+    #[instrument(skip_all, err)]
     fn build_tropical_sampler(&mut self, process_settings: &GenerationSettings) -> Result<()> {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Tropical Sampler");
         if process_settings
             .tropical_subgraph_table
             .disable_tropical_generation
@@ -1410,7 +1585,7 @@ impl AmplitudeGraph {
           level = "info",
           skip(self, model, global_settings),
           fields(
-              graph.name = %self.graph.name, indicatif.pb_show = true, indicatif.pb_msg = format!("Generating Evaluators for {}", self.graph.name)
+              graph.name = %self.graph.name
 
           ),
           err
@@ -1422,6 +1597,10 @@ impl AmplitudeGraph {
         esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
         global_settings: &GlobalSettings,
     ) -> Result<(AmplitudeGraphTerm, GraphGenerationStats)> {
+        let _progress_guard = generation_progress::enter_detailed_progress_span(&format!(
+            "Generating Evaluators for {}",
+            self.graph.name
+        ));
         AmplitudeGraphTerm::from_amplitude_graph(
             self,
             own_group_position,

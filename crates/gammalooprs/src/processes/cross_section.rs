@@ -42,7 +42,10 @@ use crate::{
         sample::{ExternalIndex, SubspaceData},
     },
     processes::{
-        DotExportSettings, EvaluatorSettings, GraphGenerationStats, NamedGraphGenerationReport,
+        DotExportSettings, EvaluatorSettings, GraphCutSelectionSubject, GraphGenerationStats,
+        GraphGroupSelectionMode, GraphGroupSelectionPlan, GraphGroupSelectionSpec,
+        GraphSelectionSignatureInventory, GraphSelectionSubject, NamedGraphGenerationReport,
+        RaisedCutSignatureInventory,
     },
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
     utils::{
@@ -62,6 +65,8 @@ use serde::{Deserialize, Serialize};
 use symbolica::{domains::dual::HyperDual, prelude::*};
 use tracing::{debug, warn};
 use typed_index_collections::{TiVec, ti_vec};
+
+use super::generation_progress::{self, GenerationProcessKind, GenerationProgressPhase};
 
 use crate::{
     cff::esurface::{Esurface, EsurfaceID},
@@ -171,6 +176,293 @@ pub struct CrossSection {
 }
 
 impl CrossSection {
+    pub fn plan_graph_group_selection(
+        &self,
+        spec: &GraphGroupSelectionSpec,
+    ) -> Result<GraphGroupSelectionPlan> {
+        if spec.mode() == GraphGroupSelectionMode::CrossSectionAmplitudeGraphs {
+            return Err(eyre!(
+                "`select --amplitude-graphs` for cross sections requires process and generation settings context."
+            ));
+        }
+        if spec.has_raised_cut_rules() {
+            return Err(eyre!(
+                "Raised-cut signature selection for cross sections requires process and generation settings context."
+            ));
+        }
+        spec.plan(&self.graph_group_structure, |graph_id| {
+            self.supergraphs.get(graph_id).map(|graph| &graph.graph)
+        })
+    }
+
+    pub fn plan_graph_group_selection_with_context(
+        &self,
+        spec: &GraphGroupSelectionSpec,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+        generation_settings: &GenerationSettings,
+    ) -> Result<GraphGroupSelectionPlan> {
+        match spec.mode() {
+            GraphGroupSelectionMode::MasterGraphs => {
+                spec.plan_with_analysis_contexts(
+                    &self.graph_group_structure,
+                    |graph_id| self.supergraphs.get(graph_id).map(|graph| &graph.graph),
+                    |_master_graph_id, master_graph| {
+                        Ok(vec![GraphSelectionSubject::whole_graph(master_graph)])
+                    },
+                    |master_graph_id, master_graph| {
+                        self.cut_selection_subjects(
+                            master_graph_id,
+                            master_graph,
+                            model,
+                            process_definition,
+                            generation_settings,
+                        )
+                    },
+                    "Graph-group selection structural filters have no graph analysis subjects.",
+                    "Raised-cut signature selection found no process-valid Cutkosky cuts to analyse.",
+                )
+            }
+            GraphGroupSelectionMode::CrossSectionAmplitudeGraphs => {
+                spec.plan_with_analysis_contexts(
+                    &self.graph_group_structure,
+                    |graph_id| self.supergraphs.get(graph_id).map(|graph| &graph.graph),
+                    |master_graph_id, master_graph| {
+                        let cross_section_graph =
+                            self.supergraphs.get(master_graph_id).ok_or_else(|| {
+                                eyre!(
+                                    "Graph group refers to missing master supergraph id {}.",
+                                    master_graph_id
+                                )
+                            })?;
+                        let cuts = cross_section_graph.process_valid_cuts(
+                            model,
+                            process_definition,
+                            generation_settings,
+                        )?;
+                        Ok(cuts
+                            .into_iter()
+                            .flat_map(|cut| cut.amplitude_side_subjects(master_graph))
+                            .collect())
+                    },
+                    |master_graph_id, master_graph| {
+                        self.cut_selection_subjects(
+                            master_graph_id,
+                            master_graph,
+                            model,
+                            process_definition,
+                            generation_settings,
+                        )
+                    },
+                    "`select --amplitude-graphs` found no process-valid Cutkosky cuts to analyse for structural filters.",
+                    "Raised-cut signature selection found no process-valid Cutkosky cuts to analyse.",
+                )
+            }
+        }
+    }
+
+    fn cut_selection_subjects<'a>(
+        &'a self,
+        master_graph_id: usize,
+        master_graph: &'a Graph,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+        generation_settings: &GenerationSettings,
+    ) -> Result<Vec<GraphCutSelectionSubject<'a>>> {
+        let cross_section_graph = self.supergraphs.get(master_graph_id).ok_or_else(|| {
+            eyre!(
+                "Graph group refers to missing master supergraph id {}.",
+                master_graph_id
+            )
+        })?;
+        let cuts = cross_section_graph.process_valid_cuts(
+            model,
+            process_definition,
+            generation_settings,
+        )?;
+        Ok(cuts
+            .into_iter()
+            .map(|cut| GraphCutSelectionSubject::new(master_graph, cut.cut.as_subgraph()))
+            .collect())
+    }
+
+    pub fn amplitude_graph_signature_inventory(
+        &self,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+        generation_settings: &GenerationSettings,
+    ) -> Result<GraphSelectionSignatureInventory> {
+        let subjects = self
+            .graph_group_structure
+            .iter()
+            .flat_map(|group| group.into_iter().next())
+            .map(|master_graph_id| {
+                let cross_section_graph =
+                    self.supergraphs.get(master_graph_id).ok_or_else(|| {
+                        eyre!(
+                            "Graph group refers to missing master supergraph id {}.",
+                            master_graph_id
+                        )
+                    })?;
+                let cuts = cross_section_graph.process_valid_cuts(
+                    model,
+                    process_definition,
+                    generation_settings,
+                )?;
+                Ok(cuts
+                    .into_iter()
+                    .flat_map(|cut| cut.amplitude_side_subjects(&cross_section_graph.graph))
+                    .collect::<Vec<_>>())
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+
+        Ok(GraphSelectionSignatureInventory::from_analysis_subjects(
+            subjects,
+        ))
+    }
+
+    pub fn raised_cut_signature_inventory(
+        &self,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+        generation_settings: &GenerationSettings,
+    ) -> Result<RaisedCutSignatureInventory> {
+        let subjects = self
+            .graph_group_structure
+            .iter()
+            .flat_map(|group| group.into_iter().next())
+            .map(|master_graph_id| {
+                let cross_section_graph =
+                    self.supergraphs.get(master_graph_id).ok_or_else(|| {
+                        eyre!(
+                            "Graph group refers to missing master supergraph id {}.",
+                            master_graph_id
+                        )
+                    })?;
+                let cuts = cross_section_graph.process_valid_cuts(
+                    model,
+                    process_definition,
+                    generation_settings,
+                )?;
+                Ok(cuts
+                    .into_iter()
+                    .map(|cut| {
+                        GraphCutSelectionSubject::new(
+                            &cross_section_graph.graph,
+                            cut.cut.as_subgraph(),
+                        )
+                    })
+                    .collect::<Vec<_>>())
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+
+        Ok(RaisedCutSignatureInventory::from_cut_subjects(subjects))
+    }
+
+    pub fn validate_graph_group_selection_plan(
+        &self,
+        plan: &GraphGroupSelectionPlan,
+    ) -> Result<()> {
+        for &old_group_id in plan.retained_group_ids() {
+            plan.new_group_id_for_old(old_group_id).ok_or_else(|| {
+                eyre!(
+                    "Selection plan is missing compact group id for old group {}.",
+                    old_group_id.0
+                )
+            })?;
+            if old_group_id.0 >= self.graph_group_structure.len() {
+                return Err(eyre!(
+                    "Selection plan refers to missing graph group {}.",
+                    old_group_id.0
+                ));
+            }
+            let group = &self.graph_group_structure[old_group_id];
+            for old_graph_id in group {
+                if old_graph_id >= self.supergraphs.len() {
+                    return Err(eyre!(
+                        "Graph group {} refers to missing graph id {}.",
+                        old_group_id.0,
+                        old_graph_id
+                    ));
+                }
+            }
+            let master = group.master();
+            if master >= self.supergraphs.len() {
+                return Err(eyre!(
+                    "Graph group {} refers to missing master graph id {}.",
+                    old_group_id.0,
+                    master
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn apply_graph_group_selection(&mut self, plan: &GraphGroupSelectionPlan) -> Result<()> {
+        self.validate_graph_group_selection_plan(plan)?;
+
+        let mut old_graph_to_new_group = vec![None; self.supergraphs.len()];
+        let mut old_graph_is_master = vec![false; self.supergraphs.len()];
+        for &old_group_id in plan.retained_group_ids() {
+            let new_group_id = plan.new_group_id_for_old(old_group_id).ok_or_else(|| {
+                eyre!(
+                    "Selection plan is missing compact group id for old group {}.",
+                    old_group_id.0
+                )
+            })?;
+            let group = &self.graph_group_structure[old_group_id];
+            for old_graph_id in group {
+                old_graph_to_new_group[old_graph_id] = Some(new_group_id);
+            }
+            old_graph_is_master[group.master()] = true;
+        }
+
+        let mut new_supergraphs = self
+            .supergraphs
+            .iter()
+            .cloned()
+            .enumerate()
+            .filter_map(|(old_graph_id, mut graph)| {
+                let new_group_id = old_graph_to_new_group[old_graph_id]?;
+                graph.graph.group_id = Some(new_group_id);
+                graph.graph.is_group_master = old_graph_is_master[old_graph_id];
+                if let Some(multi_channeling_setup) = &mut graph.derived_data.multi_channeling_setup
+                {
+                    multi_channeling_setup.graph.group_id = Some(new_group_id);
+                    multi_channeling_setup.graph.is_group_master =
+                        old_graph_is_master[old_graph_id];
+                }
+                Some(graph)
+            })
+            .collect::<Vec<_>>();
+
+        let mut parsed_graphs = new_supergraphs
+            .iter()
+            .map(|graph| graph.graph.clone())
+            .collect::<Vec<_>>();
+        let new_graph_group_structure = complete_group_parsing(&mut parsed_graphs)?;
+        for (graph, parsed_graph) in new_supergraphs.iter_mut().zip(parsed_graphs) {
+            graph.graph.group_id = parsed_graph.group_id;
+            graph.graph.is_group_master = parsed_graph.is_group_master;
+            if let Some(multi_channeling_setup) = &mut graph.derived_data.multi_channeling_setup {
+                multi_channeling_setup.graph.group_id = graph.graph.group_id;
+                multi_channeling_setup.graph.is_group_master = graph.graph.is_group_master;
+            }
+        }
+
+        self.supergraphs = new_supergraphs;
+        self.graph_group_structure = new_graph_group_structure;
+        self.integrand = None;
+        Ok(())
+    }
+
     fn storage_path(&self, base: &Path) -> PathBuf {
         base.join(&self.name)
     }
@@ -284,6 +576,14 @@ impl CrossSection {
         generation_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
         let integrand_name = self.name.clone();
+        generation_progress::begin_phase(
+            GenerationProgressPhase::CutDiscovery,
+            GenerationProcessKind::CrossSection,
+            &process_definition.folder_name,
+            &integrand_name,
+            self.supergraphs.len(),
+            None,
+        );
         generation_pool.install(|| {
             self.supergraphs
                 .par_iter_mut()
@@ -313,6 +613,7 @@ impl CrossSection {
     pub fn build_integrand(
         &mut self,
         model: &Model,
+        process_name: &str,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
@@ -328,6 +629,26 @@ impl CrossSection {
             return Err(eyre!("Generation interrupted by user"));
         }
         let integrand_name = self.name.clone();
+        let total_cuts = self
+            .supergraphs
+            .iter()
+            .map(|sg| {
+                sg.derived_data
+                    .raised_data
+                    .raised_cut_groups
+                    .iter()
+                    .map(|cut_group| cut_group.cuts.len())
+                    .sum::<usize>()
+            })
+            .sum();
+        generation_progress::begin_phase(
+            GenerationProgressPhase::GraphGeneration,
+            GenerationProcessKind::CrossSection,
+            process_name,
+            &integrand_name,
+            self.supergraphs.len(),
+            Some(total_cuts),
+        );
         let mut graph_reports = Vec::new();
         let terms = generation_pool.install(|| {
             self.supergraphs
@@ -343,6 +664,15 @@ impl CrossSection {
                         graph = %sg.graph.name,
                         "Generation timing milestone"
                     );
+                    generation_progress::graph_started(
+                        GenerationProcessKind::CrossSection,
+                        &integrand_name,
+                        &sg.graph.name,
+                        Some(sg.cuts.len()),
+                    );
+                    let _progress_context_guard = generation_progress::enter_progress_context(
+                        format!("{} / {} cuts", sg.graph.name, sg.cuts.len()),
+                    );
                     let (term, mut stats) = sg.generate_term_for_graph(model, global_settings)?;
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
@@ -354,6 +684,13 @@ impl CrossSection {
                         graph = %sg.graph.name,
                         elapsed_ms = graph_started.elapsed().as_secs_f64() * 1000.0,
                         "Generation timing milestone"
+                    );
+                    generation_progress::graph_finished(
+                        GenerationProcessKind::CrossSection,
+                        &integrand_name,
+                        &sg.graph.name,
+                        &stats,
+                        None,
                     );
                     Ok((
                         term,
@@ -396,6 +733,11 @@ impl CrossSection {
             elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Generation timing milestone"
         );
+        generation_progress::backend_started(
+            GenerationProcessKind::CrossSection,
+            &self.name,
+            graph_count,
+        );
         let mut cross_section_integrand = CrossSectionIntegrand {
             settings: runtime_default.into(),
             data: CrossSectionIntegrandData {
@@ -429,6 +771,11 @@ impl CrossSection {
             elapsed_ms = backend_started.elapsed().as_secs_f64() * 1000.0,
             total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Generation timing milestone"
+        );
+        generation_progress::backend_finished(
+            GenerationProcessKind::CrossSection,
+            &self.name,
+            backend_started.elapsed(),
         );
         for (report, compile_time) in graph_reports.iter_mut().zip(compile_times) {
             report.stats.evaluator_compile_time += compile_time;
@@ -536,6 +883,14 @@ pub struct CrossSectionCut {
 }
 
 impl CrossSectionCut {
+    fn amplitude_side_subjects<'a>(&self, graph: &'a Graph) -> [GraphSelectionSubject<'a>; 2] {
+        let cut_edges = self.cut.as_subgraph();
+        [
+            GraphSelectionSubject::subgraph(graph, self.left.subtract(&cut_edges)),
+            GraphSelectionSubject::subgraph(graph, self.right.subtract(&cut_edges)),
+        ]
+    }
+
     pub(crate) fn is_s_channel(&self, cross_section_graph: &CrossSectionGraph) -> Result<bool> {
         let nodes_of_left_cut: Vec<_> = cross_section_graph
             .graph
@@ -880,21 +1235,31 @@ impl CrossSectionGraph {
         Ok(raised_cut_stats)
     }
 
-    fn generate_cuts(
-        &mut self,
+    pub(crate) fn process_valid_cuts(
+        &self,
         model: &Model,
         process_definition: &ProcessDefinition,
         settings: &GenerationSettings,
-    ) -> Result<()> {
-        info!("generating cuts for graph: {}", self.graph.name);
+    ) -> Result<TiVec<CutId, CrossSectionCut>> {
+        if !self.cuts.is_empty() {
+            return Ok(self.cuts.clone());
+        }
+        self.compute_process_valid_cuts(model, process_definition, settings)
+            .map(|(_, cuts)| cuts)
+    }
 
+    fn compute_process_valid_cuts(
+        &self,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+        settings: &GenerationSettings,
+    ) -> Result<(usize, TiVec<CutId, CrossSectionCut>)> {
         let all_st_cuts = self.graph.all_st_cuts_for_cs(
             self.source_nodes.clone(),
             self.target_nodes.clone(),
             &self.graph.get_initial_state_tree().0,
         );
-
-        info!("num s_t cuts: {}", all_st_cuts.len());
+        let num_st_cuts = all_st_cuts.len();
 
         let mut cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
             .into_iter()
@@ -931,13 +1296,33 @@ impl CrossSectionGraph {
             });
         }
 
-        self.cuts = cuts;
+        Ok((num_st_cuts, cuts))
+    }
 
-        info!(
-            "found {} cuts for graph: {}",
-            self.cuts.len(),
-            self.graph.name
+    fn generate_cuts(
+        &mut self,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+        settings: &GenerationSettings,
+    ) -> Result<()> {
+        debug_tags!(#generation, #profile, #graph;
+            stage = "cross_section_generate_cuts_start",
+            graph = %self.graph.name,
+            "Cut discovery timing milestone"
         );
+        let started = std::time::Instant::now();
+        let (num_st_cuts, cuts) =
+            self.compute_process_valid_cuts(model, process_definition, settings)?;
+        self.cuts = cuts;
+        debug_tags!(#generation, #profile, #graph;
+            stage = "cross_section_generate_cuts_done",
+            graph = %self.graph.name,
+            st_cut_count = num_st_cuts,
+            valid_cut_count = self.cuts.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Cut discovery timing milestone"
+        );
+        generation_progress::cuts_discovered("", &self.graph.name, num_st_cuts, self.cuts.len());
 
         Ok(())
     }

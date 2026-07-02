@@ -7,8 +7,12 @@ use std::{
 use color_eyre::{eyre::eyre, Result};
 use colored::Colorize;
 use gammalooprs::integrands::process::ProcessIntegrand;
-use gammalooprs::processes::ProcessCollection;
-use gammalooprs::settings::RuntimeSettings;
+use gammalooprs::model::Model;
+use gammalooprs::processes::{
+    GraphSelectionSignatureInventory, ProcessCollection, ProcessDefinition,
+    RaisedCutSignatureInventory,
+};
+use gammalooprs::settings::{global::GenerationSettings, RuntimeSettings};
 use tracing::{info, warn};
 
 use crate::{
@@ -21,8 +25,8 @@ use crate::{
     integrand_info::IntegrandKind,
     render_smart_toml,
     repl::{
-        IntegrandDetailCompletionEntry, IrProfileCompletionEntry, ProcessCompletionEntry,
-        ProcessKind,
+        IntegrandDetailCompletionEntry, IrProfileCompletionEntry, ModelVertexCompletionEntry,
+        ProcessCompletionEntry, ProcessKind,
     },
     state::{CommandHistory, CommandsBlock, ProcessRef, RunHistory, State},
     CLISettings, ReadOnlyStateOrigin,
@@ -342,11 +346,42 @@ impl<'a> CliSession<'a> {
                         if info.kind == IntegrandKind::CrossSection {
                             categories.push("cuts".to_string());
                         }
+                        let signature_inventory =
+                            integrand_signature_inventory(&process.collection, &integrand_name);
+                        let amplitude_signature_inventory = amplitude_graph_signature_inventory(
+                            &process.collection,
+                            &integrand_name,
+                            &self.state.model,
+                            &process.definition,
+                            &self.cli_settings.global.generation,
+                        );
+                        let raised_cut_signature_inventory = raised_cut_signature_inventory(
+                            &process.collection,
+                            &integrand_name,
+                            &self.state.model,
+                            &process.definition,
+                            &self.cli_settings.global.generation,
+                        );
 
                         Some(IntegrandDetailCompletionEntry {
                             process_name: process.definition.folder_name.clone(),
                             integrand_name,
+                            kind: info.kind,
                             master_graph_names,
+                            raised_all_signatures: signature_inventory.raised_all,
+                            raised_massive_signatures: signature_inventory.raised_massive,
+                            raised_massless_signatures: signature_inventory.raised_massless,
+                            cycle_signatures: signature_inventory.cycles,
+                            amplitude_raised_all_signatures: amplitude_signature_inventory
+                                .raised_all,
+                            amplitude_raised_massive_signatures: amplitude_signature_inventory
+                                .raised_massive,
+                            amplitude_raised_massless_signatures: amplitude_signature_inventory
+                                .raised_massless,
+                            amplitude_cycle_signatures: amplitude_signature_inventory.cycles,
+                            raised_cut_all_signatures: raised_cut_signature_inventory.all,
+                            raised_cut_massive_signatures: raised_cut_signature_inventory.massive,
+                            raised_cut_massless_signatures: raised_cut_signature_inventory.massless,
                             categories,
                         })
                     })
@@ -476,6 +511,20 @@ impl<'a> CliSession<'a> {
         names
     }
 
+    pub fn current_model_select_particle_names(&self) -> Vec<String> {
+        let mut names = self
+            .state
+            .model
+            .particles
+            .iter()
+            .filter(|particle| particle.pdg_code > 0)
+            .map(|particle| particle.name.to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        names.dedup();
+        names
+    }
+
     pub fn current_model_coupling_names(&self) -> Vec<String> {
         let mut names = self
             .state
@@ -489,17 +538,25 @@ impl<'a> CliSession<'a> {
         names
     }
 
-    pub fn current_model_vertex_names(&self) -> Vec<String> {
-        let mut names = self
+    pub fn current_model_vertices(&self) -> Vec<ModelVertexCompletionEntry> {
+        let mut entries = self
             .state
             .model
             .vertex_rules
             .iter()
-            .map(|vertex_rule| vertex_rule.0.name.to_string())
+            .map(|vertex_rule| ModelVertexCompletionEntry {
+                name: vertex_rule.0.name.to_string(),
+                particles: vertex_rule
+                    .0
+                    .particles
+                    .iter()
+                    .map(|particle| particle.name.to_string())
+                    .collect(),
+            })
             .collect::<Vec<_>>();
-        names.sort();
-        names.dedup();
-        names
+        entries.sort_by(|left, right| left.name.cmp(&right.name));
+        entries.dedup_by(|left, right| left.name == right.name);
+        entries
     }
 
     pub fn run_history_toml(&self) -> Result<String> {
@@ -753,6 +810,82 @@ impl<'a> CliSession<'a> {
                 .push_with_raw(normalized.command, normalized.raw_string);
         }
     }
+}
+
+fn integrand_signature_inventory(
+    collection: &ProcessCollection,
+    integrand_name: &str,
+) -> GraphSelectionSignatureInventory {
+    match collection {
+        ProcessCollection::Amplitudes(amplitudes) => amplitudes
+            .get(integrand_name)
+            .map(|amplitude| {
+                GraphSelectionSignatureInventory::from_master_graphs(
+                    amplitude.graph_group_structure.iter().map(|group| {
+                        let master_graph_id = group
+                            .into_iter()
+                            .next()
+                            .expect("graph group should contain a master graph");
+                        &amplitude.graphs[master_graph_id].graph
+                    }),
+                )
+            })
+            .unwrap_or_else(GraphSelectionSignatureInventory::empty),
+        ProcessCollection::CrossSections(cross_sections) => cross_sections
+            .get(integrand_name)
+            .map(|cross_section| {
+                GraphSelectionSignatureInventory::from_master_graphs(
+                    cross_section.graph_group_structure.iter().map(|group| {
+                        let master_graph_id = group
+                            .into_iter()
+                            .next()
+                            .expect("graph group should contain a master graph");
+                        &cross_section.supergraphs[master_graph_id].graph
+                    }),
+                )
+            })
+            .unwrap_or_else(GraphSelectionSignatureInventory::empty),
+    }
+}
+
+fn amplitude_graph_signature_inventory(
+    collection: &ProcessCollection,
+    integrand_name: &str,
+    model: &Model,
+    process_definition: &ProcessDefinition,
+    generation_settings: &GenerationSettings,
+) -> GraphSelectionSignatureInventory {
+    let ProcessCollection::CrossSections(cross_sections) = collection else {
+        return GraphSelectionSignatureInventory::empty();
+    };
+    cross_sections
+        .get(integrand_name)
+        .map(|cross_section| {
+            cross_section
+                .amplitude_graph_signature_inventory(model, process_definition, generation_settings)
+                .unwrap_or_else(|_| GraphSelectionSignatureInventory::empty())
+        })
+        .unwrap_or_else(GraphSelectionSignatureInventory::empty)
+}
+
+fn raised_cut_signature_inventory(
+    collection: &ProcessCollection,
+    integrand_name: &str,
+    model: &Model,
+    process_definition: &ProcessDefinition,
+    generation_settings: &GenerationSettings,
+) -> RaisedCutSignatureInventory {
+    let ProcessCollection::CrossSections(cross_sections) = collection else {
+        return RaisedCutSignatureInventory::empty();
+    };
+    cross_sections
+        .get(integrand_name)
+        .map(|cross_section| {
+            cross_section
+                .raised_cut_signature_inventory(model, process_definition, generation_settings)
+                .unwrap_or_else(|_| RaisedCutSignatureInventory::empty())
+        })
+        .unwrap_or_else(RaisedCutSignatureInventory::empty)
 }
 
 fn normalize_persisted_command_history(command: &CommandHistory) -> Option<CommandHistory> {

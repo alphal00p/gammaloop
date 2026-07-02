@@ -28,6 +28,7 @@ name = "generate_diagrams"
 # --select-graphs GL26
 #      --select-graphs GL30
 # --loop-momentum-bases GL26=2,4,11
+#	  --select-graphs GL06
 commands = [
   "import model sm-default.json",
   "set global kv global.n_cores.feyngen=10",
@@ -37,15 +38,16 @@ commands = [
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states true
       -p epem_a_tth -i NLO
-      --global-prefactor-num "1𝑖"
-	  --select-graphs GL06
+      --global-prefactor-num "-1"
       --only-diagrams""",
+  "select -p epem_a_tth -i NLO --amplitude-graphs --with-raised-propagator-signatures [] --without-raised-cuts-signatures [2] [3] [2,2] [4] [2,3] [2,2,2]",
   "save dot",
 ]
 
 [[command_blocks]]
 name = "generate_integrands"
 commands = [
+    "set global kv global.n_cores.generate=10",
     "generate existing -p epem_a_tth -i NLO",
     "duplicate integrand -p epem_a_tth -i NLO --output_process_name epem_a_tth --output_integrand_name NLO_semi_inclusive",
     "save state -o"
@@ -167,19 +169,29 @@ name = "integrate"
 #  "set process -p epem_a_tth -i NLO_inclusive_m_uv_up kv general.m_uv=364.752",
 commands = [
   "run set_model_parameters",
-  "run set_differential_quantities",
-  "run set_differential_observables",
-  "run set_differential_selectors",
+  # "run set_differential_quantities",
+  # "run set_differential_observables",
+  # "run set_differential_selectors",
+
+  "set process -p epem_a_tth kv integrator.discrete_dim_learning_rate=0.0",
 
   """set process -p epem_a_tth string '
     [sampling]
     graphs = "monte_carlo"
     orientations = "summed"
-    lmb_multichanneling = true
+    lmb_multichanneling = false
+	lmb_channel_weight = "ose"
     # For importance-sampling over channels, use the quantity below
     # lmb_channels = "monte_carlo"
     lmb_channels = "summed"
     '""",
+
+  """set process -p epem_a_tth string '
+    [h_function]
+    function = "poly_exponential"
+    sigma = 1.0
+	power = 0
+  '""",
 
   """set process -p epem_a_tth string '
   [[stability.rotation_axis]]
@@ -194,9 +206,9 @@ commands = [
   escalate_for_large_weight_threshold = 0.99
 
   [[stability.levels]]
-  precision = "Arb"
-  required_precision_for_re = 1.0e-5
-  required_precision_for_im = 1.0e-5
+  precision = "Quad"
+  required_precision_for_re = 1.0e-8
+  required_precision_for_im = 1.0e-8
   escalate_for_large_weight_threshold = -1.0
       '""",
 
@@ -240,10 +252,10 @@ commands = [
   # --target epem_a_tth@NLO=-2.4706e-04,0.0
   #  GL08
   # --target epem_a_tth@NLO=-1.6168e-06,0.0
-  """integrate -p epem_a_tth -i NLO -p epem_a_tth -i NLO_m_uv_up --n-cores 10
-				 --target epem_a_tth@NLO=-2.4706e-04,0.0
+  # -p epem_a_tth -i NLO_m_uv_up
+  """integrate -p epem_a_tth -i NLO -p epem_a_tth -i NLO_m_uv_up --n-cores 3
 				 --renderer ratatui
-				 --batch-size 10000
+				 --batch-size 1000
 				 --show-phase both
 				 --show-max-weight-info
 				 --show-top-discrete-grid

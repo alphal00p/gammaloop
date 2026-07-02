@@ -19,7 +19,10 @@ use regex::Regex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use symbolica::parse;
-use tabled::{builder::Builder, settings::Style};
+use tabled::{
+    builder::Builder,
+    settings::{style::HorizontalLine, themes::Theme, Style},
+};
 use thiserror::Error;
 use walkdir::WalkDir;
 
@@ -33,8 +36,8 @@ use gammalooprs::model::Model;
 use gammalooprs::numerator::GlobalPrefactor;
 use gammalooprs::processes::amplitude::Amplitude;
 use gammalooprs::processes::{
-    merge_generated_graph_reports, CrossSection, GeneratedGraphReport, Process, ProcessDefinition,
-    ProcessList,
+    merge_generated_graph_reports, CrossSection, GeneratedGraphReport, GraphGenerationStats,
+    Process, ProcessDefinition, ProcessList,
 };
 use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
 
@@ -417,7 +420,9 @@ pub(crate) fn render_generation_summary(
         "compile".bold().blue().to_string(),
     ]);
 
-    for report in sorted_reports {
+    let mut total_stats = GraphGenerationStats::default();
+    for report in &sorted_reports {
+        total_stats.merge_in_place(&report.stats);
         let expr_time = report.stats.expression_build_time();
         let total_time = report.stats.total_time;
         let expr_value = format!(
@@ -457,8 +462,50 @@ pub(crate) fn render_generation_summary(
         ]);
     }
 
+    let total_time = total_stats.total_time;
+    let total_expr_time = total_stats.expression_build_time();
+    let total_expr_value = format!(
+        "{} ({})",
+        format_generation_duration(total_expr_time).magenta(),
+        format_generation_fraction(total_expr_time, total_time).cyan()
+    );
+    let total_spenso_value = format!(
+        "{} ({})",
+        format_generation_duration(total_stats.evaluator_spenso_time).magenta(),
+        format_generation_fraction(total_stats.evaluator_spenso_time, total_time).cyan()
+    );
+    let total_symbolica_value = format!(
+        "{} ({})",
+        format_generation_duration(total_stats.evaluator_symbolica_time).magenta(),
+        format_generation_fraction(total_stats.evaluator_symbolica_time, total_time).cyan()
+    );
+    let total_compile_value = format!(
+        "{} ({})",
+        format_generation_duration(total_stats.evaluator_compile_time).magenta(),
+        format_generation_fraction(total_stats.evaluator_compile_time, total_time).cyan()
+    );
+    builder.push_record([
+        "Total".bold().yellow().to_string(),
+        String::new(),
+        total_stats
+            .evaluator_count
+            .to_string()
+            .bold()
+            .yellow()
+            .to_string(),
+        total_expr_value,
+        total_spenso_value,
+        total_symbolica_value,
+        total_compile_value,
+    ]);
+
     let mut table = builder.build();
-    table.with(Style::rounded());
+    let mut style = Theme::from_style(Style::rounded());
+    style.insert_horizontal_line(
+        sorted_reports.len() + 1,
+        HorizontalLine::inherit(Style::modern()),
+    );
+    table.with(style);
     let mut sections = Vec::new();
     if let Some(title) = title {
         sections.push(title.bold().blue().to_string());
@@ -2086,6 +2133,7 @@ mod tests {
     use clap::Parser;
     use gammalooprs::utils::load_generic_model;
     use gammalooprs::{feyngen::GenerationType, initialisation::test_initialise};
+    use std::time::Duration;
 
     #[test]
     fn remove_compiled_cpp_sources_only_removes_sources_with_matching_libraries() -> Result<()> {
@@ -2118,6 +2166,64 @@ mod tests {
             }
             other => panic!("Expected generate command, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn generation_summary_includes_separator_and_total_row() {
+        let reports = vec![
+            GeneratedGraphReport {
+                process_id: 0,
+                integrand_name: "itg".to_string(),
+                graph_name: "GL01".to_string(),
+                stats: GraphGenerationStats {
+                    evaluator_count: 2,
+                    total_time: Duration::from_secs(4),
+                    evaluator_spenso_time: Duration::from_secs(1),
+                    evaluator_symbolica_time: Duration::from_secs(1),
+                    evaluator_compile_time: Duration::from_secs(1),
+                },
+            },
+            GeneratedGraphReport {
+                process_id: 0,
+                integrand_name: "itg".to_string(),
+                graph_name: "GL02".to_string(),
+                stats: GraphGenerationStats {
+                    evaluator_count: 3,
+                    total_time: Duration::from_secs(6),
+                    evaluator_spenso_time: Duration::from_secs(2),
+                    evaluator_symbolica_time: Duration::ZERO,
+                    evaluator_compile_time: Duration::from_secs(3),
+                },
+            },
+        ];
+
+        let summary = render_generation_summary(&reports, 0, Some(4), None).unwrap();
+        let plain = Regex::new(r"\x1b\[[0-9;]*m")
+            .unwrap()
+            .replace_all(&summary, "")
+            .into_owned();
+
+        assert!(plain.contains("Total"));
+        assert!(plain.contains("5"));
+        assert!(plain.contains("20%"));
+        assert!(plain.contains("30%"));
+        assert!(plain.contains("10%"));
+        assert!(plain.contains("40%"));
+
+        let lines = plain.lines().collect::<Vec<_>>();
+        let total_line_index = lines
+            .iter()
+            .position(|line| line.contains("Total"))
+            .expect("missing Total row");
+        let separator_line = lines[..total_line_index]
+            .iter()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .expect("missing line before Total row");
+        assert!(
+            separator_line.chars().any(|ch| "┼╪╫┿├┤".contains(ch)),
+            "missing horizontal separator before Total row: {separator_line}"
+        );
     }
 
     fn base_args(tokens: &str) -> SpecArgs {

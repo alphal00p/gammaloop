@@ -23,6 +23,21 @@ pub use generation_report::{
     EvaluatorBuildTimings, GeneratedGraphKey, GeneratedGraphReport, GraphGenerationStats,
     NamedGraphGenerationReport, merge_generated_graph_reports,
 };
+mod generation_progress;
+pub use generation_progress::{
+    GenerationProcessKind, GenerationProgressMode, GenerationProgressModeGuard,
+    GenerationProgressObserver, GenerationProgressObserverGuard, GenerationProgressPhase,
+    cut_finished, detailed_progress_enabled, detailed_progress_message,
+    enter_detailed_progress_span, enter_progress_context,
+};
+mod selection;
+pub use selection::{
+    CycleSignature, GraphGroupSelectionMode, GraphGroupSelectionPlan, GraphGroupSelectionReport,
+    GraphGroupSelectionSpec, GraphSelectionSignatureInventory, ParticleSignature,
+    RaisedCutSignatureInventory, RaisedPropagatorScope, RaisedPropagatorSignature,
+    SelectionPolarity, VertexSignature,
+};
+pub(crate) use selection::{GraphCutSelectionSubject, GraphSelectionSubject};
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(

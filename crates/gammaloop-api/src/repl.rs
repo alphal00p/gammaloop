@@ -23,7 +23,10 @@ use crate::{
         selector_kind_names, selector_schema, NamedProcessSettingKind,
         ProcessSettingsCompletionEntry,
     },
-    completion::{arg_value_completion, ArgValueCompletion, SelectorKind},
+    completion::{
+        arg_value_completion, ArgValueCompletion, SelectRaisedSignatureScope, SelectorKind,
+    },
+    integrand_info::IntegrandKind,
     session::CliSession,
     settings_tree::{
         schema_at_path, schema_enum_values, schema_example_values, schema_is_object_container,
@@ -42,14 +45,31 @@ pub struct CompletionState {
     ir_profile_entries: Vec<IrProfileCompletionEntry>,
     model_parameter_entries: Vec<ModelParameterCompletionEntry>,
     model_particle_names: Vec<String>,
+    model_select_particle_names: Vec<String>,
     model_coupling_names: Vec<String>,
-    model_vertex_names: Vec<String>,
+    model_vertices: Vec<ModelVertexCompletionEntry>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelParameterCompletionEntry {
     pub name: String,
     pub parameter_type: ParameterType,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelVertexCompletionEntry {
+    pub name: String,
+    pub particles: Vec<String>,
+}
+
+impl ModelVertexCompletionEntry {
+    fn particle_description(&self) -> String {
+        if self.particles.is_empty() {
+            "Particles: none".to_string()
+        } else {
+            format!("Particles: {}", self.particles.join(", "))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,7 +99,19 @@ pub struct ProcessCompletionEntry {
 pub struct IntegrandDetailCompletionEntry {
     pub process_name: String,
     pub integrand_name: String,
+    pub kind: IntegrandKind,
     pub master_graph_names: Vec<String>,
+    pub raised_all_signatures: Vec<String>,
+    pub raised_massive_signatures: Vec<String>,
+    pub raised_massless_signatures: Vec<String>,
+    pub cycle_signatures: Vec<String>,
+    pub amplitude_raised_all_signatures: Vec<String>,
+    pub amplitude_raised_massive_signatures: Vec<String>,
+    pub amplitude_raised_massless_signatures: Vec<String>,
+    pub amplitude_cycle_signatures: Vec<String>,
+    pub raised_cut_all_signatures: Vec<String>,
+    pub raised_cut_massive_signatures: Vec<String>,
+    pub raised_cut_massless_signatures: Vec<String>,
     pub categories: Vec<String>,
 }
 
@@ -118,8 +150,9 @@ impl SharedCompletionState {
             state.ir_profile_entries = session.current_ir_profile_entries();
             state.model_parameter_entries = session.current_model_parameter_entries();
             state.model_particle_names = session.current_model_particle_names();
+            state.model_select_particle_names = session.current_model_select_particle_names();
             state.model_coupling_names = session.current_model_coupling_names();
-            state.model_vertex_names = session.current_model_vertex_names();
+            state.model_vertices = session.current_model_vertices();
         });
     }
 }
@@ -541,6 +574,78 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
                 }
                 ArgValueCompletion::SelectedIntegrandCategory => {
                     add_selected_integrand_category_suggestions(
+                        CompletionSuggestionContext {
+                            completion_state,
+                            completed_tokens: context.all_completed_tokens,
+                            root_cmd: context.root_cmd,
+                            request: value_request,
+                            pos,
+                        },
+                        &flag_value_context.consumed_values,
+                        &mut suggestions,
+                        &mut seen,
+                    );
+                }
+                ArgValueCompletion::SelectRaisedSignature(scope) => {
+                    add_select_raised_signature_suggestions(
+                        CompletionSuggestionContext {
+                            completion_state,
+                            completed_tokens: context.all_completed_tokens,
+                            root_cmd: context.root_cmd,
+                            request: value_request,
+                            pos,
+                        },
+                        scope,
+                        &flag_value_context.consumed_values,
+                        &mut suggestions,
+                        &mut seen,
+                    );
+                }
+                ArgValueCompletion::SelectRaisedCutSignature(scope) => {
+                    add_select_raised_cut_signature_suggestions(
+                        CompletionSuggestionContext {
+                            completion_state,
+                            completed_tokens: context.all_completed_tokens,
+                            root_cmd: context.root_cmd,
+                            request: value_request,
+                            pos,
+                        },
+                        scope,
+                        &flag_value_context.consumed_values,
+                        &mut suggestions,
+                        &mut seen,
+                    );
+                }
+                ArgValueCompletion::SelectCycleSignature => {
+                    add_select_cycle_signature_suggestions(
+                        CompletionSuggestionContext {
+                            completion_state,
+                            completed_tokens: context.all_completed_tokens,
+                            root_cmd: context.root_cmd,
+                            request: value_request,
+                            pos,
+                        },
+                        &flag_value_context.consumed_values,
+                        &mut suggestions,
+                        &mut seen,
+                    );
+                }
+                ArgValueCompletion::SelectVertexSignature => {
+                    add_select_vertex_signature_suggestions(
+                        CompletionSuggestionContext {
+                            completion_state,
+                            completed_tokens: context.all_completed_tokens,
+                            root_cmd: context.root_cmd,
+                            request: value_request,
+                            pos,
+                        },
+                        &flag_value_context.consumed_values,
+                        &mut suggestions,
+                        &mut seen,
+                    );
+                }
+                ArgValueCompletion::SelectParticleSignature => {
+                    add_select_particle_signature_suggestions(
                         CompletionSuggestionContext {
                             completion_state,
                             completed_tokens: context.all_completed_tokens,
@@ -1022,20 +1127,20 @@ fn add_generate_vertex_suggestions(
         .map(String::as_str)
         .collect::<HashSet<_>>();
 
-    for vertex_name in &completion_state.model_vertex_names {
-        if consumed_values.contains(vertex_name.as_str()) {
+    for vertex in &completion_state.model_vertices {
+        if consumed_values.contains(vertex.name.as_str()) {
             continue;
         }
-        if !prefix.is_empty() && !vertex_name.starts_with(prefix) {
+        if !prefix.is_empty() && !vertex.name.starts_with(prefix) {
             continue;
         }
-        let rendered = render_value_completion(vertex_name, request.quote_style);
+        let rendered = render_value_completion(&vertex.name, request.quote_style);
         if !seen.insert(rendered.clone()) {
             continue;
         }
         suggestions.push(reedline::Suggestion {
             value: rendered.clone(),
-            description: Some("Model vertex interaction".to_string()),
+            description: Some(vertex.particle_description()),
             style: None,
             extra: None,
             span: Span::new(request.span_start, pos),
@@ -2506,6 +2611,7 @@ fn add_process_suggestions(
     }
 }
 
+#[derive(Clone, Copy)]
 struct CompletionSuggestionContext<'a> {
     completion_state: &'a CompletionState,
     completed_tokens: &'a [CompletionToken],
@@ -2715,6 +2821,397 @@ fn add_selected_integrand_category_suggestions(
             span: Span::new(context.request.span_start, context.pos),
             append_whitespace: true,
         });
+    }
+}
+
+fn add_select_raised_signature_suggestions(
+    context: CompletionSuggestionContext<'_>,
+    scope: SelectRaisedSignatureScope,
+    consumed_values: &[String],
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let signatures = find_selected_integrand_detail_entry(
+        context.completion_state,
+        context.root_cmd,
+        context.completed_tokens,
+    )
+    .map(
+        |entry| match (select_uses_amplitude_graphs(context), entry.kind, scope) {
+            (true, IntegrandKind::CrossSection, SelectRaisedSignatureScope::All) => {
+                entry.amplitude_raised_all_signatures.as_slice()
+            }
+            (true, IntegrandKind::CrossSection, SelectRaisedSignatureScope::Massive) => {
+                entry.amplitude_raised_massive_signatures.as_slice()
+            }
+            (true, IntegrandKind::CrossSection, SelectRaisedSignatureScope::Massless) => {
+                entry.amplitude_raised_massless_signatures.as_slice()
+            }
+            (_, _, SelectRaisedSignatureScope::All) => entry.raised_all_signatures.as_slice(),
+            (_, _, SelectRaisedSignatureScope::Massive) => {
+                entry.raised_massive_signatures.as_slice()
+            }
+            (_, _, SelectRaisedSignatureScope::Massless) => {
+                entry.raised_massless_signatures.as_slice()
+            }
+        },
+    );
+
+    let fallback = ["[]".to_string(), "[2]".to_string()];
+    let values = signatures.unwrap_or(&fallback);
+    add_select_full_value_suggestions(
+        values,
+        "Raised-propagator signature",
+        context,
+        consumed_values,
+        suggestions,
+        seen,
+    );
+}
+
+fn add_select_raised_cut_signature_suggestions(
+    context: CompletionSuggestionContext<'_>,
+    scope: SelectRaisedSignatureScope,
+    consumed_values: &[String],
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let signatures = find_selected_integrand_detail_entry(
+        context.completion_state,
+        context.root_cmd,
+        context.completed_tokens,
+    )
+    .and_then(|entry| {
+        if entry.kind != IntegrandKind::CrossSection {
+            return None;
+        }
+        Some(match scope {
+            SelectRaisedSignatureScope::All => entry.raised_cut_all_signatures.as_slice(),
+            SelectRaisedSignatureScope::Massive => entry.raised_cut_massive_signatures.as_slice(),
+            SelectRaisedSignatureScope::Massless => entry.raised_cut_massless_signatures.as_slice(),
+        })
+    });
+
+    let fallback = ["[]".to_string(), "[2]".to_string()];
+    let values = signatures.unwrap_or(&fallback);
+    add_select_full_value_suggestions(
+        values,
+        "Raised-cut signature",
+        context,
+        consumed_values,
+        suggestions,
+        seen,
+    );
+}
+
+fn add_select_cycle_signature_suggestions(
+    context: CompletionSuggestionContext<'_>,
+    consumed_values: &[String],
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    if add_select_cycle_token_suggestions(context, suggestions, seen) {
+        return;
+    }
+
+    if let Some(entry) = find_selected_integrand_detail_entry(
+        context.completion_state,
+        context.root_cmd,
+        context.completed_tokens,
+    ) {
+        let signatures =
+            if select_uses_amplitude_graphs(context) && entry.kind == IntegrandKind::CrossSection {
+                &entry.amplitude_cycle_signatures
+            } else {
+                &entry.cycle_signatures
+            };
+        add_select_full_value_suggestions(
+            signatures,
+            "Cycle signature observed in selected integrand",
+            context,
+            consumed_values,
+            suggestions,
+            seen,
+        );
+    }
+    let category_signatures = [
+        "[(fermion)]".to_string(),
+        "[(ghost)]".to_string(),
+        "[(goldstone)]".to_string(),
+    ];
+    add_select_full_value_suggestions(
+        &category_signatures,
+        "Cycle signature category",
+        context,
+        consumed_values,
+        suggestions,
+        seen,
+    );
+}
+
+fn add_select_vertex_signature_suggestions(
+    context: CompletionSuggestionContext<'_>,
+    consumed_values: &[String],
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    if add_select_vertex_list_token_suggestions(context, suggestions, seen) {
+        return;
+    }
+
+    let consumed_values = consumed_values
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+    let prefix = context.request.partial_path.as_str();
+    for vertex in &context.completion_state.model_vertices {
+        let value = format!("[{}]", vertex.name);
+        if consumed_values.contains(value.as_str()) {
+            continue;
+        }
+        if !prefix.is_empty() && !value.starts_with(prefix) {
+            continue;
+        }
+        add_select_value_suggestion(
+            &value,
+            &vertex.particle_description(),
+            context,
+            suggestions,
+            seen,
+            true,
+        );
+    }
+}
+
+fn add_select_particle_signature_suggestions(
+    context: CompletionSuggestionContext<'_>,
+    consumed_values: &[String],
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    if add_select_list_token_suggestions(
+        SelectListTokenCompletion {
+            partial: context.request.partial_path.as_str(),
+            open: '[',
+            close: ']',
+            values: &context.completion_state.model_select_particle_names,
+            description: "Particle in selected subject graph",
+        },
+        context,
+        suggestions,
+        seen,
+    ) || add_select_list_token_suggestions(
+        SelectListTokenCompletion {
+            partial: context.request.partial_path.as_str(),
+            open: '(',
+            close: ')',
+            values: &context.completion_state.model_select_particle_names,
+            description: "Particle in selected subject graph",
+        },
+        context,
+        suggestions,
+        seen,
+    ) {
+        return;
+    }
+
+    let singleton_signatures = context
+        .completion_state
+        .model_select_particle_names
+        .iter()
+        .map(|particle| format!("[{particle}]"))
+        .collect::<Vec<_>>();
+    add_select_full_value_suggestions(
+        &singleton_signatures,
+        "Particle-set signature",
+        context,
+        consumed_values,
+        suggestions,
+        seen,
+    );
+}
+
+fn add_select_cycle_token_suggestions(
+    context: CompletionSuggestionContext<'_>,
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) -> bool {
+    let partial = context.request.partial_path.as_str();
+    let Some(open_position) = partial.rfind('(') else {
+        return false;
+    };
+    if partial[open_position + 1..].contains(')') {
+        return false;
+    }
+
+    let tuple_content = &partial[open_position + 1..];
+    let (stem, item_prefix) = match tuple_content.rfind(',') {
+        Some(separator) => (
+            &partial[..open_position + 1 + separator + 1],
+            tuple_content[separator + 1..].trim_start(),
+        ),
+        None => (&partial[..open_position + 1], tuple_content.trim_start()),
+    };
+
+    let mut values = context
+        .completion_state
+        .model_select_particle_names
+        .iter()
+        .map(String::as_str)
+        .chain(["fermion", "ghost", "goldstone"])
+        .collect::<Vec<_>>();
+    values.sort_unstable();
+    values.dedup();
+
+    for value in values {
+        if !value.starts_with(item_prefix) {
+            continue;
+        }
+        add_select_value_suggestion(
+            &format!("{stem}{value}"),
+            "Cycle particle/category token",
+            context,
+            suggestions,
+            seen,
+            false,
+        );
+    }
+    true
+}
+
+fn add_select_vertex_list_token_suggestions(
+    context: CompletionSuggestionContext<'_>,
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) -> bool {
+    let partial = context.request.partial_path.as_str();
+    if !partial.starts_with('[') || partial.contains(']') {
+        return false;
+    }
+
+    let content = &partial['['.len_utf8()..];
+    let (stem, item_prefix) = match content.rfind(',') {
+        Some(separator) => (
+            &partial[..'['.len_utf8() + separator + 1],
+            content[separator + 1..].trim_start(),
+        ),
+        None => (&partial[..'['.len_utf8()], content.trim_start()),
+    };
+
+    for vertex in &context.completion_state.model_vertices {
+        if !vertex.name.starts_with(item_prefix) {
+            continue;
+        }
+        add_select_value_suggestion(
+            &format!("{stem}{}", vertex.name),
+            &vertex.particle_description(),
+            context,
+            suggestions,
+            seen,
+            false,
+        );
+    }
+    true
+}
+
+struct SelectListTokenCompletion<'a> {
+    partial: &'a str,
+    open: char,
+    close: char,
+    values: &'a [String],
+    description: &'a str,
+}
+
+fn add_select_list_token_suggestions(
+    completion: SelectListTokenCompletion<'_>,
+    context: CompletionSuggestionContext<'_>,
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) -> bool {
+    if !completion.partial.starts_with(completion.open)
+        || completion.partial.contains(completion.close)
+    {
+        return false;
+    }
+
+    let content = &completion.partial[completion.open.len_utf8()..];
+    let (stem, item_prefix) = match content.rfind(',') {
+        Some(separator) => (
+            &completion.partial[..completion.open.len_utf8() + separator + 1],
+            content[separator + 1..].trim_start(),
+        ),
+        None => (
+            &completion.partial[..completion.open.len_utf8()],
+            content.trim_start(),
+        ),
+    };
+
+    for value in completion.values {
+        if !value.starts_with(item_prefix) {
+            continue;
+        }
+        add_select_value_suggestion(
+            &format!("{stem}{value}"),
+            completion.description,
+            context,
+            suggestions,
+            seen,
+            false,
+        );
+    }
+    true
+}
+
+fn add_select_full_value_suggestions(
+    values: &[String],
+    description: &str,
+    context: CompletionSuggestionContext<'_>,
+    consumed_values: &[String],
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let consumed_values = consumed_values
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+    let prefix = context.request.partial_path.as_str();
+    for value in values {
+        if consumed_values.contains(value.as_str()) {
+            continue;
+        }
+        if !prefix.is_empty() && !value.starts_with(prefix) {
+            continue;
+        }
+        add_select_value_suggestion(value, description, context, suggestions, seen, true);
+    }
+}
+
+fn add_select_value_suggestion(
+    value: &str,
+    description: &str,
+    context: CompletionSuggestionContext<'_>,
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+    append_whitespace: bool,
+) {
+    let rendered = render_select_value_completion(value, context.request.quote_style);
+    if !seen.insert(rendered.clone()) {
+        return;
+    }
+    suggestions.push(reedline::Suggestion {
+        value: rendered,
+        description: Some(description.to_string()),
+        style: None,
+        extra: None,
+        span: Span::new(context.request.span_start, context.pos),
+        append_whitespace,
+    });
+}
+
+fn render_select_value_completion(value: &str, quote_style: QuoteStyle) -> String {
+    match quote_style {
+        QuoteStyle::None => value.to_string(),
+        QuoteStyle::Double | QuoteStyle::Single => render_value_completion(value, quote_style),
     }
 }
 
@@ -3119,8 +3616,56 @@ fn find_selected_process_entry<'a>(
     root_cmd: &clap::Command,
     completed_tokens: &[CompletionToken],
 ) -> Option<&'a ProcessCompletionEntry> {
-    let process_value = find_last_flag_value(root_cmd, completed_tokens, "process")?;
-    resolve_process_reference(&completion_state.process_entries, &process_value)
+    match find_last_flag_value(root_cmd, completed_tokens, "process") {
+        Some(process_value) => {
+            resolve_process_reference(&completion_state.process_entries, &process_value)
+        }
+        None => match completion_state.process_entries.as_slice() {
+            [entry] => Some(entry),
+            _ => None,
+        },
+    }
+}
+
+fn select_uses_amplitude_graphs(context: CompletionSuggestionContext<'_>) -> bool {
+    completed_tokens_include_long_flag(
+        context.root_cmd,
+        context.completed_tokens,
+        "amplitude-graphs",
+    )
+}
+
+fn completed_tokens_include_long_flag(
+    root_cmd: &clap::Command,
+    completed_tokens: &[CompletionToken],
+    long_name: &str,
+) -> bool {
+    let mut cmd = root_cmd;
+    let mut index = 0usize;
+
+    while index < completed_tokens.len() {
+        let token = completed_tokens[index].cooked.as_str();
+        if let Some(subcmd) = find_subcommand(cmd, token) {
+            cmd = subcmd;
+            index += 1;
+            continue;
+        }
+
+        if let Some(arg) = find_flag(cmd, token) {
+            if arg.get_long() == Some(long_name) {
+                return true;
+            }
+            let inline_start = inline_flag_value_start(token);
+            index += 1;
+            if arg_takes_value(arg) && inline_start.is_none() {
+                index = index.saturating_add(1);
+            }
+            continue;
+        }
+        index += 1;
+    }
+
+    false
 }
 
 fn find_last_flag_value(
@@ -3171,7 +3716,11 @@ fn find_selected_integrand_detail_entry<'a>(
     completed_tokens: &[CompletionToken],
 ) -> Option<&'a IntegrandDetailCompletionEntry> {
     let process_entry = find_selected_process_entry(completion_state, root_cmd, completed_tokens)?;
-    let integrand_name = find_last_flag_value(root_cmd, completed_tokens, "integrand-name")?;
+    let integrand_name = find_last_flag_value(root_cmd, completed_tokens, "integrand-name")
+        .or_else(|| match process_entry.integrand_names.as_slice() {
+            [integrand_name] => Some(integrand_name.clone()),
+            _ => None,
+        })?;
 
     completion_state
         .integrand_detail_entries
@@ -3943,13 +4492,14 @@ mod tests {
     use crate::{
         commands::process_settings::ProcessSettingsCompletionEntry,
         completion::{arg_value_completion, ArgValueCompletion},
+        integrand_info::IntegrandKind,
         Repl,
     };
 
     use super::{
         collect_completions, CompletionState, IntegrandDetailCompletionEntry,
-        IrProfileCompletionEntry, ModelParameterCompletionEntry, ProcessCompletionEntry,
-        ProcessKind,
+        IrProfileCompletionEntry, ModelParameterCompletionEntry, ModelVertexCompletionEntry,
+        ProcessCompletionEntry, ProcessKind,
     };
 
     fn sample_process_entries() -> Vec<ProcessCompletionEntry> {
@@ -3993,7 +4543,19 @@ mod tests {
             IntegrandDetailCompletionEntry {
                 process_name: "triangle".to_string(),
                 integrand_name: "LO".to_string(),
+                kind: IntegrandKind::Amplitude,
                 master_graph_names: vec!["GL0".to_string(), "GL1".to_string()],
+                raised_all_signatures: vec!["[]".to_string(), "[2]".to_string()],
+                raised_massive_signatures: vec!["[]".to_string()],
+                raised_massless_signatures: vec!["[2]".to_string()],
+                cycle_signatures: vec!["[(6)]".to_string(), "[(6,21)]".to_string()],
+                amplitude_raised_all_signatures: vec!["[]".to_string(), "[2]".to_string()],
+                amplitude_raised_massive_signatures: vec!["[]".to_string(), "[2]".to_string()],
+                amplitude_raised_massless_signatures: vec!["[]".to_string(), "[2]".to_string()],
+                amplitude_cycle_signatures: Vec::new(),
+                raised_cut_all_signatures: vec!["[]".to_string(), "[2]".to_string()],
+                raised_cut_massive_signatures: vec!["[]".to_string(), "[2]".to_string()],
+                raised_cut_massless_signatures: vec!["[]".to_string(), "[2]".to_string()],
                 categories: vec![
                     "generation".to_string(),
                     "orientation".to_string(),
@@ -4003,7 +4565,23 @@ mod tests {
             IntegrandDetailCompletionEntry {
                 process_name: "epem_xs".to_string(),
                 integrand_name: "subtracted".to_string(),
+                kind: IntegrandKind::CrossSection,
                 master_graph_names: vec!["GL0".to_string(), "GL2".to_string()],
+                raised_all_signatures: vec!["[]".to_string(), "[2,3]".to_string()],
+                raised_massive_signatures: vec!["[2]".to_string()],
+                raised_massless_signatures: vec!["[]".to_string()],
+                cycle_signatures: vec!["[(3)]".to_string(), "[(3,21)]".to_string()],
+                amplitude_raised_all_signatures: vec!["[]".to_string(), "[4]".to_string()],
+                amplitude_raised_massive_signatures: vec!["[]".to_string()],
+                amplitude_raised_massless_signatures: vec!["[4]".to_string()],
+                amplitude_cycle_signatures: vec!["[(11)]".to_string(), "[(11,21)]".to_string()],
+                raised_cut_all_signatures: vec![
+                    "[]".to_string(),
+                    "[2]".to_string(),
+                    "[2,2]".to_string(),
+                ],
+                raised_cut_massive_signatures: vec!["[]".to_string(), "[2]".to_string()],
+                raised_cut_massless_signatures: vec!["[]".to_string(), "[2,2]".to_string()],
                 categories: vec![
                     "generation".to_string(),
                     "orientation".to_string(),
@@ -4141,8 +4719,22 @@ mod tests {
                 "e+".to_string(),
                 "e-".to_string(),
             ],
+            model_select_particle_names: vec!["g".to_string(), "h".to_string(), "e-".to_string()],
             model_coupling_names: vec!["QCD".to_string(), "QED".to_string()],
-            model_vertex_names: vec!["V_6".to_string(), "V_9".to_string(), "V_36".to_string()],
+            model_vertices: vec![
+                ModelVertexCompletionEntry {
+                    name: "V_6".to_string(),
+                    particles: vec!["g".to_string(), "g".to_string(), "h".to_string()],
+                },
+                ModelVertexCompletionEntry {
+                    name: "V_9".to_string(),
+                    particles: vec!["e-".to_string(), "e+".to_string(), "a".to_string()],
+                },
+                ModelVertexCompletionEntry {
+                    name: "V_36".to_string(),
+                    particles: vec!["t".to_string(), "t~".to_string(), "g".to_string()],
+                },
+            ],
             process_settings_entries: sample_process_settings_entries(),
             ..CompletionState::default()
         }
@@ -4659,6 +5251,161 @@ mod tests {
     }
 
     #[test]
+    fn completion_offers_select_master_graphs_for_selected_integrand() {
+        let values = completion_values(
+            "select -p triangle -i LO --with-graph-names GL",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"GL0".to_string()), "{values:?}");
+        assert!(values.contains(&"GL1".to_string()), "{values:?}");
+        assert!(!values.contains(&"GL2".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_select_master_graphs_for_single_integrand_process() {
+        let mut completion_state = generate_completion_state();
+        completion_state.process_entries = vec![ProcessCompletionEntry {
+            id: 0,
+            name: "triangle".to_string(),
+            kind: ProcessKind::Amplitude,
+            integrand_names: vec!["LO".to_string()],
+        }];
+        completion_state
+            .integrand_detail_entries
+            .retain(|entry| entry.process_name == "triangle" && entry.integrand_name == "LO");
+
+        let values = completion_values(
+            "select -p triangle --with-graph-names GL",
+            &completion_state,
+        );
+
+        assert!(values.contains(&"GL0".to_string()), "{values:?}");
+        assert!(values.contains(&"GL1".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_select_raised_signatures_for_selected_integrand() {
+        let values = completion_values(
+            "select -p epem_xs -i subtracted --with-raised-propagator-signatures ",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"[]".to_string()), "{values:?}");
+        assert!(values.contains(&"[2,3]".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_select_amplitude_graph_raised_signatures() {
+        let values = completion_values(
+            "select -p epem_xs -i subtracted --amplitude-graphs --with-raised-propagator-signatures ",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"[]".to_string()), "{values:?}");
+        assert!(values.contains(&"[4]".to_string()), "{values:?}");
+        assert!(!values.contains(&"[2,3]".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_select_raised_cut_signatures_for_cross_sections() {
+        let values = completion_values(
+            "select -p epem_xs -i subtracted --with-raised-cuts-signatures ",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"[]".to_string()), "{values:?}");
+        assert!(values.contains(&"[2,2]".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_raised_cut_signatures_ignore_amplitude_graphs_mode() {
+        let values = completion_values(
+            "select -p epem_xs -i subtracted --amplitude-graphs --with-raised-cuts-signatures ",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"[2,2]".to_string()), "{values:?}");
+        assert!(!values.contains(&"[4]".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_select_cycle_signatures_and_tokens() {
+        let observed = completion_values(
+            "select -p epem_xs -i subtracted --with-cycle-signatures ",
+            &generate_completion_state(),
+        );
+        assert!(observed.contains(&"[(3,21)]".to_string()), "{observed:?}");
+        assert!(
+            observed.contains(&"[(fermion)]".to_string()),
+            "{observed:?}"
+        );
+
+        let token_values = completion_values(
+            "select -p triangle -i LO --with-cycle-signatures [(f",
+            &generate_completion_state(),
+        );
+        assert!(
+            token_values.contains(&"[(fermion".to_string()),
+            "{token_values:?}"
+        );
+        assert!(
+            !token_values.contains(&"e+".to_string()),
+            "{token_values:?}"
+        );
+    }
+
+    #[test]
+    fn completion_offers_select_amplitude_graph_cycle_signatures() {
+        let observed = completion_values(
+            "select -p epem_xs -i subtracted --amplitude-graphs --with-cycle-signatures ",
+            &generate_completion_state(),
+        );
+
+        assert!(observed.contains(&"[(11,21)]".to_string()), "{observed:?}");
+        assert!(!observed.contains(&"[(3,21)]".to_string()), "{observed:?}");
+    }
+
+    #[test]
+    fn completion_offers_select_vertex_rules_inside_lists() {
+        let values = completion_values(
+            "select -p triangle -i LO --with-vertices [V_6,",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"[V_6,V_9".to_string()), "{values:?}");
+        assert!(values.contains(&"[V_6,V_36".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_describes_select_vertex_particles() {
+        let suggestions = completion_suggestions(
+            "select -p triangle -i LO --with-vertices [V_6,",
+            &generate_completion_state(),
+        );
+
+        let suggestion = suggestions
+            .iter()
+            .find(|suggestion| suggestion.value == "[V_6,V_9")
+            .expect("V_9 should be suggested after the comma");
+        assert_eq!(
+            suggestion.description.as_deref(),
+            Some("Particles: e-, e+, a")
+        );
+    }
+
+    #[test]
+    fn completion_offers_select_particle_signatures_inside_lists() {
+        let values = completion_values(
+            "select -p triangle -i LO --with-particles [",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"[g".to_string()), "{values:?}");
+        assert!(values.contains(&"[h".to_string()), "{values:?}");
+    }
+
+    #[test]
     fn completion_does_not_offer_existing_integrands_for_free_form_names() {
         let completion_state = CompletionState {
             process_entries: sample_process_entries(),
@@ -4668,6 +5415,40 @@ mod tests {
         let values = completion_values("generate amp --integrand-name ", &completion_state);
 
         assert!(values.is_empty());
+    }
+
+    #[test]
+    fn completion_does_not_offer_selectors_for_select_output_names() {
+        let completion_state = generate_completion_state();
+
+        let integrand_values = completion_values(
+            "select -p triangle -i LO --with-graph-names GL0 --output_integrand ",
+            &completion_state,
+        );
+        assert!(integrand_values.is_empty(), "{integrand_values:?}");
+
+        let process_values = completion_values(
+            "select -p triangle -i LO --with-graph-names GL0 --output_process ",
+            &completion_state,
+        );
+        assert!(process_values.is_empty(), "{process_values:?}");
+    }
+
+    #[test]
+    fn completion_keeps_select_output_flags_available_after_variadic_values() {
+        let values = completion_values(
+            "select -p triangle -i LO --with-graph-names GL0 --out",
+            &generate_completion_state(),
+        );
+
+        assert!(
+            values.contains(&"--output_integrand".to_string()),
+            "{values:?}"
+        );
+        assert!(
+            values.contains(&"--output_process".to_string()),
+            "{values:?}"
+        );
     }
 
     #[test]
