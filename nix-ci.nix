@@ -1,35 +1,19 @@
 let
   system = "x86_64-linux";
+  workspaceGraph = builtins.fromJSON (builtins.readFile ./nix/ci-workspace-graph.json);
   unique = values:
     builtins.attrNames (builtins.listToAttrs (map (value: {
         name = value;
         value = true;
       })
       values));
-  workspaceMemberDirs = let
-    crateEntries = builtins.readDir ./crates;
-    crateMemberDirs = map (name: "crates/${name}") (
-      builtins.filter (
-        name:
-          crateEntries.${name}
-          == "directory"
-          && builtins.pathExists (./. + "/crates/${name}/Cargo.toml")
-      ) (builtins.attrNames crateEntries)
-    );
-  in
-    crateMemberDirs ++ ["tests"];
-  workspaceMembers = builtins.listToAttrs (map (member: let
-      manifest = builtins.fromTOML (builtins.readFile (./. + "/${member}/Cargo.toml"));
-    in {
-      name = manifest.package.name;
-      value = {
-        inherit manifest member;
-      };
-    })
-    workspaceMemberDirs);
+  workspacePackages = workspaceGraph.packages;
+  cratePackageDepsAttr = package: "packages.${system}.crate-deps-${package}";
   cratePackageAttr = package: "packages.${system}.crate-${package}";
+  crateTestBinaryDepsAttr = package: "packages.${system}.crate-test-binaries-deps-${package}";
   crateTestBinaryAttr = package: "packages.${system}.crate-test-binaries-${package}";
-  crate2nixCiPrebuildAttr = "packages.${system}.crate2nix-ci-prebuild";
+  workspaceHackPackage = "gammaloop-workspace-hack";
+  workspaceHackCacheAttr = cratePackageDepsAttr workspaceHackPackage;
   workspacePackageGraphAttr = package:
     if package == "gammaloop-api"
     then "packages.${system}.gammaloop"
@@ -42,27 +26,14 @@ let
         value = unique (builtins.concatLists (map (set: set.${attr} or []) sets));
       })
       attrs);
-  workspaceDependencySections = manifest: [
-    (manifest.dependencies or {})
-    (manifest."build-dependencies" or {})
-  ];
-  workspaceDependencyPackageName = name: spec:
-    if builtins.isAttrs spec && spec ? package
-    then spec.package
-    else name;
-  workspaceDependencyNamesInSection = section:
-    builtins.filter (package: builtins.hasAttr package workspaceMembers) (
-      map (name: workspaceDependencyPackageName name section.${name})
-      (builtins.attrNames section)
-    );
-  workspaceDependencyNamesFor = manifest:
-    unique (builtins.concatLists (map workspaceDependencyNamesInSection (workspaceDependencySections manifest)));
+  workspaceDependencyNamesFor = package:
+    workspaceGraph.resolved_normal_dependencies.${package} or [];
   workspaceCratePackageDependencies = builtins.listToAttrs (
     builtins.filter (entry: entry.value != []) (map (package: {
         name = workspacePackageGraphAttr package;
-        value = map workspacePackageGraphAttr (workspaceDependencyNamesFor workspaceMembers.${package}.manifest);
+        value = map workspacePackageGraphAttr (workspaceDependencyNamesFor package);
       })
-      (builtins.attrNames workspaceMembers))
+      workspacePackages)
   );
   workspaceCratePackageDependencyEdges = builtins.concatLists (map (dependent:
       map (dependency: {
@@ -70,12 +41,36 @@ let
       })
       (workspaceCratePackageDependencies.${dependent} or []))
     (builtins.attrNames workspaceCratePackageDependencies));
+  workspaceCratePackageCacheDependencies = builtins.listToAttrs (map (package: {
+      name = workspacePackageGraphAttr package;
+      value = [(cratePackageDepsAttr package)];
+    })
+    workspacePackages);
+  workspaceCratePackageCacheArtifactDependencies = builtins.listToAttrs (
+    builtins.filter (entry: entry.value != []) (map (package: {
+        name = cratePackageDepsAttr package;
+        value =
+          map cratePackageDepsAttr (workspaceDependencyNamesFor package)
+          ++ (
+            if package != workspaceHackPackage && (workspaceDependencyNamesFor package) == [] && builtins.elem package workspaceGraph.symbolica_normal_packages
+            then [workspaceHackCacheAttr]
+            else []
+          );
+      })
+      workspacePackages)
+  );
+  workspaceCratePackageCacheArtifactDependencyEdges = builtins.concatLists (map (dependent:
+      map (dependency: {
+        inherit dependency dependent;
+      })
+      (workspaceCratePackageCacheArtifactDependencies.${dependent} or []))
+    (builtins.attrNames workspaceCratePackageCacheArtifactDependencies));
   workspaceCrateTestBinaryDependencies = builtins.listToAttrs (
     builtins.filter (entry: entry.value != []) (map (package: {
         name = crateTestBinaryAttr package;
-        value = map crateTestBinaryAttr (workspaceDependencyNamesFor workspaceMembers.${package}.manifest);
+        value = map crateTestBinaryAttr (workspaceDependencyNamesFor package);
       })
-      (builtins.attrNames workspaceMembers))
+      workspacePackages)
   );
   workspaceCrateTestBinaryDependencyEdges = builtins.concatLists (map (dependent:
       map (dependency: {
@@ -83,41 +78,32 @@ let
       })
       (workspaceCrateTestBinaryDependencies.${dependent} or []))
     (builtins.attrNames workspaceCrateTestBinaryDependencies));
-  # Keep every crate2nix derivation whose closure contains Symbolica behind the
-  # prebuild job. The omitted attrs either do not contain Symbolica themselves
-  # or are already ordered through a gated workspace dependency.
-  crate2nixCiPrebuildDependentAttrs = unique [
-    (workspacePackageGraphAttr "gammaloop-api")
-    (cratePackageAttr "gammaloop-integration-tests")
-    (cratePackageAttr "gammaloop-tracing-filter")
-    (cratePackageAttr "gammalooprs")
-    (cratePackageAttr "gammaloop-workspace-hack")
-    (cratePackageAttr "idenso")
-    (cratePackageAttr "linnet")
-    (cratePackageAttr "spenso")
-    (cratePackageAttr "spenso-hep-lib")
-    (cratePackageAttr "spenso-macros")
-    (cratePackageAttr "spynso3")
-    (cratePackageAttr "vakint")
-    (crateTestBinaryAttr "gammaloop-api")
-    (crateTestBinaryAttr "gammaloop-integration-tests")
-    (crateTestBinaryAttr "gammaloop-tracing-filter")
-    (crateTestBinaryAttr "gammalooprs")
-    (crateTestBinaryAttr "gammaloop-workspace-hack")
-    (crateTestBinaryAttr "idenso")
-    (crateTestBinaryAttr "linnet")
-    (crateTestBinaryAttr "spenso")
-    (crateTestBinaryAttr "spenso-hep-lib")
-    (crateTestBinaryAttr "spenso-macros")
-    (crateTestBinaryAttr "spynso3")
-    (crateTestBinaryAttr "vakint")
-    "packages.${system}.gammaloop-python-module"
-  ];
-  crate2nixCiPrebuildDependencies = builtins.listToAttrs (map (attr: {
-      name = attr;
-      value = [crate2nixCiPrebuildAttr];
+  workspaceCrateTestBinaryCacheDependencies = builtins.listToAttrs (map (package: {
+      name = crateTestBinaryAttr package;
+      value = [
+        (crateTestBinaryDepsAttr package)
+        (workspacePackageGraphAttr package)
+      ];
     })
-    crate2nixCiPrebuildDependentAttrs);
+    workspacePackages);
+  workspaceCrateTestBinaryCacheArtifactDependencies = builtins.listToAttrs (
+    builtins.filter (entry: entry.value != []) (map (package: {
+        name = crateTestBinaryDepsAttr package;
+        value =
+          [(cratePackageDepsAttr package)]
+          ++ map crateTestBinaryDepsAttr (workspaceDependencyNamesFor package);
+      })
+      workspacePackages)
+  );
+  workspaceCrateTestBinaryCacheArtifactDependencyEdges = builtins.concatLists (map (dependent:
+      map (dependency: {
+        inherit dependency dependent;
+      })
+      (workspaceCrateTestBinaryCacheArtifactDependencies.${dependent} or []))
+    (builtins.attrNames workspaceCrateTestBinaryCacheArtifactDependencies));
+  # The Hakari workspace-hack deps artifact is the root for the
+  # Symbolica-containing cache DAG. Higher-level crate cache jobs reach it
+  # through their Guppy-resolved workspace cache dependencies.
   nextestBinaryChecks = [
     "checks.${system}.gammaloop-nextest-binaries-core"
     "checks.${system}.gammaloop-nextest-binaries-integration"
@@ -127,20 +113,21 @@ let
     "checks.${system}.gammaloop-nextest-binaries-vakint"
   ];
   dependencies = mergeDependencySets [
-    crate2nixCiPrebuildDependencies
+    workspaceCratePackageCacheArtifactDependencies
+    workspaceCratePackageCacheDependencies
     workspaceCratePackageDependencies
+    workspaceCrateTestBinaryCacheArtifactDependencies
+    workspaceCrateTestBinaryCacheDependencies
     workspaceCrateTestBinaryDependencies
     {
       "packages.${system}.gammaloop" = [
         "checks.${system}.gammaloop-fmt"
         "devShells.${system}.default"
-        crate2nixCiPrebuildAttr
       ];
       "checks.${system}.gammaloop" = ["packages.${system}.gammaloop"];
       "packages.${system}.default" = ["packages.${system}.gammaloop"];
       "packages.${system}.gammaloop-python-module" =
-        (workspaceCratePackageDependencies."packages.${system}.gammaloop" or [])
-        ++ [crate2nixCiPrebuildAttr];
+        workspaceCratePackageDependencies."packages.${system}.gammaloop" or [];
       "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoArtifacts"];
       "packages.${system}.workspaceBuildArtifacts" = ["packages.${system}.cargoArtifacts"];
@@ -188,21 +175,26 @@ let
       "packages.${system}.nix-ci-check-gammaloop-nextest-vakint" = ["checks.${system}.gammaloop-nextest-binaries-vakint"];
     }
   ];
-  missingCrate2nixCiPrebuildEdges =
-    builtins.filter (
-      attr: !(builtins.elem crate2nixCiPrebuildAttr (dependencies.${attr} or []))
-    )
-    crate2nixCiPrebuildDependentAttrs;
   missingWorkspaceCratePackageEdges =
     builtins.filter (
       edge: !(builtins.elem edge.dependency (dependencies.${edge.dependent} or []))
     )
     workspaceCratePackageDependencyEdges;
+  missingWorkspaceCratePackageCacheArtifactEdges =
+    builtins.filter (
+      edge: !(builtins.elem edge.dependency (dependencies.${edge.dependent} or []))
+    )
+    workspaceCratePackageCacheArtifactDependencyEdges;
   missingWorkspaceCrateTestBinaryEdges =
     builtins.filter (
       edge: !(builtins.elem edge.dependency (dependencies.${edge.dependent} or []))
     )
     workspaceCrateTestBinaryDependencyEdges;
+  missingWorkspaceCrateTestBinaryCacheArtifactEdges =
+    builtins.filter (
+      edge: !(builtins.elem edge.dependency (dependencies.${edge.dependent} or []))
+    )
+    workspaceCrateTestBinaryCacheArtifactDependencyEdges;
   reciprocalWorkspaceCratePackageEdges =
     builtins.filter (
       edge: builtins.elem edge.dependent (workspaceCratePackageDependencies.${edge.dependency} or [])
@@ -220,12 +212,14 @@ let
     )
     (builtins.attrNames dependencies);
   validatedDependencies =
-    assert missingCrate2nixCiPrebuildEdges == []
-    || builtins.throw "missing ${crate2nixCiPrebuildAttr} dependency edges for: ${builtins.concatStringsSep ", " missingCrate2nixCiPrebuildEdges}";
     assert missingWorkspaceCratePackageEdges == []
     || builtins.throw "manual NixCI dependency graph is missing workspace crate package dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge missingWorkspaceCratePackageEdges)}";
+    assert missingWorkspaceCratePackageCacheArtifactEdges == []
+    || builtins.throw "manual NixCI dependency graph is missing workspace crate package cache dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge missingWorkspaceCratePackageCacheArtifactEdges)}";
     assert missingWorkspaceCrateTestBinaryEdges == []
     || builtins.throw "manual NixCI dependency graph is missing workspace crate-test-binary dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge missingWorkspaceCrateTestBinaryEdges)}";
+    assert missingWorkspaceCrateTestBinaryCacheArtifactEdges == []
+    || builtins.throw "manual NixCI dependency graph is missing workspace crate-test-binary cache dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge missingWorkspaceCrateTestBinaryCacheArtifactEdges)}";
     assert reciprocalWorkspaceCratePackageEdges == []
     || builtins.throw "manual NixCI dependency graph contains reciprocal workspace crate package dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge reciprocalWorkspaceCratePackageEdges)}";
     assert reciprocalWorkspaceCrateTestBinaryEdges == []
@@ -250,23 +244,24 @@ in {
       "checks.${system}.gammaloop-nextest-spenso"
       "checks.${system}.gammaloop-nextest-vakint"
       "packages.${system}.default"
+      "packages.${system}.crane-ci-prebuild"
       "packages.${system}.cargoArtifacts"
       "packages.${system}.workspaceBuildArtifacts"
       "packages.${system}.gammaloop-llvm-coverage"
       "packages.${system}.nix-ci-check-gammaloop-nextest"
     ];
   fail-fast = false;
-  # Keep dependency discovery manual. With the generated crate2nix outputs,
+  # Keep dependency discovery manual. With generated Rust outputs,
   # automatic discovery asks NixCI to compute derivation paths for many
   # package/check attrs during `show`, including attrs listed in doNotBuild.
-  # The manual graph below prebuilds the crate2nix Symbolica closure before
-  # Symbolica-consuming crate jobs fan out, orders crate package and test-binary
-  # jobs by regular workspace dependencies, and keeps impure Symbolica users
-  # behind test runners.
-  # Test-only workspace dependencies are deliberately omitted: the flake has
-  # synthetic crate2nix package IDs to break the linnet/linnest and
-  # spenso-macros/spenso dev-dependency cycles, but those synthetic crates are
-  # not exposed as NixCI jobs.
+  # The manual graph below uses the Hakari workspace-hack cache artifact as the
+  # root for Symbolica-containing cache jobs, orders crate package and
+  # test-binary jobs by regular workspace dependencies, makes each test-binary
+  # dependency artifact wait for its matching package dependency artifact, and
+  # keeps impure Symbolica users behind test runners.
+  # The workspace edges use Guppy's normal resolved package closures. Test-only
+  # workspace dependencies are deliberately omitted because the linnet/linnest
+  # and spenso-macros/spenso dev-dependency cycles are not a valid NixCI job DAG.
   # See https://nix-ci.com/documentation/automatic-dependency-discovery
   # and https://nix-ci.com/documentation/manually-specified-dependencies
   dependency-discovery.enable = false;

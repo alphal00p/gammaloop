@@ -29,9 +29,7 @@ derive_more = { version = "2", features = ["as_ref", "deref", "deref_mut", "is_v
 either = { version = "1", features = ["use_std"] }
 figment = { version = "0.10", default-features = false, features = ["json", "toml"] }
 getrandom = { version = "0.2", default-features = false, features = ["custom", "std"] }
-indenter = { version = "0.3", features = ["std"] }
 indexmap = { version = "2" }
-indicatif = { version = "0.18", features = ["improved_unicode", "in_memory", "rayon"] }
 insta = { version = "1", features = ["json", "ron", "toml", "yaml"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
 memchr = { version = "2" }
@@ -82,9 +80,7 @@ derive_more-impl = { version = "2", features = ["as_ref", "deref", "deref_mut", 
 either = { version = "1", features = ["use_std"] }
 figment = { version = "0.10", default-features = false, features = ["json", "toml"] }
 getrandom = { version = "0.2", default-features = false, features = ["custom", "std"] }
-indenter = { version = "0.3", features = ["std"] }
 indexmap = { version = "2" }
-indicatif = { version = "0.18", features = ["improved_unicode", "in_memory", "rayon"] }
 insta = { version = "1", features = ["json", "ron", "toml", "yaml"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
 memchr = { version = "2" }

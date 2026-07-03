@@ -14,11 +14,6 @@
       inputs.rust-analyzer-src.follows = "";
     };
 
-    crate2nix = {
-      url = "github:nix-community/crate2nix/0.14.1";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -26,7 +21,6 @@
     nixpkgs,
     crane,
     fenix,
-    crate2nix,
     flake-utils,
     ...
   }:
@@ -66,6 +60,8 @@
         wasmToolchain;
 
       workspaceRoot = ./.;
+      workspaceGraph = builtins.fromJSON (builtins.readFile ./nix/ci-workspace-graph.json);
+      workspaceHackPackage = "gammaloop-workspace-hack";
 
       cargoSources = craneLib.fileset.commonCargoSources workspaceRoot;
 
@@ -240,16 +236,17 @@
         )
         workspaceMemberDirs;
 
-      workspaceCargoTargetEntrypoints =
-        lib.filter builtins.pathExists (
-          map (path: workspaceRoot + "/${path}") (
-            lib.sort (left: right: left < right) (lib.unique (
-              workspaceDefaultCargoTargetPaths
-              ++ workspaceExplicitCargoTargetPaths
-              ++ autoCargoTargetPaths
-            ))
-          )
+      workspaceCargoTargetRelPaths =
+        lib.filter (path: builtins.pathExists (workspaceRoot + "/${path}")) (
+          lib.sort (left: right: left < right) (lib.unique (
+            workspaceDefaultCargoTargetPaths
+            ++ workspaceExplicitCargoTargetPaths
+            ++ autoCargoTargetPaths
+          ))
         );
+
+      workspaceCargoTargetEntrypoints =
+        map (path: workspaceRoot + "/${path}") workspaceCargoTargetRelPaths;
 
       workspaceDependencyManifestFiles =
         [
@@ -275,7 +272,7 @@
         );
       };
 
-      crate2nixGenerationSrc = lib.fileset.toSource {
+      cargoGraphGenerationSrc = lib.fileset.toSource {
         root = workspaceRoot;
         fileset = lib.fileset.unions (
           workspaceDependencyManifestFiles
@@ -288,44 +285,115 @@
         );
       };
 
-      crate2nixSourceRootFiles = [
-        ./Cargo.lock
-        ./Cargo.toml
-      ];
-
-      crate2nixSourceWith = fileset:
-        lib.fileset.toSource {
-          root = workspaceRoot;
-          fileset = lib.fileset.unions (crate2nixSourceRootFiles ++ fileset);
-        };
-
-      crate2nixGammaloopApiSrc = crate2nixSourceWith [
-        ./crates/gammaloop-api
-        ./assets
-      ];
-
-      crate2nixGammalooprsSrc = crate2nixSourceWith [
-        ./crates/gammalooprs
-        ./assets
-      ];
-
-      crate2nixIntegrationTestsSrc = crate2nixSourceWith [
-        ./tests
-        ./assets
-        ./examples/cli
-      ];
-
-      crate2nixWorkspaceCrateSrcFor = package:
-        crate2nixSourceWith [
-          (workspaceRoot + "/${workspaceMemberPackageDirs.${package}}")
-        ];
-
       dummyCargoTarget = pkgs.writeText "crane-dummy-cargo-target.rs" ''
         #![allow(clippy::all)]
         #![allow(dead_code)]
 
         pub fn main() {}
       '';
+
+      workspaceDependencyNamesFor = package:
+        workspaceGraph.normal_dependencies.${package} or [];
+
+      workspacePackageExtraFilesets = {
+        "gammaloop-api" = [
+          ./assets
+        ];
+        gammalooprs = [
+          ./assets
+        ];
+        "gammaloop-integration-tests" = [
+          ./assets
+          ./examples/cli
+        ];
+      };
+
+      workspacePackageSrcFor = package:
+        lib.fileset.toSource {
+          root = workspaceRoot;
+          fileset = lib.fileset.unions (
+            workspaceDependencyManifestFiles
+            ++ workspaceDependencyBuildScripts
+            ++ [
+              (workspaceRoot + "/${workspaceMemberPackageDirs.${package}}")
+              ./tests/resources/fjcore
+            ]
+            ++ (workspacePackageExtraFilesets.${package} or [])
+          );
+        };
+
+      workspaceDummyCargoTargetPathsFor = package:
+        lib.filter (
+          path: !(lib.hasPrefix "${workspaceMemberPackageDirs.${package}}/" path)
+        )
+        workspaceCargoTargetRelPaths;
+
+      workspaceDummyCargoTargetsScriptFor = package:
+        lib.concatMapStringsSep "\n" (path: ''
+          if [ ! -e ${lib.escapeShellArg path} ]; then
+            install -D -m 0644 ${dummyCargoTarget} ${lib.escapeShellArg path}
+          fi
+        '')
+        (workspaceDummyCargoTargetPathsFor package);
+
+      workspaceAllDummyCargoTargetsScript =
+        lib.concatMapStringsSep "\n" (path: ''
+          install -D -m 0644 ${dummyCargoTarget} ${lib.escapeShellArg path}
+        '')
+        workspaceCargoTargetRelPaths;
+
+      packageCargoFeatures = package:
+        (workspaceManifestFor workspaceMemberPackageDirs.${package}).features or {};
+
+      packageFeatureIf = package: feature:
+        lib.optional (builtins.hasAttr feature (packageCargoFeatures package)) feature;
+
+      craneCiCommonFeaturesFor = package:
+        lib.concatMap (packageFeatureIf package) ["bincode" "serde"];
+
+      craneCiExtraFeatureSets = {
+        "gammaloop-tracing-filter" = ["clap" "symbolica"];
+        idenso = ["reference-cases"];
+        linnet = ["symbolica"];
+        spenso = ["shadowing"];
+        "spenso-macros" = ["shadowing"];
+      };
+
+      craneCiFeaturesFor = package:
+        sortedUnique (craneCiCommonFeaturesFor package ++ (craneCiExtraFeatureSets.${package} or []));
+
+      craneTestExtraFeatureSets = {
+        "gammaloop-integration-tests" = ["python-api-tests"];
+      };
+
+      craneTestFeaturesFor = package:
+        sortedUnique (craneCiFeaturesFor package ++ (craneTestExtraFeatureSets.${package} or []));
+
+      cargoFeatureArgs = features:
+        lib.optionalString (features != []) "--features ${lib.escapeShellArg (lib.concatStringsSep "," features)}";
+
+      cargoPackageArgsFor = package: features:
+        lib.concatStringsSep " " (
+          [
+            "--locked"
+            "-p ${lib.escapeShellArg package}"
+          ]
+          ++ lib.optional (features != []) (cargoFeatureArgs features)
+        );
+
+      cargoQualifiedFeatureArgsFor = packages: featuresFor:
+        let
+          features =
+            lib.concatMap (
+              package:
+                map (feature: "${package}/${feature}") (featuresFor package)
+            )
+            packages;
+        in
+          cargoFeatureArgs (sortedUnique features);
+
+      craneWorkspacePrebuildFeatureArgs =
+        cargoQualifiedFeatureArgsFor workspaceMemberPackages craneTestFeaturesFor;
 
       src = workspaceBuildSrc;
 
@@ -428,143 +496,31 @@
         fi
       '';
 
-      crate2nixCommonOverride = old: {
-        nativeBuildInputs = (old.nativeBuildInputs or []) ++ (commonArgs.nativeBuildInputs or []);
-        buildInputs = (old.buildInputs or []) ++ (commonArgs.buildInputs or []);
-
-        CC = nixCc;
-        CXX = nixCxx;
-        CARGO_CRATE_NAME = lib.replaceStrings [ "-" ] [ "_" ] old.crateName;
-        "${cargoLinkerVar}" = nixCc;
-        RUSTFLAGS = "-C linker=${nixCc}";
-
-        LD_LIBRARY_PATH = runtimeLibPath;
-        DYLD_LIBRARY_PATH = runtimeLibPath;
-        PYO3_PYTHON = "${pkgs.python313}/bin/python3";
-        PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
-        SYMBOLICA_OEM_LICENSE = "SYMBOLICA_OEM_GAMMALOOP";
-      };
-
-      crate2nixSourceOverride = old: src: workspace_member:
-        (crate2nixCommonOverride old)
+      gammaloop-cli = craneLib.buildPackage (ciArgs
         // {
-          inherit src workspace_member;
-        };
-
-      crate2nixSymbolicaGitHeadOverride = old:
-        (crate2nixCommonOverride old)
+          cargoArtifacts = cranePackageBuildArtifacts."gammaloop-api";
+          doNotLinkInheritedArtifacts = true;
+          pname = "gammaloop-api";
+          src = workspacePackageSrcFor "gammaloop-api";
+          cargoExtraArgs = cargoPackageArgsFor "gammaloop-api" [];
+          doCheck = false;
+          postPatch = workspaceDummyCargoTargetsScriptFor "gammaloop-api";
+        });
+      gammaloop-python-lib = craneLib.buildPackage (ciArgs
         // {
-          # GammaLoop only depends on Symbolica as a library. Declaring an empty
-          # binary set keeps buildRustCrate from auto-detecting Symbolica's CLI
-          # and putting it in the default out output for every feature set.
-          crateBin = [];
-          postPatch =
-            (old.postPatch or "")
-            + ''
-              mkdir -p .git
-              printf 'ref: refs/heads/nix-vendor\n' > .git/HEAD
-            '';
-        };
-
-      crate2nixWorkspaceCrateOverrides =
-        lib.mapAttrs (
-          package: member: old:
-            crate2nixSourceOverride old (crate2nixWorkspaceCrateSrcFor package) member
-        )
-        workspaceMemberPackageDirs;
-
-      crate2nixDefaultCrateOverrides =
-        pkgs.defaultCrateOverrides
-        // crate2nixWorkspaceCrateOverrides
-        // {
-          "gammaloop-api" = old: crate2nixSourceOverride old crate2nixGammaloopApiSrc "crates/gammaloop-api";
-          "gammalooprs" = old: crate2nixSourceOverride old crate2nixGammalooprsSrc "crates/gammalooprs";
-          "gammaloop-integration-tests" = old: crate2nixSourceOverride old crate2nixIntegrationTestsSrc "tests";
-          "gmp-mpfr-sys" = crate2nixCommonOverride;
-          "pyo3-build-config" = crate2nixCommonOverride;
-          "rug" = old:
-            (crate2nixCommonOverride old)
-            // {
-              DEP_GMP_LIMB_BITS = "64";
-            };
-          "symbolica" = crate2nixSymbolicaGitHeadOverride;
-          "graphica" = crate2nixSymbolicaGitHeadOverride;
-          "numerica" = crate2nixSymbolicaGitHeadOverride;
-        };
-
-      crate2nixBuildRustCrateForPkgs = pkgs':
-        pkgs'.buildRustCrate.override {
-          rustc = ciToolchain;
-          cargo = ciToolchain;
-        };
-      crate2nixBuildRustCrateWithDefaultOverridesForPkgs = pkgs':
-        (crate2nixBuildRustCrateForPkgs pkgs').override {
-          defaultCrateOverrides = crate2nixDefaultCrateOverrides;
-        };
-
-      crate2nixGeneratedCargoNix = crate2nix.tools.${system}.generatedCargoNix {
-        name = "gammaloop";
-        src = crate2nixGenerationSrc;
-      };
-
-      crate2nixPackageSet = import crate2nixGeneratedCargoNix {
-        inherit pkgs;
-        release = true;
-        buildRustCrateForPkgs = crate2nixBuildRustCrateForPkgs;
-        defaultCrateOverrides = crate2nixDefaultCrateOverrides;
-      };
-
-      crate2nixWorkspaceMembers = crate2nixPackageSet.workspaceMembers;
-      crate2nixBuildDefault = package: crate2nixWorkspaceMembers.${package}.build;
-      crate2nixBuildWithFeatures = package: features:
-        (crate2nixBuildDefault package).override {
-          inherit features;
-        };
-      crate2nixRootFeatures = package: crate2nixPackageSet.internal.crates.${package}.features or {};
-      crate2nixRootFeatureIf = package: feature:
-        lib.optional (builtins.hasAttr feature (crate2nixRootFeatures package)) feature;
-      crate2nixCiCommonFeaturesFor = package:
-        ["default"] ++ lib.concatMap (crate2nixRootFeatureIf package) ["bincode" "serde"];
-      crate2nixCiExtraFeatureSets = {
-        "gammaloop-tracing-filter" = ["clap" "symbolica"];
-        idenso = ["reference-cases"];
-        linnet = ["symbolica"];
-        spenso = ["shadowing"];
-        "spenso-macros" = ["shadowing"];
-      };
-      crate2nixCiFeaturesFor = package:
-        sortedUnique (crate2nixCiCommonFeaturesFor package ++ (crate2nixCiExtraFeatureSets.${package} or []));
-      crate2nixBuild = package: crate2nixBuildWithFeatures package (crate2nixCiFeaturesFor package);
-      crate2nixCiSanitizePackageId = packageId: lib.replaceStrings [" "] ["-"] packageId;
-      crate2nixCiFeatureSetName = features:
-        if features == []
-        then "plain"
-        else lib.concatStringsSep "-" features;
-      crate2nixCiPrebuildCrateFor = rootPackageId: rootFeatures: packageId:
-        (crate2nixPackageSet.internal.builtRustCratesWithFeatures {
-          packageId = rootPackageId;
-          features = rootFeatures;
-          buildRustCrateForPkgsFunc = crate2nixBuildRustCrateWithDefaultOverridesForPkgs;
-          runTests = false;
-        })
-        .crates.${packageId};
-      crate2nixCiDependencyEntriesFor = rootPackageId: rootFeatures: packageIds:
-        map (packageId: {
-          name = "${crate2nixCiSanitizePackageId rootPackageId}-${crate2nixCiFeatureSetName rootFeatures}-${crate2nixCiSanitizePackageId packageId}";
-          path = lib.getLib (crate2nixCiPrebuildCrateFor rootPackageId rootFeatures packageId);
-        })
-        packageIds;
-
-      gammaloop-cli = crate2nixBuildWithFeatures "gammaloop-api" ["default"];
-      gammaloop-python-lib = crate2nixBuildWithFeatures "gammaloop-api" [
-        "python_abi"
-        "pyo3-extension-module"
-      ];
+          cargoArtifacts = cranePythonBuildArtifacts;
+          doNotLinkInheritedArtifacts = true;
+          pname = "gammaloop-api-python";
+          src = workspacePackageSrcFor "gammaloop-api";
+          cargoExtraArgs = "--locked -p gammaloop-api --no-default-features --features python_abi,pyo3-extension-module";
+          doCheck = false;
+          postPatch = workspaceDummyCargoTargetsScriptFor "gammaloop-api";
+        });
       gammaloop-python-lib-output = lib.getLib gammaloop-python-lib;
       pythonSitePackages = "${pkgs.python313.sitePackages}";
       gammaloop-python-module = pkgs.runCommand "gammaloop-python-module" {} ''
         mkdir -p "$out/${pythonSitePackages}/gammaloop"
-        cp ${crate2nixGammaloopApiSrc}/crates/gammaloop-api/python/gammaloop/__init__.py \
+        cp ${./crates/gammaloop-api/python/gammaloop/__init__.py} \
           "$out/${pythonSitePackages}/gammaloop/__init__.py"
 
         extension="$(
@@ -574,18 +530,22 @@
             | head -n 1
         )"
         if [ -z "$extension" ]; then
-          echo "Could not find crate2nix-built gammaloop-api Python extension in ${gammaloop-python-lib-output}" >&2
+          echo "Could not find Crane-built gammaloop-api Python extension in ${gammaloop-python-lib-output}" >&2
           exit 1
         fi
         cp "$extension" "$out/${pythonSitePackages}/gammaloop/_gammaloop.so"
       '';
-      clinnet-cli = crate2nixBuildWithFeatures "clinnet" ["default"];
-
-      crate2nixPackageOutputs = lib.listToAttrs (map (package: {
-          name = "crate-${package}";
-          value = crate2nixBuild package;
-        })
-        workspaceMemberPackages);
+      clinnet-cli = craneLib.buildPackage (ciArgs
+        // {
+          cargoArtifacts = cranePackageBuildArtifacts.clinnet;
+          doNotLinkInheritedArtifacts = true;
+          pname = "clinnet";
+          inherit (clinnetMeta) version;
+          src = workspacePackageSrcFor "clinnet";
+          cargoExtraArgs = cargoPackageArgsFor "clinnet" [];
+          doCheck = false;
+          postPatch = workspaceDummyCargoTargetsScriptFor "clinnet";
+        });
 
       nextestProfile = "ci_gammaloop";
       nextestJunitPath = "target/nextest/${nextestProfile}/junit.xml";
@@ -736,12 +696,408 @@
         // {
           pname = "gammaloop-workspace-deps";
           src = workspaceDependencySrc;
+          cargoExtraArgs = "--locked --workspace ${craneWorkspacePrebuildFeatureArgs}";
           extraDummyScript =
             lib.concatMapStringsSep "\n" (path: ''
               install -D -m 0644 ${dummyCargoTarget} "$out/${path}"
             '')
             autoCargoTargetPaths;
         });
+
+      guppyWorkspaceGraphNativeBuildInputs = [
+        ciToolchain
+        pkgs.cargo-guppy
+        pkgs.coreutils
+        pkgs.gawk
+        pkgs.gnugrep
+        pkgs.jq
+      ];
+
+      guppyWorkspaceGraphJson = pkgs.runCommand "gammaloop-guppy-workspace-graph.json" {
+        nativeBuildInputs = guppyWorkspaceGraphNativeBuildInputs;
+      } ''
+        set -euo pipefail
+
+        cp -R ${cargoGraphGenerationSrc} source
+        chmod -R u+w source
+        cd source
+        mkdir -p .cargo .cargo-home
+        cp ${cargoVendorDir}/config.toml .cargo/config.toml
+        export CARGO_HOME="$PWD/.cargo-home"
+
+        manifest_path="Cargo.toml"
+        tmp="$(mktemp -d)"
+        trap 'rm -rf "$tmp"' EXIT
+
+        cargo metadata \
+          --format-version 1 \
+          --no-deps \
+          --manifest-path "$manifest_path" \
+          > "$tmp/metadata.json"
+
+        jq '
+          def workspace_deps($path_map; $kinds):
+            [
+              .dependencies[]
+              | select((.kind // "normal") as $kind | $kinds | index($kind))
+              | select(.path != null)
+              | $path_map[.path] // empty
+            ]
+            | unique
+            | sort;
+
+          . as $metadata
+          | [
+              $metadata.packages[]
+              | select(.id as $id | $metadata.workspace_members | index($id))
+            ]
+            | sort_by(.name) as $packages
+          | ($packages | map({key: (.manifest_path | rtrimstr("/Cargo.toml")), value: .name}) | from_entries) as $path_map
+          | {
+              workspace_root: ".",
+              packages: ($packages | map(.name)),
+              package_dirs: (
+                $packages
+                | map({
+                    key: .name,
+                    value: (.manifest_path | ltrimstr($metadata.workspace_root + "/") | rtrimstr("/Cargo.toml"))
+                  })
+                | from_entries
+              ),
+              normal_dependencies: (
+                $packages
+                | map({key: .name, value: workspace_deps($path_map; ["normal", "build"])})
+                | from_entries
+              ),
+              test_dependencies: (
+                $packages
+                | map({key: .name, value: workspace_deps($path_map; ["normal", "build", "dev"])})
+                | from_entries
+              )
+            }
+        ' "$tmp/metadata.json" > "$tmp/base.json"
+
+        jq -r '.packages[]' "$tmp/base.json" > "$tmp/workspace-packages"
+
+        guppy_names() {
+          local package="$1"
+          local kind="$2"
+          local include_dev="$3"
+          if [[ "$include_dev" == "true" ]]; then
+            cargo-guppy resolve-cargo \
+              --manifest-path "$manifest_path" \
+              --resolver-version v2 \
+              --target-platform any \
+              --host-platform any \
+              -k "$kind" \
+              -p "$package" \
+              --include-dev
+          else
+            cargo-guppy resolve-cargo \
+              --manifest-path "$manifest_path" \
+              --resolver-version v2 \
+              --target-platform any \
+              --host-platform any \
+              -k "$kind" \
+              -p "$package"
+          fi | awk '{ print $1 }' | sort -u
+        }
+
+        workspace_guppy_list() {
+          local package="$1"
+          local include_dev="$2"
+          guppy_names "$package" workspace "$include_dev" \
+            | comm -12 - "$tmp/workspace-packages" \
+            | awk -v self="$package" '$0 != self' \
+            | jq -R . \
+            | jq -s 'sort'
+        }
+
+        write_dependency_object() {
+          local include_dev="$1"
+          local output="$2"
+          local fragments="$tmp/$(basename "$output").fragments"
+          : > "$fragments"
+          while IFS= read -r package; do
+            deps="$(workspace_guppy_list "$package" "$include_dev")"
+            jq -n --arg package "$package" --argjson deps "$deps" '{($package): $deps}' >> "$fragments"
+          done < "$tmp/workspace-packages"
+          jq -s 'add' "$fragments" > "$output"
+        }
+
+        write_symbolica_packages() {
+          local include_dev="$1"
+          local output="$2"
+          local names="$tmp/$(basename "$output").names"
+          : > "$names"
+          while IFS= read -r package; do
+            if guppy_names "$package" all "$include_dev" | grep -Eq '^(symbolica|numerica|graphica)$'; then
+              printf '%s\n' "$package" >> "$names"
+            fi
+          done < "$tmp/workspace-packages"
+          jq -R . "$names" | jq -s 'sort' > "$output"
+        }
+
+        write_dependency_object false "$tmp/resolved-normal.json"
+        write_dependency_object true "$tmp/resolved-test.json"
+        write_symbolica_packages false "$tmp/symbolica-normal.json"
+        write_symbolica_packages true "$tmp/symbolica-test.json"
+
+        jq -S \
+          --slurpfile resolvedNormal "$tmp/resolved-normal.json" \
+          --slurpfile resolvedTest "$tmp/resolved-test.json" \
+          --slurpfile symbolicaNormal "$tmp/symbolica-normal.json" \
+          --slurpfile symbolicaTest "$tmp/symbolica-test.json" \
+          '. + {
+            resolved_normal_dependencies: $resolvedNormal[0],
+            resolved_test_dependencies: $resolvedTest[0],
+            symbolica_normal_packages: $symbolicaNormal[0],
+            symbolica_test_packages: $symbolicaTest[0]
+          }' \
+          "$tmp/base.json" \
+          > "$out"
+      '';
+
+      guppyWorkspaceGraphCheck = pkgs.runCommand "gammaloop-guppy-workspace-graph-check" {
+        nativeBuildInputs = [
+          pkgs.diffutils
+        ];
+      } ''
+        diff -u ${./nix/ci-workspace-graph.json} ${guppyWorkspaceGraphJson}
+        mkdir -p "$out"
+      '';
+
+      mergeCargoArtifacts = name: artifacts: let
+        artifactList = lib.filter (artifact: artifact != null) artifacts;
+      in
+        if builtins.length artifactList == 1
+        then builtins.head artifactList
+        else
+          pkgs.runCommand name {
+            nativeBuildInputs = [pkgs.rsync pkgs.zstd pkgs.gnutar];
+          } ''
+            mkdir -p "$out/target"
+
+            unpack_artifact() {
+              local artifact="$1"
+
+              if [ -d "$artifact" ] && [ -f "$artifact/target.tar.zst" ]; then
+                artifact="$artifact/target.tar.zst"
+              elif [ -d "$artifact" ] && [ -d "$artifact/target" ]; then
+                artifact="$artifact/target"
+              fi
+
+              if [ -f "$artifact" ]; then
+                if [ -f "$artifact.prev" ]; then
+                  unpack_artifact "$(realpath "$artifact.prev")"
+                fi
+                zstd -d "$artifact" --stdout | tar -x -C "$out/target"
+              elif [ -d "$artifact" ]; then
+                rsync -a "$artifact/" "$out/target/"
+              else
+                echo "unsupported cargo artifact path: $artifact" >&2
+                exit 1
+              fi
+            }
+
+            ${lib.concatMapStringsSep "\n" (artifact: "unpack_artifact ${artifact}") artifactList}
+          '';
+
+      mergeCargoArtifactsOrNull = name: artifacts: let
+        artifactList = lib.filter (artifact: artifact != null) artifacts;
+      in
+        if artifactList == []
+        then null
+        else mergeCargoArtifacts name artifactList;
+
+      # Crane's buildDepsOnly deliberately clears cargoArtifacts. This local
+      # variant keeps the same dummy-source behavior while allowing per-crate
+      # dependency archives to build incrementally from earlier archives.
+      buildDepsOnlyWithArtifacts = {
+        cargoBuildCommand ? "cargoWithProfile build",
+        cargoCheckCommand ? "cargoWithProfile check",
+        cargoExtraArgs ? "--locked",
+        cargoTestCommand ? "cargoWithProfile test",
+        cargoTestExtraArgs ? "--no-run",
+        ...
+      } @ args: let
+        cleanedArgs = builtins.removeAttrs args [
+          "cargoBuildCommand"
+          "cargoCheckCommand"
+          "cargoCheckExtraArgs"
+          "cargoExtraArgs"
+          "cargoTestCommand"
+          "cargoTestExtraArgs"
+          "dummySrc"
+          "outputHashes"
+          "outputs"
+        ];
+        doCheck = args.doCheck or true;
+        cargoCheckExtraArgs = args.cargoCheckExtraArgs or (if doCheck then "--all-targets" else "");
+        dummySrc =
+          if args ? dummySrc
+          then
+            lib.warnIf (
+              args ? src && args.src != null
+            ) "buildDepsOnlyWithArtifacts will ignore `src` when `dummySrc` is specified" args.dummySrc
+          else
+            craneLib.mkDummySrc args;
+        argsMaybeDummySrcOverride =
+          if args ? dummySrc
+          then args // {src = args.dummySrc;}
+          else args;
+        crateName = craneLib.crateNameFromCargoToml argsMaybeDummySrcOverride;
+      in
+        craneLib.mkCargoDerivation (
+          cleanedArgs
+          // {
+            inherit doCheck;
+
+            src = dummySrc;
+            pnameSuffix = "-deps";
+            pname = args.pname or crateName.pname;
+            version = args.version or crateName.version;
+
+            cargoArtifacts = args.cargoArtifacts or null;
+            doNotLinkInheritedArtifacts = args.doNotLinkInheritedArtifacts or true;
+            cargoVendorDir = args.cargoVendorDir or (craneLib.vendorCargoDeps argsMaybeDummySrcOverride);
+
+            env = (args.env or {}) // {
+              CRANE_BUILD_DEPS_ONLY = ((args.env or {}).CRANE_BUILD_DEPS_ONLY or 1);
+            };
+
+            buildPhaseCargoCommand =
+              args.buildPhaseCargoCommand or ''
+                ${cargoCheckCommand} ${cargoExtraArgs} ${cargoCheckExtraArgs}
+                ${cargoBuildCommand} ${cargoExtraArgs}
+              '';
+
+            checkPhaseCargoCommand =
+              args.checkPhaseCargoCommand or ''
+                ${cargoTestCommand} ${cargoExtraArgs} ${cargoTestExtraArgs}
+              '';
+
+            doInstallCargoArtifacts = true;
+          }
+        );
+
+      rootPackageDependencyArtifactsFor = package:
+        lib.optional (
+          package != workspaceHackPackage
+          && (workspaceDependencyNamesFor package) == []
+          && builtins.elem package workspaceGraph.symbolica_normal_packages
+        )
+        cargoArtifacts;
+
+      cranePackageDependencyArtifacts = lib.fix (self:
+        lib.genAttrs workspacePackages (package:
+          if package == workspaceHackPackage
+          then cargoArtifacts
+          else
+            buildDepsOnlyWithArtifacts (ciArgs
+              // {
+                cargoArtifacts = mergeCargoArtifactsOrNull "gammaloop-crate-${package}-deps-inputs" (
+                  rootPackageDependencyArtifactsFor package
+                  ++ map (dependency: self.${dependency}) (workspaceDependencyNamesFor package)
+                );
+                pname = "gammaloop-crate-${package}";
+                src = workspacePackageSrcFor package;
+                cargoExtraArgs = cargoPackageArgsFor package (craneCiFeaturesFor package);
+                doCheck = false;
+                extraDummyScript = workspaceAllDummyCargoTargetsScript;
+              })));
+
+      cranePackageBuildArtifacts = lib.fix (self:
+        lib.genAttrs workspacePackages (package:
+          if package == workspaceHackPackage
+          then cargoArtifacts
+          else
+            craneLib.cargoBuild (ciArgs
+              // {
+                cargoArtifacts = mergeCargoArtifacts "gammaloop-crate-${package}-deps" (
+                  [cranePackageDependencyArtifacts.${package}]
+                  ++ map (dependency: self.${dependency}) (workspaceDependencyNamesFor package)
+                );
+                doNotLinkInheritedArtifacts = true;
+                pname = "gammaloop-crate-${package}";
+                src = workspacePackageSrcFor package;
+                cargoExtraArgs = cargoPackageArgsFor package (craneCiFeaturesFor package);
+                postPatch = workspaceDummyCargoTargetsScriptFor package;
+              })));
+
+      craneTestDependencyArtifacts = lib.fix (self:
+        lib.genAttrs workspacePackages (package:
+          if package == workspaceHackPackage
+          then cargoArtifacts
+          else
+            buildDepsOnlyWithArtifacts (ciArgs
+              // {
+                cargoArtifacts = mergeCargoArtifactsOrNull "gammaloop-crate-test-binaries-${package}-deps-inputs" (
+                  [cranePackageDependencyArtifacts.${package}]
+                  ++ map (dependency: self.${dependency}) (workspaceDependencyNamesFor package)
+                );
+                pname = "gammaloop-crate-test-binaries-${package}";
+                src = workspacePackageSrcFor package;
+                cargoExtraArgs = cargoPackageArgsFor package (craneTestFeaturesFor package);
+                cargoTestExtraArgs = "--no-run";
+                extraDummyScript = workspaceAllDummyCargoTargetsScript;
+              })));
+
+      craneTestBinaryArtifacts = lib.genAttrs workspacePackages (package:
+        if package == workspaceHackPackage
+        then cargoArtifacts
+        else
+          craneLib.mkCargoDerivation (ciArgs
+            // {
+              cargoArtifacts = mergeCargoArtifacts "gammaloop-crate-test-binaries-${package}-deps" (
+                [craneTestDependencyArtifacts.${package} cranePackageBuildArtifacts.${package}]
+                ++ map (dependency: cranePackageBuildArtifacts.${dependency}) (workspaceDependencyNamesFor package)
+              );
+              doNotLinkInheritedArtifacts = true;
+              pname = "gammaloop-crate-test-binaries-${package}";
+              src = workspacePackageSrcFor package;
+              buildPhaseCargoCommand = "cargoWithProfile test --no-run ${cargoPackageArgsFor package (craneTestFeaturesFor package)}";
+              checkPhaseCargoCommand = "";
+              doCheck = false;
+              postPatch = workspaceDummyCargoTargetsScriptFor package;
+            }));
+
+      cranePythonBuildArtifacts = craneLib.cargoBuild (ciArgs
+        // {
+          cargoArtifacts = mergeCargoArtifacts "gammaloop-python-deps" (
+            [cargoArtifacts]
+            ++ map (dependency: cranePackageBuildArtifacts.${dependency}) (workspaceDependencyNamesFor "gammaloop-api")
+          );
+          doNotLinkInheritedArtifacts = true;
+          pname = "gammaloop-api-python-build";
+          src = workspacePackageSrcFor "gammaloop-api";
+          cargoExtraArgs = "--locked -p gammaloop-api --no-default-features --features python_abi,pyo3-extension-module";
+          postPatch = workspaceDummyCargoTargetsScriptFor "gammaloop-api";
+        });
+
+      cranePackageOutputs = lib.listToAttrs (map (package: {
+          name = "crate-${package}";
+          value = cranePackageBuildArtifacts.${package};
+        })
+        workspacePackages);
+
+      cranePackageDependencyOutputs = lib.listToAttrs (map (package: {
+          name = "crate-deps-${package}";
+          value = cranePackageDependencyArtifacts.${package};
+        })
+        workspacePackages);
+
+      craneTestBinaryPackageOutputs = lib.listToAttrs (map (package: {
+          name = "crate-test-binaries-${package}";
+          value = craneTestBinaryArtifacts.${package};
+        })
+        workspacePackages);
+
+      craneTestBinaryDependencyOutputs = lib.listToAttrs (map (package: {
+          name = "crate-test-binaries-deps-${package}";
+          value = craneTestDependencyArtifacts.${package};
+        })
+        workspacePackages);
 
       workspaceBuildArtifacts = craneLib.cargoBuild (ciArgs
         // {
@@ -804,6 +1160,7 @@
           name = "python-api";
           packages = ["gammaloop-integration-tests"];
           filter = "package(gammaloop-integration-tests) & binary(test_python_api)";
+          extraFeatures."gammaloop-integration-tests" = ["python-api-tests"];
         }
         {
           name = "linnet";
@@ -861,340 +1218,27 @@
         then workspaceTestSrc
         else workspaceNonIntegrationTestSrc;
 
-      crate2nixReplacePackageDependency = dependencyName: newPackageId: dependencies:
-        map (
-          dependency:
-            if dependency.name == dependencyName
-            then dependency // {packageId = newPackageId;}
-            else dependency
-        )
-        dependencies;
-
-      crate2nixTestSharedSources = [
-        ./.config
-        ./assets
-        ./crates/clinnet/templates
-        ./crates/vakint/form_src
-        ./crates/vakint/templates
-        ./examples/cli
-        ./tests/resources
-      ];
-
-      crate2nixTestSrcForPackage = package:
-        crate2nixSourceWith (
-          [
-            (workspaceRoot + "/${workspaceMemberPackageDirs.${package}}")
-          ]
-          ++ crate2nixTestSharedSources
+      nextestFeatureArgsFor = target:
+        cargoQualifiedFeatureArgsFor target.packages (
+          package:
+            sortedUnique (
+              craneCiFeaturesFor package
+              ++ lib.optionals ((target ? extraFeatures) && builtins.hasAttr package target.extraFeatures) target.extraFeatures.${package}
+            )
         );
 
-      crate2nixTestCrateConfigs = let
-        crates = crate2nixPackageSet.internal.crates;
-        workspaceTestCrates = lib.genAttrs workspacePackages (package:
-          crates.${package}
-          // {
-            src = crate2nixTestSrcForPackage package;
-            workspace_member = workspaceMemberPackageDirs.${package};
-          });
-      in
-        crates
-        // workspaceTestCrates
-        // {
-          "linnet-nontest" = workspaceTestCrates."linnet";
-          "linnest-for-linnet-test" =
-            workspaceTestCrates."linnest"
-            // {
-              dependencies = crate2nixReplacePackageDependency "linnet" "linnet-nontest" workspaceTestCrates."linnest".dependencies;
-            };
-          "linnet" =
-            workspaceTestCrates."linnet"
-            // {
-              devDependencies = crate2nixReplacePackageDependency "linnest" "linnest-for-linnet-test" workspaceTestCrates."linnet".devDependencies;
-            };
-          "spenso-macros-nontest" = workspaceTestCrates."spenso-macros";
-          "spenso-for-spenso-macros-test" =
-            workspaceTestCrates."spenso"
-            // {
-              dependencies = crate2nixReplacePackageDependency "spenso-macros" "spenso-macros-nontest" workspaceTestCrates."spenso".dependencies;
-            };
-          "spenso-macros" =
-            workspaceTestCrates."spenso-macros"
-            // {
-              devDependencies = crate2nixReplacePackageDependency "spenso" "spenso-for-spenso-macros-test" workspaceTestCrates."spenso-macros".devDependencies;
-            };
-        };
+      nextestCargoArgsFor = target:
+        lib.concatStringsSep " " (
+          [
+            "--locked"
+          ]
+          ++ map (package: "-p ${lib.escapeShellArg package}") target.packages
+          ++ lib.optional (nextestFeatureArgsFor target != "") (nextestFeatureArgsFor target)
+        );
 
-      crate2nixTestBuildRustCrateForPkgs = pkgs':
-        crate2nixBuildRustCrateWithDefaultOverridesForPkgs pkgs';
-
-      crate2nixBuiltTestCratesFor = package:
-        crate2nixPackageSet.internal.builtRustCratesWithFeatures {
-          packageId = package;
-          features = crate2nixCiFeaturesFor package;
-          crateConfigs = crate2nixTestCrateConfigs;
-          buildRustCrateForPkgsFunc = crate2nixTestBuildRustCrateForPkgs;
-          runTests = true;
-        };
-
-      crate2nixTestBinaryCrateFor = package:
-        (crate2nixBuiltTestCratesFor package).crates.${package}.override (old: {
-          buildTests = true;
-          preBuild =
-            (old.preBuild or "")
-            + lib.optionalString (crate2nixTestCrateConfigs.${package}.procMacro or false) ''
-              # buildRustCrate wires the current crate as an rlib for integration
-              # tests. Proc-macro crates emit a build-platform shared library
-              # instead, so correct the self --extern path for those tests.
-              build_lib() {
-                lib_src=$1
-                echo_build_heading $lib_src "$LIB_NAME"
-
-                noisily rustc \
-                  --crate-name $CRATE_NAME \
-                  $lib_src \
-                  --out-dir target/lib \
-                  -L dependency=target/deps \
-                  --cap-lints allow \
-                  $LINK \
-                  $EXTRA_LINK_ARGS \
-                  $EXTRA_LINK_ARGS_LIB \
-                  $LIB_RUSTC_OPTS \
-                  $BUILD_OUT_DIR \
-                  $EXTRA_BUILD \
-                  $EXTRA_FEATURES \
-                  $EXTRA_RUSTC_FLAGS \
-                  --color $colors
-
-                if [ -e target/lib/lib$CRATE_NAME-$metadata$LIB_EXT ]; then
-                  EXTRA_LIB=" --extern $CRATE_NAME=target/lib/lib$CRATE_NAME-$metadata$LIB_EXT"
-                else
-                  EXTRA_LIB=" --extern $CRATE_NAME=target/lib/lib$CRATE_NAME-$metadata.rlib"
-                fi
-              }
-            '';
-        });
-
-      crate2nixTestBinaryCrates = lib.genAttrs workspacePackages crate2nixTestBinaryCrateFor;
-
-      crate2nixTestBinaryPackageOutputs = lib.listToAttrs (map (package: {
-          name = "crate-test-binaries-${package}";
-          value = crate2nixTestBinaryCrates.${package};
-        })
-        workspacePackages);
-
-      crate2nixCiPrebuildRoots = [
-        {
-          packageId = "gammaloop-workspace-hack";
-          features = ["default"];
-          packageIds = ["symbolica" "numerica"];
-        }
-        {
-          packageId = "gammaloop-api";
-          features = ["default"];
-          packageIds = ["gammaloop-workspace-hack" "symbolica" "numerica"];
-        }
-        {
-          packageId = "gammaloop-api";
-          features = ["python_abi" "pyo3-extension-module"];
-          packageIds = ["gammaloop-workspace-hack" "symbolica" "numerica"];
-        }
-        {
-          packageId = "spenso";
-          features = crate2nixCiFeaturesFor "spenso";
-          packageIds = ["gammaloop-workspace-hack" "symbolica" "numerica"];
-        }
-        {
-          packageId = "spynso3";
-          features = crate2nixCiFeaturesFor "spynso3";
-          packageIds = ["gammaloop-workspace-hack" "symbolica" "numerica"];
-        }
-        {
-          packageId = "vakint";
-          features = crate2nixCiFeaturesFor "vakint";
-          packageIds = ["symbolica" "numerica"];
-        }
-      ];
-      # Only prebuild test-root Symbolica variants that are reused by more than one CI job.
-      crate2nixCiPrebuildSharedTestRoots = [
-        "gammaloop-integration-tests"
-      ];
-      crate2nixCiPrebuildSharedTestDependencyEntries = map (package: {
-        name = "test-${crate2nixCiSanitizePackageId package}-symbolica";
-        path = lib.getLib (crate2nixBuiltTestCratesFor package).crates.symbolica;
-      })
-      crate2nixCiPrebuildSharedTestRoots;
-      crate2nixCiPrebuild =
-        (pkgs.linkFarm "gammaloop-crate2nix-ci-prebuild" (
-          lib.concatMap (
-            root:
-              crate2nixCiDependencyEntriesFor root.packageId root.features root.packageIds
-          )
-          crate2nixCiPrebuildRoots
-          ++ crate2nixCiPrebuildSharedTestDependencyEntries
-        ))
-        .overrideAttrs (old: {
-          passthru =
-            (old.passthru or {})
-            // {
-              inherit crate2nixGeneratedCargoNix crate2nixGenerationSrc;
-            };
-        });
-
-      nextestCargoMetadata = pkgs.runCommand "gammaloop-nextest-cargo-metadata.json" {
-        nativeBuildInputs = [ciToolchain];
-      } ''
-        cp -R ${workspaceTestSrc} source
-        chmod -R u+w source
-        cd source
-        cargo metadata --format-version 1 --no-deps > "$out"
-      '';
-
-      nextestBinarySetFor = target: let
-        packageNamesFile = pkgs.writeText "gammaloop-nextest-packages-${target.name}.json" (builtins.toJSON target.packages);
-        testCratePathsFile = pkgs.writeText "gammaloop-nextest-test-crates-${target.name}.json" (builtins.toJSON (lib.genAttrs target.packages (package: "${crate2nixTestBinaryCrates.${package}}")));
-      in
-        pkgs.runCommand "gammaloop-nextest-binaries-${target.name}" {
-          nativeBuildInputs = [pkgs.python3];
-          packageNames = packageNamesFile;
-          testCratePaths = testCratePathsFile;
-          cargoMetadata = nextestCargoMetadata;
-          rustLibDir = nextestRustLibDir;
-          targetTriple = nextestTargetTriple;
-        } ''
-          mkdir -p "$out/target/debug/deps"
-          export OUT_DIR="$out"
-          python3 <<'PY'
-          import json
-          import os
-          import shutil
-          import stat
-          import sys
-          from pathlib import Path
-
-          out = Path(os.environ["OUT_DIR"])
-          target_dir = out / "target"
-          deps_dir = target_dir / "debug" / "deps"
-
-          with open(os.environ["cargoMetadata"], "r", encoding="utf-8") as handle:
-              metadata = json.load(handle)
-          with open(os.environ["packageNames"], "r", encoding="utf-8") as handle:
-              package_names = json.load(handle)
-          with open(os.environ["testCratePaths"], "r", encoding="utf-8") as handle:
-              test_crate_paths = json.load(handle)
-
-          metadata["target_directory"] = str(target_dir)
-          metadata["build_directory"] = str(target_dir)
-          with open(out / "cargo-metadata.json", "w", encoding="utf-8") as handle:
-              json.dump(metadata, handle, separators=(",", ":"))
-
-          packages_by_name = {package["name"]: package for package in metadata["packages"]}
-
-          def nextest_kind(kinds):
-              if any(kind in kinds for kind in ("lib", "rlib", "cdylib", "proc-macro")):
-                  return "lib"
-              for kind in ("bin", "test", "bench", "example"):
-                  if kind in kinds:
-                      return kind
-              return None
-
-          def executable_files(test_dir):
-              if not test_dir.exists():
-                  return []
-              return [path for path in sorted(test_dir.iterdir()) if path.is_file() and os.access(path, os.X_OK)]
-
-          def find_binary(files, package_name, target_name, kind):
-              names = [target_name, target_name.replace("-", "_")]
-              if kind == "lib":
-                  names.extend([package_name, package_name.replace("-", "_")])
-              candidates = []
-              for name in dict.fromkeys(names):
-                  candidates.extend(path for path in files if path.name == name or path.name.startswith(f"{name}-"))
-              unique = []
-              seen = set()
-              for candidate in candidates:
-                  if candidate not in seen:
-                      unique.append(candidate)
-                      seen.add(candidate)
-              exact = [path for path in unique if path.name in names]
-              if len(exact) == 1:
-                  return exact[0]
-              if len(unique) == 1:
-                  return unique[0]
-              if unique:
-                  return sorted(unique, key=lambda path: (len(path.name), path.name))[0]
-              return None
-
-          rust_binaries = {}
-          missing = []
-          for package_name in package_names:
-              package = packages_by_name[package_name]
-              test_dir = Path(test_crate_paths[package_name]) / "tests"
-              files = executable_files(test_dir)
-              for target in package["targets"]:
-                  if not target.get("test", False):
-                      continue
-                  kind = nextest_kind(target["kind"])
-                  if kind is None:
-                      continue
-                  source = find_binary(files, package_name, target["name"], kind)
-                  if source is None:
-                      missing.append(f"{package_name}:{target['name']} ({'/'.join(target['kind'])}) in {test_dir}")
-                      continue
-                  binary_id = f"{package_name}::{target['name']}"
-                  safe_binary_id = binary_id.replace("/", "_").replace(":", "_")
-                  destination = deps_dir / f"{safe_binary_id}-{source.name}"
-                  shutil.copy2(source, destination)
-                  destination.chmod(destination.stat().st_mode | stat.S_IXUSR)
-                  rust_binaries[binary_id] = {
-                      "binary-id": binary_id,
-                      "binary-name": target["name"],
-                      "package-id": package["id"],
-                      "kind": kind,
-                      "binary-path": str(destination),
-                      "build-platform": "target",
-                  }
-
-          if missing:
-              print("missing crate2nix test binaries for nextest metadata:", file=sys.stderr)
-              for item in missing:
-                  print(f"  - {item}", file=sys.stderr)
-              sys.exit(1)
-
-          build_meta = {
-              "target-directory": str(target_dir),
-              "base-output-directories": ["debug"],
-              "non-test-binaries": {},
-              "build-script-out-dirs": {},
-              "linked-paths": [],
-              "platforms": {
-                  "host": {
-                      "platform": {
-                          "triple": os.environ["targetTriple"],
-                          "target-features": "unknown",
-                      },
-                      "libdir": {
-                          "status": "available",
-                          "path": os.environ["rustLibDir"],
-                      },
-                  },
-                  "targets": [],
-              },
-              "target-platforms": [
-                  {
-                      "triple": os.environ["targetTriple"],
-                      "target-features": "unknown",
-                  }
-              ],
-              "target-platform": None,
-          }
-          binaries_metadata = {
-              "rust-build-meta": build_meta,
-              "rust-binaries": rust_binaries,
-          }
-          with open(out / "binaries-metadata.json", "w", encoding="utf-8") as handle:
-              json.dump(binaries_metadata, handle, separators=(",", ":"))
-          PY
-        '';
+      nextestBinarySetFor = target:
+        mergeCargoArtifacts "gammaloop-nextest-binaries-${target.name}"
+        (map (package: craneTestBinaryArtifacts.${package}) target.packages);
 
       nextestBinarySets = lib.listToAttrs (map (target: {
           name = "gammaloop-nextest-binaries-${target.name}";
@@ -1211,28 +1255,27 @@
         checkedNextestPackageGroups);
 
       nextestCheckFor = target:
-        pkgs.stdenv.mkDerivation ({
+        craneLib.cargoNextest (ciArgs
+          // {
           pname = "gammaloop-nextest-${target.name}";
-          version = "0.1.0";
           src = nextestSrcFor target;
+          cargoArtifacts = nextestBinarySetForTarget target;
+          doNotLinkInheritedArtifacts = true;
+          cargoExtraArgs = nextestCargoArgsFor target;
+          cargoNextestExtraArgs = "${nextestFilterFor target} ${nextestBaseExtraArgs}";
           nativeBuildInputs =
-            [ciToolchain pkgs.cargo-nextest pkgs.form]
+            (ciArgs.nativeBuildInputs or [])
+            ++ [pkgs.form]
             ++ lib.optionals (nextestUsesIntegrationTests target) [nextestPython];
-          dontConfigure = true;
-          dontBuild = true;
-          doCheck = true;
-          dontFixup = true;
-          LD_LIBRARY_PATH = runtimeLibPath;
-          DYLD_LIBRARY_PATH = runtimeLibPath;
           RUST_BACKTRACE = "1";
           RUST_LIB_BACKTRACE = "1";
           SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
           preCheck = ''
             ${licensePreCheck}
-            # crate2nix-built test binaries run under nextest with the workspace
-            # root as cwd, while insta snapshots are stored under each crate src.
-            # Mirror those snapshot directories into the workspace-level src tree
-            # in the disposable Nix build directory so insta can find them.
+            # Nextest runs with the workspace root as cwd, while some insta
+            # snapshots are stored under each crate src. Mirror those snapshot
+            # directories into the workspace-level src tree in the disposable
+            # Nix build directory so insta can find them.
             if [ -d crates ]; then
               while IFS= read -r snapshots; do
                 rel="''${snapshots#crates/*/src/}"
@@ -1241,39 +1284,8 @@
               done < <(find crates -type d -name snapshots | sort)
             fi
           '';
-          checkPhase = ''
-            runHook preCheck
-
-            cp -R ${nextestBinarySetForTarget target}/target target
-            chmod -R u+w target
-
-            cat > nextest-nix.toml <<EOF
-            [store]
-            dir = "$PWD/target/nextest"
-
-            EOF
-            cat "$PWD/.config/nextest.toml" >> nextest-nix.toml
-
-            set +e
-            cargo nextest run \
-              --cargo-metadata ${nextestBinarySetForTarget target}/cargo-metadata.json \
-              --binaries-metadata ${nextestBinarySetForTarget target}/binaries-metadata.json \
-              --target-dir-remap "$PWD/target" \
-              --workspace-remap "$PWD" \
-              --config-file "$PWD/nextest-nix.toml" \
-              ${nextestFilterFor target} ${nextestBaseExtraArgs}
-            nextest_status=$?
-            set -e
-
+          postCheck = ''
             ${nextestFailureSummary}/bin/nextest-failure-summary ${lib.escapeShellArg nextestJunitPath} || true
-
-            runHook postCheck
-            if [ "$nextest_status" -ne 0 ]; then
-              exit "$nextest_status"
-            fi
-          '';
-          installPhase = ''
-            mkdir -p "$out"
           '';
         } // lib.optionalAttrs (nextestUsesIntegrationTests target) {
           PYO3_PYTHON = "${nextestPython}/bin/python3";
@@ -1374,6 +1386,8 @@
             inherit (apiMeta) version;
           };
 
+          gammaloop-guppy-workspace-graph = guppyWorkspaceGraphCheck;
+
           linnest-wasm =
             pkgs.runCommand "linnest-wasm-check" {
               nativeBuildInputs = [pkgs.wasm-tools];
@@ -1397,13 +1411,16 @@
           gammaloop = gammaloop-cli;
           inherit clinnet-cli;
           "gammaloop-python-module" = gammaloop-python-module;
+          "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
           inherit linnest-wasm linnestWasmCargoArtifacts;
-          "crate2nix-ci-prebuild" = crate2nixCiPrebuild;
+          "crane-ci-prebuild" = cargoArtifacts;
           inherit cargoArtifacts workspaceBuildArtifacts;
           "nix-ci-passed" = nixCiPassed;
         }
-        // crate2nixPackageOutputs
-        // crate2nixTestBinaryPackageOutputs
+        // cranePackageDependencyOutputs
+        // cranePackageOutputs
+        // craneTestBinaryDependencyOutputs
+        // craneTestBinaryPackageOutputs
         // impureCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
           gammaloop-llvm-coverage = craneLib.cargoLlvmCov (commonArgs
@@ -1469,9 +1486,11 @@
               pkg-config
               cargo-deny
               cargo-edit
+              cargo-guppy
               cargo-hakari
               cargo-watch
               bacon
+              jq
               gfortran
               gcc
               rust-script
