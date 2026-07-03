@@ -247,10 +247,22 @@ impl Esurface {
 
         if shift_part < -F::from_ff64(SHIFT_THRESHOLD) * e_cm {
             let lmb = subspace.get_lmb(all_lmbs);
+            let subspace_energy_indices = subspace.contains(&self.energies, graph).collect_vec();
 
-            let mass_sum: F<T> = subspace
-                .contains(&self.energies, graph)
-                .map(|index| &real_mass_vector[index])
+            if !subspace_energy_indices.iter().any(|&index| {
+                subspace
+                    .project_loop_signature(&lmb.edge_signatures[index].internal)
+                    .any(|sign| sign.is_sign())
+            }) {
+                debug!(
+                    "esurface has no radial energy in this subspace, cannot bound a threshold region"
+                );
+                return false;
+            }
+
+            let mass_sum: F<T> = subspace_energy_indices
+                .iter()
+                .map(|&index| &real_mass_vector[index])
                 .fold(F::from_f64(0.0), |acc, x| acc + x);
 
             let zero_vector = ThreeMomentum::new(e_cm.zero(), e_cm.zero(), e_cm.zero());

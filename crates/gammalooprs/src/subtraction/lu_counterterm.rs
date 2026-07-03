@@ -1796,7 +1796,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
 
         debug!("subspace: {:?}", subspace);
 
-        let (radius_guess, _) = self.esurface.get_radius_guess_subspace(
+        let (raw_radius_guess, _) = self.esurface.get_radius_guess_subspace(
             &self.overlap_builder.unit_shifted_momenta,
             self.overlap_builder
                 .counterterm_builder
@@ -1808,8 +1808,6 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             graph,
             masses,
         );
-
-        debug!("initial radius guess: {:?}", radius_guess);
 
         let function = |r: &_| {
             self.esurface.compute_self_and_r_derivative_subspace(
@@ -1827,6 +1825,29 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 graph,
             )
         };
+
+        let zero = raw_radius_guess.zero();
+        let (inside_value, _) = function(&zero);
+        if inside_value >= zero {
+            debug!("overlap center is not inside threshold surface: {inside_value}");
+        }
+        let mut radius_guess = raw_radius_guess.clone();
+        if radius_guess.is_nan() || radius_guess.is_infinite() || radius_guess <= zero {
+            radius_guess = self.overlap_builder.counterterm_builder.e_cm.clone();
+        }
+
+        let mut outside_value = function(&radius_guess).0;
+        let mut outside_search_iterations = 0;
+        while !(outside_value.is_nan() || outside_value.is_infinite())
+            && outside_value <= zero
+            && outside_search_iterations < 64
+        {
+            radius_guess = radius_guess * F::from_f64(2.0);
+            outside_value = function(&radius_guess).0;
+            outside_search_iterations += 1;
+        }
+
+        debug!("initial radius guess: {:?}", radius_guess);
 
         let solution = newton_iteration_and_derivative(
             &radius_guess,
