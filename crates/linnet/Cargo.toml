@@ -32,6 +32,8 @@ serde = { workspace = true, features = ["derive"], optional = true }
 serde_repr = { workspace = true }
 symbolica = { workspace = true, default-features = false, optional = true }
 thiserror = { workspace = true }
+
+[target.x86_64-unknown-linux-gnu.dependencies]
 gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }
 
 [dev-dependencies]

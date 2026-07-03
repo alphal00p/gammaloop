@@ -19,7 +19,6 @@ ahash = { version = "0.8", features = ["compile-time-rng", "serde"] }
 bincode = { version = "2", features = ["serde"] }
 bitflags = { version = "2", default-features = false, features = ["serde"] }
 bitvec = { version = "1", features = ["serde"] }
-cgmath = { version = "0.18", default-features = false, features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env", "unicode", "unstable-ext", "wrap_help"] }
 clap_builder = { version = "4", default-features = false, features = ["color", "env", "std", "suggestions", "unicode", "unstable-ext", "usage", "wrap_help"] }
@@ -41,8 +40,6 @@ num-traits = { version = "0.2", features = ["i128", "libm"] }
 numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main", default-features = false, features = ["bincode", "gmp", "serde"] }
 once_cell = { version = "1" }
 papergrid = { version = "0.17", default-features = false, features = ["ansi", "std"] }
-pyo3 = { version = "0.28", features = ["abi3-py37", "auto-initialize", "extension-module", "eyre"] }
-pyo3-ffi = { version = "0.28", features = ["abi3-py37", "extension-module"] }
 rand = { version = "0.9" }
 rand_chacha = { version = "0.9", default-features = false, features = ["std"] }
 regex = { version = "1" }
@@ -74,7 +71,6 @@ ahash = { version = "0.8", features = ["compile-time-rng", "serde"] }
 bincode = { version = "2", features = ["serde"] }
 bitflags = { version = "2", default-features = false, features = ["serde"] }
 bitvec = { version = "1", features = ["serde"] }
-cgmath = { version = "0.18", default-features = false, features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env", "unicode", "unstable-ext", "wrap_help"] }
 clap_builder = { version = "4", default-features = false, features = ["color", "env", "std", "suggestions", "unicode", "unstable-ext", "usage", "wrap_help"] }
@@ -97,9 +93,6 @@ num-traits = { version = "0.2", features = ["i128", "libm"] }
 numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main", default-features = false, features = ["bincode", "gmp", "serde"] }
 once_cell = { version = "1" }
 papergrid = { version = "0.17", default-features = false, features = ["ansi", "std"] }
-pyo3 = { version = "0.28", features = ["abi3-py37", "auto-initialize", "extension-module", "eyre"] }
-pyo3-build-config = { version = "0.28", features = ["abi3-py37", "extension-module", "resolve-config"] }
-pyo3-ffi = { version = "0.28", features = ["abi3-py37", "extension-module"] }
 rand = { version = "0.9" }
 rand_chacha = { version = "0.9", default-features = false, features = ["std"] }
 regex = { version = "1" }
