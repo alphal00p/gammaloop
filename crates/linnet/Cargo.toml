@@ -32,6 +32,7 @@ serde = { workspace = true, features = ["derive"], optional = true }
 serde_repr = { workspace = true }
 symbolica = { workspace = true, default-features = false, optional = true }
 thiserror = { workspace = true }
+gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }
 
 [dev-dependencies]
 criterion = "0.5"

@@ -33,6 +33,7 @@ toml = { workspace = true }
 tracing = { workspace = true, features = ["release_max_level_info"] }
 vakint = { workspace = true }
 which = { workspace = true }
+gammaloop-workspace-hack = { version = "0.1", path = "../crates/gammaloop-workspace-hack" }
 
 [dependencies.symbolica]
 workspace = true

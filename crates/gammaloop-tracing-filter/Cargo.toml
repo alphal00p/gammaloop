@@ -17,6 +17,7 @@ symbolica = { workspace = true, optional = true }
 tabled = { workspace = true, features = ["ansi"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }
 
 [dependencies.tracing-subscriber]
 workspace = true

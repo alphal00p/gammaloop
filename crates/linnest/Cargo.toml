@@ -21,6 +21,7 @@ getrandom = { version = "0.2", default-features = false, features = ["custom"] }
 rand = "0.8.5"
 thiserror = { workspace = true }
 wasm-minimal-protocol = "0.2.0"
+gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }
 
 [features]
 custom = []
