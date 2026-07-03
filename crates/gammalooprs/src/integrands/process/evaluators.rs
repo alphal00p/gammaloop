@@ -597,7 +597,7 @@ impl EvaluatorStack {
                         elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
                         "Evaluator timing milestone"
                     );
-                    a.as_atom_view().to_owned()
+                    a.as_atom_view().to_cof_dimension_invariants()
                 };
                 crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
                     stage = "evaluator_stack_parse_atom_before_network_parse",
