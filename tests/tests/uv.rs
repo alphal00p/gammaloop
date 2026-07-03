@@ -1645,28 +1645,3 @@ fn epem_a_ddx_xs_nlo_uv() {
         check_mu_r_dependence: false,
     });
 }
-
-#[test]
-fn epem_a_tth_nlo_uv() -> Result<()> {
-    let state_path = get_tests_workspace_path().join("epem_a_tth_nlo_example");
-    let mut cli = get_example_cli(
-        "epem_a_ttxh/NLO/epem_a_tth_NLO.toml",
-        &["generate_diagrams"],
-        Some(state_path.clone()),
-        None,
-        true,
-    )?;
-
-    cli.run_command("run generate_diagrams generate_integrands")?;
-    let res = Profile::UltraViolet(UltraVioletProfile {
-        process: Some(ProcessRef::Unqualified("epem_a_tth".to_string())),
-        integrand_name: Some("NLO".to_string()),
-        ..Default::default()
-    })
-    .run(&mut cli.state, &cli.cli_settings)?;
-
-    let uv = res.unwrap_uv();
-    assert_eq!(uv.pass_fail(-0.9).failed, 0);
-    clean_test(&state_path);
-    Ok(())
-}

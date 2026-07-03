@@ -28,10 +28,16 @@ platforms = [
 [traversal-excludes]
 workspace-members = [
     "idenso",
+    "linnest",
     "linnet-py",
     "spenso",
     "spynso3",
     "vakint",
+]
+third-party = [
+    { name = "pyo3" },
+    { name = "pyo3-build-config" },
+    { name = "pyo3-ffi" },
 ]
 
 # Write out exact versions rather than a semver range. (Defaults to false.)
