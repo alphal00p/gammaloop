@@ -171,6 +171,7 @@ fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
 
     amp.build_integrand(
         &model,
+        "test_process",
         &GlobalSettings {
             ..Default::default()
         },
@@ -1691,6 +1692,7 @@ mod failing {
 
         amp.build_integrand(
             &model,
+            "test_process",
             &GlobalSettings {
                 ..Default::default()
             },

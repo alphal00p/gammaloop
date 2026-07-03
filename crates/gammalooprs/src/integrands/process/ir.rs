@@ -879,6 +879,7 @@ impl AmplitudeIntegrand {
                 mapping: ParameterizationMapping::default(),
                 b: 10.0,
                 power: 1.0,
+                lmb_basis_ids: Default::default(),
             }),
         });
 
@@ -1187,6 +1188,7 @@ impl CrossSectionIntegrand {
                 mapping: ParameterizationMapping::default(),
                 b: 10.0,
                 power: 1.0,
+                lmb_basis_ids: Default::default(),
             }),
         });
 

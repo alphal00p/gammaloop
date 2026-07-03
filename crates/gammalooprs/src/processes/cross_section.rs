@@ -1,4 +1,5 @@
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
     fs::{self, File},
     io::Write,
@@ -28,7 +29,7 @@ use crate::{
     },
     debug_tags, define_index,
     graph::{
-        GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
+        GraphGroup, GroupId, LMBext, LmbChannelFallback, LmbIndex, LoopMomentumBasis,
         cuts::{CutSet, ResidueSelector},
         parse::complete_group_parsing,
     },
@@ -56,9 +57,10 @@ use crate::{
 };
 use eyre::{Context, eyre};
 use linnet::half_edge::{
-    involution::{EdgeVec, Orientation},
+    involution::{EdgeIndex, EdgeVec, Orientation},
     subgraph::{
-        HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SuBitGraph, SubGraphLike, SubSetOps,
+        HedgeNode, Inclusion, InternalSubGraph, ModifySubSet, OrientedCut, SuBitGraph,
+        SubGraphLike, SubSetOps,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -886,8 +888,14 @@ impl CrossSectionCut {
     fn amplitude_side_subjects<'a>(&self, graph: &'a Graph) -> [GraphSelectionSubject<'a>; 2] {
         let cut_edges = self.cut.as_subgraph();
         [
-            GraphSelectionSubject::subgraph(graph, self.left.subtract(&cut_edges)),
-            GraphSelectionSubject::subgraph(graph, self.right.subtract(&cut_edges)),
+            GraphSelectionSubject::cut_side_amplitude_subgraph(
+                graph,
+                self.left.subtract(&cut_edges),
+            ),
+            GraphSelectionSubject::cut_side_amplitude_subgraph(
+                graph,
+                self.right.subtract(&cut_edges),
+            ),
         ]
     }
 
@@ -1136,7 +1144,7 @@ impl CrossSectionGraph {
         debug_tags!(#generation; "building multi channeling channels");
 
         if self.graph.is_group_master {
-            self.build_multi_channeling_channels(settings.override_lmb_heuristics);
+            self.build_multi_channeling_channels(settings.override_lmb_heuristics)?;
         }
 
         let vk = crate::utils::vakint()?;
@@ -2030,13 +2038,185 @@ impl CrossSectionGraph {
         Ok(())
     }
 
-    fn build_multi_channeling_channels(&mut self, override_lmb_heuristics: bool) {
-        let channels = self.graph.build_multi_channeling_channels(
-            self.derived_data.lmbs.as_ref().unwrap(),
-            override_lmb_heuristics,
-        );
+    fn build_multi_channeling_channels(&mut self, override_lmb_heuristics: bool) -> Result<()> {
+        let lmbs = self.derived_data.lmbs.as_ref().unwrap();
+        let channels = if override_lmb_heuristics {
+            self.graph
+                .build_multi_channeling_channels(lmbs, override_lmb_heuristics)
+        } else {
+            self.build_cross_section_multi_channeling_channels(lmbs)?
+        };
 
-        self.derived_data.multi_channeling_setup = Some(channels)
+        self.derived_data.multi_channeling_setup = Some(channels);
+        Ok(())
+    }
+
+    fn build_cross_section_multi_channeling_channels(
+        &self,
+        lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> Result<LmbMultiChannelingSetup> {
+        let channels = self.select_cross_section_lmb_channel_indices(lmbs)?;
+        debug!(
+            "number of lmbs: {}, number of cross-section channels: {}",
+            lmbs.len(),
+            channels.len()
+        );
+        Ok(LmbMultiChannelingSetup {
+            channels,
+            graph: self.graph.clone(),
+            all_bases: lmbs.clone(),
+        })
+    }
+
+    fn select_cross_section_lmb_channel_indices(
+        &self,
+        lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> Result<TiVec<crate::integrands::process::ChannelIndex, LmbIndex>> {
+        if self.cuts.is_empty() {
+            return Ok(self.graph.select_amplitude_lmb_channel_indices(
+                lmbs,
+                false,
+                LmbChannelFallback::CurrentGraphBasis,
+            ));
+        }
+
+        let mut lmb_index_by_loop_edges = BTreeMap::<Vec<EdgeIndex>, LmbIndex>::new();
+        for (lmb_index, lmb) in lmbs.iter_enumerated() {
+            lmb_index_by_loop_edges
+                .entry(lmb.loop_edges.iter().copied().sorted().collect())
+                .or_insert(lmb_index);
+        }
+
+        let mut selected_loop_edge_sets = BTreeSet::<Vec<EdgeIndex>>::new();
+        for cut in &self.cuts {
+            let cut_edges = cut.cut.as_subgraph();
+            let cut_edge_ids = self
+                .graph
+                .underlying
+                .iter_edges_of(&cut_edges)
+                .map(|(_, edge_id, _)| edge_id)
+                .sorted()
+                .collect_vec();
+            let Some(excluded_cut_edge) = self.excluded_cut_edge_for_lmb_channel(&cut_edge_ids)
+            else {
+                continue;
+            };
+
+            let fixed_cut_edges = cut_edge_ids
+                .iter()
+                .copied()
+                .filter(|edge_id| *edge_id != excluded_cut_edge)
+                .collect::<BTreeSet<_>>();
+            let left_basis_edge_sets =
+                self.selected_cut_side_lmb_edge_sets(cut.left.subtract(&cut_edges))?;
+            let right_basis_edge_sets =
+                self.selected_cut_side_lmb_edge_sets(cut.right.subtract(&cut_edges))?;
+
+            for left_basis_edges in &left_basis_edge_sets {
+                for right_basis_edges in &right_basis_edge_sets {
+                    let loop_edges = fixed_cut_edges
+                        .iter()
+                        .copied()
+                        .chain(left_basis_edges.iter().copied())
+                        .chain(right_basis_edges.iter().copied())
+                        .collect::<BTreeSet<_>>()
+                        .into_iter()
+                        .collect_vec();
+                    selected_loop_edge_sets.insert(loop_edges);
+                }
+            }
+        }
+
+        let mut channels = Vec::<LmbIndex>::new();
+        for loop_edges in selected_loop_edge_sets {
+            let lmb_index = lmb_index_by_loop_edges.get(&loop_edges).ok_or_else(|| {
+                eyre!(
+                    "Could not find a generated cross-section LMB with loop edges [{}] for graph '{}'.",
+                    loop_edges.iter().map(|edge| edge.to_string()).join(", "),
+                    self.graph.name
+                )
+            })?;
+            channels.push(*lmb_index);
+        }
+
+        if channels.is_empty() {
+            Ok(self.graph.select_amplitude_lmb_channel_indices(
+                lmbs,
+                false,
+                LmbChannelFallback::CurrentGraphBasis,
+            ))
+        } else {
+            Ok(channels.into_iter().sorted().dedup().collect())
+        }
+    }
+
+    fn excluded_cut_edge_for_lmb_channel(&self, cut_edge_ids: &[EdgeIndex]) -> Option<EdgeIndex> {
+        Self::excluded_cut_edge_for_lmb_channel_in(&self.graph, cut_edge_ids)
+    }
+
+    fn excluded_cut_edge_for_lmb_channel_in(
+        graph: &Graph,
+        cut_edge_ids: &[EdgeIndex],
+    ) -> Option<EdgeIndex> {
+        cut_edge_ids
+            .iter()
+            .copied()
+            .filter(|edge_id| graph[*edge_id].particle.is_massive())
+            .min()
+            .or_else(|| {
+                cut_edge_ids
+                    .iter()
+                    .copied()
+                    .filter(|edge_id| graph[*edge_id].particle.is_fermion())
+                    .min()
+            })
+            .or_else(|| cut_edge_ids.iter().copied().min())
+    }
+
+    fn selected_cut_side_lmb_edge_sets(
+        &self,
+        mut side_subgraph: SuBitGraph,
+    ) -> Result<Vec<Vec<EdgeIndex>>> {
+        for (pair, _, edge) in self.graph.underlying.iter_edges() {
+            if edge.data.is_dummy {
+                side_subgraph.sub(pair);
+            }
+        }
+
+        if self.graph.underlying.cyclotomatic_number(&side_subgraph) == 0 {
+            return Ok(vec![Vec::new()]);
+        }
+
+        let side_lmbs = self.graph.generate_loop_momentum_bases_of(&side_subgraph);
+        if side_lmbs.is_empty() {
+            return Err(eyre!(
+                "Could not generate cut-side LMBs for a non-tree side of graph '{}'.",
+                self.graph.name
+            ));
+        }
+
+        let selected_side_lmbs = self.graph.select_amplitude_lmb_channel_indices(
+            &side_lmbs,
+            false,
+            LmbChannelFallback::FirstBasis,
+        );
+        let mut edge_sets = BTreeSet::<Vec<EdgeIndex>>::new();
+        for lmb_index in selected_side_lmbs {
+            edge_sets.insert(
+                side_lmbs[lmb_index]
+                    .loop_edges
+                    .iter()
+                    .copied()
+                    .sorted()
+                    .collect(),
+            );
+        }
+
+        if edge_sets.is_empty() {
+            Ok(vec![Vec::new()])
+        } else {
+            Ok(edge_sets.into_iter().collect())
+        }
     }
 
     fn build_threshold_counterterm(
@@ -2847,7 +3027,11 @@ mod tests {
 
     use symbolica::{atom::AtomCore, function, symbol};
 
-    use crate::{cff::CutCFFIndex, utils::GS};
+    use crate::{
+        cff::CutCFFIndex, dot, graph::parse::from_dot::IntoGraph, initialisation::test_initialise,
+        utils::GS,
+    };
+    use linnet::half_edge::involution::EdgeIndex;
 
     fn fresh_temp_dir(name: &str) -> PathBuf {
         let unique = SystemTime::now()
@@ -2869,6 +3053,44 @@ mod tests {
 
         assert_eq!(cross_section.storage_path(&temp), temp.join("NLO"));
         fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn cross_section_lmb_cut_edge_exclusion_prefers_massive_then_fermion_then_id() {
+        test_initialise().unwrap();
+        let graph = dot!(
+            digraph cut_edge_priority {
+                edge [num=1]
+                node [num=1]
+                A -> B [id=0 particle="g"]
+                A -> B [id=1 particle="d"]
+                A -> B [id=2 particle="t"]
+                A -> B [id=3 particle="a"]
+            }
+        )
+        .unwrap();
+
+        assert_eq!(
+            super::CrossSectionGraph::excluded_cut_edge_for_lmb_channel_in(
+                &graph,
+                &[EdgeIndex::from(0), EdgeIndex::from(1), EdgeIndex::from(2)]
+            ),
+            Some(EdgeIndex::from(2))
+        );
+        assert_eq!(
+            super::CrossSectionGraph::excluded_cut_edge_for_lmb_channel_in(
+                &graph,
+                &[EdgeIndex::from(0), EdgeIndex::from(1), EdgeIndex::from(3)]
+            ),
+            Some(EdgeIndex::from(1))
+        );
+        assert_eq!(
+            super::CrossSectionGraph::excluded_cut_edge_for_lmb_channel_in(
+                &graph,
+                &[EdgeIndex::from(0), EdgeIndex::from(3)]
+            ),
+            Some(EdgeIndex::from(0))
+        );
     }
 
     #[test]

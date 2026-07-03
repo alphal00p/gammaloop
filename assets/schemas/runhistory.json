@@ -34,6 +34,16 @@
       },
       "additionalProperties": false
     },
+    "ApproximationType": {
+      "type": "string",
+      "enum": [
+        "MUV",
+        "OS",
+        "IR",
+        "Unsubtracted",
+        "VaccuumLimit"
+      ]
+    },
     "CLISettings": {
       "type": "object",
       "properties": {
@@ -51,6 +61,47 @@
         }
       },
       "additionalProperties": false
+    },
+    "CTIdentifier": {
+      "type": "object",
+      "properties": {
+        "external_pdg_set": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int"
+          },
+          "uniqueItems": true
+        },
+        "internal_pdg_set": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "int"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "CTRenormalizationRule": {
+      "type": "object",
+      "properties": {
+        "ct_identifier": {
+          "$ref": "#/$defs/CTIdentifier"
+        },
+        "renormalization_scheme": {
+          "$ref": "#/$defs/ApproximationType"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ct_identifier",
+        "renormalization_scheme"
+      ]
     },
     "CommandHistory": {
       "description": "Represents a command with optional raw string representation\n\nThis struct stores both the parsed command and optionally the original\nstring that was used to create it. This allows for preserving the exact\nuser input while still having access to the structured command data.",
@@ -198,6 +249,18 @@
           "additionalProperties": false,
           "required": [
             "Generate"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Select": {
+              "$ref": "#/$defs/Select"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Select"
           ]
         },
         {
@@ -384,6 +447,13 @@
         "O3"
       ]
     },
+    "ContractionMode": {
+      "type": "string",
+      "enum": [
+        "SmallestDegree",
+        "MinResultRank"
+      ]
+    },
     "ContributionSortOption": {
       "type": "string",
       "enum": [
@@ -400,13 +470,287 @@
         "hyperspherical",
         "hyperspherical_flat",
         "momentum_space",
-        "tropical"
+        "tropical",
+        "relative_spherical",
+        "spherical_common_radial",
+        "spherical_product_common_radial"
+      ]
+    },
+    "CountRangeSelectorSerdeTag": {
+      "type": "string",
+      "enum": [
+        "count_range"
+      ]
+    },
+    "CountRangeSelectorSettingsSerde": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "entry_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "entry_selection": {
+          "$ref": "#/$defs/EntrySelection"
+        },
+        "max_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "min_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "quantity": {
+          "type": "string"
+        },
+        "selector": {
+          "$ref": "#/$defs/CountRangeSelectorSerdeTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "quantity",
+        "selector",
+        "min_count"
       ]
     },
     "Dep": {
       "type": "string",
       "enum": [
         "dependent"
+      ]
+    },
+    "DiscreteBinDomainSettings": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "max": {
+              "type": "integer",
+              "format": "int"
+            },
+            "min": {
+              "type": "integer",
+              "format": "int"
+            },
+            "type": {
+              "type": "string",
+              "const": "explicit_range"
+            }
+          },
+          "required": [
+            "type",
+            "min",
+            "max"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "single_bin"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_group_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "orientation_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "lmb_channel_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "DiscreteBinLabelsSettings": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "custom"
+            }
+          },
+          "required": [
+            "type",
+            "labels"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "bin_id"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_name"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_group_master_name"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "orientation"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "lmb_channel_edge_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "DiscreteBinOrdering": {
+      "type": "string",
+      "enum": [
+        "ascending_bin_id",
+        "value_descending",
+        "abs_value_descending"
+      ]
+    },
+    "DiscreteRangeSelectorSerdeTag": {
+      "type": "string",
+      "enum": [
+        "discrete_range"
+      ]
+    },
+    "DiscreteRangeSelectorSettingsSerde": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "entry_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "entry_selection": {
+          "$ref": "#/$defs/EntrySelection"
+        },
+        "max": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int"
+        },
+        "min": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int"
+        },
+        "quantity": {
+          "type": "string"
+        },
+        "selector": {
+          "$ref": "#/$defs/DiscreteRangeSelectorSerdeTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "quantity",
+        "selector"
       ]
     },
     "Display": {
@@ -833,7 +1177,6 @@
         "abort_level": {
           "type": "integer",
           "format": "uint",
-          "default": 0,
           "minimum": 0
         },
         "compile": {
@@ -847,13 +1190,18 @@
           "format": "uint",
           "minimum": 0
         },
+        "direct_translation": {
+          "type": "boolean"
+        },
+        "do_algebra": {
+          "type": "boolean"
+        },
         "do_fn_map_replacements": {
           "type": "boolean"
         },
         "horner_iterations": {
           "type": "integer",
           "format": "uint",
-          "default": 0,
           "minimum": 0
         },
         "iterative_orientation_optimization": {
@@ -862,26 +1210,35 @@
         "max_common_pair_cache_entries": {
           "type": "integer",
           "format": "uint",
-          "default": 0,
           "minimum": 0
         },
         "max_common_pair_distance": {
           "type": "integer",
           "format": "uint",
-          "default": 0,
           "minimum": 0
         },
         "max_horner_scheme_variables": {
           "type": "integer",
           "format": "uint",
-          "default": 0,
           "minimum": 0
         },
         "n_cores": {
           "type": "integer",
           "format": "uint",
-          "default": 0,
           "minimum": 0
+        },
+        "spenso_execution_mode": {
+          "type": "array",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/ExecutionMode"
+            },
+            {
+              "$ref": "#/$defs/ContractionMode"
+            }
+          ]
         },
         "store_atom": {
           "type": "boolean"
@@ -892,10 +1249,22 @@
         "summed_function_map": {
           "type": "boolean"
         },
+        "tensor_network_contraction_order": {
+          "$ref": "#/$defs/TensorNetworkContractionOrder"
+        },
         "verbose": {
           "type": "boolean"
         }
       }
+    },
+    "ExecutionMode": {
+      "type": "string",
+      "enum": [
+        "Sequential",
+        "Parallel",
+        "SequentialRef",
+        "SequentialExtract"
+      ]
     },
     "ExternalMomenta": {
       "anyOf": [
@@ -1063,6 +1432,10 @@
         "orientation_pat": {
           "$ref": "#/$defs/OrientationPattern"
         },
+        "renormalization_localization_scale": {
+          "type": "number",
+          "format": "double"
+        },
         "store_additional_weights_in_event": {
           "type": "boolean"
         },
@@ -1076,6 +1449,11 @@
       "description": "Generate integrands",
       "type": "object",
       "properties": {
+        "keep_sources": {
+          "description": "Keep generated C++ source files after external compilation",
+          "type": "boolean",
+          "default": false
+        },
         "mode": {
           "anyOf": [
             {
@@ -1155,6 +1533,9 @@
         },
         "orientation_pattern": {
           "$ref": "#/$defs/OrientationPattern"
+        },
+        "override_lmb_heuristics": {
+          "type": "boolean"
         },
         "threshold_subtraction": {
           "$ref": "#/$defs/ThresholdSubtractionSettings"
@@ -1270,6 +1651,13 @@
             "summed-averaged"
           ]
         }
+      ]
+    },
+    "HistogramKindSerde": {
+      "type": "string",
+      "enum": [
+        "continuous",
+        "discrete"
       ]
     },
     "Import": {
@@ -1390,6 +1778,10 @@
             "null"
           ]
         },
+        "per_orientation": {
+          "description": "Profile each visible orientation separately and report one row per orientation",
+          "type": "boolean"
+        },
         "process": {
           "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
           "anyOf": [
@@ -1416,12 +1808,18 @@
             "string",
             "null"
           ]
+        },
+        "show_per_cut_info": {
+          "description": "Retain generated event data so per-cut IR fits can be computed and displayed",
+          "type": "boolean"
         }
       },
       "required": [
         "n_points",
         "min_scale_exponent",
-        "max_scale_exponent"
+        "max_scale_exponent",
+        "per_orientation",
+        "show_per_cut_info"
       ]
     },
     "Inspect": {
@@ -1510,6 +1908,7 @@
     "IntegrandDisplayCategory": {
       "type": "string",
       "enum": [
+        "generation",
         "orientation",
         "loop_momentum_basis",
         "cuts"
@@ -1875,6 +2274,13 @@
         "value"
       ]
     },
+    "LmbChannelWeight": {
+      "type": "string",
+      "enum": [
+        "ose",
+        "inverse_jacobian"
+      ]
+    },
     "LocalCounterTermSettings": {
       "type": "object",
       "properties": {
@@ -1970,6 +2376,16 @@
     "ObservableSettings": {
       "type": "object",
       "properties": {
+        "domain": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiscreteBinDomainSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "entry_index": {
           "type": "integer",
           "format": "uint",
@@ -1978,11 +2394,38 @@
         "entry_selection": {
           "$ref": "#/$defs/EntrySelection"
         },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HistogramKindSerde"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiscreteBinLabelsSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "log_x_axis": {
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "log_y_axis": {
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "misbinning_max_normalized_distance": {
           "type": [
@@ -1992,9 +2435,22 @@
           "format": "double"
         },
         "n_bins": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint",
           "minimum": 0
+        },
+        "ordering": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiscreteBinOrdering"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "phase": {
           "$ref": "#/$defs/ObservablePhase"
@@ -2002,26 +2458,39 @@
         "quantity": {
           "type": "string"
         },
+        "selections": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "title": {
-          "description": "Optional histogram title. Defaults to the observable name when omitted.",
           "type": [
             "string",
             "null"
           ]
         },
         "type_description": {
-          "description": "HwU TYPE description written after TYPE@ in the histogram header.",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "value_transform": {
           "$ref": "#/$defs/ObservableValueTransform"
         },
         "x_max": {
-          "type": "number",
+          "type": [
+            "number",
+            "null"
+          ],
           "format": "double"
         },
         "x_min": {
-          "type": "number",
+          "type": [
+            "number",
+            "null"
+          ],
           "format": "double"
         }
       },
@@ -2041,7 +2510,10 @@
       "type": "object",
       "properties": {
         "format": {
-          "$ref": "#/$defs/ObservableFileFormat"
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObservableFileFormat"
+          }
         }
       },
       "additionalProperties": false
@@ -2172,6 +2644,7 @@
       "type": "string",
       "enum": [
         "log",
+        "power",
         "linear"
       ]
     },
@@ -2962,7 +3435,55 @@
           "properties": {
             "type": {
               "type": "string",
-              "const": "cross_section"
+              "const": "integral"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_id"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_group_id"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "orientation_id"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "lmb_channel_id"
             }
           },
           "required": [
@@ -3236,6 +3757,10 @@
     "SamplingSettings": {
       "type": "object",
       "properties": {
+        "alpha": {
+          "type": "number",
+          "format": "double"
+        },
         "b": {
           "type": "number",
           "format": "double"
@@ -3245,6 +3770,20 @@
         },
         "graphs": {
           "$ref": "#/$defs/SumMode"
+        },
+        "lmb_basis_ids": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          }
+        },
+        "lmb_channel_weight": {
+          "$ref": "#/$defs/LmbChannelWeight"
         },
         "lmb_channels": {
           "$ref": "#/$defs/SumMode"
@@ -3257,6 +3796,10 @@
         },
         "orientations": {
           "$ref": "#/$defs/SumMode"
+        },
+        "power": {
+          "type": "number",
+          "format": "double"
         }
       },
       "additionalProperties": false
@@ -3284,6 +3827,12 @@
                     "null"
                   ]
                 },
+                "include_autogenerated_fields": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
                 "output_full_numerator": {
                   "type": [
                     "boolean",
@@ -3293,6 +3842,12 @@
                 "path": {
                   "type": [
                     "string",
+                    "null"
+                  ]
+                },
+                "split_xs_by_initial_states": {
+                  "type": [
+                    "boolean",
                     "null"
                   ]
                 },
@@ -3319,6 +3874,9 @@
             "Standalone": {
               "type": "object",
               "properties": {
+                "arbprec": {
+                  "type": "boolean"
+                },
                 "binary": {
                   "type": "boolean"
                 },
@@ -3334,6 +3892,9 @@
                 "python": {
                   "type": "boolean"
                 },
+                "quadprec": {
+                  "type": "boolean"
+                },
                 "rust": {
                   "type": "boolean"
                 }
@@ -3342,7 +3903,9 @@
                 "python",
                 "rust",
                 "binary",
-                "json"
+                "json",
+                "quadprec",
+                "arbprec"
               ]
             }
           },
@@ -3416,67 +3979,213 @@
         "no_save_state"
       ]
     },
-    "SelectorDefinitionSettings": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "max": {
-              "description": "Optional upper bound. Use null to disable the upper cut.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "format": "double"
-            },
-            "min": {
-              "description": "Optional lower bound. Use null to disable the lower cut.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "format": "double"
-            },
-            "reduction": {
-              "$ref": "#/$defs/SelectorReduction"
-            },
-            "selector": {
-              "type": "string",
-              "const": "value_range"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "selector"
+    "Select": {
+      "type": "object",
+      "properties": {
+        "amplitude_graphs": {
+          "description": "Apply structural filters to left/right amplitude graphs of cross-section cuts",
+          "type": "boolean"
+        },
+        "clear_existing_processes": {
+          "description": "Allow copy-mode selection to replace an existing output process or integrand",
+          "type": "boolean"
+        },
+        "integrand_name": {
+          "description": "Integrand name inside the selected process",
+          "type": [
+            "string",
+            "null"
           ]
         },
-        {
-          "type": "object",
-          "properties": {
-            "max_count": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint",
-              "minimum": 0
-            },
-            "min_count": {
-              "type": "integer",
-              "format": "uint",
-              "minimum": 0
-            },
-            "selector": {
-              "type": "string",
-              "const": "count_range"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "selector",
-            "min_count"
+        "output_integrand": {
+          "description": "Copy the selected graph groups to this output integrand instead of modifying in place",
+          "type": [
+            "string",
+            "null"
           ]
+        },
+        "output_process": {
+          "description": "Copy the selected graph groups to this output process instead of modifying in place",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "process": {
+          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "with_cycle_signatures": {
+          "description": "Retain graph groups matching one of these cycle signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_graph_names": {
+          "description": "Retain graph groups with these master graph names",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_massive_raised_cuts_signatures": {
+          "description": "Retain graph groups where a process-valid cut touches one of these massive raised-propagator group signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_massive_raised_propagator_signatures": {
+          "description": "Retain graph groups with one of these massive raised-propagator signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_massless_raised_cuts_signatures": {
+          "description": "Retain graph groups where a process-valid cut touches one of these massless raised-propagator group signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_massless_raised_propagator_signatures": {
+          "description": "Retain graph groups with one of these massless raised-propagator signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_particles": {
+          "description": "Retain graph groups containing all particles from at least one of these particle sets",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_raised_cuts_signatures": {
+          "description": "Retain graph groups where a process-valid cut touches one of these raised-propagator group signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_raised_propagator_signatures": {
+          "description": "Retain graph groups with one of these raised-propagator signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "with_vertices": {
+          "description": "Retain graph groups containing at least one of these vertex-rule multisets",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_cycle_signatures": {
+          "description": "Remove graph groups matching one of these cycle signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_graph_names": {
+          "description": "Remove graph groups with these master graph names",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_massive_raised_cuts_signatures": {
+          "description": "Remove graph groups where a process-valid cut touches one of these massive raised-propagator group signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_massive_raised_propagator_signatures": {
+          "description": "Remove graph groups with one of these massive raised-propagator signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_massless_raised_cuts_signatures": {
+          "description": "Remove graph groups where a process-valid cut touches one of these massless raised-propagator group signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_massless_raised_propagator_signatures": {
+          "description": "Remove graph groups with one of these massless raised-propagator signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_particles": {
+          "description": "Remove graph groups containing all particles from at least one of these particle sets",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_raised_cuts_signatures": {
+          "description": "Remove graph groups where a process-valid cut touches one of these raised-propagator group signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_raised_propagator_signatures": {
+          "description": "Remove graph groups with one of these raised-propagator signatures",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "without_vertices": {
+          "description": "Remove graph groups containing at least one of these vertex-rule multisets",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
+      },
+      "required": [
+        "amplitude_graphs",
+        "with_graph_names",
+        "without_graph_names",
+        "with_raised_propagator_signatures",
+        "without_raised_propagator_signatures",
+        "with_massive_raised_propagator_signatures",
+        "without_massive_raised_propagator_signatures",
+        "with_massless_raised_propagator_signatures",
+        "without_massless_raised_propagator_signatures",
+        "with_raised_cuts_signatures",
+        "without_raised_cuts_signatures",
+        "with_massive_raised_cuts_signatures",
+        "without_massive_raised_cuts_signatures",
+        "with_massless_raised_cuts_signatures",
+        "without_massless_raised_cuts_signatures",
+        "with_cycle_signatures",
+        "without_cycle_signatures",
+        "with_vertices",
+        "without_vertices",
+        "with_particles",
+        "without_particles",
+        "clear_existing_processes"
       ]
     },
     "SelectorReduction": {
@@ -3487,28 +4196,16 @@
       ]
     },
     "SelectorSettings": {
-      "type": "object",
-      "properties": {
-        "entry_index": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ValueRangeSelectorSettingsSerde"
         },
-        "entry_selection": {
-          "$ref": "#/$defs/EntrySelection"
+        {
+          "$ref": "#/$defs/DiscreteRangeSelectorSettingsSerde"
         },
-        "quantity": {
-          "type": "string"
-        },
-        "selector": {
-          "$ref": "#/$defs/SelectorDefinitionSettings"
+        {
+          "$ref": "#/$defs/CountRangeSelectorSettingsSerde"
         }
-      },
-      "required": [
-        "quantity",
-        "entry_selection",
-        "entry_index",
-        "selector"
       ]
     },
     "Set": {
@@ -4213,9 +4910,21 @@
         "monte_carlo"
       ]
     },
+    "TensorNetworkContractionOrder": {
+      "type": "string",
+      "enum": [
+        "sparse_atom_aware",
+        "atom_aware",
+        "result_rank_only",
+        "entry_aware"
+      ]
+    },
     "ThresholdSubtractionSettings": {
       "type": "object",
       "properties": {
+        "assume_positive_external_energies": {
+          "type": "boolean"
+        },
         "check_esurface_at_generation": {
           "type": "boolean"
         },
@@ -4253,6 +4962,9 @@
         "dynamic_width": {
           "type": "boolean"
         },
+        "force_uv_dampers_to_one": {
+          "type": "boolean"
+        },
         "gaussian_width": {
           "type": "number",
           "format": "double"
@@ -4267,7 +4979,18 @@
     "UVgenerationSettings": {
       "type": "object",
       "properties": {
+        "add_integrated_uv_with_n_loops": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
         "add_sigma": {
+          "type": "boolean"
+        },
+        "cached": {
           "type": "boolean"
         },
         "generate_integrated": {
@@ -4276,13 +4999,28 @@
         "inner_products": {
           "type": "boolean"
         },
+        "keep_sigma": {
+          "type": "boolean"
+        },
         "only_integrated": {
           "type": "boolean"
         },
         "pole_part": {
           "type": "boolean"
         },
+        "renormalization_schemes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CTRenormalizationRule"
+          }
+        },
         "softct": {
+          "type": "boolean"
+        },
+        "subtract_uv": {
+          "type": "boolean"
+        },
+        "use_legacy": {
           "type": "boolean"
         },
         "vakint": {
@@ -4298,7 +5036,7 @@
           "type": "boolean"
         },
         "integrand_name": {
-          "description": "The amplitude name to inspect",
+          "description": "The integrand name to inspect",
           "type": [
             "string",
             "null"
@@ -4327,6 +5065,10 @@
             "null"
           ]
         },
+        "per_orientation": {
+          "description": "Profile each visible orientation separately and include per-orientation results",
+          "type": "boolean"
+        },
         "process": {
           "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
           "anyOf": [
@@ -4350,6 +5092,22 @@
         "use_f128": {
           "description": "Use f128 precision for evaluation",
           "type": "boolean"
+        },
+        "uv_ray_directions": {
+          "description": "Fixed UV ray directions as flattened 3-vectors, repeated for all rays if one direction is supplied",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "uv_ray_norms": {
+          "description": "Fixed UV ray starting norms, repeated for all rays if one norm is supplied",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
         }
       },
       "required": [
@@ -4357,7 +5115,10 @@
         "min_scale_exponent",
         "max_scale_exponent",
         "use_f128",
-        "analyse_analytically"
+        "analyse_analytically",
+        "per_orientation",
+        "uv_ray_directions",
+        "uv_ray_norms"
       ]
     },
     "UnitSurfaceSettings": {
@@ -4436,6 +5197,56 @@
         }
       },
       "additionalProperties": false
+    },
+    "ValueRangeSelectorSerdeTag": {
+      "type": "string",
+      "enum": [
+        "value_range"
+      ]
+    },
+    "ValueRangeSelectorSettingsSerde": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "entry_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "entry_selection": {
+          "$ref": "#/$defs/EntrySelection"
+        },
+        "max": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "min": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "quantity": {
+          "type": "string"
+        },
+        "reduction": {
+          "$ref": "#/$defs/SelectorReduction"
+        },
+        "selector": {
+          "$ref": "#/$defs/ValueRangeSelectorSerdeTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "quantity",
+        "selector"
+      ]
     },
     "VectorPolarizationSumGauge": {
       "type": "string",

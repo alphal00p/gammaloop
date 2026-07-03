@@ -57,7 +57,10 @@ use crate::{
     },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent},
     processes::{AmplitudeGraph, GraphGenerationStats, GroupDerivedData},
-    settings::{GlobalSettings, RuntimeSettings, global::FrozenCompilationMode},
+    settings::{
+        GlobalSettings, RuntimeSettings, global::FrozenCompilationMode,
+        runtime::ParameterizationSettings,
+    },
     subtraction::{
         amplitude_counterterm::{
             AmplitudeCountertermAtom, AmplitudeCountertermData, AmplitudeCountertermEvaluation,
@@ -459,8 +462,19 @@ impl AmplitudeGraphTerm {
         event.cut_info.cut_id = 0;
         event.cut_info.orientation_id = orientation_id;
         event.cut_info.lmb_channel_id = channel_id.map(usize::from);
-        event.cut_info.lmb_channel_edge_ids =
-            channel_id.map(|channel_id| self.multi_channeling_setup.channel_edge_ids(channel_id));
+        event.cut_info.lmb_channel_edge_ids = channel_id
+            .map(|channel_id| {
+                let parameterization_settings = settings
+                    .sampling
+                    .get_parameterization_settings()
+                    .expect("LMB channel event metadata requires a parameterization.");
+                self.multi_channeling_setup.effective_channel_edge_ids(
+                    channel_id,
+                    &self.graph.name,
+                    &parameterization_settings,
+                )
+            })
+            .transpose()?;
 
         for ((sign, momentum), pdg) in self
             .master_external_signature
@@ -502,6 +516,7 @@ impl AmplitudeGraphTerm {
                     .get_parameterization_settings()
                     .expect("LMB multichanneling requires a parameterization.");
                 let weighting_settings = LmbChannelWeightingSettings {
+                    graph_name: &self.graph.name,
                     model: context.model,
                     alpha,
                     channel_weight: *channel_weight,
@@ -515,9 +530,21 @@ impl AmplitudeGraphTerm {
                         momentum_sample,
                         0,
                         weighting_settings,
-                    )
+                    )?
             } else {
-                (momentum_sample.clone(), momentum_sample.one())
+                if let Some(lmb_basis_id) = context.lmb_basis_id {
+                    (
+                        self.multi_channeling_setup
+                            .reinterpret_loop_momenta_for_lmb(
+                                lmb_basis_id,
+                                momentum_sample,
+                                momentum_sample.sample.loop_mom_cache_id,
+                            ),
+                        momentum_sample.one(),
+                    )
+                } else {
+                    (momentum_sample.clone(), momentum_sample.one())
+                }
             };
 
         let hel = context.settings.kinematics.externals.get_helicities();
@@ -748,18 +775,35 @@ impl GraphTerm for AmplitudeGraphTerm {
             .map(format_orientation_label)
     }
 
-    fn lmb_channel_label(&self, channel_id: ChannelIndex) -> Option<String> {
-        Some(format_lmb_channel_label(
-            &self.multi_channeling_setup.channel_edge_ids(channel_id),
-        ))
+    fn lmb_channel_label(
+        &self,
+        channel_id: ChannelIndex,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<Option<String>> {
+        Ok(Some(format_lmb_channel_label(
+            &self.multi_channeling_setup.effective_channel_edge_ids(
+                channel_id,
+                &self.graph.name,
+                parameterization_settings,
+            )?,
+        )))
     }
 
     fn get_graph(&self) -> &Graph {
         &self.graph
     }
 
-    fn get_num_channels(&self) -> usize {
-        self.multi_channeling_setup.channels.len()
+    fn get_num_channels(&self, parameterization_settings: &ParameterizationSettings) -> usize {
+        self.multi_channeling_setup
+            .effective_channel_count(&self.graph.name, parameterization_settings)
+    }
+
+    fn selected_lmb_basis_id(
+        &self,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<LmbIndex> {
+        self.multi_channeling_setup
+            .selected_lmb_basis_id(&self.graph.name, parameterization_settings)
     }
 
     fn evaluate<T: FloatLike>(
@@ -1807,7 +1851,7 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
             EventProcessingRuntime::from_settings_with_model_and_process_info(
                 &self.settings,
                 model,
-                &histogram_process_info_for_integrand(self),
+                &histogram_process_info_for_integrand(self)?,
             )?,
         );
 

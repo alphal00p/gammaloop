@@ -588,4 +588,15 @@ mod tests {
         let spec = select.selection_spec(&state).unwrap();
         assert!(spec.has_raised_cut_rules());
     }
+
+    #[test]
+    fn selection_spec_accepts_any_raising_keyword() {
+        let state = State::new_test();
+        let mut select = empty_select();
+        select.without_raised_propagator_signatures = vec!["ANY_RAISING".to_string()];
+        select.without_raised_cuts_signatures = vec!["ANY_RAISING".to_string()];
+
+        let spec = select.selection_spec(&state).unwrap();
+        assert!(spec.has_raised_cut_rules());
+    }
 }

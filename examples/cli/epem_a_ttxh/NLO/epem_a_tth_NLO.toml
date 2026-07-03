@@ -40,7 +40,7 @@ commands = [
       -p epem_a_tth -i NLO
       --global-prefactor-num "-1"
       --only-diagrams""",
-  "select -p epem_a_tth -i NLO --amplitude-graphs --with-raised-propagator-signatures [] --without-raised-cuts-signatures [2] [3] [2,2] [4] [2,3] [2,2,2]",
+  "select -p epem_a_tth -i NLO --amplitude-graphs --without-raised-propagator-signatures ANY_RAISING --without-raised-cuts-signatures ANY_RAISING",
   "save dot",
 ]
 

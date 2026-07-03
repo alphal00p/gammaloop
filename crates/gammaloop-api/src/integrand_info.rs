@@ -6,7 +6,7 @@ use gammalooprs::{
     graph::Graph,
     integrands::process::{ActiveF64Backend, LmbMultiChannelingSetup},
     processes::{Amplitude, CrossSection, CrossSectionCut, ProcessCollection, RaisedCutId},
-    settings::global::FrozenCompilationMode,
+    settings::{global::FrozenCompilationMode, runtime::ParameterizationSettings},
 };
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use schemars::JsonSchema;
@@ -140,7 +140,7 @@ pub(crate) fn collect_integrand_info(
                 graph_count: amplitude.graphs.len(),
                 graph_group_count: amplitude.graph_group_structure.len(),
                 record_size_bytes: integrand_record_size_from_amplitude(amplitude)?,
-                graph_groups: amplitude_graph_groups(integrand),
+                graph_groups: amplitude_graph_groups(integrand)?,
             })
         }
         (
@@ -167,7 +167,7 @@ pub(crate) fn collect_integrand_info(
                 graph_count: cross_section.supergraphs.len(),
                 graph_group_count: cross_section.graph_group_structure.len(),
                 record_size_bytes: integrand_record_size_from_cross_section(cross_section)?,
-                graph_groups: cross_section_graph_groups(integrand),
+                graph_groups: cross_section_graph_groups(integrand)?,
             })
         }
         _ => Err(eyre!(
@@ -228,17 +228,28 @@ fn lmb_channel_ids(
         gammalooprs::graph::LoopMomentumBasis,
     >,
     multi_channeling_setup: &LmbMultiChannelingSetup,
-) -> Vec<Option<usize>> {
+    graph_name: &str,
+    parameterization_settings: &ParameterizationSettings,
+) -> Result<Vec<Option<usize>>> {
     let mut channel_ids = vec![None; lmbs.len()];
-    for (channel_id, lmb_index) in multi_channeling_setup.channels.iter_enumerated() {
-        channel_ids[usize::from(*lmb_index)] = Some(usize::from(channel_id));
+    for (channel_id, lmb_index) in multi_channeling_setup
+        .effective_channels(graph_name, parameterization_settings)?
+        .into_iter()
+        .enumerate()
+    {
+        channel_ids[usize::from(lmb_index)] = Some(channel_id);
     }
-    channel_ids
+    Ok(channel_ids)
 }
 
 fn amplitude_graph_groups(
     integrand: &gammalooprs::integrands::process::amplitude::AmplitudeIntegrand,
-) -> Vec<IntegrandGraphGroupInfo> {
+) -> Result<Vec<IntegrandGraphGroupInfo>> {
+    let parameterization_settings = integrand
+        .settings
+        .sampling
+        .get_parameterization_settings()
+        .unwrap_or_default();
     integrand
         .data
         .graph_group_structure
@@ -250,8 +261,12 @@ fn amplitude_graph_groups(
                 .next()
                 .expect("graph group should not be empty");
             let master_graph = &integrand.data.graph_terms[master_graph_id];
-            let channel_ids =
-                lmb_channel_ids(&master_graph.lmbs, &master_graph.multi_channeling_setup);
+            let channel_ids = lmb_channel_ids(
+                &master_graph.lmbs,
+                &master_graph.multi_channeling_setup,
+                &master_graph.graph.name,
+                &parameterization_settings,
+            )?;
             let threshold_esurface_ids = master_graph
                 .threshold_counterterm
                 .generated_mask
@@ -266,7 +281,7 @@ fn amplitude_graph_groups(
                     edge_ids: threshold_esurface_edge_ids(&master_graph.esurfaces, esurface_id),
                 })
                 .collect::<Vec<_>>();
-            IntegrandGraphGroupInfo {
+            Ok(IntegrandGraphGroupInfo {
                 group_id,
                 graphs: group
                     .into_iter()
@@ -304,14 +319,19 @@ fn amplitude_graph_groups(
                 threshold_esurface_ids,
                 threshold_esurfaces,
                 cuts: Vec::new(),
-            }
+            })
         })
         .collect()
 }
 
 fn cross_section_graph_groups(
     integrand: &gammalooprs::integrands::process::cross_section::CrossSectionIntegrand,
-) -> Vec<IntegrandGraphGroupInfo> {
+) -> Result<Vec<IntegrandGraphGroupInfo>> {
+    let parameterization_settings = integrand
+        .settings
+        .sampling
+        .get_parameterization_settings()
+        .unwrap_or_default();
     integrand
         .data
         .graph_group_structure
@@ -323,8 +343,12 @@ fn cross_section_graph_groups(
                 .next()
                 .expect("graph group should not be empty");
             let master_graph = &integrand.data.graph_terms[master_graph_id];
-            let channel_ids =
-                lmb_channel_ids(&master_graph.lmbs, &master_graph.multi_channeling_setup);
+            let channel_ids = lmb_channel_ids(
+                &master_graph.lmbs,
+                &master_graph.multi_channeling_setup,
+                &master_graph.graph.name,
+                &parameterization_settings,
+            )?;
             let cut_raising_powers = cut_raising_powers(master_graph);
             let mut cut_to_raised_cut = vec![None; master_graph.cuts.len()];
             for (raised_cut_id, raised_cut_group) in
@@ -382,7 +406,7 @@ fn cross_section_graph_groups(
                 })
                 .collect::<Vec<_>>();
 
-            IntegrandGraphGroupInfo {
+            Ok(IntegrandGraphGroupInfo {
                 group_id,
                 graphs: group
                     .into_iter()
@@ -420,7 +444,7 @@ fn cross_section_graph_groups(
                 threshold_esurface_ids,
                 threshold_esurfaces,
                 cuts,
-            }
+            })
         })
         .collect()
 }

@@ -9,6 +9,7 @@ use std::{
 use clap::Parser;
 use console::style;
 use gammalooprs::model::ParameterType;
+use gammalooprs::processes::RaisedPropagatorSignature;
 use gammalooprs::settings::RuntimeSettings;
 use serde_json::Value as JsonValue;
 
@@ -2867,6 +2868,13 @@ fn add_select_raised_signature_suggestions(
         suggestions,
         seen,
     );
+    add_select_any_raising_suggestion(
+        "Any non-empty raised-propagator signature",
+        context,
+        consumed_values,
+        suggestions,
+        seen,
+    );
 }
 
 fn add_select_raised_cut_signature_suggestions(
@@ -2897,6 +2905,13 @@ fn add_select_raised_cut_signature_suggestions(
     add_select_full_value_suggestions(
         values,
         "Raised-cut signature",
+        context,
+        consumed_values,
+        suggestions,
+        seen,
+    );
+    add_select_any_raising_suggestion(
+        "Any non-empty raised-cut signature",
         context,
         consumed_values,
         suggestions,
@@ -3184,6 +3199,24 @@ fn add_select_full_value_suggestions(
         }
         add_select_value_suggestion(value, description, context, suggestions, seen, true);
     }
+}
+
+fn add_select_any_raising_suggestion(
+    description: &str,
+    context: CompletionSuggestionContext<'_>,
+    consumed_values: &[String],
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let value = RaisedPropagatorSignature::ANY_RAISING_KEYWORD;
+    if consumed_values.iter().any(|consumed| consumed == value) {
+        return;
+    }
+    let prefix = context.request.partial_path.as_str();
+    if !prefix.is_empty() && !value.starts_with(prefix) {
+        return;
+    }
+    add_select_value_suggestion(value, description, context, suggestions, seen, true);
 }
 
 fn add_select_value_suggestion(
@@ -5293,6 +5326,24 @@ mod tests {
 
         assert!(values.contains(&"[]".to_string()), "{values:?}");
         assert!(values.contains(&"[2,3]".to_string()), "{values:?}");
+        assert!(values.contains(&"ANY_RAISING".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_describes_select_any_raising_signature() {
+        let suggestions = completion_suggestions(
+            "select -p epem_xs -i subtracted --without-raised-propagator-signatures ANY",
+            &generate_completion_state(),
+        );
+
+        let suggestion = suggestions
+            .iter()
+            .find(|suggestion| suggestion.value == "ANY_RAISING")
+            .expect("ANY_RAISING should be suggested for raised-propagator signatures");
+        assert_eq!(
+            suggestion.description.as_deref(),
+            Some("Any non-empty raised-propagator signature")
+        );
     }
 
     #[test]
@@ -5316,6 +5367,7 @@ mod tests {
 
         assert!(values.contains(&"[]".to_string()), "{values:?}");
         assert!(values.contains(&"[2,2]".to_string()), "{values:?}");
+        assert!(values.contains(&"ANY_RAISING".to_string()), "{values:?}");
     }
 
     #[test]
@@ -5327,6 +5379,23 @@ mod tests {
 
         assert!(values.contains(&"[2,2]".to_string()), "{values:?}");
         assert!(!values.contains(&"[4]".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_describes_select_any_raising_cut_signature() {
+        let suggestions = completion_suggestions(
+            "select -p epem_xs -i subtracted --without-raised-cuts-signatures ANY",
+            &generate_completion_state(),
+        );
+
+        let suggestion = suggestions
+            .iter()
+            .find(|suggestion| suggestion.value == "ANY_RAISING")
+            .expect("ANY_RAISING should be suggested for raised-cut signatures");
+        assert_eq!(
+            suggestion.description.as_deref(),
+            Some("Any non-empty raised-cut signature")
+        );
     }
 
     #[test]

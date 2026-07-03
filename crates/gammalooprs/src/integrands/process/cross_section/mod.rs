@@ -30,7 +30,9 @@ use crate::{
         IteratedCtCollection, RaisedCutData, RaisedCutId,
     },
     settings::{
-        GlobalSettings, RuntimeSettings, global::FrozenCompilationMode, runtime::IntegralUnit,
+        GlobalSettings, RuntimeSettings,
+        global::FrozenCompilationMode,
+        runtime::{IntegralUnit, ParameterizationSettings},
     },
     subtraction::{
         generate_rstar_t_dependence_evaluator,
@@ -373,7 +375,7 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
             EventProcessingRuntime::from_settings_with_model_and_process_info(
                 &self.settings,
                 model,
-                &histogram_process_info_for_integrand(self),
+                &histogram_process_info_for_integrand(self)?,
             )?,
         );
         Ok(())
@@ -464,6 +466,12 @@ pub struct CrossSectionGraphTerm {
     #[allow(private_interfaces)]
     pub counterterm: LUCounterTerm,
     pub raised_data: RaisedCutData,
+}
+
+struct CutEventGenerationContext<'a> {
+    settings: &'a RuntimeSettings,
+    model: &'a Model,
+    channel_id: Option<ChannelIndex>,
 }
 
 impl CrossSectionGraphTerm {
@@ -1007,12 +1015,11 @@ impl CrossSectionGraphTerm {
 
     fn generate_event_for_cut<T: FloatLike>(
         &self,
-        model: &Model,
+        event_context: CutEventGenerationContext<'_>,
         t_scaling_solution: &NewtonIterationResult<T>,
         momentum_sample: &MomentumSample<T>,
         cut_id: CutId,
         cut: &CrossSectionCut,
-        channel_id: Option<ChannelIndex>,
     ) -> Result<GenericEvent<T>> {
         let rescaled_momenta =
             momentum_sample.rescaled_loop_momenta(&t_scaling_solution.solution, Subspace::None);
@@ -1020,9 +1027,22 @@ impl CrossSectionGraphTerm {
         let mut new_event = GenericEvent::<T>::default();
         new_event.cut_info.cut_id = cut_id.0;
         new_event.cut_info.orientation_id = momentum_sample.sample.orientation;
-        new_event.cut_info.lmb_channel_id = channel_id.map(usize::from);
-        new_event.cut_info.lmb_channel_edge_ids =
-            channel_id.map(|channel_id| self.multi_channeling_setup.channel_edge_ids(channel_id));
+        new_event.cut_info.lmb_channel_id = event_context.channel_id.map(usize::from);
+        new_event.cut_info.lmb_channel_edge_ids = event_context
+            .channel_id
+            .map(|channel_id| {
+                let parameterization_settings = event_context
+                    .settings
+                    .sampling
+                    .get_parameterization_settings()
+                    .expect("LMB channel event metadata requires a parameterization.");
+                self.multi_channeling_setup.effective_channel_edge_ids(
+                    channel_id,
+                    &self.graph.name,
+                    &parameterization_settings,
+                )
+            })
+            .transpose()?;
         // Set initial momenta and PDGs for the event
         new_event
             .kinematic_configuration
@@ -1090,24 +1110,26 @@ impl CrossSectionGraphTerm {
                 Flow::Source => edge_pdg,
                 Flow::Sink => {
                     edge_spatial_momentum = -edge_spatial_momentum;
-                    model
+                    event_context
+                        .model
                         .get_particle_from_pdg(edge_pdg)
-                        .get_anti_particle(model)
+                        .get_anti_particle(event_context.model)
                         .pdg_code
                 }
             };
 
-            let mass_value = if let Some(mass) = d.data.mass.value(model, &self.param_builder) {
-                if !mass.im.is_zero() {
-                    return Err(eyre!(
-                        "Cut particles should have real-valued masses ({})",
-                        edge_pdg
-                    ));
-                }
-                Some(mass.re)
-            } else {
-                None
-            };
+            let mass_value =
+                if let Some(mass) = d.data.mass.value(event_context.model, &self.param_builder) {
+                    if !mass.im.is_zero() {
+                        return Err(eyre!(
+                            "Cut particles should have real-valued masses ({})",
+                            edge_pdg
+                        ));
+                    }
+                    Some(mass.re)
+                } else {
+                    None
+                };
 
             let cut_four_momentum = edge_spatial_momentum.into_on_shell_four_momentum(mass_value);
 
@@ -1129,8 +1151,17 @@ impl GraphTerm for CrossSectionGraphTerm {
         &mut self.param_builder
     }
 
-    fn get_num_channels(&self) -> usize {
-        self.multi_channeling_setup.channels.len()
+    fn get_num_channels(&self, parameterization_settings: &ParameterizationSettings) -> usize {
+        self.multi_channeling_setup
+            .effective_channel_count(&self.graph.name, parameterization_settings)
+    }
+
+    fn selected_lmb_basis_id(
+        &self,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<LmbIndex> {
+        self.multi_channeling_setup
+            .selected_lmb_basis_id(&self.graph.name, parameterization_settings)
     }
 
     fn orientation_label(&self, orientation_id: usize) -> Option<String> {
@@ -1142,10 +1173,18 @@ impl GraphTerm for CrossSectionGraphTerm {
             .map(format_orientation_label)
     }
 
-    fn lmb_channel_label(&self, channel_id: ChannelIndex) -> Option<String> {
-        Some(format_lmb_channel_label(
-            &self.multi_channeling_setup.channel_edge_ids(channel_id),
-        ))
+    fn lmb_channel_label(
+        &self,
+        channel_id: ChannelIndex,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<Option<String>> {
+        Ok(Some(format_lmb_channel_label(
+            &self.multi_channeling_setup.effective_channel_edge_ids(
+                channel_id,
+                &self.graph.name,
+                parameterization_settings,
+            )?,
+        )))
     }
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
@@ -1271,13 +1310,29 @@ impl GraphTerm for CrossSectionGraphTerm {
 
         let momentum_sample =
             if let Some((channel_id, _alpha, _channel_weight)) = &context.channel_id {
-                MomentumSample {
-                    sample: self.multi_channeling_setup.reinterpret_loop_momenta_impl(
-                        *channel_id,
-                        &momentum_sample.sample,
+                let parameterization_settings = context
+                    .settings
+                    .sampling
+                    .get_parameterization_settings()
+                    .expect("LMB multichanneling requires a parameterization.");
+                let lmb_index = self.multi_channeling_setup.effective_channel_lmb_id(
+                    *channel_id,
+                    &self.graph.name,
+                    &parameterization_settings,
+                )?;
+                self.multi_channeling_setup
+                    .reinterpret_loop_momenta_for_lmb(
+                        lmb_index,
+                        momentum_sample,
                         momentum_sample.sample.loop_mom_cache_id,
-                    ),
-                }
+                    )
+            } else if let Some(lmb_basis_id) = context.lmb_basis_id {
+                self.multi_channeling_setup
+                    .reinterpret_loop_momenta_for_lmb(
+                        lmb_basis_id,
+                        momentum_sample,
+                        momentum_sample.sample.loop_mom_cache_id,
+                    )
             } else {
                 momentum_sample.clone()
             };
@@ -1349,15 +1404,18 @@ impl GraphTerm for CrossSectionGraphTerm {
                 context.event_processing_runtime.as_deref_mut(),
                 || {
                     let mut generated = self.generate_event_for_cut::<T>(
-                        context.model,
+                        CutEventGenerationContext {
+                            settings: context.settings,
+                            model: context.model,
+                            channel_id: context
+                                .channel_id
+                                .as_ref()
+                                .map(|(channel_id, _, _)| *channel_id),
+                        },
                         &solution,
                         &momentum_sample,
                         self.raised_data.raised_cut_groups[raised_cut].cuts[0],
                         &self.cuts[self.raised_data.raised_cut_groups[raised_cut].cuts[0]],
-                        context
-                            .channel_id
-                            .as_ref()
-                            .map(|(channel_id, _, _)| *channel_id),
                     )?;
                     generated.inverse_rotate(context.rotation);
                     Ok(generated)
@@ -1491,6 +1549,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                             .get_parameterization_settings()
                             .expect("LMB multichanneling requires a parameterization.");
                         let weighting_settings = LmbChannelWeightingSettings {
+                            graph_name: &self.graph.name,
                             model: context.model,
                             alpha: _alpha,
                             channel_weight: *_channel_weight,
@@ -1498,11 +1557,17 @@ impl GraphTerm for CrossSectionGraphTerm {
                             e_cm: context.settings.kinematics.e_cm,
                         };
 
+                        let selected_lmb = self.multi_channeling_setup.effective_channel_lmb_id(
+                            *_channel_index,
+                            &self.graph.name,
+                            &parameterization_settings,
+                        )?;
                         self.multi_channeling_setup.compute_prefactor_impl(
                             *_channel_index,
+                            selected_lmb,
                             &rescaled_momenta,
                             weighting_settings,
-                        )
+                        )?
                     } else {
                         F::from_f64(1.0)
                     },

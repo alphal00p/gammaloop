@@ -30,6 +30,57 @@
       },
       "additionalProperties": false
     },
+    "ApproximationType": {
+      "type": "string",
+      "enum": [
+        "MUV",
+        "OS",
+        "IR",
+        "Unsubtracted",
+        "VaccuumLimit"
+      ]
+    },
+    "CTIdentifier": {
+      "type": "object",
+      "properties": {
+        "external_pdg_set": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int"
+          },
+          "uniqueItems": true
+        },
+        "internal_pdg_set": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "int"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "CTRenormalizationRule": {
+      "type": "object",
+      "properties": {
+        "ct_identifier": {
+          "$ref": "#/$defs/CTIdentifier"
+        },
+        "renormalization_scheme": {
+          "$ref": "#/$defs/ApproximationType"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ct_identifier",
+        "renormalization_scheme"
+      ]
+    },
     "CompilationMode": {
       "type": "string",
       "enum": [
@@ -47,13 +98,19 @@
         "O3"
       ]
     },
+    "ContractionMode": {
+      "type": "string",
+      "enum": [
+        "SmallestDegree",
+        "MinResultRank"
+      ]
+    },
     "EvaluatorSettings": {
       "type": "object",
       "properties": {
         "abort_level": {
           "type": "integer",
           "format": "uint",
-          "default": 0,
           "minimum": 0
         },
         "compile": {
@@ -67,13 +124,18 @@
           "format": "uint",
           "minimum": 0
         },
+        "direct_translation": {
+          "type": "boolean"
+        },
+        "do_algebra": {
+          "type": "boolean"
+        },
         "do_fn_map_replacements": {
           "type": "boolean"
         },
         "horner_iterations": {
           "type": "integer",
           "format": "uint",
-          "default": 0,
           "minimum": 0
         },
         "iterative_orientation_optimization": {
@@ -82,26 +144,35 @@
         "max_common_pair_cache_entries": {
           "type": "integer",
           "format": "uint",
-          "default": 0,
           "minimum": 0
         },
         "max_common_pair_distance": {
           "type": "integer",
           "format": "uint",
-          "default": 0,
           "minimum": 0
         },
         "max_horner_scheme_variables": {
           "type": "integer",
           "format": "uint",
-          "default": 0,
           "minimum": 0
         },
         "n_cores": {
           "type": "integer",
           "format": "uint",
-          "default": 0,
           "minimum": 0
+        },
+        "spenso_execution_mode": {
+          "type": "array",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/ExecutionMode"
+            },
+            {
+              "$ref": "#/$defs/ContractionMode"
+            }
+          ]
         },
         "store_atom": {
           "type": "boolean"
@@ -112,10 +183,22 @@
         "summed_function_map": {
           "type": "boolean"
         },
+        "tensor_network_contraction_order": {
+          "$ref": "#/$defs/TensorNetworkContractionOrder"
+        },
         "verbose": {
           "type": "boolean"
         }
       }
+    },
+    "ExecutionMode": {
+      "type": "string",
+      "enum": [
+        "Sequential",
+        "Parallel",
+        "SequentialRef",
+        "SequentialExtract"
+      ]
     },
     "FMFTSettings": {
       "type": "object",
@@ -188,6 +271,9 @@
         },
         "orientation_pattern": {
           "$ref": "#/$defs/OrientationPattern"
+        },
+        "override_lmb_heuristics": {
+          "type": "boolean"
         },
         "threshold_subtraction": {
           "$ref": "#/$defs/ThresholdSubtractionSettings"
@@ -327,9 +413,21 @@
       },
       "additionalProperties": false
     },
+    "TensorNetworkContractionOrder": {
+      "type": "string",
+      "enum": [
+        "sparse_atom_aware",
+        "atom_aware",
+        "result_rank_only",
+        "entry_aware"
+      ]
+    },
     "ThresholdSubtractionSettings": {
       "type": "object",
       "properties": {
+        "assume_positive_external_energies": {
+          "type": "boolean"
+        },
         "check_esurface_at_generation": {
           "type": "boolean"
         },
@@ -364,7 +462,18 @@
     "UVgenerationSettings": {
       "type": "object",
       "properties": {
+        "add_integrated_uv_with_n_loops": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
         "add_sigma": {
+          "type": "boolean"
+        },
+        "cached": {
           "type": "boolean"
         },
         "generate_integrated": {
@@ -373,13 +482,28 @@
         "inner_products": {
           "type": "boolean"
         },
+        "keep_sigma": {
+          "type": "boolean"
+        },
         "only_integrated": {
           "type": "boolean"
         },
         "pole_part": {
           "type": "boolean"
         },
+        "renormalization_schemes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CTRenormalizationRule"
+          }
+        },
         "softct": {
+          "type": "boolean"
+        },
+        "subtract_uv": {
+          "type": "boolean"
+        },
+        "use_legacy": {
           "type": "boolean"
         },
         "vakint": {

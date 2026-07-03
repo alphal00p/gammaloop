@@ -411,9 +411,14 @@ pub enum RaisedPropagatorScope {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct RaisedPropagatorSignature(Vec<usize>);
+pub enum RaisedPropagatorSignature {
+    Exact(Vec<usize>),
+    AnyRaising,
+}
 
 impl RaisedPropagatorSignature {
+    pub const ANY_RAISING_KEYWORD: &'static str = "ANY_RAISING";
+
     pub fn new(mut multiplicities: Vec<usize>) -> Result<Self> {
         if let Some(invalid) = multiplicities
             .iter()
@@ -425,17 +430,29 @@ impl RaisedPropagatorSignature {
             ));
         }
         multiplicities.sort_unstable();
-        Ok(Self(multiplicities))
+        Ok(Self::Exact(multiplicities))
     }
 
     pub fn canonical(&self) -> String {
         self.to_string()
     }
+
+    fn matches(&self, actual: &Self) -> bool {
+        match self {
+            Self::Exact(_) => self == actual,
+            Self::AnyRaising => {
+                matches!(actual, Self::Exact(multiplicities) if !multiplicities.is_empty())
+            }
+        }
+    }
 }
 
 impl Display for RaisedPropagatorSignature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}]", self.0.iter().join(","))
+        match self {
+            Self::Exact(multiplicities) => write!(f, "[{}]", multiplicities.iter().join(",")),
+            Self::AnyRaising => write!(f, "{}", Self::ANY_RAISING_KEYWORD),
+        }
     }
 }
 
@@ -443,10 +460,13 @@ impl FromStr for RaisedPropagatorSignature {
     type Err = eyre::Report;
 
     fn from_str(raw: &str) -> Result<Self> {
+        if raw.trim().eq_ignore_ascii_case(Self::ANY_RAISING_KEYWORD) {
+            return Ok(Self::AnyRaising);
+        }
         let content = bracket_content(raw, '[', ']')
             .with_context(|| format!("Invalid raised-propagator signature '{raw}'"))?;
         if content.trim().is_empty() {
-            return Ok(Self(Vec::new()));
+            return Ok(Self::Exact(Vec::new()));
         }
         let entries = parse_comma_separated_list(content)
             .with_context(|| format!("Invalid raised-propagator signature '{raw}'"))?;
@@ -859,7 +879,9 @@ impl GraphGroupSelectionRule {
             } => matching_candidates(candidates, |candidate| {
                 let matched = candidate.analysis_subjects.iter().any(|subject| {
                     let actual = subject.raised_propagator_signature(*scope);
-                    signatures.iter().any(|signature| signature == &actual)
+                    signatures
+                        .iter()
+                        .any(|signature| signature.matches(&actual))
                 });
                 polarity.keep_if_match(matched)
             }),
@@ -870,7 +892,9 @@ impl GraphGroupSelectionRule {
             } => matching_candidates(candidates, |candidate| {
                 let matched = candidate.cut_subjects.iter().any(|subject| {
                     let actual = subject.raised_cut_signature(*scope);
-                    signatures.iter().any(|signature| signature == &actual)
+                    signatures
+                        .iter()
+                        .any(|signature| signature.matches(&actual))
                 });
                 polarity.keep_if_match(matched)
             }),
@@ -964,6 +988,13 @@ struct GraphGroupSelectionCandidate<'a> {
 pub(crate) struct GraphSelectionSubject<'a> {
     graph: &'a Graph,
     subgraph: Option<SuBitGraph>,
+    raised_edge_policy: RaisedEdgePolicy,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RaisedEdgePolicy {
+    LoopDependentOnly,
+    AllInternalInSubject,
 }
 
 impl<'a> GraphSelectionSubject<'a> {
@@ -971,13 +1002,24 @@ impl<'a> GraphSelectionSubject<'a> {
         Self {
             graph,
             subgraph: None,
+            raised_edge_policy: RaisedEdgePolicy::LoopDependentOnly,
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn subgraph(graph: &'a Graph, subgraph: SuBitGraph) -> Self {
         Self {
             graph,
             subgraph: Some(subgraph),
+            raised_edge_policy: RaisedEdgePolicy::LoopDependentOnly,
+        }
+    }
+
+    pub(crate) fn cut_side_amplitude_subgraph(graph: &'a Graph, subgraph: SuBitGraph) -> Self {
+        Self {
+            graph,
+            subgraph: Some(subgraph),
+            raised_edge_policy: RaisedEdgePolicy::AllInternalInSubject,
         }
     }
 
@@ -1166,11 +1208,13 @@ impl GraphSelectionSubject<'_> {
         let subgraph = self.raised_edge_subgraph();
 
         for (_, edge_index, edge) in self.graph.underlying.iter_edges_of(&subgraph) {
+            let loop_independent = self.graph.loop_momentum_basis.edge_signatures[edge_index]
+                .internal
+                .iter()
+                .all(|sign| sign.is_zero());
             if edge.data.is_dummy
-                || self.graph.loop_momentum_basis.edge_signatures[edge_index]
-                    .internal
-                    .iter()
-                    .all(|sign| sign.is_zero())
+                || (self.raised_edge_policy == RaisedEdgePolicy::LoopDependentOnly
+                    && loop_independent)
             {
                 continue;
             }
@@ -1580,6 +1624,37 @@ mod tests {
         Ok(graph)
     }
 
+    fn tree_raised_test_graph() -> Result<Graph> {
+        let mut graph: Graph = dot!(
+            digraph tree_raised {
+                edge [particle=scalar_1]
+                ext [style=invis]
+                ext -> A [id=3]
+                B -> ext [id=4]
+                A -> B [id=0]
+                A -> B [id=1]
+                A -> B [id=2]
+            },
+            scalar_model()
+        )?;
+
+        graph.loop_momentum_basis = LoopMomentumBasis {
+            tree: graph.underlying.empty_subgraph(),
+            loop_edges: vec![EdgeIndex::from(2)].into(),
+            ext_edges: vec![EdgeIndex::from(3), EdgeIndex::from(4)].into(),
+            edge_signatures: graph
+                .underlying
+                .new_edgevec(|_, edge_id, _| match edge_id.0 {
+                    0 => LoopExtSignature::from((vec![0], vec![1])),
+                    1 => LoopExtSignature::from((vec![0], vec![-1])),
+                    2 => LoopExtSignature::from((vec![1], vec![])),
+                    _ => LoopExtSignature::from((vec![0], vec![])),
+                }),
+        };
+
+        Ok(graph)
+    }
+
     fn cycle_test_graph() -> Result<Graph> {
         dot!(
             digraph cycle_test {
@@ -1676,6 +1751,18 @@ mod tests {
         )])
     }
 
+    fn raised_any_test_subjects_by_graph_id(
+        graph_id: usize,
+        graph: &Graph,
+    ) -> Result<Vec<GraphSelectionSubject<'_>>> {
+        let subject = if graph_id == 0 {
+            GraphSelectionSubject::whole_graph(graph)
+        } else {
+            GraphSelectionSubject::subgraph(graph, subgraph_from_edge_ids(graph, &[0, 2]))
+        };
+        Ok(vec![subject])
+    }
+
     #[test]
     fn raised_signature_parses_and_canonicalizes() {
         assert_eq!(
@@ -1696,7 +1783,27 @@ mod tests {
                 .unwrap()
                 .canonical()
         );
+        assert_eq!(
+            "ANY_RAISING",
+            RaisedPropagatorSignature::from_str("ANY_RAISING")
+                .unwrap()
+                .canonical()
+        );
         assert!(RaisedPropagatorSignature::from_str("[1]").is_err());
+    }
+
+    #[test]
+    fn any_raising_matches_any_non_empty_raised_signature() -> Result<()> {
+        let any = RaisedPropagatorSignature::from_str("ANY_RAISING")?;
+        let none = RaisedPropagatorSignature::from_str("[]")?;
+        let raised = RaisedPropagatorSignature::from_str("[2]")?;
+
+        assert!(any.matches(&raised));
+        assert!(!any.matches(&none));
+        assert!(raised.matches(&raised));
+        assert!(!raised.matches(&RaisedPropagatorSignature::from_str("[3]")?));
+
+        Ok(())
     }
 
     #[test]
@@ -1743,6 +1850,36 @@ mod tests {
             "[]",
             cut_edge_removed_side
                 .raised_propagator_signature(RaisedPropagatorScope::All)
+                .canonical()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn cut_side_amplitude_raised_signature_includes_tree_like_internal_edges() -> Result<()> {
+        let graph = tree_raised_test_graph()?;
+        let tree_raised_edges = subgraph_from_edge_ids(&graph, &[0, 1]);
+        let normal_subject = GraphSelectionSubject::subgraph(&graph, tree_raised_edges.clone());
+        let cut_side_subject =
+            GraphSelectionSubject::cut_side_amplitude_subgraph(&graph, tree_raised_edges.clone());
+
+        assert_eq!(
+            "[]",
+            normal_subject
+                .raised_propagator_signature(RaisedPropagatorScope::All)
+                .canonical()
+        );
+        assert_eq!(
+            "[2]",
+            cut_side_subject
+                .raised_propagator_signature(RaisedPropagatorScope::All)
+                .canonical()
+        );
+        assert_eq!(
+            "[]",
+            GraphCutSelectionSubject::new(&graph, tree_raised_edges)
+                .raised_cut_signature(RaisedPropagatorScope::All)
                 .canonical()
         );
 
@@ -2144,6 +2281,47 @@ mod tests {
     }
 
     #[test]
+    fn raised_propagator_selection_supports_any_raising_wildcard() -> Result<()> {
+        let mut graphs = vec![raised_test_graph()?, raised_test_graph()?];
+        graphs[0].name = "g0".to_string();
+        graphs[1].name = "g1".to_string();
+        let graph_group_structure = complete_group_parsing(&mut graphs)?;
+        let any = RaisedPropagatorSignature::from_str("ANY_RAISING")?;
+        let with_spec = GraphGroupSelectionSpec::new().with_raised_propagator_signatures(
+            SelectionPolarity::With,
+            RaisedPropagatorScope::All,
+            vec![any.clone()],
+        );
+        let without_spec = GraphGroupSelectionSpec::new().with_raised_propagator_signatures(
+            SelectionPolarity::Without,
+            RaisedPropagatorScope::All,
+            vec![any],
+        );
+
+        let with_plan = with_spec.plan_with_analysis_contexts(
+            &graph_group_structure,
+            |graph_id| graphs.get(graph_id),
+            raised_any_test_subjects_by_graph_id,
+            |_graph_id, _graph| Ok(Vec::new()),
+            "no graph subjects",
+            "no cuts",
+        )?;
+        assert_eq!(with_plan.report().kept_master_graphs, vec!["g0"]);
+
+        let without_plan = without_spec.plan_with_analysis_contexts(
+            &graph_group_structure,
+            |graph_id| graphs.get(graph_id),
+            raised_any_test_subjects_by_graph_id,
+            |_graph_id, _graph| Ok(Vec::new()),
+            "no graph subjects",
+            "no cuts",
+        )?;
+        assert_eq!(without_plan.report().kept_master_graphs, vec!["g1"]);
+
+        Ok(())
+    }
+
+    #[test]
     fn raised_cut_selection_matches_any_cut_and_without_vetoes() -> Result<()> {
         let mut graphs = vec![raised_test_graph()?, raised_test_graph()?];
         graphs[0].name = "g0".to_string();
@@ -2158,6 +2336,47 @@ mod tests {
             SelectionPolarity::Without,
             RaisedPropagatorScope::All,
             vec![RaisedPropagatorSignature::from_str("[2]")?],
+        );
+
+        let with_plan = with_spec.plan_with_analysis_contexts(
+            &graph_group_structure,
+            |graph_id| graphs.get(graph_id),
+            |_graph_id, graph| Ok(vec![GraphSelectionSubject::whole_graph(graph)]),
+            raised_cut_test_subjects_by_graph_id,
+            "no graph subjects",
+            "no cuts",
+        )?;
+        assert_eq!(with_plan.report().kept_master_graphs, vec!["g0"]);
+
+        let without_plan = without_spec.plan_with_analysis_contexts(
+            &graph_group_structure,
+            |graph_id| graphs.get(graph_id),
+            |_graph_id, graph| Ok(vec![GraphSelectionSubject::whole_graph(graph)]),
+            raised_cut_test_subjects_by_graph_id,
+            "no graph subjects",
+            "no cuts",
+        )?;
+        assert_eq!(without_plan.report().kept_master_graphs, vec!["g1"]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn raised_cut_selection_supports_any_raising_wildcard() -> Result<()> {
+        let mut graphs = vec![raised_test_graph()?, raised_test_graph()?];
+        graphs[0].name = "g0".to_string();
+        graphs[1].name = "g1".to_string();
+        let graph_group_structure = complete_group_parsing(&mut graphs)?;
+        let any = RaisedPropagatorSignature::from_str("ANY_RAISING")?;
+        let with_spec = GraphGroupSelectionSpec::new().with_raised_cut_signatures(
+            SelectionPolarity::With,
+            RaisedPropagatorScope::All,
+            vec![any.clone()],
+        );
+        let without_spec = GraphGroupSelectionSpec::new().with_raised_cut_signatures(
+            SelectionPolarity::Without,
+            RaisedPropagatorScope::All,
+            vec![any],
         );
 
         let with_plan = with_spec.plan_with_analysis_contexts(

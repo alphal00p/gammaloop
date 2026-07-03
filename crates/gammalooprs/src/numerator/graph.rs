@@ -606,6 +606,7 @@ mod test {
 
             amp.build_integrand(
                 &model,
+                "test_process",
                 &GlobalSettings::default(),
                 (&RuntimeSettings::default()).into(),
                 &thread_pool,

@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Display,
+};
 
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
@@ -379,6 +382,8 @@ pub struct ParameterizationSettings {
     pub b: f64,
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub power: f64,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub lmb_basis_ids: BTreeMap<String, Vec<usize>>,
 }
 
 impl Default for ParameterizationSettings {
@@ -388,6 +393,7 @@ impl Default for ParameterizationSettings {
             power: 1.0,
             mode: ParameterizationMode::default(),
             mapping: ParameterizationMapping::default(),
+            lmb_basis_ids: BTreeMap::new(),
         }
     }
 }
@@ -1027,6 +1033,8 @@ pub struct SamplingSettingsParser {
     pub b: f64,
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub power: f64,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub lmb_basis_ids: BTreeMap<String, Vec<usize>>,
 }
 
 impl Default for SamplingSettingsParser {
@@ -1042,6 +1050,7 @@ impl Default for SamplingSettingsParser {
             mapping: ParameterizationMapping::Linear,
             b: 1.0,
             power: 1.0,
+            lmb_basis_ids: BTreeMap::new(),
         }
     }
 }
@@ -1055,9 +1064,9 @@ impl Default for SamplingSettingsParser {
 )]
 pub enum LmbChannelWeight {
     #[serde(rename = "ose")]
+    #[default]
     Ose,
     #[serde(rename = "inverse_jacobian")]
-    #[default]
     InverseJacobian,
 }
 
@@ -1107,6 +1116,27 @@ impl Default for SamplingSettings {
     }
 }
 
+fn validate_lmb_basis_ids(lmb_basis_ids: &BTreeMap<String, Vec<usize>>) -> Result<(), String> {
+    for (graph_name, basis_ids) in lmb_basis_ids {
+        if basis_ids.is_empty() {
+            return Err(format!(
+                "Invalid sampling settings: lmb_basis_ids entry for graph '{graph_name}' cannot be empty."
+            ));
+        }
+
+        let mut seen = BTreeSet::new();
+        for basis_id in basis_ids {
+            if !seen.insert(*basis_id) {
+                return Err(format!(
+                    "Invalid sampling settings: lmb_basis_ids entry for graph '{graph_name}' contains duplicate basis id {basis_id}."
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 impl SamplingSettings {
     fn as_parser(&self) -> SamplingSettingsParser {
         match self {
@@ -1121,6 +1151,7 @@ impl SamplingSettings {
                 mapping: settings.mapping.clone(),
                 b: settings.b,
                 power: settings.power,
+                lmb_basis_ids: settings.lmb_basis_ids.clone(),
             },
             SamplingSettings::MultiChanneling(settings) => SamplingSettingsParser {
                 graphs: SumMode::Summed,
@@ -1135,6 +1166,7 @@ impl SamplingSettings {
                 mapping: settings.parameterization_settings.mapping.clone(),
                 b: settings.parameterization_settings.b,
                 power: settings.parameterization_settings.power,
+                lmb_basis_ids: settings.parameterization_settings.lmb_basis_ids.clone(),
             },
             SamplingSettings::DiscreteGraphs(settings) => {
                 let orientations = if settings.sample_orientations {
@@ -1158,6 +1190,7 @@ impl SamplingSettings {
                             mapping: parameterization_settings.mapping.clone(),
                             b: parameterization_settings.b,
                             power: parameterization_settings.power,
+                            lmb_basis_ids: parameterization_settings.lmb_basis_ids.clone(),
                         }
                     }
                     DiscreteGraphSamplingType::MultiChanneling(multichanneling_settings) => {
@@ -1180,6 +1213,10 @@ impl SamplingSettings {
                                 .clone(),
                             b: multichanneling_settings.parameterization_settings.b,
                             power: multichanneling_settings.parameterization_settings.power,
+                            lmb_basis_ids: multichanneling_settings
+                                .parameterization_settings
+                                .lmb_basis_ids
+                                .clone(),
                         }
                     }
                     DiscreteGraphSamplingType::DiscreteMultiChanneling(
@@ -1203,6 +1240,10 @@ impl SamplingSettings {
                             .clone(),
                         b: multichanneling_settings.parameterization_settings.b,
                         power: multichanneling_settings.parameterization_settings.power,
+                        lmb_basis_ids: multichanneling_settings
+                            .parameterization_settings
+                            .lmb_basis_ids
+                            .clone(),
                     },
                     DiscreteGraphSamplingType::TropicalSampling(_) => SamplingSettingsParser {
                         graphs: SumMode::MonteCarlo,
@@ -1215,6 +1256,7 @@ impl SamplingSettings {
                         mapping: ParameterizationMapping::default(),
                         b: 1.0,
                         power: 1.0,
+                        lmb_basis_ids: BTreeMap::new(),
                     },
                 }
             }
@@ -1233,7 +1275,10 @@ impl SamplingSettings {
             mapping,
             b,
             power,
+            lmb_basis_ids,
         } = parser;
+
+        validate_lmb_basis_ids(&lmb_basis_ids)?;
 
         let sample_orientations = match (graphs.clone(), orientations) {
             (SumMode::Summed, SumMode::Summed) => false,
@@ -1247,6 +1292,12 @@ impl SamplingSettings {
         };
 
         if matches!(coordinate_system, CoordinateSystem::MomTrop) {
+            if !lmb_basis_ids.is_empty() {
+                return Err(
+                    "Invalid sampling settings: coordinate_system = 'tropical' is incompatible with lmb_basis_ids."
+                        .to_string(),
+                );
+            }
             if !matches!(graphs, SumMode::MonteCarlo) {
                 return Err(
                     "Invalid sampling settings: coordinate_system = 'tropical' requires graphs = 'monte_carlo'."
@@ -1314,6 +1365,7 @@ impl SamplingSettings {
             mapping,
             b,
             power,
+            lmb_basis_ids,
         };
 
         match graphs {
@@ -1436,7 +1488,7 @@ impl CoordinateSystem {
 }
 
 impl SamplingSettings {
-    pub(crate) fn get_parameterization_settings(&self) -> Option<ParameterizationSettings> {
+    pub fn get_parameterization_settings(&self) -> Option<ParameterizationSettings> {
         match self {
             SamplingSettings::Default(settings) => Some(settings.clone()),
             SamplingSettings::MultiChanneling(settings) => {
