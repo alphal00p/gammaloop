@@ -9,7 +9,7 @@ use gammaloop_api::commands::{
 };
 use gammaloop_api::state::ProcessRef;
 use gammaloop_integration_tests::{
-    CLIState, clean_test, get_example_cli, get_test_cli, get_tests_workspace_path, workspace_root,
+    CLIState, clean_test, get_test_cli, get_tests_workspace_path, workspace_root,
 };
 use gammalooprs::integrands::{HasIntegrand, evaluation::EvaluationMetaData};
 use gammalooprs::observables::events::AdditionalWeightKey;
