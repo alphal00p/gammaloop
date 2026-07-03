@@ -1842,7 +1842,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             && outside_value <= zero
             && outside_search_iterations < 64
         {
-            radius_guess = radius_guess * F::from_f64(2.0);
+            radius_guess *= F::from_f64(2.0);
             outside_value = function(&radius_guess).0;
             outside_search_iterations += 1;
         }
