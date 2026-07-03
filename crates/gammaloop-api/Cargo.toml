@@ -69,6 +69,7 @@ tracing-indicatif = { workspace = true }
 
 unicode-width = "0.2.2"
 walkdir = { workspace = true }
+gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }
 
 [dependencies.linnet]
 workspace = true

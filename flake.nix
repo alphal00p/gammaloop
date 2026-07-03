@@ -14,6 +14,11 @@
       inputs.rust-analyzer-src.follows = "";
     };
 
+    crate2nix = {
+      url = "github:nix-community/crate2nix/0.14.1";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -21,6 +26,7 @@
     nixpkgs,
     crane,
     fenix,
+    crate2nix,
     flake-utils,
     ...
   }:
@@ -163,9 +169,12 @@
       in
         crateMemberDirs ++ ["tests"];
 
+      workspaceManifestFor = member:
+        builtins.fromTOML (builtins.readFile (workspaceRoot + "/${member}/Cargo.toml"));
+
       workspaceMemberPackageDirs =
         lib.listToAttrs (map (member: {
-            name = (builtins.fromTOML (builtins.readFile (workspaceRoot + "/${member}/Cargo.toml"))).package.name;
+            name = (workspaceManifestFor member).package.name;
             value = member;
           })
           workspaceMemberDirs);
@@ -203,6 +212,45 @@
         autoCargoTargetDirs
       );
 
+      workspaceExplicitCargoTargetPaths =
+        lib.concatMap (
+          member: let
+            manifest = workspaceManifestFor member;
+            targetPaths = targets:
+              lib.concatMap (
+                target:
+                  lib.optional (target ? path) "${member}/${target.path}"
+              )
+              targets;
+          in
+            lib.optional ((manifest ? lib) && (manifest.lib ? path)) "${member}/${manifest.lib.path}"
+            ++ targetPaths (manifest.bin or [])
+            ++ targetPaths (manifest.example or [])
+            ++ targetPaths (manifest.test or [])
+            ++ targetPaths (manifest.bench or [])
+        )
+        workspaceMemberDirs;
+
+      workspaceDefaultCargoTargetPaths =
+        lib.concatMap (
+          member: [
+            "${member}/src/lib.rs"
+            "${member}/src/main.rs"
+          ]
+        )
+        workspaceMemberDirs;
+
+      workspaceCargoTargetEntrypoints =
+        lib.filter builtins.pathExists (
+          map (path: workspaceRoot + "/${path}") (
+            lib.sort (left: right: left < right) (lib.unique (
+              workspaceDefaultCargoTargetPaths
+              ++ workspaceExplicitCargoTargetPaths
+              ++ autoCargoTargetPaths
+            ))
+          )
+        );
+
       workspaceDependencyManifestFiles =
         [
           ./Cargo.lock
@@ -223,6 +271,19 @@
           ++ workspaceDependencyBuildScripts
           ++ [
             ./tests/resources/fjcore
+          ]
+        );
+      };
+
+      crate2nixGenerationSrc = lib.fileset.toSource {
+        root = workspaceRoot;
+        fileset = lib.fileset.unions (
+          workspaceDependencyManifestFiles
+          ++ workspaceDependencyBuildScripts
+          ++ workspaceCargoTargetEntrypoints
+          ++ [
+            ./crate-hashes.json
+            ./.config/hakari.toml
           ]
         );
       };
@@ -253,6 +314,11 @@
         ./assets
         ./examples/cli
       ];
+
+      crate2nixWorkspaceCrateSrcFor = package:
+        crate2nixSourceWith [
+          (workspaceRoot + "/${workspaceMemberPackageDirs.${package}}")
+        ];
 
       dummyCargoTarget = pkgs.writeText "crane-dummy-cargo-target.rs" ''
         #![allow(clippy::all)]
@@ -400,7 +466,12 @@
             '';
         };
 
-      crate2nixWorkspaceCrateOverrides = lib.genAttrs workspaceMemberPackages (_: crate2nixCommonOverride);
+      crate2nixWorkspaceCrateOverrides =
+        lib.mapAttrs (
+          package: member: old:
+            crate2nixSourceOverride old (crate2nixWorkspaceCrateSrcFor package) member
+        )
+        workspaceMemberPackageDirs;
 
       crate2nixDefaultCrateOverrides =
         pkgs.defaultCrateOverrides
@@ -431,7 +502,12 @@
           defaultCrateOverrides = crate2nixDefaultCrateOverrides;
         };
 
-      crate2nixPackageSet = import ./Cargo.nix {
+      crate2nixGeneratedCargoNix = crate2nix.tools.${system}.generatedCargoNix {
+        name = "gammaloop";
+        src = crate2nixGenerationSrc;
+      };
+
+      crate2nixPackageSet = import crate2nixGeneratedCargoNix {
         inherit pkgs;
         release = true;
         buildRustCrateForPkgs = crate2nixBuildRustCrateForPkgs;
@@ -758,8 +834,12 @@
 
       nextestSplitPackages = sortedUnique (lib.concatMap (target: target.packages) nextestPackageGroups);
       workspacePackages = sortedUnique workspaceMemberPackages;
-      missingNextestPackages = lib.subtractLists nextestSplitPackages workspacePackages;
-      extraNextestPackages = lib.subtractLists workspacePackages nextestSplitPackages;
+      nextestCoverageIgnoredPackages = [
+        "gammaloop-workspace-hack"
+      ];
+      nextestCoveredWorkspacePackages = sortedUnique (lib.subtractLists nextestCoverageIgnoredPackages workspaceMemberPackages);
+      missingNextestPackages = lib.subtractLists nextestSplitPackages nextestCoveredWorkspacePackages;
+      extraNextestPackages = lib.subtractLists nextestCoveredWorkspacePackages nextestSplitPackages;
 
       checkedNextestPackageGroups = assert lib.asserts.assertMsg (
         missingNextestPackages == [] && extraNextestPackages == []
@@ -904,14 +984,34 @@
 
       crate2nixCiPrebuildRoots = [
         {
+          packageId = "gammaloop-workspace-hack";
+          features = ["default"];
+          packageIds = ["symbolica" "numerica"];
+        }
+        {
           packageId = "gammaloop-api";
           features = ["default"];
-          packageIds = ["symbolica"];
+          packageIds = ["gammaloop-workspace-hack" "symbolica" "numerica"];
         }
         {
           packageId = "gammaloop-api";
           features = ["python_abi" "pyo3-extension-module"];
-          packageIds = ["symbolica"];
+          packageIds = ["gammaloop-workspace-hack" "symbolica" "numerica"];
+        }
+        {
+          packageId = "spenso";
+          features = crate2nixCiFeaturesFor "spenso";
+          packageIds = ["gammaloop-workspace-hack" "symbolica" "numerica"];
+        }
+        {
+          packageId = "spynso3";
+          features = crate2nixCiFeaturesFor "spynso3";
+          packageIds = ["gammaloop-workspace-hack" "symbolica" "numerica"];
+        }
+        {
+          packageId = "vakint";
+          features = crate2nixCiFeaturesFor "vakint";
+          packageIds = ["symbolica" "numerica"];
         }
       ];
       # Only prebuild test-root Symbolica variants that are reused by more than one CI job.
@@ -923,14 +1023,22 @@
         path = lib.getLib (crate2nixBuiltTestCratesFor package).crates.symbolica;
       })
       crate2nixCiPrebuildSharedTestRoots;
-      crate2nixCiPrebuild = pkgs.linkFarm "gammaloop-crate2nix-ci-prebuild" (
-        lib.concatMap (
-          root:
-            crate2nixCiDependencyEntriesFor root.packageId root.features root.packageIds
-        )
-        crate2nixCiPrebuildRoots
-        ++ crate2nixCiPrebuildSharedTestDependencyEntries
-      );
+      crate2nixCiPrebuild =
+        (pkgs.linkFarm "gammaloop-crate2nix-ci-prebuild" (
+          lib.concatMap (
+            root:
+              crate2nixCiDependencyEntriesFor root.packageId root.features root.packageIds
+          )
+          crate2nixCiPrebuildRoots
+          ++ crate2nixCiPrebuildSharedTestDependencyEntries
+        ))
+        .overrideAttrs (old: {
+          passthru =
+            (old.passthru or {})
+            // {
+              inherit crate2nixGeneratedCargoNix crate2nixGenerationSrc;
+            };
+        });
 
       nextestCargoMetadata = pkgs.runCommand "gammaloop-nextest-cargo-metadata.json" {
         nativeBuildInputs = [ciToolchain];
@@ -1361,6 +1469,7 @@
               pkg-config
               cargo-deny
               cargo-edit
+              cargo-hakari
               cargo-watch
               bacon
               gfortran

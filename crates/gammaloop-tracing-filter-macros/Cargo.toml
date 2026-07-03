@@ -9,3 +9,4 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1.0"
 quote = "1.0"
+gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }
