@@ -27,10 +27,10 @@ platforms = [
 # builds but too broad for the common CI cache target.
 [traversal-excludes]
 workspace-members = [
+    "clinnet",
     "idenso",
     "linnest",
     "linnet-py",
-    "spenso",
     "spynso3",
     "vakint",
 ]

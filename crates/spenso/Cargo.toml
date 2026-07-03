@@ -75,6 +75,7 @@ colored = { workspace = true }
 itertools = "0.14.0"
 nu-ansi-term = { workspace = true }
 pyo3-stub-gen = { workspace = true, optional = true }
+gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }
 
 [dependencies.symbolica]
 workspace = true

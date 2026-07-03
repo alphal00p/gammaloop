@@ -16,6 +16,7 @@ publish = false
 ### BEGIN HAKARI SECTION
 [dependencies]
 ahash = { version = "0.8", features = ["compile-time-rng", "serde"] }
+anstream = { version = "1" }
 bincode = { version = "2", features = ["serde"] }
 bitflags = { version = "2", default-features = false, features = ["serde"] }
 bitvec = { version = "1", features = ["serde"] }
@@ -29,12 +30,12 @@ derive_more = { version = "2", features = ["as_ref", "deref", "deref_mut", "is_v
 either = { version = "1", features = ["use_std"] }
 figment = { version = "0.10", default-features = false, features = ["json", "toml"] }
 getrandom = { version = "0.2", default-features = false, features = ["custom", "std"] }
-indenter = { version = "0.3", features = ["std"] }
-indexmap = { version = "2" }
-indicatif = { version = "0.18", features = ["improved_unicode", "in_memory", "rayon"] }
+indexmap = { version = "2", features = ["serde"] }
 insta = { version = "1", features = ["json", "ron", "toml", "yaml"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
 memchr = { version = "2" }
+num-bigint = { version = "0.4", features = ["serde"] }
+num-complex = { version = "0.4", features = ["serde"] }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
 numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main", default-features = false, features = ["bincode", "gmp", "serde"] }
@@ -61,6 +62,7 @@ toml_datetime = { version = "1", features = ["serde"] }
 toml_parser = { version = "1" }
 toml_writer = { version = "1" }
 tracing = { version = "0.1", features = ["release_max_level_info"] }
+tracing-core = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time"] }
 winnow-ca01ad9e24f5d932 = { package = "winnow", version = "0.7" }
 winnow-dff4ba8e3ae991db = { package = "winnow", version = "1" }
@@ -68,6 +70,7 @@ zerocopy = { version = "0.8", default-features = false, features = ["derive", "s
 
 [build-dependencies]
 ahash = { version = "0.8", features = ["compile-time-rng", "serde"] }
+anstream = { version = "1" }
 bincode = { version = "2", features = ["serde"] }
 bitflags = { version = "2", default-features = false, features = ["serde"] }
 bitvec = { version = "1", features = ["serde"] }
@@ -82,12 +85,12 @@ derive_more-impl = { version = "2", features = ["as_ref", "deref", "deref_mut", 
 either = { version = "1", features = ["use_std"] }
 figment = { version = "0.10", default-features = false, features = ["json", "toml"] }
 getrandom = { version = "0.2", default-features = false, features = ["custom", "std"] }
-indenter = { version = "0.3", features = ["std"] }
-indexmap = { version = "2" }
-indicatif = { version = "0.18", features = ["improved_unicode", "in_memory", "rayon"] }
+indexmap = { version = "2", features = ["serde"] }
 insta = { version = "1", features = ["json", "ron", "toml", "yaml"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
 memchr = { version = "2" }
+num-bigint = { version = "0.4", features = ["serde"] }
+num-complex = { version = "0.4", features = ["serde"] }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
 numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main", default-features = false, features = ["bincode", "gmp", "serde"] }
@@ -107,14 +110,17 @@ similar = { version = "2", features = ["inline", "unicode"] }
 smallvec = { version = "1", default-features = false, features = ["const_generics", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
 symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main", default-features = false, features = ["bincode", "gmp", "serde"] }
-syn = { version = "2", features = ["extra-traits", "full", "visit", "visit-mut"] }
+syn-dff4ba8e3ae991db = { package = "syn", version = "1", features = ["extra-traits", "full"] }
+syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
 tabled = { version = "0.20", features = ["ansi"] }
 testing_table = { version = "0.3", default-features = false, features = ["ansi", "std"] }
 time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
+tiny-keccak = { version = "2", features = ["sha3", "shake"] }
 toml_datetime = { version = "1", features = ["serde"] }
 toml_parser = { version = "1" }
 toml_writer = { version = "1" }
 tracing = { version = "0.1", features = ["release_max_level_info"] }
+tracing-core = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time"] }
 winnow-ca01ad9e24f5d932 = { package = "winnow", version = "0.7" }
 winnow-dff4ba8e3ae991db = { package = "winnow", version = "1" }
