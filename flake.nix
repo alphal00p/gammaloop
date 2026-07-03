@@ -480,7 +480,16 @@
           "gammaloop-api" = old: crate2nixSourceOverride old crate2nixGammaloopApiSrc "crates/gammaloop-api";
           "gammalooprs" = old: crate2nixSourceOverride old crate2nixGammalooprsSrc "crates/gammalooprs";
           "gammaloop-integration-tests" = old: crate2nixSourceOverride old crate2nixIntegrationTestsSrc "tests";
-          "gmp-mpfr-sys" = crate2nixCommonOverride;
+          # GMP's bundled C tests fail in the crate build on Darwin; keep the
+          # original bundled-library build there, but skip the dependency
+          # self-tests instead of switching to system GMP/MPFR/MPC.
+          "gmp-mpfr-sys" = old:
+            (crate2nixCommonOverride old)
+            // {
+              features =
+                (old.features or [])
+                ++ lib.optionals pkgs.stdenv.isDarwin ["c-no-tests"];
+            };
           "pyo3-build-config" = crate2nixCommonOverride;
           "rug" = old:
             (crate2nixCommonOverride old)
