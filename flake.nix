@@ -475,7 +475,7 @@
       crate2nixCiDependencyEntriesFor = rootPackageId: rootFeatures: packageIds:
         map (packageId: {
           name = "${crate2nixCiSanitizePackageId rootPackageId}-${crate2nixCiFeatureSetName rootFeatures}-${crate2nixCiSanitizePackageId packageId}";
-          path = crate2nixCiPrebuildCrateFor rootPackageId rootFeatures packageId;
+          path = lib.getLib (crate2nixCiPrebuildCrateFor rootPackageId rootFeatures packageId);
         })
         packageIds;
 
@@ -920,7 +920,7 @@
       ];
       crate2nixCiPrebuildSharedTestDependencyEntries = map (package: {
         name = "test-${crate2nixCiSanitizePackageId package}-symbolica";
-        path = (crate2nixBuiltTestCratesFor package).crates.symbolica;
+        path = lib.getLib (crate2nixBuiltTestCratesFor package).crates.symbolica;
       })
       crate2nixCiPrebuildSharedTestRoots;
       crate2nixCiPrebuild = pkgs.linkFarm "gammaloop-crate2nix-ci-prebuild" (
