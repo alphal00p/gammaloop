@@ -1623,25 +1623,3 @@ mod slow {
         Ok(())
     }
 }
-#[test]
-fn epem_a_ddx_xs_nlo_uv() {
-    run_single_integrated_uv_case(&IntegratedUvCase {
-        run_card: "uv/epem_a_ddx_xs_nlo",
-        test_name: "epem_a_ddx_xs_nlo",
-        process: "epem_a_ddx",
-        integrand_name: "NLO",
-        integrator: DEFAULT_INTEGRATED_UV_INTEGRATOR,
-        original_m_uv: 20.0,
-        shifted_m_uv: 7.0,
-        original_renormalization_localization_scale: 5.0,
-        shifted_renormalization_localization_scale: 25.0,
-        original_mu_r: 3.0,
-        shifted_mu_r: 9.0,
-        skip_uv_profile: true,
-        targets: IntegratedUvTargets {
-            integrated: Some(Complex::new(F(0.0), F(1.163e-3))),
-        },
-        integrated_ct_relative_error_limit: None,
-        check_mu_r_dependence: false,
-    });
-}

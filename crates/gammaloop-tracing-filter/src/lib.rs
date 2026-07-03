@@ -807,7 +807,7 @@ mod tests {
 
     #[test]
     fn reloadable_filter_applies_event_value_tags() {
-        let (filter, handle) = GammaLogFilter::parse("gammalooprs=info")
+        let (filter, handle) = GammaLogFilter::parse("gammalooprs=warn")
             .unwrap()
             .reloadable();
         let recorder = EventRecorder::default();
@@ -816,7 +816,7 @@ mod tests {
         );
 
         tracing::subscriber::with_default(subscriber, || {
-            tracing::debug!(
+            tracing::info!(
                 target: "gammalooprs::uv::forest",
                 generation = true,
                 uv = true,
@@ -824,17 +824,16 @@ mod tests {
                 "Terms"
             );
             handle.reload(
-                GammaLogFilter::parse("gammalooprs=info,gammalooprs::uv[{#algebra}]=debug")
-                    .unwrap(),
+                GammaLogFilter::parse("gammalooprs=warn,gammalooprs::uv[{#algebra}]=info").unwrap(),
             );
-            tracing::debug!(
+            tracing::info!(
                 target: "gammalooprs::uv::forest",
                 generation = true,
                 uv = true,
                 term = true,
                 "Terms"
             );
-            tracing::debug!(
+            tracing::info!(
                 target: "gammalooprs::uv::approx::integrated",
                 uv = true,
                 integrated = true,
@@ -842,17 +841,17 @@ mod tests {
                 "Algebra"
             );
             handle.reload(
-                GammaLogFilter::parse("gammalooprs=info,gammalooprs::uv[{#!inspect}]=debug")
+                GammaLogFilter::parse("gammalooprs=warn,gammalooprs::uv[{#!inspect}]=info")
                     .unwrap(),
             );
-            tracing::debug!(
+            tracing::info!(
                 target: "gammalooprs::uv::approx::integrated",
                 uv = true,
                 integrated = true,
                 inspect = true,
                 "Inspect true"
             );
-            tracing::debug!(
+            tracing::info!(
                 target: "gammalooprs::uv::approx::integrated",
                 uv = true,
                 integrated = true,
