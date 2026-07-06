@@ -18,10 +18,6 @@ let
     if package == "gammaloop-api"
     then "packages.${system}.gammaloop"
     else cratePackageAttr package;
-  workspaceTestSupportGraphAttr = representative:
-    if representative == workspaceHackPackage
-    then workspaceHackCacheAttr
-    else crateTestSupportAttr representative;
   mergeDependencySets = sets: let
     attrs = unique (builtins.concatLists (map builtins.attrNames sets));
   in
@@ -54,18 +50,6 @@ let
     unique (map workspaceTestComponentRepresentativeFor workspacePackages);
   workspaceTestSupportComponentRepresentatives =
     builtins.filter (representative: representative != workspaceHackPackage) workspaceTestComponentRepresentatives;
-  workspaceTestComponentMembers =
-    builtins.listToAttrs (map (representative: {
-        name = representative;
-        value = workspaceTestComponentMembersFor representative;
-      })
-      workspaceTestComponentRepresentatives);
-  workspaceTestComponentDependencyRepresentativesFor = representative:
-    unique (builtins.filter (dependencyRepresentative: dependencyRepresentative != representative) (
-      map workspaceTestComponentRepresentativeFor (
-        builtins.concatLists (map workspaceTestDependencyNamesFor workspaceTestComponentMembers.${representative})
-      )
-    ));
   workspaceCratePackageDependencies = builtins.listToAttrs (
     builtins.filter (entry: entry.value != []) (map (package: {
         name = workspacePackageGraphAttr package;
@@ -103,46 +87,47 @@ let
       })
       (workspaceCratePackageCacheArtifactDependencies.${dependent} or []))
     (builtins.attrNames workspaceCratePackageCacheArtifactDependencies));
-  workspaceCrateTestSupportDependencies = builtins.listToAttrs (
-    builtins.filter (entry: entry.value != []) (map (representative: {
-        name = crateTestSupportAttr representative;
-        value =
-          [workspaceHackCacheAttr]
-          ++ map workspaceTestSupportGraphAttr (workspaceTestComponentDependencyRepresentativesFor representative);
-      })
-      workspaceTestSupportComponentRepresentatives)
-  );
-  workspaceCrateTestSupportDependencyEdges = builtins.concatLists (map (dependent:
-      map (dependency: {
-        inherit dependency dependent;
-      })
-      (workspaceCrateTestSupportDependencies.${dependent} or []))
-    (builtins.attrNames workspaceCrateTestSupportDependencies));
-  workspaceCrateTestBinaryCacheDependencies = builtins.listToAttrs (map (package: {
-      name = crateTestBinaryAttr package;
-      value = [
-        (workspaceTestSupportGraphAttr (workspaceTestComponentRepresentativeFor package))
-        (workspacePackageGraphAttr package)
-      ];
-    })
-    workspacePackages);
+  nextestPackageGroups = {
+    core = [
+      "gammaloop-api"
+      "gammaloop-tracing-filter"
+      "gammaloop-tracing-filter-macros"
+      "gammalooprs"
+    ];
+    integration = ["gammaloop-integration-tests"];
+    "python-api" = ["gammaloop-integration-tests"];
+    linnet = [
+      "clinnet"
+      "linnet"
+      "linnet-py"
+      "linnest"
+    ];
+    spenso = [
+      "idenso"
+      "spenso"
+      "spenso-hep-lib"
+      "spenso-macros"
+      "spynso3"
+    ];
+    vakint = ["vakint"];
+  };
+  nextestArchiveAttr = target: "checks.${system}.gammaloop-nextest-binaries-${target}";
+  nextestArchiveDependenciesFor = target:
+    ["packages.${system}.cargoArtifacts"]
+    ++ map workspacePackageGraphAttr nextestPackageGroups.${target}
+    ++ (
+      if target == "integration" || target == "python-api"
+      then ["packages.${system}.gammaloop-python-module"]
+      else []
+    );
   # The Hakari workspace-hack deps artifact is the root for the
   # Symbolica-containing cache DAG. Higher-level crate cache jobs reach it
   # through their Guppy-resolved workspace cache dependencies.
-  nextestBinaryChecks = [
-    "checks.${system}.gammaloop-nextest-binaries-core"
-    "checks.${system}.gammaloop-nextest-binaries-integration"
-    "checks.${system}.gammaloop-nextest-binaries-python-api"
-    "checks.${system}.gammaloop-nextest-binaries-linnet"
-    "checks.${system}.gammaloop-nextest-binaries-spenso"
-    "checks.${system}.gammaloop-nextest-binaries-vakint"
-  ];
+  nextestBinaryChecks = map nextestArchiveAttr (builtins.attrNames nextestPackageGroups);
   dependencies = mergeDependencySets [
     workspaceCratePackageCacheArtifactDependencies
     workspaceCratePackageCacheDependencies
     workspaceCratePackageDependencies
-    workspaceCrateTestSupportDependencies
-    workspaceCrateTestBinaryCacheDependencies
     {
       "packages.${system}.gammaloop" = [
         "checks.${system}.gammaloop-fmt"
@@ -156,28 +141,12 @@ let
       "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoArtifacts"];
       "packages.${system}.workspaceBuildArtifacts" = ["packages.${system}.cargoArtifacts"];
-      "checks.${system}.gammaloop-nextest-binaries-core" = [
-        "packages.${system}.crate-test-binaries-gammaloop-api"
-        "packages.${system}.crate-test-binaries-gammaloop-tracing-filter"
-        "packages.${system}.crate-test-binaries-gammaloop-tracing-filter-macros"
-        "packages.${system}.crate-test-binaries-gammalooprs"
-      ];
-      "checks.${system}.gammaloop-nextest-binaries-integration" = ["packages.${system}.crate-test-binaries-gammaloop-integration-tests"];
-      "checks.${system}.gammaloop-nextest-binaries-python-api" = ["packages.${system}.crate-test-binaries-gammaloop-integration-tests"];
-      "checks.${system}.gammaloop-nextest-binaries-linnet" = [
-        "packages.${system}.crate-test-binaries-clinnet"
-        "packages.${system}.crate-test-binaries-linnet"
-        "packages.${system}.crate-test-binaries-linnet-py"
-        "packages.${system}.crate-test-binaries-linnest"
-      ];
-      "checks.${system}.gammaloop-nextest-binaries-spenso" = [
-        "packages.${system}.crate-test-binaries-idenso"
-        "packages.${system}.crate-test-binaries-spenso"
-        "packages.${system}.crate-test-binaries-spenso-hep-lib"
-        "packages.${system}.crate-test-binaries-spenso-macros"
-        "packages.${system}.crate-test-binaries-spynso3"
-      ];
-      "checks.${system}.gammaloop-nextest-binaries-vakint" = ["packages.${system}.crate-test-binaries-vakint"];
+      "checks.${system}.gammaloop-nextest-binaries-core" = nextestArchiveDependenciesFor "core";
+      "checks.${system}.gammaloop-nextest-binaries-integration" = nextestArchiveDependenciesFor "integration";
+      "checks.${system}.gammaloop-nextest-binaries-python-api" = nextestArchiveDependenciesFor "python-api";
+      "checks.${system}.gammaloop-nextest-binaries-linnet" = nextestArchiveDependenciesFor "linnet";
+      "checks.${system}.gammaloop-nextest-binaries-spenso" = nextestArchiveDependenciesFor "spenso";
+      "checks.${system}.gammaloop-nextest-binaries-vakint" = nextestArchiveDependenciesFor "vakint";
       "checks.${system}.gammaloop-nextest-binaries" = nextestBinaryChecks;
       "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];
       "checks.${system}.linnest-wasm" = ["packages.${system}.linnest-wasm"];
@@ -210,21 +179,11 @@ let
       edge: !(builtins.elem edge.dependency (dependencies.${edge.dependent} or []))
     )
     workspaceCratePackageCacheArtifactDependencyEdges;
-  missingWorkspaceCrateTestSupportEdges =
-    builtins.filter (
-      edge: !(builtins.elem edge.dependency (dependencies.${edge.dependent} or []))
-    )
-    workspaceCrateTestSupportDependencyEdges;
   reciprocalWorkspaceCratePackageEdges =
     builtins.filter (
       edge: builtins.elem edge.dependent (workspaceCratePackageDependencies.${edge.dependency} or [])
     )
     workspaceCratePackageDependencyEdges;
-  reciprocalWorkspaceCrateTestSupportEdges =
-    builtins.filter (
-      edge: builtins.elem edge.dependent (workspaceCrateTestSupportDependencies.${edge.dependency} or [])
-    )
-    workspaceCrateTestSupportDependencyEdges;
   formatDependencyEdge = edge: "${edge.dependency} -> ${edge.dependent}";
   selfDependencies =
     builtins.filter (
@@ -236,18 +195,14 @@ let
     || builtins.throw "manual NixCI dependency graph is missing workspace crate package dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge missingWorkspaceCratePackageEdges)}";
     assert missingWorkspaceCratePackageCacheArtifactEdges == []
     || builtins.throw "manual NixCI dependency graph is missing workspace crate package cache dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge missingWorkspaceCratePackageCacheArtifactEdges)}";
-    assert missingWorkspaceCrateTestSupportEdges == []
-    || builtins.throw "manual NixCI dependency graph is missing workspace crate-test-support dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge missingWorkspaceCrateTestSupportEdges)}";
     assert reciprocalWorkspaceCratePackageEdges == []
     || builtins.throw "manual NixCI dependency graph contains reciprocal workspace crate package dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge reciprocalWorkspaceCratePackageEdges)}";
-    assert reciprocalWorkspaceCrateTestSupportEdges == []
-    || builtins.throw "manual NixCI dependency graph contains reciprocal workspace crate-test-support dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge reciprocalWorkspaceCrateTestSupportEdges)}";
     assert selfDependencies == []
     || builtins.throw "manual NixCI dependency graph contains self dependencies: ${builtins.concatStringsSep ", " selfDependencies}";
       dependencies;
 in {
   systems = [system];
-  doNotBuild =
+  doNotBuild = unique (
     [
       # Alias of packages.${system}.gammaloop; the product attr carries the
       # gammaloop-api crate graph.
@@ -266,18 +221,19 @@ in {
       "packages.${system}.workspaceBuildArtifacts"
       "packages.${system}.gammaloop-llvm-coverage"
       "packages.${system}.nix-ci-check-gammaloop-nextest"
-    ];
+    ]
+    ++ map crateTestSupportAttr workspaceTestSupportComponentRepresentatives
+    ++ map crateTestBinaryAttr workspacePackages
+  );
   fail-fast = false;
   # Keep dependency discovery manual. With generated Rust outputs,
   # automatic discovery asks NixCI to compute derivation paths for many
   # package/check attrs during `show`, including attrs listed in doNotBuild.
   # The manual graph below uses the Hakari workspace-hack cache artifact as the
   # root for Symbolica-containing cache jobs, orders crate package jobs by
-  # Guppy's normal resolved package closures, and orders test-binary cache jobs
-  # by SCC-compressed Guppy test dependencies. Packages in a test-dependency SCC
-  # share one crate-test-support derivation, so dev-dependency cycles like
-  # linnet/linnest and spenso-macros/spenso do not become reciprocal NixCI
-  # edges.
+  # Guppy's normal resolved package closures, and orders nextest archive jobs
+  # after the normal workspace package artifacts that the archives merge into
+  # their Cargo target directories.
   # See https://nix-ci.com/documentation/automatic-dependency-discovery
   # and https://nix-ci.com/documentation/manually-specified-dependencies
   dependency-discovery.enable = false;

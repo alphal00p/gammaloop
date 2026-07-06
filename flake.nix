@@ -515,6 +515,17 @@
         in
           cargoFeatureArgs (sortedUnique features);
 
+      cargoPackageArgsWithFeaturePackagesFor = package: featurePackages: featuresFor: let
+        featureArgs = cargoQualifiedFeatureArgsFor featurePackages featuresFor;
+      in
+        lib.concatStringsSep " " (
+          [
+            "--locked"
+            "-p ${lib.escapeShellArg package}"
+          ]
+          ++ lib.optional (featureArgs != "") featureArgs
+        );
+
       cargoPackagesArgsFor = packages: featuresFor: let
         featureArgs = cargoQualifiedFeatureArgsFor packages featuresFor;
       in
@@ -528,6 +539,10 @@
 
       craneWorkspacePrebuildFeatureArgs =
         cargoQualifiedFeatureArgsFor workspaceMemberPackages craneTestFeaturesFor;
+      cargoPackageCiArgsFor = package:
+        cargoPackageArgsWithFeaturePackagesFor package (workspaceNormalSourcePackageNamesFor package) craneCiFeaturesFor;
+      cargoPackageTestArgsFor = package:
+        cargoPackageArgsWithFeaturePackagesFor package (workspaceTestSourcePackageNamesFor package) craneTestFeaturesFor;
 
       guppyFeatureMapFor = featuresFor:
         builtins.toJSON (lib.listToAttrs (map (package: {
@@ -624,7 +639,7 @@
           CARGO_PROFILE = ciCargoProfile;
           # The workspace sets default-members to gammaloop-api, so CI checks must
           # opt into the full workspace explicitly.
-          cargoExtraArgs = "--locked --workspace";
+          cargoExtraArgs = "--locked --workspace ${craneWorkspacePrebuildFeatureArgs}";
 
           PYO3_PYTHON = "${pkgs.python313}/bin/python3";
           PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
@@ -643,7 +658,7 @@
           doNotLinkInheritedArtifacts = true;
           pname = "gammaloop-api";
           src = workspacePackageSrcFor "gammaloop-api";
-          cargoExtraArgs = cargoPackageArgsFor "gammaloop-api" [];
+          cargoExtraArgs = cargoPackageCiArgsFor "gammaloop-api";
           doCheck = false;
           postPatch = workspaceDummyCargoTargetsScriptFor "gammaloop-api";
         });
@@ -683,7 +698,7 @@
           pname = "clinnet";
           inherit (clinnetMeta) version;
           src = workspacePackageSrcFor "clinnet";
-          cargoExtraArgs = cargoPackageArgsFor "clinnet" [];
+          cargoExtraArgs = cargoPackageCiArgsFor "clinnet";
           doCheck = false;
           postPatch = workspaceDummyCargoTargetsScriptFor "clinnet";
         });
@@ -1162,8 +1177,8 @@
         // {
           pname = "gammaloop-crate-${workspaceHackPackage}";
           src = workspacePackageSrcFor workspaceHackPackage;
-          cargoExtraArgs = cargoPackageArgsFor workspaceHackPackage [];
-          buildPhaseCargoCommand = "cargoWithProfile build ${cargoPackageArgsFor workspaceHackPackage []}";
+          cargoExtraArgs = cargoPackageCiArgsFor workspaceHackPackage;
+          buildPhaseCargoCommand = "cargoWithProfile build ${cargoPackageCiArgsFor workspaceHackPackage}";
           checkPhaseCargoCommand = "";
           doCheck = false;
           extraDummyScript = workspaceAllDummyCargoTargetsScript;
@@ -1182,8 +1197,8 @@
                 );
                 pname = "gammaloop-crate-${package}";
                 src = workspacePackageSrcFor package;
-                cargoExtraArgs = cargoPackageArgsFor package (craneCiFeaturesFor package);
-                buildPhaseCargoCommand = "cargoWithProfile build ${cargoPackageArgsFor package (craneCiFeaturesFor package)}";
+                cargoExtraArgs = cargoPackageCiArgsFor package;
+                buildPhaseCargoCommand = "cargoWithProfile build ${cargoPackageCiArgsFor package}";
                 checkPhaseCargoCommand = "";
                 doCheck = false;
                 extraDummyScript = workspaceAllDummyCargoTargetsScript;
@@ -1203,7 +1218,7 @@
                 doNotLinkInheritedArtifacts = true;
                 pname = "gammaloop-crate-${package}";
                 src = workspacePackageSrcFor package;
-                cargoExtraArgs = cargoPackageArgsFor package (craneCiFeaturesFor package);
+                cargoExtraArgs = cargoPackageCiArgsFor package;
                 postPatch = workspaceDummyCargoTargetsScriptFor package;
               })));
 
@@ -1217,7 +1232,7 @@
             sourcePackages = workspaceTestComponentSourcePackageNamesFor representative;
             supportCargoCommands =
               lib.concatMapStringsSep "\n" (
-                package: "cargoWithProfile test --no-run ${cargoPackageArgsFor package (craneTestFeaturesFor package)}"
+                package: "cargoWithProfile test --no-run ${cargoPackageTestArgsFor package}"
               )
               componentPackages;
           in
@@ -1282,7 +1297,7 @@
           inherit cargoArtifacts;
           pname = "gammaloop-workspace-build-artifacts";
           src = workspaceNonIntegrationTestSrc;
-          cargoExtraArgs = "--locked --workspace --exclude gammaloop-integration-tests --tests";
+          cargoExtraArgs = "${cargoPackagesArgsFor (lib.subtractLists ["gammaloop-integration-tests"] workspaceMemberPackages) craneTestFeaturesFor} --tests";
         });
 
       symbolicaCrateArgs = usesSymbolica:
@@ -1397,7 +1412,7 @@
         else workspaceNonIntegrationTestSrc;
 
       nextestFeatureArgsFor = target:
-        cargoQualifiedFeatureArgsFor target.packages (
+        cargoQualifiedFeatureArgsFor (nextestArchiveInputPackagesFor target) (
           package:
             sortedUnique (
               craneCiFeaturesFor package
@@ -1414,13 +1429,48 @@
           ++ lib.optional (nextestFeatureArgsFor target != "") (nextestFeatureArgsFor target)
         );
 
-      nextestBinarySetFor = target:
-        mergeCargoArtifacts "gammaloop-nextest-binaries-${target.name}"
-        (map (package: craneTestBinaryArtifacts.${package}) target.packages);
+      nextestArchiveNameFor = target: "gammaloop-nextest-${target.name}.tar.zst";
+      nextestArchiveInputPackagesFor = target:
+        sortedUnique (target.packages ++ lib.concatMap workspaceResolvedDependencyNamesFor target.packages);
+      nextestArchiveCargoArtifactsFor = target:
+        mergeCargoArtifacts "gammaloop-nextest-binaries-${target.name}-inputs" (
+          [cargoArtifacts]
+          ++ map (package: cranePackageBuildArtifacts.${package}) (nextestArchiveInputPackagesFor target)
+        );
+
+      nextestArchiveFor = target:
+        craneLib.mkCargoDerivation (ciArgs
+          // {
+            pname = "gammaloop-nextest-binaries-${target.name}";
+            src = nextestSrcFor target;
+            cargoArtifacts = nextestArchiveCargoArtifactsFor target;
+            doCheck = false;
+            doInstallCargoArtifacts = false;
+            nativeBuildInputs =
+              (ciArgs.nativeBuildInputs or [])
+              ++ [pkgs.cargo-nextest pkgs.form]
+              ++ lib.optionals (nextestUsesIntegrationTests target) [nextestPython];
+            buildPhaseCargoCommand = ''
+              mkdir -p "$out"
+              cargo nextest --version
+              cargo nextest archive \
+                --cargo-profile ${ciCargoProfile} \
+                ${nextestCargoArgsFor target} \
+                ${nextestFilterFor target} \
+                --profile ${nextestProfile} \
+                --archive-file "$out/${nextestArchiveNameFor target}"
+            '';
+            checkPhaseCargoCommand = "";
+            installPhaseCommand = "";
+          } // lib.optionalAttrs (nextestUsesIntegrationTests target) {
+            PYO3_PYTHON = "${nextestPython}/bin/python3";
+            PYTHON = "${nextestPython}/bin/python3";
+            PYTHONPATH = "${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}";
+          });
 
       nextestBinarySets = lib.listToAttrs (map (target: {
           name = "gammaloop-nextest-binaries-${target.name}";
-          value = nextestBinarySetFor target;
+          value = nextestArchiveFor target;
         })
         checkedNextestPackageGroups);
 
@@ -1433,43 +1483,55 @@
         checkedNextestPackageGroups);
 
       nextestCheckFor = target:
-        craneLib.cargoNextest (ciArgs
-          // {
-          pname = "gammaloop-nextest-${target.name}";
-          src = nextestSrcFor target;
-          cargoArtifacts = nextestBinarySetForTarget target;
-          doNotLinkInheritedArtifacts = true;
-          cargoExtraArgs = nextestCargoArgsFor target;
-          cargoNextestExtraArgs = "${nextestFilterFor target} ${nextestBaseExtraArgs}";
-          nativeBuildInputs =
-            (ciArgs.nativeBuildInputs or [])
-            ++ [pkgs.form]
-            ++ lib.optionals (nextestUsesIntegrationTests target) [nextestPython];
+        pkgs.runCommand "gammaloop-nextest-${target.name}" {
+          nativeBuildInputs = [
+            pkgs.cargo-nextest
+            pkgs.form
+            nextestFailureSummary
+          ] ++ lib.optionals (nextestUsesIntegrationTests target) [nextestPython];
+          LD_LIBRARY_PATH = runtimeLibPath;
+          DYLD_LIBRARY_PATH = runtimeLibPath;
+          NEXTEST_SHOW_PROGRESS = "counter";
           RUST_BACKTRACE = "1";
           RUST_LIB_BACKTRACE = "1";
           SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-          preCheck = ''
-            ${licensePreCheck}
-            # Nextest runs with the workspace root as cwd, while some insta
-            # snapshots are stored under each crate src. Mirror those snapshot
-            # directories into the workspace-level src tree in the disposable
-            # Nix build directory so insta can find them.
-            if [ -d crates ]; then
-              while IFS= read -r snapshots; do
-                rel="''${snapshots#crates/*/src/}"
-                mkdir -p "src/$rel"
-                cp -R "$snapshots/." "src/$rel/"
-              done < <(find crates -type d -name snapshots | sort)
-            fi
-          '';
-          postCheck = ''
-            ${nextestFailureSummary}/bin/nextest-failure-summary ${lib.escapeShellArg nextestJunitPath} || true
-          '';
-        } // lib.optionalAttrs (nextestUsesIntegrationTests target) {
-          PYO3_PYTHON = "${nextestPython}/bin/python3";
-          PYTHON = "${nextestPython}/bin/python3";
-          PYTHONPATH = "${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}";
-        });
+        } (''
+          if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
+            echo "Missing SYMBOLICA_LICENSE environment variable" >&2
+            exit 1
+          fi
+
+          cp -R ${nextestSrcFor target}/. .
+          chmod -R u+w .
+        '' + lib.optionalString (nextestUsesIntegrationTests target) ''
+          export PYO3_PYTHON=${nextestPython}/bin/python3
+          export PYTHON=${nextestPython}/bin/python3
+          export PYTHONPATH=${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}
+        '' + ''
+          # Nextest runs with the workspace root as cwd, while some insta
+          # snapshots are stored under each crate src. Mirror those snapshot
+          # directories into the workspace-level src tree in the disposable
+          # Nix build directory so insta can find them.
+          if [ -d crates ]; then
+            while IFS= read -r snapshots; do
+              rel="''${snapshots#crates/*/src/}"
+              mkdir -p "src/$rel"
+              cp -R "$snapshots/." "src/$rel/"
+            done < <(find crates -type d -name snapshots | sort)
+          fi
+
+          mkdir -p target/nextest
+          set +e
+          cargo nextest run \
+            --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target} \
+            --workspace-remap . \
+            --target-dir-remap target \
+            ${nextestBaseExtraArgs}
+          status=$?
+          nextest-failure-summary ${lib.escapeShellArg nextestJunitPath} || true
+          mkdir -p "$out"
+          exit "$status"
+        '');
 
       nextestRunChecks = lib.listToAttrs (map (target: {
           name = "gammaloop-nextest-${target.name}";
