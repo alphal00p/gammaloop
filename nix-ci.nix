@@ -263,7 +263,6 @@ in {
       "checks.${system}.gammaloop-nextest-vakint"
       "packages.${system}.default"
       "packages.${system}.crane-ci-prebuild"
-      "packages.${system}.cargoArtifacts"
       "packages.${system}.workspaceBuildArtifacts"
       "packages.${system}.gammaloop-llvm-coverage"
       "packages.${system}.nix-ci-check-gammaloop-nextest"
