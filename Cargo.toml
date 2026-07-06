@@ -95,6 +95,9 @@ opt-level = 2
 [profile.dev-optim.package."*"]
 opt-level = 3
 
+[profile.dev-optim.package.gammaloop-workspace-hack]
+opt-level = 3
+
 [profile.dev-optim.package.gammaloop-api]
 opt-level = 2
 
@@ -108,6 +111,9 @@ inherits = "dev-optim"
 debug = false
 
 [profile.ci-optim.package."*"]
+opt-level = 3
+
+[profile.ci-optim.package.gammaloop-workspace-hack]
 opt-level = 3
 
 [profile.ci-optim.package.gammaloop-api]

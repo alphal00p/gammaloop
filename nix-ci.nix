@@ -14,10 +14,12 @@ let
   crateTestBinaryAttr = package: "packages.${system}.crate-test-binaries-${package}";
   workspaceHackPackage = "gammaloop-workspace-hack";
   workspaceHackCacheAttr = cratePackageDepsAttr workspaceHackPackage;
-  workspacePackageGraphAttr = package:
-    if package == "gammaloop-api"
-    then "packages.${system}.gammaloop"
-    else cratePackageAttr package;
+  workspaceCheckCargoArtifactsAttr = "packages.${system}.workspaceCheckCargoArtifacts";
+  workspaceClippyCargoArtifactsAttr = "packages.${system}.workspaceClippyCargoArtifacts";
+  workspaceDocCargoArtifactsAttr = "packages.${system}.workspaceDocCargoArtifacts";
+  workspaceDoctestCargoArtifactsAttr = "packages.${system}.workspaceDoctestCargoArtifacts";
+  gammaloopApiPackageArtifactsAttr = "packages.${system}.gammaloopApiPackageArtifacts";
+  workspacePackageGraphAttr = package: cratePackageAttr package;
   mergeDependencySets = sets: let
     attrs = unique (builtins.concatLists (map builtins.attrNames sets));
   in
@@ -50,6 +52,18 @@ let
     unique (map workspaceTestComponentRepresentativeFor workspacePackages);
   workspaceTestSupportComponentRepresentatives =
     builtins.filter (representative: representative != workspaceHackPackage) workspaceTestComponentRepresentatives;
+  workspaceTestComponentMembers =
+    builtins.listToAttrs (map (representative: {
+        name = representative;
+        value = workspaceTestComponentMembersFor representative;
+      })
+      workspaceTestComponentRepresentatives);
+  workspaceTestComponentDependencyRepresentativesFor = representative:
+    unique (builtins.filter (dependencyRepresentative: dependencyRepresentative != representative) (
+      map workspaceTestComponentRepresentativeFor (
+        builtins.concatLists (map workspaceTestDependencyNamesFor workspaceTestComponentMembers.${representative})
+      )
+    ));
   workspaceCratePackageDependencies = builtins.listToAttrs (
     builtins.filter (entry: entry.value != []) (map (package: {
         name = workspacePackageGraphAttr package;
@@ -87,6 +101,18 @@ let
       })
       (workspaceCratePackageCacheArtifactDependencies.${dependent} or []))
     (builtins.attrNames workspaceCratePackageCacheArtifactDependencies));
+  workspaceTestSupportDependencies = builtins.listToAttrs (map (representative: {
+      name = crateTestSupportAttr representative;
+      value =
+        [(workspacePackageGraphAttr workspaceHackPackage)]
+        ++ map crateTestSupportAttr (
+          builtins.filter (
+            dependencyRepresentative: dependencyRepresentative != workspaceHackPackage
+          )
+          (workspaceTestComponentDependencyRepresentativesFor representative)
+        );
+    })
+    workspaceTestSupportComponentRepresentatives);
   nextestPackageGroups = {
     core = [
       "gammaloop-api"
@@ -96,8 +122,8 @@ let
     ];
     integration = ["gammaloop-integration-tests"];
     "python-api" = ["gammaloop-integration-tests"];
+    clinnet = ["clinnet"];
     linnet = [
-      "clinnet"
       "linnet"
       "linnet-py"
       "linnest"
@@ -107,7 +133,6 @@ let
       "spenso"
       "spenso-hep-lib"
       "spenso-macros"
-      "spynso3"
     ];
     vakint = ["vakint"];
   };
@@ -116,7 +141,7 @@ let
     ["packages.${system}.cargoArtifacts"]
     ++ map workspacePackageGraphAttr nextestPackageGroups.${target}
     ++ (
-      if target == "integration" || target == "python-api"
+      if target == "python-api"
       then ["packages.${system}.gammaloop-python-module"]
       else []
     );
@@ -124,24 +149,37 @@ let
   # Symbolica-containing cache DAG. Higher-level crate cache jobs reach it
   # through their Guppy-resolved workspace cache dependencies.
   nextestBinaryChecks = map nextestArchiveAttr (builtins.attrNames nextestPackageGroups);
+  workspaceCheckCargoArtifactDependencies =
+    ["packages.${system}.cargoArtifacts"]
+    ++ map workspacePackageGraphAttr workspacePackages
+    ++ map crateTestSupportAttr workspaceTestSupportComponentRepresentatives;
   dependencies = mergeDependencySets [
     workspaceCratePackageCacheArtifactDependencies
     workspaceCratePackageCacheDependencies
     workspaceCratePackageDependencies
+    workspaceTestSupportDependencies
     {
       "packages.${system}.gammaloop" = [
+        gammaloopApiPackageArtifactsAttr
         "checks.${system}.gammaloop-fmt"
         "devShells.${system}.default"
       ];
       "checks.${system}.gammaloop" = ["packages.${system}.gammaloop"];
       "packages.${system}.default" = ["packages.${system}.gammaloop"];
       "packages.${system}.gammaloop-python-module" =
-        workspaceCratePackageDependencies."packages.${system}.gammaloop" or [];
+        workspaceCratePackageDependencies.${cratePackageAttr "gammaloop-api"} or [];
+      ${gammaloopApiPackageArtifactsAttr} = [(cratePackageAttr "gammaloop-api")];
+      ${workspaceCheckCargoArtifactsAttr} = workspaceCheckCargoArtifactDependencies;
+      ${workspaceClippyCargoArtifactsAttr} = [workspaceCheckCargoArtifactsAttr];
+      ${workspaceDocCargoArtifactsAttr} = [workspaceCheckCargoArtifactsAttr];
+      ${workspaceDoctestCargoArtifactsAttr} = [workspaceCheckCargoArtifactsAttr];
       "packages.${system}.cargoArtifacts" = [workspaceHackCacheAttr];
-      "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoArtifacts"];
-      "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoArtifacts"];
+      "checks.${system}.gammaloop-clippy" = [workspaceClippyCargoArtifactsAttr];
+      "checks.${system}.gammaloop-doc" = [workspaceDocCargoArtifactsAttr];
+      "checks.${system}.gammaloop-doctest" = [workspaceDoctestCargoArtifactsAttr];
       "packages.${system}.workspaceBuildArtifacts" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-nextest-binaries-core" = nextestArchiveDependenciesFor "core";
+      "checks.${system}.gammaloop-nextest-binaries-clinnet" = nextestArchiveDependenciesFor "clinnet";
       "checks.${system}.gammaloop-nextest-binaries-integration" = nextestArchiveDependenciesFor "integration";
       "checks.${system}.gammaloop-nextest-binaries-python-api" = nextestArchiveDependenciesFor "python-api";
       "checks.${system}.gammaloop-nextest-binaries-linnet" = nextestArchiveDependenciesFor "linnet";
@@ -151,14 +189,14 @@ let
       "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];
       "checks.${system}.linnest-wasm" = ["packages.${system}.linnest-wasm"];
       "packages.${system}.gammaloop-llvm-coverage" = ["packages.${system}.gammaloop"];
-      "packages.${system}.nix-ci-check-gammaloop-doctest" = ["packages.${system}.cargoArtifacts"];
+      "packages.${system}.nix-ci-check-gammaloop-doctest" = [workspaceDoctestCargoArtifactsAttr];
       "packages.${system}.nix-ci-check-gammaloop-nextest" =
         nextestBinaryChecks
         ++ ["packages.${system}.gammaloop-python-module"];
+      "packages.${system}.nix-ci-check-gammaloop-nextest-clinnet" = ["checks.${system}.gammaloop-nextest-binaries-clinnet"];
       "packages.${system}.nix-ci-check-gammaloop-nextest-core" = ["checks.${system}.gammaloop-nextest-binaries-core"];
       "packages.${system}.nix-ci-check-gammaloop-nextest-integration" = [
         "checks.${system}.gammaloop-nextest-binaries-integration"
-        "packages.${system}.gammaloop-python-module"
       ];
       "packages.${system}.nix-ci-check-gammaloop-nextest-python-api" = [
         "checks.${system}.gammaloop-nextest-binaries-python-api"
@@ -204,12 +242,10 @@ in {
   systems = [system];
   doNotBuild = unique (
     [
-      # Alias of packages.${system}.gammaloop; the product attr carries the
-      # gammaloop-api crate graph.
-      (cratePackageAttr "gammaloop-api")
       "checks.${system}.gammaloop-doctest"
       "checks.${system}.gammaloop-nextest"
       "checks.${system}.gammaloop-nextest-binaries"
+      "checks.${system}.gammaloop-nextest-clinnet"
       "checks.${system}.gammaloop-nextest-core"
       "checks.${system}.gammaloop-nextest-integration"
       "checks.${system}.gammaloop-nextest-python-api"
@@ -222,7 +258,6 @@ in {
       "packages.${system}.gammaloop-llvm-coverage"
       "packages.${system}.nix-ci-check-gammaloop-nextest"
     ]
-    ++ map crateTestSupportAttr workspaceTestSupportComponentRepresentatives
     ++ map crateTestBinaryAttr workspacePackages
   );
   fail-fast = false;
@@ -248,6 +283,13 @@ in {
 
     gammaloop-nextest-core = {
       package = "packages.${system}.nix-ci-check-gammaloop-nextest-core";
+      system = system;
+      in-repo = true;
+      secrets = ["SYMBOLICA_LICENSE"];
+    };
+
+    gammaloop-nextest-clinnet = {
+      package = "packages.${system}.nix-ci-check-gammaloop-nextest-clinnet";
       system = system;
       in-repo = true;
       secrets = ["SYMBOLICA_LICENSE"];

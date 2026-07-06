@@ -58,7 +58,7 @@ similar-asserts = "1.7.0"
 [features]
 default = ["nodestore-vec", "serde"]
 bincode = ["dep:bincode", "serde"]
-drawing = ["dep:cgmath"]
+drawing = ["dep:cgmath", "cgmath/serde"]
 energy_trace = []
 nodestore-forest-child-vec = []
 nodestore-forest-parent-child = []

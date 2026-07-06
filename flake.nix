@@ -62,6 +62,8 @@
       workspaceRoot = ./.;
       workspaceGraph = builtins.fromJSON (builtins.readFile ./nix/ci-workspace-graph.json);
       workspaceHackPackage = "gammaloop-workspace-hack";
+      workspacePrebuildPackage = "gammaloop-ci-prebuild";
+      workspacePrebuildPackageDir = "crates/${workspacePrebuildPackage}";
 
       cargoSources = craneLib.fileset.commonCargoSources workspaceRoot;
 
@@ -297,6 +299,24 @@
         #![allow(dead_code)]
       '';
 
+      normalizeWorkspaceHackBuildScriptTimestampScriptFor = prefix: ''
+        if [ -e ${prefix}crates/${workspaceHackPackage}/build.rs ]; then
+          if [ -e ${prefix}crates/${workspaceHackPackage}/Cargo.toml ]; then
+            touch -d @0 ${prefix}crates/${workspaceHackPackage}/Cargo.toml
+          fi
+          if [ -e ${prefix}crates/${workspaceHackPackage}/src/lib.rs ]; then
+            touch -d @0 ${prefix}crates/${workspaceHackPackage}/src/lib.rs
+          fi
+          touch -d @1 ${prefix}crates/${workspaceHackPackage}/build.rs
+        fi
+      '';
+
+      normalizeWorkspaceHackBuildScriptTimestampScript =
+        normalizeWorkspaceHackBuildScriptTimestampScriptFor "";
+
+      normalizeWorkspaceHackBuildScriptTimestampInDummySrcScript =
+        normalizeWorkspaceHackBuildScriptTimestampScriptFor "$out/";
+
       workspaceDependencyNamesFor = package:
         workspaceGraph.normal_dependencies.${package} or [];
 
@@ -349,6 +369,55 @@
           )
         ));
 
+      workspaceTestComponentDependencyClosureFor = representative:
+        sortedUnique (lib.filter (dependencyRepresentative: dependencyRepresentative != representative) (
+          map (entry: entry.key) (builtins.genericClosure {
+            startSet = [{key = representative;}];
+            operator = entry: map (dependencyRepresentative: {key = dependencyRepresentative;}) (
+              workspaceTestComponentDependencyRepresentativesFor entry.key
+            );
+          })
+        ));
+
+      workspaceTestSyntheticConsumerExcludedPackages =
+        workspaceFeatureUnificationExcludedPackages ++ [
+          "gammaloop-api"
+          "gammaloop-integration-tests"
+          "gammalooprs"
+        ];
+
+      workspaceTestComponentSyntheticConsumerPackagesFor = representative:
+        sortedUnique (lib.filter (
+            package: let
+              consumerRepresentative = workspaceTestComponentRepresentativeFor package;
+              consumerDependencyRepresentatives =
+                workspaceTestComponentDependencyRepresentativesFor consumerRepresentative;
+              dependencyIsCoveredByIntermediate =
+                builtins.any (
+                  dependencyRepresentative:
+                    dependencyRepresentative != representative
+                    && builtins.elem representative (
+                      workspaceTestComponentDependencyClosureFor dependencyRepresentative
+                    )
+                )
+                consumerDependencyRepresentatives;
+            in
+              !(builtins.elem package workspaceTestComponentMembers.${representative})
+              && !(builtins.elem package workspaceTestSyntheticConsumerExcludedPackages)
+              && builtins.any (
+                dependency: workspaceTestComponentRepresentativeFor dependency == representative
+              )
+              (workspaceTestDependencyNamesFor package)
+              && !dependencyIsCoveredByIntermediate
+          )
+          workspaceMemberPackages);
+
+      workspaceTestComponentSyntheticConsumerSourcePackageNamesFor = representative:
+        sortedUnique (
+          lib.concatMap workspaceTestSourcePackageNamesFor
+          (workspaceTestComponentSyntheticConsumerPackagesFor representative)
+        );
+
       workspaceSourcePackageNamesFor = package: dependencies:
         sortedUnique ([package] ++ dependencies);
 
@@ -358,24 +427,47 @@
       workspaceTestSourcePackageNamesFor = package:
         workspaceSourcePackageNamesFor package (workspaceResolvedTestDependencyNamesFor package);
 
+      workspaceDirectNormalSourcePackageNamesFor = package:
+        workspaceSourcePackageNamesFor package (workspaceDependencyNamesFor package);
+
+      workspaceDirectTestSourcePackageNamesFor = package:
+        workspaceSourcePackageNamesFor package (workspaceTestDependencyNamesFor package);
+
       workspaceTestComponentSourcePackageNamesFor = representative:
         sortedUnique (lib.concatMap workspaceTestSourcePackageNamesFor workspaceTestComponentMembers.${representative});
 
-      workspacePackageExtraFilesets = {
+      workspacePackageExtraSourceRoots = {
         "gammaloop-api" = [
-          ./assets
+          "assets"
         ];
         gammalooprs = [
-          ./assets
+          "assets"
         ];
         "gammaloop-integration-tests" = [
-          ./assets
-          ./examples/cli
+          "assets"
+          "examples/cli"
         ];
       };
 
+      workspacePackageExtraSourceRootsForSourcePackages = sourcePackages:
+        sortedUnique (lib.concatMap (sourcePackage: workspacePackageExtraSourceRoots.${sourcePackage} or []) sourcePackages);
+
       workspacePackageExtraFilesetsForSourcePackages = sourcePackages:
-        lib.concatMap (sourcePackage: workspacePackageExtraFilesets.${sourcePackage} or []) sourcePackages;
+        map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageExtraSourceRootsForSourcePackages sourcePackages);
+
+      workspacePackageExtraSourceRestoreInDummySrcScriptFor = sourcePackages:
+        ''
+          ${lib.concatMapStringsSep "\n" (sourceRoot: let
+            sourceParentDir = builtins.dirOf sourceRoot;
+            source = workspaceRoot + "/${sourceRoot}";
+          in ''
+            rm -rf "$out"/${lib.escapeShellArg sourceRoot}
+            mkdir -p "$out"/${lib.escapeShellArg sourceParentDir}
+            cp -R --no-preserve=ownership ${source} "$out"/${lib.escapeShellArg sourceRoot}
+            chmod -R u+w "$out"/${lib.escapeShellArg sourceRoot}
+          '')
+          (workspacePackageExtraSourceRootsForSourcePackages sourcePackages)}
+        '';
 
       workspacePackageSrcForSourcePackages = package: sourcePackages:
         lib.fileset.toSource {
@@ -410,6 +502,18 @@
         || builtins.elem "proc-macro" crateTypes
         || builtins.elem "proc_macro" crateTypes;
 
+      workspacePackageHasLibTarget = package: let
+        manifest = workspaceManifestFor workspaceMemberPackageDirs.${package};
+        packageDir = workspaceMemberPackageDirs.${package};
+      in
+        manifest ? lib || builtins.pathExists (workspaceRoot + "/${packageDir}/src/lib.rs");
+
+      workspacePackageHasBinTarget = package: let
+        manifest = workspaceManifestFor workspaceMemberPackageDirs.${package};
+        packageDir = workspaceMemberPackageDirs.${package};
+      in
+        (manifest.bin or []) != [] || builtins.pathExists (workspaceRoot + "/${packageDir}/src/main.rs");
+
       workspacePackageLibTargetRelPath = package: let
         manifest = workspaceManifestFor workspaceMemberPackageDirs.${package};
       in
@@ -443,21 +547,89 @@
         workspaceCargoTargetRelPaths;
 
       workspaceDummyCargoTargetsScriptForSourcePackages = sourcePackages:
-        lib.concatMapStringsSep "\n" (path: ''
-          if [ ! -e ${lib.escapeShellArg path} ]; then
-            install -D -m 0644 ${workspaceDummyCargoTargetForPath path} ${lib.escapeShellArg path}
-          fi
-        '')
-        (workspaceDummyCargoTargetPathsForSourcePackages sourcePackages);
+        ''
+          ${lib.concatMapStringsSep "\n" (path: ''
+            if [ ! -e ${lib.escapeShellArg path} ]; then
+              install -D -m 0644 ${workspaceDummyCargoTargetForPath path} ${lib.escapeShellArg path}
+            fi
+          '')
+          (workspaceDummyCargoTargetPathsForSourcePackages sourcePackages)}
+
+          ${normalizeWorkspaceHackBuildScriptTimestampScript}
+        '';
 
       workspaceDummyCargoTargetsScriptFor = package:
         workspaceDummyCargoTargetsScriptForSourcePackages (workspaceNormalSourcePackageNamesFor package);
 
       workspaceAllDummyCargoTargetsScript =
-        lib.concatMapStringsSep "\n" (path: ''
-          install -D -m 0644 ${workspaceDummyCargoTargetForPath path} ${lib.escapeShellArg path}
-        '')
-        workspaceCargoTargetRelPaths;
+        ''
+          ${lib.concatMapStringsSep "\n" (path: ''
+            install -D -m 0644 ${workspaceDummyCargoTargetForPath path} "$out"/${lib.escapeShellArg path}
+          '')
+          workspaceCargoTargetRelPaths}
+
+          ${normalizeWorkspaceHackBuildScriptTimestampInDummySrcScript}
+        '';
+
+      workspaceAllDummyCargoTargetsPreservingProcMacrosScript =
+        ''
+          ${lib.concatMapStringsSep "\n" (path: let
+            package = workspacePackageForCargoTargetPath path;
+            keepRealProcMacro =
+              package != null
+              && workspacePackageIsProcMacro package
+              && path == workspacePackageLibTargetRelPath package;
+            source = workspaceRoot + "/${path}";
+          in
+            if keepRealProcMacro
+            then ''
+              install -D -m 0644 ${source} "$out"/${lib.escapeShellArg path}
+            ''
+            else ''
+              install -D -m 0644 ${workspaceDummyCargoTargetForPath path} "$out"/${lib.escapeShellArg path}
+            '')
+          workspaceCargoTargetRelPaths}
+
+          ${normalizeWorkspaceHackBuildScriptTimestampInDummySrcScript}
+        '';
+
+      workspacePackageSourceRestoreInDummySrcScriptFor = sourcePackages:
+        ''
+          ${lib.concatMapStringsSep "\n" (sourcePackage: let
+            packageDir = workspaceMemberPackageDirs.${sourcePackage};
+            packageParentDir = builtins.dirOf packageDir;
+            source = workspaceRoot + "/${packageDir}";
+          in ''
+            rm -rf "$out"/${lib.escapeShellArg packageDir}
+            mkdir -p "$out"/${lib.escapeShellArg packageParentDir}
+            cp -R --no-preserve=ownership ${source} "$out"/${lib.escapeShellArg packageDir}
+            chmod -R u+w "$out"/${lib.escapeShellArg packageDir}
+          '')
+          sourcePackages}
+
+          ${workspacePackageExtraSourceRestoreInDummySrcScriptFor sourcePackages}
+        '';
+
+      workspaceDependencyDummyCargoTargetsScriptFor = package: let
+        dependencySourcePackages =
+          lib.filter (sourcePackage: sourcePackage != package) (workspaceNormalSourcePackageNamesFor package);
+        packageTargetPaths =
+          lib.filter (
+            path:
+              lib.hasPrefix "${workspaceMemberPackageDirs.${package}}/" path
+          )
+          workspaceCargoTargetRelPaths;
+      in
+        ''
+          ${workspacePackageSourceRestoreInDummySrcScriptFor dependencySourcePackages}
+
+          ${lib.concatMapStringsSep "\n" (path: ''
+            install -D -m 0644 ${workspaceDummyCargoTargetForPath path} "$out"/${lib.escapeShellArg path}
+          '')
+          packageTargetPaths}
+
+          ${normalizeWorkspaceHackBuildScriptTimestampInDummySrcScript}
+        '';
 
       packageCargoFeatures = package:
         (workspaceManifestFor workspaceMemberPackageDirs.${package}).features or {};
@@ -469,18 +641,32 @@
         lib.concatMap (packageFeatureIf package) ["bincode" "serde"];
 
       craneCiExtraFeatureSets = {
+        "gammaloop-workspace-hack" = ["symbolica/tracing_max_level_info"];
         "gammaloop-tracing-filter" = ["clap" "symbolica"];
         idenso = ["reference-cases"];
-        linnet = ["symbolica"];
+        linnet = ["drawing" "symbolica"];
         spenso = ["shadowing"];
         "spenso-macros" = ["shadowing"];
       };
 
+      workspaceFeatureUnificationExcludedPackages = [
+        "linnet-py"
+        "spynso3"
+      ];
+
+      workspaceIncomingNormalDependencyFeaturesFor = dependency:
+        sortedUnique (lib.concatMap (
+            package: workspaceGraph.normal_dependency_features.${package}.${dependency} or []
+          ) (lib.subtractLists workspaceFeatureUnificationExcludedPackages workspaceMemberPackages));
+
       craneCiFeaturesFor = package:
-        sortedUnique (craneCiCommonFeaturesFor package ++ (craneCiExtraFeatureSets.${package} or []));
+        sortedUnique (
+          craneCiCommonFeaturesFor package
+          ++ (craneCiExtraFeatureSets.${package} or [])
+          ++ (workspaceIncomingNormalDependencyFeaturesFor package)
+        );
 
       craneTestExtraFeatureSets = {
-        "gammaloop-integration-tests" = ["python-api-tests"];
         "spenso-macros" = ["spenso/shadowing"];
       };
 
@@ -515,14 +701,36 @@
         in
           cargoFeatureArgs (sortedUnique features);
 
-      cargoPackageArgsWithFeaturePackagesFor = package: featurePackages: featuresFor: let
-        featureArgs = cargoQualifiedFeatureArgsFor featurePackages featuresFor;
+      cargoPackageArgsWithFeaturePackagesFor = {
+        package,
+        featurePackages,
+        featuresFor,
+        selectFeaturePackages ? true,
+      }: let
+        anchorPackages =
+          lib.optionals (
+            package != workspaceHackPackage
+            && builtins.elem package workspaceGraph.symbolica_normal_packages
+          ) [workspaceHackPackage];
+        selectedFeaturePackages =
+          if selectFeaturePackages
+          then
+            lib.filter (
+              featurePackage:
+                (featuresFor featurePackage) != []
+                && !workspacePackageIsProcMacro featurePackage
+            )
+            featurePackages
+          else [];
+        selectedPackages = sortedUnique ([package] ++ anchorPackages ++ selectedFeaturePackages);
+        featureArgs =
+          cargoQualifiedFeatureArgsFor (sortedUnique (featurePackages ++ anchorPackages)) featuresFor;
       in
         lib.concatStringsSep " " (
           [
             "--locked"
-            "-p ${lib.escapeShellArg package}"
           ]
+          ++ map (selectedPackage: "-p ${lib.escapeShellArg selectedPackage}") selectedPackages
           ++ lib.optional (featureArgs != "") featureArgs
         );
 
@@ -539,10 +747,177 @@
 
       craneWorkspacePrebuildFeatureArgs =
         cargoQualifiedFeatureArgsFor workspaceMemberPackages craneTestFeaturesFor;
+      workspacePrebuildExcludedPackages = workspaceFeatureUnificationExcludedPackages;
+      workspacePrebuildDependencyPackages =
+        lib.filter (
+          package:
+            package != workspaceHackPackage
+            && !(builtins.elem package workspacePrebuildExcludedPackages)
+            && workspacePackageHasLibTarget package
+        )
+        workspaceMemberPackages;
+      workspacePrebuildDependencyPathFor = package: let
+        packageDir = workspaceMemberPackageDirs.${package};
+      in
+        if lib.hasPrefix "crates/" packageDir
+        then "../${lib.removePrefix "crates/" packageDir}"
+        else "../../${packageDir}";
+      workspacePrebuildCargoToml = pkgs.writeText "${workspacePrebuildPackage}-Cargo.toml" ''
+        [package]
+        name = "${workspacePrebuildPackage}"
+        version = "0.1.0"
+        edition = "2024"
+        publish = false
+
+        [lib]
+        path = "src/lib.rs"
+
+        [dependencies]
+        ${lib.concatMapStringsSep "\n" (package: let
+          features = lib.filter (feature: !lib.hasInfix "/" feature) (craneTestFeaturesFor package);
+          featureEntry = lib.optionalString (features != []) ", features = ${builtins.toJSON features}";
+        in ''
+          ${package} = { path = "${workspacePrebuildDependencyPathFor package}"${featureEntry} }
+        '') workspacePrebuildDependencyPackages}
+      '';
+      workspacePrebuildSourceScript = ''
+        install -D -m 0644 ${workspacePrebuildCargoToml} "$out/${workspacePrebuildPackageDir}/Cargo.toml"
+        install -D -m 0644 ${dummyCargoTarget} "$out/${workspacePrebuildPackageDir}/src/lib.rs"
+      '';
+      workspacePrebuildCargoArgs =
+        lib.concatStringsSep " " (
+          [
+            "--offline"
+            "-p ${lib.escapeShellArg workspacePrebuildPackage}"
+            "-p ${lib.escapeShellArg workspaceHackPackage}"
+          ]
+          ++ lib.optional (craneWorkspacePrebuildFeatureArgs != "") craneWorkspacePrebuildFeatureArgs
+        );
+      workspaceConsumerPackageFor = package: "gammaloop-ci-consumer-${package}";
+      workspaceConsumerPackageDirFor = package: "crates/${workspaceConsumerPackageFor package}";
+      workspaceConsumerCargoTomlFor = package: dependencyPackages: pkgs.writeText "${workspaceConsumerPackageFor package}-Cargo.toml" ''
+        [package]
+        name = "${workspaceConsumerPackageFor package}"
+        version = "0.1.0"
+        edition = "2024"
+        publish = false
+
+        [lib]
+        path = "src/lib.rs"
+
+        [dependencies]
+        ${lib.concatMapStringsSep "\n" (dependencyPackage: let
+          features = lib.filter (feature: !lib.hasInfix "/" feature) (craneCiFeaturesFor dependencyPackage);
+          featureEntry = lib.optionalString (features != []) ", features = ${builtins.toJSON features}";
+        in ''
+          ${dependencyPackage} = { path = "${workspacePrebuildDependencyPathFor dependencyPackage}"${featureEntry} }
+        '') dependencyPackages}
+      '';
+      workspaceConsumerSourceScriptFor = package: dependencyPackages: ''
+        install -D -m 0644 ${workspaceConsumerCargoTomlFor package dependencyPackages} "$out/${workspaceConsumerPackageDirFor package}/Cargo.toml"
+        install -D -m 0644 ${dummyCargoTarget} "$out/${workspaceConsumerPackageDirFor package}/src/lib.rs"
+      '';
+      cargoPackageDependencyModeArgsFor = package: let
+        sourcePackages = workspaceNormalSourcePackageNamesFor package;
+        anchorPackages =
+          lib.optionals (
+            package != workspaceHackPackage
+            && builtins.elem package workspaceGraph.symbolica_normal_packages
+          ) [workspaceHackPackage];
+        crossFeatures =
+          sortedUnique (lib.concatMap (
+              featurePackage:
+                lib.filter (feature: lib.hasInfix "/" feature) (craneCiFeaturesFor featurePackage)
+            )
+            (sortedUnique (sourcePackages ++ anchorPackages)));
+        featureArgs = cargoFeatureArgs crossFeatures;
+      in
+        lib.concatStringsSep " " (
+          [
+            "--offline"
+            "-p ${lib.escapeShellArg (workspaceConsumerPackageFor package)}"
+          ]
+          ++ map (anchorPackage: "-p ${lib.escapeShellArg anchorPackage}") anchorPackages
+          ++ lib.optional (featureArgs != "") featureArgs
+        );
       cargoPackageCiArgsFor = package:
-        cargoPackageArgsWithFeaturePackagesFor package (workspaceNormalSourcePackageNamesFor package) craneCiFeaturesFor;
-      cargoPackageTestArgsFor = package:
-        cargoPackageArgsWithFeaturePackagesFor package (workspaceTestSourcePackageNamesFor package) craneTestFeaturesFor;
+        cargoPackageArgsWithFeaturePackagesFor {
+          inherit package;
+          featurePackages = workspaceNormalSourcePackageNamesFor package;
+          featuresFor = craneCiFeaturesFor;
+        };
+      testSupportFeatureAnchorPackageFor = representative: "gammaloop-ci-test-support-${representative}-features";
+      testSupportFeatureAnchorPackageDirFor = representative: "crates/${testSupportFeatureAnchorPackageFor representative}";
+      testSupportFeatureAnchorDependencyPackagesFor = sourcePackages:
+        lib.filter workspacePackageHasLibTarget sourcePackages;
+      testSupportFeatureAnchorCargoTomlFor = representative: sourcePackages: pkgs.writeText "${testSupportFeatureAnchorPackageFor representative}-Cargo.toml" ''
+        [package]
+        name = "${testSupportFeatureAnchorPackageFor representative}"
+        version = "0.1.0"
+        edition = "2024"
+        publish = false
+
+        [lib]
+        path = "src/lib.rs"
+
+        [dependencies]
+        ${lib.concatMapStringsSep "\n" (package: let
+          features = lib.filter (feature: !lib.hasInfix "/" feature) (craneTestFeaturesFor package);
+          featureEntry = lib.optionalString (features != []) ", features = ${builtins.toJSON features}";
+        in ''
+          ${package} = { path = "${workspacePrebuildDependencyPathFor package}"${featureEntry} }
+        '') (testSupportFeatureAnchorDependencyPackagesFor sourcePackages)}
+      '';
+      testSupportFeatureAnchorSourceScriptFor = representative: sourcePackages: prefix: ''
+        install -D -m 0644 ${testSupportFeatureAnchorCargoTomlFor representative sourcePackages} "${prefix}${testSupportFeatureAnchorPackageDirFor representative}/Cargo.toml"
+        install -D -m 0644 ${dummyCargoTarget} "${prefix}${testSupportFeatureAnchorPackageDirFor representative}/src/lib.rs"
+      '';
+      cargoTestSupportArgsFor = representative: packages: sourcePackages: let
+        featureAnchorPackage = testSupportFeatureAnchorPackageFor representative;
+        anchorPackages =
+          lib.optionals (
+            builtins.any (
+              featurePackage:
+                featurePackage != workspaceHackPackage
+                && builtins.elem featurePackage workspaceGraph.symbolica_test_packages
+            )
+            sourcePackages
+          ) [workspaceHackPackage];
+        selectedPackages = sortedUnique (packages ++ anchorPackages ++ [featureAnchorPackage]);
+        featureArgs = cargoQualifiedFeatureArgsFor (sortedUnique (sourcePackages ++ anchorPackages)) craneTestFeaturesFor;
+      in
+        lib.concatStringsSep " " (
+          [
+            "--offline"
+          ]
+          ++ map (selectedPackage: "-p ${lib.escapeShellArg selectedPackage}") selectedPackages
+          ++ lib.optional (featureArgs != "") featureArgs
+        );
+      cranePythonExtraFeatureSets = {
+        "gammaloop-api" = ["python_abi" "pyo3-extension-module"];
+      };
+      cranePythonFeaturesFor = package:
+        sortedUnique (craneCiFeaturesFor package ++ (cranePythonExtraFeatureSets.${package} or []));
+      cranePythonCargoArgs = let
+        featurePackages = workspaceNormalSourcePackageNamesFor "gammaloop-api";
+        selectedFeaturePackages =
+          lib.filter (
+            featurePackage:
+              (cranePythonFeaturesFor featurePackage) != []
+              && !workspacePackageIsProcMacro featurePackage
+          )
+          featurePackages;
+        selectedPackages = sortedUnique (["gammaloop-api" workspaceHackPackage] ++ selectedFeaturePackages);
+        featureArgs = cargoQualifiedFeatureArgsFor featurePackages cranePythonFeaturesFor;
+      in
+        lib.concatStringsSep " " (
+          [
+            "--locked"
+            "--no-default-features"
+          ]
+          ++ map (package: "-p ${lib.escapeShellArg package}") selectedPackages
+          ++ lib.optional (featureArgs != "") featureArgs
+        );
 
       guppyFeatureMapFor = featuresFor:
         builtins.toJSON (lib.listToAttrs (map (package: {
@@ -640,6 +1015,9 @@
           # The workspace sets default-members to gammaloop-api, so CI checks must
           # opt into the full workspace explicitly.
           cargoExtraArgs = "--locked --workspace ${craneWorkspacePrebuildFeatureArgs}";
+          # NixCI provides the runtime Symbolica license, not the compile-time
+          # OEM key consumed by gammalooprs' activate_oem_license! path.
+          NO_SYMBOLICA_OEM_LICENSE = "1";
 
           PYO3_PYTHON = "${pkgs.python313}/bin/python3";
           PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
@@ -652,23 +1030,43 @@
         fi
       '';
 
-      gammaloop-cli = craneLib.buildPackage (ciArgs
-        // {
-          cargoArtifacts = cranePackageBuildArtifacts."gammaloop-api";
-          doNotLinkInheritedArtifacts = true;
-          pname = "gammaloop-api";
-          src = workspacePackageSrcFor "gammaloop-api";
-          cargoExtraArgs = cargoPackageCiArgsFor "gammaloop-api";
-          doCheck = false;
-          postPatch = workspaceDummyCargoTargetsScriptFor "gammaloop-api";
-        });
+      gammaloop-cli = pkgs.runCommand "gammaloop-api-${apiMeta.version}" {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.findutils
+        ];
+      } ''
+        target="${gammaloopApiPackageArtifacts}/target/${ciCargoProfile}"
+        binary="$target/gammaloop"
+
+        if [ ! -x "$binary" ]; then
+          echo "Could not find Crane-built gammaloop binary in $target" >&2
+          exit 1
+        fi
+
+        library="$(
+          find "$target" -maxdepth 2 -type f \
+            \( -name 'libgammaloop_api*.so' -o -name 'libgammaloop_api*.dylib' \) \
+            | sort \
+            | head -n 1
+        )"
+        if [ -z "$library" ]; then
+          echo "Could not find Crane-built gammaloop-api shared library in $target" >&2
+          exit 1
+        fi
+
+        install -D -m 0755 "$binary" "$out/bin/gammaloop"
+        install -D -m 0644 "$library" "$out/lib/$(basename "$library")"
+      '';
       gammaloop-python-lib = craneLib.buildPackage (ciArgs
         // {
-          cargoArtifacts = cranePythonBuildArtifacts;
+          cargoArtifacts = mergeCargoArtifacts "gammaloop-python-package-inputs" [
+            cranePythonBuildArtifacts
+          ];
           doNotLinkInheritedArtifacts = true;
           pname = "gammaloop-api-python";
           src = workspacePackageSrcFor "gammaloop-api";
-          cargoExtraArgs = "--locked -p gammaloop-api --no-default-features --features python_abi,pyo3-extension-module";
+          cargoExtraArgs = cranePythonCargoArgs;
           doCheck = false;
           postPatch = workspaceDummyCargoTargetsScriptFor "gammaloop-api";
         });
@@ -852,13 +1250,21 @@
         // {
           pname = "gammaloop-workspace-deps";
           src = workspaceDependencySrc;
-          cargoArtifacts = workspaceHackCargoArtifacts;
-          cargoExtraArgs = "--locked --workspace ${craneWorkspacePrebuildFeatureArgs}";
+          cargoArtifacts = workspaceHackBuildArtifacts;
+          cargoExtraArgs = workspacePrebuildCargoArgs;
+          buildPhaseCargoCommand = "cargoWithProfile build ${workspacePrebuildCargoArgs}";
+          checkPhaseCargoCommand = "";
+          doCheck = false;
+          stripWorkspaceArtifacts = true;
           extraDummyScript =
-            lib.concatMapStringsSep "\n" (path: ''
-              install -D -m 0644 ${dummyCargoTarget} "$out/${path}"
-            '')
-            autoCargoTargetPaths;
+            ''
+              ${workspacePrebuildSourceScript}
+
+              ${lib.concatMapStringsSep "\n" (path: ''
+                install -D -m 0644 ${dummyCargoTarget} "$out/${path}"
+              '')
+              autoCargoTargetPaths}
+            '';
         });
 
       guppyWorkspaceGraphNativeBuildInputs = [
@@ -909,6 +1315,24 @@
             | unique
             | sort;
 
+          def workspace_dep_features($path_map; $kinds):
+            [
+              .dependencies[]
+              | select((.kind // "normal") as $kind | $kinds | index($kind))
+              | select(.path != null)
+              | ($path_map[.path] // empty) as $package
+              | {
+                  key: $package,
+                  value: (.features // [])
+                }
+            ]
+            | group_by(.key)
+            | map({
+                key: .[0].key,
+                value: (map(.value[]) | unique | sort)
+              })
+            | from_entries;
+
           . as $metadata
           | [
               $metadata.packages[]
@@ -935,6 +1359,16 @@
               test_dependencies: (
                 $packages
                 | map({key: .name, value: workspace_deps($path_map; ["normal", "build", "dev"])})
+                | from_entries
+              ),
+              normal_dependency_features: (
+                $packages
+                | map({key: .name, value: workspace_dep_features($path_map; ["normal", "build"])})
+                | from_entries
+              ),
+              test_dependency_features: (
+                $packages
+                | map({key: .name, value: workspace_dep_features($path_map; ["normal", "build", "dev"])})
                 | from_entries
               )
             }
@@ -1054,38 +1488,43 @@
       mergeCargoArtifacts = name: artifacts: let
         artifactList = lib.filter (artifact: artifact != null) artifacts;
       in
-        if builtins.length artifactList == 1
-        then builtins.head artifactList
-        else
-          pkgs.runCommand name {
-            nativeBuildInputs = [pkgs.rsync pkgs.zstd pkgs.gnutar];
-          } ''
-            mkdir -p "$out/target"
+        pkgs.runCommand name {
+          nativeBuildInputs = [pkgs.rsync pkgs.zstd pkgs.gnutar];
+        } ''
+          mkdir -p "$out/target"
 
-            unpack_artifact() {
-              local artifact="$1"
+          make_target_writable() {
+            chmod -R u+w "$out/target"
+          }
 
-              if [ -d "$artifact" ] && [ -f "$artifact/target.tar.zst" ]; then
-                artifact="$artifact/target.tar.zst"
-              elif [ -d "$artifact" ] && [ -d "$artifact/target" ]; then
-                artifact="$artifact/target"
+          unpack_artifact() {
+            local artifact="$1"
+
+            if [ -d "$artifact" ] && [ -f "$artifact/target.tar.zst" ]; then
+              artifact="$artifact/target.tar.zst"
+            elif [ -d "$artifact" ] && [ -d "$artifact/target" ]; then
+              artifact="$artifact/target"
+            fi
+
+            if [ -f "$artifact" ]; then
+              if [ -e "$artifact.prev" ] || [ -L "$artifact.prev" ]; then
+                unpack_artifact "$(realpath "$artifact.prev")"
               fi
+              make_target_writable
+              zstd -d "$artifact" --stdout | tar --no-same-permissions -x -C "$out/target"
+              make_target_writable
+            elif [ -d "$artifact" ]; then
+              make_target_writable
+              rsync -a --chmod=u+w "$artifact/" "$out/target/"
+              make_target_writable
+            else
+              echo "unsupported cargo artifact path: $artifact" >&2
+              exit 1
+            fi
+          }
 
-              if [ -f "$artifact" ]; then
-                if [ -f "$artifact.prev" ]; then
-                  unpack_artifact "$(realpath "$artifact.prev")"
-                fi
-                zstd -d "$artifact" --stdout | tar -x -C "$out/target"
-              elif [ -d "$artifact" ]; then
-                rsync -a "$artifact/" "$out/target/"
-              else
-                echo "unsupported cargo artifact path: $artifact" >&2
-                exit 1
-              fi
-            }
-
-            ${lib.concatMapStringsSep "\n" (artifact: "unpack_artifact ${artifact}") artifactList}
-          '';
+          ${lib.concatMapStringsSep "\n" (artifact: "unpack_artifact ${artifact}") artifactList}
+        '';
 
       mergeCargoArtifactsOrNull = name: artifacts: let
         artifactList = lib.filter (artifact: artifact != null) artifacts;
@@ -1093,6 +1532,56 @@
         if artifactList == []
         then null
         else mergeCargoArtifacts name artifactList;
+
+      workspacePackageCargoArtifactNames = package: let
+        manifest = workspaceManifestFor workspaceMemberPackageDirs.${package};
+        libManifest = manifest.lib or {};
+        targetNameForCargo = name: lib.replaceStrings ["-"] ["_"] name;
+      in
+        [(targetNameForCargo (libManifest.name or manifest.package.name))];
+
+      stripSelectedWorkspaceCargoArtifactsScript = packagesToStrip: let
+        stripPackageScript = package: let
+          artifactNames = workspacePackageCargoArtifactNames package;
+          fingerprintNames = sortedUnique ([package] ++ artifactNames);
+        in ''
+          ${lib.concatMapStringsSep "\n" (name: ''
+              rm -f target/${ciCargoProfile}/deps/${lib.escapeShellArg name}
+              rm -f target/${ciCargoProfile}/deps/${lib.escapeShellArg name}.d
+              rm -f target/${ciCargoProfile}/deps/${lib.escapeShellArg name}-*
+              rm -f target/${ciCargoProfile}/deps/lib${lib.escapeShellArg name}.*
+              rm -f target/${ciCargoProfile}/deps/lib${lib.escapeShellArg name}-*
+              rm -f target/${ciCargoProfile}/${lib.escapeShellArg name}
+              rm -f target/${ciCargoProfile}/${lib.escapeShellArg name}.d
+              rm -f target/${ciCargoProfile}/lib${lib.escapeShellArg name}.*
+              rm -f target/${ciCargoProfile}/lib${lib.escapeShellArg name}-*
+            '')
+            artifactNames}
+          ${lib.concatMapStringsSep "\n" (name: ''
+              rm -rf target/${ciCargoProfile}/.fingerprint/${lib.escapeShellArg name}-[0-9a-f]*
+              rm -rf target/${ciCargoProfile}/build/${lib.escapeShellArg name}-[0-9a-f]*
+            '')
+            fingerprintNames}
+        '';
+      in ''
+        # Cargo feature anchors can compile dummy workspace units. Keep only
+        # artifacts that are intended to be reused by later derivations.
+        ${lib.concatMapStringsSep "\n" stripPackageScript packagesToStrip}
+      '';
+
+      stripWorkspaceCargoArtifactsScript = {
+        preserveProcMacros ? false,
+        preservedPackages ? [],
+      }: let
+        packagesToStrip =
+          lib.filter (
+            package:
+              !(builtins.elem package preservedPackages)
+              && !(preserveProcMacros && workspacePackageIsProcMacro package)
+          )
+          workspacePackages;
+      in
+        stripSelectedWorkspaceCargoArtifactsScript packagesToStrip;
 
       # Crane's buildDepsOnly deliberately clears cargoArtifacts. This local
       # variant keeps the same dummy-source behavior while allowing per-crate
@@ -1103,6 +1592,8 @@
         cargoExtraArgs ? "--locked",
         cargoTestCommand ? "cargoWithProfile test",
         cargoTestExtraArgs ? "--no-run",
+        preBuildWorkspaceArtifactStripPackages ? [],
+        preservedWorkspaceArtifactPackages ? [],
         ...
       } @ args: let
         cleanedArgs = builtins.removeAttrs args [
@@ -1115,6 +1606,10 @@
           "dummySrc"
           "outputHashes"
           "outputs"
+          "preBuildWorkspaceArtifactStripPackages"
+          "preserveWorkspaceProcMacroArtifacts"
+          "preservedWorkspaceArtifactPackages"
+          "stripWorkspaceArtifacts"
         ];
         doCheck = args.doCheck or true;
         cargoCheckExtraArgs = args.cargoCheckExtraArgs or (if doCheck then "--all-targets" else "");
@@ -1131,6 +1626,11 @@
           then args // {src = args.dummySrc;}
           else args;
         crateName = craneLib.crateNameFromCargoToml argsMaybeDummySrcOverride;
+        stripWorkspaceArtifactsScriptText =
+          lib.optionalString (args.stripWorkspaceArtifacts or false) (stripWorkspaceCargoArtifactsScript {
+            preserveProcMacros = args.preserveWorkspaceProcMacroArtifacts or false;
+            preservedPackages = preservedWorkspaceArtifactPackages;
+          });
       in
         craneLib.mkCargoDerivation (
           cleanedArgs
@@ -1141,6 +1641,13 @@
             pnameSuffix = "-deps";
             pname = args.pname or crateName.pname;
             version = args.version or crateName.version;
+            nativeBuildInputs =
+              (cleanedArgs.nativeBuildInputs or [])
+              ++ lib.optionals (args.stripWorkspaceArtifacts or false) [
+                pkgs.gnutar
+                pkgs.rsync
+                pkgs.zstd
+              ];
 
             cargoArtifacts = args.cargoArtifacts or null;
             doNotLinkInheritedArtifacts = args.doNotLinkInheritedArtifacts or true;
@@ -1149,6 +1656,17 @@
             env = (args.env or {}) // {
               CRANE_BUILD_DEPS_ONLY = ((args.env or {}).CRANE_BUILD_DEPS_ONLY or 1);
             };
+
+            postPatch =
+              (args.postPatch or "")
+              + ''
+
+                ${normalizeWorkspaceHackBuildScriptTimestampScript}
+              '';
+
+            preBuild =
+              (args.preBuild or "")
+              + lib.optionalString (preBuildWorkspaceArtifactStripPackages != []) (stripSelectedWorkspaceCargoArtifactsScript preBuildWorkspaceArtifactStripPackages);
 
             buildPhaseCargoCommand =
               args.buildPhaseCargoCommand or ''
@@ -1161,6 +1679,63 @@
                 ${cargoTestCommand} ${cargoExtraArgs} ${cargoTestExtraArgs}
               '';
 
+            postBuild =
+              (args.postBuild or "")
+              + stripWorkspaceArtifactsScriptText;
+
+            preFixup =
+              (args.preFixup or "")
+              + lib.optionalString (args.stripWorkspaceArtifacts or false) ''
+                if [ -f "$out/target.tar.zst" ] && { [ -e "$out/target.tar.zst.prev" ] || [ -L "$out/target.tar.zst.prev" ]; }; then
+                  tmp="$(mktemp -d)"
+                  mkdir -p "$tmp/target"
+
+                  make_target_writable() {
+                    chmod -R u+w "$tmp/target"
+                  }
+
+                  unpack_artifact() {
+                    local artifact="$1"
+
+                    if [ -d "$artifact" ] && [ -f "$artifact/target.tar.zst" ]; then
+                      artifact="$artifact/target.tar.zst"
+                    elif [ -d "$artifact" ] && [ -d "$artifact/target" ]; then
+                      artifact="$artifact/target"
+                    fi
+
+                    if [ -f "$artifact" ]; then
+                      if [ -e "$artifact.prev" ] || [ -L "$artifact.prev" ]; then
+                        unpack_artifact "$(realpath "$artifact.prev")"
+                      fi
+                      make_target_writable
+                      zstd -d "$artifact" --stdout | tar --no-same-permissions -x -C "$tmp/target"
+                      make_target_writable
+                    elif [ -d "$artifact" ]; then
+                      make_target_writable
+                      rsync -a --chmod=u+w "$artifact/" "$tmp/target/"
+                      make_target_writable
+                    else
+                      echo "unsupported cargo artifact path: $artifact" >&2
+                      exit 1
+                    fi
+                  }
+
+                  unpack_artifact "$(realpath "$out/target.tar.zst.prev")"
+                  unpack_artifact "$out/target.tar.zst"
+
+                  (
+                    cd "$tmp"
+                    ${stripWorkspaceArtifactsScriptText}
+                  )
+
+                  tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -C "$tmp/target" -cf - . \
+                    | zstd -T0 --stdout > "$out/target.tar.zst.tmp"
+                  mv "$out/target.tar.zst.tmp" "$out/target.tar.zst"
+                  rm -f "$out/target.tar.zst.prev"
+                  rm -rf "$tmp"
+                fi
+              '';
+
             doInstallCargoArtifacts = true;
           }
         );
@@ -1171,9 +1746,9 @@
           && (workspaceDependencyNamesFor package) == []
           && builtins.elem package workspaceGraph.symbolica_normal_packages
         )
-        workspaceHackCargoArtifacts;
+        workspaceHackBuildArtifacts;
 
-      workspaceHackCargoArtifacts = buildDepsOnlyWithArtifacts (ciArgs
+      workspaceHackDependencyArtifacts = buildDepsOnlyWithArtifacts (ciArgs
         // {
           pname = "gammaloop-crate-${workspaceHackPackage}";
           src = workspacePackageSrcFor workspaceHackPackage;
@@ -1181,90 +1756,258 @@
           buildPhaseCargoCommand = "cargoWithProfile build ${cargoPackageCiArgsFor workspaceHackPackage}";
           checkPhaseCargoCommand = "";
           doCheck = false;
+          preBuildWorkspaceArtifactStripPackages = [workspaceHackPackage];
+          stripWorkspaceArtifacts = true;
           extraDummyScript = workspaceAllDummyCargoTargetsScript;
         });
 
-      cranePackageDependencyArtifacts = lib.fix (self:
+      workspaceHackBuildArtifacts = craneLib.cargoBuild (ciArgs
+        // {
+          cargoArtifacts = workspaceHackDependencyArtifacts;
+          doNotLinkInheritedArtifacts = true;
+          pname = "gammaloop-crate-${workspaceHackPackage}";
+          src = workspacePackageSrcFor workspaceHackPackage;
+          cargoExtraArgs = cargoPackageCiArgsFor workspaceHackPackage;
+          postPatch = workspaceDummyCargoTargetsScriptFor workspaceHackPackage;
+        });
+
+      cranePackageDependencyModeDependencyArtifacts = lib.fix (self:
         lib.genAttrs workspacePackages (package:
           if package == workspaceHackPackage
-          then workspaceHackCargoArtifacts
-          else
-            buildDepsOnlyWithArtifacts (ciArgs
+          then workspaceHackDependencyArtifacts
+          else if !workspacePackageHasLibTarget package
+          then null
+          else let
+            dependencyArtifactFor = dependency:
+              if dependency == workspaceHackPackage
+              then workspaceHackBuildArtifacts
+              else cranePackageDependencyModeArtifacts.${dependency};
+            dependencySourcePackages =
+              lib.filter (sourcePackage: sourcePackage != package) (workspaceNormalSourcePackageNamesFor package);
+            preservedWorkspaceArtifactPackages =
+              lib.filter workspacePackageIsProcMacro (workspaceResolvedDependencyNamesFor package);
+          in
+            buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
               // {
-                cargoArtifacts = mergeCargoArtifactsOrNull "gammaloop-crate-${package}-deps-inputs" (
-                  rootPackageDependencyArtifactsFor package
-                  ++ map (dependency: self.${dependency}) (workspaceDependencyNamesFor package)
+                cargoArtifacts = mergeCargoArtifactsOrNull "gammaloop-crate-${package}-dependency-deps-inputs" (
+                  [cargoArtifacts]
+                  ++ rootPackageDependencyArtifactsFor package
+                  ++ map dependencyArtifactFor dependencySourcePackages
                 );
-                pname = "gammaloop-crate-${package}";
-                src = workspacePackageSrcFor package;
-                cargoExtraArgs = cargoPackageCiArgsFor package;
-                buildPhaseCargoCommand = "cargoWithProfile build ${cargoPackageCiArgsFor package}";
+                pname = "gammaloop-crate-${package}-dependency-deps";
+                src = workspacePackageSrcForSourcePackages package dependencySourcePackages;
+                buildPhaseCargoCommand = "cargoWithProfile build ${cargoPackageDependencyModeArgsFor package}";
                 checkPhaseCargoCommand = "";
                 doCheck = false;
-                extraDummyScript = workspaceAllDummyCargoTargetsScript;
+                stripWorkspaceArtifacts = true;
+                inherit preservedWorkspaceArtifactPackages;
+                extraDummyScript = ''
+                  ${workspaceDependencyDummyCargoTargetsScriptFor package}
+                  ${workspaceConsumerSourceScriptFor package dependencySourcePackages}
+                '';
               })));
+
+      cranePackageDependencyModeArtifacts = lib.fix (self:
+        lib.genAttrs workspacePackages (package:
+          if package == workspaceHackPackage
+          then workspaceHackBuildArtifacts
+          else if !workspacePackageHasLibTarget package
+          then null
+          else let
+            dependencyArtifactFor = dependency:
+              if dependency == workspaceHackPackage
+              then workspaceHackBuildArtifacts
+              else self.${dependency};
+            sourcePackages = workspaceNormalSourcePackageNamesFor package;
+            preservedWorkspaceArtifactPackages =
+              sortedUnique ([package] ++ workspaceResolvedDependencyNamesFor package);
+          in
+            buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
+              // {
+                cargoArtifacts = mergeCargoArtifactsOrNull "gammaloop-crate-${package}-dependency-inputs" (
+                  [cranePackageDependencyModeDependencyArtifacts.${package}]
+                  ++ map dependencyArtifactFor (lib.filter (sourcePackage: sourcePackage != package) sourcePackages)
+                );
+                pname = "gammaloop-crate-${package}-dependency";
+                src = workspacePackageSrcForSourcePackages package sourcePackages;
+                buildPhaseCargoCommand = "cargoWithProfile build ${cargoPackageDependencyModeArgsFor package}";
+                checkPhaseCargoCommand = "";
+                doCheck = false;
+                preBuildWorkspaceArtifactStripPackages = [package];
+                stripWorkspaceArtifacts = true;
+                inherit preservedWorkspaceArtifactPackages;
+                extraDummyScript = ''
+                  ${workspacePackageSourceRestoreInDummySrcScriptFor sourcePackages}
+                  ${workspaceConsumerSourceScriptFor package sourcePackages}
+                '';
+                postPatch = workspaceDummyCargoTargetsScriptForSourcePackages sourcePackages;
+              })));
+
+      # Public crate-deps outputs are the reusable workspace crate artifacts.
+      # Build them through the consumer-anchor path so each package's real
+      # artifact is preserved for downstream package and test derivations.
+      cranePackageDependencyArtifacts = cranePackageDependencyModeArtifacts;
 
       cranePackageBuildArtifacts = lib.fix (self:
         lib.genAttrs workspacePackages (package:
           if package == workspaceHackPackage
-          then workspaceHackCargoArtifacts
+          then workspaceHackBuildArtifacts
           else
             craneLib.cargoBuild (ciArgs
               // {
                 cargoArtifacts = mergeCargoArtifacts "gammaloop-crate-${package}-deps" (
-                  [cranePackageDependencyArtifacts.${package}]
-                  ++ map (dependency: self.${dependency}) (workspaceDependencyNamesFor package)
+                  [
+                    cargoArtifacts
+                    cranePackageDependencyArtifacts.${package}
+                  ]
                 );
                 doNotLinkInheritedArtifacts = true;
                 pname = "gammaloop-crate-${package}";
                 src = workspacePackageSrcFor package;
-                cargoExtraArgs = cargoPackageCiArgsFor package;
+                cargoExtraArgs =
+                  cargoPackageCiArgsFor package
+                  + lib.optionalString (package == "gammaloop-api") " --lib --bins";
                 postPatch = workspaceDummyCargoTargetsScriptFor package;
               })));
+
+      gammaloopApiPackageArtifacts = mergeCargoArtifacts "gammaloop-api-package-artifacts" [
+        cranePackageBuildArtifacts."gammaloop-api"
+      ];
 
       craneTestSupportArtifacts = lib.fix (self:
         lib.genAttrs workspaceTestComponentRepresentatives (representative:
           if representative == workspaceHackPackage
-          then workspaceHackCargoArtifacts
+          then workspaceHackBuildArtifacts
           else let
             componentPackages = workspaceTestComponentMembers.${representative};
             dependencyComponents = workspaceTestComponentDependencyRepresentativesFor representative;
             sourcePackages = workspaceTestComponentSourcePackageNamesFor representative;
-            supportCargoCommands =
-              lib.concatMapStringsSep "\n" (
-                package: "cargoWithProfile test --no-run ${cargoPackageTestArgsFor package}"
-              )
-              componentPackages;
+            syntheticConsumerPackages = workspaceTestComponentSyntheticConsumerPackagesFor representative;
+            syntheticConsumerSourcePackages = workspaceTestComponentSyntheticConsumerSourcePackageNamesFor representative;
+            selectedPackages = sortedUnique (componentPackages ++ syntheticConsumerPackages);
+            selectedBinaryPackages = lib.filter workspacePackageHasBinTarget componentPackages;
+            featureSourcePackages = sortedUnique (sourcePackages ++ syntheticConsumerSourcePackages);
+            supportCargoCommand =
+              lib.concatStringsSep "\n" (
+                lib.optional (selectedBinaryPackages != [])
+                  "cargoWithProfile build ${cargoTestSupportArgsFor representative selectedBinaryPackages featureSourcePackages} --bins"
+                ++ [
+                  "cargoWithProfile test --no-run ${cargoTestSupportArgsFor representative selectedPackages featureSourcePackages}"
+                ]
+              );
           in
             buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
               // {
                 cargoArtifacts = mergeCargoArtifactsOrNull "gammaloop-crate-test-support-${representative}-inputs" (
-                  [workspaceHackCargoArtifacts]
+                  [workspaceHackBuildArtifacts]
                   ++ map (dependencyComponent: self.${dependencyComponent}) dependencyComponents
                 );
                 pname = "gammaloop-crate-test-support-${representative}";
                 dummySrc = workspacePackageSrcForSourcePackages representative sourcePackages;
-                buildPhaseCargoCommand = supportCargoCommands;
+                buildPhaseCargoCommand = supportCargoCommand;
                 checkPhaseCargoCommand = "";
                 doCheck = false;
-                postPatch = workspaceDummyCargoTargetsScriptForSourcePackages sourcePackages;
+                stripWorkspaceArtifacts = syntheticConsumerPackages != [];
+                preservedWorkspaceArtifactPackages = sourcePackages;
+                postPatch = ''
+                  ${workspaceDummyCargoTargetsScriptForSourcePackages sourcePackages}
+                  ${testSupportFeatureAnchorSourceScriptFor representative featureSourcePackages ""}
+                '';
               })));
 
       craneTestBinaryArtifacts = lib.genAttrs workspacePackages (package:
         if package == workspaceHackPackage
-        then workspaceHackCargoArtifacts
+        then workspaceHackBuildArtifacts
         else craneTestSupportArtifacts.${workspaceTestComponentRepresentativeFor package});
+
+      workspaceCheckCargoArtifacts = mergeCargoArtifacts "gammaloop-workspace-check-artifacts" (
+        [
+          cargoArtifacts
+        ]
+        ++ builtins.attrValues cranePackageBuildArtifacts
+        ++ map (representative: craneTestSupportArtifacts.${representative}) workspaceTestSupportComponentRepresentatives
+      );
+
+      workspaceClippyCargoArtifacts = buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
+        // {
+          cargoArtifacts = workspaceCheckCargoArtifacts;
+          pname = "gammaloop-workspace-clippy-artifacts";
+          dummySrc = workspaceTestSrc;
+          buildPhaseCargoCommand = ''
+            if [ -d target ]; then
+              chmod -R u+w target
+            fi
+            cargoWithProfile clippy ${ciArgs.cargoExtraArgs} --all-targets --no-deps -- --deny warnings
+          '';
+          checkPhaseCargoCommand = "";
+          doCheck = false;
+        });
+
+      workspaceDocCargoArtifacts = buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
+        // {
+          cargoArtifacts = workspaceCheckCargoArtifacts;
+          pname = "gammaloop-workspace-doc-artifacts";
+          dummySrc = workspaceTestSrc;
+          buildPhaseCargoCommand = ''
+            if [ -d target ]; then
+              chmod -R u+w target
+            fi
+            cargoWithProfile doc ${ciArgs.cargoExtraArgs} --no-deps
+          '';
+          checkPhaseCargoCommand = "";
+          doCheck = false;
+        });
+
+      workspaceDoctestCargoArtifacts = buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
+        // {
+          cargoArtifacts = workspaceCheckCargoArtifacts;
+          pname = "gammaloop-workspace-doctest-artifacts";
+          dummySrc = workspaceTestSrc;
+          buildPhaseCargoCommand = ''
+            if [ -d target ]; then
+              chmod -R u+w target
+            fi
+            cargoWithProfile test --doc ${ciArgs.cargoExtraArgs}
+          '';
+          checkPhaseCargoCommand = "";
+          doCheck = false;
+          preBuild = licensePreCheck;
+          SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+        });
+
+      cranePythonDependencyArtifacts = buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
+        // {
+          cargoArtifacts = mergeCargoArtifacts "gammaloop-python-deps-inputs" (
+            [cargoArtifacts]
+            ++ map (
+              dependency:
+                if dependency == workspaceHackPackage
+                then workspaceHackBuildArtifacts
+                else cranePackageDependencyModeArtifacts.${dependency}
+            ) (lib.filter (sourcePackage: sourcePackage != "gammaloop-api") (workspaceNormalSourcePackageNamesFor "gammaloop-api"))
+          );
+          pname = "gammaloop-api-python";
+          src = workspacePackageSrcForSourcePackages "gammaloop-api" (
+            lib.filter (sourcePackage: sourcePackage != "gammaloop-api") (workspaceNormalSourcePackageNamesFor "gammaloop-api")
+          );
+          buildPhaseCargoCommand = "cargoWithProfile build ${cranePythonCargoArgs}";
+          checkPhaseCargoCommand = "";
+          doCheck = false;
+          preBuildWorkspaceArtifactStripPackages = ["gammaloop-api"];
+          stripWorkspaceArtifacts = true;
+          preservedWorkspaceArtifactPackages = workspaceResolvedDependencyNamesFor "gammaloop-api";
+          extraDummyScript = workspaceDependencyDummyCargoTargetsScriptFor "gammaloop-api";
+        });
 
       cranePythonBuildArtifacts = craneLib.cargoBuild (ciArgs
         // {
-          cargoArtifacts = mergeCargoArtifacts "gammaloop-python-deps" (
-            [cargoArtifacts]
-            ++ map (dependency: cranePackageBuildArtifacts.${dependency}) (workspaceDependencyNamesFor "gammaloop-api")
-          );
+          cargoArtifacts = mergeCargoArtifacts "gammaloop-python-build-inputs" [
+            cranePythonDependencyArtifacts
+          ];
           doNotLinkInheritedArtifacts = true;
           pname = "gammaloop-api-python-build";
           src = workspacePackageSrcFor "gammaloop-api";
-          cargoExtraArgs = "--locked -p gammaloop-api --no-default-features --features python_abi,pyo3-extension-module";
+          cargoExtraArgs = cranePythonCargoArgs;
           postPatch = workspaceDummyCargoTargetsScriptFor "gammaloop-api";
         });
 
@@ -1356,9 +2099,12 @@
           extraFeatures."gammaloop-integration-tests" = ["python-api-tests"];
         }
         {
+          name = "clinnet";
+          packages = ["clinnet"];
+        }
+        {
           name = "linnet";
           packages = [
-            "clinnet"
             "linnet"
             "linnet-py"
             "linnest"
@@ -1371,7 +2117,6 @@
             "spenso"
             "spenso-hep-lib"
             "spenso-macros"
-            "spynso3"
           ];
         }
         {
@@ -1386,6 +2131,7 @@
       workspacePackages = sortedUnique workspaceMemberPackages;
       nextestCoverageIgnoredPackages = [
         "gammaloop-workspace-hack"
+        "spynso3"
       ];
       nextestCoveredWorkspacePackages = sortedUnique (lib.subtractLists nextestCoverageIgnoredPackages workspaceMemberPackages);
       missingNextestPackages = lib.subtractLists nextestSplitPackages nextestCoveredWorkspacePackages;
@@ -1406,36 +2152,151 @@
         then "-E ${lib.escapeShellArg target.filter}"
         else nextestPackageFilter target.packages;
       nextestUsesIntegrationTests = target: builtins.elem "gammaloop-integration-tests" target.packages;
-      nextestSrcFor = target:
-        if nextestUsesIntegrationTests target
-        then workspaceTestSrc
-        else workspaceNonIntegrationTestSrc;
+      nextestTargetExtraFeaturesFor = target: package:
+        if (target ? extraFeatures) && builtins.hasAttr package target.extraFeatures
+        then target.extraFeatures.${package}
+        else [];
+      nextestUsesPythonModule = target:
+        builtins.any (
+          package: builtins.elem "python-api-tests" (nextestTargetExtraFeaturesFor target package)
+        ) target.packages;
+      nextestSourcePackagesFor = target:
+        sortedUnique (
+          target.packages
+          ++ lib.concatMap workspaceResolvedTestDependencyNamesFor target.packages
+        );
+      nextestSrcFor = target: let
+        sourcePackages = nextestSourcePackagesFor target;
+      in
+        lib.fileset.toSource {
+          root = workspaceRoot;
+          fileset = lib.fileset.unions (
+            workspaceDependencyManifestFiles
+            ++ workspaceDependencyBuildScripts
+            ++ map (
+              sourcePackage:
+                workspaceRoot + "/${workspaceMemberPackageDirs.${sourcePackage}}"
+            )
+            sourcePackages
+            ++ [
+              ./.config/nextest.toml
+              ./tests/resources
+              ./examples/api
+              ./examples/cli
+            ]
+            ++ (workspacePackageExtraFilesetsForSourcePackages sourcePackages)
+          );
+        };
 
       nextestFeatureArgsFor = target:
-        cargoQualifiedFeatureArgsFor (nextestArchiveInputPackagesFor target) (
+        cargoQualifiedFeatureArgsFor (nextestFeaturePackagesFor target) (
           package:
             sortedUnique (
               craneCiFeaturesFor package
-              ++ lib.optionals ((target ? extraFeatures) && builtins.hasAttr package target.extraFeatures) target.extraFeatures.${package}
+              ++ nextestTargetExtraFeaturesFor target package
             )
         );
 
       nextestCargoArgsFor = target:
         lib.concatStringsSep " " (
           [
-            "--locked"
+            "--offline"
           ]
-          ++ map (package: "-p ${lib.escapeShellArg package}") target.packages
+          ++ map (package: "-p ${lib.escapeShellArg package}") (nextestSelectedPackagesFor target)
           ++ lib.optional (nextestFeatureArgsFor target != "") (nextestFeatureArgsFor target)
         );
 
       nextestArchiveNameFor = target: "gammaloop-nextest-${target.name}.tar.zst";
       nextestArchiveInputPackagesFor = target:
-        sortedUnique (target.packages ++ lib.concatMap workspaceResolvedDependencyNamesFor target.packages);
+        sortedUnique target.packages;
+      nextestAnchorPackagesFor = target:
+        lib.optionals (
+          builtins.any (
+            package: builtins.elem package workspaceGraph.symbolica_test_packages
+          ) (nextestSourcePackagesFor target)
+        ) [workspaceHackPackage];
+      nextestSelectedPackagesFor = target:
+        sortedUnique (target.packages ++ nextestAnchorPackagesFor target ++ [(nextestFeatureAnchorPackageFor target)]);
+      nextestFeaturePackagesFor = target:
+        sortedUnique (
+          nextestAnchorPackagesFor target
+          ++ nextestSourcePackagesFor target
+        );
+      nextestFeatureAnchorPackageFor = target: "gammaloop-ci-nextest-${target.name}-features";
+      nextestFeatureAnchorPackageDirFor = target: "crates/${nextestFeatureAnchorPackageFor target}";
+      nextestFeatureAnchorDependencyPackagesFor = target:
+        lib.filter workspacePackageHasLibTarget (nextestFeaturePackagesFor target);
+      nextestFeatureAnchorCargoTomlFor = target: pkgs.writeText "${nextestFeatureAnchorPackageFor target}-Cargo.toml" ''
+        [package]
+        name = "${nextestFeatureAnchorPackageFor target}"
+        version = "0.1.0"
+        edition = "2024"
+        publish = false
+
+        [lib]
+        path = "src/lib.rs"
+
+        [dependencies]
+        ${lib.concatMapStringsSep "\n" (package: let
+          features = lib.filter (feature: !lib.hasInfix "/" feature) (
+            sortedUnique (craneCiFeaturesFor package ++ nextestTargetExtraFeaturesFor target package)
+          );
+          featureEntry = lib.optionalString (features != []) ", features = ${builtins.toJSON features}";
+        in ''
+          ${package} = { path = "${workspacePrebuildDependencyPathFor package}"${featureEntry} }
+        '') (nextestFeatureAnchorDependencyPackagesFor target)}
+      '';
+      nextestFeatureAnchorSourceScriptFor = target: prefix: ''
+        install -D -m 0644 ${nextestFeatureAnchorCargoTomlFor target} "${prefix}${nextestFeatureAnchorPackageDirFor target}/Cargo.toml"
+        install -D -m 0644 ${dummyCargoTarget} "${prefix}${nextestFeatureAnchorPackageDirFor target}/src/lib.rs"
+      '';
+      testSupportArtifactForPackage = package:
+        if package == workspaceHackPackage
+        then workspaceHackBuildArtifacts
+        else craneTestSupportArtifacts.${workspaceTestComponentRepresentativeFor package};
+
+      nextestPackageTestBinaryArtifactFor = target: package: let
+        packageTarget =
+          target
+          // {
+            name = "${target.name}-${package}";
+            packages = [package];
+          };
+        sourcePackages = nextestSourcePackagesFor packageTarget;
+      in
+        buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
+          // {
+            cargoArtifacts = mergeCargoArtifacts "gammaloop-nextest-binaries-${target.name}-${package}-test-inputs" (
+              [cargoArtifacts]
+              ++ [(testSupportArtifactForPackage package)]
+            );
+            pname = "gammaloop-nextest-binaries-${target.name}-${package}-test";
+            dummySrc = nextestSrcFor packageTarget;
+            buildPhaseCargoCommand = ''
+              if [ -d target ]; then
+                chmod -R u+w target
+              fi
+              cargoWithProfile test --no-run ${nextestCargoArgsFor packageTarget}
+            '';
+            checkPhaseCargoCommand = "";
+            doCheck = false;
+            postPatch = ''
+              ${workspaceDummyCargoTargetsScriptForSourcePackages sourcePackages}
+              ${nextestFeatureAnchorSourceScriptFor packageTarget ""}
+            '';
+          } // lib.optionalAttrs (nextestUsesPythonModule packageTarget) {
+            nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [nextestPython];
+            PYO3_PYTHON = "${nextestPython}/bin/python3";
+            PYTHON = "${nextestPython}/bin/python3";
+            PYTHONPATH = "${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}";
+          });
+
       nextestArchiveCargoArtifactsFor = target:
         mergeCargoArtifacts "gammaloop-nextest-binaries-${target.name}-inputs" (
-          [cargoArtifacts]
-          ++ map (package: cranePackageBuildArtifacts.${package}) (nextestArchiveInputPackagesFor target)
+          [
+            cargoArtifacts
+          ]
+          ++ map (nextestPackageTestBinaryArtifactFor target) target.packages
         );
 
       nextestArchiveFor = target:
@@ -1444,14 +2305,22 @@
             pname = "gammaloop-nextest-binaries-${target.name}";
             src = nextestSrcFor target;
             cargoArtifacts = nextestArchiveCargoArtifactsFor target;
+            doNotLinkInheritedArtifacts = true;
             doCheck = false;
             doInstallCargoArtifacts = false;
             nativeBuildInputs =
               (ciArgs.nativeBuildInputs or [])
               ++ [pkgs.cargo-nextest pkgs.form]
-              ++ lib.optionals (nextestUsesIntegrationTests target) [nextestPython];
+              ++ lib.optionals (nextestUsesPythonModule target) [nextestPython];
+            postPatch = ''
+              ${workspaceDummyCargoTargetsScriptForSourcePackages (nextestSourcePackagesFor target)}
+              ${nextestFeatureAnchorSourceScriptFor target ""}
+            '';
             buildPhaseCargoCommand = ''
               mkdir -p "$out"
+              if [ -d target ]; then
+                chmod -R u+w target
+              fi
               cargo nextest --version
               cargo nextest archive \
                 --cargo-profile ${ciCargoProfile} \
@@ -1462,7 +2331,7 @@
             '';
             checkPhaseCargoCommand = "";
             installPhaseCommand = "";
-          } // lib.optionalAttrs (nextestUsesIntegrationTests target) {
+          } // lib.optionalAttrs (nextestUsesPythonModule target) {
             PYO3_PYTHON = "${nextestPython}/bin/python3";
             PYTHON = "${nextestPython}/bin/python3";
             PYTHONPATH = "${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}";
@@ -1485,10 +2354,15 @@
       nextestCheckFor = target:
         pkgs.runCommand "gammaloop-nextest-${target.name}" {
           nativeBuildInputs = [
+            ciToolchain
             pkgs.cargo-nextest
             pkgs.form
+            pkgs.gcc
             nextestFailureSummary
-          ] ++ lib.optionals (nextestUsesIntegrationTests target) [nextestPython];
+          ] ++ lib.optionals (nextestUsesPythonModule target) [nextestPython];
+          CC = nixCc;
+          CXX = nixCxx;
+          "${cargoLinkerVar}" = nixCc;
           LD_LIBRARY_PATH = runtimeLibPath;
           DYLD_LIBRARY_PATH = runtimeLibPath;
           NEXTEST_SHOW_PROGRESS = "counter";
@@ -1501,9 +2375,12 @@
             exit 1
           fi
 
-          cp -R ${nextestSrcFor target}/. .
-          chmod -R u+w .
-        '' + lib.optionalString (nextestUsesIntegrationTests target) ''
+          mkdir -p /build/source
+          cp -R ${nextestSrcFor target}/. /build/source/
+          chmod -R u+w /build/source
+          cd /build/source
+          ${workspaceDummyCargoTargetsScriptForSourcePackages (nextestSourcePackagesFor target)}
+        '' + lib.optionalString (nextestUsesPythonModule target) ''
           export PYO3_PYTHON=${nextestPython}/bin/python3
           export PYTHON=${nextestPython}/bin/python3
           export PYTHONPATH=${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}
@@ -1525,7 +2402,6 @@
           cargo nextest run \
             --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target} \
             --workspace-remap . \
-            --target-dir-remap target \
             ${nextestBaseExtraArgs}
           status=$?
           nextest-failure-summary ${lib.escapeShellArg nextestJunitPath} || true
@@ -1600,25 +2476,20 @@
           # Keep existing check names for CI compatibility.
           gammaloop = gammaloop-cli;
 
-          gammaloop-clippy = craneLib.cargoClippy (ciArgs
-            // {
-              inherit cargoArtifacts;
-              src = workspaceTestSrc;
-              cargoClippyExtraArgs = "--all-targets -- --deny warnings";
-            });
+          gammaloop-clippy = pkgs.runCommand "gammaloop-workspace-clippy" {} ''
+            test -e ${workspaceClippyCargoArtifacts}
+            mkdir -p "$out"
+          '';
 
-          gammaloop-doc = craneLib.cargoDoc (ciArgs
-            // {
-              inherit cargoArtifacts;
-              src = workspaceTestSrc;
-            });
+          gammaloop-doc = pkgs.runCommand "gammaloop-workspace-doc" {} ''
+            test -e ${workspaceDocCargoArtifacts}
+            mkdir -p "$out"
+          '';
 
-          gammaloop-doctest = craneLib.cargoDocTest (ciArgs
-            // {
-              inherit cargoArtifacts;
-              src = workspaceTestSrc;
-            }
-            // symbolicaCrateArgs true);
+          gammaloop-doctest = pkgs.runCommand "gammaloop-workspace-doctest" {} ''
+            test -e ${workspaceDoctestCargoArtifacts}
+            mkdir -p "$out"
+          '';
 
           gammaloop-fmt = craneLib.cargoFmt {
             src = workspaceFmtSrc;
@@ -1654,7 +2525,14 @@
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
           inherit linnest-wasm linnestWasmCargoArtifacts;
           "crane-ci-prebuild" = cargoArtifacts;
-          inherit cargoArtifacts workspaceBuildArtifacts;
+          inherit
+            cargoArtifacts
+            gammaloopApiPackageArtifacts
+            workspaceBuildArtifacts
+            workspaceCheckCargoArtifacts
+            workspaceClippyCargoArtifacts
+            workspaceDocCargoArtifacts
+            workspaceDoctestCargoArtifacts;
           "nix-ci-passed" = nixCiPassed;
         }
         // cranePackageDependencyOutputs

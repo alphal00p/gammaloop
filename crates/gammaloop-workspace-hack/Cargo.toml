@@ -137,3 +137,27 @@ libc = { version = "0.2", features = ["extra_traits"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 ### END HAKARI SECTION
+
+# The normal gammalooprs CI graph enables arrayvec's std/default feature set
+# through vakint. Vakint stays out of Hakari traversal because its optional
+# Python/stubgen features are too broad for the common cache target, so keep
+# this small feature anchor outside Hakari's managed section.
+[dependencies.arrayvec]
+version = "0.7"
+features = ["std"]
+
+# The root gammalooprs graph also enables indenter/std through color-eyre.
+# Without this, vakint is built against eyre -> indenter(default), while the
+# final gammalooprs graph asks for eyre -> indenter(default,std), causing vakint
+# to be rebuilt in the root derivation.
+[dependencies.indenter]
+version = "0.3"
+features = ["std"]
+
+[build-dependencies.arrayvec]
+version = "0.7"
+features = ["std"]
+
+[build-dependencies.indenter]
+version = "0.3"
+features = ["std"]

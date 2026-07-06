@@ -40,5 +40,13 @@ third-party = [
     { name = "pyo3-ffi" },
 ]
 
+# Proc-macro crates build on the host side and should not carry the workspace
+# hack into normal target-side artifact archives.
+[final-excludes]
+workspace-members = [
+    "gammaloop-tracing-filter-macros",
+    "spenso-macros",
+]
+
 # Write out exact versions rather than a semver range. (Defaults to false.)
 # exact-versions = true
