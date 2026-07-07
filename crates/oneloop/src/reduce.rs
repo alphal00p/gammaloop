@@ -129,7 +129,15 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
                 )
             }
         }
-        n => todo!("scalar reduction for {n}-propagator families"),
+        n => {
+            // N > 4: van Neerven-Vermaseren reduction to boxes
+            if exponents.iter().any(|&a| a != 1) {
+                todo!("raised propagator powers for {n}-point (N>4) integrals");
+            }
+            let masses: Vec<Atom> = (0..n).map(mass).collect();
+            let y = modified_cayley(&masses, &family.kinematics.invariants);
+            reduce_scalar_cayley(&y, &masses)
+        }
     };
 
     Reduction { terms }
@@ -452,6 +460,115 @@ fn reduce_triangle(
         );
     }
     acc
+}
+
+// General symbolic determinant by cofactor expansion along the first row.
+fn det(m: &[Vec<Atom>]) -> Atom {
+    let n = m.len();
+    if n == 1 {
+        return m[0][0].clone();
+    }
+    let mut acc = Atom::Zero;
+    for j in 0..n {
+        let cols: Vec<usize> = (0..n).filter(|&c| c != j).collect();
+        let minor: Vec<Vec<Atom>> = m[1..]
+            .iter()
+            .map(|row| cols.iter().map(|&c| row[c].clone()).collect())
+            .collect();
+        let cofactor = &m[0][j] * &det(&minor);
+        if j % 2 == 0 {
+            acc += &cofactor;
+        } else {
+            acc -= &cofactor;
+        }
+    }
+    acc
+}
+
+// Modified Cayley matrix Y_ij = m_i^2 + m_j^2 - (r_i - r_j)^2 from the masses and the
+// C(n,2) pairwise invariants (r_i - r_j)^2 in lexicographic (i<j) order.
+fn modified_cayley(masses: &[Atom], pairwise: &[Atom]) -> Vec<Vec<Atom>> {
+    let n = masses.len();
+    let idx = |a: usize, b: usize| a * n - a * (a + 1) / 2 + (b - a - 1);
+    (0..n)
+        .map(|i| {
+            (0..n)
+                .map(|j| {
+                    if i == j {
+                        Atom::num(2) * &masses[i]
+                    } else {
+                        let (a, b) = (i.min(j), i.max(j));
+                        &masses[i] + &masses[j] - &pairwise[idx(a, b)]
+                    }
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn delete_row_col(m: &[Vec<Atom>], skip_row: usize, skip_col: usize) -> Vec<Vec<Atom>> {
+    let n = m.len();
+    let cols: Vec<usize> = (0..n).filter(|&c| c != skip_col).collect();
+    (0..n)
+        .filter(|&r| r != skip_row)
+        .map(|r| cols.iter().map(|&c| m[r][c].clone()).collect())
+        .collect()
+}
+
+// van Neerven-Vermaseren coefficients for I_N = sum_i c_i I_{N-1}^(i) (scalar, d=4):
+// c_i = (YB^{-1})_{i0} / (YB^{-1})_{00}, YB the bordered Cayley matrix.
+fn high_point_coeffs(y: &[Vec<Atom>]) -> Vec<Atom> {
+    let n = y.len();
+    let mut yb = vec![vec![Atom::Zero; n + 1]; n + 1];
+    for i in 1..=n {
+        yb[0][i] = Atom::num(1);
+        yb[i][0] = Atom::num(1);
+        for j in 1..=n {
+            yb[i][j] = y[i - 1][j - 1].clone();
+        }
+    }
+    let det_y = det(y);
+    (1..=n)
+        .map(|col| {
+            let minor = det(&delete_row_col(&yb, 0, col));
+            let cofactor = if col % 2 == 0 { minor } else { -minor };
+            cofactor / &det_y
+        })
+        .collect()
+}
+
+fn reduce_scalar_cayley(y: &[Vec<Atom>], masses: &[Atom]) -> Vec<(Atom, MasterIntegral)> {
+    let n = y.len();
+    if n == 4 {
+        let pair = |a: usize, b: usize| &masses[a] + &masses[b] - &y[a][b];
+        return vec![(
+            Atom::num(1),
+            MasterIntegral::Box {
+                p1_sq: pair(0, 1),
+                p2_sq: pair(1, 2),
+                p3_sq: pair(2, 3),
+                p4_sq: pair(0, 3),
+                s: pair(0, 2),
+                t: pair(1, 3),
+                m1_sq: masses[0].clone(),
+                m2_sq: masses[1].clone(),
+                m3_sq: masses[2].clone(),
+                m4_sq: masses[3].clone(),
+            },
+        )];
+    }
+    let mut terms = Vec::new();
+    for (i, c_i) in high_point_coeffs(y).iter().enumerate() {
+        let sub_y = delete_row_col(y, i, i);
+        let sub_masses: Vec<Atom> = masses
+            .iter()
+            .enumerate()
+            .filter(|&(j, _)| j != i)
+            .map(|(_, m)| m.clone())
+            .collect();
+        add_scaled(&mut terms, c_i, reduce_scalar_cayley(&sub_y, &sub_masses));
+    }
+    terms
 }
 
 fn det3(m: &[[Atom; 3]; 3]) -> Atom {
@@ -834,6 +951,67 @@ mod tests {
     use symbolica::atom::Atom;
     use symbolica::function;
     use symbolica::symbol;
+
+    #[test]
+    fn scalar_pentagon_reduces_to_five_boxes() {
+        crate::ensure_symbolica_license();
+        let masses: Vec<Atom> = [1, 2, 3, 4, 5].iter().map(|&x| Atom::num(x)).collect();
+        let invariants: Vec<Atom> = [3, 5, 7, 9, 4, 6, 8, 5, 7, 6]
+            .iter()
+            .map(|&x| Atom::num(x))
+            .collect();
+        let r = reduce(&scalar_family(masses, invariants));
+        assert_eq!(r.terms.len(), 5);
+        assert!(
+            r.terms
+                .iter()
+                .all(|(_, m)| matches!(m, MasterIntegral::Box { .. }))
+        );
+        // van Neerven-Vermaseren coefficients
+        let want_c = [
+            Atom::num(-1088) / Atom::num(639),
+            Atom::num(-212) / Atom::num(639),
+            Atom::num(-44) / Atom::num(213),
+            Atom::num(-191) / Atom::num(639),
+            Atom::num(-341) / Atom::num(639),
+        ];
+        for ((coeff, _), want) in r.terms.iter().zip(&want_c) {
+            assert_eq!(coeff, want);
+        }
+        // pinching the last propagator leaves the box on propagators 1..4
+        assert_eq!(
+            r.terms[4].1,
+            MasterIntegral::Box {
+                p1_sq: Atom::num(3),
+                p2_sq: Atom::num(4),
+                p3_sq: Atom::num(5),
+                p4_sq: Atom::num(7),
+                s: Atom::num(5),
+                t: Atom::num(6),
+                m1_sq: Atom::num(1),
+                m2_sq: Atom::num(2),
+                m3_sq: Atom::num(3),
+                m4_sq: Atom::num(4),
+            }
+        );
+    }
+
+    #[test]
+    fn scalar_hexagon_recurses_down_to_boxes() {
+        crate::ensure_symbolica_license();
+        let masses: Vec<Atom> = [1, 2, 3, 4, 5, 6].iter().map(|&x| Atom::num(x)).collect();
+        let invariants: Vec<Atom> = [3, 5, 7, 9, 11, 4, 6, 8, 10, 5, 7, 9, 6, 8, 7]
+            .iter()
+            .map(|&x| Atom::num(x))
+            .collect();
+        let r = reduce(&scalar_family(masses, invariants));
+        assert!(!r.terms.is_empty());
+        assert!(
+            r.terms
+                .iter()
+                .all(|(_, m)| matches!(m, MasterIntegral::Box { .. }))
+        );
+    }
 
     fn family(masses: Vec<Atom>, invariants: Vec<Atom>, exponents: Vec<i32>) -> IntegralFamily {
         IntegralFamily {
