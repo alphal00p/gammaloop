@@ -1924,7 +1924,6 @@
         [
           cargoArtifacts
         ]
-        ++ builtins.attrValues cranePackageBuildArtifacts
         ++ map (representative: craneTestSupportArtifacts.${representative}) workspaceTestSupportComponentRepresentatives
       );
 

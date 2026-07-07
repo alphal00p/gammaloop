@@ -13,6 +13,10 @@ let
   crateTestSupportAttr = representative: "packages.${system}.crate-test-support-${representative}";
   crateTestBinaryAttr = package: "packages.${system}.crate-test-binaries-${package}";
   workspaceHackPackage = "gammaloop-workspace-hack";
+  # clinnet is binary-only: the flake exposes crate-clinnet, but no
+  # crate-deps-clinnet artifact.
+  workspacePackagesWithDependencyArtifacts = builtins.filter (package: package != "clinnet") workspacePackages;
+  nonWorkspaceHackPackages = builtins.filter (package: package != workspaceHackPackage) workspacePackages;
   workspaceHackCacheAttr = cratePackageDepsAttr workspaceHackPackage;
   workspaceCheckCargoArtifactsAttr = "packages.${system}.workspaceCheckCargoArtifacts";
   workspaceClippyCargoArtifactsAttr = "packages.${system}.workspaceClippyCargoArtifacts";
@@ -81,7 +85,7 @@ let
       name = workspacePackageGraphAttr package;
       value = [(cratePackageDepsAttr package)];
     })
-    workspacePackages);
+    workspacePackagesWithDependencyArtifacts);
   workspaceCratePackageCacheArtifactDependencies = builtins.listToAttrs (
     builtins.filter (entry: entry.value != []) (map (package: {
         name = cratePackageDepsAttr package;
@@ -137,9 +141,11 @@ let
     vakint = ["vakint"];
   };
   nextestArchiveAttr = target: "checks.${system}.gammaloop-nextest-binaries-${target}";
+  nextestPackageTestSupportAttr = package:
+    crateTestSupportAttr (workspaceTestComponentRepresentativeFor package);
   nextestArchiveDependenciesFor = target:
     ["packages.${system}.cargoArtifacts"]
-    ++ map workspacePackageGraphAttr nextestPackageGroups.${target}
+    ++ unique (map nextestPackageTestSupportAttr nextestPackageGroups.${target})
     ++ (
       if target == "python-api"
       then ["packages.${system}.gammaloop-python-module"]
@@ -151,7 +157,6 @@ let
   nextestBinaryChecks = map nextestArchiveAttr (builtins.attrNames nextestPackageGroups);
   workspaceCheckCargoArtifactDependencies =
     ["packages.${system}.cargoArtifacts"]
-    ++ map workspacePackageGraphAttr workspacePackages
     ++ map crateTestSupportAttr workspaceTestSupportComponentRepresentatives;
   dependencies = mergeDependencySets [
     workspaceCratePackageCacheArtifactDependencies
@@ -259,16 +264,21 @@ in {
       "packages.${system}.nix-ci-check-gammaloop-nextest"
     ]
     ++ map crateTestBinaryAttr workspacePackages
+    ++ map cratePackageDepsAttr (
+      builtins.filter (package: package != workspaceHackPackage) workspacePackagesWithDependencyArtifacts
+    )
+    ++ map cratePackageAttr nonWorkspaceHackPackages
   );
   fail-fast = false;
   # Keep dependency discovery manual. With generated Rust outputs,
   # automatic discovery asks NixCI to compute derivation paths for many
   # package/check attrs during `show`, including attrs listed in doNotBuild.
   # The manual graph below uses the Hakari workspace-hack cache artifact as the
-  # root for Symbolica-containing cache jobs, orders crate package jobs by
-  # Guppy's normal resolved package closures, and orders nextest archive jobs
-  # after the normal workspace package artifacts that the archives merge into
-  # their Cargo target directories.
+  # root for Symbolica-containing cache jobs, keeps crate package edges valid
+  # for final-package closures, and orders nextest archive jobs after the
+  # shared test-support artifacts that the archives reuse. Ordinary crate
+  # package attrs are not CI roots, so test-binary generation can start before
+  # unrelated final package outputs.
   # See https://nix-ci.com/documentation/automatic-dependency-discovery
   # and https://nix-ci.com/documentation/manually-specified-dependencies
   dependency-discovery.enable = false;
