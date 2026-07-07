@@ -194,7 +194,7 @@ let
       "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];
       "checks.${system}.linnest-wasm" = ["packages.${system}.linnest-wasm"];
       "packages.${system}.gammaloop-llvm-coverage" = ["packages.${system}.gammaloop"];
-      "packages.${system}.nix-ci-check-gammaloop-doctest" = [workspaceDoctestCargoArtifactsAttr];
+      "packages.${system}.nix-ci-check-gammaloop-doctest" = [workspaceCheckCargoArtifactsAttr];
       "packages.${system}.nix-ci-check-gammaloop-nextest" =
         nextestBinaryChecks
         ++ ["packages.${system}.gammaloop-python-module"];
@@ -260,6 +260,7 @@ in {
       "packages.${system}.default"
       "packages.${system}.crane-ci-prebuild"
       "packages.${system}.workspaceBuildArtifacts"
+      "packages.${system}.workspaceDoctestCargoArtifacts"
       "packages.${system}.gammaloop-llvm-coverage"
       "packages.${system}.nix-ci-check-gammaloop-nextest"
     ]
