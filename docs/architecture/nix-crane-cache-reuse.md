@@ -1180,6 +1180,90 @@ artifacts. The Python API check intentionally compiles
 path intentionally compiles a separate PyO3 feature family for `gammaloop-api`
 and its dependents. That is not reusable with the normal Rust feature family.
 
+## Follow-up audit: crate-level check splits
+
+The per-crate package and nextest cache graph should not be copied directly to
+every Cargo mode. I tested crate-level `clippy`, `doc`, and doctest splits and
+rejected them because the actual logs showed downstream rebuilds of already
+compiled dependency work.
+
+The `clippy` experiment used a dependency-mode layer first, then a final real
+package lint layer. The dependency-mode nodes improved reuse, but linting the
+real selected package still changed Cargo's unit fingerprints and rebuilt the
+expensive dependency graph:
+
+```text
+crate-clippy-deps-spenso:
+  no Checking symbolica
+  no Checking linnet
+
+crate-clippy-gammalooprs:
+  Compiling symbolica
+  Checking linnet
+  Checking spenso
+  Checking idenso
+```
+
+The `doc` experiment failed in the same way. A narrow package could sometimes
+reuse the inputs, but another package in the same dependency family re-entered
+the Symbolica graph:
+
+```text
+crate-doc-linnet:
+  no Checking symbolica
+
+crate-doc-spenso-macros:
+  Checking numerica
+  Checking graphica
+  Checking symbolica
+```
+
+Even the single workspace doc artifact fed from `workspaceCheckCargoArtifacts`
+does doc-mode work that is not reusable from the normal check/test artifacts:
+
+```text
+cargo doc --profile ci-optim --locked --workspace ... --no-deps
+  Compiling rug
+  Compiling numerica
+  Checking graphica
+  Checking symbolica
+```
+
+The doctest split looked viable for one component, but failed the broader
+representative path. The `spenso` component reused cleanly:
+
+```text
+crate-doctest-spenso:
+  cargo test --profile ci-optim --doc ... -p spenso -p spenso-macros ...
+  Finished in 0.29s
+  no Compiling symbolica
+  no Compiling linnet
+  no Compiling spenso
+```
+
+When the `gammalooprs` doctest path pulled in downstream components, the split
+either produced illegal transitive `pkg/feature` flags or, after narrowing those
+flags to direct packages, recompiled real workspace crates:
+
+```text
+crate-doctest-gammaloop-tracing-filter:
+  Compiling linnet
+  Compiling spenso
+  Compiling gammaloop-tracing-filter
+
+crate-doctest-spenso-hep-lib:
+  Compiling linnet
+  Compiling spenso
+  Compiling idenso
+  Compiling spenso-hep-lib
+```
+
+So the current rule is: only expose crate-level CI attrs for a Cargo mode after
+the persisted logs prove that downstream nodes do not compile real workspace
+crates or the Symbolica/numerica/graphica graph. For now, crate-level reuse is
+kept for package and nextest/test-binary artifacts. Workspace `clippy`, `doc`,
+and doctest remain single artifact nodes rather than a misleading per-crate DAG.
+
 ## Remaining caveats
 
 - Dependency-only derivations can still compile generated feature-anchor or
