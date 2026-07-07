@@ -1218,8 +1218,9 @@ crate-doc-spenso-macros:
   Checking symbolica
 ```
 
-Even the single workspace doc artifact fed from `workspaceCheckCargoArtifacts`
-does doc-mode work that is not reusable from the normal check/test artifacts:
+Even the single workspace doc artifact fed from the merged workspace check
+artifact does doc-mode work that is not reusable from the normal check/test
+artifacts:
 
 ```text
 cargo doc --profile ci-optim --locked --workspace ... --no-deps
@@ -1258,11 +1259,23 @@ crate-doctest-spenso-hep-lib:
   Compiling spenso-hep-lib
 ```
 
+The workspace aggregate artifact approach also proved too expensive as a cache
+object. In the `000c330d7caae29bf4d4fd7136e4929c5e6f1f19` NixCI run,
+`workspaceCheckCargoArtifacts`, `workspaceClippyCargoArtifacts`, and
+`workspaceDocCargoArtifacts` spent minutes on cache download/upload and
+compression even when they were already cached. They are invalidated by ordinary
+workspace crate edits, and no later high-value test step consumes their exact
+Cargo mode output. The replacement is a terminal `gammaloop-check` job that runs
+`cargo check --all-targets` and writes only a tiny success marker.
+
 So the current rule is: only expose crate-level CI attrs for a Cargo mode after
 the persisted logs prove that downstream nodes do not compile real workspace
 crates or the Symbolica/numerica/graphica graph. For now, crate-level reuse is
-kept for package and nextest/test-binary artifacts. Workspace `clippy`, `doc`,
-and doctest remain single artifact nodes rather than a misleading per-crate DAG.
+kept for package and nextest/test-binary artifacts. Workspace `check`, `clippy`,
+`doc`, and doctest are terminal checks rather than misleading per-crate DAGs or
+reusable artifact producers. They consume the base dependency artifact to avoid
+starting completely cold, but they do not publish merged workspace target trees
+back to the cache.
 
 ## Remaining caveats
 

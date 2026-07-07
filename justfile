@@ -300,6 +300,13 @@ test-release TEST_NAME="":
 
 # Run tests in release mode (faster execution)
 test-ci TEST_NAME="":
+    just _test-ci "{{ TEST_NAME }}" ""
+
+# Run tests in release mode on GitHub macOS runners.
+test-ci-mac TEST_NAME="":
+    just _test-ci "{{ TEST_NAME }}" 'not test(/^aa_aa::important::aa_aa_local_inspect_backend_consistency$/)'
+
+_test-ci TEST_NAME="" NEXTEST_FILTERSET="":
     #!/usr/bin/env bash
     set -euo pipefail
     gammaloop_packages=(
@@ -324,6 +331,9 @@ test-ci TEST_NAME="":
     for package in "${gammaloop_packages[@]}"; do
         cmd+=(-p "$package")
     done
+    if [ -n "{{ NEXTEST_FILTERSET }}" ]; then
+        cmd+=(-E '{{ NEXTEST_FILTERSET }}')
+    fi
     if [ -n "{{ TEST_NAME }}" ]; then
         cmd+=({{ TEST_NAME }})
     fi

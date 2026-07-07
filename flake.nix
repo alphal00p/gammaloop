@@ -1920,19 +1920,34 @@
         then workspaceHackBuildArtifacts
         else craneTestSupportArtifacts.${workspaceTestComponentRepresentativeFor package});
 
-      workspaceCheckCargoArtifacts = mergeCargoArtifacts "gammaloop-workspace-check-artifacts" (
-        [
-          cargoArtifacts
-        ]
-        ++ map (representative: craneTestSupportArtifacts.${representative}) workspaceTestSupportComponentRepresentatives
-      );
-
-      workspaceClippyCargoArtifacts = buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
+      workspaceCargoCheck = craneLib.mkCargoDerivation (ciArgs
         // {
-          cargoArtifacts = workspaceCheckCargoArtifacts;
-          pname = "gammaloop-workspace-clippy-artifacts";
-          dummySrc = workspaceTestSrc;
+          cargoArtifacts = cargoArtifacts;
+          pname = "gammaloop-workspace-check";
+          src = workspaceTestSrc;
+          doNotLinkInheritedArtifacts = true;
+          doInstallCargoArtifacts = false;
           buildPhaseCargoCommand = ''
+            mkdir -p "$out"
+            if [ -d target ]; then
+              chmod -R u+w target
+            fi
+            cargoWithProfile check ${ciArgs.cargoExtraArgs} --all-targets
+          '';
+          checkPhaseCargoCommand = "";
+          doCheck = false;
+          installPhaseCommand = "";
+        });
+
+      workspaceClippyCheck = craneLib.mkCargoDerivation (ciArgs
+        // {
+          cargoArtifacts = cargoArtifacts;
+          pname = "gammaloop-workspace-clippy";
+          src = workspaceTestSrc;
+          doNotLinkInheritedArtifacts = true;
+          doInstallCargoArtifacts = false;
+          buildPhaseCargoCommand = ''
+            mkdir -p "$out"
             if [ -d target ]; then
               chmod -R u+w target
             fi
@@ -1940,14 +1955,18 @@
           '';
           checkPhaseCargoCommand = "";
           doCheck = false;
+          installPhaseCommand = "";
         });
 
-      workspaceDocCargoArtifacts = buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
+      workspaceDocCheck = craneLib.mkCargoDerivation (ciArgs
         // {
-          cargoArtifacts = workspaceCheckCargoArtifacts;
-          pname = "gammaloop-workspace-doc-artifacts";
-          dummySrc = workspaceTestSrc;
+          cargoArtifacts = cargoArtifacts;
+          pname = "gammaloop-workspace-doc";
+          src = workspaceTestSrc;
+          doNotLinkInheritedArtifacts = true;
+          doInstallCargoArtifacts = false;
           buildPhaseCargoCommand = ''
+            mkdir -p "$out"
             if [ -d target ]; then
               chmod -R u+w target
             fi
@@ -1955,14 +1974,18 @@
           '';
           checkPhaseCargoCommand = "";
           doCheck = false;
+          installPhaseCommand = "";
         });
 
-      workspaceDoctestCargoArtifacts = buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
+      workspaceDoctestCheck = craneLib.mkCargoDerivation (ciArgs
         // {
-          cargoArtifacts = workspaceCheckCargoArtifacts;
-          pname = "gammaloop-workspace-doctest-artifacts";
-          dummySrc = workspaceTestSrc;
+          cargoArtifacts = cargoArtifacts;
+          pname = "gammaloop-workspace-doctest";
+          src = workspaceTestSrc;
+          doNotLinkInheritedArtifacts = true;
+          doInstallCargoArtifacts = false;
           buildPhaseCargoCommand = ''
+            mkdir -p "$out"
             if [ -d target ]; then
               chmod -R u+w target
             fi
@@ -1970,6 +1993,7 @@
           '';
           checkPhaseCargoCommand = "";
           doCheck = false;
+          installPhaseCommand = "";
           preBuild = licensePreCheck;
           SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
         });
@@ -2475,20 +2499,13 @@
           # Keep existing check names for CI compatibility.
           gammaloop = gammaloop-cli;
 
-          gammaloop-clippy = pkgs.runCommand "gammaloop-workspace-clippy" {} ''
-            test -e ${workspaceClippyCargoArtifacts}
-            mkdir -p "$out"
-          '';
+          gammaloop-check = workspaceCargoCheck;
 
-          gammaloop-doc = pkgs.runCommand "gammaloop-workspace-doc" {} ''
-            test -e ${workspaceDocCargoArtifacts}
-            mkdir -p "$out"
-          '';
+          gammaloop-clippy = workspaceClippyCheck;
 
-          gammaloop-doctest = pkgs.runCommand "gammaloop-workspace-doctest" {} ''
-            test -e ${workspaceDoctestCargoArtifacts}
-            mkdir -p "$out"
-          '';
+          gammaloop-doc = workspaceDocCheck;
+
+          gammaloop-doctest = workspaceDoctestCheck;
 
           gammaloop-fmt = craneLib.cargoFmt {
             src = workspaceFmtSrc;
@@ -2527,11 +2544,7 @@
           inherit
             cargoArtifacts
             gammaloopApiPackageArtifacts
-            workspaceBuildArtifacts
-            workspaceCheckCargoArtifacts
-            workspaceClippyCargoArtifacts
-            workspaceDocCargoArtifacts
-            workspaceDoctestCargoArtifacts;
+            workspaceBuildArtifacts;
           "nix-ci-passed" = nixCiPassed;
         }
         // cranePackageDependencyOutputs

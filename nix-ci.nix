@@ -18,10 +18,6 @@ let
   workspacePackagesWithDependencyArtifacts = builtins.filter (package: package != "clinnet") workspacePackages;
   nonWorkspaceHackPackages = builtins.filter (package: package != workspaceHackPackage) workspacePackages;
   workspaceHackCacheAttr = cratePackageDepsAttr workspaceHackPackage;
-  workspaceCheckCargoArtifactsAttr = "packages.${system}.workspaceCheckCargoArtifacts";
-  workspaceClippyCargoArtifactsAttr = "packages.${system}.workspaceClippyCargoArtifacts";
-  workspaceDocCargoArtifactsAttr = "packages.${system}.workspaceDocCargoArtifacts";
-  workspaceDoctestCargoArtifactsAttr = "packages.${system}.workspaceDoctestCargoArtifacts";
   gammaloopApiPackageArtifactsAttr = "packages.${system}.gammaloopApiPackageArtifacts";
   workspacePackageGraphAttr = package: cratePackageAttr package;
   mergeDependencySets = sets: let
@@ -155,9 +151,6 @@ let
   # Symbolica-containing cache DAG. Higher-level crate cache jobs reach it
   # through their Guppy-resolved workspace cache dependencies.
   nextestBinaryChecks = map nextestArchiveAttr (builtins.attrNames nextestPackageGroups);
-  workspaceCheckCargoArtifactDependencies =
-    ["packages.${system}.cargoArtifacts"]
-    ++ map crateTestSupportAttr workspaceTestSupportComponentRepresentatives;
   dependencies = mergeDependencySets [
     workspaceCratePackageCacheArtifactDependencies
     workspaceCratePackageCacheDependencies
@@ -167,21 +160,17 @@ let
       "packages.${system}.gammaloop" = [
         gammaloopApiPackageArtifactsAttr
         "checks.${system}.gammaloop-fmt"
-        "devShells.${system}.default"
       ];
       "checks.${system}.gammaloop" = ["packages.${system}.gammaloop"];
       "packages.${system}.default" = ["packages.${system}.gammaloop"];
       "packages.${system}.gammaloop-python-module" =
         workspaceCratePackageDependencies.${cratePackageAttr "gammaloop-api"} or [];
       ${gammaloopApiPackageArtifactsAttr} = [(cratePackageAttr "gammaloop-api")];
-      ${workspaceCheckCargoArtifactsAttr} = workspaceCheckCargoArtifactDependencies;
-      ${workspaceClippyCargoArtifactsAttr} = [workspaceCheckCargoArtifactsAttr];
-      ${workspaceDocCargoArtifactsAttr} = [workspaceCheckCargoArtifactsAttr];
-      ${workspaceDoctestCargoArtifactsAttr} = [workspaceCheckCargoArtifactsAttr];
       "packages.${system}.cargoArtifacts" = [workspaceHackCacheAttr];
-      "checks.${system}.gammaloop-clippy" = [workspaceClippyCargoArtifactsAttr];
-      "checks.${system}.gammaloop-doc" = [workspaceDocCargoArtifactsAttr];
-      "checks.${system}.gammaloop-doctest" = [workspaceDoctestCargoArtifactsAttr];
+      "checks.${system}.gammaloop-check" = ["packages.${system}.cargoArtifacts"];
+      "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoArtifacts"];
+      "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoArtifacts"];
+      "checks.${system}.gammaloop-doctest" = ["packages.${system}.cargoArtifacts"];
       "packages.${system}.workspaceBuildArtifacts" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-nextest-binaries-core" = nextestArchiveDependenciesFor "core";
       "checks.${system}.gammaloop-nextest-binaries-clinnet" = nextestArchiveDependenciesFor "clinnet";
@@ -194,7 +183,7 @@ let
       "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];
       "checks.${system}.linnest-wasm" = ["packages.${system}.linnest-wasm"];
       "packages.${system}.gammaloop-llvm-coverage" = ["packages.${system}.gammaloop"];
-      "packages.${system}.nix-ci-check-gammaloop-doctest" = [workspaceCheckCargoArtifactsAttr];
+      "packages.${system}.nix-ci-check-gammaloop-doctest" = ["packages.${system}.cargoArtifacts"];
       "packages.${system}.nix-ci-check-gammaloop-nextest" =
         nextestBinaryChecks
         ++ ["packages.${system}.gammaloop-python-module"];
@@ -258,7 +247,6 @@ let
       "packages.${system}.default"
       "packages.${system}.crane-ci-prebuild"
       "packages.${system}.workspaceBuildArtifacts"
-      "packages.${system}.workspaceDoctestCargoArtifacts"
       "packages.${system}.gammaloop-llvm-coverage"
       "packages.${system}.nix-ci-check-gammaloop-nextest"
     ]

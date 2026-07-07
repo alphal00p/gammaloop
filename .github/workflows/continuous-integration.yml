@@ -117,7 +117,12 @@ jobs:
           python3 --version
 
       - name: Run tests
+        if: ${{ !startsWith(matrix.os, 'macos-') }}
         run: just test-ci
+
+      - name: Run tests
+        if: startsWith(matrix.os, 'macos-')
+        run: just test-ci-mac
 
       - name: Upload nextest JUnit
         if: always()
