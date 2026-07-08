@@ -243,8 +243,6 @@ let
     assert selfDependencies == []
     || builtins.throw "manual NixCI dependency graph contains self dependencies: ${builtins.concatStringsSep ", " selfDependencies}";
       dependencies;
-in {
-  systems = [system];
   doNotBuild = unique (
     [
       "checks.${system}.gammaloop-doctest"
@@ -270,20 +268,44 @@ in {
     )
     ++ map cratePackageAttr nonWorkspaceHackPackages
   );
+  # NixCI only schedules jobs it actually builds, so a dependency edge that
+  # references a doNotBuild job is rejected as pointing at a non-existent job.
+  # The manual graph above is constructed over the full crate/artifact DAG
+  # (which keeps the drift and cycle asserts meaningful); here we drop every
+  # edge touching a doNotBuild job so only ordering between built jobs remains.
+  doNotBuildSet = builtins.listToAttrs (map (job: {
+      name = job;
+      value = true;
+    })
+    doNotBuild);
+  isBuiltJob = job: !(doNotBuildSet ? ${job});
+  buildableDependencies = deps:
+    builtins.listToAttrs (
+      builtins.filter (entry: entry.value != []) (map (dependent: {
+          name = dependent;
+          value = builtins.filter isBuiltJob deps.${dependent};
+        })
+        (builtins.filter isBuiltJob (builtins.attrNames deps)))
+    );
+in {
+  systems = [system];
+  inherit doNotBuild;
   fail-fast = false;
   # Keep dependency discovery manual. With generated Rust outputs,
   # automatic discovery asks NixCI to compute derivation paths for many
   # package/check attrs during `show`, including attrs listed in doNotBuild.
   # The manual graph below uses the Hakari workspace-hack cache artifact as the
-  # root for Symbolica-containing cache jobs, keeps crate package edges valid
-  # for final-package closures, and orders nextest archive jobs after the
-  # shared test-support artifacts that the archives reuse. Ordinary crate
-  # package attrs are not CI roots, so test-binary generation can start before
-  # unrelated final package outputs.
+  # root for Symbolica-containing cache jobs and orders nextest archive jobs
+  # after the shared test-support artifacts that the archives reuse. The graph
+  # is constructed over the full crate/artifact DAG so the drift and cycle
+  # asserts stay meaningful, then buildableDependencies drops every edge that
+  # references a doNotBuild job, since NixCI rejects edges to jobs it does not
+  # build. Ordinary crate package attrs are not CI roots, so test-binary
+  # generation can start before unrelated final package outputs.
   # See https://nix-ci.com/documentation/automatic-dependency-discovery
   # and https://nix-ci.com/documentation/manually-specified-dependencies
   dependency-discovery.enable = false;
-  dependencies = validatedDependencies;
+  dependencies = buildableDependencies validatedDependencies;
   test = {
     gammaloop-doctest = {
       package = "packages.${system}.nix-ci-check-gammaloop-doctest";
