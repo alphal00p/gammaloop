@@ -130,13 +130,10 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
             }
         }
         n => {
-            // N > 4: van Neerven-Vermaseren reduction to boxes
-            if exponents.iter().any(|&a| a != 1) {
-                todo!("raised propagator powers for {n}-point (N>4) integrals");
-            }
+            // N > 4: van Neerven-Vermaseren / FJT-Tarasov reduction to boxes
             let masses: Vec<Atom> = (0..n).map(mass).collect();
             let y = modified_cayley(&masses, &family.kinematics.invariants);
-            reduce_scalar_cayley(&y, &masses)
+            reduce_cayley(&y, &masses, exponents)
         }
     };
 
@@ -515,6 +512,21 @@ fn delete_row_col(m: &[Vec<Atom>], skip_row: usize, skip_col: usize) -> Vec<Vec<
         .collect()
 }
 
+// Adjugate matrix: adj[k][i] = (-1)^{i+k} det(m without row i, col k)
+fn adjugate(m: &[Vec<Atom>]) -> Vec<Vec<Atom>> {
+    let n = m.len();
+    (0..n)
+        .map(|k| {
+            (0..n)
+                .map(|i| {
+                    let minor = det(&delete_row_col(m, i, k));
+                    if (i + k) % 2 == 0 { minor } else { -minor }
+                })
+                .collect()
+        })
+        .collect()
+}
+
 // van Neerven-Vermaseren coefficients for I_N = sum_i c_i I_{N-1}^(i) (scalar, d=4):
 // c_i = (YB^{-1})_{i0} / (YB^{-1})_{00}, YB the bordered Cayley matrix.
 fn high_point_coeffs(y: &[Vec<Atom>]) -> Vec<Atom> {
@@ -537,38 +549,95 @@ fn high_point_coeffs(y: &[Vec<Atom>]) -> Vec<Atom> {
         .collect()
 }
 
-fn reduce_scalar_cayley(y: &[Vec<Atom>], masses: &[Atom]) -> Vec<(Atom, MasterIntegral)> {
+// Reduce an N-point (N>=4) from its Cayley matrix, masses, and powers.
+fn reduce_cayley(
+    y: &[Vec<Atom>],
+    masses: &[Atom],
+    exponents: &[i32],
+) -> Vec<(Atom, MasterIntegral)> {
+    let drop = |i: usize, v: &[Atom]| -> Vec<Atom> {
+        v.iter()
+            .enumerate()
+            .filter(|&(j, _)| j != i)
+            .map(|(_, x)| x.clone())
+            .collect()
+    };
+    if let Some(z) = exponents.iter().position(|&e| e == 0) {
+        let sub_exp: Vec<i32> = exponents
+            .iter()
+            .enumerate()
+            .filter(|&(j, _)| j != z)
+            .map(|(_, &e)| e)
+            .collect();
+        return reduce_cayley(&delete_row_col(y, z, z), &drop(z, masses), &sub_exp);
+    }
     let n = y.len();
     if n == 4 {
         let pair = |a: usize, b: usize| &masses[a] + &masses[b] - &y[a][b];
-        return vec![(
-            Atom::num(1),
-            MasterIntegral::Box {
-                p1_sq: pair(0, 1),
-                p2_sq: pair(1, 2),
-                p3_sq: pair(2, 3),
-                p4_sq: pair(0, 3),
-                s: pair(0, 2),
-                t: pair(1, 3),
-                m1_sq: masses[0].clone(),
-                m2_sq: masses[1].clone(),
-                m3_sq: masses[2].clone(),
-                m4_sq: masses[3].clone(),
-            },
-        )];
+        return reduce_box(
+            exponents[0],
+            exponents[1],
+            exponents[2],
+            exponents[3],
+            &pair(0, 1),
+            &pair(1, 2),
+            &pair(2, 3),
+            &pair(0, 3),
+            &pair(0, 2),
+            &pair(1, 3),
+            &masses[0],
+            &masses[1],
+            &masses[2],
+            &masses[3],
+        );
     }
-    let mut terms = Vec::new();
-    for (i, c_i) in high_point_coeffs(y).iter().enumerate() {
-        let sub_y = delete_row_col(y, i, i);
-        let sub_masses: Vec<Atom> = masses
-            .iter()
-            .enumerate()
-            .filter(|&(j, _)| j != i)
-            .map(|(_, m)| m.clone())
-            .collect();
-        add_scaled(&mut terms, c_i, reduce_scalar_cayley(&sub_y, &sub_masses));
+    if exponents.iter().all(|&e| e == 1) {
+        let ones = vec![1; n - 1];
+        let mut terms = Vec::new();
+        for (i, c_i) in high_point_coeffs(y).iter().enumerate() {
+            add_scaled(
+                &mut terms,
+                c_i,
+                reduce_cayley(&delete_row_col(y, i, i), &drop(i, masses), &ones),
+            );
+        }
+        return terms;
     }
-    terms
+
+    // dotted: FJT/Tarasov index-lowering
+    let mut k = 0;
+    for i in 1..n {
+        if exponents[i] > exponents[k] {
+            k = i;
+        }
+    }
+    let mut a = exponents.to_vec();
+    a[k] -= 1;
+    let total: i32 = a.iter().sum();
+    let adj = adjugate(y);
+    let den = Atom::num(i64::from(a[k])) * det(y);
+
+    let d = Atom::var(S.d);
+    let mut diag = Atom::Zero;
+    for i in 0..n {
+        let factor = &d - Atom::num(i64::from(total + a[i]));
+        diag += &adj[k][i] * &factor;
+    }
+    let mut acc = Vec::new();
+    add_scaled(&mut acc, &(diag / &den), reduce_cayley(y, masses, &a));
+    for i in 0..n {
+        for j in 0..n {
+            if i == j {
+                continue;
+            }
+            let num = Atom::num(i64::from(-a[j])) * &adj[k][i];
+            let mut ch = a.clone();
+            ch[j] += 1;
+            ch[i] -= 1;
+            add_scaled(&mut acc, &(num / &den), reduce_cayley(y, masses, &ch));
+        }
+    }
+    acc
 }
 
 fn det3(m: &[[Atom; 3]; 3]) -> Atom {
@@ -953,6 +1022,30 @@ mod tests {
     use symbolica::symbol;
 
     #[test]
+    #[allow(clippy::needless_range_loop)]
+    fn adjugate_times_matrix_is_det_identity() {
+        crate::ensure_symbolica_license();
+        // M = [[2,1,0],[1,3,1],[0,1,2]], det 8
+        let m = vec![
+            vec![Atom::num(2), Atom::num(1), Atom::num(0)],
+            vec![Atom::num(1), Atom::num(3), Atom::num(1)],
+            vec![Atom::num(0), Atom::num(1), Atom::num(2)],
+        ];
+        let adj = super::adjugate(&m);
+        let det = super::det(&m);
+        for k in 0..3 {
+            for i in 0..3 {
+                let mut entry = Atom::Zero;
+                for j in 0..3 {
+                    entry += &(&m[k][j] * &adj[j][i]);
+                }
+                let want = if k == i { det.clone() } else { Atom::Zero };
+                assert_eq!(entry, want, "(M*adj)[{k}][{i}]");
+            }
+        }
+    }
+
+    #[test]
     fn scalar_pentagon_reduces_to_five_boxes() {
         crate::ensure_symbolica_license();
         let masses: Vec<Atom> = [1, 2, 3, 4, 5].iter().map(|&x| Atom::num(x)).collect();
@@ -1010,6 +1103,31 @@ mod tests {
             r.terms
                 .iter()
                 .all(|(_, m)| matches!(m, MasterIntegral::Box { .. }))
+        );
+    }
+
+    #[test]
+    fn dotted_pentagon_reduces_to_valid_masters() {
+        crate::ensure_symbolica_license();
+        let masses: Vec<Atom> = [1, 2, 3, 4, 5].iter().map(|&x| Atom::num(x)).collect();
+        let invariants: Vec<Atom> = [3, 5, 7, 9, 4, 6, 8, 5, 7, 6]
+            .iter()
+            .map(|&x| Atom::num(x))
+            .collect();
+        // pentagon with one squared propagator
+        let r = reduce(&family(masses, invariants, vec![2, 1, 1, 1, 1]));
+        assert!(!r.terms.is_empty());
+        assert!(r.terms.iter().all(|(_, m)| matches!(
+            m,
+            MasterIntegral::Box { .. }
+                | MasterIntegral::Triangle { .. }
+                | MasterIntegral::Bubble { .. }
+                | MasterIntegral::Tadpole { .. }
+        )));
+        assert!(
+            r.terms
+                .iter()
+                .any(|(_, m)| matches!(m, MasterIntegral::Triangle { .. }))
         );
     }
 
