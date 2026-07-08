@@ -73,6 +73,15 @@ const EPEM_A_BBX_INTEGRATED_UV_INTEGRATOR: IntegratedUvIntegratorSettings =
         n_cores: 1,
     };
 
+const DOTTED_DT_INTEGRATED_UV_INTEGRATOR: IntegratedUvIntegratorSettings =
+    IntegratedUvIntegratorSettings {
+        target_relative_accuracy: 0.04,
+        n_start: 10_000,
+        n_increase: 0,
+        n_max: 50_000,
+        n_cores: 1,
+    };
+
 #[derive(Default)]
 struct IntegratedUvTargets {
     integrated: Option<Complex<F<f64>>>,
@@ -1163,7 +1172,7 @@ fn dotted_dt_uv() {
         test_name: "dotted_dt",
         process: "dotted_dt",
         integrand_name: "dotted_dt",
-        integrator: DEFAULT_INTEGRATED_UV_INTEGRATOR,
+        integrator: DOTTED_DT_INTEGRATED_UV_INTEGRATOR,
         original_m_uv: 0.2,
         shifted_m_uv: 0.5,
         original_renormalization_localization_scale: 0.2,
