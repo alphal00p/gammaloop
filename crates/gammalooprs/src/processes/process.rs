@@ -895,6 +895,7 @@ impl Process {
     ) -> Result<Vec<GeneratedGraphReport>> {
         let reports = self.collection.generate_integrands(
             model,
+            &self.definition.folder_name,
             global_settings,
             runtime_default,
             thread_pool,
@@ -1107,6 +1108,7 @@ impl ProcessCollection {
     fn generate_integrands(
         &mut self,
         model: &Model,
+        process_name: &str,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
         thread_pool: &ThreadPool,
@@ -1117,6 +1119,7 @@ impl ProcessCollection {
                 for amplitude in amplitudes.values_mut() {
                     reports.extend(amplitude.build_integrand(
                         model,
+                        process_name,
                         global_settings,
                         runtime_default,
                         thread_pool,
@@ -1129,6 +1132,7 @@ impl ProcessCollection {
                 for cross_section in cross_sections.values_mut() {
                     reports.extend(cross_section.build_integrand(
                         model,
+                        process_name,
                         global_settings,
                         runtime_default,
                         thread_pool,

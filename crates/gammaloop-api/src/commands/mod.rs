@@ -31,6 +31,8 @@ pub mod remove;
 pub use remove::Remove;
 pub mod save;
 pub use save::Save;
+pub mod select;
+pub use select::Select;
 pub mod set;
 pub mod shell;
 pub use set::Set;
@@ -107,6 +109,8 @@ pub enum Commands {
     Integrate(Integrate),
 
     Generate(Generate),
+
+    Select(Select),
 
     /// Quit gammaloop
     Quit(SaveState),
@@ -226,6 +230,9 @@ impl Commands {
                     default_runtime_settings,
                 )?
             }
+            Commands::Select(s) => {
+                s.run(state, global_cli_settings)?;
+            }
             Commands::Integrate(g) => {
                 return Ok(CommandExecution::continue_with(CommandOutput::Integrate(
                     g.run(state, global_cli_settings)?,
@@ -285,10 +292,80 @@ mod tests {
     use super::Commands;
     use crate::{
         commands::generate::{Generate, GenerateCmd, ProcessArgs},
-        state::{RunHistory, State},
+        state::{ProcessRef, RunHistory, State},
         CLISettings,
     };
     use gammalooprs::settings::RuntimeSettings;
+
+    #[test]
+    fn select_command_parses_graph_names() {
+        let command: Commands =
+            "select -p #0 -i default --with-graph-names GL04 GL05 --without-graph-names GL06"
+                .parse()
+                .unwrap();
+        match command {
+            Commands::Select(select) => {
+                assert_eq!(select.process, Some(ProcessRef::Id(0)));
+                assert_eq!(select.integrand_name.as_deref(), Some("default"));
+                assert_eq!(
+                    select.with_graph_names,
+                    vec!["GL04".to_string(), "GL05".to_string()]
+                );
+                assert_eq!(select.without_graph_names, vec!["GL06".to_string()]);
+            }
+            other => panic!("expected select command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn select_command_parses_filter_options() {
+        let command: Commands = "select -p #0 -i default --amplitude-graphs --with-raised-propagator-signatures '[2]' --without-massive-raised-propagator-signatures '[]' --with-cycle-signatures '[(3,21)]' --without-cycle-signatures '[(ghost)]' --with-vertices '[V_6,V_9]' --without-vertices '[V_36]' --with-particles '[t,b]' '[g]' --without-particles '(e+,e-)'"
+            .parse()
+            .unwrap();
+        match command {
+            Commands::Select(select) => {
+                assert!(select.amplitude_graphs);
+                assert_eq!(
+                    select.with_raised_propagator_signatures,
+                    vec!["[2]".to_string()]
+                );
+                assert_eq!(
+                    select.without_massive_raised_propagator_signatures,
+                    vec!["[]".to_string()]
+                );
+                assert_eq!(select.with_cycle_signatures, vec!["[(3,21)]".to_string()]);
+                assert_eq!(
+                    select.without_cycle_signatures,
+                    vec!["[(ghost)]".to_string()]
+                );
+                assert_eq!(select.with_vertices, vec!["[V_6,V_9]".to_string()]);
+                assert_eq!(select.without_vertices, vec!["[V_36]".to_string()]);
+                assert_eq!(
+                    select.with_particles,
+                    vec!["[t,b]".to_string(), "[g]".to_string()]
+                );
+                assert_eq!(select.without_particles, vec!["(e+,e-)".to_string()]);
+            }
+            other => panic!("expected select command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn select_command_parses_output_targets() {
+        let command: Commands = "select -p #0 -i default --with-graph-names GL04 --output_process selected_proc --output_integrand selected_itg --clear-existing-processes"
+            .parse()
+            .unwrap();
+        match command {
+            Commands::Select(select) => {
+                assert_eq!(select.process, Some(ProcessRef::Id(0)));
+                assert_eq!(select.integrand_name.as_deref(), Some("default"));
+                assert_eq!(select.output_process.as_deref(), Some("selected_proc"));
+                assert_eq!(select.output_integrand.as_deref(), Some("selected_itg"));
+                assert!(select.clear_existing_processes);
+            }
+            other => panic!("expected select command, got {other:?}"),
+        }
+    }
 
     #[test]
     fn generate_rejects_compilation_into_active_state_in_read_only_mode() {

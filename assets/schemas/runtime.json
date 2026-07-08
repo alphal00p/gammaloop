@@ -66,13 +66,287 @@
         "hyperspherical",
         "hyperspherical_flat",
         "momentum_space",
-        "tropical"
+        "tropical",
+        "relative_spherical",
+        "spherical_common_radial",
+        "spherical_product_common_radial"
+      ]
+    },
+    "CountRangeSelectorSerdeTag": {
+      "type": "string",
+      "enum": [
+        "count_range"
+      ]
+    },
+    "CountRangeSelectorSettingsSerde": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "entry_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "entry_selection": {
+          "$ref": "#/$defs/EntrySelection"
+        },
+        "max_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "min_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "quantity": {
+          "type": "string"
+        },
+        "selector": {
+          "$ref": "#/$defs/CountRangeSelectorSerdeTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "quantity",
+        "selector",
+        "min_count"
       ]
     },
     "Dep": {
       "type": "string",
       "enum": [
         "dependent"
+      ]
+    },
+    "DiscreteBinDomainSettings": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "max": {
+              "type": "integer",
+              "format": "int"
+            },
+            "min": {
+              "type": "integer",
+              "format": "int"
+            },
+            "type": {
+              "type": "string",
+              "const": "explicit_range"
+            }
+          },
+          "required": [
+            "type",
+            "min",
+            "max"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "single_bin"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_group_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "orientation_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "lmb_channel_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "DiscreteBinLabelsSettings": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "custom"
+            }
+          },
+          "required": [
+            "type",
+            "labels"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "bin_id"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_name"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_group_master_name"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "orientation"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "lmb_channel_edge_ids"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "DiscreteBinOrdering": {
+      "type": "string",
+      "enum": [
+        "ascending_bin_id",
+        "value_descending",
+        "abs_value_descending"
+      ]
+    },
+    "DiscreteRangeSelectorSerdeTag": {
+      "type": "string",
+      "enum": [
+        "discrete_range"
+      ]
+    },
+    "DiscreteRangeSelectorSettingsSerde": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "entry_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "entry_selection": {
+          "$ref": "#/$defs/EntrySelection"
+        },
+        "max": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int"
+        },
+        "min": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int"
+        },
+        "quantity": {
+          "type": "string"
+        },
+        "selector": {
+          "$ref": "#/$defs/DiscreteRangeSelectorSerdeTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "quantity",
+        "selector"
       ]
     },
     "EntrySelection": {
@@ -210,6 +484,10 @@
         "orientation_pat": {
           "$ref": "#/$defs/OrientationPattern"
         },
+        "renormalization_localization_scale": {
+          "type": "number",
+          "format": "double"
+        },
         "store_additional_weights_in_event": {
           "type": "boolean"
         },
@@ -288,6 +566,13 @@
             "summed-averaged"
           ]
         }
+      ]
+    },
+    "HistogramKindSerde": {
+      "type": "string",
+      "enum": [
+        "continuous",
+        "discrete"
       ]
     },
     "ImprovementMode": {
@@ -509,6 +794,13 @@
       },
       "additionalProperties": false
     },
+    "LmbChannelWeight": {
+      "type": "string",
+      "enum": [
+        "ose",
+        "inverse_jacobian"
+      ]
+    },
     "LocalCounterTermSettings": {
       "type": "object",
       "properties": {
@@ -536,6 +828,16 @@
     "ObservableSettings": {
       "type": "object",
       "properties": {
+        "domain": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiscreteBinDomainSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "entry_index": {
           "type": "integer",
           "format": "uint",
@@ -544,11 +846,38 @@
         "entry_selection": {
           "$ref": "#/$defs/EntrySelection"
         },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HistogramKindSerde"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiscreteBinLabelsSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "log_x_axis": {
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "log_y_axis": {
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "misbinning_max_normalized_distance": {
           "type": [
@@ -558,9 +887,22 @@
           "format": "double"
         },
         "n_bins": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint",
           "minimum": 0
+        },
+        "ordering": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiscreteBinOrdering"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "phase": {
           "$ref": "#/$defs/ObservablePhase"
@@ -568,26 +910,39 @@
         "quantity": {
           "type": "string"
         },
+        "selections": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "title": {
-          "description": "Optional histogram title. Defaults to the observable name when omitted.",
           "type": [
             "string",
             "null"
           ]
         },
         "type_description": {
-          "description": "HwU TYPE description written after TYPE@ in the histogram header.",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "value_transform": {
           "$ref": "#/$defs/ObservableValueTransform"
         },
         "x_max": {
-          "type": "number",
+          "type": [
+            "number",
+            "null"
+          ],
           "format": "double"
         },
         "x_min": {
-          "type": "number",
+          "type": [
+            "number",
+            "null"
+          ],
           "format": "double"
         }
       },
@@ -607,7 +962,10 @@
       "type": "object",
       "properties": {
         "format": {
-          "$ref": "#/$defs/ObservableFileFormat"
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObservableFileFormat"
+          }
         }
       },
       "additionalProperties": false
@@ -674,6 +1032,7 @@
       "type": "string",
       "enum": [
         "log",
+        "power",
         "linear"
       ]
     },
@@ -954,7 +1313,55 @@
           "properties": {
             "type": {
               "type": "string",
-              "const": "cross_section"
+              "const": "integral"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_id"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "graph_group_id"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "orientation_id"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "lmb_channel_id"
             }
           },
           "required": [
@@ -1066,6 +1473,10 @@
     "SamplingSettings": {
       "type": "object",
       "properties": {
+        "alpha": {
+          "type": "number",
+          "format": "double"
+        },
         "b": {
           "type": "number",
           "format": "double"
@@ -1075,6 +1486,20 @@
         },
         "graphs": {
           "$ref": "#/$defs/SumMode"
+        },
+        "lmb_basis_ids": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          }
+        },
+        "lmb_channel_weight": {
+          "$ref": "#/$defs/LmbChannelWeight"
         },
         "lmb_channels": {
           "$ref": "#/$defs/SumMode"
@@ -1087,72 +1512,13 @@
         },
         "orientations": {
           "$ref": "#/$defs/SumMode"
+        },
+        "power": {
+          "type": "number",
+          "format": "double"
         }
       },
       "additionalProperties": false
-    },
-    "SelectorDefinitionSettings": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "max": {
-              "description": "Optional upper bound. Use null to disable the upper cut.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "format": "double"
-            },
-            "min": {
-              "description": "Optional lower bound. Use null to disable the lower cut.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "format": "double"
-            },
-            "reduction": {
-              "$ref": "#/$defs/SelectorReduction"
-            },
-            "selector": {
-              "type": "string",
-              "const": "value_range"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "selector"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "max_count": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint",
-              "minimum": 0
-            },
-            "min_count": {
-              "type": "integer",
-              "format": "uint",
-              "minimum": 0
-            },
-            "selector": {
-              "type": "string",
-              "const": "count_range"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "selector",
-            "min_count"
-          ]
-        }
-      ]
     },
     "SelectorReduction": {
       "type": "string",
@@ -1162,28 +1528,16 @@
       ]
     },
     "SelectorSettings": {
-      "type": "object",
-      "properties": {
-        "entry_index": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ValueRangeSelectorSettingsSerde"
         },
-        "entry_selection": {
-          "$ref": "#/$defs/EntrySelection"
+        {
+          "$ref": "#/$defs/DiscreteRangeSelectorSettingsSerde"
         },
-        "quantity": {
-          "type": "string"
-        },
-        "selector": {
-          "$ref": "#/$defs/SelectorDefinitionSettings"
+        {
+          "$ref": "#/$defs/CountRangeSelectorSettingsSerde"
         }
-      },
-      "required": [
-        "quantity",
-        "entry_selection",
-        "entry_index",
-        "selector"
       ]
     },
     "StabilityLevelSetting": {
@@ -1298,6 +1652,9 @@
         "dynamic_width": {
           "type": "boolean"
         },
+        "force_uv_dampers_to_one": {
+          "type": "boolean"
+        },
         "gaussian_width": {
           "type": "number",
           "format": "double"
@@ -1333,6 +1690,56 @@
       },
       "required": [
         "n_3d_momenta"
+      ]
+    },
+    "ValueRangeSelectorSerdeTag": {
+      "type": "string",
+      "enum": [
+        "value_range"
+      ]
+    },
+    "ValueRangeSelectorSettingsSerde": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "entry_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "entry_selection": {
+          "$ref": "#/$defs/EntrySelection"
+        },
+        "max": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "min": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "quantity": {
+          "type": "string"
+        },
+        "reduction": {
+          "$ref": "#/$defs/SelectorReduction"
+        },
+        "selector": {
+          "$ref": "#/$defs/ValueRangeSelectorSerdeTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "quantity",
+        "selector"
       ]
     }
   }

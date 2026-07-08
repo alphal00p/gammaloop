@@ -5,7 +5,7 @@ use idenso::{
     representations::{ColorAdjoint, ColorFundamental},
 };
 use spenso::{
-    network::parsing::ParseSettings,
+    network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
     structure::representation::{Minkowski, RepName},
 };
 
@@ -127,7 +127,15 @@ impl AtomCoreExt for AtomView<'_> {
             *self,
             TENSORLIB.read().unwrap().deref(),
             &ParseSettings {
-                parse_inner_products: false,
+                shorthand_parsing: ShorthandParsing::Expand {
+                    schoonschip: SchoonschipExpansionMode {
+                        inner_products: false,
+                        expand_schoonship: true,
+                        expand_inside_chains: true,
+                    },
+                    trace: true,
+                    chain: true,
+                },
                 ..Default::default()
             },
         )
@@ -149,7 +157,7 @@ mod tests {
     use idenso::IndexTooling;
     use linnet::half_edge::involution::EdgeIndex;
     use spenso::{
-        network::parsing::SPENSO_TAG,
+        network::tags::SPENSO_TAG,
         structure::{
             representation::{Minkowski, RepName},
             slot::{DummyAind, IsAbstractSlot, Slot},
@@ -183,7 +191,7 @@ mod tests {
 
         let e = EdgeIndex(0);
 
-        let sqrt = symbol!("sqrt_scalar", tag = SPENSO_TAG.tag);
+        let sqrt = symbol!("sqrt_scalar", tag = SPENSO_TAG.broadcast);
 
         let a = function!(
             sqrt,

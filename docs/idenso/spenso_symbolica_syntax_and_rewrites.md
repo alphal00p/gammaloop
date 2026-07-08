@@ -1,0 +1,416 @@
+# Spenso Symbolica Syntax And Rewrite Idioms
+
+This note describes the Symbolica syntax Spenso uses for tensor expressions and
+the Rust idioms for implementing algebraic rewrites over that syntax. It is
+meant as a general reference for tensor, metric, Schoonschip, Dirac, and color
+simplifiers; the FORM-derived identities in
+`docs/idenso/form_symbolica_color_and_dirac.typ` are examples of this style, not
+the definition of the syntax.
+
+## Tensor Syntax
+
+Spenso tensor expressions are Symbolica atoms. The names in the surface syntax
+mirror the Rust model:
+
+- a representation kind implements `RepName`;
+- a concrete representation is a `Representation<LibraryRep>`;
+- an indexed tensor slot is a `Slot<LibraryRep, Aind>`;
+- a symbolic tensor leaf carries a structure made from those slots.
+
+In Symbolica syntax, a tensor slot is a function whose head is the
+representation name. The first argument is always the dimension, and the second
+argument is the abstract index:
+
+```text
+mink(D, mu)
+```
+
+Here `mink` is the representation head, `D` is the dimension, and `mu` is the
+abstract index. The same representation without its index is the stripped
+representation:
+
+```text
+mink(D)
+```
+
+Tensor leaves are functions whose head is the tensor symbol and whose structural
+arguments are representation slots.
+
+```text
+F(mink(D, mu), cof(NC, i), dind(cof(NC, j)))
+```
+
+The standard slot spellings are:
+
+```text
+mink(D)          stripped Minkowski representation
+mink(D, mu)      indexed Minkowski slot
+bis(D, i)        indexed self-dual bispinor slot
+cof(NC, i)       indexed color-fundamental slot
+dind(cof(NC, j)) dual color-fundamental slot
+```
+
+`dind(...)` is the dual wrapper from `AIND_SYMBOLS`. Self-dual representations
+such as `mink`, `bis`, and `coad` use the same representation on both sides of a
+contraction. Dualizable representations such as `cof` use the unwrapped slot for
+one orientation and `dind(...)` for the dual orientation.
+
+Direct slot arguments define the exposed tensor structure. Non-slot arguments
+are metadata on the symbolic tensor leaf:
+
+```text
+P(1, mink(D, mu))     rank-one tensor with label 1 and one Lorentz slot
+T(a, b, cof(NC, i))   symbolic tensor with scalar labels a, b and one slot
+```
+
+The same convention is used in patterns: structural arguments are represented by
+slot or representation patterns, and scalar labels are ordinary Symbolica atoms.
+
+## Supported Surface Forms
+
+The parser and simplifiers recognize the following Spenso surface forms. The
+same row shows how to build the form, which tag or symbol makes it recognizable,
+and what to use when matching it in a replacement rule.
+
+| Surface form | Meaning | Concrete builder | Tag or symbol | Pattern form |
+| --- | --- | --- | --- | --- |
+| `f(args...)` with no representation-tagged syntax | pure scalar Symbolica expression | `function!(f, args...)` | no Spenso tensor tag | ordinary Symbolica pattern |
+| `pure_scalar(expr)` | force `expr` to parse as a scalar | `pure_scalar!(expr)` | `SPENSO_TAG.pure_scalar` symbol | `function!(T.pure_scalar, W_.x_)` |
+| `rep(dim)` | stripped representation, for compact notation or traces | `mink!(D)`, `bis!(D)`, `cof!(NC)`, `coad!(NA)` | representation head tagged `representation` | `rep_!(N; W_.d_)` |
+| `rep(dim, i)` | indexed representation slot | `mink!(D, mu)`, `bis!(D, i)`, `cof!(NC, i)`, `slot!(rep, i)` | representation head tagged `representation`; maybe `self_dual` or `dualizable` | `rep_!(N; W_.d_, W_.i_)`, `self_dual_!(N; ...)`, `dualizable_!(N; ...)` |
+| `dind(rep(dim, i))` | dual slot | `dind!(cof!(NC, i))` or `slot.dual().to_atom()` | `dind` dual wrapper plus representation tags | `dualizable_dual_!(N; W_.d_, W_.i_)` |
+| `aind(slot...)` | bundle of structural slots inside one argument | `aind!(slots...)` | `AIND_SYMBOLS.aind` symbol | `function!(AIND_SYMBOLS.aind, W_.x___)` |
+| `F(..., slot, ...)` | ordinary tensor leaf; direct slots define structure | `tensor!(F, args...)` | head tagged `tensor` | `tensor_!(N; W_.a___)` or `function!(W_.f_, args...)` |
+| `p(..., rep(dim))` | compact rank-one tensor shorthand | `vector!(p, args...)`, `p!(args...)`, `q!(args...)` | head tagged `tensor` and `rank1` | `rank1_!(N; W_.a___, rep_!(M; W_.d_))` |
+| `g(slot_a, slot_b)` | metric tensor syntax | `g!(a, b)` or `metric!(a, b)` | `ETS.metric` symbol | `function!(ETS.metric, a, b)` |
+| `g(p(rep), q(rep))` | compact scalar product shorthand | `g!(p, q)` or `metric!(p, q)` | `ETS.metric` plus rank-one compact arguments | `function!(ETS.metric, rank1_!(0; ...), rank1_!(1; ...))` |
+| `dot(p(rep), q(rep))` | two-argument compact dot shorthand | `dot!(p, q)` | `SPENSO_TAG.dot` symbol | `function!(T.dot, a, b)` |
+| `chain(start, end, factors...)` | ordered open chain | `chain!(start, end, factors...)` | `SPENSO_TAG.chain` symbol; ordered arguments | `chain!(start, end, factors...)` |
+| `trace(rep)` | empty closed trace | `trace!(rep)` | `SPENSO_TAG.trace` symbol | `trace!(rep)` |
+| `trace(rep, cyclic(factors...))` | ordinary closed trace with cyclic factor order | `trace!(rep, factors...)` or `trace!(rep, cyclic!(factors...))` | `SPENSO_TAG.trace` plus `CYCLIC` with `Cyclesymmetric` attribute | `trace!(rep, cyclic!(args...))` |
+| `trace(rep, sym(factors...))` | fully symmetric closed trace invariant | `trace_sym!(rep, factors...)` | `SPENSO_TAG.trace` plus `SYM` with `Symmetric` attribute | `trace_sym!(rep, args...)` |
+| `epsilon(args...)` | antisymmetric Levi-Civita tensor for idenso epsilon algebra | `epsilon!(args...)` | `EPSILON_SYMBOL` with `Antisymmetric` attribute | `function!(*EPSILON_SYMBOL, W_.x___)` |
+| `bracket(expr...)` | product-like parser grouping of network factors | `bracket!(expr...)` | `SPENSO_TAG.bracket` symbol | `function!(T.bracket, W_.x___)` |
+| `broadcast(expr)` | apply a scalar/broadcast function to the parsed inner tensor | `broadcast_symbol!(f)` then `function!(f, expr)` | head tagged `broadcast` | `function!(W_.f_, W_.x_)` with a broadcast-head condition |
+| `sum`, `product`, `integer power` | ordinary Symbolica arithmetic, parsed recursively | `+`, `*`, `.pow(...)` | Symbolica arithmetic nodes | ordinary Symbolica pattern, with conditions for exponent cases |
+
+`dot` is a two-argument shorthand. A three-argument spelling such as
+`dot(rep, p, q)` is not parser syntax.
+
+For compact vector arguments, `g(p(rep), q(rep))` and `dot(p(rep), q(rep))`
+materialize to the same expanded tensor product:
+
+```text
+p(rep(d)) * q(rep(d))
+```
+
+The difference is the Symbolica head. `g` is the actual metric tensor head
+(`ETS.metric`), so it is also the spelling for explicit slot metrics such as
+`g(rep(d), rep(e))`. `dot` is only the compact scalar-product shorthand, and its
+symbol carries Symbolica's `Linear` attribute while `g` does not. This matters
+before parser materialization, because Symbolica may distribute `dot` over sums
+as ordinary linear algebra syntax.
+
+`chain` is ordered and non-symmetric. Ordinary non-empty traces are stored as
+`trace(rep, cyclic(factors...))`, never as an ordered raw factor list. Fully
+symmetric trace invariants use `trace(rep, sym(factors...))`.
+A factor inside a chain or trace uses the symbols `in` and `out` as local
+placeholder slots:
+
+```text
+chain(bis(D, i), bis(D, j),
+  gamma(in, out, mink(D, mu)),
+  gamma(in, out, mink(D, nu)))
+
+trace(bis(D), cyclic(
+  gamma(in, out, mink(D, mu)),
+  gamma(in, out, mink(D, nu))))
+```
+
+In expanded parsing, chain materialization replaces `in` and `out` with actual
+slots and creates intermediate dummy slots between adjacent factors. In opaque
+parsing, the chain or trace remains a leaf and its exposed structure is inferred
+from the endpoints and visible external slots.
+
+The trace macro does the cyclic wrapping automatically:
+
+```text
+trace!(rep, A, B, C) -> trace(rep, cyclic(A, B, C))
+trace(rep, cyclic(A, B, C)) = trace(rep, cyclic(B, C, A))
+trace_sym!(rep, A, B, C) -> trace(rep, sym(A, B, C))
+trace(rep, cyclic(sym(A, B, C))) -> trace(rep, sym(A, B, C))
+```
+
+`cyclic` is a Symbolica `Cyclesymmetric` head. It is not the same as a symmetric
+projector: it only identifies rotations, not arbitrary permutations. Its
+Symbolica normalization rule unwraps a single symmetric projector argument,
+because `sym(...)` is already stronger than cyclic equivalence.
+
+Compact Schoonschip-style rank-one notation is local shorthand:
+
+```text
+F(..., p(mink(D)), ...) -> F(..., mink(D, d), ...) * p(mink(D, d))
+g(p(mink(D)), q(mink(D))) -> p(mink(D, d)) * q(mink(D, d))
+dot(p(mink(D)), q(mink(D))) -> p(mink(D, d)) * q(mink(D, d))
+```
+
+The stripped representation in `p(mink(D))` means that `p` replaces a tensor
+slot whose explicit index has been omitted. It is valid only where there is a
+slot to replace: as an argument of another tensor, or under a recognized compact
+scalar-product head such as `g` or `dot`. For example, `p!(q!(mink!(4)))` is
+valid shorthand for replacing the slot of `p` by the compact vector `q`; it
+materializes to `p(mink(4, d)) * q(mink(4, d))`. A bare product such as
+`p!(mink!(4)) * q!(mink!(4))` is malformed Schoonschip input, because neither
+vector is replacing an omitted slot.
+
+The dummy `d` is fresh and local to the materialized expansion.
+
+## Tagged Builders And Patterns
+
+Concrete expression builders, parser detection, and replacement patterns are the
+three uses of the same `SPENSO_TAG` mechanism shown in the table above. Spenso
+does not identify tensor syntax by string names alone. A symbol for `mink`
+carries the `representation` tag; a self-dual representation also carries
+`self_dual`; a dualizable representation also carries `dualizable`. Tensor heads
+such as `F`, `gamma`, and `t` carry `tensor`, while vector heads such as `p`,
+`q`, `u`, and `v` carry both `tensor` and `rank1`. Broadcast heads carry
+`broadcast`.
+
+The expression macros are the concrete builders for the rows in the surface-form
+table. Representation helpers such as `mink!`, `euc!`, `lor!`, `bis!`, `spf!`,
+`cof!`, `cos!`, and `coad!` build stripped or indexed representation atoms.
+Their dual-representation aliases `spaf!`, `coaf!`, and `coas!` are available
+when explicit dual representation syntax is needed. `slot!(rep, mu)` builds a
+concrete `Slot<LibraryRep, Aind>` and prints as `rep(dim, mu)`. `tensor!(F,
+args...)` creates a tensor-tagged head. `vector!(p, args...)`, and the short
+`p!(...)` and `q!(...)` forms, create rank-one tensor heads. `g!`/`metric!`,
+`dot!`, `pure_scalar!`, `bracket!`, `aind!`, and `dind!` cover the named parser
+forms. `chain!` builds an ordered open container, while `trace!` builds the
+cyclic closed container and `trace_sym!` builds the symmetric closed trace
+invariant, including iterator forms `chain!(start, end; factors)`,
+`trace!(rep; factors)`, and `trace_sym!(rep; factors)`. `chain_factor!` builds a
+generic ordered factor with explicit `in` and `out` placeholders.
+`sym!`, `antisym!`, and `cyclic!` build inert ordered projectors.
+`function!(head, args...)` remains the fallback when there is no
+Spenso-specific builder, and `s!(mu)` is the lightweight plain-symbol helper for
+labels and indices.
+
+When adding new heads, use the symbol-constructor macro for the semantic class
+you need: `tensor_symbol!(F)`, `vector_symbol!(p)`,
+`representation_symbol!(rep)`, `self_dual_symbol!(mink)`,
+`dualizable_symbol!(cof)`, or `broadcast_symbol!(sqrt)`. These macros are the
+concrete side of the same tag system used by the pattern constructors.
+
+For concrete expressions in tests and examples, prefer the expression macros:
+
+```rust
+use idenso::{epsilon, gamma};
+use spenso::{chain, dot, p, q, slot};
+
+let mu = slot!(mink4, mu);
+let expr = chain!(
+    slot!(bis4, i),
+    slot!(bis4, j),
+    gamma!(mu),
+    gamma!(slot!(mink4, nu)),
+);
+let dot = dot!(p!(&mink4), q!(&mink4));
+let eps = epsilon!(slot!(mink4, mu), slot!(mink4, nu), slot!(mink4, rho));
+```
+
+For replacement rules, use wildcard-head macros with the same tags instead of
+naming one concrete symbol. `rep_!(N; args...)` matches any representation
+syntax; `self_dual_!(N; args...)` restricts that to self-dual representations;
+`dualizable_!(N; args...)` and `dualizable_dual_!(N; args...)` match the two
+orientations of dualizable representations; `tensor_!(N; args...)` matches any
+tensor-tagged head; and `rank1_!(N; args...)` matches any rank-one tensor head.
+Numbered constructors create independent wildcard heads, so `rank1_!(0; ...)`
+and `rank1_!(1; ...)` can match two different vector symbols in the same rule.
+These macros return atoms, not patterns. Put `.to_pattern()` on the complete
+left-hand side after composing products, sums, or fixed-head functions.
+
+```rust
+use spenso::{rank1_, self_dual_};
+
+let slot = self_dual_!(0; W_.d_, W_.i_);
+let stripped = self_dual_!(0; W_.d_);
+let lhs = rank1_!(0; W_.a___, &slot) * rank1_!(1; W_.b___, &slot);
+let rhs = function!(
+    T.dot,
+    rank1_!(0; W_.a___, &stripped),
+    rank1_!(1; W_.b___, &stripped),
+);
+```
+
+Use `function!(W_.f_, args...)` when the head itself is arbitrary Symbolica
+syntax rather than a tagged tensor class. Use `function!(ETS.metric, a, b)` for
+metric rules and `function!(T.dot, a, b)` for compact dot rules. `chain!` is the
+preferred pattern builder for ordered open containers; `trace!` is the preferred
+builder for cyclic closed containers; `trace_sym!` is the preferred builder for
+fully symmetric closed trace invariants.
+
+`W_` contains the plain Symbolica wildcards used inside these constructors:
+`x_` matches one atom, `x__` matches one or more atoms, and `x___` matches zero
+or more atoms. Repeating a wildcard name enforces equality; different names mean
+independent matches. Add conditions when tags and wildcard shape are still too
+broad, for example `filter_single` for even/odd powers, `filter_match` for
+structural predicates, or local predicates such as `not_slot(...)` to prevent
+variadic tails from swallowing structural slots.
+
+idenso adds domain-specific expression macros for common Dirac objects:
+`gamma!`, `gamma0!`, `gamma5!`, `u!`, and `v!`. It also has the Levi-Civita
+builder `epsilon!` and color builders `color_t!`, `t!`, `color_f!`, `f!`,
+`color_d!`, `color_d33!`, `color_gram!`, `color_cas!`, `color_idx!`, and
+`color_str_t!` (`STrT!`). The color generator and structure-constant macros
+follow the same pattern and bracket conventions as `gamma!`: `RS.a__`-style
+pattern variables become symbolic representation arguments, and bracketed forms
+such as `[CS.adj_, RS.a_]` spell out representation arguments explicitly.
+Numeric literals become default-dimension slots, while bare Rust identifiers are
+treated as expressions so local slot bindings are used as-is. Use these in tests
+and examples when they make the expression read like the algebra. In generic
+rewrite rules, still match the structural class with Spenso tag patterns when
+the rule is not specific to one concrete head.
+
+Color simplification emits scalar invariant heads `idx(k, rep)`,
+`cas(k, rep)`, and `gram(k, rep_left, rep_right)` for Dynkin indices, Casimir
+eigenvalues, and contracted symmetric traces. These heads are plain scalar
+Symbolica functions even though their arguments include stripped
+representations, so TensorNetwork parsing should not treat them as tensor
+leaves. Call `ColorSimplifySettings::default().with_cof_dimension_invariants()`
+when a caller needs supported `cof(N)` cases rewritten to explicit dimension
+formulas before numeric evaluation or graph grouping.
+
+## Rust Rewrite Idioms
+
+Prefer a small pass type over a pile of free helpers:
+
+```rust
+struct DotNormalizer;
+
+impl DotNormalizer {
+    fn run(view: AtomView<'_>) -> Atom {
+        view.to_owned()
+            .replace_multiple_repeat(&VECTOR_RULES[..])
+            .replace_multiple_repeat(&METRIC_RULES[..])
+    }
+
+    fn even_power(view: AtomView<'_>) -> bool {
+        // predicate body
+    }
+}
+```
+
+For settings-driven simplifiers, keep the settings on the pass object and make
+the pass order explicit:
+
+```rust
+struct AlgebraSimplifier<'a> {
+    settings: &'a AlgebraSettings,
+}
+
+impl AlgebraSimplifier<'_> {
+    fn run(&self, view: AtomView<'_>) -> Atom {
+        let mut current = view.to_owned();
+        loop {
+            let next = self.apply_once(current.as_view());
+            if next == current {
+                return next;
+            }
+            current = next;
+        }
+    }
+
+    fn apply_once(&self, view: AtomView<'_>) -> Atom {
+        // ordered passes
+        view.to_owned()
+    }
+}
+```
+
+Use private static replacement tables for local, static identities:
+
+```rust
+use spenso::{rank1_, self_dual_};
+
+static VECTOR_DOT_PRODUCTS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
+    let slot = self_dual_!(0; W_.d_, W_.i_);
+    let stripped = self_dual_!(0; W_.d_);
+
+    [Replacement::new(
+        (rank1_!(0; W_.a___, &slot) * rank1_!(1; W_.b___, &slot)).to_pattern(),
+        function!(
+            T.dot,
+            rank1_!(0; W_.a___, &stripped),
+            rank1_!(1; W_.b___, &stripped),
+        ),
+    )]
+});
+```
+
+This style is appropriate when the right-hand side is determined entirely by the
+matched wildcard substitution.
+
+Current examples of this style are `CHAIN_NORMALIZATIONS` in
+`crates/idenso/src/chain.rs`, `TRACE_TERMINALS` in
+`crates/idenso/src/dirac/simplify.rs`, and `TRACE_TERMINALS` in
+`crates/idenso/src/color/mod.rs`. They are all local identities: the replacement
+does not need to inspect an ordered factor list, choose a contraction target,
+allocate fresh dummies, or branch on a simplification strategy.
+
+Use `replace_map` or `ReplaceBuilder::with_map` when the right-hand side must be
+computed from the match:
+
+- reversing or rotating ordered chain factors;
+- flipping `in` and `out` in reversed chain factors;
+- Chisholm rules depending on the parity or length of the matched middle;
+- recursive trace expansion;
+- cyclic color trace normalization;
+- loop-detection algorithms such as FORM `ReplaceLoop`;
+- fresh dummy allocation.
+
+This is also how FORM-style rules should be translated when FORM spells them as
+`id` rules inside an ordered procedure. A literal replacement in FORM may still
+depend on earlier `if (match(...))`, `repeat`, `ReplaceLoop`, `sum`, `renumber`,
+or C-side trace logic. In Rust, keep the local identity as a static replacement
+only when the Symbolica match already contains all information needed for the
+right-hand side. Otherwise put the strategy on a pass type, as in
+`DiracChainSimplifier` in `crates/idenso/src/dirac/simplify.rs`.
+
+`crates/idenso/src/epsilon.rs` is an example of a dynamic pass. Its right-hand
+side depends on the matched epsilon rank and factor positions: it emits
+`g(a,b) epsilon(...,a,...) -> epsilon(...,b,...)`,
+`epsilon(a_1,...,a_n) epsilon(b_1,...,b_n) -> det(g(a_i,b_j))`, and the matching
+power form `epsilon(a_1,...,a_n)^k -> det(g(a_i,a_j)) epsilon(...)^(k-2)`.
+
+Disable RHS caching when a map creates match-local fresh symbols:
+
+```rust
+let settings = MatchSettings {
+    rhs_cache_size: 0,
+    ..Default::default()
+};
+```
+
+Implement FORM-like simplifiers as ordered passes, not as one unordered
+`replace_multiple` table. Put cheap terminal rules first, then structural
+normalization, then broader recursive searches. If a pass can expose another
+rule in the same family, run to a fixed point with an equality guard.
+
+Keep semantic boundaries clear:
+
+- `chain` stays an opaque ordered container except inside chain materialization
+  or dedicated algebraic simplifiers. Ordinary non-empty `trace` stores its
+  factors under `cyclic(...)`; symmetric trace invariants use `sym(...)`.
+  Match them through `trace!`, `trace_sym!`, or the trace helper APIs that
+  flatten only the cyclic wrapper.
+- Four-dimensional identities must match a four-dimensional representation in
+  the pattern or check it in the map.
+- Fresh dummies belong at parser materialization or explicit dynamic rewrite
+  boundaries, not in static replacement tables.
+- Static rule tables should be private; expose only the small module entry point
+  needed by callers.
+- Unit tests for narrow rule families should live next to the implementation.
+  Larger FORM/FeynCalc/reference cases should stay in the broader test modules.
+
+The goal is source-backed named rule families plus a small ordered pass driver.
+Avoid a universal rewrite engine unless the algebraic strategy itself is shared.

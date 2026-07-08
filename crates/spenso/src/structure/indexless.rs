@@ -1,5 +1,6 @@
-use linnet::permutation::Permutation;
 use std::marker::PhantomData;
+
+use linnet::permutation::Permutation;
 use tabled::{builder::Builder, settings::Style};
 
 use super::{
@@ -239,7 +240,10 @@ impl<T: RepName<Dual = T>, Aind: AbsInd> TensorStructure for IndexLess<T, Aind> 
         self.structure.iter().map(|s| s.dim)
     }
 
-    fn get_aind(&self, _: usize) -> Option<Aind> {
+    fn get_aind(
+        &self,
+        _i: impl Into<super::SlotIndex>,
+    ) -> Option<<Self::Slot as IsAbstractSlot>::Aind> {
         None
     }
 
@@ -255,7 +259,7 @@ impl<T: RepName<Dual = T>, Aind: AbsInd> TensorStructure for IndexLess<T, Aind> 
         self.structure.len()
     }
 
-    fn get_slot(&self, _: usize) -> Option<Self::Slot> {
+    fn get_slot(&self, _i: impl Into<super::SlotIndex>) -> Option<Self::Slot> {
         None
     }
 
@@ -305,12 +309,15 @@ impl<T: RepName<Dual = T>, Aind: AbsInd> TensorStructure for IndexLess<T, Aind> 
         // Ok(permutation)
     }
 
-    fn get_rep(&self, i: usize) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>> {
-        self.structure.get(i).copied()
+    fn get_rep(
+        &self,
+        i: impl Into<super::SlotIndex>,
+    ) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>> {
+        self.structure.get(i.into().0).copied()
     }
 
-    fn get_dim(&self, i: usize) -> Option<Dimension> {
-        self.structure.get(i).map(|&r| r.into())
+    fn get_dim(&self, i: impl Into<super::SlotIndex>) -> Option<Dimension> {
+        self.structure.get(i.into().0).map(|&r| r.into())
     }
 }
 
@@ -507,10 +514,10 @@ impl<Name, Args, R: RepName<Dual = R>, Aind: AbsInd> TensorStructure
             fn external_dims_iter(&self)->impl Iterator<Item=Dimension>;
             fn external_structure_iter(&self) -> impl Iterator<Item = Self::Slot>;
             fn order(&self) -> usize;
-            fn get_slot(&self, i: usize) -> Option<Self::Slot>;
-            fn get_rep(&self, i: usize) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_aind(&self,i:usize)->Option<Aind>;
-            fn get_dim(&self, i: usize) -> Option<Dimension>;
+            fn get_slot(&self, i: impl Into<super::SlotIndex>) -> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<super::SlotIndex>) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_aind(&self,i: impl Into<super::SlotIndex>)->Option<Aind>;
+            fn get_dim(&self, i: impl Into<super::SlotIndex>) -> Option<Dimension>;
         }
     }
 }

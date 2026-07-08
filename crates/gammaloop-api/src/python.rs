@@ -1,3 +1,4 @@
+use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
     cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
     feyngen::diagram_generator::evaluate_overall_factor,
@@ -11,8 +12,9 @@ use gammalooprs::{
     },
     processes::{DotExportSettings, ProcessCollection},
     settings::{global::OrientationPattern, RuntimeSettings},
-    utils::tracing::{LogFormat, LogLevel},
+    utils::tracing::LogLevel,
 };
+use idenso::shorthands::{metric::to_dots_impl, schoonschip::Schoonschip};
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::{ModifySubSet, SuBitGraph},
@@ -32,7 +34,7 @@ use crate::{
     render_smart_toml,
     session::{display_command, CliSession, CliSessionState},
     settings_tree::{json_type_name, serialize_settings_with_defaults, value_at_path},
-    state::{ProcessRef, RunHistory, State},
+    state::{ProcessListExt, ProcessRef, RunHistory, State},
     CLISettings, LoadedState, StateLoadOption,
 };
 use ahash::{HashMap, HashMapExt};
@@ -54,7 +56,7 @@ use gammalooprs::feyngen::{
 use itertools::{self, Itertools};
 use std::{path::PathBuf, str::FromStr};
 
-use symbolica::{atom::AtomCore, parse};
+use symbolica::{atom::AtomCore, parse, printer::PrintOptions};
 // const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
@@ -80,6 +82,23 @@ pub(crate) fn evaluate_graph_overall_factor(overall_factor: &str) -> Result<Stri
 #[pyo3(name = "atom_to_canonical_string")]
 pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
     Ok(parse!(atom_str).to_canonical_string())
+}
+
+#[pyfunction]
+#[pyo3(name = "to_dots")]
+pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
+    let dotted = to_dots_impl(
+        parse!(atom_str, default_namespace = "python")
+            .to_dots()
+            .as_view(),
+    );
+    Ok(format!(
+        "{}",
+        dotted.as_view().printer(PrintOptions {
+            hide_namespace: Some(std::borrow::Cow::Borrowed("python")),
+            ..PrintOptions::file()
+        })
+    ))
 }
 
 #[pymodule(name = "_gammaloop")]
@@ -135,6 +154,7 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     */
     // m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
+    m.add_wrapped(wrap_pyfunction!(atom_to_dots))?;
     m.add_wrapped(wrap_pyfunction!(evaluate_graph_overall_factor))?;
     Ok(())
 }
@@ -1178,6 +1198,10 @@ fn additional_weight_key_to_string(key: AdditionalWeightKey) -> String {
         AdditionalWeightKey::ThresholdCounterterm { subset_index } => {
             format!("threshold_counterterm:{subset_index}")
         }
+        AdditionalWeightKey::AmplitudeThresholdCounterterm {
+            esurface_id,
+            overlap_group,
+        } => format!("threshold_counterterm:{esurface_id}:{overlap_group}"),
     }
 }
 
@@ -1261,9 +1285,23 @@ fn event_from_py_event(event: &PyEvent) -> Event {
                 "original" => AdditionalWeightKey::Original,
                 "full_multiplicative_factor" => AdditionalWeightKey::FullMultiplicativeFactor,
                 _ => match weight.key.strip_prefix("threshold_counterterm:") {
-                    Some(subset_index) => AdditionalWeightKey::ThresholdCounterterm {
-                        subset_index: subset_index.parse().unwrap_or_default(),
-                    },
+                    Some(indices) => {
+                        let mut indices = indices.split(':');
+                        let first = indices
+                            .next()
+                            .unwrap_or_default()
+                            .parse()
+                            .unwrap_or_default();
+                        match indices.next() {
+                            Some(second) => AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                                esurface_id: first,
+                                overlap_group: second.parse().unwrap_or_default(),
+                            },
+                            None => AdditionalWeightKey::ThresholdCounterterm {
+                                subset_index: first,
+                            },
+                        }
+                    }
                     None => AdditionalWeightKey::Original,
                 },
             };
@@ -2679,17 +2717,17 @@ impl GammaLoopAPI {
         )
     }
 
-    #[pyo3(name="get_dot_files", signature = (process_id=None, integrand_name=None,settings=DotExportSettings::default()))]
+    #[pyo3(name="get_dot_files", signature = (process=None, integrand_name=None, settings=DotExportSettings::default()))]
     pub(crate) fn get_dot_files(
         &mut self,
-        process_id: Option<usize>,
+        process: Option<ProcessRef>,
         integrand_name: Option<String>,
         settings: DotExportSettings,
     ) -> PyResult<String> {
         let (pid, name) = self
             .gammaloop_state
             .process_list
-            .find_integrand(process_id, integrand_name.as_ref())
+            .find_integrand_ref(process.as_ref(), integrand_name.as_ref())
             .map_err(|e| {
                 exceptions::PyException::new_err(format!("Could not find integrand: {}", e))
             })?;

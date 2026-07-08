@@ -13,6 +13,7 @@ use pyo3::{
     types::{PyList, PyTuple},
 };
 
+use idenso::tensor::SymbolicTensor;
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{
     TypeInfo,
@@ -25,6 +26,7 @@ use spenso::{
     network::{
         library::symbolic::{ETS, ExplicitKey},
         parsing::ShadowedStructure,
+        tags::SPENSO_TAG,
     },
     structure::{
         HasName, IndexLess, OrderedStructure, PermutedStructure, TensorStructure, ToSymbolic,
@@ -36,13 +38,12 @@ use spenso::{
         },
         slot::{IsAbstractSlot, Slot},
     },
-    tensors::symbolic::SymbolicTensor,
 };
 use symbolica::{
     api::python::PythonTransformer,
     atom::{
         Atom, AtomView, DefaultNamespace, FunctionBuilder, NamespacedSymbol, Symbol,
-        SymbolAttribute,
+        SymbolAttribute, SymbolBuilder,
     },
     state::Workspace,
     symbol,
@@ -55,7 +56,8 @@ use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
 use thiserror::Error;
 
 use idenso::{
-    IndexTooling, color::CS, gamma::AGS, metric::PermuteWithMetric, representations::Bispinor,
+    Cookable, color::CS, dirac::AGS, representations::Bispinor,
+    shorthands::metric::PermuteWithMetric,
 };
 
 use super::{ModuleInit, SliceOrIntOrExpanded};
@@ -213,7 +215,8 @@ impl SpensoName {
             && custom_normalization.is_none()
         // && custom_print.is_none()
         {
-            let id = Symbol::new(namespace.attach_namespace(&name))
+            let id = SymbolBuilder::new(namespace.attach_namespace(&name))
+                .with_tags(std::slice::from_ref(&SPENSO_TAG.tensor))
                 .build()
                 .map_err(|e| exceptions::PyTypeError::new_err(e.to_string()))?;
 
@@ -253,7 +256,9 @@ impl SpensoName {
 
         let name = namespace.attach_namespace(&name);
 
-        let mut symbol = Symbol::new(name).with_attributes(opts);
+        let mut symbol = SymbolBuilder::new(name)
+            .with_attributes(opts)
+            .with_tags(std::slice::from_ref(&SPENSO_TAG.tensor));
 
         if let Some(f) = custom_normalization {
             symbol = symbol.with_normalization_function(Box::new(
@@ -1475,7 +1480,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToDimension {
             Dimension::from(id)
         } else if let Ok(s) = dimension.extract::<PyBackedStr>() {
             let ns = "spenso_python";
-            let id = Symbol::new(NamespacedSymbol {
+            let id = SymbolBuilder::new(NamespacedSymbol {
                 symbol: format!("{}::{}", ns, s).into(),
                 namespace: ns.into(),
                 file: file!().into(),

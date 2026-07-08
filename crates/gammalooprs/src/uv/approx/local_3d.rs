@@ -1,15 +1,16 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::LazyLock};
 
 use eyre::eyre;
+use gammaloop_tracing_filter::debug_instrument;
 use linnet::half_edge::{
     involution::HedgePair,
     subgraph::{SuBitGraph, SubSetOps},
 };
 use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder},
+    atom::{Atom, AtomCore, FunctionBuilder, Symbol},
     function,
     id::Replacement,
-    parse,
+    symbol,
 };
 use tracing::instrument;
 
@@ -18,10 +19,7 @@ use crate::{
     debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
     settings::global::OrientationPattern,
-    utils::{
-        GS, W_,
-        symbolica_ext::{CallSymbol, LogPrint},
-    },
+    utils::{GS, W_, symbolica_ext::CallSymbol},
     uv::{
         ApproximationType, UltravioletGraph,
         approx::{ApproximationKernel, UVCtx},
@@ -30,7 +28,43 @@ use crate::{
 };
 use color_eyre::Result;
 
-pub struct Local3DApproximation;
+#[derive(Clone, Copy, Debug)]
+pub struct Local3DApproximation {
+    rescaling: Local3DLoopRescaling,
+}
+
+impl Local3DApproximation {
+    pub fn full() -> Self {
+        Self {
+            rescaling: Local3DLoopRescaling::FullSubgraph,
+        }
+    }
+
+    pub fn reduced() -> Self {
+        Self {
+            rescaling: Local3DLoopRescaling::ReducedSubgraph,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Local3DLoopRescaling {
+    FullSubgraph,
+    ReducedSubgraph,
+}
+
+static OSE_FOR_LOCAL_3D_SERIES: LazyLock<Symbol> = LazyLock::new(|| {
+    symbol!(
+        "gammalooprs::OSE_for_local_3d_series",
+        der = |_, arg, out| {
+            if arg == 2 {
+                **out = Atom::num(1);
+            } else {
+                **out = Atom::Zero;
+            }
+        }
+    )
+});
 
 impl Local3DApproximation {
     pub(crate) fn dependent(
@@ -64,6 +98,7 @@ impl Local3DApproximation {
         cuts: &CutSet,
         orientation_pattern: &OrientationPattern,
     ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
+        // debug_tags!(;"Computing root");
         Self::dependent(
             graph,
             &graph.empty_subgraph::<SuBitGraph>(),
@@ -72,6 +107,11 @@ impl Local3DApproximation {
         )
     }
 
+    #[debug_instrument(
+        current = %current.log_display(),
+        given = %given.log_display(),
+        reduced,
+    )]
     pub(crate) fn t_tilde<S: super::ForestNodeLike>(
         &self,
         ctx: &UVCtx<'_>,
@@ -88,7 +128,12 @@ impl Local3DApproximation {
         for (p, eid, e) in graph.iter_edges_of(current.subgraph()) {
             if p.is_paired() {
                 let e_mass = e.data.mass_atom();
-                reps.push(GS.split_mom_pattern(eid, e_mass, settings.inner_products));
+                reps.push(GS.split_mom_pattern(
+                    eid,
+                    current.lmb_id(),
+                    e_mass,
+                    settings.inner_products,
+                ));
             }
         }
 
@@ -107,7 +152,6 @@ impl Local3DApproximation {
         }
 
         let mut atomarg = cff * numerator;
-        // println!("CFF: {}", cff);
 
         // add data for OSE computation and add an explicit sqrt
         for (p, ei, e) in graph.iter_edges_of(current.subgraph()) {
@@ -119,6 +163,7 @@ impl Local3DApproximation {
                 let e_mass = e.data.mass_atom();
                 atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
                     ei,
+                    current.lmb_id(),
                     e_mass,
                     None,
                     settings.inner_products,
@@ -140,7 +185,7 @@ impl Local3DApproximation {
                         .with(
                             FunctionBuilder::new(GS.emr_vec)
                                 .add_arg(W_.x_)
-                                .add_args(&[W_.x___])
+                                .add_args([W_.x___])
                                 .finish(),
                         )
                         + externals * GS.rescale)
@@ -158,20 +203,57 @@ impl Local3DApproximation {
         );
 
         atomarg = atomarg.replace_multiple(&mom_reps);
-        let a = atomarg
-            .series(GS.rescale, Atom::Zero, (-1).into(), true)
-            .unwrap();
+        atomarg = atomarg
+            .replace(function!(GS.ose, W_.a___))
+            .with(function!(*OSE_FOR_LOCAL_3D_SERIES, W_.a___));
+
+        let a = atomarg.series(GS.rescale, Atom::Zero, -1).unwrap();
 
         let mut a = a
             .to_atom()
-            .replace(parse!("der(0,0,0,1, OSE(y__))"))
+            .replace(function!(
+                Symbol::DERIVATIVE,
+                0,
+                1,
+                *OSE_FOR_LOCAL_3D_SERIES,
+                W_.y___
+            ))
             .with(Atom::num(1))
-            .replace(parse!("der(x__, OSE(y__))"))
+            .replace(function!(
+                Symbol::DERIVATIVE,
+                W_.x___,
+                *OSE_FOR_LOCAL_3D_SERIES,
+                W_.y___
+            ))
             .with(Atom::num(0));
+        a = a
+            .replace(function!(*OSE_FOR_LOCAL_3D_SERIES, W_.a___))
+            .with(function!(GS.ose, W_.a___));
         a = a.replace(GS.rescale).with(Atom::num(1));
         Ok(a)
     }
 
+    fn measure_scaling<S: super::ForestNodeLike>(
+        &self,
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+    ) -> Atom {
+        let n_rescaled_loops = match self.rescaling {
+            Local3DLoopRescaling::FullSubgraph => ctx.graph.n_loops(current.subgraph()),
+            Local3DLoopRescaling::ReducedSubgraph => {
+                ctx.graph.n_loops(current.subgraph()) - ctx.graph.n_loops(given.subgraph())
+            }
+        };
+
+        Atom::var(GS.rescale).pow(3 * n_rescaled_loops as i64)
+    }
+
+    #[debug_instrument(
+        current = %current.log_display(),
+        given = %given.log_display(),
+        reduced,
+    )]
     pub(crate) fn t<S: super::ForestNodeLike>(
         &self,
         ctx: &UVCtx<'_>,
@@ -184,73 +266,88 @@ impl Local3DApproximation {
 
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_spatial_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]);
+        for m in &mom_reps {
+            debug_tags!(#uv,#momentum,#trace;mom_rep=%m,"Mom rep");
+        }
 
+        debug_tags!(#generation, #profile, #uv, #local, #summary;
+            stage = "local_3d_t_input",
+            byte_size = integrand.as_view().get_byte_size(),
+            "Local 3D T size checkpoint"
+        );
         let mut atomarg = integrand.replace_multiple(&mom_reps);
+        debug_tags!(#generation, #profile, #uv, #local, #summary;
+            stage = "local_3d_t_after_momentum_replacements",
+            byte_size = atomarg.as_view().get_byte_size(),
+            "Local 3D T size checkpoint"
+        );
 
-        // rescale the loop momenta in the whole subgraph, including previously expanded cycles
+        // Rescale the loop momenta in the current subgraph, including
+        // previously expanded cycles. Nested integrated loop variables are
+        // absent after integration, so these replacements are harmless no-ops.
         for e in &current.lmb().loop_edges {
             // println!("Rescale {}", e);
             atomarg = atomarg
                 .replace(GS.emr_vec_index(*e, W_.x___))
                 .with(GS.emr_vec_index(*e, W_.x___) * GS.rescale);
         }
+        debug_tags!(#generation, #profile, #uv, #local, #summary;
+            stage = "local_3d_t_after_loop_rescale",
+            byte_size = atomarg.as_view().get_byte_size(),
+            "Local 3D T size checkpoint"
+        );
 
         // (re-)expand OSEs from the subgraph only
-        for (_, eid, _) in graph.iter_edges_of(current.subgraph()) {
-            let eid = usize::from(eid) as i64;
+        for eid in current.lmb().loop_edges.iter() {
+            let eid = eid.0 as i64;
             // rescale the whole OSE so that the function itself has no poles during the expansion
-            atomarg = atomarg
-                .replace(function!(GS.ose, eid, W_.mom_, W_.mass_, W_.prop_))
-                .with(
-                    function!(
-                        GS.ose,
-                        eid,
-                        W_.mom_,
-                        GS.m_uv * GS.m_uv,
-                        (GS.m_uv * GS.m_uv * GS.rescale * GS.rescale + W_.prop_
-                            - GS.m_uv * GS.m_uv)
-                            / GS.rescale
-                            / GS.rescale
-                    ) * GS.rescale
-                        * GS.rescale,
-                )
-                .replace(function!(GS.ose, eid, W_.mom_, W_.a___)) //rescale the momenta for the same reason
-                .with_map(move |m| {
-                    let mut f = FunctionBuilder::new(GS.ose);
-                    f = f.add_arg(eid);
-                    f = f.add_arg(
-                        (m.get(W_.mom_)
-                            .unwrap()
-                            .to_atom()
-                            .replace(GS.rescale)
-                            .with(Atom::num(1) / GS.rescale)
-                            * GS.rescale)
-                            .expand()
-                            .replace(GS.rescale)
-                            .with(Atom::Zero),
-                    );
-                    f = f.add_arg(m.get(W_.a___).unwrap().to_atom());
-
-                    f.finish()
-                });
+            atomarg = atomarg.replace(function!(GS.ose, eid, W_.prop_)).with(
+                function!(
+                    GS.ose,
+                    eid,
+                    (GS.m_uv_expansion * GS.m_uv_expansion * GS.rescale * GS.rescale + W_.prop_
+                        - GS.m_uv_expansion * GS.m_uv_expansion)
+                        / GS.rescale
+                        / GS.rescale
+                ) * GS.rescale
+                    * GS.rescale,
+            )
         }
+        debug_tags!(#generation, #profile, #uv, #local, #summary;
+            stage = "local_3d_t_after_ose_rescale",
+            byte_size = atomarg.as_view().get_byte_size(),
+            "Local 3D T size checkpoint"
+        );
 
-        atomarg = (atomarg
-            * Atom::var(GS.rescale).pow(3 * graph.n_loops(current.subgraph()) as i64))
-        .replace(GS.rescale)
-        .with(Atom::num(1) / GS.rescale);
-        let a = atomarg
-            .series(GS.rescale, Atom::Zero, 0.into(), true)
-            .unwrap();
+        atomarg = (atomarg * self.measure_scaling(ctx, current, given))
+            .replace(GS.rescale)
+            .with(Atom::num(1) / GS.rescale);
+        debug_tags!(#generation, #profile, #uv, #local, #summary;
+            stage = "local_3d_t_before_series",
+            loop_edges = ?current.lmb().loop_edges,
+            byte_size = atomarg.as_view().get_byte_size(),
+            "Local 3D T size checkpoint"
+        );
 
-        let mut a = a
-            .to_atom()
-            .replace(parse!("der(0,0,0,1, OSE(y__))"))
-            .with(Atom::num(1))
-            .replace(parse!("der(x__, OSE(y__))"))
-            .with(Atom::num(0));
-        a = a.replace(GS.rescale).with(Atom::num(1));
-        debug_tags!(#uv,#local; expr=%a.log_print(Some(80)), "Local 3D approximation");
+        debug_tags!(#uv, #local, #before_series; log.expr = atomarg, "Before series in t");
+
+        let series = atomarg.series(GS.rescale, Atom::Zero, 0).unwrap();
+        let series_atom = series.to_atom();
+        debug_tags!(#generation, #profile, #uv, #local, #summary;
+            stage = "local_3d_t_after_series",
+            byte_size = series_atom.as_view().get_byte_size(),
+            "Local 3D T size checkpoint"
+        );
+
+        debug_tags!(#uv, #local; expr = %series, "After series in t");
+        let a = series_atom.replace(GS.rescale).with(Atom::num(1));
+
+        debug_tags!(#generation, #profile, #uv, #local, #summary;
+            stage = "local_3d_t_output",
+            byte_size = a.as_view().get_byte_size(),
+            "Local 3D T size checkpoint"
+        );
+        debug_tags!(#uv, #local; log.expr = a, "Local 3D approximation");
         Ok(a)
     }
 
@@ -269,6 +366,12 @@ impl Local3DApproximation {
                 .numerator(&reduced, given.subgraph())
                 .get_single_atom()
                 .unwrap();
+        debug_tags!(#generation, #profile, #uv, #local, #trace;
+            stage = "local_3d_start_initial",
+            byte_size = atomarg.as_view().get_byte_size(),
+            file.expr = %atomarg,
+            "Local 3D start expression checkpoint"
+        );
         // println!("CFF: {}", cff);
 
         // add data for OSE computation and add an explicit sqrt
@@ -281,22 +384,43 @@ impl Local3DApproximation {
                 let e_mass = e.data.mass_atom();
                 atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
                     ei,
+                    current.lmb_id(),
                     e_mass,
                     None,
                     settings.inner_products,
                 ));
             }
         }
+        debug_tags!(#generation, #profile, #uv, #local, #trace;
+            stage = "local_3d_start_after_ose_full",
+            byte_size = atomarg.as_view().get_byte_size(),
+            file.expr = %atomarg,
+            "Local 3D start expression checkpoint"
+        );
 
         // split numerator momenta into OSEs and spatial parts
         let mut reps = Vec::new();
         for (p, eid, e) in graph.iter_edges_of(current.subgraph()) {
             if p.is_paired() {
                 let e_mass = e.data.mass_atom();
-                reps.push(GS.split_mom_pattern(eid, e_mass, settings.inner_products));
+                let rep =
+                    GS.split_mom_pattern(eid, current.lmb_id(), e_mass, settings.inner_products);
+                debug_tags!(#uv, #local, #momentum, #trace;
+                    stage = "local_3d_start_split_mom_pattern",
+                    split_rep = %rep,
+                    "Local 3D start momentum split"
+                );
+                reps.push(rep);
             }
         }
-        Ok(atomarg.replace_multiple(&reps))
+        let atomarg = atomarg.replace_multiple(&reps);
+        debug_tags!(#generation, #profile, #uv, #local, #trace;
+            stage = "local_3d_start_output",
+            byte_size = atomarg.as_view().get_byte_size(),
+            file.expr = %atomarg,
+            "Local 3D start expression checkpoint"
+        );
+        Ok(atomarg)
     }
 }
 
@@ -310,12 +434,16 @@ impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
         integrand: &Atom,
     ) -> Result<Atom> {
         match current.renormalization_scheme() {
-            ApproximationType::MUV => self.t(
-                ctx,
-                current,
-                given,
-                &self.start(ctx, current, given, integrand)?,
-            ),
+            ApproximationType::MUV => {
+                let started = self.start(ctx, current, given, integrand)?;
+                crate::debug_tags!(#generation, #profile, #uv, #local, #summary;
+                    stage = "local_3d_kernel_after_start",
+                    input_byte_size = integrand.as_view().get_byte_size(),
+                    output_byte_size = started.as_view().get_byte_size(),
+                    "Local 3D kernel size checkpoint"
+                );
+                self.t(ctx, current, given, &started)
+            }
             ApproximationType::IR => Ok(self.t(
                 ctx,
                 current,

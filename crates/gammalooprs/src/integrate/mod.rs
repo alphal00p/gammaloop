@@ -796,10 +796,17 @@ fn first_non_trivial_discrete_bin_descriptions_for_process_integrand(
             let group = integrand.data.graph_group_structure.get(group_id)?;
             let master = group.master();
             let graph_term = &integrand.data.graph_terms[master];
+            let parameterization_settings = integrand
+                .settings
+                .sampling
+                .get_parameterization_settings()
+                .unwrap_or_default();
+            let effective_channels = graph_term
+                .multi_channeling_setup
+                .effective_channels(&graph_term.graph.name, &parameterization_settings)
+                .ok()?;
             Some(
-                graph_term
-                    .multi_channeling_setup
-                    .channels
+                effective_channels
                     .iter()
                     .map(|&channel_lmb| {
                         lmb_channel_description(
@@ -814,10 +821,17 @@ fn first_non_trivial_discrete_bin_descriptions_for_process_integrand(
             let group = integrand.data.graph_group_structure.get(group_id)?;
             let master = group.master();
             let graph_term = &integrand.data.graph_terms[master];
+            let parameterization_settings = integrand
+                .settings
+                .sampling
+                .get_parameterization_settings()
+                .unwrap_or_default();
+            let effective_channels = graph_term
+                .multi_channeling_setup
+                .effective_channels(&graph_term.graph.name, &parameterization_settings)
+                .ok()?;
             Some(
-                graph_term
-                    .multi_channeling_setup
-                    .channels
+                effective_channels
                     .iter()
                     .map(|&channel_lmb| {
                         lmb_channel_description(

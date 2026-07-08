@@ -26,7 +26,9 @@ name = "generate_diagrams"
 # --select-graphs GL00 GL02 GL06 GL08 GL10 GL12 GL18 GL20 GL22 GL26 GL30
 # --select-graphs GL08
 # --select-graphs GL26
+#      --select-graphs GL30
 # --loop-momentum-bases GL26=2,4,11
+#	  --select-graphs GL06
 commands = [
   "import model sm-default.json",
   "set global kv global.n_cores.feyngen=10",
@@ -36,15 +38,16 @@ commands = [
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states true
       -p epem_a_tth -i NLO
-      --global-prefactor-num "1𝑖"
-      --select-graphs GL30
+      --global-prefactor-num "-1"
       --only-diagrams""",
+  "select -p epem_a_tth -i NLO --amplitude-graphs --without-raised-propagator-signatures ANY_RAISING --without-raised-cuts-signatures ANY_RAISING",
   "save dot",
 ]
 
 [[command_blocks]]
 name = "generate_integrands"
 commands = [
+    "set global kv global.n_cores.generate=10",
     "generate existing -p epem_a_tth -i NLO",
     "duplicate integrand -p epem_a_tth -i NLO --output_process_name epem_a_tth --output_integrand_name NLO_semi_inclusive",
     "save state -o"
@@ -78,7 +81,8 @@ helicities = [
 ]
 
 [default_runtime_settings.general]
-evaluator_method = "SingleParametric"
+#evaluator_method = "SingleParametric"
+evaluator_method = "SummedFunctionMap"
 enable_cache = false
 debug_cache = false
 generate_events = false
@@ -97,9 +101,9 @@ format = ["hwu","json"]
 do_algebra = false
 iterative_orientation_optimization = false
 store_atom = true
-compile = true
+compile = false
 summed = false
-summed_function_map = false
+summed_function_map = true
 #horner_iterations = 0
 #cpe_iterations = 0
 
@@ -108,13 +112,13 @@ summed_function_map = false
 
 # Otherwise leave them enabled with
 [cli_settings.global.generation.threshold_subtraction]
-enable_thresholds = false
+enable_thresholds = true
 # The option below specifies the generation of threshold for the kinematics supplied
 check_esurface_at_generation = true
-skip_thresholds_that_are_cuts = true
+skip_thresholds_that_are_cuts = false
 
 [default_runtime_settings.subtraction]
-disable_threshold_subtraction = true
+disable_threshold_subtraction = false
 
 [cli_settings.global.generation.compile]
 compilation_mode = "assembly"
@@ -126,7 +130,7 @@ custom = []
 [cli_settings.global.generation.uv]
 softct=false
 inner_products=true
-generate_integrated=false
+generate_integrated=true
 subtract_uv=true
 
 [cli_settings.global.n_cores]
@@ -162,21 +166,32 @@ escalate_for_large_weight_threshold = -1.0
 
 [[command_blocks]]
 name = "integrate"
+#  "set process -p epem_a_tth -i NLO_inclusive_m_uv_up kv general.m_uv=364.752",
 commands = [
   "run set_model_parameters",
-  "run set_differential_quantities",
-  "run set_differential_observables",
-  "run set_differential_selectors",
+  # "run set_differential_quantities",
+  # "run set_differential_observables",
+  # "run set_differential_selectors",
+
+  "set process -p epem_a_tth kv integrator.discrete_dim_learning_rate=0.0",
 
   """set process -p epem_a_tth string '
     [sampling]
     graphs = "monte_carlo"
     orientations = "summed"
-    lmb_multichanneling = true
+    lmb_multichanneling = false
+	lmb_channel_weight = "ose"
     # For importance-sampling over channels, use the quantity below
     # lmb_channels = "monte_carlo"
     lmb_channels = "summed"
     '""",
+
+  """set process -p epem_a_tth string '
+    [h_function]
+    function = "poly_exponential"
+    sigma = 1.0
+	power = 0
+  '""",
 
   """set process -p epem_a_tth string '
   [[stability.rotation_axis]]
@@ -191,20 +206,25 @@ commands = [
   escalate_for_large_weight_threshold = 0.99
 
   [[stability.levels]]
-  precision = "Arb"
-  required_precision_for_re = 1.0e-5
-  required_precision_for_im = 1.0e-5
+  precision = "Quad"
+  required_precision_for_re = 1.0e-8
+  required_precision_for_im = 1.0e-8
   escalate_for_large_weight_threshold = -1.0
       '""",
 
+  "remove processes -p epem_a_tth -i NLO_inclusive_m_uv_up",
+  "duplicate integrand -p epem_a_tth -i NLO --output_process_name epem_a_tth --output_integrand_name NLO_m_uv_up",
+
   """set process -p epem_a_tth -i NLO kv
         integrator.n_increase=0
-        integrator.n_start=10000
+        integrator.n_start=1000000
         integrator.n_max=10000000000
         integrator.seed=1337
         general.m_uv=91.188
 
     """,
+  "set process -p epem_a_tth -i NLO_m_uv_up kv general.m_uv=1459.008",
+
   # --show-max-weight-info-for-discrete-bins
   # --batch-size 100000
   # --no-stream-iterations
@@ -226,9 +246,14 @@ commands = [
 		# 		 --show-discrete-contributions-sum
 		# 		 --write-results-for-each-iteration
   #                --restart
-  #   """
-  """integrate -p epem_a_tth -i NLO --n-cores 10
-                 --target epem_a_tth@NLO=0.0,5.924e-05
+  #   """-2.4706e-04
+  # --target epem_a_tth@NLO=0.0,5.924e-05
+  # GL06
+  # --target epem_a_tth@NLO=-2.4706e-04,0.0
+  #  GL08
+  # --target epem_a_tth@NLO=-1.6168e-06,0.0
+  # -p epem_a_tth -i NLO_m_uv_up
+  """integrate -p epem_a_tth -i NLO -p epem_a_tth -i NLO_m_uv_up --n-cores 3
 				 --renderer ratatui
 				 --batch-size 1000
 				 --show-phase both

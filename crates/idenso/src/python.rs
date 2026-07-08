@@ -1,7 +1,8 @@
-use crate::color::{ColorSimplifier, SelectiveExpand};
-use crate::gamma::GammaSimplifier;
-use crate::metric::MetricSimplifier;
+use crate::color::ColorSimplifier;
+use crate::dirac::GammaSimplifier;
 use crate::representations::initialize;
+use crate::selective_expand::SelectiveExpand;
+use crate::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
 
 use pyo3::{
     Bound, PyResult, Python,
@@ -13,7 +14,7 @@ use pyo3::{
 use spenso::structure::abstract_index::AbstractIndex;
 use symbolica::atom::Atom;
 
-use crate::IndexTooling;
+use crate::{Cookable, IndexTooling};
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
 use symbolica::atom::Symbol;
@@ -52,11 +53,11 @@ pub fn dirac_adjoint(self_: &PythonExpression) -> PythonExpression {
 /// - Unfolding nested products in field theory calculations
 /// - Algebraic manipulation of relativistic expressions
 ///
-/// # Args:
-///     self_: Expression containing factorized terms with Minkowski indices
+/// # Arguments
+/// - `self_`: expression containing factorized terms with Minkowski indices
 ///
-/// # Returns:
-///     Expanded expression with factorizations unfolded
+/// # Returns
+/// Expanded expression with factorizations unfolded.
 ///
 /// # Examples:
 /// ```python
@@ -98,11 +99,11 @@ pub fn expand_mink(self_: &PythonExpression) -> PythonExpression {
 /// - Prepares expressions for gamma matrix simplification
 ///
 ///
-/// # Args:
-///     self_: Expression containing factorized terms with bispinor indices
+/// # Arguments
+/// - `self_`: expression containing factorized terms with bispinor indices
 ///
-/// # Returns:
-///     Expanded expression with factorizations unfolded
+/// # Returns
+/// Expanded expression with factorizations unfolded.
 ///
 #[cfg_attr(
     feature = "python_stubgen",
@@ -124,11 +125,11 @@ pub fn expand_bis(self_: &PythonExpression) -> PythonExpression {
 /// simultaneous expansion of factorized expressions involving both spacetime
 /// and spinor indices.
 ///
-/// # Args:
-///     self_: Expression containing factorized terms with both index types
+/// # Arguments
+/// - `self_`: expression containing factorized terms with both index types
 ///
-/// # Returns:
-///     Expanded expression with all factorizations unfolded
+/// # Returns
+/// Expanded expression with all factorizations unfolded.
 ///
 #[cfg_attr(
     feature = "python_stubgen",
@@ -162,11 +163,11 @@ pub fn expand_mink_bis(self_: &PythonExpression) -> PythonExpression {
 /// - Unfolding nested products in gauge theory calculations
 /// - Algebraic manipulation of color structures
 ///
-/// # Args:
-///     self_: Expression containing factorized terms with color indices
+/// # Arguments
+/// - `self_`: expression containing factorized terms with color indices
 ///
-/// # Returns:
-///     Expanded expression with factorizations unfolded
+/// # Returns
+/// Expanded expression with factorizations unfolded.
 ///
 #[cfg_attr(
     feature = "python_stubgen",
@@ -192,11 +193,11 @@ pub fn expand_color(self_: &PythonExpression) -> PythonExpression {
 /// Finds and expands factorized expressions involving metric tensors and related
 /// geometric objects, unfolding multiplicative structures for subsequent simplification.
 ///
-/// # Args:
-///     self_ (Expression): The expression containing factorized metric terms
+/// # Arguments
+/// - `self_`: expression containing factorized metric terms
 ///
-/// # Returns:
-///     Expression: The expanded expression with metric factorizations unfolded
+/// # Returns
+/// The expanded expression with metric factorizations unfolded.
 pub fn expand_metrics(self_: &PythonExpression) -> PythonExpression {
     self_
         .expr
@@ -213,12 +214,12 @@ pub fn expand_metrics(self_: &PythonExpression) -> PythonExpression {
 #[pyfunction]
 /// Wrap all abstract indices with a header symbol
 ///
-/// # Args:
-///     self_: The input expression containing tensor indices
-///     header: Symbol to use as the wrapper function for all indices
+/// # Arguments
+/// - `self_`: input expression containing tensor indices
+/// - `header`: symbol to use as the wrapper function for all indices
 ///
-/// # Returns:
-///     Expression with all indices wrapped by the header symbol
+/// # Returns
+/// Expression with all indices wrapped by the header symbol.
 ///
 /// # Examples:
 /// ```python
@@ -261,11 +262,11 @@ pub fn wrap_indices(self_: &PythonExpression, header: Symbol) -> PythonExpressio
 /// **Scope:**
 /// - Only affects indices appearing as function arguments
 /// - Preserves top-level function structure
-/// # Args:
-///     self_: Expression containing complex nested index structures
+/// # Arguments
+/// - `self_`: expression containing complex nested index structures
 ///
-/// # Returns:
-///     Expression with flattened, simplified index names
+/// # Returns
+/// Expression with flattened, simplified index names.
 ///
 /// # Examples:
 /// ```python
@@ -313,14 +314,14 @@ pub fn cook_indices(self_: &PythonExpression) -> PythonExpression {
 /// - Arguments must be cookable (symbols, numbers, simple functions)
 /// - Cannot cook expressions containing polynomials or complex structures
 ///
-/// # Args:
-///     self_: Expression representing a single function call to cook
+/// # Arguments
+/// - `self_`: expression representing a single function call to cook
 ///
-/// # Returns:
-///     Expression containing the flattened variable symbol
+/// # Returns
+/// Expression containing the flattened variable symbol.
 ///
-/// # Raises:
-///     TypeError: If input is not a cookable function or contains invalid argument types
+/// # Raises
+/// `TypeError` if input is not a cookable function or contains invalid argument types.
 ///
 /// # Examples:
 /// ```python
@@ -359,12 +360,12 @@ pub fn cook_function(self_: &PythonExpression) -> PyResult<PythonExpression> {
 /// - Appear twice in the same position (for self-dual reps)
 /// - Are summed over (Einstein summation convention)
 ///
-/// # Args:
-///     self_ (Expression): The input expression containing both dummy and free indices
-///     header (Symbol): The symbol to use as wrapper function name for dummy indices only
+/// # Arguments
+/// - `self_`: input expression containing both dummy and free indices
+/// - `header`: symbol to use as wrapper function name for dummy indices only
 ///
-/// # Returns:
-///     Expression: A new expression with only contracted indices wrapped
+/// # Returns
+/// A new expression with only contracted indices wrapped.
 ///
 /// # Examples:
 /// ```python
@@ -404,11 +405,11 @@ pub fn wrap_dummies(self_: &PythonExpression, header: Symbol) -> PythonExpressio
 /// - Determining the rank and structure of tensor expressions
 /// - Debugging index contractions
 ///
-/// # Args:
-///     self_ (Expression): The tensor expression to analyze
+/// # Arguments
+/// - `self_`: tensor expression to analyze
 ///
-/// # Returns:
-///     list[Expression]: A list of expressions, each representing a free (dangling) index
+/// # Returns
+/// A list of expressions, each representing a free (dangling) index.
 ///
 /// # Examples:
 /// ```python
@@ -455,11 +456,11 @@ pub fn list_dangling(self_: &PythonExpression) -> Vec<PythonExpression> {
 /// where `mu` is the Lorentz index and `alpha`, `beta` are spinor indices.
 /// These can be easily created using the hep_lib.
 ///
-/// # Args:
-///     self_ (Expression): The expression containing gamma matrix products and traces
+/// # Arguments
+/// - `self_`: expression containing gamma matrix products and traces
 ///
-/// # Returns:
-///     Expression: The simplified expression with gamma algebra applied
+/// # Returns
+/// The simplified expression with gamma algebra applied.
 ///
 /// # Examples:
 /// ```python
@@ -485,7 +486,7 @@ pub fn simplify_gamma(self_: &PythonExpression) -> PythonExpression {
 /// Converts contracted Lorentz/Minkowski indices into dot product notation.
 ///
 /// Automatically identifies and converts patterns like `p(mink(D, mu)) * q(mink(D, mu))`
-/// into the more compact and physically meaningful `dot(p, q)` notation. This
+/// into the compact, representation-carrying `dot(p(mink(D)), q(mink(D)))` notation. This
 /// simplification is essential for physics calculations involving four-vectors.
 ///
 /// The function recognizes:
@@ -493,11 +494,11 @@ pub fn simplify_gamma(self_: &PythonExpression) -> PythonExpression {
 /// - Multiple contractions: `pᵘqᵤrᵛsᵥ → (p·q)(r·s)`
 /// - Self-contractions: `pᵘpᵤ → p²`
 ///
-/// # Args:
-///     self_ (Expression): The expression containing contracted Minkowski vector indices
+/// # Arguments
+/// - `self_`: expression containing contracted Minkowski vector indices
 ///
-/// # Returns:
-///     Expression: The expression with vector contractions converted to dot products
+/// # Returns
+/// The expression with vector contractions converted to dot products.
 ///
 /// # Examples:
 /// ```python
@@ -537,11 +538,11 @@ pub fn to_dots(self_: &PythonExpression) -> PythonExpression {
 ///
 /// The function recognizes metrics as `spenso::g(...)`
 ///
-/// # Args:
-///     self_ (Expression): The expression containing metric/identity tensor contractions
+/// # Arguments
+/// - `self_`: expression containing metric/identity tensor contractions
 ///
-/// # Returns:
-///     Expression: The simplified expression with metric rules applied
+/// # Returns
+/// The simplified expression with metric rules applied.
 ///
 /// # Examples:
 /// ```python
@@ -584,16 +585,16 @@ pub fn simplify_metrics(self_: &PythonExpression) -> PythonExpression {
 /// - `CF = (Nc² - 1)/(2Nc)`: Fundamental Casimir
 /// - `TR = 1/2`: Normalization factor
 ///
-/// # Args:
-///     self_ (Expression): The expression containing SU(N) color structures
+/// # Arguments
+/// - `self_`: expression containing SU(N) color structures
 ///
-/// # Returns:
-///     Expression: Simplified expression with color algebra reduced to scalar factors
-///                 (Nc, CA, CF, TR) when possible
+/// # Returns
+/// Simplified expression with color algebra reduced to scalar factors (`Nc`, `CA`, `CF`,
+/// `TR`) when possible.
 ///
-/// # Notes:
-///     If explicit color indices remain after simplification, it indicates the
-///     expression could not be fully reduced to color-scalar form.
+/// # Notes
+/// If explicit color indices remain after simplification, it indicates the expression
+/// could not be fully reduced to color-scalar form.
 ///
 pub fn simplify_color(self_: &PythonExpression) -> PythonExpression {
     self_.expr.simplify_color().into()

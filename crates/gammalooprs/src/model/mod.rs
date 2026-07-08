@@ -16,7 +16,6 @@ use linnet::half_edge::involution::{EdgeIndex, Flow};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde::de::DeserializeOwned;
-use spenso::network::library::TensorLibraryData;
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::structure::{IndexLess, PermutedStructure};
 use tabled::settings::Modify;
@@ -28,14 +27,13 @@ use tabled::{
 
 // use log::{info, trace};
 use idenso::{
-    gamma::AGS,
+    dirac::AGS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
 };
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use spenso::algebra::complex::Complex;
 use spenso::network::library::symbolic::ETS;
-use spenso::network::parsing::SPENSO_TAG;
 use spenso::structure::OrderedStructure;
 use spenso::structure::representation::Euclidean;
 use spenso::structure::representation::{LibraryRep, Minkowski};
@@ -48,13 +46,7 @@ use spenso::tensors::parametric::ParamTensor;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::fs;
-use symbolica::domains::float::Real;
-use symbolica::domains::integer::IntegerRing;
-use symbolica::domains::rational::{Fraction, Rational};
-
-type ExternalFunctionMap = HashMap<String, Box<dyn ExternalFunction<Complex<F<f64>>>>, RandomState>;
-use symbolica::evaluate::{ExternalFunction, FunctionMap, OptimizationSettings};
-use symbolica::id::Replacement;
+use symbolica::{domains::rational::Fraction, prelude::*, printer::PrintUserData};
 use tracing::info;
 
 use color_eyre::Result;
@@ -62,13 +54,9 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
-use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
 use crate::settings::global::VectorPolarizationSumGauge;
 use crate::utils::GS;
-
-use symbolica::printer::{AtomPrinter, PrintOptions};
-use symbolica::{function, get_symbol, parse, symbol};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SerializableInputParamCard<T> {
@@ -301,14 +289,15 @@ where
             } else {
                 UFOSymbol(symbol!(
                     &name,
-                    print = |a, opt| {
+                    print = |a, opt, _state| {
                         let AtomView::Var(a) = a else {
                             return None;
                         };
-                        match opt.custom_print_mode {
-                            Some(("spenso", i)) => {
-                                let SpensoPrintSettings { .. } = SpensoPrintSettings::from(i);
-                                if SpensoPrintSettings::from(i).is_typst() {
+                        match opt.custom_print_mode.get("spenso") {
+                            Some(PrintUserData::Integer(i)) => {
+                                let SpensoPrintSettings { .. } =
+                                    SpensoPrintSettings::from(*i as usize);
+                                if SpensoPrintSettings::from(*i as usize).is_typst() {
                                     Some(format!("\"{}\"", a.get_symbol().get_stripped_name()))
                                 } else {
                                     None
@@ -816,6 +805,8 @@ pub struct SerializableParticle {
     ghost_number: isize,
     lepton_number: isize,
     y_charge: isize,
+    #[serde(default, alias = "goldstoneboson", alias = "GoldstoneBoson")]
+    goldstone: bool,
 }
 
 impl SerializableParticle {
@@ -834,6 +825,7 @@ impl SerializableParticle {
             ghost_number: particle.ghost_number,
             lepton_number: particle.lepton_number,
             y_charge: particle.y_charge,
+            goldstone: particle.goldstone,
         }
     }
 }
@@ -853,6 +845,7 @@ pub struct Particle {
     pub ghost_number: isize,
     pub lepton_number: isize,
     pub y_charge: isize,
+    pub goldstone: bool,
 }
 
 impl Particle {
@@ -912,12 +905,9 @@ impl Particle {
                     let n_b = temporal_component.clone() * GS.energy_delta(W_.b_)
                         - GS.emr_vec_index(eid, W_.b_);
                     let q_dot_n = temporal_component.pow(2)
-                        + function!(
-                            SPENSO_TAG.dot,
-                            Euclidean {}.new_rep(4).to_symbolic([]),
-                            GS.emr_vec(eid),
-                            GS.emr_vec(eid)
-                        );
+                        + Euclidean {}
+                            .new_rep(4)
+                            .inner_product(GS.emr_vec(eid), GS.emr_vec(eid));
 
                     minus_metric
                         + (GS.emr_mom(eid, W_.a_) * n_b + n_a * GS.emr_mom(eid, W_.b_)) / q_dot_n
@@ -1044,6 +1034,10 @@ impl Particle {
 
     pub fn is_ghost(&self) -> bool {
         self.ghost_number != 0
+    }
+
+    pub fn is_goldstone(&self) -> bool {
+        self.goldstone
     }
 
     pub fn symbolic_mass(&self) -> Atom {
@@ -1344,6 +1338,7 @@ impl Particle {
             ghost_number: particle.ghost_number,
             lepton_number: particle.lepton_number,
             y_charge: particle.y_charge,
+            goldstone: particle.goldstone,
         }
     }
 }
@@ -2081,16 +2076,16 @@ n_couplings = format!("{}", self.couplings.len()).green(),
 
         let mut expr = vec![];
         let mut new_values_len = 0;
+        let mut dependent_parameter_names = vec![];
 
         for (n, c) in &self.couplings {
             let key = n.0.0;
             expr.push(function!(key));
 
             fn_map
-                .add_function::<Symbol>(
+                .add_function::<Symbol, Symbol>(
                     key,
-                    c.name.namespaceless_string().into(),
-                    vec![],
+                    Vec::new(),
                     c.expression.replace_multiple(&reps),
                 )
                 .map_err(|e| eyre!(" {}", e))?;
@@ -2112,14 +2107,18 @@ n_couplings = format!("{}", self.couplings.len()).green(),
                     }
                 }
                 ParameterNature::Internal => {
+                    if p.name.is_zero() {
+                        continue;
+                    }
+
                     new_values_len += 1;
                     expr.push(key.clone());
+                    dependent_parameter_names.push(*n);
                     if let Some(body) = p.expression.clone() {
                         fn_map
-                            .add_function::<Symbol>(
+                            .add_function::<Symbol, Symbol>(
                                 n.0.0,
-                                p.name.namespaceless_string().into(),
-                                vec![],
+                                Vec::new(),
                                 body.replace_multiple(&reps),
                             )
                             .map_err(|e| eyre!(" {}", e))?;
@@ -2127,52 +2126,37 @@ n_couplings = format!("{}", self.couplings.len()).green(),
                         let value = p
                             .value
                             .ok_or(eyre!("internal param {} has no expression or value", key))?;
-                        let value_rat = (
+                        let value_rat = symbolica::domains::float::Complex::new(
                             Fraction::<IntegerRing>::try_from(value.re.0).unwrap(),
                             Fraction::<IntegerRing>::try_from(value.im.0).unwrap(),
-                        )
-                            .into();
-                        fn_map.add_constant(key, value_rat);
+                        );
+                        fn_map
+                            .add_aliases([(key, Atom::num(value_rat))])
+                            .map_err(|e| eyre!(" {}", e))?;
                     }
                 }
             }
         }
 
         fn_map
-            .add_external_function(
-                UFOSymbol::from("complexconjugate").0,
-                "complexconjugate".into(),
-            )
-            .unwrap();
-
-        // fn_map.add_external_function(name, rename)
-
-        fn_map.add_constant(
-            Atom::var(Symbol::PI),
-            (Rational::try_from(0.0.pi()).unwrap(), Rational::zero()).into(),
-        );
+            .add_aliases([(
+                Atom::var(Symbol::PI),
+                Atom::num(symbolica::domains::float::Complex::new(
+                    Rational::try_from(0.0.pi()).unwrap(),
+                    Rational::zero(),
+                )),
+            )])
+            .map_err(|e| eyre!(" {}", e))?;
 
         let evaluator = AtomView::to_eval_tree_multiple(&expr, &fn_map, &params)
             .unwrap()
-            .linearize(&OptimizationSettings {
-                cpe_iterations: Some(1),
-                verbose: false,
-                ..OptimizationSettings::default()
-            });
-        let mut ext: ExternalFunctionMap = HashMap::default();
-        ext.insert(
-            "complexconjugate".to_string(),
-            Box::new(|a| {
-                if a.len() > 1 {
-                    panic!("complex_conjugate takes one argument, got {}", a.len());
-                };
-                a[0].conj()
-            }),
-        );
-        let mut evaluator = evaluator
-            .map_coeff(&|f| Complex::new(F(f.re.to_f64()), F(f.im.to_f64())))
-            .with_external_functions(ext)
-            .unwrap();
+            .linearize(
+                &OptimizationSettings::new()
+                    .cpe_iterations(Some(1))
+                    .verbose(false),
+            );
+        let mut evaluator =
+            evaluator.map_coeff(&|f| Complex::new(F(f.re.to_f64()), F(f.im.to_f64())));
 
         let mut new_values = vec![Complex::new(F(0.0), F(0.0)); new_values_len];
         evaluator.evaluate(&param_values, &mut new_values);
@@ -2180,14 +2164,10 @@ n_couplings = format!("{}", self.couplings.len()).green(),
         for (i, c) in self.couplings.values_mut().enumerate() {
             c.value = Some(new_values[i].map(|f| f.0));
         }
-        let mut i = self.couplings.len();
-
-        for c in self.parameters.values_mut() {
-            if c.nature == ParameterNature::External {
-                continue;
+        for (i, name) in (self.couplings.len()..).zip(dependent_parameter_names) {
+            if let Some(c) = self.parameters.get_mut(&name) {
+                c.value = Some(new_values[i]);
             }
-            c.value = Some(new_values[i]);
-            i += 1;
         }
 
         Ok(())
@@ -2249,19 +2229,22 @@ n_couplings = format!("{}", self.couplings.len()).green(),
         let mut reps = Vec::new();
 
         for cpl in self.couplings.values() {
-            reps.push(
-                cpl.rep_rule()
-                    .map(|a| format!("{}", AtomPrinter::new_with_options(a.as_view(), print_ops))),
-            );
+            reps.push(cpl.rep_rule().map(|a| {
+                format!(
+                    "{}",
+                    AtomPrinter::new_with_options(a.as_view(), print_ops.clone())
+                )
+            }));
         }
 
         for para in self.parameters.values() {
             if let Some(rule) = para.rep_rule() {
-                reps.push(
-                    rule.map(|a| {
-                        format!("{}", AtomPrinter::new_with_options(a.as_view(), print_ops))
-                    }),
-                );
+                reps.push(rule.map(|a| {
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(a.as_view(), print_ops.clone())
+                    )
+                }));
             }
         }
 

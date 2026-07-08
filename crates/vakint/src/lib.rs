@@ -2038,7 +2038,6 @@ impl LoopNormalizationFactor {
             vk_symbol!(settings.epsilon_symbol.as_str()),
             Atom::Zero.as_atom_view(),
             Rational::from(settings.number_of_terms_in_epsilon_expansion - 1),
-            true,
         ) {
             Ok(a) => a,
             Err(e) => return Err(VakintError::SymbolicaError(e.to_string())),
@@ -2815,15 +2814,12 @@ impl NumericalEvaluationResult {
             .collect::<Vec<_>>();
 
         let binary_prec = settings.get_binary_precision();
+        let empty_map: HashMap<Atom, Complex<Float>, RandomState> = HashMap::default();
         let mut epsilon_coeffs_vec_floats = vec![];
         for (i64, coeff) in epsilon_coeffs_vec.iter() {
             epsilon_coeffs_vec_floats.push((
                 *i64,
-                match coeff.evaluate::<Atom,Complex<Float>,_>(
-                    |x| Complex::new(x.to_multi_prec_float(binary_prec), Float::with_val(binary_prec, 0.)),
-                    &HashMap::default(),
-                    &HashMap::default()
-                ) {
+                match coeff.evaluate_with_prec(&empty_map, binary_prec) {
                     Ok(x) => x,
                     Err(e) => {
                         return Err(VakintError::EvaluationError(format!(
@@ -3390,16 +3386,7 @@ Evaluated (n_loops=1, mu_r=1) :
             // println!("coeff_processed={}", coeff_processed);
             epsilon_coeffs_vec_floats.push((
                 *i64,
-                match coeff_processed.evaluate(
-                    |x| {
-                        Complex::new(
-                            x.to_multi_prec_float(binary_prec),
-                            Float::with_val(binary_prec, 0.),
-                        )
-                    },
-                    &map_view,
-                    &HashMap::default(),
-                ) {
+                match coeff_processed.evaluate_with_prec(&map_view, binary_prec) {
                     Ok(x) => x,
                     Err(e) => {
                         return Err(VakintError::EvaluationError(format!(
@@ -3745,7 +3732,6 @@ Evaluated (n_loops=1, mu_r=1) :
                     Rational::from(
                         settings.number_of_terms_in_epsilon_expansion - (integral.n_loops as i64),
                     ),
-                    true,
                 )
                 .unwrap()
                 .to_atom();
@@ -4079,7 +4065,6 @@ Evaluated (n_loops=1, mu_r=1) :
                                 - (integral.n_loops as i64)
                                 - 1,
                         ),
-                        true,
                     ) {
                         Ok(a) => a,
                         Err(e) => return Err(VakintError::SymbolicaError(e.to_string())),
@@ -4434,7 +4419,6 @@ Evaluated (n_loops=1, mu_r=1) :
             Rational::from(
                 settings.number_of_terms_in_epsilon_expansion - (integral.n_loops as i64) - 1,
             ),
-            true,
         ) {
             Ok(a) => a,
             Err(e) => return Err(VakintError::SymbolicaError(e.to_string())),
@@ -4513,7 +4497,7 @@ Evaluated (n_loops=1, mu_r=1) :
             .replace(S.dot(S.a_, S.b_))
             .with(S.dot_pow(S.a_, S.b_, 1))
             .replace(S.dot_pow(S.a_, S.b_, S.c_))
-            .when(S.c_.filter_single(|a| a < 0))
+            .when(S.c_.filter(|a| a < 0))
             .with(S.dot_pow(S.a_, S.b_, -Atom::var(S.c_)).pow(-1))
             .map_terms_single_core(|a| {
                 let mut dummy = 1;
@@ -4565,14 +4549,14 @@ Evaluated (n_loops=1, mu_r=1) :
                                         .add_arg(&dummy_wrapped)
                                         .finish()
                                         * FunctionBuilder::new(b.get_symbol())
-                                            .add_args(&b.iter().collect::<Vec<_>>())
+                                            .add_args(b.iter().collect::<Vec<_>>())
                                             .add_arg(&dummy_wrapped)
                                             .finish()
                                         * rest
                                 }
                                 (AtomView::Fun(a), AtomView::Var(b)) => {
                                     FunctionBuilder::new(a.get_symbol())
-                                        .add_args(&a.iter().collect::<Vec<_>>())
+                                        .add_args(a.iter().collect::<Vec<_>>())
                                         .add_arg(&dummy_wrapped)
                                         .finish()
                                         * FunctionBuilder::new(b.get_symbol())
@@ -4582,11 +4566,11 @@ Evaluated (n_loops=1, mu_r=1) :
                                 }
                                 (AtomView::Fun(a), AtomView::Fun(b)) => {
                                     FunctionBuilder::new(a.get_symbol())
-                                        .add_args(&a.iter().collect::<Vec<_>>())
+                                        .add_args(a.iter().collect::<Vec<_>>())
                                         .add_arg(&dummy_wrapped)
                                         .finish()
                                         * FunctionBuilder::new(b.get_symbol())
-                                            .add_args(&b.iter().collect::<Vec<_>>())
+                                            .add_args(b.iter().collect::<Vec<_>>())
                                             .add_arg(&dummy_wrapped)
                                             .finish()
                                         * rest

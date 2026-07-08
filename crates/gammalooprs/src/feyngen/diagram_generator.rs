@@ -1,6 +1,6 @@
 use idenso::IndexTooling;
-use idenso::color::{CS, ColorSimplifier, SelectiveExpand};
-use idenso::gamma::{AGS, GammaSimplifier};
+use idenso::color::{CS, ColorSimplifier, ColorSimplifySettings};
+use idenso::dirac::{AGS, GammaSimplifier};
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
@@ -12,8 +12,8 @@ use rayon::prelude::*;
 
 use spenso::network::library::LibraryTensor;
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
-use spenso::network::parsing::ParseSettings;
-use spenso::network::{Sequential, SmallestDegree};
+use spenso::network::parsing::{ParseSettings, ShorthandParsing};
+use spenso::network::{MinResultRank, Sequential};
 
 // use spenso::network::Network;
 
@@ -38,6 +38,7 @@ use symbolica::domains::float::Complex as SymbolicaComplex;
 use symbolica::function;
 use symbolica::graph::{GenerationSettings, HalfEdge};
 use symbolica::id::Replacement;
+
 use tracing::{error, event_enabled, info, instrument};
 
 use ahash::AHashMap;
@@ -4039,21 +4040,28 @@ impl ProcessDefinition {
             vec![]
         };
 
-        let was_interrupted = Arc::new(AtomicBool::new(false));
+        let abort_requested = Arc::new(AtomicBool::new(false));
         let graph_count = canonized_processed_graphs.len();
         let padding_width = if graph_count <= 1 {
             1
         } else {
             (graph_count - 1).to_string().len()
         };
-        pool.install(|| {
+        let grouping_result: Result<(), FeynGenError> = pool.install(|| {
             canonized_processed_graphs
                 .into_par_iter()
                 .progress_with(bar.clone())
                 .enumerate()
-                .map({
-                    |(i_g, canonical_graph)| {
-                        let was_interrupted = Arc::clone(&was_interrupted);
+                .try_for_each(|(i_g, canonical_graph)| {
+                    let abort_requested = Arc::clone(&abort_requested);
+                    let result = (|| -> Result<(), FeynGenError> {
+                        if abort_requested.load(Ordering::Relaxed) {
+                            return Ok(());
+                        }
+                        if is_interrupted() {
+                            abort_requested.store(true, Ordering::Relaxed);
+                            return Err(FeynGenError::Interrupted);
+                        }
                         let graph_name: String = format!("{}{:0width$}", self.graph_prefix, i_g, width = padding_width);
                         if let Some(selected_graphs) = &self.selected_graphs
                             && !selected_graphs.contains(&graph_name) {
@@ -4101,11 +4109,14 @@ impl ProcessDefinition {
                             ratio: Atom::num(1),
                             bare_graph:canonized_fermion_flow_bare_graph.clone(),
                         };
-                        if was_interrupted.load(Ordering::Relaxed) && is_interrupted(){
-                            was_interrupted.store(true, Ordering::Relaxed);
-                            eprintln!("Numerator-aware comparison of graphs interrupted by user, finishing current operations {}...","WITHOUT NUMERATOR COMPARISONS".red().bold());
+                        if abort_requested.load(Ordering::Relaxed) {
+                            return Ok(());
                         }
-                        if was_interrupted.load(Ordering::Relaxed) || matches!(
+                        if is_interrupted() {
+                            abort_requested.store(true, Ordering::Relaxed);
+                            return Err(FeynGenError::Interrupted);
+                        }
+                        if matches!(
                             self.numerator_grouping,
                             NumeratorAwareGraphGroupingOption::NoGrouping
                         ) {
@@ -4133,8 +4144,15 @@ impl ProcessDefinition {
                             debug!(num = %numerator.state.expr.to_ordered_simple(),"Initial numerator",);
 
                             // println!("HEEEEy");
-                            let numerator_color_simplified =
-                                numerator.clone().get_single_atom().unwrap().to_param_color().simplify_color();
+                            let numerator_color_simplified = numerator
+                                .clone()
+                                .get_single_atom()
+                                .unwrap()
+                                .to_param_color()
+                                .simplify_color_with(
+                                    ColorSimplifySettings::default()
+                                        .with_cof_dimension_invariants(),
+                                );
 
                             // println!("numerator_color_simplified=\n{}",numerator_color_simplified.to_plain_string());
 
@@ -4281,12 +4299,17 @@ impl ProcessDefinition {
                             }
                         }
                         Ok(())
-                    }
-                }).collect::<Result<Vec<()>, FeynGenError>>()
-        })?;
+                        })();
+                        if result.is_err() {
+                            abort_requested.store(true, Ordering::Relaxed);
+                        }
+                    result
+                })
+        });
         // Reset the interrupt flag
         set_interrupted(false);
         bar.finish_and_clear();
+        grouping_result?;
 
         // Now combine the pooled graphs identified to be combined.
         let mut bare_graphs: Vec<(usize, Graph)> = Vec::default();
@@ -4408,6 +4431,12 @@ impl ProcessDefinition {
 
                         loop_momentum_basis.put_loop_to_ext(LoopIndex(l));
                     }
+                    let external_momentum_edge_order = graph
+                        .initial_state_cut
+                        .iter_left_hedges()
+                        .map(|hedge| graph[&hedge])
+                        .collect_vec();
+                    loop_momentum_basis.canonicalize_external_order(&external_momentum_edge_order);
 
                     let lmb_init_loop_ids = lmb
                         .iter()
@@ -5046,6 +5075,10 @@ impl ProcessedNumeratorForComparison {
                 };
 
                 let mut numerators = vec![numerator];
+                let sample_parse_settings = ParseSettings {
+                    shorthand_parsing: ShorthandParsing::expand_schoonschip_only(),
+                    ..Default::default()
+                };
 
                 if settings
                     .generation
@@ -5053,30 +5086,74 @@ impl ProcessedNumeratorForComparison {
                     .gamma_simplification_closure_check
                 {
                     debug!(numerator = %numerators[0].to_ordered_simple(),"Gamma Simplifying");
-                    numerators.push(numerators[0].simplify_gamma());
+                    let gamma_simplified_numerator = numerators[0].simplify_gamma();
+                    crate::debug_tags!(#generation, #profile, #graph, #inspect, #dump;
+                        stage = "feyngen_closure_check_after_simplify_gamma",
+                        log.after_gamma = gamma_simplified_numerator,
+                        "Feyngen closure check after gamma simplification"
+                    );
+                    numerators.push(gamma_simplified_numerator);
                     debug!("Done Simplifying");
                 }
 
                 let mut sample_evals = VecDeque::new();
                 for numerator in numerators {
+                    if is_interrupted() {
+                        return Err(FeynGenError::Interrupted);
+                    }
                     let expanded = numerator.expand_color();
 
                     let sample_evaluations = samples
                     .iter()
-                    .map(|(reps, lib)| {
+                    .enumerate()
+                    .map(|(sample_index, (reps, lib))| {
+                        if is_interrupted() {
+                            return Err(FeynGenError::Interrupted);
+                        }
                         let mut sample_evaluation = expanded
                             .iter()
-                            .map(|(c, l)| {
+                            .enumerate()
+                            .try_fold(Atom::Zero, |acc, (term_index, (c, l))| {
+                                if is_interrupted() {
+                                    return Err(FeynGenError::Interrupted);
+                                }
+                                let context = || {
+                                    format!(
+                                        "while evaluating numerator sample for graph '{}' (diagram id {}, sample {}, expanded color term {}, color_len={}, lorentz_len={})",
+                                        graph.name,
+                                        diagram_id,
+                                        sample_index,
+                                        term_index,
+                                        c.to_plain_string().len(),
+                                        l.to_plain_string().len()
+                                    )
+                                };
                                 debug!("Sample evaluation inputs c:{c},l:{l}");
-                                let mut net = ParamParsingNet::try_from_view(l.as_view(), lib,&ParseSettings::default()).unwrap();
+                                let mut net = ParamParsingNet::try_from_view(
+                                    l.as_view(),
+                                    lib,
+                                    &sample_parse_settings,
+                                )
+                                .map_err(|source| {
+                                    FeynGenError::Eyre(eyre!(source).wrap_err(context()))
+                                })?;
                                 net.store
                                     .scalar
                                     .iter_mut()
                                     .for_each(|a| *a = a.replace_multiple(reps));
 
                                 // debug!(net=?net.dot_pretty());
-                                net.execute::<Sequential, SmallestDegree, _, _,_>(lib,PARAM_FUN_LIB.deref())
-                                    .unwrap_or_else(|_| panic!("failed to execute net:{}", net.dot_pretty()));
+                                net.execute::<Sequential, MinResultRank, _, _, _>(
+                                    lib,
+                                    PARAM_FUN_LIB.deref(),
+                                )
+                                .map_err(|source| {
+                                    FeynGenError::Eyre(eyre!(source).wrap_err(format!(
+                                        "{}; failed tensor-network execution for net:\n{}",
+                                        context(),
+                                        net.dot_pretty()
+                                    )))
+                                })?;
 
                                 // let c = ProcessDefinition::substitute_color_factors(c.as_view())
                                 //     .expand();
@@ -5089,9 +5166,16 @@ impl ProcessedNumeratorForComparison {
                                 }
 
                                 let scalar:Atom = scalar
-                                    .unwrap_or_else(|_| panic!("Expected scalar for c:{c} l:{l} that yields net:{} for graph {}",
-                                        net.dot_pretty()
-                                        ,graph.debug_dot()))
+                                    .map_err(|source| {
+                                        FeynGenError::Eyre(
+                                            eyre!(source).wrap_err(format!(
+                                                "{}; expected scalar from net:\n{}\nfor graph:\n{}",
+                                                context(),
+                                                net.dot_pretty(),
+                                                graph.debug_dot()
+                                            )),
+                                        )
+                                    })?
                                     .into();
 
                                 // println!("Trying to canonize:{c}");
@@ -5101,26 +5185,26 @@ impl ProcessedNumeratorForComparison {
                                     (canonized_color * scalar).as_view(),
                                 );
 
-                                debug!(evaluated=%a.printer(LOGPRINTOPTS),"evaluated{}",a.floatify(13).printer(LOGPRINTOPTS));
-                                a
-                            })
-                            .fold(Atom::Zero, |acc, l| acc + l);
+                                debug!(evaluated=%a.printer(LOGPRINTOPTS.clone()),"evaluated{}",a.floatify(13).printer(LOGPRINTOPTS.clone()));
+                                Ok::<_, FeynGenError>(acc + a)
+                            })?;
 
                         if EXPAND_NUMERICAL_SAMPLES_BEFORE_COMPARISON {
                             sample_evaluation = sample_evaluation.expand();
                         }
                         // TODO: optimize the above by instead directly storing "a.to_polynomial(&Q_I.clone(), None)" in the sample record, and not the expanded atom.
                         // Only do that for the if-branch below though.
-                        if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL || !matches!(numerator_aware_isomorphism_grouping,NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(_))
+                        let sample_evaluation = if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL || !matches!(numerator_aware_isomorphism_grouping,NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(_))
                         {
                             sample_evaluation
                         } else {
                             // When not looking at the ratio of samples as a rational polynomial, we must make sure to collect all common coefficients first
                             // with `collect_factors()` to ensure that common factors get simplified when looking at ratios.
                             sample_evaluation.collect_factors()
-                        }
+                        };
+                        Ok(sample_evaluation)
                     })
-                    .collect();
+                    .collect::<Result<Vec<_>, FeynGenError>>()?;
 
                     sample_evals.push_back(sample_evaluations);
                 }

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use linnet::half_edge::subgraph::subset::SubSet;
+
 use crate::{
     algebra::{
         algebraic_traits::{IsZero, RefZero},
@@ -8,7 +10,9 @@ use crate::{
     iterators::{
         CoreFlatFiberIterator, Fiber, IteratableTensor, IteratesAlongFibers, ResetableIterator,
     },
-    structure::{HasStructure, StructureContract, TensorStructure, concrete_index::ExpandedIndex},
+    structure::{
+        HasStructure, SlotIndex, StructureContract, TensorStructure, concrete_index::ExpandedIndex,
+    },
     tensors::data::{DataIterator, DenseTensor, GetTensorData, SetTensorData, SparseTensor},
 };
 
@@ -166,7 +170,7 @@ where
         &self,
         other: &SparseTensor<T, I>,
         resulting_structure: <Self::LCM as crate::structure::HasStructure>::Structure,
-        partition: bitvec::prelude::BitVec,
+        partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError> {
         let mut result_data = HashMap::default();
         if let Some((_, _)) = self.flat_iter().next() {
@@ -187,7 +191,7 @@ where
                             .expanded_index(result_index)?
                             .into_iter()
                             .enumerate()
-                            .partition(|(i, _)| partition[*i]);
+                            .partition(|(i, _)| partition[SlotIndex(*i)]);
 
                     // And now we flatten
                     let i = self.structure().flat_index(expa).unwrap();
@@ -226,7 +230,7 @@ where
         &self,
         other: &DenseTensor<T, I>,
         resulting_structure: <Self::LCM as crate::structure::HasStructure>::Structure,
-        partition: bitvec::prelude::BitVec,
+        partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError> {
         let zero = self.data[0].try_upgrade().unwrap().into_owned().ref_zero();
         let mut result_data = vec![zero.clone(); resulting_structure.size()?];
@@ -247,7 +251,7 @@ where
                         .expanded_index(result_index)?
                         .into_iter()
                         .enumerate()
-                        .partition(|(i, _)| partition[*i]);
+                        .partition(|(i, _)| partition[SlotIndex(*i)]);
 
                 // And now we flatten
                 let i = self.structure().flat_index(expa).unwrap();
@@ -284,7 +288,7 @@ where
         &self,
         other: &SparseTensor<T, I>,
         resulting_structure: <Self::LCM as crate::structure::HasStructure>::Structure,
-        partition: bitvec::prelude::BitVec,
+        partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError> {
         let zero = self.data[0].try_upgrade().unwrap().into_owned().ref_zero();
         let mut result_data = vec![zero.clone(); resulting_structure.size()?];
@@ -305,7 +309,7 @@ where
                         .expanded_index(result_index)?
                         .into_iter()
                         .enumerate()
-                        .partition(|(i, _)| partition[*i]);
+                        .partition(|(i, _)| partition[SlotIndex(*i)]);
 
                 // And now we flatten
                 let i = self.structure().flat_index(expa).unwrap();
@@ -342,7 +346,7 @@ where
         &self,
         other: &DenseTensor<T, I>,
         resulting_structure: <Self::LCM as crate::structure::HasStructure>::Structure,
-        partition: bitvec::prelude::BitVec,
+        partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError> {
         let zero = if let Some((_, s)) = self.flat_iter().next() {
             s.try_upgrade().unwrap().as_ref().ref_zero()
@@ -369,7 +373,7 @@ where
                         .expanded_index(result_index)?
                         .into_iter()
                         .enumerate()
-                        .partition(|(i, _)| partition[*i]);
+                        .partition(|(i, _)| partition[SlotIndex(*i)]);
 
                 // And now we flatten
                 let i = self.structure().flat_index(expa).unwrap();

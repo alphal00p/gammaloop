@@ -1,7 +1,11 @@
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use eyre::{Context, eyre};
-use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
+use idenso::{
+    color::{ColorSimplifier, ColorSimplifySettings},
+    dirac::GammaSimplifier,
+    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+};
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
     subgraph::{SubSetIter, SubSetLike, subset::SubSet},
@@ -16,23 +20,20 @@ use spenso::{
         algebraic_traits::RefOne,
         complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
     },
-    network::{ExecutionResult, Sequential, SmallestDegree},
+    network::{
+        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinResultRank, MinResultRankWith,
+        PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE, PAIR_SCORE_RESULT_RANK_ONLY, Sequential,
+        SequentialExtract, SequentialRef, SmallestDegree,
+    },
     shadowing::symbolica_utils::SpensoPrintSettings,
 };
 use std::ops::Deref;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{mem::transmute, ops::Neg, path::Path};
 use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder, Indeterminate, Symbol},
-    domains::{
-        dual::HyperDual,
-        float::Complex as SymComplex,
-        integer::IntegerRing,
-        rational::{Fraction, Rational},
-    },
-    evaluate::{
-        CompiledCode, Dualizer, ExpressionEvaluator, FunctionMap, JITCompiledEvaluator,
-        OptimizationSettings,
-    },
+    domains::{dual::HyperDual, float::Complex as SymComplex, rational::Fraction},
+    evaluate::JITCompiledEvaluator,
+    prelude::*,
 };
 use tracing::{debug, instrument};
 use typed_index_collections::TiVec;
@@ -50,7 +51,10 @@ use crate::{
     },
     momentum::{Helicity, sample::MomentumSample},
     numerator::symbolica_ext::AtomCoreExt,
-    processes::{EvaluatorBuildTimings, EvaluatorSettings},
+    processes::{
+        ContractionMode, EvaluatorBuildTimings, EvaluatorSettings, ExecutionMode,
+        TensorNetworkContractionOrder,
+    },
     settings::{RuntimeSettings, global::FrozenCompilationMode},
     utils::{
         ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
@@ -63,6 +67,14 @@ use super::{
     ParamBuilder, RuntimeCache,
     param_builder::{ThresholdParams, UpdateAndGetParams},
 };
+
+const NETWORK_SCALAR_ALIAS_MIN_BYTES: usize = 4096;
+const DUMP_EVALUATOR_PRE_NETWORK_PARSE_ENV: &str = "GAMMALOOP_DUMP_EVALUATOR_PRE_NETWORK_PARSE";
+const STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE_ENV: &str =
+    "GAMMALOOP_STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE";
+const TRACE_PARAMETRIC_NONFINITE_ENV: &str = "GAMMALOOP_TRACE_PARAMETRIC_NONFINITE";
+const DUMP_PARAMETRIC_NONFINITE_DIR_ENV: &str = "GAMMALOOP_DUMP_PARAMETRIC_NONFINITE_DIR";
+static PARAMETRIC_NONFINITE_DUMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Clone, Copy)]
 pub enum SingleOrAllOrientations<'a, OID> {
@@ -332,18 +344,16 @@ impl EvaluatorStack {
         count
     }
 
-    #[instrument(
-        skip_all,
-          fields(
-           indicatif.pb_show = true, indicatif.pb_msg = "Generating Single Parametric Evaluator",
-          )
-      )]
+    #[instrument(skip_all)]
     fn new_single_parametric<A: AtomCore>(
         parametric_atom: &[A],
         param_builder: &ParamBuilder,
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
+        let _progress_guard = crate::processes::enter_detailed_progress_span(
+            "Generating Single Parametric Evaluator",
+        );
         let opt_settings = settings.optimization_settings();
 
         GenericEvaluator::new_from_builder(
@@ -356,12 +366,7 @@ impl EvaluatorStack {
             settings,
         )
     }
-    #[instrument(
-        skip_all,
-          fields(
-           indicatif.pb_show = true, indicatif.pb_msg = "Generating Iterative Evaluator",
-          )
-      )]
+    #[instrument(skip_all)]
     fn new_iterative<A: AtomCore>(
         parametric_atom: &[A],
         param_builder: &ParamBuilder,
@@ -369,6 +374,8 @@ impl EvaluatorStack {
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(GenericEvaluator, usize)> {
+        let _progress_guard =
+            crate::processes::enter_detailed_progress_span("Generating Iterative Evaluator");
         // let  n_orientations=;
 
         Ok((
@@ -389,12 +396,7 @@ impl EvaluatorStack {
         ))
     }
 
-    #[instrument(
-        skip_all,
-          fields(
-           indicatif.pb_show = true, indicatif.pb_msg = "Generating Summed Function Map Evaluator",
-          )
-      )]
+    #[instrument(skip_all)]
     fn new_summed_function_map<A: AtomCore>(
         atoms: &[A],
         param_builder: &ParamBuilder,
@@ -402,6 +404,9 @@ impl EvaluatorStack {
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
+        let _progress_guard = crate::processes::enter_detailed_progress_span(
+            "Generating Summed Function Map Evaluator",
+        );
         let params: Vec<Atom> = (&param_builder.pairs)
             .into_iter()
             .flat_map(|p| p.params.clone())
@@ -426,7 +431,6 @@ impl EvaluatorStack {
                     .add_tagged_function(
                         GS.integrand,
                         vec![Atom::num(i)],
-                        "integrand".into(),
                         args.clone(),
                         param_integrand.clone(),
                     )
@@ -473,12 +477,7 @@ impl EvaluatorStack {
         )
     }
 
-    #[instrument(
-        skip_all,
-          fields(
-           indicatif.pb_show = true, indicatif.pb_msg = "Generating Summed Evaluator",
-          )
-      )]
+    #[instrument(skip_all)]
     fn new_summed<A: AtomCore>(
         atoms: &[A],
         param_builder: &ParamBuilder,
@@ -486,6 +485,8 @@ impl EvaluatorStack {
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
+        let _progress_guard =
+            crate::processes::enter_detailed_progress_span("Generating Summed Evaluator");
         let sum = atoms.iter().map(|atom| {
             orientations
                 .iter()
@@ -528,56 +529,273 @@ impl EvaluatorStack {
         Ok(Self::new_with_timings(atoms, param_builder, orientations, dual_shape, settings)?.0)
     }
 
-    #[instrument(
-           skip_all,
-           fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Evaluator Stack"),
-           err
-       )]
-    pub(crate) fn new_with_timings<A: AtomCore>(
+    #[instrument(skip_all, err)]
+    pub fn new_with_timings<A: AtomCore>(
         atoms: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
+        let _progress_guard =
+            crate::processes::enter_detailed_progress_span("Building Evaluator Stack");
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "evaluator_stack_new_start",
+            atom_count = atoms.len(),
+            orientation_count = orientations.len(),
+            iterative_orientation_optimization = settings.iterative_orientation_optimization,
+            summed_function_map = settings.summed_function_map,
+            summed = settings.summed,
+            do_algebra = settings.do_algebra,
+            "Evaluator timing milestone"
+        );
         let mut timings = EvaluatorBuildTimings::default();
         let spenso_started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "evaluator_stack_parse_atoms_start",
+            atom_count = atoms.len(),
+            do_algebra = settings.do_algebra,
+            "Evaluator timing milestone"
+        );
         let parsed_atoms = atoms
             .iter()
-            .map(|a| {
+            .enumerate()
+            .map(|(atom_index, a)| {
+                let atom_started = std::time::Instant::now();
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_start",
+                    atom_index,
+                    do_algebra = settings.do_algebra,
+                    "Evaluator timing milestone"
+                );
                 // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
-                let mut net = if settings.do_algebra {
-                    a.as_atom_view()
-                        .simplify_color()
-                        .simplify_gamma()
-                        .simplify_metrics()
-                        .to_dots()
-                        .parse_into_net()?
+                let instant = std::time::Instant::now();
+                let network_input = if settings.do_algebra {
+                    let color_simplified = a.as_atom_view().simplify_color_with(
+                        ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                    );
+                    let gamma_simplified = color_simplified.simplify_gamma();
+                    crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
+                        stage = "evaluator_stack_parse_atom_after_simplify_gamma",
+                        atom_index,
+                        log.after_gamma = gamma_simplified,
+                        "Evaluator atom after gamma simplification"
+                    );
+                    let simplified = gamma_simplified.simplify_metrics().to_dots();
+                    crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                        stage = "evaluator_stack_parse_atom_simplify_done",
+                        atom_index,
+                        elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                        "Evaluator timing milestone"
+                    );
+                    simplified
                 } else {
-                    a.as_atom_view().parse_into_net()?
+                    crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                        stage = "evaluator_stack_parse_atom_simplify_skipped",
+                        atom_index,
+                        elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                        "Evaluator timing milestone"
+                    );
+                    a.as_atom_view().to_cof_dimension_invariants()
                 };
+                crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
+                    stage = "evaluator_stack_parse_atom_before_network_parse",
+                    atom_index,
+                    log.atom = network_input,
+                    "Evaluator atom before network parsing"
+                );
+                if let Some(path) =
+                    std::env::var_os(DUMP_EVALUATOR_PRE_NETWORK_PARSE_ENV).map(std::path::PathBuf::from)
+                {
+                    std::fs::write(&path, network_input.to_plain_string()).with_context(|| {
+                        format!("failed to write evaluator pre-network atom to {}", path.display())
+                    })?;
+                }
+                if std::env::var_os(STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE_ENV).is_some() {
+                    return Err(eyre!(
+                        "stopped after evaluator pre-network parse dump because {STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE_ENV} is set"
+                    ));
+                }
+                let mut net = network_input.parse_into_net()?;
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_net_done",
+                    atom_index,
+                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
 
-                // println!("Executing {}", net.dot_pretty());
-                net.execute::<Sequential, SmallestDegree, _, _, _>(
+                // println!("Net: {}", net.dot_pretty());
+                let scalar_aliases = net.alias_scalar_refs(|_, scalar| {
+                    scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
+                });
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_scalar_aliases_done",
+                    atom_index,
+                    threshold_bytes = NETWORK_SCALAR_ALIAS_MIN_BYTES,
+                    aliases_created = scalar_aliases.aliases_created(),
+                    aliased_terms = scalar_aliases.aliased_terms(),
+                    aliased_bytes = scalar_aliases.aliased_bytes(),
+                    max_aliased_bytes = scalar_aliases.max_aliased_bytes(),
+                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
+                crate::debug_tags!(#generation, #compile, #term, #dump;
+                    stage = "evaluator_stack_parse_atom_network_dump",
+                    atom_index,
+                    file.atom = %a.as_atom_view().to_canonical_string(),
+                    file.network = %net.dot_pretty(),
+                    "Parsed evaluator network dump"
+                );
+
+                let parse_elapsed = instant.elapsed();
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_parse_elapsed",
+                    atom_index,
+                    elapsed_ms = parse_elapsed.as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
+                let instant = std::time::Instant::now();
+
+                macro_rules! execute_min_result_rank {
+                    ($execution_strategy:ty) => {
+                        match settings.tensor_network_contraction_order {
+                            TensorNetworkContractionOrder::SparseAtomAware => {
+                                net.execute::<$execution_strategy, MinResultRank, _, _, _>(
+                                    TENSORLIB.read().unwrap().deref(),
+                                    FUN_LIB.deref(),
+                                )
+                            }
+                            TensorNetworkContractionOrder::AtomAware => {
+                                net.execute::<
+                                    $execution_strategy,
+                                    MinResultRankWith<
+                                        { PAIR_SCORE_ATOM_AWARE },
+                                        { DEFAULT_EXACT_JOIN_LIMIT },
+                                    >,
+                                    _,
+                                    _,
+                                    _,
+                                >(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref())
+                            }
+                            TensorNetworkContractionOrder::ResultRankOnly => {
+                                net.execute::<
+                                    $execution_strategy,
+                                    MinResultRankWith<
+                                        { PAIR_SCORE_RESULT_RANK_ONLY },
+                                        { DEFAULT_EXACT_JOIN_LIMIT },
+                                    >,
+                                    _,
+                                    _,
+                                    _,
+                                >(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref())
+                            }
+                            TensorNetworkContractionOrder::EntryAware => {
+                                net.execute::<
+                                    $execution_strategy,
+                                    MinResultRankWith<
+                                        { PAIR_SCORE_ENTRY_AWARE },
+                                        { DEFAULT_EXACT_JOIN_LIMIT },
+                                    >,
+                                    _,
+                                    _,
+                                    _,
+                                >(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref())
+                            }
+                        }
+                    };
+                }
+
+                match settings.spenso_execution_mode {
+                    (ExecutionMode::Sequential, ContractionMode::SmallestDegree) => {
+                        net.execute::<Sequential, SmallestDegree, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        )?;
+                    }
+                    (ExecutionMode::Sequential, ContractionMode::MinResultRank) => {
+                        execute_min_result_rank!(Sequential)?;
+                    }
+                    (ExecutionMode::SequentialRef, ContractionMode::SmallestDegree) => {
+                        net.execute::<SequentialRef, SmallestDegree, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        )?;
+                    }
+                    (ExecutionMode::SequentialRef, ContractionMode::MinResultRank) => {
+                        execute_min_result_rank!(SequentialRef)?;
+                    }
+                    (ExecutionMode::SequentialExtract, ContractionMode::SmallestDegree) => {
+                        net.execute::<SequentialExtract, SmallestDegree, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        )?;
+                    }
+                    (ExecutionMode::SequentialExtract, ContractionMode::MinResultRank) => {
+                        execute_min_result_rank!(SequentialExtract)?;
+                    }
+                    _ => {
+                        net.execute::<Sequential, SmallestDegree, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        )?;
+                    }
+                }
+
+                // println!("Executing ", net.dot_pretty());
+                net.execute::<SequentialRef, SmallestDegree, _, _, _>(
                     TENSORLIB.read().unwrap().deref(),
                     FUN_LIB.deref(),
                 )?;
 
-                net.result_scalar()
+                let execute_elapsed = instant.elapsed();
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_execute_elapsed",
+                    atom_index,
+                    elapsed_ms = execute_elapsed.as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_execute_done",
+                    atom_index,
+                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
+
+                let result = net
+                    .result_scalar()
                     .map(|a| match a {
                         ExecutionResult::One => Atom::num(1),
                         ExecutionResult::Zero => Atom::Zero,
                         ExecutionResult::Val(v) => v.into_owned(),
                     })
+                    .map(|root| net.resolve_scalar_aliases(&scalar_aliases, root))
                     .map_err(|a| {
                         Report::from(a)
                             .with_note(|| format!("Network looks like: {}", net.dot_pretty()))
-                    })
+                    });
+                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                    stage = "evaluator_stack_parse_atom_done",
+                    atom_index,
+                    success = result.is_ok(),
+                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                    "Evaluator timing milestone"
+                );
+                result
             })
             .collect::<Result<Vec<_>>>()?;
         timings.spenso_time += spenso_started.elapsed();
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "evaluator_stack_parse_atoms_done",
+            atom_count = parsed_atoms.len(),
+            orientation_count = orientations.len(),
+            elapsed_ms = timings.spenso_time.as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Evaluator timing milestone"
+        );
 
         let symbolica_started = std::time::Instant::now();
+        let iterative_started = std::time::Instant::now();
         let iterative = if settings.iterative_orientation_optimization {
             Some(
                 Self::new_iterative(
@@ -592,7 +810,17 @@ impl EvaluatorStack {
         } else {
             None
         };
+        if settings.iterative_orientation_optimization {
+            crate::debug_tags!(#generation, #profile, #compile, #summary;
+                stage = "evaluator_stack_new_iterative_done",
+                orientation_count = orientations.len(),
+                elapsed_ms = iterative_started.elapsed().as_secs_f64() * 1000.0,
+                total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                "Evaluator timing milestone"
+            );
+        }
 
+        let summed_function_map_started = std::time::Instant::now();
         let summed_function_map = if settings.summed_function_map {
             Some(
                 Self::new_summed_function_map(
@@ -607,7 +835,17 @@ impl EvaluatorStack {
         } else {
             None
         };
+        if settings.summed_function_map {
+            crate::debug_tags!(#generation, #profile, #compile, #summary;
+                stage = "evaluator_stack_new_summed_function_map_done",
+                orientation_count = orientations.len(),
+                elapsed_ms = summed_function_map_started.elapsed().as_secs_f64() * 1000.0,
+                total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                "Evaluator timing milestone"
+            );
+        }
 
+        let summed_started = std::time::Instant::now();
         let summed = if settings.summed {
             Some(
                 Self::new_summed(
@@ -622,11 +860,37 @@ impl EvaluatorStack {
         } else {
             None
         };
+        if settings.summed {
+            crate::debug_tags!(#generation, #profile, #compile, #summary;
+                stage = "evaluator_stack_new_summed_done",
+                orientation_count = orientations.len(),
+                elapsed_ms = summed_started.elapsed().as_secs_f64() * 1000.0,
+                total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+                "Evaluator timing milestone"
+            );
+        }
 
+        let single_started = std::time::Instant::now();
         let single_parametric =
             Self::new_single_parametric(&parsed_atoms, param_builder, &dual_shape, settings)
                 .with_context(|| "Failed to create parametric")?;
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "evaluator_stack_new_single_parametric_done",
+            orientation_count = orientations.len(),
+            elapsed_ms = single_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Evaluator timing milestone"
+        );
         timings.symbolica_time += symbolica_started.elapsed();
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "evaluator_stack_new_done",
+            atom_count = parsed_atoms.len(),
+            orientation_count = orientations.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            spenso_ms = timings.spenso_time.as_secs_f64() * 1000.0,
+            symbolica_ms = timings.symbolica_time.as_secs_f64() * 1000.0,
+            "Evaluator timing milestone"
+        );
 
         Ok((
             EvaluatorStack {
@@ -650,7 +914,7 @@ impl EvaluatorStack {
         usize: From<OID>,
     {
         let mut result: Option<Vec<DualOrNot<Complex<F<T>>>>> = None;
-        for (_, e) in orientations.iter() {
+        for (orientation_id, e) in orientations.iter() {
             input.set_orientation_values(e);
             let output = evaluate_evaluator(
                 &mut self.single_parametric,
@@ -658,6 +922,130 @@ impl EvaluatorStack {
                 evaluation_metadata,
                 record_primary_timing,
             );
+            if std::env::var_os(TRACE_PARAMETRIC_NONFINITE_ENV).is_some() {
+                let output_nonfinite = output.iter().any(|entry| match entry {
+                    DualOrNot::Dual(dual_result) => dual_result.values.iter().any(|value| {
+                        value.re.is_nan()
+                            || value.re.is_infinite()
+                            || value.im.is_nan()
+                            || value.im.is_infinite()
+                    }),
+                    DualOrNot::NonDual(value) => {
+                        value.re.is_nan()
+                            || value.re.is_infinite()
+                            || value.im.is_nan()
+                            || value.im.is_infinite()
+                    }
+                });
+
+                if output_nonfinite {
+                    let f128_params = input
+                        .as_slice()
+                        .iter()
+                        .map(|value| {
+                            Complex::new(
+                                F::<f128>::from_ff64(value.re.into_ff64()),
+                                F::<f128>::from_ff64(value.im.into_ff64()),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    let mut f128_out =
+                        vec![Complex::default(); self.single_parametric.compute_out_size()];
+                    self.single_parametric
+                        .f128
+                        .evaluate(&f128_params, &mut f128_out);
+
+                    let arb_params = input
+                        .as_slice()
+                        .iter()
+                        .map(|value| {
+                            Complex::new(
+                                F::<ArbPrec>::from_ff64(value.re.into_ff64()),
+                                F::<ArbPrec>::from_ff64(value.im.into_ff64()),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    let mut arb_out =
+                        vec![Complex::default(); self.single_parametric.compute_out_size()];
+                    self.single_parametric
+                        .arb
+                        .evaluate(&arb_params, &mut arb_out);
+
+                    let f128_nonfinite_count = f128_out
+                        .iter()
+                        .filter(|value| {
+                            value.re.is_nan()
+                                || value.re.is_infinite()
+                                || value.im.is_nan()
+                                || value.im.is_infinite()
+                        })
+                        .count();
+                    let arb_nonfinite_count = arb_out
+                        .iter()
+                        .filter(|value| {
+                            value.re.is_nan()
+                                || value.re.is_infinite()
+                                || value.im.is_nan()
+                                || value.im.is_infinite()
+                        })
+                        .count();
+                    let f128_dump = f128_out
+                        .iter()
+                        .enumerate()
+                        .map(|(index, value)| format!("{index}: {value:+16e}"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let arb_dump = arb_out
+                        .iter()
+                        .enumerate()
+                        .map(|(index, value)| format!("{index}: {value:+16e}"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let params_dump = input
+                        .as_slice()
+                        .iter()
+                        .enumerate()
+                        .map(|(index, value)| format!("{index:04}\t{value:+16e}"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+
+                    if let Some(dump_dir) = std::env::var_os(DUMP_PARAMETRIC_NONFINITE_DIR_ENV) {
+                        let dump_dir = std::path::PathBuf::from(dump_dir);
+                        let _ = std::fs::create_dir_all(&dump_dir);
+                        let dump_index =
+                            PARAMETRIC_NONFINITE_DUMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+                        let stem = format!(
+                            "parametric_nonfinite_{dump_index:04}_orientation{}",
+                            usize::from(orientation_id)
+                        );
+                        let _ = std::fs::write(
+                            dump_dir.join(format!("{stem}.txt")),
+                            format!(
+                                "orientation_id={}\norientations_start={}\noverride_pos={}\nmultiplicative_offset={}\nf128_nonfinite_count={}\narb_nonfinite_count={}\n\n# f128_out\n{}\n\n# arb_out\n{}\n\n# params_after_orientation\n{}\n",
+                                usize::from(orientation_id),
+                                input.orientations_start,
+                                input.override_pos,
+                                input.multiplicative_offset,
+                                f128_nonfinite_count,
+                                arb_nonfinite_count,
+                                f128_dump,
+                                arb_dump,
+                                params_dump
+                            ),
+                        );
+                    }
+                    crate::debug_tags!(#integration, #inspect, #dump;
+                        stage = "parametric_orientation_nonfinite",
+                        orientation_id = usize::from(orientation_id),
+                        output_nonfinite = output_nonfinite,
+                        f128_nonfinite_count = f128_nonfinite_count,
+                        arb_nonfinite_count = arb_nonfinite_count,
+                        f128 = %f128_dump,
+                        arb = %arb_dump,
+                        "single-parametric orientation produced nonfinite output"
+                    );
+                }
+            }
             if let Some(result) = &mut result {
                 for (r, v) in result.iter_mut().zip(output) {
                     *r += v;
@@ -740,7 +1128,7 @@ impl EvaluatorStack {
     {
         let Some(summed_function_map) = &mut self.summed_function_map else {
             return Err(eyre!(
-                "Summed function map evaluator not available. Regenerate with summed_function_map set to true."
+                "Runtime requested evaluator_method=SummedFunctionMap, but this integrand was generated without a summed function-map evaluator. Regenerate with global.generation.evaluator.summed_function_map=true, or set process runtime general.evaluator_method=SingleParametric."
             ));
         };
 
@@ -1063,7 +1451,7 @@ impl GenericEvaluator {
             .as_ref()
             .ok_or_else(|| eyre!("Cannot build symjit backend without the rational evaluator"))?;
         let evaluator = rational
-            .jit_compile::<SymComplex<f64>>()
+            .jit_compile::<SymComplex<f64>>(JITCompilationSettings::default())
             .map_err(|err| eyre!(err))?;
         self.loaded_f64_compiled.invalidate();
         self.symjit_f64.set(SymjitComplexEvaluatorGL(evaluator));
@@ -1158,10 +1546,13 @@ impl GenericEvaluator {
 
         let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
         for n in exprs.iter() {
-            let eval = n
-                .evaluator(fn_map, params, optimization_settings.clone())
+            let eval: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> = n
+                .evaluator(params)
+                .function_map(fn_map.clone())
+                .optimization_settings(optimization_settings.clone())
+                .build()
                 .map_err(|e| {
-                    let mut settings =SpensoPrintSettings::compact().nice_symbolica();
+                    let mut settings = SpensoPrintSettings::compact().nice_symbolica();
                     settings.max_line_length = Some(120);
                     settings.hide_all_namespaces = false;
                     eyre!(
@@ -1182,7 +1573,7 @@ impl GenericEvaluator {
                 })?;
 
             tree = Some(if let Some(mut tree) = tree {
-                tree.merge(eval, optimization_settings.cpe_iterations)
+                tree.merge(eval, settings.cpe_iterations)
                     .map_err(|e| eyre!("Failed to merge evaluators: {}", e))?;
                 tree
             } else {
@@ -1195,9 +1586,7 @@ impl GenericEvaluator {
         if let Some(dual_shape) = &dual_shape {
             let dual = HyperDual::<SymComplex<Rational>>::new(dual_shape.clone());
             let dualizer = Dualizer::new(dual, vec![]);
-            tree = tree
-                .vectorize(&dualizer, ahash::HashMap::default())
-                .unwrap();
+            tree = tree.vectorize(&dualizer).unwrap();
         }
 
         let rational = tree.clone();
@@ -1606,6 +1995,7 @@ impl GenericEvaluatorFloat for ArbPrec {
 
 #[cfg(test)]
 mod tests {
+    use idenso::color::CS;
     use symbolica::atom::Symbol;
 
     use crate::utils::{W_, symbolica_ext::CallSymbol};
@@ -1665,5 +2055,15 @@ mod tests {
         let summed = sum_iterative_outputs_for_selected_orientations(output, 3, &[1]);
 
         assert_eq!(summed, vec![20, 50]);
+    }
+
+    #[test]
+    fn pi_eval() {
+        let params = vec![parse!("x"), parse!("y")];
+        let _evaluator = (parse!("x + y") + Symbol::PI / CS.cf)
+            .evaluator(&params)
+            .build()
+            .unwrap();
+        // assert_eq!(evaluator.evaluate_single(&[1.0, 2.0]), 3.0);
     }
 }

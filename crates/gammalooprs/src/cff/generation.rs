@@ -7,7 +7,7 @@ use crate::{
         surface::{HybridSurface, HybridSurfaceID, InfiniteSurface},
         tree::Tree,
     },
-    graph::{Graph, get_cff_inverse_energy_product_impl},
+    graph::{Graph, LoopMomentumBasis, get_cff_inverse_energy_product_impl},
     processes::{CrossSectionCut, CutId},
     settings::global::OrientationPattern,
 };
@@ -760,6 +760,20 @@ impl SurfaceCache {
             .collect()
     }
 
+    pub(crate) fn get_all_replacements_in_lmb(
+        &self,
+        cut_edges: &[EdgeIndex],
+        lmb: &LoopMomentumBasis,
+    ) -> Vec<Replacement> {
+        self.iter_all_surfaces()
+            .map(|(id, surface)| {
+                let id_atom = Pattern::from(Atom::from(id));
+                let surface_atom = Pattern::from(surface.to_atom_in_lmb(cut_edges, lmb));
+                Replacement::new(id_atom, surface_atom)
+            })
+            .collect()
+    }
+
     #[allow(dead_code)]
     pub(crate) fn get_surface(&self, surface_id: HybridSurfaceID) -> HybridSurfaceRef<'_> {
         match surface_id {
@@ -1071,6 +1085,7 @@ mod tests_cff {
             let function_map = FunctionMap::new();
 
             let mut tree = expression_atom
+                .as_view()
                 .to_evaluation_tree(&function_map, &params)
                 .unwrap();
 
@@ -1214,7 +1229,6 @@ mod tests_cff {
     }
 
     #[test]
-    #[ignore]
     fn fishnet2b2() {
         let edges = vec![
             (0, 1),
@@ -1265,7 +1279,6 @@ mod tests_cff {
     }
 
     #[test]
-    #[ignore]
     fn cube() {
         let edges = vec![
             (0, 1),
@@ -1819,76 +1832,6 @@ mod tests_cff {
             assert_eq!(num_with_16, 2);
             assert_eq!(num_with_42, 2);
             assert_eq!(num_with_36, 1);
-        }
-    }
-
-    mod slow {
-        use super::*;
-
-        #[test]
-        #[ignore]
-        fn fishnet2b3() {
-            let edges = vec![
-                (0, 1),
-                (1, 2),
-                (3, 4),
-                (4, 5),
-                (6, 7),
-                (7, 8),
-                (9, 10),
-                (10, 11),
-                (0, 3),
-                (3, 6),
-                (6, 9),
-                (1, 4),
-                (4, 7),
-                (7, 10),
-                (2, 5),
-                (5, 8),
-                (8, 11),
-            ];
-
-            let incoming_vertices = vec![];
-
-            let dep_mom = EdgeIndex::from(3);
-            let dep_mom_expr = vec![
-                (EdgeIndex::from(0), -1),
-                (EdgeIndex::from(1), -1),
-                (EdgeIndex::from(2), -1),
-            ];
-
-            let shift_rewrite = ShiftRewrite {
-                dependent_momentum: dep_mom,
-                dependent_momentum_expr: dep_mom_expr,
-            };
-
-            let start = std::time::Instant::now();
-            let orientations = generate_orientations_for_testing(edges, incoming_vertices);
-            let mut surface_cache = SurfaceCache::new();
-
-            let cff = generate_cff_from_orientations(
-                orientations,
-                &mut surface_cache,
-                &[],
-                &Some(shift_rewrite),
-            )
-            .unwrap();
-            let finish = std::time::Instant::now();
-            println!("time to generate cff: {:?}", finish - start);
-
-            let energy_cache = [F(3.0); 17];
-
-            //let energy_cache = dummy_hedge_graph(energy_cache.len())
-            //    .new_hedgevec_from_iter(energy_cache)
-            //    .unwrap();
-
-            let mut evaluator = cff.quick_symbolica_evaluator(0..4, 4..17);
-            let start = std::time::Instant::now();
-            for _ in 0..100 {
-                let _res = evaluator.evaluate_single(&energy_cache);
-            }
-            let finish = std::time::Instant::now();
-            println!("time to evaluate cff: {:?}", (finish - start) / 100);
         }
     }
 }

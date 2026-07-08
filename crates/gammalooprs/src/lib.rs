@@ -25,7 +25,7 @@ pub mod tests;
 // pub mod tests_from_pytest;
 pub mod utils;
 pub mod uv;
-use idenso::representations::initialize;
+pub use gammaloop_tracing_filter::LogMessage;
 use integrands::*;
 use model::Model;
 use momentum::signature::ExternalSignature;
@@ -40,10 +40,6 @@ pub static ITERATION_ABORT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 pub const GAMMALOOP_NAMESPACE: &str = "GL";
 pub const MAX_CORES: usize = 1000;
-
-pub(crate) fn initialize_reps() {
-    initialize();
-}
 
 pub trait GammaLoopContext: HasStateMap + HasModel {}
 

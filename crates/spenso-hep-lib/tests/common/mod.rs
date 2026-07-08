@@ -1,13 +1,14 @@
 use idenso::{
-    gamma::AGS,
-    metric::{MetricSimplifier, PermuteWithMetric},
+    dirac::AGS,
     representations::{Bispinor, initialize},
+    shorthands::metric::{MetricSimplifier, PermuteWithMetric},
+    tensor::SymbolicTensor,
 };
 use spenso::{
     network::{
-        ExecutionResult, Sequential, SmallestDegree, TensorNetworkError, TensorOrScalarOrKey,
-        library::{TensorLibraryData, symbolic::ExplicitKey},
-        parsing::ParseSettings,
+        ExecutionResult, Sequential, SmallestDegree, TensorNetworkError,
+        library::symbolic::ExplicitKey,
+        parsing::{ParseSettings, StrictTensorFilter},
     },
     structure::{
         IndexlessNamedStructure, ScalarTensor,
@@ -15,7 +16,7 @@ use spenso::{
         permuted::Perm,
         representation::{Minkowski, RepName},
     },
-    tensors::{parametric::ParamTensor, symbolic::SymbolicTensor},
+    tensors::parametric::ParamTensor,
 };
 use spenso_hep_lib::{FUN_LIB, HEP_LIB, HepNet, HepTensor};
 use symbolica::{
@@ -42,23 +43,10 @@ impl NetExt for HepNet<AbstractIndex> {
     ) -> Result<HepTensor<AbstractIndex>, TensorNetworkError<ExplicitKey<AbstractIndex>, Symbol>>
     {
         self.execute::<Sequential, SmallestDegree, _, _, _>(&*HEP_LIB, &*FUN_LIB)?;
-        match self.result()? {
+        match self.result_tensor(&*HEP_LIB)? {
             ExecutionResult::One => Ok(HepTensor::Param(ParamTensor::new_scalar(Atom::one()))),
             ExecutionResult::Zero => Ok(HepTensor::Param(ParamTensor::new_scalar(Atom::zero()))),
-            ExecutionResult::Val(a) => match a {
-                TensorOrScalarOrKey::Scalar(a) => {
-                    Ok(HepTensor::Param(ParamTensor::new_scalar(a.clone())))
-                }
-                _ => match self.result_tensor(&*HEP_LIB)? {
-                    ExecutionResult::One => {
-                        Ok(HepTensor::Param(ParamTensor::new_scalar(Atom::one())))
-                    }
-                    ExecutionResult::Zero => {
-                        Ok(HepTensor::Param(ParamTensor::new_scalar(Atom::zero())))
-                    }
-                    ExecutionResult::Val(t) => Ok(t.into_owned()),
-                },
-            },
+            ExecutionResult::Val(tensor) => Ok(tensor.into_owned()),
         }
     }
 }
@@ -84,7 +72,11 @@ impl HepAtomExt for AtomView<'_> {
         &self,
         settings: &ParseSettings,
     ) -> Result<HepNet<AbstractIndex>, TensorNetworkError<ExplicitKey<AbstractIndex>, Symbol>> {
-        HepNet::try_from_view(*self, &*HEP_LIB, settings)
+        let settings = settings
+            .clone()
+            .with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
+
+        HepNet::try_from_view(*self, &*HEP_LIB, &settings)
     }
 }
 

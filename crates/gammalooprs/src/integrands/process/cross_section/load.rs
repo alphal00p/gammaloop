@@ -25,19 +25,7 @@ use std::{
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Indeterminate},
-    domains::{
-        float::Complex,
-        integer::IntegerRing,
-        rational::{Fraction, Rational},
-    },
-    evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
-    id::{MatchSettings, Replacement},
-    parse_lit,
-    state::{State, StateMap},
-    try_parse,
-};
+use symbolica::{domains::rational::Fraction, prelude::*, state::StateMap};
 
 type RationalExpressionTree = (
     Vec<Atom>,
@@ -182,15 +170,16 @@ fn apply_fn_map_entries(
     let mut all_replacements = Vec::new();
     let mut fn_map = FunctionMap::new();
     let mut replacements = Vec::new();
-    fn_map.add_constant(
-        parse_lit!(gammalooprs::x),
-        Complex::<Rational>::try_from(Atom::Zero.as_view()).unwrap(),
-    );
+    fn_map
+        .add_aliases([(parse_lit!(gammalooprs::x), Atom::Zero)])
+        .map_err(|e| eyre!(e))?;
 
     for (lhs, rhs, tags, args) in parsed_entries {
         if let AtomView::Var(_) = lhs.as_view() {
             if let Ok(value) = Complex::<Rational>::try_from(rhs.as_view()) {
-                fn_map.add_constant(lhs.clone(), value);
+                fn_map
+                    .add_aliases([(lhs.clone(), Atom::num(value))])
+                    .map_err(|e| eyre!(e))?;
                 all_replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
             } else {
                 replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
@@ -206,20 +195,12 @@ fn apply_fn_map_entries(
                             atom.to_pattern(),
                             Atom::var(symbolica::symbol!(format!("x{i}_"))),
                         )
-                        .with_settings(MatchSettings {
-                            allow_new_wildcards_on_rhs: true,
-                            ..Default::default()
-                        })
+                        .allow_new_wildcards_on_rhs(true)
                     })
                     .collect::<Vec<_>>();
 
                 fn_map
-                    .add_function(
-                        f.get_symbol(),
-                        f.get_symbol().get_name().into(),
-                        args,
-                        rhs.clone(),
-                    )
+                    .add_function(f.get_symbol(), args, rhs.clone())
                     .map_err(|e| eyre!(e))?;
 
                 all_replacements.push(Replacement::new(
@@ -228,13 +209,7 @@ fn apply_fn_map_entries(
                 ));
             } else {
                 fn_map
-                    .add_tagged_function(
-                        f.get_symbol(),
-                        tags,
-                        f.get_symbol().get_name().into(),
-                        args,
-                        rhs.clone(),
-                    )
+                    .add_tagged_function(f.get_symbol(), tags, args, rhs.clone())
                     .map_err(|e| eyre!(e))?;
                 all_replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
             }
@@ -254,12 +229,11 @@ fn build_evaluator<A: ImportWithMap>(
     state_map: &StateMap,
     iterate: bool,
 ) -> Result<LoadedGenericEvaluator> {
-    let optimization_settings = OptimizationSettings {
-        horner_iterations: 10,
-        n_cores: 10,
-        abort_check: None,
-        ..Default::default()
-    };
+    let optimization_settings = OptimizationSettings::new()
+        .horner_iterations(10)
+        .cores(10)
+        .abort_check(None);
+    let cpe_iterations = None;
     let exprs = payload
         .exprs
         .iter()
@@ -278,13 +252,14 @@ fn build_evaluator<A: ImportWithMap>(
         for expr in &exprs {
             let eval = expr
                 .replace_multiple(&replacements)
-                .evaluator(&fn_map, params, optimization_settings.clone())
+                .evaluator(params)
+                .function_map(fn_map.clone())
+                .optimization_settings(optimization_settings.clone())
+                .build()
                 .map_err(|e| eyre!("{e} for {expr}:{}", expr.replace_multiple(&replacements)))?;
 
             tree = Some(if let Some((atoms, mut existing)) = tree {
-                existing
-                    .merge(eval, optimization_settings.cpe_iterations)
-                    .map_err(|e| eyre!(e))?;
+                existing.merge(eval, cpe_iterations).map_err(|e| eyre!(e))?;
                 (atoms, existing)
             } else {
                 (exprs.clone(), eval)
@@ -309,24 +284,22 @@ fn build_evaluator<A: ImportWithMap>(
             .map(|expr| expr.replace_multiple(&replacements))
             .collect::<Vec<_>>();
 
-        Atom::evaluator_multiple(
-            &replaced_exprs,
-            &fn_map,
-            params,
-            optimization_settings.clone(),
-        )
-        .map(|eval| {
-            (
-                exprs,
-                all_replacements,
-                eval.map_coeff(&|r| Complex {
-                    re: r.re.to_f64(),
-                    im: r.im.to_f64(),
-                }),
-                result,
-            )
-        })
-        .map_err(|e| eyre!("{e}"))
+        Atom::evaluator_multiple(&replaced_exprs, params)
+            .function_map(fn_map)
+            .optimization_settings(optimization_settings)
+            .build()
+            .map(|eval| {
+                (
+                    exprs,
+                    all_replacements,
+                    eval.map_coeff(&|r| Complex {
+                        re: r.re.to_f64(),
+                        im: r.im.to_f64(),
+                    }),
+                    result,
+                )
+            })
+            .map_err(|e| eyre!("{e}"))
     }
 }
 

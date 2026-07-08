@@ -198,6 +198,39 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
+name = "astro-float"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96034cc871c05bb65ad7fb77e6a8bebf45d8b055ed0311769e2f83a1d373c1ec"
+dependencies = [
+ "astro-float-macro",
+ "astro-float-num",
+]
+
+[[package]]
+name = "astro-float-macro"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05cfe0f6df5a74fb25b9e713470ad77e091f35f798730673c8772f26ed438963"
+dependencies = [
+ "astro-float-num",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "astro-float-num"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86887daca11d02e0b04f37a9cb81888aae881397fb48ff66494e356aea97554a"
+dependencies = [
+ "itertools 0.10.5",
+ "lazy_static",
+ "serde",
+]
+
+[[package]]
 name = "atomic"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1046,6 +1079,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "delegate"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "780eb241654bf097afb00fc5f054a09b687dad862e485fdcf8399bb056565370"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "deltae"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1484,6 +1528,7 @@ dependencies = [
  "eyre",
  "figment",
  "gammaloop-tracing-filter",
+ "gammaloop-workspace-hack",
  "gammalooprs",
  "idenso",
  "include_dir",
@@ -1532,12 +1577,14 @@ dependencies = [
  "colored 3.1.1",
  "eyre",
  "gammaloop-api",
+ "gammaloop-workspace-hack",
  "gammalooprs",
  "insta",
  "itertools 0.14.0",
  "momtrop",
  "ndarray",
  "rand 0.9.4",
+ "rayon",
  "serde_json",
  "serial_test",
  "spenso",
@@ -1553,9 +1600,95 @@ dependencies = [
 name = "gammaloop-tracing-filter"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "clap",
+ "colored 3.1.1",
+ "gammaloop-tracing-filter-macros",
+ "gammaloop-workspace-hack",
+ "itertools 0.14.0",
+ "pyo3",
+ "serde",
+ "serde_json",
+ "spenso",
+ "symbolica",
+ "tabled",
  "thiserror 2.0.18",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "gammaloop-tracing-filter-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "gammaloop-workspace-hack"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "anstream",
+ "arrayvec",
+ "bincode 2.0.1",
+ "bitflags 2.11.1",
+ "bitvec",
+ "chrono",
+ "clap",
+ "clap_builder",
+ "console 0.16.3",
+ "criterion",
+ "crossterm 0.28.1",
+ "derive_more 2.1.1",
+ "derive_more-impl",
+ "either",
+ "figment",
+ "getrandom 0.2.17",
+ "indenter",
+ "indexmap",
+ "insta",
+ "libc",
+ "matrixmultiply",
+ "memchr",
+ "num-bigint",
+ "num-complex",
+ "num-integer",
+ "num-traits",
+ "numerica",
+ "once_cell",
+ "papergrid",
+ "rand 0.9.4",
+ "rand_chacha 0.9.0",
+ "regex",
+ "regex-automata",
+ "regex-syntax",
+ "rug",
+ "rustix 1.1.4",
+ "serde",
+ "serde_core",
+ "serde_json",
+ "serde_spanned 1.1.1",
+ "similar",
+ "smallvec",
+ "smartstring",
+ "symbolica",
+ "syn 1.0.109",
+ "syn 2.0.117",
+ "tabled",
+ "testing_table",
+ "time",
+ "tiny-keccak",
+ "toml_datetime 1.1.1+spec-1.1.0",
+ "toml_parser",
+ "toml_writer",
+ "tracing",
+ "tracing-core",
+ "tracing-subscriber",
+ "winnow 0.7.15",
+ "winnow 1.0.2",
+ "zerocopy",
 ]
 
 [[package]]
@@ -1573,12 +1706,14 @@ dependencies = [
  "colored 3.1.1",
  "criterion",
  "ctrlc",
- "delegate",
+ "delegate 0.12.0",
  "derive_more 0.99.20",
  "dirs",
  "dot-parser",
  "enum_dispatch",
  "eyre",
+ "gammaloop-tracing-filter",
+ "gammaloop-workspace-hack",
  "idenso",
  "include_dir",
  "indicatif",
@@ -1699,14 +1834,50 @@ dependencies = [
 
 [[package]]
 name = "graphica"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f32bec01b43c1a68289108ac4c3b71ed76296f871f3dbf3922d3f498cf6e7215"
+version = "2.1.0"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=main#9135b4091505276baa11ef262fe1165f2b95ea33"
 dependencies = [
  "ahash",
  "dyn-clone",
  "numerica",
  "rand 0.9.4",
+]
+
+[[package]]
+name = "gungraun"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bfa183cef2c88324b20de9727befd262c35592d9885ffd93b8b102536a81cf2"
+dependencies = [
+ "bincode 1.3.3",
+ "derive_more 2.1.1",
+ "gungraun-macros",
+ "gungraun-runner",
+]
+
+[[package]]
+name = "gungraun-macros"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e35c7fb6133421db1cf752b7a2838d9277a26810ccaeeca7aa449f96ad7c2b01"
+dependencies = [
+ "derive_more 2.1.1",
+ "proc-macro-error2",
+ "proc-macro2",
+ "quote",
+ "rustc_version",
+ "serde",
+ "serde_json",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "gungraun-runner"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ebdac6d5fe0aa9d9623d690fbfdb759e0ed44115e0685b9abc4568fe47db364"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -1771,6 +1942,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "hugepage-rs"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da5c9051569a6ff2f501fb927a7d994af9232e4bff255352811d7b87afc50603"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "iai-callgrind"
 version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1818,7 +1998,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core",
 ]
 
 [[package]]
@@ -1840,9 +2020,14 @@ checksum = "3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954"
 name = "idenso"
 version = "0.3.0"
 dependencies = [
+ "base64 0.22.1",
  "bincode 2.0.1",
  "bincode-trait-derive",
+ "blake3",
+ "criterion",
+ "delegate 0.13.5",
  "eyre",
+ "gungraun",
  "insta",
  "itertools 0.14.0",
  "linnet",
@@ -2218,6 +2403,7 @@ dependencies = [
  "dot-parser",
  "duplicate 2.0.1",
  "figment",
+ "gammaloop-workspace-hack",
  "getrandom 0.2.17",
  "iai-callgrind",
  "indenter",
@@ -2306,6 +2492,43 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d640282b302c0bb0a2a8e0233ead9035e3bed871f0b7e81fe4a1ec829765db44"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "malachite-base"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30a52349e41ad66905fd33a8dc8736c554d71cfe56b81e2c499abec7f0168725"
+dependencies = [
+ "hashbrown 0.16.1",
+ "itertools 0.14.0",
+ "libm",
+ "ryu",
+]
+
+[[package]]
+name = "malachite-nz"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3069312201645d5257b0c34b8d506933f9d5ea82133b14b9c76be2ce5bb41a6"
+dependencies = [
+ "itertools 0.14.0",
+ "libm",
+ "malachite-base",
+ "serde",
+ "wide 0.8.3",
+]
+
+[[package]]
+name = "malachite-q"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2549764c0d9756d0396cf0c7fb47aee5df4da8a771ac5bfc616bb53ac344c9c"
+dependencies = [
+ "itertools 0.14.0",
+ "malachite-base",
+ "malachite-nz",
+ "serde",
 ]
 
 [[package]]
@@ -2601,16 +2824,18 @@ dependencies = [
 
 [[package]]
 name = "numerica"
-version = "1.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adef2a6836e2a9b3b695858bbc1d0835c1bb3475b3dcf4d0131a6a3cd2877a72"
+version = "2.1.0"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=main#9135b4091505276baa11ef262fe1165f2b95ea33"
 dependencies = [
  "ahash",
+ "astro-float",
  "bincode 2.0.1",
  "bincode-trait-derive",
  "colored 3.1.1",
  "dyn-clone",
  "itertools 0.14.0",
+ "malachite-nz",
+ "malachite-q",
  "num-traits",
  "numpy",
  "pyo3",
@@ -3746,6 +3971,15 @@ dependencies = [
 
 [[package]]
 name = "safe_arch"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "629516c85c29fe757770fa03f2074cf1eac43d44c02a3de9fc2ef7b0e207dfdd"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
+name = "safe_arch"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f7caad094bd561859bcd467734a720c3c1f5d1f338995351fefe2190c45efed"
@@ -4124,7 +4358,7 @@ dependencies = [
  "colored 3.1.1",
  "constcat",
  "criterion",
- "delegate",
+ "delegate 0.12.0",
  "derive_more 0.99.20",
  "duplicate 1.0.0",
  "dyn-clone",
@@ -4132,6 +4366,7 @@ dependencies = [
  "env_logger",
  "eyre",
  "features",
+ "gammaloop-workspace-hack",
  "gat-lending-iterator",
  "indexmap",
  "insta",
@@ -4154,6 +4389,7 @@ dependencies = [
  "symbolica",
  "tabled",
  "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]
@@ -4161,11 +4397,13 @@ name = "spenso-hep-lib"
 version = "0.1.7"
 dependencies = [
  "ahash",
+ "gammaloop-workspace-hack",
  "idenso",
  "insta",
  "spenso",
  "spenso-macros",
  "symbolica",
+ "tabled",
  "xpct",
 ]
 
@@ -4309,9 +4547,8 @@ dependencies = [
 
 [[package]]
 name = "symbolica"
-version = "1.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce23e15d37e02117d7c009244c837b7cfbee407bc128cd5f0980aaf1c7a1a8ed"
+version = "2.1.0"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=main#9135b4091505276baa11ef262fe1165f2b95ea33"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -4322,6 +4559,7 @@ dependencies = [
  "bytes",
  "dyn-clone",
  "graphica",
+ "inventory",
  "libloading",
  "numerica",
  "numpy",
@@ -4345,13 +4583,15 @@ dependencies = [
 
 [[package]]
 name = "symjit"
-version = "2.14.9"
+version = "2.18.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5b34984a3f453e00a971da44b637482e935af9d8a3234b593608d46ca5890df"
+checksum = "7845712223287ac3f93b947ae073cd3ee14b4951242bea436969e910cd6ba247"
 dependencies = [
  "ahash",
  "anyhow",
  "hashbrown 0.16.1",
+ "hugepage-rs",
+ "lazy_static",
  "libc",
  "num-complex",
  "petgraph",
@@ -4361,6 +4601,7 @@ dependencies = [
  "serde",
  "serde_json",
  "spec_math",
+ "toml 1.1.2+spec-1.1.0",
  "wasmtime-jit-icache-coherence",
  "wide 1.3.0",
  "windows-sys 0.61.2",
@@ -4717,6 +4958,21 @@ dependencies = [
  "toml_parser",
  "toml_writer",
  "winnow 0.7.15",
+]
+
+[[package]]
+name = "toml"
+version = "1.1.2+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81f3d15e84cbcd896376e6730314d59fb5a87f31e4b038454184435cd57defee"
+dependencies = [
+ "indexmap",
+ "serde_core",
+ "serde_spanned 1.1.1",
+ "toml_datetime 1.1.1+spec-1.1.0",
+ "toml_parser",
+ "toml_writer",
+ "winnow 1.0.2",
 ]
 
 [[package]]
@@ -5472,6 +5728,16 @@ dependencies = [
 
 [[package]]
 name = "wide"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13ca908d26e4786149c48efcf6c0ea09ab0e06d1fe3c17dc1b4b0f1ca4a7e788"
+dependencies = [
+ "bytemuck",
+ "safe_arch 0.9.3",
+]
+
+[[package]]
+name = "wide"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c9479f84a757f819cfab37295955906479181395de83add28f74975fde083141"
@@ -5517,7 +5783,7 @@ version = "0.57.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12342cb4d8e3b046f3d80effd474a7a02447231330ef77d71daa6fbc40681143"
 dependencies = [
- "windows-core 0.57.0",
+ "windows-core",
  "windows-targets",
 ]
 
@@ -5527,23 +5793,10 @@ version = "0.57.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2ed2439a290666cd67ecce2b0ffaad89c2a56b976b736e6ece670297897832d"
 dependencies = [
- "windows-implement 0.57.0",
- "windows-interface 0.57.0",
- "windows-result 0.1.2",
+ "windows-implement",
+ "windows-interface",
+ "windows-result",
  "windows-targets",
-]
-
-[[package]]
-name = "windows-core"
-version = "0.62.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8e83a14d34d0623b51dce9581199302a221863196a1dde71a7663a4c2be9deb"
-dependencies = [
- "windows-implement 0.60.2",
- "windows-interface 0.59.3",
- "windows-link",
- "windows-result 0.4.1",
- "windows-strings",
 ]
 
 [[package]]
@@ -5558,32 +5811,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "windows-implement"
-version = "0.60.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "053e2e040ab57b9dc951b72c264860db7eb3b0200ba345b4e4c3b14f67855ddf"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "windows-interface"
 version = "0.57.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29bee4b38ea3cde66011baa44dba677c432a78593e202392d1e9070cf2a7fca7"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "windows-interface"
-version = "0.59.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f316c4a2570ba26bbec722032c4099d8c8bc095efccdc15688708623367e358"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5603,24 +5834,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e383302e8ec8515204254685643de10811af0ed97ea37210dc26fb0032647f8"
 dependencies = [
  "windows-targets",
-]
-
-[[package]]
-name = "windows-result"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7781fa89eaf60850ac3d2da7af8e5242a5ea78d1a11c49bf2910bb5a73853eb5"
-dependencies = [
- "windows-link",
-]
-
-[[package]]
-name = "windows-strings"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7837d08f69c77cf6b07689544538e017c1bfcf57e34b4c0ff58e6c2cd3b37091"
-dependencies = [
- "windows-link",
 ]
 
 [[package]]

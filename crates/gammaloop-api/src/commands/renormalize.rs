@@ -9,7 +9,7 @@ use color_eyre::Result;
 use colored::Colorize;
 use gammalooprs::utils::symbolica_ext::TypstFormat;
 use idenso::color::{ColorSimplifier, CS};
-use idenso::metric::MetricSimplifier;
+use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::io::Write as _;

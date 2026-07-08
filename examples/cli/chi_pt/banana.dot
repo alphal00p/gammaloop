@@ -1,0 +1,20 @@
+digraph banana {
+    num = "1";
+    overall_factor = "1";
+    overall_factor_evaluated = "1";
+    projector = " 1 ";
+
+	exte0	 [style=invis];
+
+	exte1	 [style=invis];
+
+	exte0	-> 0:0	 [id=0 particle="scalar_1"];
+	1:1     -> exte1 [id=1 particle="scalar_1"];
+
+	0   -> 1		[id=2 particle="scalar_2" lmb_id=0];
+	0   -> 1		[id=3 particle="scalar_2" lmb_id=1];
+	0   -> 1		[id=4 particle="scalar_2" lmb_id=2];
+	0   -> 1		[id=5 particle="scalar_2" ];
+
+}
+

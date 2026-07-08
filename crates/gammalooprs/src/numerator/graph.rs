@@ -439,9 +439,9 @@ impl ReversibleEdge for EdgeData<ArcParticle> {
 mod test {
 
     // use env_logger::WriteStyle;
-    use idenso::{color::ColorSimplifier, gamma::GammaSimplifier};
+    use idenso::{color::ColorSimplifier, dirac::GammaSimplifier, tensor::SymbolicNetParse};
 
-    use spenso::network::parsing::{NetworkParse, ParseSettings};
+    use spenso::network::parsing::ParseSettings;
     use symbolica::{
         atom::{Atom, AtomCore},
         parse_lit,
@@ -606,6 +606,7 @@ mod test {
 
             amp.build_integrand(
                 &model,
+                "test_process",
                 &GlobalSettings::default(),
                 (&RuntimeSettings::default()).into(),
                 &thread_pool,

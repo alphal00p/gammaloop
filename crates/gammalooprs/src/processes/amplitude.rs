@@ -13,12 +13,12 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use momtrop::SampleGenerator;
 
-use idenso::gamma::GammaSimplifier;
+use idenso::dirac::GammaSimplifier;
 use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
 };
-use spenso::{algebra::complex::Complex, network::library::TensorLibraryData};
+use spenso::algebra::complex::Complex;
 use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
@@ -41,8 +41,9 @@ use crate::{
     model::ArcParticle,
     momentum::{sample::ExternalIndex, signature::SignatureLike},
     processes::{
-        DotExportSettings, EvaluatorSettings, GraphGenerationStats, NamedGraphGenerationReport,
-        StandaloneExportSettings, build_derivative_structure_atom, params_for_derivative_order,
+        DotExportSettings, EvaluatorSettings, GraphGenerationStats, GraphGroupSelectionPlan,
+        GraphGroupSelectionSpec, NamedGraphGenerationReport, StandaloneExportSettings,
+        build_derivative_structure_atom, params_for_derivative_order,
     },
     settings::{
         GlobalSettings, RuntimeSettings, global::OrientationPattern, runtime::LockedRuntimeSettings,
@@ -67,14 +68,11 @@ use linnet::{
     num_traits::SignOrZero,
     parser::DotGraph,
 };
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol, Var},
-    domains::rational::Rational,
-    evaluate::FunctionMap,
-    function,
-};
+use symbolica::{atom::Var, prelude::*};
 use tracing::{debug, info};
 use typed_index_collections::{TiVec, ti_vec};
+
+use super::generation_progress::{self, GenerationProcessKind, GenerationProgressPhase};
 
 use crate::{
     cff::esurface::EsurfaceID,
@@ -106,6 +104,134 @@ pub struct GroupDerivedData {
 }
 
 impl Amplitude {
+    pub fn plan_graph_group_selection(
+        &self,
+        spec: &GraphGroupSelectionSpec,
+    ) -> Result<GraphGroupSelectionPlan> {
+        spec.plan(&self.graph_group_structure, |graph_id| {
+            self.graphs.get(graph_id).map(|graph| &graph.graph)
+        })
+    }
+
+    pub fn validate_graph_group_selection_plan(
+        &self,
+        plan: &GraphGroupSelectionPlan,
+    ) -> Result<()> {
+        if !self.group_derived_data.is_empty()
+            && self.group_derived_data.len() != self.graph_group_structure.len()
+        {
+            return Err(eyre!(
+                "Amplitude '{}' has {} group-derived-data entries for {} graph groups.",
+                self.name,
+                self.group_derived_data.len(),
+                self.graph_group_structure.len()
+            ));
+        }
+
+        for &old_group_id in plan.retained_group_ids() {
+            plan.new_group_id_for_old(old_group_id).ok_or_else(|| {
+                eyre!(
+                    "Selection plan is missing compact group id for old group {}.",
+                    old_group_id.0
+                )
+            })?;
+            if old_group_id.0 >= self.graph_group_structure.len() {
+                return Err(eyre!(
+                    "Selection plan refers to missing graph group {}.",
+                    old_group_id.0
+                ));
+            }
+            let group = &self.graph_group_structure[old_group_id];
+            for old_graph_id in group {
+                if old_graph_id >= self.graphs.len() {
+                    return Err(eyre!(
+                        "Graph group {} refers to missing graph id {}.",
+                        old_group_id.0,
+                        old_graph_id
+                    ));
+                }
+            }
+            let master = group.master();
+            if master >= self.graphs.len() {
+                return Err(eyre!(
+                    "Graph group {} refers to missing master graph id {}.",
+                    old_group_id.0,
+                    master
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn apply_graph_group_selection(&mut self, plan: &GraphGroupSelectionPlan) -> Result<()> {
+        self.validate_graph_group_selection_plan(plan)?;
+
+        let mut old_graph_to_new_group = vec![None; self.graphs.len()];
+        let mut old_graph_is_master = vec![false; self.graphs.len()];
+        for &old_group_id in plan.retained_group_ids() {
+            let new_group_id = plan.new_group_id_for_old(old_group_id).ok_or_else(|| {
+                eyre!(
+                    "Selection plan is missing compact group id for old group {}.",
+                    old_group_id.0
+                )
+            })?;
+            let group = &self.graph_group_structure[old_group_id];
+            for old_graph_id in group {
+                old_graph_to_new_group[old_graph_id] = Some(new_group_id);
+            }
+            old_graph_is_master[group.master()] = true;
+        }
+
+        let mut new_graphs = self
+            .graphs
+            .iter()
+            .cloned()
+            .enumerate()
+            .filter_map(|(old_graph_id, mut graph)| {
+                let new_group_id = old_graph_to_new_group[old_graph_id]?;
+                graph.graph.group_id = Some(new_group_id);
+                graph.graph.is_group_master = old_graph_is_master[old_graph_id];
+                if let Some(multi_channeling_setup) = &mut graph.derived_data.multi_channeling_setup
+                {
+                    multi_channeling_setup.graph.group_id = Some(new_group_id);
+                    multi_channeling_setup.graph.is_group_master =
+                        old_graph_is_master[old_graph_id];
+                }
+                Some(graph)
+            })
+            .collect::<Vec<_>>();
+
+        let mut parsed_graphs = new_graphs
+            .iter()
+            .map(|graph| graph.graph.clone())
+            .collect::<Vec<_>>();
+        let new_graph_group_structure = complete_group_parsing(&mut parsed_graphs)?;
+        for (graph, parsed_graph) in new_graphs.iter_mut().zip(parsed_graphs) {
+            graph.graph.group_id = parsed_graph.group_id;
+            graph.graph.is_group_master = parsed_graph.is_group_master;
+            if let Some(multi_channeling_setup) = &mut graph.derived_data.multi_channeling_setup {
+                multi_channeling_setup.graph.group_id = graph.graph.group_id;
+                multi_channeling_setup.graph.is_group_master = graph.graph.is_group_master;
+            }
+        }
+
+        let new_group_derived_data = if self.group_derived_data.is_empty() {
+            TiVec::new()
+        } else {
+            plan.retained_group_ids()
+                .iter()
+                .map(|&old_group_id| self.group_derived_data[old_group_id].clone())
+                .collect::<TiVec<GroupId, _>>()
+        };
+
+        self.graphs = new_graphs;
+        self.graph_group_structure = new_graph_group_structure;
+        self.group_derived_data = new_group_derived_data;
+        self.integrand = None;
+        Ok(())
+    }
+
     pub fn export_standalone(
         &self,
         path: impl AsRef<Path>,
@@ -254,14 +380,18 @@ impl Amplitude {
         // preprocess each graph individually
         let integrand_name = self.name.clone();
 
-        let preprocess_span = info_span!("Preprocessing graphs", indicatif.pb_show = true);
-        preprocess_span.pb_set_style(&ProgressStyle::with_template(
-            "{wide_bar} {pos}/{len} {msg}",
-        )?);
-        preprocess_span.pb_set_length(self.graphs.len() as u64);
-        preprocess_span.pb_set_message("Preprocessing graphs");
-
-        let preprocess_span_enter = preprocess_span.enter();
+        let preprocess_span = if generation_progress::detailed_progress_enabled() {
+            let span = info_span!("Preprocessing graphs", indicatif.pb_show = true);
+            span.pb_set_style(&ProgressStyle::with_template(
+                "{wide_bar} {pos}/{len} {msg}",
+            )?);
+            span.pb_set_length(self.graphs.len() as u64);
+            span.pb_set_message("Preprocessing graphs");
+            Some(span)
+        } else {
+            None
+        };
+        let preprocess_span_enter = preprocess_span.as_ref().map(|span| span.enter());
 
         let preprocess_reports = thread_pool.install(|| {
             let parent = preprocess_span.clone();
@@ -271,10 +401,12 @@ impl Amplitude {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
-                    let _guard = parent.enter();
+                    let _guard = parent.as_ref().map(|span| span.enter());
                     let stats =
                         amplitude_graph.preprocess(model, settings, locked_runtime_settings);
-                    preprocess_span.pb_inc(1);
+                    if let Some(span) = &parent {
+                        span.pb_inc(1);
+                    }
 
                     let stats = stats?;
                     if crate::is_interrupted() {
@@ -301,20 +433,36 @@ impl Amplitude {
     #[instrument(
         skip_all,
           fields(
-              amplitude.name = %self.name, indicatif.pb_show = true, indicatif.pb_msg = "Generating Evaluators",
+              amplitude.name = %self.name,
           )
       )]
     pub fn build_integrand(
         &mut self,
         model: &Model,
+        process_name: &str,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "amplitude_build_integrand_start",
+            integrand = %self.name,
+            graph_count = self.graphs.len(),
+            "Generation timing milestone"
+        );
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
         let integrand_name = self.name.clone();
+        generation_progress::begin_phase(
+            GenerationProgressPhase::GraphGeneration,
+            GenerationProcessKind::Amplitude,
+            process_name,
+            &integrand_name,
+            self.graphs.len(),
+            None,
+        );
         let mut graph_reports = Vec::new();
         let terms: Vec<_> = thread_pool.install(|| {
             self.graphs
@@ -331,6 +479,22 @@ impl Amplitude {
                         .find_position(graph_id)
                         .unwrap();
 
+                    crate::debug_tags!(#generation, #profile, #graph, #summary;
+                        stage = "amplitude_generate_term_for_graph_start",
+                        integrand = %integrand_name,
+                        graph = %graph.graph.name,
+                        graph_id,
+                        group_id = %group_id.0,
+                        "Generation timing milestone"
+                    );
+                    generation_progress::graph_started(
+                        GenerationProcessKind::Amplitude,
+                        &integrand_name,
+                        &graph.graph.name,
+                        None,
+                    );
+                    let _progress_context_guard =
+                        generation_progress::enter_progress_context(graph.graph.name.clone());
                     let (term, mut stats) = graph.generate_term_for_graph(
                         model,
                         group_pos,
@@ -342,6 +506,22 @@ impl Amplitude {
                     }
                     stats.evaluator_count = term.generic_evaluator_count();
                     stats.total_time += graph_started.elapsed();
+                    crate::debug_tags!(#generation, #profile, #graph, #summary;
+                        stage = "amplitude_generate_term_for_graph_done",
+                        integrand = %integrand_name,
+                        graph = %graph.graph.name,
+                        graph_id,
+                        group_id = %group_id.0,
+                        elapsed_ms = graph_started.elapsed().as_secs_f64() * 1000.0,
+                        "Generation timing milestone"
+                    );
+                    generation_progress::graph_finished(
+                        GenerationProcessKind::Amplitude,
+                        &integrand_name,
+                        &graph.graph.name,
+                        &stats,
+                        None,
+                    );
                     Ok((
                         term,
                         NamedGraphGenerationReport {
@@ -383,6 +563,20 @@ impl Amplitude {
             }
         }
 
+        let backend_started = std::time::Instant::now();
+        let graph_count = terms.len();
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+            stage = "amplitude_prepare_runtime_backends_start",
+            integrand = %self.name,
+            graph_count,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+        generation_progress::backend_started(
+            GenerationProcessKind::Amplitude,
+            &self.name,
+            graph_count,
+        );
         let mut amplitude_integrand = AmplitudeIntegrand {
             settings: runtime_default.into_with_modified_kinematics(
                 &self.external_signature,
@@ -411,11 +605,31 @@ impl Amplitude {
         };
         let compile_times =
             amplitude_integrand.prepare_runtime_backends_after_generation_with_compile_times()?;
+        crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
+            stage = "amplitude_prepare_runtime_backends_done",
+            integrand = %self.name,
+            graph_count,
+            elapsed_ms = backend_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+        generation_progress::backend_finished(
+            GenerationProcessKind::Amplitude,
+            &self.name,
+            backend_started.elapsed(),
+        );
         for (report, compile_time) in graph_reports.iter_mut().zip(compile_times) {
             report.stats.evaluator_compile_time += compile_time;
             report.stats.total_time += compile_time;
         }
         self.integrand = Some(ProcessIntegrand::Amplitude(amplitude_integrand));
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "amplitude_build_integrand_done",
+            integrand = %self.name,
+            graph_count = self.graphs.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
         Ok(graph_reports)
     }
 
@@ -588,7 +802,7 @@ impl AmplitudeGraph {
                 &OrientationPattern::default(),
             )?;
 
-            forest.pole_part_of_ends(&self.graph)
+            forest.pole_part_of_ends(&self.graph, settings.pole_part)
         } else {
             let cuts = CutStructure::empty(&self.graph);
             let wood = NewWood::new(cuts, &self.graph, settings);
@@ -616,8 +830,9 @@ impl AmplitudeGraph {
         self.graph.dot_serialize_fmt(writer, settings)
     }
 
-    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Generating CFF"), err)]
+    #[instrument(skip_all, err)]
     pub(crate) fn generate_cff(&mut self, orientation_pattern: &OrientationPattern) -> Result<()> {
+        let _progress_guard = generation_progress::enter_detailed_progress_span("Generating CFF");
         let shift_rewrite = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
@@ -643,13 +858,14 @@ impl AmplitudeGraph {
         Ok(())
     }
 
-    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "preprocessing"), err)]
+    #[instrument(skip_all, err)]
     pub(crate) fn preprocess(
         &mut self,
         model: &Model,
         settings: &GenerationSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
     ) -> Result<GraphGenerationStats> {
+        let _progress_guard = generation_progress::enter_detailed_progress_span("preprocessing");
         let preprocess_started = std::time::Instant::now();
         let vk = crate::utils::vakint()?;
 
@@ -713,8 +929,10 @@ impl AmplitudeGraph {
         })
     }
 
-    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Multi-Channeling Channels"))]
+    #[instrument(skip_all)]
     fn build_multi_channeling_channels(&mut self, override_lmb_heuristics: bool) {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Multi-Channeling Channels");
         let channels = self.graph.build_multi_channeling_channels(
             self.derived_data.lmbs.as_ref().unwrap(),
             override_lmb_heuristics,
@@ -755,7 +973,7 @@ impl AmplitudeGraph {
 
     //      param_builder.model_parameters_atom(model);
 
-    //      param_builder.m_uv_atom(Atom::var(GS.m_uv));
+    //      param_builder.m_uv_atom(Atom::var(GS.m_uv_vacuum));
 
     //      param_builder.mu_r_sq_atom(Atom::var(GS.mu_r_sq));
 
@@ -774,14 +992,6 @@ impl AmplitudeGraph {
     // }
 
     // fn get_eager_const_map(&self)->HashM
-
-    fn add_additional_factors_to_cff_atom(&self, cff_atom: &Atom) -> Atom {
-        // let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
-        let factors_of_pi = (Atom::var(GS.pi) * 2).pow(3 * self.graph.get_loop_number() as i64);
-
-        // debug!("result: {}", result);
-        cff_atom / factors_of_pi
-    }
 
     pub fn to_numerical(
         numerical_result: AtomView,
@@ -817,6 +1027,10 @@ impl AmplitudeGraph {
                     param_builder.update_model_values(config.model);
                 }
                 param_builder.m_uv_value(Complex::new_re(F(config.run_time_settings.general.m_uv)));
+                param_builder.renormalization_localization_scale_value(Complex::new_re(F(config
+                    .run_time_settings
+                    .general
+                    .renormalization_localization_scale)));
                 param_builder.mu_r_sq_value(Complex::new_re(F(config
                     .run_time_settings
                     .general
@@ -882,11 +1096,23 @@ impl AmplitudeGraph {
             num.state.expr *= &self.graph.global_prefactor.num;
         }
 
-        let mut four_dimensional_integrand = num
-            .to_d_dim(GS.dim)
-            .get_single_atom()
-            .unwrap()
-            .simplify_gamma()
+        let before_gamma = num.to_d_dim(GS.dim).get_single_atom().unwrap();
+        let before_gamma_plain = before_gamma.to_plain_string();
+        let four_dimensional_numerator = before_gamma.simplify_gamma();
+        let after_gamma_plain = four_dimensional_numerator.to_plain_string();
+        crate::debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
+            stage = "amplitude_to_vakint_after_simplify_gamma",
+            changed = before_gamma_plain != after_gamma_plain,
+            before_gamma_count = %before_gamma_plain.matches("spenso::gamma").count(),
+            after_gamma_count = %after_gamma_plain.matches("spenso::gamma").count(),
+            before_chain_count = %before_gamma_plain.matches("spenso::chain").count(),
+            after_chain_count = %after_gamma_plain.matches("spenso::chain").count(),
+            log.before_gamma = before_gamma,
+            log.after_gamma = four_dimensional_numerator,
+            "Gamma simplification before Vakint"
+        );
+
+        let mut four_dimensional_integrand = four_dimensional_numerator
             / self
                 .graph
                 .denominator(component, |e| e.extra_data.vakint_edge_power.unwrap_or(1));
@@ -964,16 +1190,23 @@ impl AmplitudeGraph {
         }
     }
 
-    #[instrument(
-        skip_all,
-        fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Parametric Integrand"),
-        err
-    )]
+    #[instrument(skip_all, err)]
     pub(crate) fn build_integrands(
         &mut self,
         settings: &GenerationSettings,
         vakint: &Vakint,
     ) -> Result<()> {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Parametric Integrand");
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "amplitude_graph_build_integrands_start",
+            graph = %self.graph.name,
+            subtract_uv = settings.uv.subtract_uv,
+            generate_integrated = settings.uv.generate_integrated,
+            only_integrated = settings.uv.only_integrated,
+            "Generation timing milestone"
+        );
         let valid_orientations: Vec<_> = self
             .derived_data
             .cff_expression
@@ -983,9 +1216,35 @@ impl AmplitudeGraph {
             .iter()
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
+        crate::debug_tags!(#generation, #profile, #graph, #orientation, #summary;
+            stage = "amplitude_graph_valid_orientations_done",
+            graph = %self.graph.name,
+            orientation_count = valid_orientations.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
         let cutstructure = CutStructure::empty(&self.graph);
+        let woods_started = std::time::Instant::now();
         let woods = CutWoods::new(cutstructure, &self.graph, &settings.uv);
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "amplitude_graph_cut_woods_done",
+            graph = %self.graph.name,
+            wood_count = woods.woods.len(),
+            elapsed_ms = woods_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+        let unfold_started = std::time::Instant::now();
         let mut forests = woods.unfold(&self.graph);
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "amplitude_graph_cut_forests_unfold_done",
+            graph = %self.graph.name,
+            forest_count = forests.forests.len(),
+            elapsed_ms = unfold_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+        let forests_started = std::time::Instant::now();
         forests.compute(
             &mut self.graph,
             vakint,
@@ -993,12 +1252,37 @@ impl AmplitudeGraph {
             &settings.uv,
             &settings.orientation_pattern,
         )?;
-        let exprs: Vec<_> = forests
-            .orientation_parametric_exprs(&self.graph, &settings.uv)?
-            .into_iter()
-            .map(|e| e.map(|a| self.add_additional_factors_to_cff_atom(&a)))
-            .collect();
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "amplitude_graph_cut_forests_compute_done",
+            graph = %self.graph.name,
+            elapsed_ms = forests_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
 
+        let orientation_started = std::time::Instant::now();
+        let parametric_exprs = forests.orientation_parametric_exprs(&self.graph, &settings.uv)?;
+        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "amplitude_graph_orientation_parametric_exprs_done",
+            graph = %self.graph.name,
+            parametric_integrand_count = parametric_exprs.len(),
+            elapsed_ms = orientation_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+
+        let normalization_started = std::time::Instant::now();
+        let exprs: Vec<_> = parametric_exprs.into_iter().collect();
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "amplitude_graph_cff_normalization_done",
+            graph = %self.graph.name,
+            expr_count = exprs.len(),
+            elapsed_ms = normalization_started.elapsed().as_secs_f64() * 1000.0,
+            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
+
+        let assign_started = std::time::Instant::now();
         self.derived_data.all_mighty_integrand = exprs
             .into_iter()
             .next()
@@ -1008,15 +1292,18 @@ impl AmplitudeGraph {
             .next()
             .unwrap()
             .1; // should be exactly one expression
+        crate::debug_tags!(#generation, #profile, #graph, #summary;
+            stage = "amplitude_graph_build_integrands_done",
+            graph = %self.graph.name,
+            assign_elapsed_ms = assign_started.elapsed().as_secs_f64() * 1000.0,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Generation timing milestone"
+        );
 
         Ok(())
     }
 
-    #[instrument(
-        skip_all,
-        fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Threshold Counterterms"),
-        err
-    )]
+    #[instrument(skip_all, err)]
     fn build_threshold_counterterm_parametric_integrand(
         &mut self,
         settings: &GenerationSettings,
@@ -1027,6 +1314,8 @@ impl AmplitudeGraph {
         TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
         TiVec<EsurfaceID, RaisedEsurfaceId>,
     )> {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Threshold Counterterms");
         let valid_orientations: Vec<_> = self
             .derived_data
             .cff_expression
@@ -1132,6 +1421,7 @@ impl AmplitudeGraph {
                     right_th_cut: None,
                 },
                 union: cut_union,
+                canonicalize_external_shifts: false,
             };
 
             cuts.push(cutset);
@@ -1173,8 +1463,10 @@ impl AmplitudeGraph {
         Ok((counterterms, raised_esurface_ids))
     }
 
-    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Loop Momentum Bases"))]
+    #[instrument(skip_all)]
     fn build_lmbs(&mut self) {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Loop Momentum Bases");
         let lmbs = self
             .graph
             .generate_loop_momentum_bases_of(&self.graph.no_dummy());
@@ -1182,8 +1474,10 @@ impl AmplitudeGraph {
         self.derived_data.lmbs = Some(lmbs)
     }
 
-    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Tropical Sampler"), err)]
+    #[instrument(skip_all, err)]
     fn build_tropical_sampler(&mut self, process_settings: &GenerationSettings) -> Result<()> {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Tropical Sampler");
         if process_settings
             .tropical_subgraph_table
             .disable_tropical_generation
@@ -1291,7 +1585,7 @@ impl AmplitudeGraph {
           level = "info",
           skip(self, model, global_settings),
           fields(
-              graph.name = %self.graph.name, indicatif.pb_show = true, indicatif.pb_msg = format!("Generating Evaluators for {}", self.graph.name)
+              graph.name = %self.graph.name
 
           ),
           err
@@ -1303,6 +1597,10 @@ impl AmplitudeGraph {
         esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
         global_settings: &GlobalSettings,
     ) -> Result<(AmplitudeGraphTerm, GraphGenerationStats)> {
+        let _progress_guard = generation_progress::enter_detailed_progress_span(&format!(
+            "Generating Evaluators for {}",
+            self.graph.name
+        ));
         AmplitudeGraphTerm::from_amplitude_graph(
             self,
             own_group_position,
@@ -1428,7 +1726,6 @@ pub(crate) fn threshold_counterterm_helper_atom(order: u8, loop_number: usize) -
             .with(GS.radius_star_left)
     });
 
-    let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).pow(loop_3);
     let i = Atom::i();
 
     let radius = Atom::var(GS.radius_left);
@@ -1442,15 +1739,16 @@ pub(crate) fn threshold_counterterm_helper_atom(order: u8, loop_number: usize) -
 
     let jacobian_ratio = (Atom::one() / &radius).pow(loop_3 - 1);
 
-    let local_prefactor = &jacobian_ratio / &factors_of_pi
-        * (uv_damp_plus / &delta_r_plus + uv_damp_minus / &delta_r_minus);
+    let local_prefactor =
+        &jacobian_ratio * (uv_damp_plus / &delta_r_plus + uv_damp_minus / &delta_r_minus);
 
-    let integrated_prefactor = i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / &factors_of_pi;
+    let integrated_prefactor = -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction;
 
     let mut result = (local_prefactor + integrated_prefactor) * laurent_coeffs.next().unwrap();
 
     for pow in 2..=order {
-        result += laurent_coeffs.next().unwrap() * &jacobian_ratio / &factors_of_pi
+        result += laurent_coeffs.next().unwrap()
+            * &jacobian_ratio
             * (Atom::one() / delta_r_plus.pow(pow as i64)
                 + Atom::one() / delta_r_minus.pow(pow as i64));
     }
@@ -1469,10 +1767,12 @@ pub(crate) fn threshold_counterterm_helper(
 ) -> GenericEvaluator {
     let atom = threshold_counterterm_helper_atom(order, loop_number);
     let mut fn_map = FunctionMap::default();
-    fn_map.add_constant(
-        GS.pi.into(),
-        Rational::try_from(std::f64::consts::PI).unwrap().into(),
-    );
+    fn_map
+        .add_aliases([(
+            GS.pi.into(),
+            Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
+        )])
+        .unwrap();
 
     let mut params = params_for_derivative_order(order)
         .into_iter()

@@ -90,6 +90,7 @@ pub struct AmplitudeCountertermData {
     pub active_mask: TiVec<RaisedEsurfaceId, bool>,
     pub raised_data: RaisedEsurfaceData,
     pub esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
+    pub local_esurface_exists: TiVec<GroupEsurfaceId, bool>,
     pub own_group_position: GraphGroupPosition,
 }
 
@@ -110,16 +111,15 @@ impl AmplitudeCountertermAtom {
         }
     }
 
-    #[instrument(
-           skip_all,
-           fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Threshold CT Evaluator"),
-       )]
+    #[instrument(skip_all)]
     pub(crate) fn to_evaluator_with_timings(
         &self,
         param_builder: &ParamBuilder,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
         global_settings: &GlobalSettings,
     ) -> (AmplitudeCountertermEvaluator, EvaluatorBuildTimings) {
+        let _progress_guard =
+            crate::processes::enter_detailed_progress_span("Building Threshold CT Evaluator");
         let mut evaluator_stacks = BTreeMap::new();
         let mut timings = EvaluatorBuildTimings::default();
 
@@ -210,6 +210,7 @@ impl AmplitudeCountertermData {
                 pass_two_evaluator: None,
             },
             esurface_map: TiVec::new(),
+            local_esurface_exists: TiVec::new(),
             own_group_position,
         }
     }
@@ -351,6 +352,15 @@ impl AmplitudeCountertermData {
             let overlap_builder = counter_term_builder.new_overlap_builder(group);
 
             for existing_esurface_id in group.existing_esurfaces.iter() {
+                let group_esurface_id = self.overlap.existing_esurfaces[*existing_esurface_id];
+                if self
+                    .local_esurface_exists
+                    .get(group_esurface_id)
+                    .is_some_and(|exists| !*exists)
+                {
+                    continue;
+                }
+
                 let Some(esurface_builder) =
                     overlap_builder.new_esurface_builder(*existing_esurface_id)
                 else {
@@ -563,6 +573,7 @@ impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
             EsurfaceCTBuilder {
                 overlap_builder: self,
                 _existing_esurface_id: existing_esurface_id,
+                group_esurface_id,
                 esurface: &self.counterterm_builder.esurface_collection[esurface_id],
                 esurface_id,
                 raised_esurface_id,
@@ -574,6 +585,7 @@ impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
 struct EsurfaceCTBuilder<'a, T: FloatLike> {
     overlap_builder: &'a OverlapBuilder<'a, T>,
     _existing_esurface_id: ExistingEsurfaceId,
+    group_esurface_id: GroupEsurfaceId,
     esurface: &'a Esurface,
     esurface_id: EsurfaceID,
     raised_esurface_id: RaisedEsurfaceId,
@@ -581,6 +593,79 @@ struct EsurfaceCTBuilder<'a, T: FloatLike> {
 
 impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
     fn solve_rstar(self) -> RstarSolution<'a, T> {
+        let center_surface_values = self
+            .overlap_builder
+            .overlap_group
+            .existing_esurfaces
+            .iter()
+            .map(|&existing_esurface_id| {
+                let group_esurface_id = self
+                    .overlap_builder
+                    .counterterm_builder
+                    .overlap_structure
+                    .existing_esurfaces[existing_esurface_id];
+
+                match self.overlap_builder.counterterm_builder.esurface_map[group_esurface_id]
+                    [self.overlap_builder.counterterm_builder.own_group_position]
+                {
+                    Some(raised_esurface_id) => {
+                        let esurface_id = self
+                            .overlap_builder
+                            .counterterm_builder
+                            .raised_data
+                            .raised_groups[raised_esurface_id]
+                            .esurface_ids[0];
+                        let esurface =
+                            &self.overlap_builder.counterterm_builder.esurface_collection
+                                [esurface_id];
+                        let value = esurface.compute_from_momenta(
+                            &self
+                                .overlap_builder
+                                .counterterm_builder
+                                .graph
+                                .loop_momentum_basis,
+                            &self.overlap_builder.counterterm_builder.real_mass_vector,
+                            &self.overlap_builder.rotated_center,
+                            self.overlap_builder
+                                .counterterm_builder
+                                .sample
+                                .external_moms(),
+                        );
+                        format!(
+                            "existing={} group={} raised={} local={} edges={:?} value={:+16e} inside={}",
+                            usize::from(existing_esurface_id),
+                            group_esurface_id.0,
+                            raised_esurface_id.0,
+                            esurface_id.0,
+                            esurface.energies,
+                            value,
+                            value < value.zero()
+                        )
+                    }
+                    None => {
+                        format!(
+                            "existing={} group={} absent_in_current_graph",
+                            usize::from(existing_esurface_id),
+                            group_esurface_id.0
+                        )
+                    }
+                }
+            })
+            .collect::<Vec<_>>();
+        crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #center;
+            stage = "amplitude_threshold_center_values",
+            graph = %self.overlap_builder.counterterm_builder.graph.name,
+            selected_existing_esurface_id = usize::from(self._existing_esurface_id),
+            selected_group_esurface_id = self.group_esurface_id.0,
+            selected_raised_esurface_id = self.raised_esurface_id.0,
+            selected_esurface_id = self.esurface_id.0,
+            overlap_group_size = self.overlap_builder.overlap_group.existing_esurfaces.len(),
+            radius = %format!("{:+16e}", self.overlap_builder.radius),
+            file.rotated_center = %format!("{}", self.overlap_builder.rotated_center),
+            file.surface_values = %center_surface_values.join("\n"),
+            "amplitude threshold center values"
+        );
+
         let (radius_guess, _) = self.esurface.get_radius_guess(
             &self.overlap_builder.unit_shifted_momenta,
             self.overlap_builder
@@ -618,6 +703,27 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             &F::from_f64(TOLERANCE),
             MAX_ITERATIONS,
             &self.overlap_builder.counterterm_builder.e_cm,
+        );
+        let solution_is_nonfinite = solution.solution.is_nan()
+            || solution.solution.is_infinite()
+            || solution.derivative_at_solution.is_nan()
+            || solution.derivative_at_solution.is_infinite()
+            || solution.error_of_function.is_nan()
+            || solution.error_of_function.is_infinite();
+        crate::debug_tags!(#integration, #subtraction, #threshold, #inspect;
+            stage = "amplitude_threshold_rstar_solution",
+            graph = %self.overlap_builder.counterterm_builder.graph.name,
+            existing_esurface_id = %self._existing_esurface_id,
+            group_esurface_id = self.group_esurface_id.0,
+            raised_esurface_id = self.raised_esurface_id.0,
+            esurface_id = self.esurface_id.0,
+            radius_guess = %format!("{:+16e}", radius_guess),
+            radius_star = %format!("{:+16e}", solution.solution),
+            derivative = %format!("{:+16e}", solution.derivative_at_solution),
+            error = %format!("{:+16e}", solution.error_of_function),
+            iterations = solution.num_iterations_used,
+            nonfinite = solution_is_nonfinite,
+            "amplitude threshold rstar solution"
         );
 
         RstarSolution {
@@ -710,6 +816,68 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
         let h_function =
             evaluate_integrated_ct_normalisation(&radius, &radius_star, e_cm, integrated_settings);
+        crate::debug_tags!(#integration, #subtraction, #threshold, #inspect;
+            stage = "amplitude_threshold_prefactors",
+            graph = %ct_builder.graph.name,
+            esurface_id = esurface_id.0,
+            raised_esurface_id = esurface_ct_builder.raised_esurface_id.0,
+            radius = %format!("{:+16e}", radius),
+            radius_star = %format!("{:+16e}", radius_star),
+            derivative = %format!(
+                "{:+16e}",
+                self.rstar_solution.solution.derivative_at_solution
+            ),
+            uv_damp_plus = %format!("{:+16e}", uv_damp_plus),
+            uv_damp_minus = %format!("{:+16e}", uv_damp_minus),
+            h_function = %format!("{:+16e}", h_function),
+            "amplitude threshold prefactors"
+        );
+
+        let coincidence_tolerance = F::from_f64(1.0e-8) * e_cm;
+        for (candidate_esurface_id, candidate_esurface) in
+            ct_builder.esurface_collection.iter_enumerated()
+        {
+            let value = candidate_esurface.compute_from_momenta(
+                &ct_builder.graph.loop_momentum_basis,
+                &ct_builder.real_mass_vector,
+                self.rstar_sample.loop_moms(),
+                self.rstar_sample.external_moms(),
+            );
+            if value.abs() < coincidence_tolerance {
+                let candidate_raised_esurface_id = ct_builder
+                    .raised_data
+                    .raised_groups
+                    .iter_enumerated()
+                    .find_map(|(raised_esurface_id, raised_group)| {
+                        raised_group
+                            .esurface_ids
+                            .contains(&candidate_esurface_id)
+                            .then_some(raised_esurface_id.0)
+                    });
+                let candidate_atom = candidate_esurface.to_atom(&[]).to_string();
+                crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #esurface;
+                    stage = "amplitude_threshold_rstar_coincident_esurface",
+                    graph = %ct_builder.graph.name,
+                    selected_esurface_id = esurface_id.0,
+                    selected_raised_esurface_id = esurface_ct_builder.raised_esurface_id.0,
+                    candidate_esurface_id = candidate_esurface_id.0,
+                    candidate_raised_esurface_id = ?candidate_raised_esurface_id,
+                    selected = candidate_esurface_id == esurface_id,
+                    value = %format!("{:+16e}", value),
+                    tolerance = %format!("{:+16e}", coincidence_tolerance),
+                    file.atom = %candidate_atom,
+                    "threshold rstar coincident esurface graph={} selected={} raised={} candidate={} candidate_raised={:?} value={} tol={} atom={}",
+                    ct_builder.graph.name,
+                    esurface_id.0,
+                    esurface_ct_builder.raised_esurface_id.0,
+                    candidate_esurface_id.0,
+                    candidate_raised_esurface_id,
+                    format!("{:+16e}", value),
+                    format!("{:+16e}", coincidence_tolerance),
+                    candidate_atom
+                );
+            }
+        }
 
         let mut total_ct = Complex::new_re(self.rstar_sample.zero());
 
@@ -853,6 +1021,33 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 None,
                 None,
             );
+            let params_slice = params.as_slice();
+            let params_nonfinite_count = params_slice
+                .iter()
+                .filter(|value| {
+                    value.re.is_nan()
+                        || value.re.is_infinite()
+                        || value.im.is_nan()
+                        || value.im.is_infinite()
+                })
+                .count();
+            let first_params_nonfinite_index = params_slice.iter().position(|value| {
+                value.re.is_nan()
+                    || value.re.is_infinite()
+                    || value.im.is_nan()
+                    || value.im.is_infinite()
+            });
+            crate::debug_tags!(#integration, #subtraction, #threshold, #inspect;
+                stage = "amplitude_threshold_pass_one_params",
+                graph = %ct_builder.graph.name,
+                esurface_id = esurface_id.0,
+                raised_esurface_id = esurface_ct_builder.raised_esurface_id.0,
+                order = order_index + 1,
+                params_len = params_slice.len(),
+                params_nonfinite_count,
+                first_params_nonfinite_index = ?first_params_nonfinite_index,
+                "amplitude threshold pass one params"
+            );
 
             let pass_one_result = evaluator_stack
                 .evaluate(
@@ -874,7 +1069,73 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 order_index,
             );
 
+            let raw_pass_one_is_nonfinite = match &pass_one_result {
+                DualOrNot::Dual(dual_result) => dual_result.values.iter().any(|value| {
+                    value.re.is_nan()
+                        || value.re.is_infinite()
+                        || value.im.is_nan()
+                        || value.im.is_infinite()
+                }),
+                DualOrNot::NonDual(non_dual_result) => {
+                    non_dual_result.re.is_nan()
+                        || non_dual_result.re.is_infinite()
+                        || non_dual_result.im.is_nan()
+                        || non_dual_result.im.is_infinite()
+                }
+            };
+            let prefactor_is_nonfinite = match &prefactor {
+                DualOrNot::Dual(dual_result) => dual_result.values.iter().any(|value| {
+                    value.re.is_nan()
+                        || value.re.is_infinite()
+                        || value.im.is_nan()
+                        || value.im.is_infinite()
+                }),
+                DualOrNot::NonDual(non_dual_result) => {
+                    non_dual_result.re.is_nan()
+                        || non_dual_result.re.is_infinite()
+                        || non_dual_result.im.is_nan()
+                        || non_dual_result.im.is_infinite()
+                }
+            };
+            crate::debug_tags!(#integration, #subtraction, #threshold, #inspect;
+                stage = "amplitude_threshold_pass_one_raw",
+                graph = %ct_builder.graph.name,
+                esurface_id = esurface_id.0,
+                raised_esurface_id = esurface_ct_builder.raised_esurface_id.0,
+                order = order_index + 1,
+                raw_result = %format!("{pass_one_result}"),
+                prefactor = %format!("{prefactor}"),
+                raw_nonfinite = raw_pass_one_is_nonfinite,
+                prefactor_nonfinite = prefactor_is_nonfinite,
+                "amplitude threshold pass one raw"
+            );
+
             let pass_one_result = multiply_dual_or_not_complex(pass_one_result, &prefactor);
+            let pass_one_is_nonfinite = match &pass_one_result {
+                DualOrNot::Dual(dual_result) => dual_result.values.iter().any(|value| {
+                    value.re.is_nan()
+                        || value.re.is_infinite()
+                        || value.im.is_nan()
+                        || value.im.is_infinite()
+                }),
+                DualOrNot::NonDual(non_dual_result) => {
+                    non_dual_result.re.is_nan()
+                        || non_dual_result.re.is_infinite()
+                        || non_dual_result.im.is_nan()
+                        || non_dual_result.im.is_infinite()
+                }
+            };
+            crate::debug_tags!(#integration, #subtraction, #threshold, #inspect;
+                stage = "amplitude_threshold_pass_one",
+                graph = %ct_builder.graph.name,
+                esurface_id = esurface_id.0,
+                raised_esurface_id = esurface_ct_builder.raised_esurface_id.0,
+                order = order_index + 1,
+                prefactor = %format!("{prefactor}"),
+                result = %format!("{pass_one_result}"),
+                nonfinite = pass_one_is_nonfinite,
+                "amplitude threshold pass one"
+            );
 
             debug!(
                 "Pass one result for esurface {} order {}: {}",
@@ -924,6 +1185,20 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 order_index + 1,
                 pass_two_result
             );
+            let pass_two_is_nonfinite = pass_two_result.re.is_nan()
+                || pass_two_result.re.is_infinite()
+                || pass_two_result.im.is_nan()
+                || pass_two_result.im.is_infinite();
+            crate::debug_tags!(#integration, #subtraction, #threshold, #inspect;
+                stage = "amplitude_threshold_pass_two",
+                graph = %ct_builder.graph.name,
+                esurface_id = esurface_id.0,
+                raised_esurface_id = esurface_ct_builder.raised_esurface_id.0,
+                order = order_index + 1,
+                result = %format!("{:+16e}", pass_two_result),
+                nonfinite = pass_two_is_nonfinite,
+                "amplitude threshold pass two"
+            );
 
             total_ct += pass_two_result;
         }
@@ -931,6 +1206,19 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         debug!(
             ct_eval = format!("{:+16e}", total_ct),
             "esurface {}", esurface_id.0
+        );
+        let total_ct_is_nonfinite = total_ct.re.is_nan()
+            || total_ct.re.is_infinite()
+            || total_ct.im.is_nan()
+            || total_ct.im.is_infinite();
+        crate::debug_tags!(#integration, #subtraction, #threshold, #inspect;
+            stage = "amplitude_threshold_total",
+            graph = %ct_builder.graph.name,
+            esurface_id = esurface_id.0,
+            raised_esurface_id = esurface_ct_builder.raised_esurface_id.0,
+            result = %format!("{:+16e}", total_ct),
+            nonfinite = total_ct_is_nonfinite,
+            "amplitude threshold total"
         );
 
         Ok(total_ct)

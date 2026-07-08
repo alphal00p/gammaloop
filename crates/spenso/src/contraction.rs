@@ -1,4 +1,4 @@
-use bitvec::vec::BitVec;
+use linnet::half_edge::subgraph::{SubSetLike, subset::SubSet};
 use log::trace;
 
 use crate::{
@@ -9,7 +9,7 @@ use crate::{
         },
     },
     structure::{
-        HasStructure, MergeInfo, StructureContract, StructureError, TensorStructure,
+        HasStructure, MergeInfo, SlotIndex, StructureContract, StructureError, TensorStructure,
         dimension::DimensionError,
     },
     tensors::data::DataTensor,
@@ -29,7 +29,7 @@ pub enum ContractionError {
     Other(#[from] eyre::Error),
 }
 
-pub trait Contract<T = Self> {
+pub trait Contract<T = Self, Settings = ()> {
     type LCM;
     fn contract(&self, other: &T) -> Result<Self::LCM, ContractionError>;
 }
@@ -54,7 +54,7 @@ pub trait ExteriorProductInterleaved<T> {
         &self,
         other: &T,
         result_structure: <Self::LCM as HasStructure>::Structure,
-        partition: BitVec,
+        partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError>;
 }
 
@@ -64,8 +64,8 @@ pub trait SingleContract<T> {
         &self,
         other: &T,
         resulting_structure: <Self::LCM as HasStructure>::Structure,
-        i: usize,
-        j: usize,
+        i: SlotIndex,
+        j: SlotIndex,
     ) -> Result<Self::LCM, ContractionError>;
 }
 
@@ -75,9 +75,9 @@ pub trait SingleContractInterleaved<T> {
         &self,
         other: &T,
         resulting_structure: <Self::LCM as HasStructure>::Structure,
-        resulting_partition: BitVec,
-        i: usize,
-        j: usize,
+        resulting_partition: SubSet<SlotIndex>,
+        i: SlotIndex,
+        j: SlotIndex,
     ) -> Result<Self::LCM, ContractionError>;
 }
 
@@ -95,10 +95,10 @@ pub trait MultiContractInterleaved<T> {
     fn multi_contract_interleaved(
         &self,
         other: &T,
-        pos_self: BitVec,
-        pos_other: BitVec,
+        pos_self: SubSet<SlotIndex>,
+        pos_other: SubSet<SlotIndex>,
         resulting_structure: <Self::LCM as HasStructure>::Structure,
-        resulting_partition: BitVec,
+        resulting_partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError>;
 }
 
@@ -150,7 +150,7 @@ where
             self.structure().merge(other.structure())?;
 
         // Count bits set to true in the BitVec
-        let common_count_self = pos_self.count_ones();
+        let common_count_self = pos_self.n_included();
 
         match common_count_self {
             0 => {
@@ -169,8 +169,14 @@ where
             }
             1 => {
                 // Find indices where bits are set to true
-                let i = pos_self.first_one().expect("Expected a bit to be set");
-                let j = pos_other.first_one().expect("Expected a bit to be set");
+                let i = pos_self
+                    .included_iter()
+                    .next()
+                    .expect("Expected a bit to be set");
+                let j = pos_other
+                    .included_iter()
+                    .next()
+                    .expect("Expected a bit to be set");
                 trace!("single");
                 match mergeinfo {
                     MergeInfo::Interleaved(partition) => self.single_contract_interleaved(

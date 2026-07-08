@@ -41,7 +41,6 @@ use crate::{
     settings::global::GenerationSettings,
     utils::load_generic_model,
 };
-use spenso::network::library::TensorLibraryData;
 use symbolica::{
     atom::{Atom, AtomCore},
     function, parse,
@@ -121,7 +120,7 @@ fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
             edge [particle=scalar_1]
             node [num=1]
             e        [style=invis]
-            // params = "if_sigma(S_11⊛y*Top(S_y⊛0));if_sigma(S_11⊛F*Top(S_F⊛0));if_sigma(S_11⊛p*Top(S_p⊛0));if_sigma(S_11⊛0);if_sigma(S_11⊛11*Top(S_11⊛0));if_sigma(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));if_sigma(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));if_sigma(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
+            // params = "uv_local(S_11⊛y*Top(S_y⊛0));uv_local(S_11⊛F*Top(S_F⊛0));uv_local(S_11⊛p*Top(S_p⊛0));uv_local(S_11⊛0);uv_local(S_11⊛11*Top(S_11⊛0));uv_local(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));uv_local(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));uv_local(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
             e -> A:0   [ id=5]
             B:1 -> e   [ id=4]
             A -> B    [ id=1]
@@ -134,7 +133,7 @@ fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
             edge [particle=scalar_1]
             node [num=1]
             e        [style=invis]
-            // params = "if_sigma(S_11⊛y*Top(S_y⊛0));if_sigma(S_11⊛F*Top(S_F⊛0));if_sigma(S_11⊛p*Top(S_p⊛0));if_sigma(S_11⊛0);if_sigma(S_11⊛11*Top(S_11⊛0));if_sigma(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));if_sigma(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));if_sigma(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
+            // params = "uv_local(S_11⊛y*Top(S_y⊛0));uv_local(S_11⊛F*Top(S_F⊛0));uv_local(S_11⊛p*Top(S_p⊛0));uv_local(S_11⊛0);uv_local(S_11⊛11*Top(S_11⊛0));uv_local(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));uv_local(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));uv_local(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
             e -> A:0   [ id=3]
             B:1 -> e   [ id=4]
             A -> B    [ id=1]
@@ -145,7 +144,7 @@ fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
             edge [particle=scalar_1]
             node [num=1]
             e        [style=invis]
-            // params = "if_sigma(S_11⊛y*Top(S_y⊛0));if_sigma(S_11⊛F*Top(S_F⊛0));if_sigma(S_11⊛p*Top(S_p⊛0));if_sigma(S_11⊛0);if_sigma(S_11⊛11*Top(S_11⊛0));if_sigma(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));if_sigma(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));if_sigma(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
+            // params = "uv_local(S_11⊛y*Top(S_y⊛0));uv_local(S_11⊛F*Top(S_F⊛0));uv_local(S_11⊛p*Top(S_p⊛0));uv_local(S_11⊛0);uv_local(S_11⊛11*Top(S_11⊛0));uv_local(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));uv_local(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));uv_local(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
             e -> A:0   [ id=3]
             B:1 -> e   [ id=2]
             A -> B    [ id=1]
@@ -172,6 +171,7 @@ fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
 
     amp.build_integrand(
         &model,
+        "bub",
         &GlobalSettings {
             ..Default::default()
         },
@@ -276,10 +276,25 @@ fn spinney_partial_cmp_is_equal_for_identical_subgraphs() {
         .into_iter()
         .next()
         .expect("expected at least one UV spinney");
-    let lhs = Spinney::new(subgraph.clone(), graph, &graph.loop_momentum_basis);
-    let rhs = Spinney::new(subgraph, graph, &graph.loop_momentum_basis);
+    let lhs = Spinney::new(subgraph.clone(), graph, &graph.loop_momentum_basis).unwrap();
+    let rhs = Spinney::new(subgraph, graph, &graph.loop_momentum_basis).unwrap();
 
     assert_eq!(lhs.partial_cmp(&rhs), Some(std::cmp::Ordering::Equal));
+}
+
+#[test]
+fn uv_marker_stripping_removes_local_and_integrated_markers() {
+    test_initialise().unwrap();
+    let marker = Atom::var(symbol!("marker"));
+    let expr = Atom::num(2) * function!(GS.uv_local, marker.clone())
+        + Atom::num(3) * function!(GS.uv_integrated, marker);
+    let stripped = expr
+        .replace(function!(GS.uv_local, W_.a___))
+        .with(Atom::num(1))
+        .replace(function!(GS.uv_integrated, W_.a___))
+        .with(Atom::num(1));
+
+    assert_eq!(stripped, Atom::num(5));
 }
 
 #[test]
@@ -1677,6 +1692,7 @@ mod failing {
 
         amp.build_integrand(
             &model,
+            "tta",
             &GlobalSettings {
                 ..Default::default()
             },

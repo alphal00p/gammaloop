@@ -4,12 +4,12 @@ use ref_ops::{RefAdd, RefDiv, RefMul, RefSub};
 use symbolica::{
     coefficient::Coefficient,
     domains::{
-        float::{Complex as SymComplex, Float, FloatLike, Real, SingleFloat},
+        float::{Complex as SymComplex, FixedPrecision, Float, FloatLike, Real, SingleFloat},
         rational::Rational,
     },
     evaluate::{
-        CompileOptions, CompiledComplexEvaluator, CompiledNumber, EvaluatorLoader, ExportNumber,
-        ExportSettings, ExpressionEvaluator,
+        CompileOptions, CompiledComplexEvaluator, CompiledNumber, EvaluationDomain,
+        EvaluatorLoader, ExportNumber, ExportSettings, ExpressionEvaluator,
     },
 };
 
@@ -172,7 +172,31 @@ impl<T: ExportNumber + SingleFloat> ExportNumber for Complex<T> {
     fn is_real(&self) -> bool {
         self.im.is_zero()
     }
+
+    fn to_complex_double(&self) -> SymComplex<f64> {
+        SymComplex {
+            re: self.re.to_complex_double().re,
+            im: self.im.to_complex_double().re,
+        }
+    }
 }
+
+impl<T: FixedPrecision> FixedPrecision for Complex<T> {
+    const BINARY_PRECISION: usize = T::BINARY_PRECISION;
+}
+
+impl<T: EvaluationDomain + FloatLike> EvaluationDomain for Complex<T> {
+    const FIXED_PRECISION: Option<u32> = T::FIXED_PRECISION;
+
+    fn try_from_complex_float(f: SymComplex<Float>) -> Result<Self, String> {
+        let zero = f.re.zero();
+        Ok(Complex {
+            re: T::try_from_complex_float(SymComplex::new(f.re, zero.clone()))?,
+            im: T::try_from_complex_float(SymComplex::new(f.im, zero))?,
+        })
+    }
+}
+
 impl<T: SingleFloat> SingleFloat for Complex<T>
 where
     T: for<'a> RefMul<&'a T, Output = T>

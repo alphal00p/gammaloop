@@ -1,4 +1,8 @@
-use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
+use idenso::{
+    color::{ColorSimplifier, ColorSimplifySettings},
+    dirac::GammaSimplifier,
+    shorthands::metric::MetricSimplifier,
+};
 use linnet::{
     half_edge::{
         HedgeGraph,
@@ -38,11 +42,18 @@ impl Graph {
                 .simplify_metrics();
 
             if settings.do_color_algebra {
-                num = num.simplify_color();
+                num = num.simplify_color_with(
+                    ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                );
             }
 
             if settings.do_gamma_algebra {
                 num = num.simplify_gamma();
+                crate::debug_tags!(#generation, #graph, #inspect, #dump;
+                    stage = "graph_serialization_after_simplify_gamma",
+                    log.after_gamma = num,
+                    "Graph serialization after gamma simplification"
+                );
             }
 
             dotgraph.global_data.statements.insert(

@@ -885,10 +885,14 @@ lmb_channels = "summed"
         .process_list
         .get_integrand(process_id, &integrand_name)?
         .require_generated()?;
-    let group_id = (0..integrand.graph_count())
+    let (group_id, master_graph_name) = (0..integrand.graph_count())
         .filter_map(|graph_id| integrand.graph_name_by_id(graph_id))
-        .filter_map(|graph_name| integrand.resolve_group_id_by_master_name(graph_name).ok())
-        .find(|&group_id| integrand.group_channel_count(group_id).unwrap_or(0) > 1)
+        .filter_map(|graph_name| {
+            let group_id = integrand.resolve_group_id_by_master_name(graph_name).ok()?;
+            (integrand.group_channel_count(group_id).unwrap_or(0) > 1)
+                .then(|| (group_id, graph_name.to_string()))
+        })
+        .next()
         .expect("expected at least one graph group with more than one LMB channel");
     let channel_count = integrand.group_channel_count(group_id).unwrap();
     let point = default_xspace_point(&explicit_cli)?;
@@ -979,6 +983,58 @@ lmb_channels = "monte_carlo"
         event_multiset(explicit_events.iter().map(event_signature)),
         event_multiset(discrete_event_signatures),
         "explicit multi-channeling should return the union of the per-channel event sets, grouped into one graph-group event group"
+    );
+
+    let mut override_cli =
+        setup_sm_differential_lu_cli("lu_rust_explicit_lmb_multichanneling_lmb_basis_ids")?;
+    override_cli.run_command(
+        "set process kv general.generate_events=true general.store_additional_weights_in_event=true",
+    )?;
+    override_cli.run_command(&format!(
+        r#"set process string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+lmb_basis_ids = {{ {master_graph_name} = [1, 0] }}
+'"#,
+    ))?;
+
+    let (process_id, integrand_name) = override_cli.state.find_integrand_ref(None, None)?;
+    let overridden_integrand = override_cli
+        .state
+        .process_list
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?;
+    assert_eq!(
+        overridden_integrand.group_channel_count(group_id).unwrap(),
+        2,
+        "lmb_basis_ids should define the active LMB-channel list for the named graph group"
+    );
+
+    let mut override_channel_tags = Vec::new();
+    for channel in 0..2 {
+        let mut results = evaluate_x_samples_with_discrete_dims(
+            &mut override_cli,
+            std::slice::from_ref(&point),
+            &[vec![group_id.0, channel]],
+        )?;
+        let result = results.samples.remove(0);
+        let lmb_channel_edge_ids = result.evaluation.event_groups[0][0]
+            .cut_info
+            .lmb_channel_edge_ids
+            .as_ref()
+            .expect("overridden discrete LMB channel events should carry channel metadata")
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        override_channel_tags.push(lmb_channel_edge_ids);
+    }
+    assert_eq!(override_channel_tags.len(), 2);
+    assert_ne!(
+        override_channel_tags[0], override_channel_tags[1],
+        "overridden discrete channel ids should resolve to distinct requested generated LMB bases"
     );
 
     Ok(())

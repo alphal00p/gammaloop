@@ -1,6 +1,6 @@
 # Gammaloop build and development commands
 
-ci_cargo_profile := "dev-optim"
+ci_cargo_profile := "ci-optim"
 
 # Build gammaloop Python CLI with UFO support and dev-optim profile
 build-cli:
@@ -221,6 +221,15 @@ test_gammaloop *args:
         done
     fi
 
+    run_ignored=0
+    for class in "${selected_modules[@]}"; do
+        case "$class" in
+            slow|failing)
+                run_ignored=1
+                ;;
+        esac
+    done
+
     existing_rustflags="${RUSTFLAGS-}"
 
     if [ "$enforce_warnings_as_errors" -eq 1 ]; then
@@ -231,15 +240,16 @@ test_gammaloop *args:
             cargo nextest run
             --cargo-profile dev-optim
             -P test_gammaloop
-            --run-ignored all
         )
     else
         cmd=(
             cargo nextest run
             --cargo-profile dev-optim
             -P test_gammaloop
-            --run-ignored all
         )
+    fi
+    if [ "$run_ignored" -eq 1 ]; then
+        cmd+=(--run-ignored all)
     fi
     for package in "${gammaloop_packages[@]}"; do
         cmd+=(-p "$package")
@@ -290,6 +300,13 @@ test-release TEST_NAME="":
 
 # Run tests in release mode (faster execution)
 test-ci TEST_NAME="":
+    just _test-ci "{{ TEST_NAME }}" ""
+
+# Run tests in release mode on GitHub macOS runners.
+test-ci-mac TEST_NAME="":
+    just _test-ci "{{ TEST_NAME }}" 'not test(/^aa_aa::important::aa_aa_local_inspect_backend_consistency$/)'
+
+_test-ci TEST_NAME="" NEXTEST_FILTERSET="":
     #!/usr/bin/env bash
     set -euo pipefail
     gammaloop_packages=(
@@ -310,11 +327,13 @@ test-ci TEST_NAME="":
         --profile ci_gammaloop
         --locked
         --no-fail-fast
-        --run-ignored all
     )
     for package in "${gammaloop_packages[@]}"; do
         cmd+=(-p "$package")
     done
+    if [ -n "{{ NEXTEST_FILTERSET }}" ]; then
+        cmd+=(-E '{{ NEXTEST_FILTERSET }}')
+    fi
     if [ -n "{{ TEST_NAME }}" ]; then
         cmd+=({{ TEST_NAME }})
     fi

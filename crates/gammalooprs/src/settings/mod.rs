@@ -286,11 +286,10 @@ mod tests {
         };
         let symbolica = options.to_symbolica_compile_options();
 
-        assert_eq!(symbolica.optimization_level, 1);
-        assert!(!symbolica.fast_math);
-        assert!(!symbolica.unsafe_math);
-        assert_eq!(symbolica.compiler, "clang++");
-        assert_eq!(symbolica.args, vec!["-g", "-Winvalid"]);
+        assert_eq!(
+            symbolica.to_string(),
+            "clang++ -shared -O1 -fPIC -march=native -g -Winvalid"
+        );
     }
 
     #[test]
@@ -582,7 +581,10 @@ mod tests {
         assert!(toml.contains("orientations = \"monte_carlo\""));
         assert!(toml.contains("lmb_multichanneling = true"));
         assert!(toml.contains("lmb_channels = \"monte_carlo\""));
+        assert!(toml.contains("alpha = 3.0"));
+        assert!(toml.contains("lmb_channel_weight = \"ose\""));
         assert!(toml.contains("coordinate_system = \"spherical\""));
+        assert!(toml.contains("power = 1.0"));
         assert!(!toml.contains("type = \"discrete_graph_sampling\""));
         assert!(!toml.contains("subtype = \"discrete_multi_channeling\""));
     }
@@ -606,15 +608,181 @@ b = 1.0
     }
 
     #[test]
+    fn sampling_settings_serializes_lmb_basis_ids_for_default_sampling() {
+        let sampling_settings =
+            SamplingSettings::Default(crate::settings::runtime::ParameterizationSettings {
+                lmb_basis_ids: std::collections::BTreeMap::from([
+                    ("GL02".to_string(), vec![0, 3]),
+                    ("GL05".to_string(), vec![1]),
+                ]),
+                ..Default::default()
+            });
+
+        let toml = toml::to_string_pretty(&sampling_settings).unwrap();
+        assert!(toml.contains("lmb_basis_ids"));
+        let reparsed: SamplingSettings = toml::from_str(&toml).unwrap();
+        assert_eq!(reparsed, sampling_settings);
+    }
+
+    #[test]
+    fn sampling_settings_deserializes_lmb_basis_ids_for_default_sampling() {
+        let toml = r#"
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+lmb_basis_ids = { GL02 = [0, 3], GL05 = [1] }
+"#;
+
+        let settings: SamplingSettings = toml::from_str(toml).unwrap();
+        assert_eq!(
+            settings,
+            SamplingSettings::Default(crate::settings::runtime::ParameterizationSettings {
+                lmb_basis_ids: std::collections::BTreeMap::from([
+                    ("GL02".to_string(), vec![0, 3]),
+                    ("GL05".to_string(), vec![1]),
+                ]),
+                ..Default::default()
+            })
+        );
+    }
+
+    #[test]
+    fn sampling_settings_allows_lmb_basis_ids_with_multichanneling() {
+        let toml = r#"
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+coordinate_system = "spherical"
+lmb_basis_ids = { GL02 = [1] }
+"#;
+
+        let settings: SamplingSettings = toml::from_str(toml).unwrap();
+        assert!(
+            settings
+                .get_parameterization_settings()
+                .unwrap()
+                .lmb_basis_ids
+                .contains_key("GL02")
+        );
+    }
+
+    #[test]
+    fn sampling_settings_rejects_scalar_lmb_basis_id_as_unknown() {
+        let invalid_toml = r#"
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+lmb_basis_id = 1
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(err.to_string().contains("unknown field `lmb_basis_id`"));
+    }
+
+    #[test]
+    fn sampling_settings_rejects_empty_lmb_basis_ids_list() {
+        let invalid_toml = r#"
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+lmb_basis_ids = { GL02 = [] }
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(err.to_string().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn sampling_settings_rejects_duplicate_lmb_basis_ids() {
+        let invalid_toml = r#"
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+lmb_basis_ids = { GL02 = [1, 1] }
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(err.to_string().contains("duplicate basis id 1"));
+    }
+
+    #[test]
+    fn sampling_settings_rejects_lmb_basis_ids_with_tropical_sampling() {
+        let invalid_toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "tropical"
+lmb_basis_ids = { GL02 = [1] }
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("coordinate_system = 'tropical' is incompatible with lmb_basis_ids")
+        );
+    }
+
+    #[test]
     fn sampling_settings_deserializes_from_parser_shape() {
         let toml = r#"
 graphs = "monte_carlo"
 orientations = "summed"
 lmb_multichanneling = true
 lmb_channels = "summed"
+alpha = 1.5
+lmb_channel_weight = "inverse_jacobian"
 coordinate_system = "momentum_space"
 mapping = "log"
 b = 5.0
+power = 2.0
+"#;
+
+        let settings: SamplingSettings = toml::from_str(toml).unwrap();
+        assert_eq!(
+            settings,
+            SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                sample_orientations: false,
+                sampling_type: DiscreteGraphSamplingType::MultiChanneling(
+                    crate::settings::runtime::MultiChannelingSettings {
+                        alpha: 1.5,
+                        channel_weight: crate::settings::runtime::LmbChannelWeight::InverseJacobian,
+                        parameterization_settings:
+                            crate::settings::runtime::ParameterizationSettings {
+                                mode: crate::settings::runtime::ParameterizationMode::MomentumSpace,
+                                mapping: crate::settings::runtime::ParameterizationMapping::Log,
+                                b: 5.0,
+                                power: 2.0,
+                                lmb_basis_ids: Default::default(),
+                            },
+                    },
+                ),
+            })
+        );
+    }
+
+    #[test]
+    fn sampling_settings_deserializes_power_mapping() {
+        let toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "spherical"
+mapping = "power"
+b = 1.5
+power = 4.0
 "#;
 
         let settings: SamplingSettings = toml::from_str(toml).unwrap();
@@ -625,16 +793,89 @@ b = 5.0
                 sampling_type: DiscreteGraphSamplingType::MultiChanneling(
                     crate::settings::runtime::MultiChannelingSettings {
                         alpha: 3.0,
+                        channel_weight: crate::settings::runtime::LmbChannelWeight::InverseJacobian,
                         parameterization_settings:
                             crate::settings::runtime::ParameterizationSettings {
-                                mode: crate::settings::runtime::ParameterizationMode::MomentumSpace,
-                                mapping: crate::settings::runtime::ParameterizationMapping::Log,
-                                b: 5.0,
+                                mode: crate::settings::runtime::ParameterizationMode::Spherical,
+                                mapping: crate::settings::runtime::ParameterizationMapping::Power,
+                                b: 1.5,
+                                power: 4.0,
+                                lmb_basis_ids: Default::default(),
                             },
                     },
                 ),
             })
         );
+    }
+
+    #[test]
+    fn sampling_settings_rejects_invalid_power_mapping_exponent() {
+        let invalid_toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "power"
+power = 0.0
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(err.to_string().contains("requires power >= 1"));
+    }
+
+    #[test]
+    fn sampling_settings_deserializes_relative_spherical_coordinates() {
+        let toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "relative_spherical"
+mapping = "linear"
+b = 1.0
+"#;
+
+        let settings: SamplingSettings = toml::from_str(toml).unwrap();
+        assert_eq!(
+            settings,
+            SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                sample_orientations: false,
+                sampling_type: DiscreteGraphSamplingType::MultiChanneling(
+                    crate::settings::runtime::MultiChannelingSettings {
+                        alpha: 3.0,
+                        channel_weight: crate::settings::runtime::LmbChannelWeight::InverseJacobian,
+                        parameterization_settings:
+                            crate::settings::runtime::ParameterizationSettings {
+                                mode: crate::settings::runtime::ParameterizationMode::RelativeSpherical,
+                                mapping: crate::settings::runtime::ParameterizationMapping::Linear,
+                                b: 1.0,
+                                power: 1.0,
+                                lmb_basis_ids: Default::default(),
+                            },
+                    },
+                ),
+            })
+        );
+    }
+
+    #[test]
+    fn sampling_settings_rejects_inverse_jacobian_for_flat_hyperspherical() {
+        let invalid_toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+alpha = 1.5
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "hyperspherical_flat"
+mapping = "linear"
+b = 1.0
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(err.to_string().contains("inverse map is not available"));
     }
 
     #[test]

@@ -25,10 +25,10 @@ use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 use crate::{GammaLoopContext, define_index};
 
 use crate::integrands::process::GenericEvaluator;
-use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
 };
+use crate::momentum::{SignOrZero, ThreeMomentum};
 use crate::processes::CrossSectionCut;
 use crate::utils::hyperdual_utils::new_constant;
 use crate::utils::{
@@ -78,6 +78,30 @@ impl Esurface {
         })
     }
     pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
+        self.to_atom_impl(cut_edges, external_energy_atom_from_index)
+    }
+
+    pub(crate) fn to_atom_in_lmb(&self, cut_edges: &[EdgeIndex], lmb: &LoopMomentumBasis) -> Atom {
+        self.to_atom_impl(cut_edges, |edge| {
+            lmb.edge_signatures[edge].external.iter_enumerated().fold(
+                Atom::Zero,
+                |sum, (external_index, sign)| {
+                    let atom = external_energy_atom_from_index(lmb.ext_edges[external_index]);
+                    match sign {
+                        SignOrZero::Zero => sum,
+                        SignOrZero::Plus => sum + atom,
+                        SignOrZero::Minus => sum - atom,
+                    }
+                },
+            )
+        })
+    }
+
+    fn to_atom_impl(
+        &self,
+        cut_edges: &[EdgeIndex],
+        external_shift_atom: impl Fn(EdgeIndex) -> Atom,
+    ) -> Atom {
         let symbolic_energies = self
             .energies
             .iter()
@@ -94,7 +118,7 @@ impl Esurface {
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                external_energy_atom_from_index(*i) * &Atom::num(*sign) + &sum
+                external_shift_atom(*i) * &Atom::num(*sign) + &sum
             });
 
         let builder_atom = Atom::new();
@@ -223,10 +247,22 @@ impl Esurface {
 
         if shift_part < -F::from_ff64(SHIFT_THRESHOLD) * e_cm {
             let lmb = subspace.get_lmb(all_lmbs);
+            let subspace_energy_indices = subspace.contains(&self.energies, graph).collect_vec();
 
-            let mass_sum: F<T> = subspace
-                .contains(&self.energies, graph)
-                .map(|index| &real_mass_vector[index])
+            if !subspace_energy_indices.iter().any(|&index| {
+                subspace
+                    .project_loop_signature(&lmb.edge_signatures[index].internal)
+                    .any(|sign| sign.is_sign())
+            }) {
+                debug!(
+                    "esurface has no radial energy in this subspace, cannot bound a threshold region"
+                );
+                return false;
+            }
+
+            let mass_sum: F<T> = subspace_energy_indices
+                .iter()
+                .map(|&index| &real_mass_vector[index])
                 .fold(F::from_f64(0.0), |acc, x| acc + x);
 
             let zero_vector = ThreeMomentum::new(e_cm.zero(), e_cm.zero(), e_cm.zero());
@@ -1016,14 +1052,21 @@ mod tests {
     use linnet::half_edge::builder::HedgeGraphBuilder;
     use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
     use linnet::half_edge::nodestore::NodeStorageVec;
+    use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
 
     use crate::cff::cff_graph::VertexSet;
+    use crate::graph::LoopMomentumBasis;
+    use crate::momentum::{
+        FourMomentum, SignOrZero,
+        sample::{ExternalFourMomenta, ExternalIndex},
+        signature::LoopExtSignature,
+    };
     use crate::processes::CrossSectionCut;
     use crate::{
         cff::{esurface::Esurface, generation::ShiftRewrite},
-        utils::{F, test_utils::dummy_hedge_graph},
+        utils::{F, external_energy_atom_from_index, test_utils::dummy_hedge_graph},
     };
 
     use super::add_external_shifts;
@@ -1073,6 +1116,85 @@ mod tests {
             vertex_set: VertexSet::dummy(),
             //subspace_graph: dummy_graph.full_graph(),
         };
+    }
+
+    #[test]
+    fn to_atom_in_lmb_uses_canonical_external_edges_not_carrier_edges() {
+        let dummy_graph = dummy_hedge_graph(9);
+        let mut edge_signatures = dummy_graph
+            .new_edgevec_from_iter(
+                (0..9).map(|_| LoopExtSignature::from((Vec::<isize>::new(), vec![0, 0]))),
+            )
+            .unwrap();
+        edge_signatures[EdgeIndex::from(8)] =
+            LoopExtSignature::from((Vec::<isize>::new(), vec![0, 1]));
+        let lmb = LoopMomentumBasis {
+            tree: SuBitGraph::empty(0),
+            loop_edges: vec![].into(),
+            ext_edges: vec![EdgeIndex::from(2), EdgeIndex::from(6)].into(),
+            edge_signatures,
+        };
+        let esurface = Esurface {
+            energies: vec![],
+            external_shift: vec![(EdgeIndex::from(8), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+
+        let atom = esurface.to_atom_in_lmb(&[], &lmb).expand();
+        let expected =
+            (Atom::num(-1) * external_energy_atom_from_index(EdgeIndex::from(6))).expand();
+
+        assert_eq!(atom.to_canonical_string(), expected.to_canonical_string());
+    }
+
+    #[test]
+    fn shift_part_uses_expanded_global_external_slots() {
+        let dummy_graph = dummy_hedge_graph(7);
+        let mut edge_signatures = dummy_graph
+            .new_edgevec_from_iter(
+                (0..7).map(|_| LoopExtSignature::from((Vec::<isize>::new(), vec![0]))),
+            )
+            .unwrap();
+        edge_signatures[EdgeIndex::from(6)] =
+            LoopExtSignature::from((Vec::<isize>::new(), vec![1]));
+        let mut lmb = LoopMomentumBasis {
+            tree: SuBitGraph::empty(0),
+            loop_edges: vec![].into(),
+            ext_edges: vec![EdgeIndex::from(6)].into(),
+            edge_signatures,
+        };
+        lmb.canonicalize_external_order(&(0..7).map(EdgeIndex::from).collect::<Vec<EdgeIndex>>());
+
+        assert_eq!(lmb.ext_edges.len(), 7);
+        assert_eq!(
+            lmb.edge_signatures[EdgeIndex::from(6)].external[ExternalIndex(2)],
+            SignOrZero::Zero
+        );
+        assert_eq!(
+            lmb.edge_signatures[EdgeIndex::from(6)].external[ExternalIndex(6)],
+            SignOrZero::Plus
+        );
+
+        let external_moms: ExternalFourMomenta<F<f64>> = vec![
+            FourMomentum::from([F(10.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(20.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(2000.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(30.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(40.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(50.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(438.555), F(0.0), F(0.0), F(0.0)]),
+        ]
+        .into();
+        let esurface = Esurface {
+            energies: vec![],
+            external_shift: vec![(EdgeIndex::from(6), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+
+        assert_eq!(
+            esurface.compute_shift_part_from_momenta(&external_moms, &lmb),
+            F(-438.555)
+        );
     }
 
     #[test]

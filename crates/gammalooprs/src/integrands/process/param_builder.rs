@@ -5,9 +5,9 @@ use std::{
 };
 
 use bincode::{Decode, Encode};
-use idenso::color::CS;
 
 use color_eyre::Result;
+use idenso::color::CS;
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
@@ -21,12 +21,9 @@ use spenso::{
     structure::concrete_index::ExpandedIndex,
     tensors::parametric::AtomViewOrConcrete,
 };
-use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Indeterminate, Symbol},
-    domains::rational::Rational,
-    evaluate::FunctionMap,
-    id::Replacement,
-    parse_lit, symbol,
+use symbolica::prelude::{
+    Atom, AtomCore, AtomOrView, FunctionBuilder, FunctionMap, Indeterminate, Rational, Replacement,
+    Symbol, parse_lit, symbol,
 };
 use tabled::{Table, settings::Style};
 use tracing::debug;
@@ -112,147 +109,77 @@ pub trait ParamBuilderGraph {
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
 
-#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
-#[trait_decode(trait = GammaLoopContext)]
-#[derive(Default)]
-pub struct GammaLoopPairs {
-    m_uv: ParamValuePairs,
-    idenso_vars: ParamValuePairs,
-    mu_r_sq: ParamValuePairs,
-    orientations: ParamValuePairs,
-    override_if: ParamValuePairs,
-    pub model_parameters: ParamValuePairs,
-    external_energies: ParamValuePairs,
-    external_spatial: ParamValuePairs,
-    pub polarizations: ParamValuePairs,
-    loop_moms_spatial: ParamValuePairs,
-    tstar: ParamValuePairs,
-    h_function_lu_cut: ParamValuePairs,
-    h_function_left_th: ParamValuePairs,
-    h_function_right_th: ParamValuePairs,
-    esurface_derivative_lu_cut: ParamValuePairs,
-    esurface_derivative_left_th: ParamValuePairs,
-    esurface_derivative_right_th: ParamValuePairs,
-    uv_damp_plus_left: ParamValuePairs,
-    uv_damp_minus_left: ParamValuePairs,
-    radius_left: ParamValuePairs,
-    radius_star_left: ParamValuePairs,
-    uv_damp_plus_right: ParamValuePairs,
-    uv_damp_minus_right: ParamValuePairs,
-    radius_right: ParamValuePairs,
-    radius_star_right: ParamValuePairs,
-    pub additional_params: ParamValuePairs,
+macro_rules! define_gamma_loop_pairs {
+    ($($vis:vis $field:ident),+ $(,)?) => {
+        #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+        #[trait_decode(trait = GammaLoopContext)]
+        #[derive(Default)]
+        pub struct GammaLoopPairs {
+            $($vis $field: ParamValuePairs,)+
+        }
+
+        const GAMMA_LOOP_PAIR_COUNT: usize =
+            <[()]>::len(&[$(define_gamma_loop_pairs!(@unit $field)),+]);
+
+        impl IntoIterator for GammaLoopPairs {
+            type Item = ParamValuePairs;
+            type IntoIter = std::array::IntoIter<Self::Item, GAMMA_LOOP_PAIR_COUNT>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                [$(self.$field),+].into_iter()
+            }
+        }
+
+        impl<'a> IntoIterator for &'a GammaLoopPairs {
+            type Item = &'a ParamValuePairs;
+            type IntoIter = std::array::IntoIter<Self::Item, GAMMA_LOOP_PAIR_COUNT>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                [$(&self.$field),+].into_iter()
+            }
+        }
+
+        impl<'a> IntoIterator for &'a mut GammaLoopPairs {
+            type Item = &'a mut ParamValuePairs;
+            type IntoIter = std::array::IntoIter<Self::Item, GAMMA_LOOP_PAIR_COUNT>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                [$(&mut self.$field),+].into_iter()
+            }
+        }
+    };
+    (@unit $field:ident) => {
+        ()
+    };
 }
 
-impl IntoIterator for GammaLoopPairs {
-    type Item = ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 26>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        [
-            self.m_uv,
-            self.mu_r_sq,
-            self.idenso_vars,
-            self.model_parameters,
-            self.external_energies,
-            self.external_spatial,
-            self.polarizations,
-            self.loop_moms_spatial,
-            self.tstar,
-            self.h_function_lu_cut,
-            self.h_function_left_th,
-            self.h_function_right_th,
-            self.esurface_derivative_lu_cut,
-            self.esurface_derivative_left_th,
-            self.esurface_derivative_right_th,
-            self.uv_damp_plus_left,
-            self.uv_damp_minus_left,
-            self.radius_left,
-            self.radius_star_left,
-            self.uv_damp_plus_right,
-            self.uv_damp_minus_right,
-            self.radius_right,
-            self.radius_star_right,
-            self.orientations,
-            self.override_if,
-            self.additional_params,
-        ]
-        .into_iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a GammaLoopPairs {
-    type Item = &'a ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 26>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        [
-            &self.m_uv,
-            &self.mu_r_sq,
-            &self.idenso_vars,
-            &self.model_parameters,
-            &self.external_energies,
-            &self.external_spatial,
-            &self.polarizations,
-            &self.loop_moms_spatial,
-            &self.tstar,
-            &self.h_function_lu_cut,
-            &self.h_function_left_th,
-            &self.h_function_right_th,
-            &self.esurface_derivative_lu_cut,
-            &self.esurface_derivative_left_th,
-            &self.esurface_derivative_right_th,
-            &self.uv_damp_plus_left,
-            &self.uv_damp_minus_left,
-            &self.radius_left,
-            &self.radius_star_left,
-            &self.uv_damp_plus_right,
-            &self.uv_damp_minus_right,
-            &self.radius_right,
-            &self.radius_star_right,
-            &self.orientations,
-            &self.override_if,
-            &self.additional_params,
-        ]
-        .into_iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a mut GammaLoopPairs {
-    type Item = &'a mut ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 26>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        [
-            &mut self.m_uv,
-            &mut self.mu_r_sq,
-            &mut self.idenso_vars,
-            &mut self.model_parameters,
-            &mut self.external_energies,
-            &mut self.external_spatial,
-            &mut self.polarizations,
-            &mut self.loop_moms_spatial,
-            &mut self.tstar,
-            &mut self.h_function_lu_cut,
-            &mut self.h_function_left_th,
-            &mut self.h_function_right_th,
-            &mut self.esurface_derivative_lu_cut,
-            &mut self.esurface_derivative_left_th,
-            &mut self.esurface_derivative_right_th,
-            &mut self.uv_damp_plus_left,
-            &mut self.uv_damp_minus_left,
-            &mut self.radius_left,
-            &mut self.radius_star_left,
-            &mut self.uv_damp_plus_right,
-            &mut self.uv_damp_minus_right,
-            &mut self.radius_right,
-            &mut self.radius_star_right,
-            &mut self.orientations,
-            &mut self.override_if,
-            &mut self.additional_params,
-        ]
-        .into_iter()
-    }
+define_gamma_loop_pairs! {
+    m_uv,
+    renormalization_localization_scale,
+    mu_r_sq,
+    orientations,
+    override_if,
+    pub model_parameters,
+    pub external_energies,
+    external_spatial,
+    pub polarizations,
+    loop_moms_spatial,
+    tstar,
+    h_function_lu_cut,
+    h_function_left_th,
+    h_function_right_th,
+    esurface_derivative_lu_cut,
+    esurface_derivative_left_th,
+    esurface_derivative_right_th,
+    uv_damp_plus_left,
+    uv_damp_minus_left,
+    radius_left,
+    radius_star_left,
+    uv_damp_plus_right,
+    uv_damp_minus_right,
+    radius_right,
+    radius_star_right,
+    pub additional_params,
 }
 
 impl GammaLoopPairs {
@@ -318,7 +245,12 @@ impl GammaLoopPairs {
         additional_params: T,
     ) -> (Self, usize) {
         let mut pairs = GammaLoopPairs {
-            m_uv: ParamValuePairs::default_from_symbol(GS.m_uv),
+            m_uv: [Atom::var(GS.m_uv_vacuum), Atom::var(GS.m_uv_expansion)]
+                .into_iter()
+                .collect(),
+            renormalization_localization_scale: ParamValuePairs::default_from_symbol(
+                GS.renormalization_localization_scale,
+            ),
             mu_r_sq: ParamValuePairs::default_from_symbol(GS.mu_r_sq),
             tstar: ParamValuePairs::default_from_symbol(GS.rescale_star),
             radius_left: ParamValuePairs::default_from_symbol(GS.radius_left),
@@ -339,8 +271,6 @@ impl GammaLoopPairs {
             ..Default::default()
         };
 
-        pairs.idenso_vars();
-
         pairs.update_model(model);
         pairs.external_energies(graph);
         pairs.orientations(graph);
@@ -350,11 +280,6 @@ impl GammaLoopPairs {
 
         let len = pairs.update_ranges();
         (pairs, len)
-    }
-
-    pub(crate) fn idenso_vars(&mut self) {
-        self.idenso_vars = [CS.tr, CS.nc].into_iter().collect();
-        self.update_ranges();
     }
 
     pub(crate) fn update_model(&mut self, model: &Model) {
@@ -724,7 +649,6 @@ pub struct ParamBuilder<T: FloatLike = f64> {
 
     pub reps: Vec<FnMapEntry>,
     // pub eager_const_map: HashMap<Atom, Complex<F<T>>>,
-    // pub eager_function_map: HashMap<Symbol, EvaluationFn<Atom, Complex<F<T>>>>,
     // pub eager_fn_map:
     pub fn_map: FunctionMap,
 }
@@ -1118,7 +1042,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         &mut self,
         name: Symbol,
         tags: Vec<Atom>,
-        rename: String,
+        _rename: String,
         args: Vec<A>,
         body: Atom,
     ) -> Result<(), String> {
@@ -1136,7 +1060,8 @@ impl<T: FloatLike> ParamBuilder<T> {
         });
 
         self.fn_map
-            .add_tagged_function(name, tags, rename, args, body)
+            .add_tagged_function(name, tags, args, body)
+            .map_err(|e| e.to_string())
 
         // body.evaluate(coeff_map, const_map, function_map)
     }
@@ -1144,7 +1069,6 @@ impl<T: FloatLike> ParamBuilder<T> {
     pub fn add_function<A: Into<Indeterminate> + Clone>(
         &mut self,
         name: Symbol,
-        rename: String,
         args: Vec<A>,
         body: Atom,
     ) -> Result<(), String> {
@@ -1157,7 +1081,9 @@ impl<T: FloatLike> ParamBuilder<T> {
             args: args.clone(),
         });
 
-        self.fn_map.add_function(name, rename, args, body)
+        self.fn_map
+            .add_function(name, args, body)
+            .map_err(|e| e.to_string())
     }
 
     pub fn initialize_duals(&mut self, max_dual_size: usize) {
@@ -1202,7 +1128,10 @@ impl<T: FloatLike> ParamBuilder<T> {
             args: vec![],
         });
 
-        self.fn_map.add_constant(key, value)
+        self.fn_map
+            .add_aliases([(key, Atom::num(value))])
+            .map_err(|e| e.to_string())
+            .expect("failed to add constant to function map");
     }
 
     pub(crate) fn new_empty() -> Self {
@@ -1235,13 +1164,8 @@ impl<T: FloatLike> ParamBuilder<T> {
         };
 
         let arg = symbol!("argument");
-        new.add_function(
-            GS.tree_denom_wrapper,
-            "tree_denom".into(),
-            vec![arg],
-            Atom::var(arg),
-        )
-        .unwrap();
+        new.add_function(GS.tree_denom_wrapper, vec![arg], Atom::var(arg))
+            .unwrap();
 
         for e in graph.iter_edge_ids() {
             if lmb.edge_signatures[e]
@@ -1295,31 +1219,67 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         new.add_function(
             GS.broadcasting_sqrt,
-            "sqrt".to_string(),
             vec![symbol!("x")],
             parse_lit!(sqrt(x)),
+        )
+        .unwrap();
+        new.add_function(
+            GS.localizing_integrand,
+            vec![symbol!("x")],
+            symbol!("x").to_atom(),
         )
         .unwrap();
         let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
 
         // new.fn_map.add_conditional(GS.orientation_if);
         new.add_constant(GS.pi.into(), pi_rational.into());
+        new.add_constant(CS.cf.into(), Rational::new(4, 3).into());
+        new.add_constant(CS.ca.into(), Rational::new(3, 1).into());
+        new.add_constant(CS.nc.into(), Rational::new(3, 1).into());
+        new.add_constant(CS.tr.into(), Rational::new(1, 2).into());
+
         new.values = vec![vec![Complex::new_re(F(T::from_f64(0.))); len]];
         new.update_model_values(model);
-        new.update_idenso_values();
-
-        // println!("self: {}", new);
         //panic!();
         new
     }
 
     #[inline]
     pub(crate) fn m_uv_value(&mut self, m_uv: Complex<F<T>>) {
-        debug_assert!(self.pairs.m_uv.value_range.len() == 1);
+        debug_assert!(self.pairs.m_uv.value_range.len() == 2);
 
         for (index, values) in self.values.iter_mut().enumerate() {
             let multiplicative_offset = index + 1;
-            values[self.pairs.m_uv.value_range.start * multiplicative_offset] = m_uv.clone();
+            let mut start = self.pairs.m_uv.value_range.start * multiplicative_offset;
+            for _ in self.pairs.m_uv.value_range.clone() {
+                values[start] = m_uv.clone();
+                start += multiplicative_offset;
+            }
+            debug_assert_eq!(
+                start,
+                self.pairs.m_uv.value_range.end * multiplicative_offset,
+                "Not filled up UV mass params"
+            );
+        }
+    }
+    #[inline]
+    pub(crate) fn renormalization_localization_scale_value(&mut self, l: Complex<F<T>>) {
+        debug_assert!(
+            self.pairs
+                .renormalization_localization_scale
+                .value_range
+                .len()
+                == 1
+        );
+
+        for (index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = index + 1;
+            values[self
+                .pairs
+                .renormalization_localization_scale
+                .value_range
+                .start
+                * multiplicative_offset] = l.clone();
         }
     }
 
@@ -1329,20 +1289,6 @@ impl<T: FloatLike> ParamBuilder<T> {
         for (index, values) in self.values.iter_mut().enumerate() {
             let multiplicative_offset = index + 1;
             values[self.pairs.mu_r_sq.value_range.start * multiplicative_offset] = mu_r_sq.clone();
-        }
-    }
-
-    pub(crate) fn update_idenso_values(&mut self) {
-        let tr_value = Complex::new_re(F(T::from_f64(0.5)));
-        let nc_value = Complex::new_re(F(T::from_f64(3.)));
-        debug_assert!(self.pairs.idenso_vars.value_range.len() == 2);
-
-        for (index, values) in self.values.iter_mut().enumerate() {
-            let multiplicative_offset = index + 1;
-            values[self.pairs.idenso_vars.value_range.start * multiplicative_offset] =
-                tr_value.clone();
-            values[self.pairs.idenso_vars.value_range.start * multiplicative_offset
-                + multiplicative_offset] = nc_value.clone();
         }
     }
 
@@ -1654,15 +1600,15 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         for FnMapEntry { lhs, rhs, .. } in &self.reps {
             table.push_record(vec![
-                lhs.printer(LOGPRINTOPTS).to_string(),
-                rhs.printer(LOGPRINTOPTS).to_string(),
+                lhs.printer(LOGPRINTOPTS.clone()).to_string(),
+                rhs.printer(LOGPRINTOPTS.clone()).to_string(),
             ]);
         }
 
         for i in &self.pairs {
             for (p, v) in i.params.iter().zip(i.value_range.clone()) {
                 table.push_record(vec![
-                    p.printer(LOGPRINTOPTS).to_string().to_string(),
+                    p.printer(LOGPRINTOPTS.clone()).to_string().to_string(),
                     self.values[0][v].to_string(),
                     format!("{}", v),
                 ]);
@@ -1679,15 +1625,15 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         for FnMapEntry { lhs, rhs, .. } in &self.reps {
             table.push_record(vec![
-                lhs.printer(LOGPRINTOPTS).to_string(),
-                rhs.printer(LOGPRINTOPTS).to_string(),
+                lhs.printer(LOGPRINTOPTS.clone()).to_string(),
+                rhs.printer(LOGPRINTOPTS.clone()).to_string(),
             ]);
         }
 
         for i in &self.pairs {
             for (p, v) in i.params.iter().zip(i.value_range.clone()) {
                 table.push_record(vec![
-                    p.printer(LOGPRINTOPTS).to_string().to_string(),
+                    p.printer(LOGPRINTOPTS.clone()).to_string().to_string(),
                     format!(
                         "{:?}",
                         &self.values[value_index]
