@@ -14,7 +14,7 @@ display_directive = "gammaloop_api=info,gammalooprs=info,symbolica=off,poly::gcd
 [cli_settings.global.generation.uv]
 generate_integrated = false
 softct = false
-add_sigma = false
+add_marker = false
 inner_products = true
 
 [cli_settings.global.generation.threshold_subtraction]

@@ -22,7 +22,7 @@ check_esurface_at_generation = false
 
 
 [cli_settings.global.generation.uv]
-add_sigma = true
+add_marker = true
 
 [[command_blocks]]
 name = "generate"

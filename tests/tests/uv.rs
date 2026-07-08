@@ -1166,6 +1166,27 @@ fn sunrise_scalar_1_uv() {
 }
 
 #[test]
+fn dotted_sunrise_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "uv/dotted_sunrise",
+        test_name: "dotted_sunrise",
+        process: "dotted_sunrise",
+        integrand_name: "dotted_sunrise",
+        integrator: SUNRISE_INTEGRATED_UV_INTEGRATOR,
+        original_m_uv: 0.2,
+        shifted_m_uv: 0.5,
+        original_renormalization_localization_scale: 0.2,
+        shifted_renormalization_localization_scale: 1.0,
+        original_mu_r: 0.2,
+        shifted_mu_r: 0.8,
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets::default(),
+        integrated_ct_relative_error_limit: None,
+        check_mu_r_dependence: true,
+    });
+}
+
+#[test]
 fn dotted_dt_uv() {
     run_single_integrated_uv_case(&IntegratedUvCase {
         run_card: "uv/dotted_dt",

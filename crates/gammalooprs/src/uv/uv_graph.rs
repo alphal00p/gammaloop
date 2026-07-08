@@ -23,10 +23,7 @@ use crate::{
     integrands::process::param_builder::ParamBuilderGraph,
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
-    utils::{
-        GS, W_,
-        symbolica_ext::{CallSymbol, DOD},
-    },
+    utils::{GS, W_, symbolica_ext::DOD},
     uv::{ApproximationType, UVgenerationSettings, settings::CTIdentifier},
 };
 
@@ -97,6 +94,20 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             .collect()
     }
 
+    fn has_massive_boundary_external<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
+        &self,
+        subgraph: &S,
+    ) -> bool
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        let graph = self.as_ref();
+        graph.full_crown(subgraph).included_iter().any(|hedge| {
+            let edge_id = graph[&hedge];
+            graph[edge_id].is_massive()
+        })
+    }
+
     fn ct_identifier<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
@@ -114,11 +125,16 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         &self,
         subgraph: &S,
         settings: &UVgenerationSettings,
+        dod: i32,
     ) -> ApproximationType
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        settings.approximation_scheme_for(&self.ct_identifier(subgraph))
+        settings.approximation_scheme_for(
+            &self.ct_identifier(subgraph),
+            dod,
+            self.has_massive_boundary_external(subgraph),
+        )
     }
 
     fn classify_spinney<E: UVE, V, H>(
@@ -130,10 +146,15 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        let renormalization_scheme = self.approximation_scheme(&spinney.filter, settings);
+        let dod = self.compute_dod(&spinney.filter);
+        if dod < 0 {
+            return None;
+        }
+
+        let renormalization_scheme = self.approximation_scheme(&spinney.filter, settings, dod);
 
         if renormalization_scheme != ApproximationType::Unsubtracted {
-            Spinney::with_scheme(spinney, self, lmb, renormalization_scheme)
+            Spinney::with_scheme(spinney, self, lmb, renormalization_scheme, dod)
         } else {
             None
         }
@@ -202,11 +223,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             .replace(function!(GS.broadcasting_sqrt, W_.a_))
             .with(Atom::var(W_.a_).sqrt())
             .replace_multiple(&ose_reps)
-            .replace_multiple(&mom_reps)
-            .replace(GS.uv_local.f(&[W_.a_]))
-            .with(Atom::one())
-            .replace(GS.uv_integrated.f(&[W_.a_]))
-            .with(Atom::one());
+            .replace_multiple(&mom_reps);
         // .replace_multiple(&q3_reps);
         let mut loops = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);
 
@@ -420,4 +437,5 @@ impl UltravioletGraph for Graph {
 pub trait UVE {
     fn mass_atom(&self) -> Atom;
     fn particle_pdg_code(&self) -> Option<isize>;
+    fn is_massive(&self) -> bool;
 }

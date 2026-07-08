@@ -7,7 +7,7 @@ use crate::CLISettings;
 use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
-use gammalooprs::utils::symbolica_ext::TypstFormat;
+use gammalooprs::{utils::symbolica_ext::TypstFormat, uv::settings::FinalIntegrandDimension};
 use idenso::color::{ColorSimplifier, CS};
 use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
 use schemars::JsonSchema;
@@ -64,7 +64,7 @@ impl Renormalize {
 
         let mut settings = global_cli_settings.global.generation.uv.clone();
 
-        settings.only_integrated = true;
+        settings.final_integrand = FinalIntegrandDimension::FourD;
         settings.generate_integrated = true;
         settings.pole_part = true;
 

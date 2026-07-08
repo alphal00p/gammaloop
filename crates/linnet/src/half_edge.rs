@@ -1568,7 +1568,20 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     /// Collect all edges in the subgraph
     /// (This is without double counting, i.e. if two half-edges are part of the same edge, only one `EdgeIndex` will be collected)
     pub fn edges<S: SubSetLike>(&self, subgraph: &S) -> Vec<EdgeIndex> {
-        self.iter_edges_of(subgraph).map(|(_, i, _)| i).collect()
+        self.iter_edges_of(subgraph)
+            .map(|(_, i, _)| i)
+            .sorted()
+            .collect()
+    }
+
+    /// Collect all edges in the subgraph
+    /// (This is without double counting, i.e. if two half-edges are part of the same edge, only one `EdgeIndex` will be collected)
+    pub fn paired_edges<S: SubSetLike>(&self, subgraph: &S) -> Vec<EdgeIndex> {
+        self.iter_edges_of(subgraph)
+            .filter(|(pair, _, _)| pair.is_paired())
+            .map(|(_, i, _)| i)
+            .sorted()
+            .collect()
     }
 }
 

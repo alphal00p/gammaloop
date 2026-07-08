@@ -40,7 +40,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     GammaLoopContext,
-    cff::expression::GraphOrientation,
+    cff::orientations::GraphOrientation,
     graph::Graph,
     integrands::{
         evaluation::EvaluationMetaData,

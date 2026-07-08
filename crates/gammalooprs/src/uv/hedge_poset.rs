@@ -1,10 +1,11 @@
 use std::{
+    cmp::Reverse,
     collections::{BTreeMap, BTreeSet},
     fmt::Display,
 };
 
 use ahash::AHashMap;
-use eyre::eyre;
+use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::LogMessage;
 use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
 use itertools::Itertools;
@@ -15,7 +16,7 @@ use linnet::half_edge::{
     },
     involution::{EdgeIndex, Flow, HedgePair},
     nodestore::{NodeStorageOps, NodeStorageVec},
-    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
+    subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
 };
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
@@ -25,16 +26,18 @@ use tracing::debug;
 use vakint::Vakint;
 
 use crate::{
-    cff::CutCFFIndex,
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet, parse::string_utils::ToOrderedSimple},
-    settings::global::OrientationPattern,
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{
-        RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
+        Integrands, RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
         approx::{
-            ApproximationKernel, CutStructure, ForestNodeLike, UVCtx, integrated::Integrated,
-            local_3d::Local3DApproximation,
+            CutStructure, ForestNodeLike, OrientationProjection, Rooted, UVCtx,
+            final_integrand::{FinalIntegrandBuilder, FinalIntegrands},
+            integrated::{Integrated, IntegratedCts},
+            local_3d::{Local3DApproximation, Local3DCts, Localizer},
+            local_4d::{self, Full4DCts, Local4dCts},
         },
+        forest::ParametricIntegrands,
         settings::VakintSettings,
     },
 };
@@ -226,11 +229,17 @@ impl Wood {
             }
             cuts.push((compatible, c.clone()));
         }
+        let root = graph
+            .iter_nodes()
+            .find(|(_, _, operation)| operation.key.is_empty())
+            .map(|(node, _, _)| node)
+            .expect("no empty trace key found in unfolded hedge-poset forest");
+
         let forests = Forests {
             graph,
             cuts,
-            root: self.root,
-            cached_node_label_atoms: cache_node_label_atoms,
+            root,
+            cached_node_label_atoms: cache_node_label_atoms.then(AHashMap::new),
             compute_store: ComputeStore::default(),
             wood: self,
         };
@@ -274,12 +283,16 @@ impl Display for Wood {
 #[derive(Default)]
 pub struct ComputeStore {
     entries: AHashMap<OperationNode, ComputeNode>,
-    pub kernel_hits: usize,
 }
 
 impl ComputeStore {
     fn get(&self, key: &OperationNode) -> Option<&ComputeNode> {
         self.entries.get(key)
+    }
+
+    fn require(&self, key: &OperationNode) -> Result<&ComputeNode> {
+        self.get(key)
+            .ok_or_else(|| eyre!("{key} not yet added to compute store"))
     }
 
     fn entry(
@@ -288,10 +301,6 @@ impl ComputeStore {
     ) -> std::collections::hash_map::Entry<'_, OperationNode, ComputeNode> {
         self.entries.entry(key)
     }
-
-    fn record_kernel_hit(&mut self) {
-        self.kernel_hits += 1;
-    }
 }
 
 pub struct Forests {
@@ -299,7 +308,7 @@ pub struct Forests {
     pub root: NodeIndex,
     /// Wood subgraph that has compatible
     cuts: Vec<(SuBitGraph, CutSet)>,
-    cached_node_label_atoms: bool,
+    cached_node_label_atoms: Option<AHashMap<NodeIndex, Atom>>,
     pub compute_store: ComputeStore,
     wood: Wood,
 }
@@ -312,6 +321,29 @@ pub struct OperationNode {
 pub struct ForestNode<'a> {
     pub spinney: &'a Spinney,
     pub topo_order: usize,
+}
+
+pub struct OwnedForestNode {
+    pub spinney: Spinney,
+    pub topo_order: usize,
+}
+
+struct LocalLeafOperation {
+    op: HiddenData<SuBitGraph, EdgeIndex>,
+    frontier: OperationNode,
+}
+
+impl LocalLeafOperation {
+    fn new(op: &HiddenData<SuBitGraph, EdgeIndex>, frontier: &OperationNode) -> Self {
+        Self {
+            op: op.clone(),
+            frontier: frontier.clone(),
+        }
+    }
+
+    fn frontier_depth(&self) -> usize {
+        self.frontier.key.op_count()
+    }
 }
 
 impl OperationNode {
@@ -383,6 +415,46 @@ impl ForestNodeLike for ForestNode<'_> {
     }
 }
 
+impl LogMessage for OwnedForestNode {
+    fn log_display(&self) -> String {
+        format!(
+            "subgraph={}, topo_order={}, dod={}",
+            self.spinney.filter().string_label(),
+            self.topo_order,
+            self.spinney.dod
+        )
+    }
+}
+
+impl ForestNodeLike for OwnedForestNode {
+    fn dod(&self) -> i32 {
+        self.spinney.dod
+    }
+
+    fn renormalization_scheme(&self) -> crate::uv::ApproximationType {
+        self.spinney.renormalization_scheme
+    }
+
+    fn lmb(&self) -> &LoopMomentumBasis {
+        &self.spinney.lmb
+    }
+
+    fn reduced_subgraph(&self, given: &Self) -> SuBitGraph {
+        self.spinney
+            .subgraph
+            .subtract(&given.spinney.subgraph)
+            .filter
+    }
+
+    fn subgraph(&self) -> &SuBitGraph {
+        self.spinney.filter()
+    }
+
+    fn topo_order(&self) -> usize {
+        self.topo_order
+    }
+}
+
 impl Display for OperationNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.key.is_empty() {
@@ -408,6 +480,22 @@ impl OperationNode {
         }
 
         acc
+    }
+
+    fn forest_node(&self, graph: &Graph, topo_order: usize) -> OwnedForestNode {
+        let spinney = match self.covers() {
+            Some(cover) if !cover.is_empty() => {
+                let subgraph = InternalSubGraph::cleaned_filter_optimist(cover, graph.as_ref());
+                Spinney::new(subgraph, graph, &graph.loop_momentum_basis)
+                    .expect("operation cover should define a valid spinney")
+            }
+            _ => Spinney::empty(graph),
+        };
+
+        OwnedForestNode {
+            spinney,
+            topo_order,
+        }
     }
 
     pub fn to_atom(&self) -> Atom {
@@ -448,143 +536,57 @@ impl OperationNode {
         acc
     }
 
-    pub fn integrated(
-        &self,
-        graph: &Graph,
-        compute_store: &mut ComputeStore,
-        wood: &Wood,
-        vakint: &Vakint,
-        settings: &UVgenerationSettings,
-    ) -> Result<Atom> {
-        let mut acc = Atom::one();
-        let integrated_orchestrator = Integrated::new(vakint, &wood.vakint_settings);
-        let uvctx = UVCtx { graph, settings };
-
-        let mut order = 0;
-        let mut levels = self.key.view();
-        if settings.cached
-            && let Some((prefix, leaf_level)) = self.key.split_last_level()
-        {
-            let prefix_key = OperationNode {
-                key: prefix.to_owned(),
-            };
-            if let Some(computed) = compute_store.get(&prefix_key) {
-                let Integrand::Single(cached) = &computed.integrated_4d else {
-                    return Err(eyre!("{} integrated_4d not computed yet", prefix_key));
-                };
-                acc = cached.clone();
-                order = prefix.op_count();
-                levels = leaf_level;
-            }
-        }
-
-        for l in levels.iter_levels_top_down() {
-            let mut mul = Atom::one();
-
-            for op in l.iter_leaf_ops() {
-                let (current, given) = wood.current_given_pair(op.data, order);
-                order += 1;
-                compute_store.record_kernel_hit();
-                let raw_integrated =
-                    integrated_orchestrator.kernel(&uvctx, &current, &given, &acc)?;
-                let integrated = if given.subgraph().is_empty() {
-                    raw_integrated
-                } else {
-                    -raw_integrated
-                };
-                mul *= integrated;
-            }
-
-            acc = mul
-        }
-
-        Ok(acc)
-    }
-
-    #[allow(unused)]
-    pub fn local(
-        &self,
-        graph: &Graph,
-        cutset: &CutSet,
-        compute_store: &mut ComputeStore,
-        wood: &Wood,
-        settings: &UVgenerationSettings,
-    ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
-        let mut acc = None;
-        let _local = Local3DApproximation::full();
-        let _uvctx = UVCtx { graph, settings };
-
-        let mut order = 0;
-        let mut levels = self.key.view();
-        if settings.cached
-            && let Some((prefix, leaf_level)) = self.key.split_last_level()
-        {
-            let prefix_key = OperationNode {
-                key: prefix.to_owned(),
-            };
-            if let Some(computed) = compute_store.get(&prefix_key) {
-                let Integrands::Multiple(cached) = &computed.local_3d[cutset] else {
-                    return Err(eyre!("{} local_3d not computed yet", prefix_key));
-                };
-                acc = Some(cached.clone());
-                order = prefix.op_count();
-                levels = leaf_level;
-            }
-        }
-        // let acc = acc.unwrap_or(Local3DApproximation::root(graph, cutset)?);
-
-        for l in levels.iter_levels_top_down() {
-            let _mul = Atom::one();
-
-            for op in l.iter_leaf_ops() {
-                let (_current, _given) = wood.current_given_pair(op.data, order);
-                order += 1;
-                compute_store.record_kernel_hit();
-                // mul *= -local.kernel(&uvctx, &current, &given, &acc)?;
-            }
-
-            // acc = mul
-        }
-
-        Ok(BTreeMap::new())
-        // Ok(acc)
-    }
+    // Four-dimensional and per-cut local terms are composed by `Forests` from typed
+    // dependency-frontier values. Empty frontiers start from the typed roots, and
+    // `Local3DApproximation::run` applies the local subtraction signs directly.
 }
 
-pub enum Integrand {
-    NotComputed,
-    Single(Atom),
-}
-pub enum Integrands {
-    NotComputed,
-    Multiple(BTreeMap<CutCFFIndex, Atom>),
-}
-
+#[derive(Default)]
 pub struct ComputeNode {
-    pub local_3d: AHashMap<CutSet, Integrands>,
-    pub final_integrand: Integrands,
-    pub integrated_4d: Integrand, //4d
-    pub simple: Integrand,
-    pub node_label_atom: Option<Atom>,
+    local_4d: Option<Local4dCts>,
+    integrated: Option<IntegratedCts>,
+    cuts: AHashMap<CutSet, CutComputation>,
 }
 
-impl Default for ComputeNode {
-    fn default() -> Self {
-        ComputeNode {
-            local_3d: AHashMap::new(),
-            final_integrand: Integrands::NotComputed,
-            integrated_4d: Integrand::NotComputed,
-            simple: Integrand::NotComputed,
-            node_label_atom: None,
-        }
+pub struct CutComputation {
+    local_3d: Local3DCts,
+    final_integrands: FinalIntegrands,
+}
+
+impl ComputeNode {
+    fn local_4d(&self, operation: &OperationNode) -> Result<&Local4dCts> {
+        self.local_4d
+            .as_ref()
+            .ok_or_else(|| eyre!("{operation} has no computed local 4D counterterm"))
+    }
+
+    fn integrated(&self, operation: &OperationNode) -> Result<&IntegratedCts> {
+        self.integrated
+            .as_ref()
+            .ok_or_else(|| eyre!("{operation} has no computed integrated counterterm"))
+    }
+
+    fn recursion_input_4d(&self, operation: &OperationNode, pole_part: bool) -> Result<Full4DCts> {
+        Ok(Full4DCts::recursion_input(
+            self.local_4d(operation)?,
+            self.integrated(operation)?,
+            pole_part,
+            operation.key.is_empty(),
+        ))
+    }
+
+    fn cut(&self, operation: &OperationNode, cutset: &CutSet) -> Result<&CutComputation> {
+        self.cuts.get(cutset).ok_or_else(|| {
+            eyre!("{operation} has no computed local counterterms for cut {cutset:?}")
+        })
     }
 }
 
 impl Forests {
     fn cached_node_label_atom(&self, node: NodeIndex) -> Option<Atom> {
-        self.compute_store
-            .get(&self.graph[node])
-            .and_then(|computed| computed.node_label_atom.as_ref())
+        self.cached_node_label_atoms
+            .as_ref()
+            .and_then(|labels| labels.get(&node))
             .cloned()
     }
 
@@ -620,9 +622,7 @@ impl Forests {
             return Atom::one();
         }
 
-        if self.cached_node_label_atoms
-            && let Some(cached) = self.cached_node_label_atom(node)
-        {
+        if let Some(cached) = self.cached_node_label_atom(node) {
             return cached;
         }
 
@@ -639,13 +639,13 @@ impl Forests {
     }
 
     fn cache_node_label_atoms(&mut self) {
+        self.cached_node_label_atoms = Some(AHashMap::new());
         for nidx in self.graph.topo_sort_kahn().unwrap() {
             let atom = self.node_label_atom(nidx);
-
-            self.compute_store
-                .entry(self.graph[nidx].clone())
-                .or_default()
-                .node_label_atom = Some(atom);
+            self.cached_node_label_atoms
+                .as_mut()
+                .expect("node-label cache was initialized")
+                .insert(nidx, atom);
         }
     }
 
@@ -663,69 +663,265 @@ impl Forests {
         format!("{foata}: {}", atom.to_ordered_simple())
     }
 
+    fn compatible_topological_order(&self, subset: &SuBitGraph) -> Result<Vec<NodeIndex>> {
+        let mut order = self.graph.topo_sort_kahn_of(subset)?;
+
+        if let Some(root_position) = order.iter().position(|node| *node == self.root) {
+            if root_position != 0 {
+                let root = order.remove(root_position);
+                order.insert(0, root);
+            }
+        } else {
+            order.insert(0, self.root);
+        }
+
+        Ok(order)
+    }
+
+    fn local_leaf_operations(&self, node: NodeIndex) -> Vec<LocalLeafOperation> {
+        let mut leaves = self
+            .graph
+            .leaf_op_dependency_frontiers(node, &self.wood)
+            .map(|(op, frontier)| LocalLeafOperation::new(op, &self.graph[frontier]))
+            .collect::<Vec<_>>();
+
+        leaves.sort_by_key(|leaf| {
+            (
+                Reverse(leaf.frontier_depth()),
+                leaf.op.order.clone(),
+                usize::from(leaf.op.data),
+            )
+        });
+        leaves
+    }
+
+    fn compute_4d_for_node(
+        &self,
+        node: NodeIndex,
+        graph: &Graph,
+        vakint: &Vakint,
+        settings: &UVgenerationSettings,
+    ) -> Result<(Local4dCts, IntegratedCts)> {
+        let operation = &self.graph[node];
+        if operation.key.is_empty() {
+            return Ok((Local4dCts::root(), IntegratedCts::root()));
+        }
+
+        let leaves = self.local_leaf_operations(node);
+        let first_leaf = leaves
+            .first()
+            .ok_or_else(|| eyre!("{operation} has no leaf operations"))?;
+        let mut full = self
+            .compute_store
+            .require(&first_leaf.frontier)?
+            .recursion_input_4d(&first_leaf.frontier, settings.pole_part)
+            .wrap_err_with(|| {
+                format!(
+                    "while loading 4D dependency frontier {} for {operation}",
+                    first_leaf.frontier
+                )
+            })?;
+        let mut local_4d = None;
+        let mut integrated = None;
+        let ctx = UVCtx::new(graph, settings);
+        let integrated_approximation = Integrated::new(vakint, &self.wood.vakint_settings);
+
+        for (step_order, leaf) in (first_leaf.frontier_depth()..).zip(leaves) {
+            let (current, given) = self.wood.current_given_pair(leaf.op.data, step_order);
+            let next_local = local_4d::uv_limit(&full, &ctx, &current, &given)?;
+            let next_integrated = if settings.generate_integrated {
+                integrated_approximation.run(&next_local, &ctx, &current, &given)?
+            } else {
+                IntegratedCts::root()
+            };
+            full = Full4DCts::recursion_input(
+                &next_local,
+                &next_integrated,
+                settings.pole_part,
+                false,
+            );
+            local_4d = Some(next_local);
+            integrated = Some(next_integrated);
+        }
+
+        Ok((
+            local_4d.expect("a non-root operation has at least one leaf"),
+            integrated.expect("a non-root operation has at least one leaf"),
+        ))
+    }
+
+    fn local_3d_for_node(
+        &self,
+        node: NodeIndex,
+        graph: &mut Graph,
+        cutset: &CutSet,
+        localizer: Localizer<'_>,
+        settings: &UVgenerationSettings,
+    ) -> Result<CutComputation> {
+        let operation = &self.graph[node];
+        let local_3d = if operation.key.is_empty() {
+            Local3DCts::root(graph, localizer)?
+        } else {
+            let leaves = self.local_leaf_operations(node);
+            let first_leaf = leaves
+                .first()
+                .ok_or_else(|| eyre!("{operation} has no local leaf operations"))?;
+            // An empty dependency frontier starts from the per-cut root integrand;
+            // otherwise its typed local result is the sequential accumulator.
+            let mut accumulator = if first_leaf.frontier.key.is_empty() {
+                Local3DCts::root(graph, localizer)?
+            } else {
+                self.compute_store
+                    .require(&first_leaf.frontier)?
+                    .cut(&first_leaf.frontier, cutset)?
+                    .local_3d
+                    .clone()
+            };
+            for (step_order, leaf) in (first_leaf.frontier_depth()..).zip(leaves) {
+                let frontier_integrated = self
+                    .compute_store
+                    .require(&leaf.frontier)?
+                    .integrated(&leaf.frontier)
+                    .wrap_err_with(|| {
+                        format!(
+                            "while loading integrated dependency frontier {} for {operation}",
+                            leaf.frontier
+                        )
+                    })?;
+                let (current, given) = self.wood.current_given_pair(leaf.op.data, step_order);
+                // `run` applies the local and integrated subtraction signs; no external
+                // sign or raw Foata-level product is introduced here.
+                accumulator = Local3DApproximation::new(localizer, graph, settings).run(
+                    &accumulator,
+                    frontier_integrated,
+                    &current,
+                    &given,
+                )?;
+            }
+            accumulator
+        };
+
+        let integrated = self
+            .compute_store
+            .require(operation)?
+            .integrated(operation)?;
+        let forest_node = operation.forest_node(graph, operation.key.op_count());
+        let final_integrands = FinalIntegrandBuilder::new(localizer).build_3d(
+            graph,
+            &forest_node,
+            &local_3d,
+            integrated,
+        )?;
+
+        Ok(CutComputation {
+            local_3d,
+            final_integrands,
+        })
+    }
+
     pub fn integrate(
         &mut self,
         graph: &Graph,
         vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        for (order, nidx) in self.graph.topo_sort_kahn().unwrap().iter().enumerate() {
-            debug!(order=%order,cache=%settings.cached,nidx=%nidx,key=%self.graph[*nidx],"One integrated step");
-            let integrand = self.graph[*nidx].integrated(
-                graph,
-                &mut self.compute_store,
-                &self.wood,
-                vakint,
-                settings,
-            )?;
-            self.compute_store
-                .entry(self.graph[*nidx].clone())
-                .or_default()
-                .integrated_4d = Integrand::Single(integrand);
+        for (order, nidx) in self.graph.topo_sort_kahn()?.into_iter().enumerate() {
+            debug!(order, nidx=%nidx, key=%self.graph[nidx], "Computing hedge-poset 4D term");
+            let operation = self.graph[nidx].clone();
+            let (local_4d, integrated) = self.compute_4d_for_node(nidx, graph, vakint, settings)?;
+            let computed = self.compute_store.entry(operation).or_default();
+            computed.local_4d = Some(local_4d);
+            computed.integrated = Some(integrated);
         }
 
         Ok(())
     }
 
-    pub fn local_subtract(
+    pub(crate) fn compute(
         &mut self,
         graph: &mut Graph,
+        vakint: &Vakint,
+        orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
-        orientation_pattern: &OrientationPattern,
     ) -> Result<()> {
-        for (cut_compatible_forest_subset, cuts) in &self.cuts {
-            let mut first = true;
+        self.integrate(graph, vakint, settings)?;
 
+        for (compatible_subset, cutset) in self.cuts.clone() {
+            let localizer = Localizer::new(&cutset, orientation);
             for (order, nidx) in self
-                .graph
-                .topo_sort_kahn_of(cut_compatible_forest_subset)
-                .unwrap()
-                .iter()
+                .compatible_topological_order(&compatible_subset)?
+                .into_iter()
                 .enumerate()
             {
-                debug!(order=%order,cache=%settings.cached,nidx=%nidx,key=%self.graph[*nidx],"One integrated step");
-                let integrands = if first {
-                    first = false;
-                    Local3DApproximation::root(graph, cuts, orientation_pattern)
-                } else {
-                    self.graph[*nidx].local(
-                        graph,
-                        cuts,
-                        &mut self.compute_store,
-                        &self.wood,
-                        settings,
-                    )
-                }?;
-
+                debug!(order, nidx=%nidx, key=%self.graph[nidx], "Computing hedge-poset per-cut term");
+                let operation = self.graph[nidx].clone();
+                let cut_computation =
+                    self.local_3d_for_node(nidx, graph, &cutset, localizer, settings)?;
                 self.compute_store
-                    .entry(self.graph[*nidx].clone())
+                    .entry(operation)
                     .or_default()
-                    .local_3d
-                    .insert(cuts.clone(), Integrands::Multiple(integrands));
+                    .cuts
+                    .insert(cutset.clone(), cut_computation);
             }
         }
 
         Ok(())
+    }
+
+    pub(crate) fn orientation_parametric_exprs(
+        &self,
+        graph: &Graph,
+        _settings: &UVgenerationSettings,
+    ) -> Result<Vec<ParametricIntegrands>> {
+        let split_momentum_replacements = graph
+            .iter_edges_of(
+                &graph
+                    .full_filter()
+                    .subtract(&graph.initial_state_cut)
+                    .subtract(&graph.tree_edges),
+            )
+            .filter_map(|(pair, edge_index, _)| {
+                (!matches!(pair, HedgePair::Unpaired { .. }))
+                    .then(|| GS.split_mom_pattern_simple(edge_index))
+            })
+            .collect::<Vec<_>>();
+        let mut expressions = Vec::with_capacity(self.cuts.len());
+
+        for (compatible_subset, cutset) in &self.cuts {
+            let mut sum: Option<Integrands> = None;
+            for nidx in self.compatible_topological_order(compatible_subset)? {
+                let operation = &self.graph[nidx];
+                let terms: Integrands = self
+                    .compute_store
+                    .require(operation)?
+                    .cut(operation, cutset)?
+                    .final_integrands
+                    .iter()
+                    .map(|(index, integrand)| (*index, integrand.clone().collect_color()))
+                    .collect();
+                sum = Some(match sum {
+                    Some(sum) => sum.zip_add(&terms).wrap_err_with(|| {
+                        format!("while aggregating hedge-poset term {operation} for cut {cutset:?}")
+                    })?,
+                    None => terms,
+                });
+            }
+
+            let integrands = sum
+                .ok_or_else(|| eyre!("No terms in hedge-poset forest for cut {cutset:?}"))?
+                .map(|integrand| {
+                    integrand
+                        .replace_multiple(&split_momentum_replacements)
+                        .replace(function!(GS.den, W_.a_, W_.b_, W_.c_, W_.d_))
+                        .with(W_.d_)
+                });
+            expressions.push(ParametricIntegrands {
+                integrands,
+                cuts: cutset.clone(),
+            });
+        }
+
+        Ok(expressions)
     }
 
     // pub fn local_subtract(
@@ -777,7 +973,10 @@ impl Forests {
     //     Ok(())
     // }
 
-    pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<RenormalizationPart> {
+    pub(crate) fn renormalization_part_of_ends(
+        &self,
+        graph: &Graph,
+    ) -> Result<RenormalizationPart> {
         let mut sum = Atom::Zero;
 
         let wild = Atom::var(W_.x___);
@@ -789,14 +988,7 @@ impl Forests {
                 continue;
             }
 
-            let computed = self
-                .compute_store
-                .get(key)
-                .ok_or(eyre!("{} not yet added to store", key))?;
-
-            let Integrand::Single(atom) = &computed.integrated_4d else {
-                return Err(eyre!("{} integrated_4d not computed yet", key));
-            };
+            let atom = self.compute_store.require(key)?.integrated(key)?.atom();
             debug!(
                 key=%key,
                expr = % atom.expand_num().log_print(None),"Term before simplification"
@@ -816,24 +1008,10 @@ impl Forests {
             sum += atom;
         }
 
-        let n_loops = graph.n_loops(&graph.full_filter());
-        let pole_stripped = sum
-            .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
-            .unwrap();
-
-        sum = Atom::Zero;
-
-        for (power, p) in pole_stripped.terms() {
-            if power < 0 {
-                sum += p * Atom::var(GS.dim_epsilon).pow(power);
-            }
-        }
-
         Ok(RenormalizationPart::new(
             sum.replace_multiple(&replacements)
                 .replace(GS.m_uv_expansion)
                 .with(GS.m_uv_vacuum),
-            self.compute_store.kernel_hits,
             self.graph.n_nodes(),
         ))
     }

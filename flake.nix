@@ -450,6 +450,7 @@
         ];
         gammalooprs = [
           "assets"
+          "tests/resources/graphs/scalar/dod2_bubble.dot"
         ];
         "gammaloop-integration-tests" = [
           "assets"
@@ -1915,6 +1916,8 @@
                 buildPhaseCargoCommand = supportCargoCommand;
                 checkPhaseCargoCommand = "";
                 doCheck = false;
+                # Rebuild workspace crates against the final merge's dependency metadata.
+                preBuildWorkspaceArtifactStripPackages = sourcePackages;
                 stripWorkspaceArtifacts = syntheticConsumerPackages != [];
                 preservedWorkspaceArtifactPackages = sourcePackages;
                 postPatch = ''

@@ -8,7 +8,7 @@ use symbolica::prelude::*;
 
 use crate::{
     GammaLoopContext,
-    cff::expression::GraphOrientation,
+    cff::orientations::GraphOrientation,
     processes::EvaluatorSettings,
     utils::{
         DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, W_,
