@@ -14,7 +14,7 @@ summed = false
 summed_function_map = true
 
 [cli_settings.global.generation.uv]
-add_integrated_uv_with_n_loops = 1
+final_integrand = "ThreeD"
 
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true

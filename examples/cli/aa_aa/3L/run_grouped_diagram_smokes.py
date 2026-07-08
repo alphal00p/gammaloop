@@ -14,9 +14,10 @@ import tempfile
 import time
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[4]
-DEFAULT_GRAPHS = ROOT / "examples/cli/aa_aa/3L/graphs_grouped/processes/amplitudes/aa_aa/3L"
+DEFAULT_GRAPHS = (
+    ROOT / "examples/cli/aa_aa/3L/graphs_grouped/processes/amplitudes/aa_aa/3L"
+)
 DEFAULT_BINARY = ROOT / "target/release/gammaloop"
 DEFAULT_OUTPUT = ROOT / "examples/cli/aa_aa/3L/grouped_diagram_smokes"
 
@@ -27,7 +28,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--graphs-dir", type=Path, default=DEFAULT_GRAPHS)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--only", nargs="*", default=None, help="Graph names such as GL000")
+    parser.add_argument(
+        "--only", nargs="*", default=None, help="Graph names such as GL000"
+    )
     parser.add_argument("--n-start", type=int, default=20)
     parser.add_argument("--n-increase", type=int, default=0)
     parser.add_argument("--n-max", type=int, default=None)
@@ -55,7 +58,9 @@ def read_status_kib(pid: int) -> tuple[int, int]:
     return rss, hwm
 
 
-def toml_card(dot_path: Path, state_dir: Path, workspace: Path, args: argparse.Namespace) -> str:
+def toml_card(
+    dot_path: Path, state_dir: Path, workspace: Path, args: argparse.Namespace
+) -> str:
     n_max = args.n_max if args.n_max is not None else args.n_start
     return f'''
 commands = ["run smoke"]
@@ -89,14 +94,12 @@ check_esurface_at_generation = false
 softct = false
 generate_integrated = false
 subtract_uv = false
-only_integrated = false
+final_integrand = "ThreeD"
 pole_part = false
-add_sigma = false
-keep_sigma = true
+add_marker = false
+keep_marker = true
 inner_products = true
-use_legacy = true
-cached = true
-renormalization_schemes = []
+orchestrator = "legacy_dag_forest"
 
 [cli_settings.global.generation.tropical_subgraph_table]
 panic_on_fail = true
@@ -296,7 +299,9 @@ def run_one(dot_path: Path, args: argparse.Namespace) -> dict[str, object]:
     if work_root.exists():
         shutil.rmtree(work_root)
     work_root.mkdir(parents=True)
-    card_path.write_text(toml_card(dot_path.resolve(), state_dir.resolve(), workspace.resolve(), args))
+    card_path.write_text(
+        toml_card(dot_path.resolve(), state_dir.resolve(), workspace.resolve(), args)
+    )
 
     cmd = [str(args.binary), "--no-save-state", "--clean-state", str(card_path)]
     start = time.monotonic()

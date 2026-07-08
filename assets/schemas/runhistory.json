@@ -212,14 +212,14 @@
         "ct_identifier": {
           "$ref": "#/$defs/CTIdentifier"
         },
-        "renormalization_scheme": {
+        "prescription": {
           "$ref": "#/$defs/ApproximationType"
         }
       },
       "additionalProperties": false,
       "required": [
         "ct_identifier",
-        "renormalization_scheme"
+        "prescription"
       ]
     },
     "CommandHistory": {
@@ -3667,6 +3667,27 @@
         "Ratatui"
       ]
     },
+    "RenormalizationPrescriptionSettings": {
+      "type": "object",
+      "properties": {
+        "log_divergent": {
+          "$ref": "#/$defs/ApproximationType"
+        },
+        "massive_power_divergent": {
+          "$ref": "#/$defs/ApproximationType"
+        },
+        "massless_power_divergent": {
+          "$ref": "#/$defs/ApproximationType"
+        },
+        "overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CTRenormalizationRule"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "Renormalize": {
       "type": "object",
       "properties": {
@@ -5121,19 +5142,15 @@
     "UVgenerationSettings": {
       "type": "object",
       "properties": {
-        "add_integrated_uv_with_n_loops": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint",
-          "minimum": 0
-        },
-        "add_sigma": {
+        "add_marker": {
           "type": "boolean"
         },
-        "cached": {
-          "type": "boolean"
+        "final_integrand": {
+          "type": "string",
+          "enum": [
+            "FourD",
+            "ThreeD"
+          ]
         },
         "generate_integrated": {
           "type": "boolean"
@@ -5141,28 +5158,27 @@
         "inner_products": {
           "type": "boolean"
         },
-        "keep_sigma": {
+        "keep_marker": {
           "type": "boolean"
         },
-        "only_integrated": {
-          "type": "boolean"
+        "orchestrator": {
+          "type": "string",
+          "enum": [
+            "legacy_dag_forest",
+            "hedge_poset",
+            "compare"
+          ]
         },
         "pole_part": {
           "type": "boolean"
         },
-        "renormalization_schemes": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CTRenormalizationRule"
-          }
+        "renormalization_prescription": {
+          "$ref": "#/$defs/RenormalizationPrescriptionSettings"
         },
         "softct": {
           "type": "boolean"
         },
         "subtract_uv": {
-          "type": "boolean"
-        },
-        "use_legacy": {
           "type": "boolean"
         },
         "vakint": {

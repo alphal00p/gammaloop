@@ -17,15 +17,14 @@ override_lmb_heuristics = true
 [cli_settings.global.generation.uv]
 softct = false
 generate_integrated = true
-add_integrated_uv_with_n_loops = 1
+
 subtract_uv = true
-only_integrated = false
+final_integrand = "ThreeD"
 pole_part = false
-add_sigma = false
-keep_sigma = true
+add_marker = false
+keep_marker = true
 inner_products = true
-use_legacy = true
-cached = true
+orchestrator = "legacy_dag_forest"
 
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false

@@ -19,10 +19,13 @@ use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::GlobalSettings;
 use crate::settings::global::OrientationPattern;
 use crate::utils::{GS, W_};
-use crate::uv::approx::CutStructure;
+use crate::uv::approx::{CutStructure, OrientationProjection};
 use crate::uv::profile::{ProfileSettings, UVProfileable};
 use crate::uv::wood::CutWoods;
-use crate::uv::{Spinney, UVgenerationSettings, UltravioletGraph};
+use crate::uv::{
+    ApproximationType, RenormalizationPrescriptionSettings, Spinney, UVOrchestrator,
+    UVgenerationSettings, UltravioletGraph,
+};
 
 use linnet::half_edge::involution::EdgeIndex;
 
@@ -84,27 +87,29 @@ fn scalar_bubble_root_integrand_reference(
         .compute(
             &mut amplitude_graph.graph,
             vakint,
-            &valid_orientations,
+            OrientationProjection::new(
+                &valid_orientations,
+                &generation_settings.orientation_pattern,
+            ),
             &reference_settings.uv,
-            &generation_settings.orientation_pattern,
         )
         .unwrap();
 
     let root_integrand = forests.forests[0]
         .dag
         .nodes
-        .iter_mut()
+        .iter()
         .find_map(|(_, node)| {
             node.parents.is_empty().then(|| {
                 node.data
-                    .final_integrand
-                    .as_mut()
-                    .and_then(|integrands| integrands.pop_first())
-            })
+                    .final_integrand(&amplitude_graph.graph)
+                    .ok()?
+                    .iter()
+                    .next()
+                    .map(|(_, integrand)| integrand.clone())
+            })?
         })
-        .expect("root UV-forest integrand should exist")
-        .expect("root UV-forest integrand should exist")
-        .1;
+        .expect("root UV-forest integrand should exist");
 
     let factors_of_pi =
         (Atom::var(GS.pi) * 2).pow(3 * amplitude_graph.graph.get_loop_number() as i64);
@@ -238,8 +243,8 @@ fn scalars_profile() {
     let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
         generate_integrated: false,
         softct: false,
-        add_sigma: true,
-        keep_sigma: false,
+        add_marker: true,
+        keep_marker: false,
         subtract_uv: true,
         ..Default::default()
     });
@@ -261,8 +266,8 @@ fn spinney_partial_cmp_is_equal_for_identical_subgraphs() {
     let (amp, _model) = build_uv_scalars_amplitude(UVgenerationSettings {
         generate_integrated: false,
         softct: false,
-        add_sigma: true,
-        keep_sigma: false,
+        add_marker: true,
+        keep_marker: false,
         subtract_uv: true,
         ..Default::default()
     });
@@ -287,11 +292,11 @@ fn uv_marker_stripping_removes_local_and_integrated_markers() {
     test_initialise().unwrap();
     let marker = Atom::var(symbol!("marker"));
     let expr = Atom::num(2) * function!(GS.uv_local, marker.clone())
-        + Atom::num(3) * function!(GS.uv_integrated, marker);
+        + Atom::num(3) * function!(GS.uv_integrate, marker);
     let stripped = expr
         .replace(function!(GS.uv_local, W_.a___))
         .with(Atom::num(1))
-        .replace(function!(GS.uv_integrated, W_.a___))
+        .replace(function!(GS.uv_integrate, W_.a___))
         .with(Atom::num(1));
 
     assert_eq!(stripped, Atom::num(5));
@@ -302,10 +307,10 @@ fn scalars_profile_new() {
     let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
         generate_integrated: false,
         softct: false,
-        add_sigma: true,
-        keep_sigma: false,
+        add_marker: true,
+        keep_marker: false,
         subtract_uv: true,
-        use_legacy: false,
+        orchestrator: UVOrchestrator::HedgePoset,
         ..Default::default()
     });
 
@@ -319,6 +324,48 @@ fn scalars_profile_new() {
         "subtracted scalar UV profile failed:\n{pass_fail:#?}\n\n{}",
         scalar_profile_tables(&analysis, -0.9)
     );
+}
+
+#[test]
+fn scalars_integrated_cts_compare_legacy_and_hedge_poset() {
+    test_initialise().unwrap();
+    let mut amp: AmplitudeGraph = dot!(
+        digraph bub {
+            edge [particle=H]
+            node [num=1]
+            e        [style=invis]
+            e -> A:0   [ id=3]
+            B:1 -> e   [ id=2]
+            A -> B    [ id=1]
+            A -> B    [ id=0]
+        }
+    )
+    .unwrap();
+
+    amp.generate_cff(&OrientationPattern::default()).unwrap();
+    let orientation_pattern = OrientationPattern::from_orientation(
+        &amp.derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .orientations[OrientationID(0)],
+    );
+    let settings = GenerationSettings {
+        orientation_pattern,
+        uv: UVgenerationSettings {
+            generate_integrated: true,
+            softct: false,
+            add_marker: true,
+            keep_marker: false,
+            subtract_uv: true,
+            orchestrator: UVOrchestrator::Compare,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    amp.build_integrands(&settings, crate::utils::vakint().unwrap())
+        .unwrap();
 }
 
 /*
@@ -1613,13 +1660,44 @@ mod failing {
     }
 
     #[test]
+    fn renormalization_prescription_uses_massive_bucket_for_dod_positive_boundary() {
+        test_initialise().unwrap();
+
+        let model = load_generic_model("scalars");
+        let graph: Graph =
+            include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot")
+                .into_graph(&model)
+                .unwrap();
+        let settings = UVgenerationSettings {
+            renormalization_prescription: RenormalizationPrescriptionSettings {
+                log_divergent: ApproximationType::MUV,
+                massive_power_divergent: ApproximationType::OS,
+                massless_power_divergent: ApproximationType::IR,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spinneys =
+            graph.classified_spinneys(&graph.full_filter(), &settings, &graph.loop_momentum_basis);
+        let spinney = spinneys
+            .iter()
+            .find(|spinney| {
+                spinney.dod > 0 && graph.has_massive_boundary_external(spinney.filter())
+            })
+            .unwrap_or_else(|| panic!("dod2 bubble should have a massive power-divergent spinney"));
+
+        assert_eq!(spinney.renormalization_scheme, ApproximationType::OS);
+    }
+
+    #[test]
     fn unsubtracted_scalars() {
         test_initialise().unwrap();
         let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
             generate_integrated: false,
             softct: false,
-            add_sigma: true,
-            keep_sigma: false,
+            add_marker: true,
+            keep_marker: false,
             subtract_uv: true,
             ..Default::default()
         });

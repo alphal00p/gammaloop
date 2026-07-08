@@ -931,22 +931,30 @@ b = 1.0
         }
 
         #[test]
-        fn test_uv_generation_settings_serializes_renormalization_rules() {
-            use crate::uv::{ApproximationType, CTIdentifier, UVgenerationSettings};
-            use std::collections::{BTreeMap, BTreeSet};
+        fn test_uv_generation_settings_serializes_renormalization_prescription() {
+            use crate::uv::{
+                ApproximationType, CTIdentifier, CTRenormalizationRule,
+                RenormalizationPrescriptionSettings, UVgenerationSettings,
+            };
+            use std::collections::BTreeSet;
 
             let settings = UVgenerationSettings {
                 softct: true,
-                renormalization_schemes: BTreeMap::from([
-                    (
-                        CTIdentifier::new(BTreeSet::from([1]), Some(BTreeSet::from([1, 22]))),
-                        ApproximationType::OS,
-                    ),
-                    (
-                        CTIdentifier::new(BTreeSet::from([6]), None),
-                        ApproximationType::Unsubtracted,
-                    ),
-                ]),
+                renormalization_prescription: RenormalizationPrescriptionSettings {
+                    log_divergent: ApproximationType::MUV,
+                    massive_power_divergent: ApproximationType::OS,
+                    massless_power_divergent: ApproximationType::IR,
+                    overrides: vec![
+                        CTRenormalizationRule::new(
+                            CTIdentifier::new(BTreeSet::from([1]), Some(BTreeSet::from([1, 22]))),
+                            ApproximationType::OS,
+                        ),
+                        CTRenormalizationRule::new(
+                            CTIdentifier::new(BTreeSet::from([6]), None),
+                            ApproximationType::Unsubtracted,
+                        ),
+                    ],
+                },
                 ..Default::default()
             };
 
@@ -960,10 +968,12 @@ b = 1.0
             })
             .unwrap();
             println!("{}", toml);
-            assert!(toml.contains("[[renormalization_schemes]]"));
+            assert!(toml.contains("[uv.renormalization_prescription]"));
+            assert!(toml.contains("[[uv.renormalization_prescription.overrides]]"));
+            assert!(toml.contains("prescription = \"Unsubtracted\""));
 
-            let deserialized_from_toml: UVgenerationSettings = toml::from_str(&toml).unwrap();
-            assert_eq!(settings, deserialized_from_toml);
+            let deserialized_from_toml: GenerationSettings = toml::from_str(&toml).unwrap();
+            assert_eq!(settings, deserialized_from_toml.uv);
 
             let json = serde_json::to_string(&settings).unwrap();
             let deserialized_from_json: UVgenerationSettings = serde_json::from_str(&json).unwrap();

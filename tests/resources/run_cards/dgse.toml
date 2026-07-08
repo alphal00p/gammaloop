@@ -32,13 +32,13 @@ display_directive = "info"
 [cli_settings.global.generation.uv]
 generate_integrated = false
 softct = true
-add_sigma = false
+add_marker = false
 inner_products = true
 
-# [[cli_settings.global.generation.uv.renormalization_schemes]]
-# renormalization_scheme = "IR"
+# [[cli_settings.global.generation.uv.renormalization_prescription.overrides]]
+# prescription = "IR"
 
-# [cli_settings.global.generation.uv.renormalization_schemes.ct_identifier]
+# [cli_settings.global.generation.uv.renormalization_prescription.overrides.ct_identifier]
 # external_pdg_set = [1]
 
 [cli_settings.global.generation.tropical_subgraph_table]

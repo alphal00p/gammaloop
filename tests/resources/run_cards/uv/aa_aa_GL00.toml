@@ -30,8 +30,8 @@ integrate = 10
 panic_on_fail = true
 disable_tropical_generation = true
 
-# [cli_settings.global.generation.uv]
-# add_integrated_uv_with_n_loops = 1
+# Integrated UV loop selection is intentionally not configured here.
+# Use loop-dependent renormalization schemes once supported.
 
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = false

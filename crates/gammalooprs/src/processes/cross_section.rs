@@ -57,7 +57,10 @@ use crate::{
         F, GS, W_,
         hyperdual_utils::{shape_from_cut_cff_index, simple_n_deriv_shape},
     },
-    uv::{approx::CutStructure, forest::ParametricIntegrands, wood::CutWoods},
+    uv::{
+        approx::{CutStructure, OrientationProjection},
+        forest::ParametricIntegrands,
+    },
 };
 use eyre::{Context, eyre};
 use linnet::half_edge::{
@@ -1623,7 +1626,6 @@ impl CrossSectionGraph {
             graph = %self.graph.name,
             subtract_uv = settings.uv.subtract_uv,
             generate_integrated = settings.uv.generate_integrated,
-            only_integrated = settings.uv.only_integrated,
             "Generation timing milestone"
         );
         let max_order = self
@@ -1674,17 +1676,6 @@ impl CrossSectionGraph {
             "Generation timing milestone"
         );
 
-        let cut_woods_started = std::time::Instant::now();
-        let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
-        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            stage = "supergraph_cut_woods_done",
-            graph = %self.graph.name,
-            cut_count = cut_woods.cuts.cuts.len(),
-            wood_count = cut_woods.woods.len(),
-            elapsed_ms = cut_woods_started.elapsed().as_secs_f64() * 1000.0,
-            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            "Generation timing milestone"
-        );
         let valid_orientations: Vec<_> = self
             .derived_data
             .global_cff_expression
@@ -1697,40 +1688,19 @@ impl CrossSectionGraph {
 
         let lu_prefactor = self.lu_prefactor_helper();
 
-        let unfold_started = std::time::Instant::now();
-        let mut cut_forests = cut_woods.unfold(&self.graph);
-        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            stage = "supergraph_cut_forests_unfold_done",
-            graph = %self.graph.name,
-            forest_count = cut_forests.forests.len(),
-            elapsed_ms = unfold_started.elapsed().as_secs_f64() * 1000.0,
-            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            "Generation timing milestone"
-        );
-        let forests_started = std::time::Instant::now();
-        cut_forests.compute(
+        let orchestration_started = std::time::Instant::now();
+        let parametric_integrands = settings.uv.orchestrator.parametric_integrands(
             &mut self.graph,
+            cut_structure,
             vakint,
-            &valid_orientations,
+            OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
             &settings.uv,
-            &settings.orientation_pattern,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            stage = "supergraph_cut_forests_compute_done",
-            graph = %self.graph.name,
-            elapsed_ms = forests_started.elapsed().as_secs_f64() * 1000.0,
-            total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            "Generation timing milestone"
-        );
-
-        let orientation_started = std::time::Instant::now();
-        let parametric_integrands =
-            cut_forests.orientation_parametric_exprs(&self.graph, &settings.uv)?;
-        crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            stage = "supergraph_orientation_parametric_exprs_done",
+            stage = "supergraph_parametric_orchestration_done",
             graph = %self.graph.name,
             parametric_integrand_count = parametric_integrands.len(),
-            elapsed_ms = orientation_started.elapsed().as_secs_f64() * 1000.0,
+            elapsed_ms = orchestration_started.elapsed().as_secs_f64() * 1000.0,
             total_elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
             "Generation timing milestone"
         );
@@ -2907,8 +2877,6 @@ impl CrossSectionGraph {
             cuts: cut_structure,
         };
 
-        let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
-        let mut cut_forests = cut_woods.unfold(&self.graph);
         let valid_orientations: Vec<_> = self
             .derived_data
             .global_cff_expression
@@ -2919,16 +2887,16 @@ impl CrossSectionGraph {
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
-        cut_forests.compute(
-            &mut self.graph,
-            vakint,
-            &valid_orientations,
-            &settings.uv,
-            &settings.orientation_pattern,
-        )?;
-
-        let mut threshold_counterterms = cut_forests
-            .orientation_parametric_exprs(&self.graph, &settings.uv)?
+        let mut threshold_counterterms = settings
+            .uv
+            .orchestrator
+            .parametric_integrands(
+                &mut self.graph,
+                cut_structure,
+                vakint,
+                OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
+                &settings.uv,
+            )?
             .into_iter();
 
         let lu_prefactor = self.lu_prefactor_helper();
@@ -3003,7 +2971,7 @@ impl CrossSectionGraph {
                     .iter()
                     .chain(counterterm_data.right_atoms.iter())
                     .chain(counterterm_data.iterated.iter())
-                    .flat_map(|integrands| integrands.integrands.keys())
+                    .flat_map(|integrands| integrands.integrands.iter().map(|(index, _)| index))
             }));
         self.graph.param_builder.initialize_duals(max_dual_size);
 

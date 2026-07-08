@@ -1,12 +1,10 @@
 use std::{collections::BTreeMap, path::Path, slice};
 
 use bincode_trait_derive::{Decode, Encode};
-use linnet::half_edge::involution::{EdgeVec, Orientation};
-use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
-use symbolica::atom::Atom;
-
 use color_eyre::Result;
 use eyre::eyre;
+use linnet::half_edge::involution::{EdgeVec, Orientation};
+use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
 use tracing::{debug, instrument, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -51,6 +49,7 @@ use crate::{
         },
         newton_solver::{NewtonIterationResult, safeguarded_newton_iteration_and_derivative},
     },
+    uv::Integrands,
 };
 use symbolica::domains::dual::HyperDual;
 
@@ -98,17 +97,17 @@ pub struct AmplitudeCountertermData {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermAtom {
-    pub parametric: BTreeMap<CutCFFIndex, Atom>,
+    pub parametric: Integrands,
 }
 
 impl AmplitudeCountertermAtom {
     pub(crate) fn is_generated(&self) -> bool {
-        !self.parametric.is_empty()
+        self.parametric.iter().next().is_some()
     }
 
     pub(crate) fn zero_like(&self) -> Self {
         Self {
-            parametric: self.parametric.keys().map(|k| (*k, Atom::Zero)).collect(),
+            parametric: self.parametric.map(|_| symbolica::atom::Atom::Zero),
         }
     }
 
@@ -144,7 +143,7 @@ impl AmplitudeCountertermAtom {
 
     pub(crate) fn new() -> Self {
         Self {
-            parametric: BTreeMap::new(),
+            parametric: std::iter::empty().collect(),
         }
     }
 }
@@ -1388,12 +1387,11 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use super::{AmplitudeCountertermAtom, AmplitudeCountertermData};
     use crate::{
         cff::{CutCFFIndex, esurface::RaisedEsurfaceId},
         graph::GraphGroupPosition,
+        uv::Integrands,
     };
     use symbolica::{atom::Atom, symbol};
     use typed_index_collections::ti_vec;
@@ -1401,7 +1399,7 @@ mod tests {
     #[test]
     fn empty_amplitude_counterterm_atom_is_not_generated() {
         let atom = AmplitudeCountertermAtom {
-            parametric: BTreeMap::new(),
+            parametric: std::iter::empty().collect(),
         };
 
         assert!(!atom.is_generated());
@@ -1410,7 +1408,10 @@ mod tests {
     #[test]
     fn non_empty_amplitude_counterterm_atom_is_generated() {
         let atom = AmplitudeCountertermAtom {
-            parametric: BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::var(symbol!("x")))]),
+            parametric: Integrands::from_iter([(
+                CutCFFIndex::new_all_none(),
+                Atom::var(symbol!("x")),
+            )]),
         };
 
         assert!(atom.is_generated());
@@ -1419,14 +1420,17 @@ mod tests {
     #[test]
     fn zero_like_amplitude_counterterm_atom_is_zero() {
         let atom = AmplitudeCountertermAtom {
-            parametric: BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::var(symbol!("x")))]),
+            parametric: Integrands::from_iter([(
+                CutCFFIndex::new_all_none(),
+                Atom::var(symbol!("x")),
+            )]),
         };
 
         let zeroed = atom.zero_like();
 
         assert_eq!(
             zeroed.parametric,
-            BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)])
+            Integrands::from_iter([(CutCFFIndex::new_all_none(), Atom::Zero)])
         );
     }
 

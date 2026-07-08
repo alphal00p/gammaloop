@@ -17,7 +17,7 @@ use spenso::{
 use symbolica::prelude::*;
 use symbolica::printer::{PrintState, PrintUserData};
 
-use crate::{cff::expression::GraphOrientation, graph::LoopMomentumBasis, numerator::aind::Aind};
+use crate::{cff::orientations::GraphOrientation, graph::LoopMomentumBasis, numerator::aind::Aind};
 
 use super::symbolica_ext::CallSymbol;
 
@@ -187,7 +187,10 @@ pub struct GammaloopSymbols {
     pub localizing_integrand: Symbol,
 
     pub uv_local: Symbol,
-    pub uv_integrated: Symbol,
+    pub uv_integrate: Symbol,
+    pub uv_truncate: Symbol,
+    /// Marker for the ct term in the UV integrand
+    pub ct_marker: Symbol,
 
     pub nc2_1: Symbol,
     pub top: Symbol,
@@ -644,8 +647,10 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         tags = [SPENSO_TAG.index.clone()]
     ),
     override_if: symbol!("override_if"),
-    uv_local: symbol!("uv_local"),
-    uv_integrated: symbol!("uv_integrated"),
+    uv_local: symbol!("T"),
+    uv_integrate: symbol!("I"),
+    uv_truncate: symbol!("uv_truncate"),
+    ct_marker: symbol!("CT"),
     is_function: symbol!("is_function"),
     is_symbol: symbol!("is_symbol"),
     nc2_1: symbol!("NC2_1"),

@@ -3,7 +3,8 @@ use crate::{
     cff::{
         CutCFFIndex,
         esurface::{Esurface, EsurfaceID},
-        expression::{GraphOrientation, OrientationID},
+        expression::OrientationID,
+        orientations::GraphOrientation,
         surface::HybridSurfaceID,
     },
     graph::{
@@ -686,8 +687,8 @@ impl CrossSectionGraphTerm {
                                         loop_count: usize| {
                 integrands
                     .integrands
-                    .keys()
-                    .map(|cut_cff_index| {
+                    .iter()
+                    .map(|(cut_cff_index, _)| {
                         let lu_order = cut_cff_index.lu_cut_order.ok_or_else(|| {
                             eyre!("LU threshold counterterm helper index is missing lu_cut_order")
                         })?;
@@ -728,8 +729,8 @@ impl CrossSectionGraphTerm {
             let build_iterated_helpers = |integrands: &crate::uv::forest::ParametricIntegrands| {
                 integrands
                     .integrands
-                    .keys()
-                    .map(|cut_cff_index| {
+                    .iter()
+                    .map(|(cut_cff_index, _)| {
                         let lu_order = cut_cff_index.lu_cut_order.ok_or_else(|| {
                             eyre!(
                                 "Iterated LU threshold counterterm helper index is missing lu_cut_order"

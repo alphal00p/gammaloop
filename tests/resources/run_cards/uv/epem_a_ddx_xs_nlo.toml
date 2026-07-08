@@ -39,9 +39,9 @@ custom = []
 [cli_settings.global.generation.uv]
 softct = false
 inner_products = true
-add_sigma = true
-keep_sigma = false
-add_integrated_uv_with_n_loops = 1
+add_marker = true
+keep_marker = false
+final_integrand = "ThreeD"
 subtract_uv = true
 
 [cli_settings.global.generation.tropical_subgraph_table]

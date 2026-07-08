@@ -8,14 +8,16 @@ use linnet::half_edge::{
 use symbolica::atom::{Atom, AtomCore};
 
 use crate::{
-    cff::expression::GraphOrientation,
+    cff::orientations::GraphOrientation,
     graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
     settings::global::OrientationPattern,
     utils::GS,
+    uv::Integrands,
 };
 use color_eyre::Result;
 
 pub mod cff_graph;
+pub mod orientations;
 //pub mod cut_expression;
 pub mod esurface;
 pub mod expression;
@@ -86,7 +88,7 @@ pub struct CutCFF {
 }
 
 impl CutCFF {
-    pub fn expression_with_selectors(&self) -> BTreeMap<CutCFFIndex, Atom> {
+    pub fn expression_with_selectors(&self) -> Integrands {
         self.terms
             .iter()
             .map(|(index, term)| (*index, term.expression_with_selectors()))
