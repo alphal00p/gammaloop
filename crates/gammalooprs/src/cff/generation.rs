@@ -40,7 +40,9 @@ use super::{
     expression::{CFFExpression, OrientationID},
     hsurface::HsurfaceCollection,
     surface::{HybridSurfaceRef, UnitSurface},
-    thermal_numerator::{ThermalNumeratorCollection, ThermalNumeratorID},
+    thermal_numerator::{
+        ThermalDistributionFactor, ThermalNumeratorCollection, ThermalNumeratorID,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -49,9 +51,10 @@ struct GenerationData {
     surface_id: Option<HybridSurfaceID>,
     thermal_numerator_id: Option<ThermalNumeratorID>,
     thermal_sign: Option<Sign>,
+    thermal_distribution_factors: Vec<ThermalDistributionFactor>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
 pub struct CFFNodeData {
     #[bincode(with_serde)]
     pub surface_id: HybridSurfaceID,
@@ -59,15 +62,22 @@ pub struct CFFNodeData {
     pub thermal_numerator_id: Option<ThermalNumeratorID>,
     #[bincode(with_serde)]
     pub thermal_sign: Option<Sign>,
+    #[bincode(with_serde)]
+    pub thermal_distribution_factors: Vec<ThermalDistributionFactor>,
 }
 
 impl From<CFFNodeData> for Atom {
     fn from(data: CFFNodeData) -> Atom {
         let surface = Atom::from(data.surface_id);
+        let thermal_factor_product = data
+            .thermal_distribution_factors
+            .into_iter()
+            .map(ThermalDistributionFactor::to_atom)
+            .fold(Atom::num(1), |acc, factor| acc * factor);
         let term = match data.thermal_numerator_id {
             Some(id) => surface / Atom::from(id),
             None => surface,
-        };
+        } / thermal_factor_product;
 
         data.thermal_sign.unwrap_or(Sign::Positive) * term
     }
@@ -84,6 +94,7 @@ fn forget_graphs(data: GenerationData) -> CFFNodeData {
         surface_id: data.surface_id.expect("corrupted expression tree"),
         thermal_numerator_id: data.thermal_numerator_id,
         thermal_sign: data.thermal_sign,
+        thermal_distribution_factors: data.thermal_distribution_factors,
     }
 }
 
@@ -854,6 +865,7 @@ fn generate_tree_for_orientation(
         surface_id: None,
         thermal_numerator_id: None,
         thermal_sign: None,
+        thermal_distribution_factors: Vec::new(),
     });
 
     match medium_mode {
@@ -1093,6 +1105,7 @@ fn advance_tree(
                     surface_id: None,
                     thermal_numerator_id: None,
                     thermal_sign: None,
+                    thermal_distribution_factors: Vec::new(),
                 };
 
                 tree.insert_node(node_id, child_node);
@@ -1350,6 +1363,7 @@ fn advance_tree_thermal(
                     surface_id: None,
                     thermal_numerator_id,
                     thermal_sign: Some(thermal_sign),
+                    thermal_distribution_factors: Vec::new(),
                 };
 
                 tree.insert_node(node_id, child_node);
@@ -1404,6 +1418,7 @@ mod tests_cff {
                     .replace(thermal_distribution_atom_from_index(
                         edge_id,
                         Sign::Positive,
+                        0,
                     ))
                     .with(
                         (Atom::num(1)
@@ -1416,6 +1431,7 @@ mod tests_cff {
                     .replace(thermal_distribution_atom_from_index(
                         edge_id,
                         Sign::Negative,
+                        0,
                     ))
                     .with(
                         (Atom::num(-1)

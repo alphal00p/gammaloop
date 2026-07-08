@@ -293,11 +293,11 @@ impl<T> Tree<T> {
 impl<T> Tree<T>
 where
     Atom: From<T>,
-    T: Copy,
+    T: Clone,
 {
     fn to_atom_inv_impl(&self, cur_node: NodeId) -> Atom {
         let node = &self.nodes[cur_node];
-        let inv_data_esurface = (Atom::num(1) / Atom::from(node.data))
+        let inv_data_esurface = (Atom::num(1) / Atom::from(node.data.clone()))
             .replace(parse!("η_inf^-1"))
             .with(Atom::num(0));
 

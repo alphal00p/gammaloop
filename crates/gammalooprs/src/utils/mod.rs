@@ -4687,8 +4687,16 @@ pub(crate) fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
     GS.emr_mom(index, Atom::from(ExpandedIndex::from_iter([0])))
 }
 
-pub(crate) fn thermal_distribution_atom_from_index(index: EdgeIndex, sign: Sign) -> Atom {
-    GS.thermal_distribution(usize::from(index) as i64, sign)
+pub(crate) fn thermal_distribution_atom_from_index(
+    index: EdgeIndex,
+    sign: Sign,
+    derivative_order: usize,
+) -> Atom {
+    GS.thermal_distribution(
+        usize::from(index) as i64,
+        sign * Atom::num(1),
+        derivative_order as i64,
+    )
 }
 
 pub mod newton_solver;

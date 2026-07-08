@@ -1268,6 +1268,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
 
         let thermal_sign = symbol!("thermal_sign");
+        let derivative_order = symbol!("derivative_order");
         for e in graph.iter_edge_ids() {
             if lmb.edge_signatures[e]
                 .internal
@@ -1278,7 +1279,7 @@ impl<T: FloatLike> ParamBuilder<T> {
                     GS.thermal_distribution,
                     vec![Atom::num(e.0 as i64)],
                     format!("N{e}"),
-                    vec![thermal_sign],
+                    vec![thermal_sign, derivative_order],
                     graph.explicit_thermal_distribution_atom(e, Atom::var(thermal_sign)),
                 )
                 .unwrap();
