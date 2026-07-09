@@ -272,6 +272,37 @@ impl GraphGroupSelectionSpec {
 
         let authoritative_group_ids =
             self.authoritative_master_graph_group_ids(&candidates, &master_name_to_group)?;
+        let mut forbidden_master_graph_group_ids = BTreeSet::new();
+        for rule in &self.rules {
+            let GraphGroupSelectionRule::MasterGraphNames {
+                polarity: SelectionPolarity::Without,
+                graph_names,
+            } = rule
+            else {
+                continue;
+            };
+            forbidden_master_graph_group_ids.extend(
+                GraphGroupSelectionRule::resolve_master_graph_name_set(
+                    graph_names,
+                    &candidates,
+                    &master_name_to_group,
+                )?,
+            );
+        }
+        let conflicting_master_graph_names = candidates
+            .iter()
+            .filter(|candidate| {
+                authoritative_group_ids.contains(&candidate.group_id)
+                    && forbidden_master_graph_group_ids.contains(&candidate.group_id)
+            })
+            .map(|candidate| candidate.master_graph_name.as_str())
+            .collect::<Vec<_>>();
+        if !conflicting_master_graph_names.is_empty() {
+            return Err(eyre!(
+                "Contradictory graph-name selection: master graph(s) {} appear in both --with-graph-names and --without-graph-names.",
+                conflicting_master_graph_names.join(", ")
+            ));
+        }
         let non_authoritative_rules = self
             .rules
             .iter()
@@ -2177,6 +2208,30 @@ mod tests {
 
         assert_eq!(plan.report().kept_master_graphs, vec!["g0", "g1"]);
         assert!(plan.report().removed_master_graphs.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn graph_name_selection_rejects_conflicting_constraints() -> Result<()> {
+        let mut graphs = vec![
+            graph_with_vertex_rules("g0", &["V_A"])?,
+            graph_with_vertex_rules("g1", &["V_B"])?,
+        ];
+        let graph_group_structure = complete_group_parsing(&mut graphs)?;
+
+        let spec = GraphGroupSelectionSpec::new()
+            .with_master_graph_names(vec!["g1".to_string()])
+            .with_master_graph_names_polarity(SelectionPolarity::Without, vec!["g1".to_string()]);
+        let err = spec
+            .plan(&graph_group_structure, |graph_id| graphs.get(graph_id))
+            .unwrap_err();
+        let message = format!("{err}");
+
+        assert!(message.contains("Contradictory graph-name selection"));
+        assert!(message.contains("g1"));
+        assert!(message.contains("--with-graph-names"));
+        assert!(message.contains("--without-graph-names"));
 
         Ok(())
     }
