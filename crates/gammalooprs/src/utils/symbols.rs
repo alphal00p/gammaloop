@@ -881,13 +881,13 @@ impl GammaloopSymbols {
     pub fn thermal_distribution<'a>(
         &self,
         eid: impl Into<AtomOrView<'a>>,
-        sign: impl Into<AtomOrView<'a>>,
         derivative_order: impl Into<AtomOrView<'a>>,
+        sign: impl Into<AtomOrView<'a>>,
     ) -> Atom {
         self.thermal_distribution.f(&[
             eid.into().as_view(),
-            sign.into().as_view(),
             derivative_order.into().as_view(),
+            sign.into().as_view(),
         ])
     }
 
@@ -905,17 +905,17 @@ impl GammaloopSymbols {
                     atom = atom
                         .replace(self.thermal_distribution(
                             usize::from(edge) as i64,
-                            Atom::num(1),
                             Atom::num(0),
+                            Atom::num(1),
                         ))
                         .with(Atom::one())
                         .replace(self.thermal_distribution(
                             usize::from(edge) as i64,
-                            Atom::num(-1),
                             Atom::num(0),
+                            Atom::num(-1),
                         ))
                         .with(Atom::zero())
-                        .replace(self.thermal_distribution(usize::from(edge) as i64, W_.s_, W_.o_))
+                        .replace(self.thermal_distribution(usize::from(edge) as i64, W_.o_, W_.s_))
                         .with(Atom::zero());
                 }
                 atom

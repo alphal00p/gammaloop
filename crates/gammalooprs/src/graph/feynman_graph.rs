@@ -129,9 +129,14 @@ where
         self.1.explicit_ose_atom(edge)
     }
 
-    fn explicit_thermal_distribution_atom(&self, edge: EdgeIndex, thermal_sign: Atom) -> Atom {
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+    ) -> Atom {
         self.1
-            .explicit_thermal_distribution_atom(edge, thermal_sign)
+            .explicit_thermal_distribution_atom(edge, derivative_order, thermal_sign)
     }
 
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
@@ -185,7 +190,12 @@ where
         (dot + mass2).sqrt()
     }
 
-    fn explicit_thermal_distribution_atom(&self, edge: EdgeIndex, thermal_sign: Atom) -> Atom {
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+    ) -> Atom {
         let chemical_potential = self[edge].chemical_potential_atom();
         let shifted_ose = match chemical_potential {
             Some(mu) => ose_atom_from_index(edge) - GS.sign(edge) * mu,
@@ -193,15 +203,35 @@ where
         };
 
         let two = Atom::num(2);
-        let arg = Atom::var(GS.inverse_temperature) * shifted_ose / &two;
+        let beta = Atom::var(GS.inverse_temperature);
+        let arg = beta.clone() * shifted_ose / &two;
         let tanh_arg = GS.tanh(arg.clone());
+        let tanh_squared = tanh_arg.clone() * tanh_arg.clone();
 
         let is_fermion = self[edge].is_fermion();
 
-        if is_fermion {
-            (thermal_sign + tanh_arg) / two
-        } else {
-            (thermal_sign + Atom::num(1) / tanh_arg) / two
+        match (is_fermion, derivative_order) {
+            (true, 0) => (thermal_sign + tanh_arg.clone()) / two.clone(),
+            (false, 0) => (thermal_sign + Atom::num(1) / tanh_arg.clone()) / two.clone(),
+            (true, 1) => -beta.clone() * (Atom::num(1) - tanh_squared.clone()) / Atom::num(4),
+            (false, 1) => {
+                beta.clone() * (Atom::num(1) / tanh_squared.clone() - Atom::num(1)) / Atom::num(4)
+            }
+            (true, 2) => {
+                -beta.clone()
+                    * beta.clone()
+                    * (Atom::num(1) - tanh_squared.clone())
+                    * tanh_arg.clone()
+                    / Atom::num(4)
+            }
+            (false, 2) => {
+                beta.clone()
+                    * beta.clone()
+                    * (Atom::num(1) / tanh_squared.clone() - Atom::num(1))
+                    * (Atom::num(1) / tanh_arg.clone())
+                    / Atom::num(4)
+            }
+            (_, order) => panic!("thermal distribution derivative order {order} is not registered"),
         }
     }
 
@@ -292,9 +322,14 @@ impl ParamBuilderGraph for Graph {
         self.underlying.explicit_ose_atom(edge)
     }
 
-    fn explicit_thermal_distribution_atom(&self, edge: EdgeIndex, thermal_sign: Atom) -> Atom {
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+    ) -> Atom {
         self.underlying
-            .explicit_thermal_distribution_atom(edge, thermal_sign)
+            .explicit_thermal_distribution_atom(edge, derivative_order, thermal_sign)
     }
 
     #[allow(unused_variables)]

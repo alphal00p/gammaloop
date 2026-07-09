@@ -1424,8 +1424,8 @@ mod tests_cff {
                 expression_atom = expression_atom
                     .replace(thermal_distribution_atom_from_index(
                         edge_id,
-                        Sign::Positive,
                         0,
+                        Sign::Positive,
                     ))
                     .with(
                         (Atom::num(1)
@@ -1437,8 +1437,8 @@ mod tests_cff {
                     )
                     .replace(thermal_distribution_atom_from_index(
                         edge_id,
-                        Sign::Negative,
                         0,
+                        Sign::Negative,
                     ))
                     .with(
                         (Atom::num(-1)
@@ -1450,8 +1450,8 @@ mod tests_cff {
                     )
                     .replace(thermal_distribution_atom_from_index(
                         edge_id,
-                        Sign::Positive,
                         1,
+                        Sign::Positive,
                     ))
                     .with(
                         function!(

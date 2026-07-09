@@ -23,7 +23,7 @@ pub struct ThermalDistributionFactor {
 
 impl ThermalDistributionFactor {
     pub(crate) fn to_atom(self) -> Atom {
-        thermal_distribution_atom_from_index(self.edge_id, self.sign, self.derivative_order)
+        thermal_distribution_atom_from_index(self.edge_id, self.derivative_order, self.sign)
     }
 }
 
@@ -72,14 +72,14 @@ impl ThermalNumerator {
                 .positive_energies
                 .iter()
                 .fold(Atom::num(1), |acc, &edge| {
-                    acc * thermal_distribution_atom_from_index(edge, positive_part_sign, 0)
+                    acc * thermal_distribution_atom_from_index(edge, 0, positive_part_sign)
                 });
 
             let negative_part = self
                 .negative_energies
                 .iter()
                 .fold(Atom::num(1), |acc, &edge| {
-                    acc * thermal_distribution_atom_from_index(edge, negative_part_sign, 0)
+                    acc * thermal_distribution_atom_from_index(edge, 0, negative_part_sign)
                 });
 
             positive_part * negative_part
@@ -108,12 +108,12 @@ mod tests {
             negative_energies: vec![EdgeIndex::from(2)],
         };
 
-        let expected = thermal_distribution_atom_from_index(EdgeIndex::from(1), Sign::Positive, 0)
-            * thermal_distribution_atom_from_index(EdgeIndex::from(3), Sign::Positive, 0)
-            * thermal_distribution_atom_from_index(EdgeIndex::from(2), Sign::Negative, 0)
-            - thermal_distribution_atom_from_index(EdgeIndex::from(1), Sign::Negative, 0)
-                * thermal_distribution_atom_from_index(EdgeIndex::from(3), Sign::Negative, 0)
-                * thermal_distribution_atom_from_index(EdgeIndex::from(2), Sign::Positive, 0);
+        let expected = thermal_distribution_atom_from_index(EdgeIndex::from(1), 0, Sign::Positive)
+            * thermal_distribution_atom_from_index(EdgeIndex::from(3), 0, Sign::Positive)
+            * thermal_distribution_atom_from_index(EdgeIndex::from(2), 0, Sign::Negative)
+            - thermal_distribution_atom_from_index(EdgeIndex::from(1), 0, Sign::Negative)
+                * thermal_distribution_atom_from_index(EdgeIndex::from(3), 0, Sign::Negative)
+                * thermal_distribution_atom_from_index(EdgeIndex::from(2), 0, Sign::Positive);
 
         assert_eq!(
             numerator.to_atom(&[]).to_canonical_string(),

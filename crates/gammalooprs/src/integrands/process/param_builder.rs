@@ -108,9 +108,16 @@ pub trait ParamBuilderGraph {
     fn external_spatial_params(&self) -> Vec<Atom>;
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom>;
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
-    fn explicit_thermal_distribution_atom(&self, edge: EdgeIndex, thermal_sign: Atom) -> Atom;
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+    ) -> Atom;
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
+
+const MAX_THERMAL_DISTRIBUTION_DERIVATIVE_ORDER: usize = 2;
 
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -1268,21 +1275,26 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
 
         let thermal_sign = symbol!("thermal_sign");
-        let derivative_order = symbol!("derivative_order");
         for e in graph.iter_edge_ids() {
             if lmb.edge_signatures[e]
                 .internal
                 .iter()
                 .any(|sign| sign.is_sign())
             {
-                new.add_tagged_function::<Symbol>(
-                    GS.thermal_distribution,
-                    vec![Atom::num(e.0 as i64)],
-                    format!("N{e}"),
-                    vec![thermal_sign, derivative_order],
-                    graph.explicit_thermal_distribution_atom(e, Atom::var(thermal_sign)),
-                )
-                .unwrap();
+                for derivative_order in 0..=MAX_THERMAL_DISTRIBUTION_DERIVATIVE_ORDER {
+                    new.add_tagged_function::<Symbol>(
+                        GS.thermal_distribution,
+                        vec![Atom::num(e.0 as i64), Atom::num(derivative_order as i64)],
+                        format!("N{e}_{derivative_order}"),
+                        vec![thermal_sign],
+                        graph.explicit_thermal_distribution_atom(
+                            e,
+                            derivative_order,
+                            Atom::var(thermal_sign),
+                        ),
+                    )
+                    .unwrap();
+                }
             }
         }
 
