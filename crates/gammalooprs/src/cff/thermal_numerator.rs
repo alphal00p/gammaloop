@@ -1,5 +1,5 @@
 use crate::utils::thermal_distribution_atom_from_index;
-use bincode::{Decode, Encode};
+use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use linnet::{half_edge::involution::EdgeIndex, num_traits::Sign};
 use serde::{Deserialize, Serialize};
@@ -12,11 +12,11 @@ pub struct ThermalNumeratorID(usize);
 pub type ThermalNumeratorCollection = TiVec<ThermalNumeratorID, ThermalNumerator>;
 pub type ThermalNumeratorCache<T> = TiVec<ThermalNumeratorID, T>;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, bincode::Encode, bincode::Decode, PartialEq, Eq,
+)]
 pub struct ThermalDistributionFactor {
-    #[bincode(with_serde)]
     pub edge_id: EdgeIndex,
-    #[bincode(with_serde)]
     pub sign: Sign,
     pub derivative_order: usize,
 }
@@ -27,7 +27,7 @@ impl ThermalDistributionFactor {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, bincode::Encode, bincode::Decode, Debug, Clone, PartialEq)]
 pub struct ThermalNumerator {
     pub positive_energies: Vec<EdgeIndex>,
     pub negative_energies: Vec<EdgeIndex>,
