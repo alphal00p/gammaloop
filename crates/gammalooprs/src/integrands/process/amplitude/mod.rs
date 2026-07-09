@@ -582,18 +582,25 @@ impl AmplitudeGraphTerm {
             .unwrap()
             .unwrap_real();
         // debug!("parambuilder 244: {}", self.param_builder);
-        let counterterm_evaluation = self.threshold_counterterm.evaluate(
-            &momentum_sample,
-            &self.graph,
-            context.model,
-            &self.esurfaces,
-            context.rotation,
-            context.settings,
-            &mut self.param_builder,
-            orientations,
-            context.evaluation_metadata,
-            context.record_primary_timing,
-        )?;
+        let counterterm_evaluation = if context.settings.subtraction.disable_threshold_subtraction {
+            AmplitudeCountertermEvaluation {
+                total: Complex::new_re(momentum_sample.zero()),
+                local_counterterms: Vec::new(),
+            }
+        } else {
+            self.threshold_counterterm.evaluate(
+                &momentum_sample,
+                &self.graph,
+                context.model,
+                &self.esurfaces,
+                context.rotation,
+                context.settings,
+                &mut self.param_builder,
+                orientations,
+                context.evaluation_metadata,
+                context.record_primary_timing,
+            )?
+        };
         let sum_of_cts = counterterm_evaluation.total.clone();
 
         crate::debug_tags!(#integration, #subtraction;

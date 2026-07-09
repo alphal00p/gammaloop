@@ -871,6 +871,8 @@ impl AmplitudeIntegrand {
         ir_profile_settings: &IRProfileSetting,
         model: &Model,
     ) -> Result<IrLimitTestReport> {
+        let previous_sampling = self.settings.sampling.clone();
+
         // override the sampling to be in momentum space
         self.settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
             sample_orientations: false,
@@ -937,6 +939,9 @@ impl AmplitudeIntegrand {
         {
             self.settings.general.store_additional_weights_in_event =
                 previous_store_additional_weights;
+        }
+        if self.settings.sampling != previous_sampling {
+            self.settings.sampling = previous_sampling;
         }
 
         result
@@ -1180,6 +1185,8 @@ impl CrossSectionIntegrand {
         ir_profile_settings: &IRProfileSetting,
         model: &Model,
     ) -> Result<IrLimitTestReport> {
+        let previous_sampling = self.settings.sampling.clone();
+
         // override the sampling to be in momentum space
         self.settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
             sample_orientations: false,
@@ -1214,6 +1221,9 @@ impl CrossSectionIntegrand {
 
         if self.settings.general.generate_events != previous_generate_events {
             self.settings.general.generate_events = previous_generate_events;
+        }
+        if self.settings.sampling != previous_sampling {
+            self.settings.sampling = previous_sampling;
         }
 
         result
