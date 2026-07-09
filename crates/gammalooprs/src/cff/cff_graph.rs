@@ -20,6 +20,7 @@ use std::{cmp::Ordering, hash::Hash};
 use super::{
     esurface::{Esurface, ExternalShift},
     surface::{HybridSurface, UnitSurface},
+    thermal_numerator::ThermalDistributionFactor,
 };
 
 const MAX_VERTEX_COUNT: usize = 64;
@@ -469,6 +470,11 @@ impl CFFGenerationGraph {
         }
     }
 
+    fn remove_isolated_vertices(&mut self) {
+        self.vertices
+            .retain(|vertex| vertex.iter_all_edges().next().is_some());
+    }
+
     pub(crate) fn remove_self_edges(&mut self) {
         let self_edges = self.get_self_edges();
 
@@ -489,6 +495,331 @@ impl CFFGenerationGraph {
         }
 
         self_edges
+    }
+
+    fn thermal_factor_sign(&self, edge_id: EdgeIndex) -> Sign {
+        match self.global_orientation[edge_id] {
+            Orientation::Default => Sign::Positive,
+            Orientation::Reversed => Sign::Negative,
+            Orientation::Undirected => {
+                panic!("cannot create thermal distribution factor for undirected edge {edge_id}")
+            }
+        }
+    }
+
+    pub(crate) fn strip_thermal_distribution_factors(&mut self) -> Vec<ThermalDistributionFactor> {
+        let mut factors = Vec::new();
+
+        loop {
+            let previous_len = factors.len();
+
+            factors.extend(self.strip_self_edges_as_thermal_distribution_factors());
+
+            if let Some(factor) =
+                self.strip_one_directed_chain_cycle_as_thermal_distribution_factor()
+            {
+                factors.push(factor);
+            }
+
+            if factors.len() == previous_len {
+                break;
+            }
+        }
+
+        factors
+    }
+
+    fn strip_self_edges_as_thermal_distribution_factors(
+        &mut self,
+    ) -> Vec<ThermalDistributionFactor> {
+        let mut self_edges = self
+            .vertices
+            .iter()
+            .flat_map(|vertex| {
+                vertex
+                    .incoming_edges
+                    .iter()
+                    .filter(|edge| {
+                        edge.edge_type == CFFEdgeType::Virtual
+                            && vertex.outgoing_edges.contains(edge)
+                    })
+                    .map(|edge| edge.edge_id)
+            })
+            .collect_vec();
+        self_edges.sort();
+        self_edges.dedup();
+
+        let factors = self_edges
+            .iter()
+            .map(|&edge_id| ThermalDistributionFactor {
+                edge_id,
+                sign: self.thermal_factor_sign(edge_id),
+                derivative_order: 0,
+            })
+            .collect_vec();
+
+        for edge_id in self_edges {
+            self.remove_edge(edge_id);
+        }
+        self.remove_isolated_vertices();
+
+        factors
+    }
+
+    fn strip_one_directed_chain_cycle_as_thermal_distribution_factor(
+        &mut self,
+    ) -> Option<ThermalDistributionFactor> {
+        let mut components = self.strongly_connected_components();
+        components.sort_by_key(|component| {
+            component
+                .iter()
+                .map(|vertex_set| vertex_set.vertex_set)
+                .min()
+                .unwrap_or_default()
+        });
+
+        for component in components {
+            if component.len() < 2 {
+                continue;
+            }
+
+            if let Some(cycle_edges) = self.directed_chain_edges(&component) {
+                let derivative_order = cycle_edges.len() - 1;
+                let representative_edge = cycle_edges[0];
+
+                for edge_id in cycle_edges {
+                    self.remove_edge(edge_id);
+                }
+                self.remove_isolated_vertices();
+
+                return Some(ThermalDistributionFactor {
+                    edge_id: representative_edge,
+                    sign: Sign::Positive,
+                    derivative_order,
+                });
+            }
+        }
+
+        None
+    }
+
+    fn directed_chain_edges(&self, component: &[VertexSet]) -> Option<Vec<EdgeIndex>> {
+        let component_vertices = component.iter().copied().collect::<HashSet<_>>();
+        let internal_edges = self
+            .virtual_edge_endpoints()
+            .into_iter()
+            .filter(|(_, source, sink)| {
+                component_vertices.contains(source) && component_vertices.contains(sink)
+            })
+            .collect_vec();
+
+        let mut adjacency = HashMap::<VertexSet, Vec<(EdgeIndex, VertexSet)>>::default();
+        for &vertex_set in component {
+            adjacency.entry(vertex_set).or_default();
+        }
+        for (edge_id, source, sink) in internal_edges {
+            adjacency.entry(source).or_default().push((edge_id, sink));
+        }
+        for outgoing_edges in adjacency.values_mut() {
+            outgoing_edges.sort_by_key(|(edge_id, sink)| (*edge_id, sink.vertex_set));
+        }
+
+        let mut start_vertices = component.to_vec();
+        start_vertices.sort_by_key(|vertex_set| vertex_set.vertex_set);
+
+        for start_vertex in start_vertices {
+            let mut visited_vertices = vec![start_vertex];
+            let mut path_edges = Vec::new();
+            if let Some(cycle_edges) = self.find_detachable_directed_chain_cycle_from(
+                start_vertex,
+                start_vertex,
+                &adjacency,
+                &mut visited_vertices,
+                &mut path_edges,
+            ) {
+                return Some(cycle_edges);
+            }
+        }
+
+        None
+    }
+
+    fn find_detachable_directed_chain_cycle_from(
+        &self,
+        start_vertex: VertexSet,
+        current_vertex: VertexSet,
+        adjacency: &HashMap<VertexSet, Vec<(EdgeIndex, VertexSet)>>,
+        visited_vertices: &mut Vec<VertexSet>,
+        path_edges: &mut Vec<EdgeIndex>,
+    ) -> Option<Vec<EdgeIndex>> {
+        for &(edge_id, next_vertex) in adjacency.get(&current_vertex).into_iter().flatten() {
+            if next_vertex == start_vertex {
+                if path_edges.is_empty() {
+                    continue;
+                }
+
+                let mut cycle_edges = path_edges.clone();
+                cycle_edges.push(edge_id);
+                if self.directed_chain_cycle_is_detachable(visited_vertices, &cycle_edges) {
+                    cycle_edges.sort();
+                    return Some(cycle_edges);
+                }
+            } else if !visited_vertices.contains(&next_vertex) {
+                visited_vertices.push(next_vertex);
+                path_edges.push(edge_id);
+                if let Some(cycle_edges) = self.find_detachable_directed_chain_cycle_from(
+                    start_vertex,
+                    next_vertex,
+                    adjacency,
+                    visited_vertices,
+                    path_edges,
+                ) {
+                    return Some(cycle_edges);
+                }
+                path_edges.pop();
+                visited_vertices.pop();
+            }
+        }
+
+        None
+    }
+
+    fn directed_chain_cycle_is_detachable(
+        &self,
+        cycle_vertices: &[VertexSet],
+        cycle_edges: &[EdgeIndex],
+    ) -> bool {
+        let cycle_edge_set = cycle_edges.iter().copied().collect::<HashSet<_>>();
+        let vertices_with_extra_edges = cycle_vertices
+            .iter()
+            .filter(|vertex_set| {
+                let vertex = self.get_vertex(vertex_set);
+                vertex
+                    .iter_all_edges()
+                    .any(|edge| !cycle_edge_set.contains(&edge.edge_id))
+            })
+            .count();
+
+        vertices_with_extra_edges <= 1
+    }
+
+    fn virtual_edge_endpoints(&self) -> Vec<(EdgeIndex, VertexSet, VertexSet)> {
+        let mut sources = HashMap::<EdgeIndex, VertexSet>::default();
+        let mut sinks = HashMap::<EdgeIndex, VertexSet>::default();
+
+        for vertex in &self.vertices {
+            for edge in vertex
+                .outgoing_edges
+                .iter()
+                .filter(|edge| edge.edge_type == CFFEdgeType::Virtual)
+            {
+                sources.insert(edge.edge_id, vertex.vertex_set);
+            }
+
+            for edge in vertex
+                .incoming_edges
+                .iter()
+                .filter(|edge| edge.edge_type == CFFEdgeType::Virtual)
+            {
+                sinks.insert(edge.edge_id, vertex.vertex_set);
+            }
+        }
+
+        sources
+            .into_iter()
+            .filter_map(|(edge_id, source)| {
+                sinks
+                    .get(&edge_id)
+                    .copied()
+                    .map(|sink| (edge_id, source, sink))
+            })
+            .collect_vec()
+    }
+
+    fn directed_virtual_adjacency(&self) -> HashMap<VertexSet, Vec<VertexSet>> {
+        let mut adjacency = HashMap::<VertexSet, Vec<VertexSet>>::default();
+        for vertex in &self.vertices {
+            adjacency.entry(vertex.vertex_set).or_default();
+        }
+
+        for (_, source, sink) in self.virtual_edge_endpoints() {
+            adjacency.entry(source).or_default().push(sink);
+        }
+
+        adjacency
+    }
+
+    fn strongly_connected_components(&self) -> Vec<Vec<VertexSet>> {
+        fn strong_connect(
+            vertex: VertexSet,
+            adjacency: &HashMap<VertexSet, Vec<VertexSet>>,
+            next_index: &mut usize,
+            indices: &mut HashMap<VertexSet, usize>,
+            lowlinks: &mut HashMap<VertexSet, usize>,
+            stack: &mut Vec<VertexSet>,
+            on_stack: &mut HashSet<VertexSet>,
+            components: &mut Vec<Vec<VertexSet>>,
+        ) {
+            indices.insert(vertex, *next_index);
+            lowlinks.insert(vertex, *next_index);
+            *next_index += 1;
+            stack.push(vertex);
+            on_stack.insert(vertex);
+
+            for &neighbour in adjacency.get(&vertex).into_iter().flatten() {
+                if !indices.contains_key(&neighbour) {
+                    strong_connect(
+                        neighbour, adjacency, next_index, indices, lowlinks, stack, on_stack,
+                        components,
+                    );
+                    let neighbour_lowlink = lowlinks[&neighbour];
+                    let vertex_lowlink = lowlinks.get_mut(&vertex).expect("missing vertex lowlink");
+                    *vertex_lowlink = (*vertex_lowlink).min(neighbour_lowlink);
+                } else if on_stack.contains(&neighbour) {
+                    let neighbour_index = indices[&neighbour];
+                    let vertex_lowlink = lowlinks.get_mut(&vertex).expect("missing vertex lowlink");
+                    *vertex_lowlink = (*vertex_lowlink).min(neighbour_index);
+                }
+            }
+
+            if lowlinks[&vertex] == indices[&vertex] {
+                let mut component = Vec::new();
+                loop {
+                    let stacked_vertex = stack.pop().expect("empty SCC stack");
+                    on_stack.remove(&stacked_vertex);
+                    component.push(stacked_vertex);
+                    if stacked_vertex == vertex {
+                        break;
+                    }
+                }
+                components.push(component);
+            }
+        }
+
+        let adjacency = self.directed_virtual_adjacency();
+        let mut next_index = 0;
+        let mut indices = HashMap::<VertexSet, usize>::default();
+        let mut lowlinks = HashMap::<VertexSet, usize>::default();
+        let mut stack = Vec::new();
+        let mut on_stack = HashSet::<VertexSet>::default();
+        let mut components = Vec::new();
+
+        for vertex in self.vertices.iter().map(|vertex| vertex.vertex_set) {
+            if !indices.contains_key(&vertex) {
+                strong_connect(
+                    vertex,
+                    &adjacency,
+                    &mut next_index,
+                    &mut indices,
+                    &mut lowlinks,
+                    &mut stack,
+                    &mut on_stack,
+                    &mut components,
+                );
+            }
+        }
+
+        components
     }
 
     fn depth_first_search(
@@ -1433,6 +1764,7 @@ mod test {
         nodestore::NodeStorageVec,
         subgraph::{SuBitGraph, SubSetOps},
     };
+    use linnet::num_traits::Sign;
 
     #[test]
     fn test_graph_struct_triangle() {
@@ -1473,6 +1805,278 @@ mod test {
         assert!(!cff_triangle.are_directed_adjacent(&vertex_sets[0], &vertex_sets[2]));
 
         println!("Directed adjacency test passed");
+    }
+
+    #[test]
+    fn strongly_connected_components_are_grouped_by_directed_virtual_cycles() {
+        // Edit this edge list to probe SCC behavior. Each pair is a directed
+        // virtual edge `(source, sink)`.
+        let edges = vec![
+            (0, 1),
+            (1, 2),
+            (2, 0),
+            (0, 3),
+            (3, 0), // SCC: {0, 1, 2, 3}
+            (4, 5),
+            (5, 4), // SCC: {4, 5}
+            (2, 4), // bridge between the two SCCs, no return path
+            (6, 7), // acyclic tail: singleton SCCs {6}, {7}
+        ];
+        // Non-virtual edges should not affect directed virtual SCC detection.
+        let incoming_vertices = vec![
+            (0, CFFEdgeType::External),
+            (4, CFFEdgeType::External),
+            (5, CFFEdgeType::VirtualExternal),
+            (7, CFFEdgeType::External),
+        ];
+
+        let cff_graph = CFFGenerationGraph::from_vec(edges, incoming_vertices, None);
+        let mut components = cff_graph
+            .strongly_connected_components()
+            .into_iter()
+            .map(|component| {
+                component
+                    .into_iter()
+                    .map(|vertex_set| vertex_set.vertex_set.trailing_zeros() as usize)
+                    .sorted()
+                    .collect_vec()
+            })
+            .collect_vec();
+        components.sort();
+
+        assert_eq!(
+            components,
+            vec![vec![0, 1, 2, 3], vec![4, 5], vec![6], vec![7]]
+        );
+    }
+
+    #[test]
+    fn directed_chain_edges_identifies_detachable_cycle_with_one_attachment_vertex() {
+        // Edit these directed virtual edges to probe chain-cycle detection.
+        let edges = vec![
+            (0, 1),
+            (1, 2),
+            (2, 0), // not a valid chain cycle on {0, 1, 2} because it has an extra attachment on vertex 2
+            (0, 3),
+            (3, 0), // valid chain cycle on {0, 3}
+            (0, 4), // extra virtual attachment on vertex 0 is allowed
+            (5, 6),
+            (6, 5), // not a valid chain cycle on {5, 6} once both vertices get extra attachments
+        ];
+        // These non-virtual edges come before virtual edges in edge-id order.
+        let incoming_vertices = vec![
+            (0, CFFEdgeType::External),
+            (0, CFFEdgeType::VirtualExternal),
+            (2, CFFEdgeType::VirtualExternal),
+            (5, CFFEdgeType::External),
+            (6, CFFEdgeType::External),
+        ];
+
+        let cff_graph = CFFGenerationGraph::from_vec(edges, incoming_vertices, None);
+
+        let valid_component = [
+            VertexSet::from_usize(0),
+            VertexSet::from_usize(1),
+            VertexSet::from_usize(2),
+            VertexSet::from_usize(3),
+        ];
+        let invalid_component = [VertexSet::from_usize(5), VertexSet::from_usize(6)];
+
+        assert_eq!(
+            cff_graph.directed_chain_edges(&valid_component),
+            Some(vec![EdgeIndex::from(8), EdgeIndex::from(9),])
+        );
+        assert_eq!(cff_graph.directed_chain_edges(&invalid_component), None);
+    }
+
+    #[test]
+    fn directed_chain_edges_rejects_cycle_with_two_attachment_vertices() {
+        let edges = vec![
+            (0, 1),
+            (1, 2),
+            (2, 0), // candidate cycle
+            (0, 3), // extra attachment on vertex 0
+        ];
+        let incoming_vertices = vec![(2, CFFEdgeType::VirtualExternal)];
+        let cff_graph = CFFGenerationGraph::from_vec(edges, incoming_vertices, None);
+        let component = [
+            VertexSet::from_usize(0),
+            VertexSet::from_usize(1),
+            VertexSet::from_usize(2),
+        ];
+
+        assert_eq!(cff_graph.directed_chain_edges(&component), None);
+    }
+
+    #[test]
+    fn directed_chain_edges_accepts_cycle_with_external_attachment_on_one_vertex() {
+        let edges = vec![(0, 1), (1, 2), (2, 0)];
+        let incoming_vertices = vec![
+            (0, CFFEdgeType::External),
+            (0, CFFEdgeType::VirtualExternal),
+        ];
+        let cff_graph = CFFGenerationGraph::from_vec(edges, incoming_vertices, None);
+        let component = [
+            VertexSet::from_usize(0),
+            VertexSet::from_usize(1),
+            VertexSet::from_usize(2),
+        ];
+
+        assert_eq!(
+            cff_graph.directed_chain_edges(&component),
+            Some(vec![
+                EdgeIndex::from(2),
+                EdgeIndex::from(3),
+                EdgeIndex::from(4)
+            ])
+        );
+    }
+
+    #[test]
+    fn directed_chain_edges_finds_cycle_inside_larger_scc() {
+        let edges = vec![
+            (0, 1),
+            (1, 2),
+            (2, 0), // rejected cycle: vertex 2 has an extra attachment
+            (0, 3),
+            (3, 0), // accepted cycle: only vertex 0 is attached
+            (0, 4),
+        ];
+        let incoming_vertices = vec![
+            (0, CFFEdgeType::External),
+            (0, CFFEdgeType::VirtualExternal),
+            (2, CFFEdgeType::VirtualExternal),
+        ];
+        let cff_graph = CFFGenerationGraph::from_vec(edges, incoming_vertices, None);
+        let component = [
+            VertexSet::from_usize(0),
+            VertexSet::from_usize(1),
+            VertexSet::from_usize(2),
+            VertexSet::from_usize(3),
+        ];
+
+        assert_eq!(
+            cff_graph.directed_chain_edges(&component),
+            Some(vec![EdgeIndex::from(6), EdgeIndex::from(7)])
+        );
+    }
+
+    #[test]
+    fn directed_chain_edges_rejects_branching_cycle_itself() {
+        let edges = vec![
+            (0, 1),
+            (1, 2),
+            (2, 0),
+            (0, 2),
+            (2, 1), // branching internal edges prevent selecting any detachable cycle
+        ];
+        let incoming_vertices = vec![];
+        let cff_graph = CFFGenerationGraph::from_vec(edges, incoming_vertices, None);
+        let component = [
+            VertexSet::from_usize(0),
+            VertexSet::from_usize(1),
+            VertexSet::from_usize(2),
+        ];
+
+        assert_eq!(cff_graph.directed_chain_edges(&component), None);
+    }
+
+    #[test]
+    fn strip_thermal_distribution_factors_strips_self_edge() {
+        let edges = vec![(0, 0), (0, 1)];
+        let incoming_vertices = vec![];
+        let mut cff_graph = CFFGenerationGraph::from_vec(edges, incoming_vertices, None);
+
+        let factors = cff_graph.strip_thermal_distribution_factors();
+
+        assert_eq!(factors.len(), 1);
+        assert_eq!(factors[0].edge_id, EdgeIndex::from(0));
+        assert_eq!(factors[0].sign, Sign::Positive);
+        assert_eq!(factors[0].derivative_order, 0);
+        assert!(!cff_graph.has_edge(EdgeIndex::from(0)));
+        assert!(cff_graph.has_edge(EdgeIndex::from(1)));
+    }
+
+    #[test]
+    fn strip_thermal_distribution_factors_strips_two_edge_chain_cycle() {
+        let edges = vec![(0, 1), (1, 0), (0, 2)];
+        let incoming_vertices = vec![];
+        let mut cff_graph = CFFGenerationGraph::from_vec(edges, incoming_vertices, None);
+
+        let factors = cff_graph.strip_thermal_distribution_factors();
+
+        assert_eq!(factors.len(), 1);
+        assert_eq!(factors[0].edge_id, EdgeIndex::from(0));
+        assert_eq!(factors[0].sign, Sign::Positive);
+        assert_eq!(factors[0].derivative_order, 1);
+        assert!(!cff_graph.has_edge(EdgeIndex::from(0)));
+        assert!(!cff_graph.has_edge(EdgeIndex::from(1)));
+        assert!(cff_graph.has_edge(EdgeIndex::from(2)));
+    }
+
+    #[test]
+    fn strip_thermal_distribution_factors_repeats_until_fixed_point() {
+        let edges = vec![(0, 1), (1, 0), (2, 3), (3, 2), (0, 4)];
+        let incoming_vertices = vec![];
+        let mut cff_graph = CFFGenerationGraph::from_vec(edges, incoming_vertices, None);
+
+        let factors = cff_graph.strip_thermal_distribution_factors();
+
+        assert_eq!(factors.len(), 2);
+        assert_eq!(factors[0].edge_id, EdgeIndex::from(0));
+        assert_eq!(factors[0].derivative_order, 1);
+        assert_eq!(factors[1].edge_id, EdgeIndex::from(2));
+        assert_eq!(factors[1].derivative_order, 1);
+        assert!(cff_graph.has_edge(EdgeIndex::from(4)));
+        for edge_id in 0..4 {
+            assert!(!cff_graph.has_edge(EdgeIndex::from(edge_id)));
+        }
+    }
+
+    #[test]
+    fn strip_thermal_distribution_factors_does_not_strip_non_detachable_scc() {
+        let edges = vec![(0, 1), (1, 0), (0, 2), (1, 3)];
+        let incoming_vertices = vec![];
+        let mut cff_graph = CFFGenerationGraph::from_vec(edges, incoming_vertices, None);
+
+        let factors = cff_graph.strip_thermal_distribution_factors();
+
+        assert!(factors.is_empty());
+        for edge_id in 0..4 {
+            assert!(cff_graph.has_edge(EdgeIndex::from(edge_id)));
+        }
+    }
+
+    #[test]
+    fn strip_thermal_distribution_factors_removes_isolated_cycle_vertices() {
+        let edges = vec![(0, 1), (1, 2), (2, 0), (0, 3)];
+        let incoming_vertices = vec![];
+        let mut cff_graph = CFFGenerationGraph::from_vec(edges, incoming_vertices, None);
+
+        let factors = cff_graph.strip_thermal_distribution_factors();
+
+        assert_eq!(factors.len(), 1);
+        assert_eq!(factors[0].edge_id, EdgeIndex::from(0));
+        assert_eq!(factors[0].derivative_order, 2);
+        assert!(
+            cff_graph
+                .vertices
+                .iter()
+                .any(|vertex| vertex.vertex_set == VertexSet::from_usize(0))
+        );
+        assert!(
+            !cff_graph
+                .vertices
+                .iter()
+                .any(|vertex| vertex.vertex_set == VertexSet::from_usize(1))
+        );
+        assert!(
+            !cff_graph
+                .vertices
+                .iter()
+                .any(|vertex| vertex.vertex_set == VertexSet::from_usize(2))
+        );
+        assert!(cff_graph.has_edge(EdgeIndex::from(3)));
     }
 
     #[test]
