@@ -354,7 +354,7 @@ fn normalize_integrator_weights(
     }
 }
 
-fn build_havana_sample(
+pub(crate) fn build_havana_sample(
     integrand: &gammalooprs::integrands::process::ProcessIntegrand,
     point: &[f64],
     discrete_dim: &[usize],
@@ -401,7 +401,7 @@ fn build_havana_samples(
         .collect()
 }
 
-fn build_momentum_input(
+pub(crate) fn build_momentum_input(
     integrand: &gammalooprs::integrands::process::ProcessIntegrand,
     point: &[f64],
     integrator_weight: f64,

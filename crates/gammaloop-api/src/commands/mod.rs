@@ -13,6 +13,8 @@ use crate::{
     CLISettings,
 };
 use symbolica::atom::Atom;
+pub mod approach;
+pub use approach::Approach;
 pub mod commands_block;
 pub use commands_block::StartCommandsBlock;
 pub mod display;
@@ -118,6 +120,9 @@ pub enum Commands {
     // #[clap(subcommand)]
     Inspect(Inspect),
 
+    /// Approach a phase-space point along one or more axes
+    Approach(Approach),
+
     Evaluate(Evaluate),
 
     Renormalize(Renormalize),
@@ -190,6 +195,9 @@ impl Commands {
             }
             Commands::Inspect(inspect) => {
                 let _ = inspect.run(state)?;
+            }
+            Commands::Approach(approach) => {
+                let _ = approach.run(state, global_cli_settings)?;
             }
             Commands::Bench {
                 samples,
@@ -364,6 +372,53 @@ mod tests {
                 assert!(select.clear_existing_processes);
             }
             other => panic!("expected select command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn approach_command_parses_axes_spacing_and_output() {
+        let command: Commands = "approach -p #0 -i default -x 0.5 0.25 --approach-axis 1.0,0.0 --approach-axis 0.0,1.0 --n-points 3 --logarithmic --min-abs-t 1e-4 --n-cores 2 --output-results approach.json"
+            .parse()
+            .unwrap();
+        match command {
+            Commands::Approach(approach) => {
+                assert_eq!(approach.process, Some(ProcessRef::Id(0)));
+                assert_eq!(approach.integrand_name.as_deref(), Some("default"));
+                assert_eq!(approach.point, vec![0.5, 0.25]);
+                assert_eq!(
+                    approach.approach_axes,
+                    vec!["1.0,0.0".to_string(), "0.0,1.0".to_string()]
+                );
+                assert_eq!(approach.n_points, 3);
+                assert!(approach.logarithmic);
+                assert!(!approach.linear);
+                assert_eq!(approach.min_abs_t, 1.0e-4);
+                assert_eq!(approach.n_cores, Some(2));
+                assert_eq!(
+                    approach.output_results.as_deref(),
+                    Some("approach.json".as_ref())
+                );
+            }
+            other => panic!("expected approach command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn approach_command_parses_momentum_space_selectors() {
+        let command: Commands = "approach -p #0 -i default -x 1.0,-7.0e-2,0.0,1.0 --approach-axis=-1.0e-3,0.0,0.0,1.0 --n-points 1 --linear --n-cores 1 --momentum-space --graph-id 2 --orientation-id 1"
+            .parse()
+            .unwrap();
+        match command {
+            Commands::Approach(approach) => {
+                assert_eq!(approach.point, vec![1.0, -7.0e-2, 0.0, 1.0]);
+                assert_eq!(approach.approach_axes, vec!["-1.0e-3,0.0,0.0,1.0"]);
+                assert!(approach.momentum_space);
+                assert!(approach.linear);
+                assert_eq!(approach.graph_id, Some(2));
+                assert_eq!(approach.orientation_id, Some(1));
+                assert_eq!(approach.n_cores, Some(1));
+            }
+            other => panic!("expected approach command, got {other:?}"),
         }
     }
 

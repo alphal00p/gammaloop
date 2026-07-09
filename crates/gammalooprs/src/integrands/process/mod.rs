@@ -304,6 +304,10 @@ impl ProcessIntegrand {
         }
     }
 
+    pub fn kind_name(&self) -> &'static str {
+        self.variant_tag()
+    }
+
     pub fn export_standalone(
         &self,
         path: impl AsRef<Path>,
@@ -445,6 +449,70 @@ impl ProcessIntegrand {
                 .graph_terms
                 .get(graph_id)
                 .map(|term| term.graph.name.as_str()),
+        }
+    }
+
+    pub fn graph_group_id_by_graph_id(&self, graph_id: usize) -> Option<usize> {
+        self.find_group_id_containing_graph(graph_id)
+            .map(usize::from)
+    }
+
+    pub fn cut_edge_ids(&self, graph_id: usize, cut_id: usize) -> Option<Vec<usize>> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                (cut_id == 0 && graph_id < integrand.data.graph_terms.len()).then(Vec::new)
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                let graph_term = integrand.data.graph_terms.get(graph_id)?;
+                let cut = graph_term.cuts.get(crate::processes::CutId::from(cut_id))?;
+                Some(
+                    graph_term
+                        .graph
+                        .underlying
+                        .iter_edges_of(&cut.cut)
+                        .map(|(_, edge_id, _)| edge_id.0)
+                        .sorted()
+                        .collect(),
+                )
+            }
+        }
+    }
+
+    pub fn lmb_sample_id_for_channel(
+        &self,
+        graph_id: usize,
+        lmb_channel_id: usize,
+    ) -> Result<Option<usize>> {
+        let parameterization_settings = self
+            .get_settings()
+            .sampling
+            .get_parameterization_settings()
+            .unwrap_or_default();
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                let Some(graph_term) = integrand.data.graph_terms.get(graph_id) else {
+                    return Ok(None);
+                };
+                Ok(Some(usize::from(
+                    graph_term.multi_channeling_setup.effective_channel_lmb_id(
+                        ChannelIndex::from(lmb_channel_id),
+                        &graph_term.graph.name,
+                        &parameterization_settings,
+                    )?,
+                )))
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                let Some(graph_term) = integrand.data.graph_terms.get(graph_id) else {
+                    return Ok(None);
+                };
+                Ok(Some(usize::from(
+                    graph_term.multi_channeling_setup.effective_channel_lmb_id(
+                        ChannelIndex::from(lmb_channel_id),
+                        &graph_term.graph.name,
+                        &parameterization_settings,
+                    )?,
+                )))
+            }
         }
     }
 
