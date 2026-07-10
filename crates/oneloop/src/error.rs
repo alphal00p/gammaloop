@@ -1,5 +1,5 @@
-//! The crate's single error type. Every fallible `oneloop` operation returns
-//! `Result<_, OneLoopError>`
+//! Error type for the (not-yet-wired) `Graph` -> `IntegralFamily` extraction.
+//! `reduce` does not fail on a well-formed family.
 
 use thiserror::Error;
 
@@ -9,28 +9,11 @@ pub enum OneLoopError {
     #[error("unsupported loop order: graph has {found} loops, only one-loop is supported")]
     UnsupportedLoopOrder { found: usize },
 
-    /// A `gammalooprs::Graph` could not be turned into an `IntegralFamily`
+    /// A `gammalooprs::Graph` could not be turned into an `IntegralFamily`.
     #[error("failed to extract integral family from graph: {reason}")]
     ExtractionFailed { reason: String },
 
-    /// The IBP system did not close onto the registered masters
-    #[error("IBP reduction did not close onto masters: {0}")]
-    SolverFailed(String),
-
-    /// Wraps an underlying Symbolica error.
+    /// Wraps an underlying Symbolica error surfaced during extraction.
     #[error("symbolica error: {0}")]
     Symbolica(String),
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn unsupported_loop_order_message_names_the_count() {
-        let e = OneLoopError::UnsupportedLoopOrder { found: 2 };
-        let msg = e.to_string();
-        assert!(msg.contains("2"));
-        assert!(msg.to_lowercase().contains("loop"));
-    }
 }

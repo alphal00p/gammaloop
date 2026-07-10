@@ -9,6 +9,17 @@ pub struct Reduction {
     pub terms: Vec<(Atom, MasterIntegral)>,
 }
 
+impl Reduction {
+    /// Reduce every coefficient to lowest terms
+    pub fn simplify(mut self) -> Self {
+        for (coeff, _) in &mut self.terms {
+            *coeff = coeff.cancel();
+        }
+        self
+    }
+}
+
+/// Reduce a one-loop integral family to the masters A0/B0/C0/D0
 pub fn reduce(family: &IntegralFamily) -> Reduction {
     let inv = |i: usize| {
         family
@@ -130,7 +141,13 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
             }
         }
         n => {
-            // N > 4: van Neerven-Vermaseren / FJT-Tarasov reduction to boxes
+            // N > 4: van Neerven-Vermaseren / FJT-Tarasov reduction to boxes.
+            let expected = n * (n - 1) / 2;
+            assert_eq!(
+                family.kinematics.invariants.len(),
+                expected,
+                "an {n}-point family needs {expected} lexicographic pairwise invariants"
+            );
             let masses: Vec<Atom> = (0..n).map(mass).collect();
             let y = modified_cayley(&masses, &family.kinematics.invariants);
             reduce_cayley(&y, &masses, exponents)
@@ -153,8 +170,12 @@ fn tadpole_coefficient(exponent: i32, m_sq: &Atom) -> Atom {
 }
 
 fn push_nonzero(terms: &mut Vec<(Atom, MasterIntegral)>, coeff: Atom, master: MasterIntegral) {
-    if coeff != Atom::Zero {
-        terms.push((coeff, master));
+    if coeff == Atom::Zero {
+        return;
+    }
+    match terms.iter_mut().find(|(_, m)| *m == master) {
+        Some(slot) => slot.0 = &slot.0 + &coeff,
+        None => terms.push((coeff, master)),
     }
 }
 
