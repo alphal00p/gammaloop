@@ -1,8 +1,10 @@
 commands = [
   "import model sm-default.json",
+  "import graphs ./tests/resources/graphs/sunrise_qcd_vacuum.dot",
   "import graphs ./tests/resources/graphs/mercedes_qcd_vacuum.dot",
+  "import graphs ./tests/resources/graphs/tennis_ball_qcd_vacuum.dot",
   "set model aS=1.0",
-  "set model muB=3.0",
+  "set model muB=0.0",
   "generate",
 ]
 
