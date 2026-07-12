@@ -4315,9 +4315,7 @@ impl ProcessDefinition {
         let mut bare_graphs: Vec<(usize, Graph)> = Vec::default();
         let mut pooled_bare_graphs_len = 0;
         let mut n_cancellations: i32 = 0;
-        for (_canonical_repr, pooled_graphs_lists_for_this_topology) in
-            pooled_bare_graphs.lock().unwrap().iter()
-        {
+        for pooled_graphs_lists_for_this_topology in pooled_bare_graphs.lock().unwrap().values() {
             pooled_bare_graphs_len += 1;
             for pooled_graphs_list in pooled_graphs_lists_for_this_topology {
                 let sorted_graphs_to_combine = pooled_graphs_list

@@ -273,7 +273,7 @@ impl<A: AtomCore> AtomCoreExt for A {
             .unwrap();
 
         writeln!(f, "#{{")?;
-        writeln!(f, "{}", &settings.preamble)?;
+        writeln!(f, "{}", settings.preamble)?;
         fn typst_rat(r: &Rational) -> String {
             if r.is_integer() {
                 r.numerator().to_string()
@@ -307,13 +307,13 @@ impl<A: AtomCore> AtomCoreExt for A {
         writeln!(
             f,
             "let default_dis(name:\"\",namespace:\"\",..arg)={{{}}}",
-            &settings.default_dis
+            settings.default_dis
         )?;
 
         writeln!(
             f,
             "let default_sym(name:\"\",namespace:\"\")={{{}}}",
-            &settings.default_sym
+            settings.default_sym
         )?;
 
         for ((i, s), a) in symbols.iter().enumerate().zip(params) {

@@ -850,17 +850,17 @@ impl LUCounterTermEvaluators {
         mut f: impl FnMut(&mut GenericEvaluator) -> color_eyre::Result<()>,
     ) -> color_eyre::Result<()> {
         for evaluators in self.left_thresholds_evaluator.iter_mut() {
-            for (_, evaluator) in evaluators.iter_mut() {
+            for evaluator in evaluators.values_mut() {
                 evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
         for evaluators in self.right_thresholds_evaluator.iter_mut() {
-            for (_, evaluator) in evaluators.iter_mut() {
+            for evaluator in evaluators.values_mut() {
                 evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
         for evaluators in self.iterated_evaluator.iter_mut() {
-            for (_, evaluator) in evaluators.iter_mut() {
+            for evaluator in evaluators.values_mut() {
                 evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }

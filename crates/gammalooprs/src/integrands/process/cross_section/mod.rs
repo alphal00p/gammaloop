@@ -999,7 +999,7 @@ impl CrossSectionGraphTerm {
         mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
     ) -> Result<()> {
         for raised_cut_integrands in self.integrand.iter_mut() {
-            for (_cut_cff_index, evaluator_stack) in raised_cut_integrands.iter_mut() {
+            for evaluator_stack in raised_cut_integrands.values_mut() {
                 evaluator_stack.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
