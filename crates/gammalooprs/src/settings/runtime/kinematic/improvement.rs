@@ -158,7 +158,8 @@ pub(crate) fn generate_default_momenta(
         .map(|i| &external_masses[*i])
         .fold(F(0.0), |a, b| a + b);
 
-    // maybe add a fudge factor?
+    // Use the requested centre-of-mass energy unless it is below the
+    // kinematic threshold implied by the external masses.
     let incoming_energy = e_cm.max(final_state_mass_sum).max(initial_state_mass_sum);
 
     let capital_p = FourMomentum {

@@ -7,7 +7,7 @@ use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     domains::{dual::HyperDual, float::Real},
     evaluate::{FunctionMap, OptimizationSettings},
-    function, parse, symbol,
+    function, parse,
 };
 use tracing::debug;
 use typed_index_collections::TiVec;
@@ -23,10 +23,11 @@ use crate::{
     },
     processes::EvaluatorSettings,
     settings::runtime::{
-        IntegratedCounterTermRange, IntegratedCounterTermSettings, UVLocalisationSettings,
+        IntegratedCounterTermRange, IntegratedCounterTermSettings, UVLocalisationFunction,
+        UVLocalisationSettings,
     },
     utils::{
-        self, F, FloatLike,
+        self, F, FloatLike, GS,
         hyperdual_utils::{DualOrNot, new_constant, simple_n_deriv_shape},
     },
 };
@@ -42,7 +43,7 @@ fn evaluate_uv_damper<T: FloatLike>(
     e_cm: &F<T>,
     settings: &UVLocalisationSettings,
 ) -> F<T> {
-    if settings.force_uv_dampers_to_one {
+    if settings.function == UVLocalisationFunction::Unit || settings.force_uv_dampers_to_one {
         return radius.one();
     }
 
@@ -70,7 +71,7 @@ fn evaluate_uv_damper_dual<T: FloatLike>(
     e_cm: &F<T>,
     settings: &UVLocalisationSettings,
 ) -> HyperDual<F<T>> {
-    if settings.force_uv_dampers_to_one {
+    if settings.function == UVLocalisationFunction::Unit || settings.force_uv_dampers_to_one {
         return new_constant(radius, &radius.values[0].one());
     }
 
@@ -266,7 +267,8 @@ impl RstarTDependenceEvaluator {
         for (i, result) in result.into_iter().enumerate() {
             if i > 0 {
                 n_factorial *= i;
-                dual_values.push(result.re / F::from_f64(n_factorial as f64));
+                let factorial = result.re.from_usize(n_factorial);
+                dual_values.push(result.re / factorial);
             } else {
                 dual_values.push(result.re);
             }
@@ -299,9 +301,10 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
         });
     }
 
-    let t = symbol!("t");
+    let t = GS.rescale;
 
     let e_surface = parse!("η(r_star(t), t)");
+    let eta = parse!("η");
     let rstar = parse!("r_star(t)");
 
     let mut rstar_derivatives = vec![];
@@ -342,6 +345,10 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
     }
 
     // dual shape is for e-surface derivatives, implict function theorem should NOT be dualized with this
+    // Keep the historical derivative-counter convention used by the LU threshold
+    // construction. Newer Symbolica versions spell derivative atoms as
+    // `der(order..., function_head, args...)`, but the parameter order must
+    // remain aligned with the old e-surface dual-shape order.
     let mut dual_shape = vec![vec![0, 0]];
     let mut params = vec![];
     for i in 1..=num_t_derivatives {
@@ -352,14 +359,14 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
 
         loop {
             dual_shape.push(vec![
-                current_r_derivative_counter,
                 current_t_derivative_counter,
+                current_r_derivative_counter,
             ]);
             let eta_derivative = function!(
                 Symbol::DERIVATIVE,
                 current_r_derivative_counter,
                 current_t_derivative_counter,
-                symbol!("η"),
+                eta.clone(),
                 rstar.clone(),
                 Atom::var(t)
             );

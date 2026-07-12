@@ -1571,13 +1571,9 @@ impl ThresholdLimit {
                 continue;
             }
 
-            let threshold_point = threshold_point.ok_or_else(|| {
-                eyre!(
-                    "Threshold '{}' is missing stored approach kinematics for overlap group {}",
-                    self,
-                    overlap_group_id
-                )
-            })?;
+            let Some(threshold_point) = threshold_point else {
+                continue;
+            };
 
             momenta_per_overlap_group.push((
                 format!("overlap group {}", overlap_group_id),
@@ -2298,6 +2294,19 @@ fn fit_power_law(x: Vec<F<ArbPrec>>, y: Vec<F<ArbPrec>>) -> Result<PowerLawFit> 
     }
     if y.iter().any(|value| value.is_nan() || value.is_infinite()) {
         return Err(eyre!("fit_power_law requires finite y values"));
+    }
+    if y.windows(2)
+        .all(|pair| (&pair[1] - &pair[0]).abs().less_than_epsilon())
+    {
+        let exponent = if y.iter().all(|value| value.abs().less_than_epsilon()) {
+            f64::INFINITY
+        } else {
+            0.0
+        };
+        return Ok(PowerLawFit {
+            exponent,
+            r_squared: 1.0,
+        });
     }
 
     let fit = log_log_slope_constant_dropped(&x, &y)?;

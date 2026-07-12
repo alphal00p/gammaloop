@@ -12,7 +12,7 @@ commands = [
   "set default-runtime kv kinematics.e_cm=500.0 stability.check_on_norm=true",
   "integrate -p advanced_process -i generated_process --n-cores 8 --workspace-path ./integration_workspace",
   "inspect -p advanced_process -i generated_process --discrete-dim 0 -x 0.1 0.2 0.3 0.4 0.5 --momentum-space",
-  "bench --samples 100000 -p advanced_process -i generated_process -c 4"
+  "inspect -p advanced_process -i generated_process --discrete-dim 0 -x 0.1 0.2 0.3 0.4 0.5 --bench 10"
 ]
 
 [cli_settings]

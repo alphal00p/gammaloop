@@ -1,0 +1,28 @@
+digraph I1_no_num {
+    label = "I.1_no_num";
+    num = "1";
+    overall_factor = "1";
+    overall_factor_evaluated = "1";
+    projector = "1";
+
+    edge [num = "1"];
+    node [num = "1"];
+
+    exte0 [style=invis];
+    exte0 -> 0:0 [id=0 dir=none is_cut="1" particle="a"];
+    exte1 [style=invis];
+    1:1 -> exte1 [id=1 dir=none is_cut="1" particle="a"];
+
+    0   -> 2     [id=2 particle="t" lmb_id=0];
+    2   -> 3     [id=3 particle="t"];
+    3   -> 4     [id=4 particle="t"];
+    4   -> 5     [id=5 particle="t"];
+    5   -> 1     [id=6 particle="t"];
+    1   -> 6     [id=7 particle="t"];
+    6   -> 7     [id=8 particle="t"];
+    7   -> 0     [id=9 particle="t"];
+
+	2	-> 5	 [id=10 particle="H" lmb_id=1];
+	3	-> 7	 [id=11 particle="g" lmb_id=2];
+	4	-> 6	 [id=12 particle="g" lmb_id=3];
+}

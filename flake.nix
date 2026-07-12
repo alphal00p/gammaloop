@@ -2109,6 +2109,7 @@
             "gammaloop-tracing-filter"
             "gammaloop-tracing-filter-macros"
             "gammalooprs"
+            "three-dimensional-reps"
           ];
         }
         {
@@ -2422,7 +2423,7 @@
 
           mkdir -p target/nextest
           set +e
-          cargo nextest run \
+          RUST_MIN_STACK=''${RUST_MIN_STACK:-33554432} cargo nextest run \
             --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target} \
             --workspace-remap . \
             ${nextestBaseExtraArgs}

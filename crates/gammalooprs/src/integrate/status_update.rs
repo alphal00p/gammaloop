@@ -6,8 +6,10 @@ use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::StatisticsAccumulator;
 
 use crate::{
-    integrands::evaluation::StatisticsCounter, settings::runtime::IntegrationStatisticsSnapshot,
-    utils, utils::F,
+    integrands::evaluation::{NumericalStabilityLevel, StatisticsCounter},
+    settings::runtime::IntegrationStatisticsSnapshot,
+    utils,
+    utils::F,
 };
 
 use super::{
@@ -868,6 +870,46 @@ impl StatisticsSection {
         ])
     }
 
+    pub(crate) fn numerical_stability_median_entries(
+        &self,
+        scope: StatisticsScope,
+    ) -> Vec<StatisticsMedianEntry> {
+        let Some(counter) = self.scoped_counter(scope) else {
+            return Vec::new();
+        };
+        let total_evals = counter.num_evals;
+        let stability_histograms = counter.numerical_stability_snapshot();
+
+        NumericalStabilityLevel::all()
+            .into_iter()
+            .map(|level| {
+                let style = match level {
+                    NumericalStabilityLevel::Double => TextStyle::green(),
+                    NumericalStabilityLevel::Quad => TextStyle::blue(),
+                    NumericalStabilityLevel::ArbPrec => TextStyle::PLAIN,
+                };
+                let value = counter
+                    .numerical_stability_median(level)
+                    .map(|median| styled_colored(median.formatted_relative_accuracy(), style))
+                    .unwrap_or_else(|| styled_plain("N/A"));
+                let processed_count = stability_histograms.processed_sample_count(level);
+                let processed_percentage = if total_evals == 0 {
+                    0.0
+                } else {
+                    processed_count as f64 / total_evals as f64 * 100.0
+                };
+                StatisticsMedianEntry {
+                    label: styled_colored(level.short_label(), style),
+                    value,
+                    processed_percentage: styled_colored(
+                        format_processed_stability_percentage(processed_percentage),
+                        style,
+                    ),
+                }
+            })
+            .collect()
+    }
+
     pub(crate) fn stability_mix_segments(
         &self,
         scope: StatisticsScope,
@@ -993,6 +1035,24 @@ pub(crate) struct StatisticsTableEntry {
 pub(crate) struct StatisticsMixSegment {
     pub(crate) label: StyledText,
     pub(crate) percentage: f64,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct StatisticsMedianEntry {
+    pub(crate) label: StyledText,
+    pub(crate) value: StyledText,
+    pub(crate) processed_percentage: StyledText,
+}
+
+fn format_processed_stability_percentage(percentage: f64) -> String {
+    if !percentage.is_finite() {
+        return "N/A".to_string();
+    }
+    if percentage > 0.0 && percentage < 0.01 {
+        format!("{percentage:.2e}%")
+    } else {
+        format!("{percentage:.2}%")
+    }
 }
 
 fn component_accumulator(
@@ -2104,7 +2164,7 @@ pub(crate) fn build_status_update(request: StatusUpdateBuildRequest<'_>) -> Stat
             request.render_options,
         ),
         statistics: Some(StatisticsSection {
-            global: request.integration_state.stats,
+            global: request.integration_state.stats.clone(),
             slot_counters: request.integration_state.slot_stats.clone(),
             slot_labels: request
                 .integration_state

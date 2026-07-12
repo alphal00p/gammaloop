@@ -24,11 +24,18 @@ momtrop = { workspace = true }
 ndarray = { workspace = true }
 rand = { workspace = true, features = ["small_rng"] }
 rayon.workspace = true
+schemars = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serial_test = "3.2.0"
 spenso = { workspace = true, features = ["shadowing"] }
 
 tabled = { workspace = true, features = ["ansi"] }
+three-dimensional-reps = { workspace = true, features = [
+  "diagnostics",
+  "eval",
+  "test-support",
+] }
 toml = { workspace = true }
 tracing = { workspace = true, features = ["release_max_level_info"] }
 vakint = { workspace = true }
