@@ -1226,6 +1226,257 @@ mod tests {
     use super::*;
     use color_eyre::Result;
 
+    impl Forests {
+        fn normalized_node_label(&self, node: NodeIndex) -> String {
+            let label = self.node_label(node);
+            let mut normalized = String::with_capacity(label.len());
+            let mut chars = label.chars().peekable();
+
+            while let Some(ch) = chars.next() {
+                normalized.push(ch);
+                if ch != '(' {
+                    continue;
+                }
+
+                let mut digits = String::new();
+                while chars.peek().is_some_and(|next| next.is_ascii_digit()) {
+                    digits.push(chars.next().expect("peeked digit must exist"));
+                }
+
+                if digits.is_empty() || !matches!(chars.peek(), Some(')')) {
+                    normalized.push_str(&digits);
+                } else {
+                    normalized.push('_');
+                }
+            }
+
+            normalized
+        }
+
+        fn normalized_node_labels_with_cover(&self, cover_label: &str) -> Vec<String> {
+            let mut labels = self
+                .graph
+                .iter_nodes()
+                .filter(|(_, _, operation)| {
+                    operation
+                        .covers()
+                        .is_some_and(|cover| cover.string_label() == cover_label)
+                })
+                .map(|(node, _, _)| self.normalized_node_label(node))
+                .collect::<Vec<_>>();
+            labels.sort();
+            labels
+        }
+    }
+
+    #[test]
+    fn local_leaf_operations_follow_dependency_frontiers() -> Result<()> {
+        test_initialise().unwrap();
+        let dumbell: Graph = dot!(
+            digraph G{
+                edge [particle="scalar_1"];
+                v1 -> v2;
+                v2 -> v2;
+                v1 -> v1;v1 -> v1;
+            },"scalars"
+        )?;
+
+        let forests = Wood::new(
+            CutStructure::empty(&dumbell),
+            &dumbell,
+            &UVgenerationSettings::default(),
+        )
+        .unfold();
+
+        let frontier_label = |operation: &OperationNode| {
+            operation
+                .covers()
+                .map_or_else(|| "∅".to_string(), |cover| cover.string_label())
+        };
+        let leaf_labels = |node| {
+            forests
+                .local_leaf_operations(node)
+                .iter()
+                .map(|leaf| {
+                    (
+                        leaf.op.order.string_label(),
+                        frontier_label(&forests.graph[leaf.frontier]),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+
+        let root_disconnected = forests
+            .graph
+            .iter_nodes()
+            .find_map(|(node, _, _)| {
+                forests
+                    .normalized_node_label(node)
+                    .starts_with("{36,F}:")
+                    .then_some(node)
+            })
+            .expect("lopsided dumbbell should contain a root disconnected frontier");
+        assert_eq!(
+            leaf_labels(root_disconnected),
+            vec![
+                ("36".to_string(), "∅".to_string()),
+                ("F".to_string(), "∅".to_string())
+            ]
+        );
+
+        let dependent_disconnected = forests
+            .graph
+            .iter_nodes()
+            .find_map(|(node, _, _)| {
+                forests
+                    .normalized_node_label(node)
+                    .starts_with("{C} · {36,F}:")
+                    .then_some(node)
+            })
+            .expect("lopsided dumbbell should contain a C-dependent disconnected frontier");
+        assert_eq!(
+            leaf_labels(dependent_disconnected),
+            vec![
+                ("F".to_string(), "C".to_string()),
+                ("36".to_string(), "∅".to_string())
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn local_frontier_terms_read_non_root_compute_store() -> Result<()> {
+        test_initialise().unwrap();
+        let mut graph: Graph = dot!(
+            digraph G{
+                edge [particle="scalar_1"];
+                v1 -> v2;
+                v2 -> v2;
+                v1 -> v1;v1 -> v1;
+            },"scalars"
+        )?;
+        let settings = UVgenerationSettings::default();
+        let cut_structure = CutStructure::empty(&graph);
+        let cutset = cut_structure
+            .cuts
+            .first()
+            .expect("empty cut structure has one cut")
+            .clone();
+        let mut forests = Wood::new(cut_structure, &graph, &settings).unfold();
+
+        let root_disconnected = forests
+            .graph
+            .iter_nodes()
+            .find_map(|(node, _, _)| {
+                forests
+                    .normalized_node_label(node)
+                    .starts_with("{36,F}:")
+                    .then_some(node)
+            })
+            .expect("lopsided dumbbell should contain a root disconnected frontier");
+        let dependent_disconnected = forests
+            .graph
+            .iter_nodes()
+            .find_map(|(node, _, _)| {
+                forests
+                    .normalized_node_label(node)
+                    .starts_with("{C} · {36,F}:")
+                    .then_some(node)
+            })
+            .expect("lopsided dumbbell should contain a C-dependent disconnected frontier");
+        let non_root_frontier = forests
+            .local_leaf_operations(dependent_disconnected)
+            .first()
+            .expect("dependent disconnected operation has a leaf")
+            .frontier
+            .clone();
+        assert_eq!(
+            forests.graph[non_root_frontier]
+                .covers()
+                .expect("non-root frontier has a cover")
+                .string_label(),
+            "C"
+        );
+
+        let operations = forests
+            .graph
+            .iter_nodes()
+            .map(|(_, _, operation)| operation.clone())
+            .collect::<Vec<_>>();
+        // Zero integrated terms isolate dependency-frontier selection in the local accumulator.
+        for operation in operations {
+            forests
+                .compute_store
+                .entry(operation)
+                .or_default()
+                .integrated = Some(IntegratedCts::root());
+        }
+
+        let orientation_pattern = crate::settings::global::OrientationPattern::default();
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::new(&[], &orientation_pattern),
+        );
+        let seed =
+            forests.local_3d_for_node(forests.root, &mut graph, &cutset, localizer, &settings)?;
+        let root_store_marker = symbolica::symbol!("root_store_marker");
+        let frontier_store_marker = symbolica::symbol!("frontier_store_marker");
+        // The cached entries need valid typed shells, but only `local_3d` is read by this path.
+        let marked_computation = |marker| -> Result<CutComputation> {
+            Ok(CutComputation {
+                local_3d: seed.local_3d.map(|_| Ok(Atom::var(marker)))?,
+                final_integrands: seed.final_integrands.clone(),
+            })
+        };
+
+        let root_operation = forests.graph[forests.root].clone();
+        forests
+            .compute_store
+            .entry(root_operation)
+            .or_default()
+            .cuts
+            .insert(cutset.clone(), marked_computation(root_store_marker)?);
+        forests
+            .compute_store
+            .entry(forests.graph[non_root_frontier].clone())
+            .or_default()
+            .cuts
+            .insert(cutset.clone(), marked_computation(frontier_store_marker)?);
+
+        let root_result = forests.local_3d_for_node(
+            root_disconnected,
+            &mut graph,
+            &cutset,
+            localizer,
+            &settings,
+        )?;
+        assert!(
+            root_result
+                .local_3d
+                .integrands()
+                .iter()
+                .all(|(_, term)| !term.contains_symbol(root_store_marker)),
+            "an empty dependency frontier must start from the typed root"
+        );
+
+        let frontier_result = forests.local_3d_for_node(
+            dependent_disconnected,
+            &mut graph,
+            &cutset,
+            localizer,
+            &settings,
+        )?;
+        assert!(
+            frontier_result
+                .local_3d
+                .integrands()
+                .iter()
+                .any(|(_, term)| term.contains_symbol(frontier_store_marker)),
+            "a non-root dependency frontier must start from its cached local result"
+        );
+        Ok(())
+    }
+
     #[test]
     fn triple_tadpole() -> Result<()> {
         test_initialise().unwrap();
@@ -1817,12 +2068,12 @@ mod tests {
             f.debug_walk();
             println!("{}", f);
             insta::assert_snapshot!(
-                f.node_label(NodeIndex(10)),
-                @"{C} · {36,F}: T((-1*S_C+S_F(11))*T(S_C(1)))*T(S_36(2))"
-            );
-            insta::assert_snapshot!(
-                f.node_label(NodeIndex(11)),
-                @"{3} · {36,F}: T((-1*S_3+S_F(4))*T(S_3(3)))*T(S_36(2))"
+                f.normalized_node_labels_with_cover("3L").join("\n"),
+                @r###"
+{36,F}: T(S_36(_))*T(S_F(_))
+{3} · {36,F}: T((-1*S_3+S_F(_))*T(S_3(_)))*T(S_36(_))
+{C} · {36,F}: T((-1*S_C+S_F(_))*T(S_C(_)))*T(S_36(_))
+"###
             );
             insta::assert_snapshot!(
                 f.graph.n_nodes(),
@@ -1836,12 +2087,12 @@ mod tests {
             .unfold_uncached();
             assert!(f.compute_store.entries.is_empty());
             insta::assert_snapshot!(
-                f.node_label(NodeIndex(10)),
-                @"{C} · {36,F}: T((-1*S_C+S_F(11))*T(S_C(1)))*T(S_36(2))"
-            );
-            insta::assert_snapshot!(
-                f.node_label(NodeIndex(11)),
-                @"{3} · {36,F}: T((-1*S_3+S_F(4))*T(S_3(3)))*T(S_36(2))"
+                f.normalized_node_labels_with_cover("3L").join("\n"),
+                @r###"
+{36,F}: T(S_36(_))*T(S_F(_))
+{3} · {36,F}: T((-1*S_3+S_F(_))*T(S_3(_)))*T(S_36(_))
+{C} · {36,F}: T((-1*S_C+S_F(_))*T(S_C(_)))*T(S_36(_))
+"###
             );
 
             Ok(())
