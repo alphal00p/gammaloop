@@ -382,7 +382,8 @@ impl EvaluatorStack {
             GenericEvaluator::new_from_builder(
                 parametric_atom.iter().flat_map(|atom| {
                     orientations.iter().map(|a| {
-                        let selected = a.select(atom.as_atom_view());
+                        let selected =
+                            GS.collect_orientation_if(a.select(atom.as_atom_view()), false);
                         debug!(selected_expr = %selected.log_print(None), "Iterative");
                         selected
                     })

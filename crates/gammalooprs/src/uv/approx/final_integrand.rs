@@ -127,7 +127,10 @@ impl<'a> FinalIntegrandBuilder<'a> {
 
             a = a.replace_multiple(&reps);
 
-            Ok(a.replace(GS.m_uv_expansion).with(GS.m_uv_vacuum))
+            Ok(a.replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum)
+                .replace(GS.dim_epsilon)
+                .with(0))
         })?))
     }
 }
