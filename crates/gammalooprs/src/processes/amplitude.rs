@@ -1260,7 +1260,6 @@ impl AmplitudeGraph {
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
-        let global_cff = self.derived_data.cff_expression.as_ref().unwrap(); // should always be set at this point
         let esurface_raising = &self.derived_data.raised_data;
         let mut counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom> = ti_vec![
             AmplitudeCountertermAtom::new();
@@ -1304,7 +1303,7 @@ impl AmplitudeGraph {
 
         for raised_data in esurface_raising.raised_groups.iter().cloned() {
             let esurface_id = raised_data.esurface_ids[0];
-            let esurface = &global_cff.surfaces.esurface_cache[esurface_id];
+            let esurface = &self.graph.surface_cache.esurface_cache[esurface_id];
 
             if esurface.external_shift.is_empty() {
                 continue;

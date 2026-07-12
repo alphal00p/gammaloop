@@ -22,8 +22,8 @@ use spenso::{
     tensors::parametric::AtomViewOrConcrete,
 };
 use symbolica::prelude::{
-    Atom, AtomCore, AtomOrView, FunctionBuilder, FunctionMap, Indeterminate, Rational, Replacement,
-    Symbol, parse_lit, symbol,
+    Atom, AtomCore, AtomOrView, FunctionBuilder, FunctionMap, Indeterminate, Rational, ReplaceWith,
+    Replacement, Symbol, parse_lit, symbol,
 };
 use tabled::{Table, settings::Style};
 use tracing::debug;
@@ -1167,21 +1167,20 @@ impl<T: FloatLike> ParamBuilder<T> {
         new.add_function(GS.tree_denom_wrapper, vec![arg], Atom::var(arg))
             .unwrap();
 
-        for e in graph.iter_edge_ids() {
-            if lmb.edge_signatures[e]
-                .internal
-                .iter()
-                .any(|sign| sign.is_sign())
-            {
-                new.add_tagged_function::<Symbol>(
-                    GS.ose,
-                    vec![Atom::num(e.0 as i64)],
-                    format!("OSE{e}"),
-                    vec![],
-                    graph.explicit_ose_atom(e),
-                )
-                .unwrap();
-            }
+        for replacement in graph.get_ose_replacements() {
+            let lhs = replacement.pat.to_atom().unwrap();
+            let rhs = match replacement.rhs {
+                ReplaceWith::Pattern(pattern) => pattern.yield_owned().to_atom().unwrap(),
+                ReplaceWith::Map(_) => unreachable!("OSE replacements should be symbolic"),
+            };
+
+            new.reps.push(FnMapEntry {
+                lhs: lhs.clone(),
+                rhs: rhs.clone(),
+                args: vec![],
+                tags: vec![],
+            });
+            new.fn_map.add_aliases([(lhs, rhs)]).unwrap();
         }
 
         for (edge_id, signature) in lmb.edge_signatures.iter() {
