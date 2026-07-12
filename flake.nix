@@ -23,8 +23,16 @@
     fenix,
     flake-utils,
     ...
-  }:
-    flake-utils.lib.eachDefaultSystem (system: let
+  }: let
+    # Nixpkgs unstable no longer supports x86_64-darwin, so exposing that
+    # system makes `nix flake show` fail before NixCI can list jobs.
+    supportedSystems = [
+      "x86_64-linux"
+      "aarch64-linux"
+      "aarch64-darwin"
+    ];
+  in
+    flake-utils.lib.eachSystem supportedSystems (system: let
       pkgs = nixpkgs.legacyPackages.${system};
       inherit (pkgs) lib;
 
@@ -2044,7 +2052,8 @@
           name = "crate-deps-${package}";
           value = cranePackageDependencyArtifacts.${package};
         })
-        workspacePackages);
+        (lib.filter (package: cranePackageDependencyArtifacts.${package} != null)
+          workspacePackages));
 
       craneTestBinaryPackageOutputs = lib.listToAttrs (map (package: {
           name = "crate-test-binaries-${package}";
