@@ -115,9 +115,11 @@ summed_function_map = true
 enable_thresholds = true
 # The option below specifies the generation of threshold for the kinematics supplied
 check_esurface_at_generation = true
-skip_thresholds_that_are_cuts = false
+esurface_existence_threshold = 1.0e-7
+skip_thresholds_that_are_cuts = true
 
 [default_runtime_settings.subtraction]
+esurface_existence_threshold = 1.0e-7
 disable_threshold_subtraction = false
 
 [cli_settings.global.generation.compile]

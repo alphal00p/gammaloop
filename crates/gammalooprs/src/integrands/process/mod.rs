@@ -2805,6 +2805,19 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
         context.is_primary_stability_level,
         context.record_rotated_results,
     )?;
+    let threshold_counterterm_failed = context
+        .evaluation_metadata
+        .threshold_counterterm_error
+        .is_some();
+    if context.is_final_level
+        && let Some(threshold_error) = &context.evaluation_metadata.threshold_counterterm_error
+    {
+        return Err(eyre!(
+            "threshold-counterterm evaluation remained invalid after the final {} stability level: {}",
+            context.stability_level.precision,
+            threshold_error,
+        ));
+    }
     let results = graph_results
         .iter()
         .map(|result| result.integrand_result.clone())
@@ -2859,7 +2872,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
             .evaluation_metadata
             .evaluator_evaluation_time
             .saturating_sub(evaluator_time_before),
-        is_stable,
+        is_stable: is_stable && !threshold_counterterm_failed,
         instability_reason,
         rotated_results,
     })
@@ -3517,6 +3530,7 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
 
     let total_levels = stability_iterator.len();
     for (level_index, stability_level) in stability_iterator.into_iter().enumerate() {
+        evaluation_metadata.clear_threshold_counterterm_error();
         let is_final_level = level_index + 1 == total_levels;
         let record_rotated_results = integrand
             .get_settings()
@@ -3671,6 +3685,7 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
                 is_nan: true,
                 loop_momenta_escalation: None,
                 stability_results: Vec::new(),
+                threshold_counterterm_error: None,
             },
         })
     }

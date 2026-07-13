@@ -11,8 +11,11 @@ use crate::{
     cff::expression::GraphOrientation,
     processes::EvaluatorSettings,
     utils::{
-        GS, W_,
-        serde_utils::{IsDefault, is_false, is_float, is_true, is_usize, show_defaults_helper},
+        DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, W_,
+        serde_utils::{
+            IsDefault, is_default_esurface_existence_threshold, is_false, is_float, is_true,
+            is_usize, show_defaults_helper,
+        },
         symbolica_ext::StringSerializedAtom,
     },
     uv::UVgenerationSettings,
@@ -63,6 +66,10 @@ pub struct ThresholdSubtractionSettings {
     pub enable_thresholds: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub check_esurface_at_generation: bool,
+    /// Dimensionless tolerance used to compare the energy-squared E-surface invariant margin
+    /// against `esurface_existence_threshold * E_cm^2` during generation-time checks.
+    #[serde(skip_serializing_if = "is_default_esurface_existence_threshold")]
+    pub esurface_existence_threshold: f64,
     #[serde(skip_serializing_if = "is_true")]
     pub skip_thresholds_that_are_cuts: bool,
     #[serde(skip_serializing_if = "is_false")]
@@ -76,6 +83,7 @@ impl Default for ThresholdSubtractionSettings {
         Self {
             enable_thresholds: true,
             check_esurface_at_generation: false,
+            esurface_existence_threshold: DEFAULT_ESURFACE_EXISTENCE_THRESHOLD,
             skip_thresholds_that_are_cuts: true,
             disable_integrated_ct: false,
             assume_positive_external_energies: true,

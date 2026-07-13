@@ -6,7 +6,8 @@ use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
 use symbolica::atom::Atom;
 
 use color_eyre::Result;
-use tracing::{debug, instrument};
+use eyre::eyre;
+use tracing::{debug, instrument, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
 use crate::{
@@ -16,6 +17,7 @@ use crate::{
         esurface::{
             Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces,
             GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceId,
+            esurface_value_is_strictly_inside,
         },
         expression::OrientationID,
     },
@@ -47,13 +49,12 @@ use crate::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape,
         },
-        newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
+        newton_solver::{NewtonIterationResult, safeguarded_newton_iteration_and_derivative},
     },
 };
 use symbolica::domains::dual::HyperDual;
 
 const MAX_ITERATIONS: usize = 40;
-const TOLERANCE: f64 = 1.0;
 
 fn multiply_dual_or_not_complex<T: FloatLike>(
     lhs: DualOrNot<Complex<F<T>>>,
@@ -369,7 +370,20 @@ impl AmplitudeCountertermData {
 
                 let raised_esurface_id = esurface_builder.raised_esurface_id;
                 self.ensure_active_raised_esurface(raised_esurface_id)?;
-                let single_result = esurface_builder.solve_rstar().rstar_samples().evaluate(
+                let Some(rstar_solution) = esurface_builder.solve_rstar() else {
+                    evaluation_metadata.record_threshold_counterterm_error(format!(
+                        "amplitude graph '{}' overlap group {} raised E-surface {} failed center or radial-root validation in probe rotation {}",
+                        graph.name,
+                        overlap_group,
+                        raised_esurface_id.0,
+                        rotation.method,
+                    ));
+                    return Ok(AmplitudeCountertermEvaluation {
+                        total: Complex::new_re(F::from_f64(f64::NAN)),
+                        local_counterterms,
+                    });
+                };
+                let single_result = rstar_solution.rstar_samples().evaluate(
                     param_builder,
                     orientation,
                     evaluation_metadata,
@@ -441,7 +455,17 @@ impl AmplitudeCountertermData {
                     .new_esurface_builder(*existing_esurface_id)
                     .map(|esurface_builder| -> Result<_> {
                         self.ensure_active_raised_esurface(esurface_builder.raised_esurface_id)?;
-                        let rstar_sample = esurface_builder.solve_rstar().rstar_samples();
+                        let raised_esurface_id = esurface_builder.raised_esurface_id;
+                        let rstar_sample = esurface_builder
+                            .solve_rstar()
+                            .ok_or_else(|| {
+                                eyre!(
+                                    "Could not construct threshold-counterterm kinematics for raised E-surface {} in probe rotation {}",
+                                    raised_esurface_id.0,
+                                    rotation.method,
+                                )
+                            })?
+                            .rstar_samples();
                         Result::Ok(rstar_sample.rstar_sample)
                     })
                     .transpose()?;
@@ -523,6 +547,8 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
     fn new_overlap_builder(&'a self, overlap_group: &'a OverlapGroup) -> OverlapBuilder<'a, T> {
         let center = &overlap_group.center;
 
+        // Overlap construction stores amplitude centers in the identity frame. Rotate the center
+        // exactly once here, alongside the sample rotation used by this stability probe.
         let (unrotated_center, rotated_center) = (
             center.cast(),
             center.rotate(self.rotation_for_overlap).cast(),
@@ -546,7 +572,9 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
 struct OverlapBuilder<'a, T: FloatLike> {
     counterterm_builder: &'a CounterTermBuilder<'a, T>,
     overlap_group: &'a OverlapGroup,
+    /// The center after its single identity-to-probe-frame rotation.
     rotated_center: LoopMomenta<F<T>>,
+    /// The stored identity-frame center, retained for frame diagnostics.
     _unrotated_center: LoopMomenta<F<T>>,
     unit_shifted_momenta: LoopMomenta<F<T>>,
     radius: F<T>,
@@ -592,7 +620,8 @@ struct EsurfaceCTBuilder<'a, T: FloatLike> {
 }
 
 impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
-    fn solve_rstar(self) -> RstarSolution<'a, T> {
+    fn solve_rstar(self) -> Option<RstarSolution<'a, T>> {
+        let mut all_center_values_valid = true;
         let center_surface_values = self
             .overlap_builder
             .overlap_group
@@ -631,6 +660,11 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                                 .sample
                                 .external_moms(),
                         );
+                        let is_valid = esurface_value_is_strictly_inside(
+                            &value,
+                            &self.overlap_builder.counterterm_builder.e_cm,
+                        );
+                        all_center_values_valid &= is_valid;
                         format!(
                             "existing={} group={} raised={} local={} edges={:?} value={:+16e} inside={}",
                             usize::from(existing_esurface_id),
@@ -639,7 +673,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                             esurface_id.0,
                             esurface.energies,
                             value,
-                            value < value.zero()
+                            is_valid
                         )
                     }
                     None => {
@@ -659,6 +693,8 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             selected_group_esurface_id = self.group_esurface_id.0,
             selected_raised_esurface_id = self.raised_esurface_id.0,
             selected_esurface_id = self.esurface_id.0,
+            rotation_id = %self.overlap_builder.counterterm_builder.rotation_for_overlap.method,
+            center_provenance = "identity_frame_rotated_once",
             overlap_group_size = self.overlap_builder.overlap_group.existing_esurfaces.len(),
             radius = %format!("{:+16e}", self.overlap_builder.radius),
             file.rotated_center = %format!("{}", self.overlap_builder.rotated_center),
@@ -666,7 +702,20 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             "amplitude threshold center values"
         );
 
-        let (radius_guess, _) = self.esurface.get_radius_guess(
+        if !all_center_values_valid {
+            warn!(
+                graph = %self.overlap_builder.counterterm_builder.graph.name,
+                selected_esurface_id = self.esurface_id.0,
+                rotation_id = %self.overlap_builder.counterterm_builder.rotation_for_overlap.method,
+                center_provenance = "identity_frame_rotated_once",
+                center = %self.overlap_builder.rotated_center,
+                surface_values = %center_surface_values.join("; "),
+                "refusing to evaluate an amplitude threshold counterterm with an invalid probe-frame overlap center"
+            );
+            return None;
+        }
+
+        let (raw_radius_guess, _) = self.esurface.get_radius_guess(
             &self.overlap_builder.unit_shifted_momenta,
             self.overlap_builder
                 .counterterm_builder
@@ -697,19 +746,36 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             )
         };
 
-        let solution = newton_iteration_and_derivative(
+        let zero = raw_radius_guess.zero();
+        let mut radius_guess = raw_radius_guess.clone();
+        if radius_guess.is_nan() || radius_guess.is_infinite() || radius_guess <= zero {
+            radius_guess = self.overlap_builder.counterterm_builder.e_cm.clone();
+        }
+        let tolerance = raw_radius_guess.from_i64(8);
+        let solution = match safeguarded_newton_iteration_and_derivative(
+            &zero,
             &radius_guess,
             function,
-            &F::from_f64(TOLERANCE),
+            &tolerance,
             MAX_ITERATIONS,
+            64,
             &self.overlap_builder.counterterm_builder.e_cm,
-        );
-        let solution_is_nonfinite = solution.solution.is_nan()
-            || solution.solution.is_infinite()
-            || solution.derivative_at_solution.is_nan()
-            || solution.derivative_at_solution.is_infinite()
-            || solution.error_of_function.is_nan()
-            || solution.error_of_function.is_infinite();
+        ) {
+            Ok(solution) => solution,
+            Err(error) => {
+                warn!(
+                    graph = %self.overlap_builder.counterterm_builder.graph.name,
+                    esurface_id = self.esurface_id.0,
+                    rotation_id = %self.overlap_builder.counterterm_builder.rotation_for_overlap.method,
+                    center_provenance = "identity_frame_rotated_once",
+                    raw_radius_guess = %raw_radius_guess,
+                    radius_guess = %radius_guess,
+                    error = %error,
+                    "refusing to evaluate an amplitude threshold counterterm with an invalid radial solution"
+                );
+                return None;
+            }
+        };
         crate::debug_tags!(#integration, #subtraction, #threshold, #inspect;
             stage = "amplitude_threshold_rstar_solution",
             graph = %self.overlap_builder.counterterm_builder.graph.name,
@@ -717,19 +783,21 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             group_esurface_id = self.group_esurface_id.0,
             raised_esurface_id = self.raised_esurface_id.0,
             esurface_id = self.esurface_id.0,
+            rotation_id = %self.overlap_builder.counterterm_builder.rotation_for_overlap.method,
+            center_provenance = "identity_frame_rotated_once",
             radius_guess = %format!("{:+16e}", radius_guess),
             radius_star = %format!("{:+16e}", solution.solution),
             derivative = %format!("{:+16e}", solution.derivative_at_solution),
             error = %format!("{:+16e}", solution.error_of_function),
             iterations = solution.num_iterations_used,
-            nonfinite = solution_is_nonfinite,
+            nonfinite = false,
             "amplitude threshold rstar solution"
         );
 
-        RstarSolution {
+        Some(RstarSolution {
             esurface_ct_builder: self,
             solution,
-        }
+        })
     }
 }
 

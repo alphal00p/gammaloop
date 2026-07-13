@@ -139,8 +139,8 @@ mod tests {
     use crate::{
         momentum::{Dep, ExternalMomenta, Helicity},
         settings::{
-            GlobalSettings, RuntimeSettings, SamplingSettings,
-            global::{GammaloopCompileOptions, GenerationSettings},
+            GlobalSettings, RuntimeSettings, SamplingSettings, SubtractionSettings,
+            global::{GammaloopCompileOptions, GenerationSettings, ThresholdSubtractionSettings},
             runtime::{
                 DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
                 GammaloopTropicalSamplingSettings,
@@ -148,7 +148,7 @@ mod tests {
             },
         },
         utils::{
-            F,
+            DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, F,
             serde_utils::{SHOWDEFAULTS, ShowDefaultsGuard},
         },
     };
@@ -198,6 +198,32 @@ mod tests {
     #[test]
     fn generation_test_serialize_deserialize() {
         generic_test_settings::<GenerationSettings>();
+    }
+
+    #[test]
+    fn esurface_existence_threshold_defaults_and_overrides() {
+        assert_eq!(
+            ThresholdSubtractionSettings::default().esurface_existence_threshold,
+            DEFAULT_ESURFACE_EXISTENCE_THRESHOLD,
+        );
+        assert_eq!(
+            SubtractionSettings::default().esurface_existence_threshold,
+            DEFAULT_ESURFACE_EXISTENCE_THRESHOLD,
+        );
+
+        let generation: GenerationSettings =
+            toml::from_str("[threshold_subtraction]\nesurface_existence_threshold = 2.5e-8\n")
+                .unwrap();
+        assert_eq!(
+            generation
+                .threshold_subtraction
+                .esurface_existence_threshold,
+            2.5e-8,
+        );
+
+        let runtime: RuntimeSettings =
+            toml::from_str("[subtraction]\nesurface_existence_threshold = 4.0e-9\n").unwrap();
+        assert_eq!(runtime.subtraction.esurface_existence_threshold, 4.0e-9,);
     }
 
     #[test]

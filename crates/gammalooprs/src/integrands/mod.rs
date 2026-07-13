@@ -444,6 +444,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
                 status: StabilityStatus::Unknown,
                 total_time: start_evaluate_sample.elapsed(),
             }],
+            threshold_counterterm_error: None,
         };
 
         Ok(EvaluationResult {
@@ -604,6 +605,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
                 status: StabilityStatus::Unknown,
                 total_time: start_evaluate_sample.elapsed(),
             }],
+            threshold_counterterm_error: None,
         };
 
         Ok(EvaluationResult {

@@ -114,9 +114,14 @@ These rules are intentionally broad and should shape most code changes.
 
 ### Tests
 
+- Install `cargo-nextest` 0.9.80 or newer. The repository configuration
+  enforces this minimum; update an existing installation with
+  `cargo nextest self update`.
 - Rust integration tests live in `tests/` with shared fixtures in
   `tests/resources/`.
 - Use `cargo nextest` via `just test TEST_NAME` for targeted integration runs.
+- Pass emulated libtest arguments after `--`, for example
+  `just test_gammaloop -- --skip TEST_NAME`.
 - Put targeted unit tests next to the implementation they exercise.
 - Use broader integration tests only for cross-module behavior.
 - Add tests for edge cases that motivated the change, especially when collapsing

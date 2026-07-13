@@ -222,6 +222,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
                 status: StabilityStatus::Unknown,
                 total_time: start_evaluate_sample.elapsed(),
             }],
+            threshold_counterterm_error: None,
         };
 
         Ok(EvaluationResult {

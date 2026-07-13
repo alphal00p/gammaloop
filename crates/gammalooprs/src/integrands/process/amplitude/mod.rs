@@ -1308,8 +1308,14 @@ impl AmplitudeIntegrand {
                         let esurface = &graph_term.esurfaces[esurface_id];
                         let lmb = &graph.loop_momentum_basis;
                         let real_mass_vector = graph.get_real_mass_vector(model);
-                        let candidate_exists =
-                            esurface.exists(&external_moms, lmb, &real_mass_vector, &F(e_cm));
+                        let candidate_existence = esurface.classify_existence(
+                            &external_moms,
+                            lmb,
+                            &real_mass_vector,
+                            &F(e_cm),
+                            &F(self.settings.subtraction.esurface_existence_threshold),
+                        );
+                        let candidate_exists = candidate_existence.is_existing();
                         if tracing::event_enabled!(tracing::Level::DEBUG) {
                             let shift_part =
                                 esurface.compute_shift_part_from_momenta(&external_moms, lmb);
@@ -1377,6 +1383,10 @@ impl AmplitudeIntegrand {
                                 representative_graph_group_pos = representative_graph_group_pos.0,
                                 representative_raised_esurface_id = representative_raised_esurface_id.0,
                                 candidate_exists,
+                                candidate_status = candidate_existence.label(),
+                                normalized_existence_margin = ?candidate_existence.normalized_margin(),
+                                non_existing_reason = ?candidate_existence.non_existing_reason(),
+                                classification = ?candidate_existence,
                                 generated = ?generated,
                                 active = ?active,
                                 max_occurrence = raised_group.max_occurence,

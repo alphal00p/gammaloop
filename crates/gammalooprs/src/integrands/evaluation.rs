@@ -659,6 +659,8 @@ pub struct EvaluationMetaData {
     pub is_nan: bool,
     pub loop_momenta_escalation: Option<LoopMomentaEscalationMetrics>,
     pub stability_results: Vec<StabilityResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) threshold_counterterm_error: Option<String>,
 }
 
 impl Display for EvaluationMetaData {
@@ -736,6 +738,17 @@ impl EvaluationMetaData {
             is_nan: false,
             loop_momenta_escalation: None,
             stability_results: Vec::new(),
+            threshold_counterterm_error: None,
+        }
+    }
+
+    pub(crate) fn clear_threshold_counterterm_error(&mut self) {
+        self.threshold_counterterm_error = None;
+    }
+
+    pub(crate) fn record_threshold_counterterm_error(&mut self, error: impl Into<String>) {
+        if self.threshold_counterterm_error.is_none() {
+            self.threshold_counterterm_error = Some(error.into());
         }
     }
 

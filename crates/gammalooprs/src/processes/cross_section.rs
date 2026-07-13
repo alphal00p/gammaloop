@@ -2610,15 +2610,22 @@ impl CrossSectionGraph {
             .derived_data
             .raised_data
             .raised_cut_groups
-            .iter()
-            .map(|cut_group| {
+            .iter_enumerated()
+            .map(|(raised_cut_id, cut_group)| {
+                let representative_cut_id = cut_group.cuts.first().copied().ok_or_else(|| {
+                    eyre!(
+                        "Graph '{}' has an empty raised cut group {} while building threshold-counterterm subspaces",
+                        self.graph.name,
+                        raised_cut_id.0,
+                    )
+                })?;
                 let valid_subspace_lmbs = all_lmbs
                     .iter_enumerated()
                     .filter_map(|(index, lmb)| {
                         let mut edges_in_cut = self
                             .graph
                             .underlying
-                            .iter_edges_of(&self.cuts[cut_group.cuts[0]].cut)
+                            .iter_edges_of(&self.cuts[representative_cut_id].cut)
                             .map(|(_, e, _)| e)
                             .collect_vec();
 
@@ -2653,30 +2660,60 @@ impl CrossSectionGraph {
                     })
                     .collect_vec();
 
-                let smallest_left_subgraph = left_subgraphs.first().unwrap().clone();
-                let smallest_right_subgraph = right_subgraphs.first().unwrap().clone();
+                let smallest_left_subgraph = left_subgraphs.first().cloned().ok_or_else(|| {
+                    eyre!(
+                        "Graph '{}' raised cut group {} has no left subgraph",
+                        self.graph.name,
+                        raised_cut_id.0,
+                    )
+                })?;
+                let smallest_right_subgraph = right_subgraphs.first().cloned().ok_or_else(|| {
+                    eyre!(
+                        "Graph '{}' raised cut group {} has no right subgraph",
+                        self.graph.name,
+                        raised_cut_id.0,
+                    )
+                })?;
 
-                let mut possible_subspaces = valid_subspace_lmbs
-                    .iter()
-                    .map(|lmb_index| {
-                        (
-                            SubspaceData::new_with_user_selected_lmb(
-                                smallest_left_subgraph.clone(),
-                                *lmb_index,
-                                &self.graph,
-                                all_lmbs,
-                            )
-                            .unwrap(),
-                            SubspaceData::new_with_user_selected_lmb(
-                                smallest_right_subgraph.clone(),
-                                *lmb_index,
-                                &self.graph,
-                                all_lmbs,
-                            )
-                            .unwrap(),
-                        )
-                    })
-                    .collect_vec();
+                let mut possible_subspaces = Vec::new();
+                let mut rejected_lmbs = Vec::new();
+                for lmb_index in valid_subspace_lmbs {
+                    let left = SubspaceData::new_with_user_selected_lmb(
+                        smallest_left_subgraph.clone(),
+                        lmb_index,
+                        &self.graph,
+                        all_lmbs,
+                    );
+                    let right = SubspaceData::new_with_user_selected_lmb(
+                        smallest_right_subgraph.clone(),
+                        lmb_index,
+                        &self.graph,
+                        all_lmbs,
+                    );
+
+                    match (left, right) {
+                        (Ok(left), Ok(right)) if left.is_mergable_with(&right) => {
+                            possible_subspaces.push((left, right));
+                        }
+                        (Ok(left), Ok(right)) => rejected_lmbs.push(format!(
+                            "LMB {} produced non-disjoint subspaces: left={:?}, right={:?}",
+                            usize::from(lmb_index),
+                            left.iter_lmb_indices().collect_vec(),
+                            right.iter_lmb_indices().collect_vec(),
+                        )),
+                        (left, right) => rejected_lmbs.push(format!(
+                            "LMB {}: left={}, right={}",
+                            usize::from(lmb_index),
+                            left.err()
+                                .map(|error| format!("{error:#}"))
+                                .unwrap_or_else(|| "compatible".to_string()),
+                            right
+                                .err()
+                                .map(|error| format!("{error:#}"))
+                                .unwrap_or_else(|| "compatible".to_string()),
+                        )),
+                    }
+                }
 
                 possible_subspaces.sort_by_key(|(left, right)| {
                     (
@@ -2685,7 +2722,14 @@ impl CrossSectionGraph {
                     )
                 });
 
-                Ok(possible_subspaces.first().unwrap().clone())
+                possible_subspaces.first().cloned().ok_or_else(|| {
+                    eyre!(
+                        "No topology-compatible parent LMB found for graph '{}' raised cut group {}. Rejections:\n{}",
+                        self.graph.name,
+                        raised_cut_id.0,
+                        rejected_lmbs.join("\n"),
+                    )
+                })
             })
             .collect::<Result<_>>()?;
 

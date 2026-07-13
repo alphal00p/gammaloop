@@ -159,6 +159,7 @@ test_gammaloop *args:
         case "$arg" in
             --)
                 passthrough_mode=1
+                nextest_args+=("--")
                 ;;
             --allow-warnings|--no-warnings-as-errors)
                 enforce_warnings_as_errors=0

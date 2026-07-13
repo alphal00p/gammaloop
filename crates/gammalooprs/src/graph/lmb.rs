@@ -84,6 +84,13 @@ pub enum LmbError {
     },
     #[error("failed to get cycle for source hedge {hedge} in tree:\n{tree_dot}\n")]
     MissingCycle { hedge: Hedge, tree_dot: String },
+    #[error(
+        "no loop-momentum basis compatible with the parent basis was found for subgraph\n{subgraph_dot}\nparent basis\n{parent_lmb_dot}"
+    )]
+    NoCompatibleSubLmb {
+        subgraph_dot: String,
+        parent_lmb_dot: String,
+    },
     #[error("failed to get cycle from tree:{is_circuit}\n{cycle_dot}\n{cover_dot}")]
     InvalidCycle {
         is_circuit: bool,
@@ -476,7 +483,7 @@ pub trait LMBext {
         subgraph: &S,
         externals: S::Base,
         lmb: &LoopMomentumBasis,
-    ) -> LoopMomentumBasis
+    ) -> LmbResult<LoopMomentumBasis>
     where
         S::Base: SubGraphLike<Base = S::Base>
             + SubSetOps
@@ -656,7 +663,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         subgraph: &S,
         externals: S::Base,
         lmb: &LoopMomentumBasis,
-    ) -> LoopMomentumBasis
+    ) -> LmbResult<LoopMomentumBasis>
     where
         S::Base: SubGraphLike<Base = S::Base>
             + SubSetOps
@@ -666,7 +673,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
     {
         let n_loops = self.cyclotomatic_number(subgraph);
         if n_loops == 0 {
-            return self.empty_lmb();
+            return Ok(self.empty_lmb());
         }
 
         // the subgraph may have disconnected components in case the of disjoint graphs in a spinney
@@ -702,21 +709,38 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             {
                 // let externals = self.full_crown(subgraph);
 
-                return self
-                    .lmb_impl(subgraph.included(), &cut_subgraph, externals.clone())
-                    .unwrap_or_else(|err| {
-                        panic!("Failed to build compatible subgraph loop momentum basis:\n{err}")
-                    });
+                return self.lmb_impl(subgraph.included(), &cut_subgraph, externals.clone());
             }
 
             //
         }
 
-        panic!(
-            "No lmb found for {} and lmb \n{}",
-            self.dot_lmb_of(subgraph, lmb),
-            self.dot_lmb_of(&self.full_filter(), lmb)
-        )
+        let full_graph = self.full_filter();
+        let parent_lmb_has_full_loop_dimension =
+            lmb.loop_edges.len() == self.cyclotomatic_number(&full_graph);
+        let (subgraph_dot, parent_lmb_dot) = if parent_lmb_has_full_loop_dimension {
+            (
+                self.dot_lmb_of(subgraph, lmb),
+                self.dot_lmb_of(&full_graph, lmb),
+            )
+        } else {
+            // Momentum-label rendering assumes a dimensionally valid parent LMB. Preserve the
+            // topology diagnostics without panicking while constructing the fallible error.
+            (
+                self.dot(subgraph),
+                format!(
+                    "parent loop edges {:?}; expected {} loops for\n{}",
+                    lmb.loop_edges,
+                    self.cyclotomatic_number(&full_graph),
+                    self.dot(&full_graph),
+                ),
+            )
+        };
+
+        Err(LmbError::NoCompatibleSubLmb {
+            subgraph_dot,
+            parent_lmb_dot,
+        })
     }
 
     /// The true externals (that will flow through the graph (i.e. not dummy)) are those that are both in the subgraph and in the externals
@@ -1357,7 +1381,7 @@ impl LMBext for Graph {
         subgraph: &S,
         externals: S::Base,
         lmb: &LoopMomentumBasis,
-    ) -> LoopMomentumBasis
+    ) -> LmbResult<LoopMomentumBasis>
     where
         S::Base: SubGraphLike<Base = S::Base>
             + SubSetOps
@@ -1365,9 +1389,11 @@ impl LMBext for Graph {
             + ModifySubSet<HedgePair>
             + ModifySubSet<Hedge>,
     {
-        let mut sub_lmb = self.underlying.compatible_sub_lmb(subgraph, externals, lmb);
+        let mut sub_lmb = self
+            .underlying
+            .compatible_sub_lmb(subgraph, externals, lmb)?;
         self.canonicalize_lmb_external_order(&mut sub_lmb);
-        sub_lmb
+        Ok(sub_lmb)
     }
 }
 
@@ -1493,7 +1519,7 @@ impl LMBext for &Graph {
         subgraph: &S,
         externals: S::Base,
         lmb: &LoopMomentumBasis,
-    ) -> LoopMomentumBasis
+    ) -> LmbResult<LoopMomentumBasis>
     where
         S::Base: SubGraphLike<Base = S::Base>
             + SubSetOps
@@ -1501,9 +1527,11 @@ impl LMBext for &Graph {
             + ModifySubSet<HedgePair>
             + ModifySubSet<Hedge>,
     {
-        let mut sub_lmb = self.underlying.compatible_sub_lmb(subgraph, externals, lmb);
+        let mut sub_lmb = self
+            .underlying
+            .compatible_sub_lmb(subgraph, externals, lmb)?;
         self.canonicalize_lmb_external_order(&mut sub_lmb);
-        sub_lmb
+        Ok(sub_lmb)
     }
 }
 
@@ -1817,6 +1845,7 @@ pub mod test {
 
     #[test]
     fn compatible_sub_lmb() {
+        test_initialise().unwrap();
         let g: DotGraph = linnet::dot!(
         digraph{
 
@@ -1838,6 +1867,15 @@ pub mod test {
         let lmb = g.lmb_of(&subgraph);
         assert_snapshot!(g.dot_lmb_of(&subgraph, &lmb));
         assert_snapshot!(lmb.to_string());
+
+        let mut incompatible_parent_lmb = lmb.clone();
+        incompatible_parent_lmb.loop_edges.clear();
+        let unavailable =
+            g.compatible_sub_lmb(&subgraph, g.full_crown(&subgraph), &incompatible_parent_lmb);
+        assert!(matches!(
+            unavailable,
+            Err(LmbError::NoCompatibleSubLmb { .. })
+        ));
 
         let g: DotGraph = linnet::dot!(
             digraph dxda{
@@ -1866,7 +1904,9 @@ pub mod test {
         let lmb = g.lmb_of(&non_dummy);
         let non_dummy_sub_ext = g.full_crown(&subgraph).subtract(&dummy);
 
-        let sub_lmb = g.compatible_sub_lmb(&subgraph, non_dummy_sub_ext, &lmb);
+        let sub_lmb = g
+            .compatible_sub_lmb(&subgraph, non_dummy_sub_ext, &lmb)
+            .unwrap();
 
         assert_snapshot!(g.dot_lmb_of(&non_dummy, &lmb));
         assert_snapshot!(g.dot_lmb_of(&subgraph, &sub_lmb));
@@ -1884,7 +1924,7 @@ pub mod test {
         let subgraph: SuBitGraph = g.compass_subgraph(Some(dot_parser::ast::CompassPt::S));
         let non_dummy = g.full_filter();
         let lmb = g.lmb_of(&non_dummy);
-        let sub_lmb = g.compatible_sub_lmb(&subgraph, non_dummy, &lmb);
+        let sub_lmb = g.compatible_sub_lmb(&subgraph, non_dummy, &lmb).unwrap();
         assert_snapshot!(g.dot_lmb_of(&subgraph, &sub_lmb));
     }
 
