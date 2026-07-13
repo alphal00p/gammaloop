@@ -988,12 +988,16 @@ impl Forests {
                 continue;
             }
 
-            let atom = self.compute_store.require(key)?.integrated(key)?.atom();
+            let atom = self
+                .compute_store
+                .require(key)?
+                .integrated(key)?
+                .physical_atom();
             debug!(
                 key=%key,
                expr = % atom.expand_num().log_print(None),"Term before simplification"
             );
-            let atom = (atom
+            let atom = (&atom
                 * &graph.global_prefactor.projector
                 * &graph.global_prefactor.num
                 * &graph.overall_factor)

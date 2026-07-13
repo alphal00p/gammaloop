@@ -235,7 +235,7 @@ impl Forest {
                 continue;
             }
 
-            let atom = n.data.integrated(graph)?.atom();
+            let atom = n.data.integrated(graph)?.physical_atom();
 
             let expanded_atom = atom.expand_num();
             debug_tags!(#generation, #uv, #graph, #term;
@@ -244,7 +244,7 @@ impl Forest {
                 "Term before simplification"
             );
 
-            let atom = atom
+            let atom = &atom
                 * &graph.global_prefactor.projector
                 * &graph.global_prefactor.num
                 * &graph.overall_factor;

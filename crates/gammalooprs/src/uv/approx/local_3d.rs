@@ -224,9 +224,9 @@ impl<'a> Local3DApproximation<'a> {
         current: &S,
         given: &S,
     ) -> Result<Local3DCts> {
-        let integrated_t = self
-            .localizer
-            .localize(integrated.atom(), self.graph, given)?;
+        let integrated_t =
+            self.localizer
+                .localize(&integrated.physical_atom(), self.graph, given)?;
         let ctx = UVCtx::new(self.graph, self.settings);
         let local = -(local.map(full(&ctx, current, given))?);
         let integrated = -(integrated_t

@@ -73,7 +73,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
 
         let localized_integrated: Integrands = self
             .localizer
-            .localize(integrated.atom(), graph, current)?
+            .localize(&integrated.physical_atom(), graph, current)?
             .combine()?;
 
         let reduced = graph

@@ -14,7 +14,7 @@ use idenso::{
     },
 };
 
-use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike};
 use spenso::shadowing::TensorCollectExt;
 use symbolica::{atom::AtomCore, prelude::*};
 
@@ -114,6 +114,12 @@ impl Graph {
             .replace(GS.m_uv_vacuum)
             .with(Atom::var(GS.m_uv_vacuum) / GS.rescale);
 
+        // The stored scale freezes integrated vacuum masses while its prefactor restores
+        // the consumed loop measures. It is set to one when the next integration consumes it.
+        atomarg = atomarg
+            .replace(GS.integrated_loop_scale)
+            .with(Atom::var(GS.integrated_loop_scale) * GS.rescale);
+
         let tsquare = Atom::var(GS.rescale).pow(2);
         let m_uv_expansion_sq = Atom::var(GS.m_uv_expansion).pow(2);
         let m_uv_vacuum_sq = Atom::var(GS.m_uv_vacuum).pow(2);
@@ -124,15 +130,25 @@ impl Graph {
         );
         atomarg = atomarg
             .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
-            .with(
-                GS.den(
-                    W_.a_,
-                    W_.mom_,
-                    &tsquare * Atom::var(W_.mass_) + m_uv_expansion_sq.clone(),
-                    Atom::var(W_.prop_) * &tsquare + m_uv_expansion_sq.clone() * &tsquare
-                        - m_uv_vacuum_sq.clone(),
-                ) / &tsquare,
-            )
+            .with_map(move |m| {
+                let edge = m.get(W_.a_).unwrap().to_atom();
+                let momentum = m.get(W_.mom_).unwrap().to_atom();
+                let mass = m.get(W_.mass_).unwrap().to_atom();
+                let propagator = m.get(W_.prop_).unwrap().to_atom();
+
+                let (mass, propagator) = if mass == m_uv_expansion_sq {
+                    // The MUV deformation was already introduced by an inner UV limit.
+                    // Rescale it without adding the vacuum mass a second time.
+                    (mass, propagator * &tsquare)
+                } else {
+                    (
+                        mass * &tsquare + &m_uv_expansion_sq,
+                        propagator * &tsquare + &m_uv_expansion_sq * &tsquare - &m_uv_vacuum_sq,
+                    )
+                };
+
+                GS.den(edge, momentum, mass, propagator) / &tsquare
+            })
             .replace(function!(GS.den, W_.a_, W_.mom_, W_.a___))
             .with_map(move |m| {
                 let mut f = symbolica::atom::FunctionBuilder::new(GS.den);
@@ -194,9 +210,36 @@ fn t<S: super::ForestNodeLike>(
 ) -> Result<Local4dCts> {
     let graph = ctx.graph;
     let reduced = current.reduced_subgraph(given);
-    let n_loops = graph.n_loops(current.subgraph()) - graph.n_loops(given.subgraph());
+    let n_loops = graph.n_loops(current.subgraph());
 
-    let rescaled = graph.uv_rescaled(&reduced, n_loops, current.lmb(), integrand);
+    // Keep the child loops as a subset of the outer basis so integrating the child
+    // commutes with the outer Taylor expansion.
+    let is_compatible = |candidate: &LoopMomentumBasis| {
+        given
+            .lmb()
+            .loop_edges
+            .iter()
+            .all(|edge| candidate.loop_edges.contains(edge))
+            && candidate
+                .loop_edges
+                .iter()
+                .filter(|edge| given.subgraph().includes(&graph[*edge].1))
+                .count()
+                == given.lmb().loop_edges.len()
+    };
+    let generated_lmb;
+    let lmb = if given.subgraph().is_empty() || is_compatible(current.lmb()) {
+        current.lmb()
+    } else {
+        generated_lmb = graph
+            .generate_loop_momentum_bases_of(current.subgraph())
+            .into_iter()
+            .find(is_compatible)
+            .ok_or_else(|| eyre!("no loop momentum basis compatible with nested UV subgraph"))?;
+        &generated_lmb
+    };
+
+    let rescaled = graph.uv_rescaled(&reduced, n_loops, lmb, integrand);
     debug_tags!(#uv,#integrated,#rescaled;log.res = rescaled, n_loops=%n_loops,"Rescaled expanded");
 
     let series = rescaled

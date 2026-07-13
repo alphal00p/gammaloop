@@ -47,6 +47,10 @@ impl IntegratedCts {
     pub(crate) fn atom(&self) -> &Atom {
         &self.0
     }
+
+    pub(crate) fn physical_atom(&self) -> Atom {
+        self.0.replace(GS.integrated_loop_scale).with(Atom::one())
+    }
 }
 
 fn series(expr: &Atom, depth: usize) -> Result<Series<AtomField>> {
@@ -152,19 +156,32 @@ impl Integrated<'_> {
     ) -> Result<IntegratedCts> {
         let graph = ctx.graph;
 
-        let n_loops: usize = graph.n_loops(current.subgraph()) - graph.n_loops(given.subgraph());
+        let n_loops = graph.n_loops(current.subgraph());
 
         match current.renormalization_scheme() {
             ApproximationType::MUV => {
-                let integrand = integrand.atom();
-                let simplified = simplify(integrand)?;
+                let integrand = integrand
+                    .atom()
+                    .replace(GS.integrated_loop_scale)
+                    .with(Atom::one());
+                let simplified = simplify(&integrand)?;
                 let integrated = self.integrate(&simplified, ctx, current, given)?;
                 let expanded = series(&integrated, n_loops + 1)?;
-                Ok(IntegratedCts(if ctx.settings.pole_part {
+                let counterterm = if ctx.settings.pole_part {
                     pole_part(&expanded)?
                 } else {
                     -finite_part(&expanded)?
-                }))
+                };
+
+                // Freeze this vacuum scale while retaining the consumed loop measures for
+                // subsequent UV rescalings. Both effects disappear when the CT is consumed.
+                let scale = Atom::var(GS.integrated_loop_scale);
+                Ok(IntegratedCts(
+                    counterterm
+                        .replace(GS.m_uv_vacuum)
+                        .with(Atom::var(GS.m_uv_vacuum) * &scale)
+                        * scale.pow(4 * n_loops as i64),
+                ))
             }
             ApproximationType::IR => Err(eyre!("Not yet implemented IR")),
             ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
@@ -203,7 +220,7 @@ impl Integrated<'_> {
         let mut integrand_vakint = to_vakint_integrand(
             integrand,
             graph,
-            &reduced,
+            current.subgraph(),
             given.subgraph(),
             &settings.vakint,
             true,

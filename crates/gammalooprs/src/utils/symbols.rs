@@ -148,6 +148,8 @@ pub struct GammaloopSymbols {
     pub epsilon: Symbol,
     pub epsilonbar: Symbol,
     pub rescale: Symbol,
+    /// Bookkeeping scale for integrated vacuum masses and consumed loop measures.
+    pub integrated_loop_scale: Symbol,
     pub rescale_mass: Symbol,
     pub rescale_star: Symbol,
     pub pi: Symbol,
@@ -655,6 +657,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     is_symbol: symbol!("is_symbol"),
     nc2_1: symbol!("NC2_1"),
     rescale: symbol!("t";Scalar,Real,Positive),
+    integrated_loop_scale: symbol!("uvIntegratedLoopScale";Scalar,Real,Positive),
     rescale_mass: symbol!("t_m";Scalar,Real,Positive),
     _linear: symbol!("_linear";Linear),
     linearize: symbol!(
