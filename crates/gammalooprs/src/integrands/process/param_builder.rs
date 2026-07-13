@@ -45,7 +45,8 @@ use crate::{
     numerator::ParsingNet,
     utils::{
         ArbPrec, F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128,
-        hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
+        hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, symbols::ThermalDistributionLimit,
+        tracing::StatusRenderable,
     },
 };
 
@@ -113,6 +114,7 @@ pub trait ParamBuilderGraph {
         edge: EdgeIndex,
         derivative_order: usize,
         thermal_sign: Atom,
+        limit: ThermalDistributionLimit,
     ) -> Atom;
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
@@ -1291,6 +1293,7 @@ impl<T: FloatLike> ParamBuilder<T> {
                             e,
                             derivative_order,
                             Atom::var(thermal_sign),
+                            ThermalDistributionLimit::Default,
                         ),
                     )
                     .unwrap();
@@ -1343,6 +1346,13 @@ impl<T: FloatLike> ParamBuilder<T> {
             "tanh".to_string(),
             vec![symbol!("x")],
             (parse_lit!(exp(x)) - parse_lit!(exp(-x))) / (parse_lit!(exp(x)) + parse_lit!(exp(-x))),
+        )
+        .unwrap();
+        new.add_function(
+            GS.heaviside,
+            "heaviside".to_string(),
+            vec![symbol!("x")],
+            parse_lit!((1 + x / abs(x)) / 2),
         )
         .unwrap();
         let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();

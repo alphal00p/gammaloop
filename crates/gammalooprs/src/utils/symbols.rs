@@ -164,6 +164,7 @@ pub struct GammaloopSymbols {
     pub theta: Symbol,
     pub broadcasting_sqrt: Symbol,
     pub tanh: Symbol,
+    pub heaviside: Symbol,
     ///for selecting orientations at generation
     pub selected: Symbol,
 
@@ -201,6 +202,7 @@ pub struct GammaloopSymbols {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThermalDistributionLimit {
     Default,
+    ZeroTemperature,
     Vacuum,
 }
 
@@ -671,6 +673,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
         }
     ),
     tanh: symbol!("tanh"),
+    heaviside: symbol!("heaviside"),
     expansion: symbol!("expansion"),
     rescale_star: symbol!("t⃰"),
     hfunction_lu_cut: symbol!("h_lu_cut"),
@@ -900,6 +903,7 @@ impl GammaloopSymbols {
         let mut atom = arg.into().as_view().into();
         match limit {
             ThermalDistributionLimit::Default => atom,
+            ThermalDistributionLimit::ZeroTemperature => atom,
             ThermalDistributionLimit::Vacuum => {
                 for edge in edges {
                     atom = atom
@@ -1028,6 +1032,11 @@ impl GammaloopSymbols {
     pub(crate) fn tanh<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
         let a = arg.into();
         function!(self.tanh, a.as_view())
+    }
+
+    pub(crate) fn heaviside<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
+        let a = arg.into();
+        function!(self.heaviside, a.as_view())
     }
 
     pub(crate) fn emr_mom<'a>(&self, e: EdgeIndex, arg: impl Into<AtomOrView<'a>>) -> Atom {
