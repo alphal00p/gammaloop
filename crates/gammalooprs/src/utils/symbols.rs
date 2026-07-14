@@ -206,6 +206,15 @@ pub enum ThermalDistributionLimit {
     Vacuum,
 }
 
+impl ThermalDistributionLimit {
+    pub fn finite_temperature(&self) -> bool {
+        matches!(self, ThermalDistributionLimit::Default)
+    }
+    pub fn temperature_flag(&self) -> Atom {
+        Atom::num(if self.finite_temperature() { 1 } else { 0 })
+    }
+}
+
 impl GammaloopSymbols {
     pub fn collect_orientation_if<'a>(
         &self,
@@ -885,11 +894,13 @@ impl GammaloopSymbols {
         &self,
         eid: impl Into<AtomOrView<'a>>,
         derivative_order: impl Into<AtomOrView<'a>>,
+        temperature_flag: impl Into<AtomOrView<'a>>,
         sign: impl Into<AtomOrView<'a>>,
     ) -> Atom {
         self.thermal_distribution.f(&[
             eid.into().as_view(),
             derivative_order.into().as_view(),
+            temperature_flag.into().as_view(),
             sign.into().as_view(),
         ])
     }
@@ -910,16 +921,23 @@ impl GammaloopSymbols {
                         .replace(self.thermal_distribution(
                             usize::from(edge) as i64,
                             Atom::num(0),
+                            W_.t_,
                             Atom::num(1),
                         ))
                         .with(Atom::one())
                         .replace(self.thermal_distribution(
                             usize::from(edge) as i64,
                             Atom::num(0),
+                            W_.t_,
                             Atom::num(-1),
                         ))
                         .with(Atom::zero())
-                        .replace(self.thermal_distribution(usize::from(edge) as i64, W_.o_, W_.s_))
+                        .replace(self.thermal_distribution(
+                            usize::from(edge) as i64,
+                            W_.o_,
+                            W_.t_,
+                            W_.s_,
+                        ))
                         .with(Atom::zero());
                 }
                 atom

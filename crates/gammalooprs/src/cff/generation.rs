@@ -52,6 +52,7 @@ struct GenerationData {
     thermal_numerator_id: Option<ThermalNumeratorID>,
     thermal_sign: Option<Sign>,
     thermal_distribution_factors: Vec<ThermalDistributionFactor>,
+    medium_mode: MediumMode,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
@@ -64,6 +65,8 @@ pub struct CFFNodeData {
     pub thermal_sign: Option<Sign>,
     #[bincode(with_serde)]
     pub thermal_distribution_factors: Vec<ThermalDistributionFactor>,
+    #[bincode(with_serde)]
+    pub finite_temperature: bool,
 }
 
 impl From<CFFNodeData> for Atom {
@@ -72,7 +75,7 @@ impl From<CFFNodeData> for Atom {
         let thermal_factor_product = data
             .thermal_distribution_factors
             .into_iter()
-            .map(ThermalDistributionFactor::to_atom)
+            .map(|factor| factor.to_atom(data.finite_temperature))
             .fold(Atom::num(1), |acc, factor| acc * factor);
         let term = match data.thermal_numerator_id {
             Some(id) => surface / Atom::from(id),
@@ -95,6 +98,7 @@ fn forget_graphs(data: GenerationData) -> CFFNodeData {
         thermal_numerator_id: data.thermal_numerator_id,
         thermal_sign: data.thermal_sign,
         thermal_distribution_factors: data.thermal_distribution_factors,
+        finite_temperature: data.medium_mode.finite_temperature(),
     }
 }
 
@@ -254,7 +258,9 @@ pub(crate) fn get_orientations_from_subgraph<E, V, H, S: SubGraphLike>(
         MediumMode::Vacuum => orientations
             .filter(|cff_graph| !cff_graph.has_directed_cycle_initial())
             .collect(),
-        MediumMode::ThermodynamicEquilibrium => orientations.collect(),
+        MediumMode::ThermodynamicEquilibrium | MediumMode::ZeroTemperatureEquilibrium => {
+            orientations.collect()
+        }
     }
 }
 
@@ -475,7 +481,7 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
 
     let atom_tree = tree.to_atom_inv();
     let atom_tree_substituted =
-        surface_cache_to_use.substitute_energies(&atom_tree, topology.cut_edges);
+        surface_cache_to_use.substitute_energies(&atom_tree, false, topology.cut_edges);
     let inverse_energies =
         get_cff_inverse_energy_product_impl(graph, subgraph, topology.contract_edges);
 
@@ -740,7 +746,9 @@ fn generate_cff_from_orientations<O: From<usize> + Into<usize>>(
             .into_iter()
             .filter(|graph| !graph.has_directed_cycle_initial())
             .collect_vec(),
-        MediumMode::ThermodynamicEquilibrium => orientations_and_graphs,
+        MediumMode::ThermodynamicEquilibrium | MediumMode::ZeroTemperatureEquilibrium => {
+            orientations_and_graphs
+        }
     };
 
     debug!(
@@ -787,8 +795,13 @@ pub struct SurfaceCache {
 }
 
 impl SurfaceCache {
-    pub fn substitute_energies(&self, atom: &Atom, cut_edges: &[EdgeIndex]) -> Atom {
-        let replacement_rules = self.get_all_replacements(cut_edges);
+    pub fn substitute_energies(
+        &self,
+        atom: &Atom,
+        finite_temperature: bool,
+        cut_edges: &[EdgeIndex],
+    ) -> Atom {
+        let replacement_rules = self.get_all_replacements(finite_temperature, cut_edges);
         atom.replace_multiple(&replacement_rules)
     }
 
@@ -812,7 +825,11 @@ impl SurfaceCache {
         esurface_id_iter.chain(hsurface_id_iter)
     }
 
-    pub(crate) fn get_all_replacements(&self, cut_edges: &[EdgeIndex]) -> Vec<Replacement> {
+    pub(crate) fn get_all_replacements(
+        &self,
+        finite_temperature: bool,
+        cut_edges: &[EdgeIndex],
+    ) -> Vec<Replacement> {
         let surface_replacements = self.iter_all_surfaces().map(|(id, surface)| {
             let id_atom = Pattern::from(Atom::from(id));
             let surface_atom = Pattern::from(surface.to_atom(cut_edges));
@@ -824,7 +841,8 @@ impl SurfaceCache {
                 .iter_enumerated()
                 .map(|(id, thermal_numerator)| {
                     let id_atom = Pattern::from(Atom::from(id));
-                    let numerator_atom = Pattern::from(thermal_numerator.to_atom(cut_edges));
+                    let numerator_atom =
+                        Pattern::from(thermal_numerator.to_atom(finite_temperature, cut_edges));
                     Replacement::new(id_atom, numerator_atom)
                 });
 
@@ -862,7 +880,9 @@ fn generate_tree_for_orientation(
 ) -> Tree<GenerationData> {
     let thermal_distribution_factors = match medium_mode {
         MediumMode::Vacuum => Vec::new(),
-        MediumMode::ThermodynamicEquilibrium => graph.strip_thermal_distribution_factors(),
+        MediumMode::ThermodynamicEquilibrium | MediumMode::ZeroTemperatureEquilibrium => {
+            graph.strip_thermal_distribution_factors()
+        }
     };
 
     let mut tree = Tree::from_root(GenerationData {
@@ -871,6 +891,7 @@ fn generate_tree_for_orientation(
         thermal_numerator_id: None,
         thermal_sign: None,
         thermal_distribution_factors,
+        medium_mode,
     });
 
     match medium_mode {
@@ -882,12 +903,13 @@ fn generate_tree_for_orientation(
                 canonize_esurface,
             ) {}
         }
-        MediumMode::ThermodynamicEquilibrium => {
+        MediumMode::ThermodynamicEquilibrium | MediumMode::ZeroTemperatureEquilibrium => {
             while let Some(()) = advance_tree_thermal(
                 &mut tree,
                 generator_cache,
                 edges_in_initial_state_cut,
                 canonize_esurface,
+                medium_mode,
             ) {}
         }
     }
@@ -1111,6 +1133,7 @@ fn advance_tree(
                     thermal_numerator_id: None,
                     thermal_sign: None,
                     thermal_distribution_factors: Vec::new(),
+                    medium_mode: MediumMode::Vacuum,
                 };
 
                 tree.insert_node(node_id, child_node);
@@ -1124,6 +1147,7 @@ fn advance_tree_thermal(
     generator_cache: &mut SurfaceCache,
     edges_in_initial_state_cut: &[EdgeIndex],
     canonize_esurface: &Option<ShiftRewrite>,
+    medium_mode: MediumMode,
 ) -> Option<()> {
     use crate::cff::cff_graph::ChildWithContractedEdges;
     use crate::cff::thermal_numerator::ThermalNumerator;
@@ -1370,6 +1394,7 @@ fn advance_tree_thermal(
                     thermal_numerator_id,
                     thermal_sign: Some(thermal_sign),
                     thermal_distribution_factors,
+                    medium_mode,
                 };
 
                 tree.insert_node(node_id, child_node);
@@ -1415,9 +1440,9 @@ mod tests_cff {
         ) -> ExpressionEvaluator<F<f64>> {
             let expression_atom_no_energy_sub = self.to_atom(OrientationPattern::default());
             let num_energies = external_range.end.max(virtual_range.end);
-            let mut expression_atom = self
-                .surfaces
-                .substitute_energies(&expression_atom_no_energy_sub, &[]);
+            let mut expression_atom =
+                self.surfaces
+                    .substitute_energies(&expression_atom_no_energy_sub, true, &[]);
             for edge_id in 0..num_energies {
                 let edge_id = EdgeIndex::from(edge_id);
                 let beta = 1;
@@ -1425,6 +1450,7 @@ mod tests_cff {
                     .replace(thermal_distribution_atom_from_index(
                         edge_id,
                         0,
+                        true,
                         Sign::Positive,
                     ))
                     .with(
@@ -1438,6 +1464,7 @@ mod tests_cff {
                     .replace(thermal_distribution_atom_from_index(
                         edge_id,
                         0,
+                        true,
                         Sign::Negative,
                     ))
                     .with(
@@ -1451,6 +1478,7 @@ mod tests_cff {
                     .replace(thermal_distribution_atom_from_index(
                         edge_id,
                         1,
+                        true,
                         Sign::Positive,
                     ))
                     .with(
@@ -1804,7 +1832,7 @@ mod tests_cff {
         let cff = generate_cff_expression(graph, &None, &[], &[], MediumMode::Vacuum).unwrap();
 
         let mut cff_atom = cff.to_atom(OrientationPattern::default());
-        cff_atom = cff.surfaces.substitute_energies(&cff_atom, &[]);
+        cff_atom = cff.surfaces.substitute_energies(&cff_atom, false, &[]);
         let inverse_energy_product =
             get_cff_inverse_energy_product_impl(graph, &graph.full_graph(), &[]);
 
@@ -2116,7 +2144,7 @@ mod tests_cff {
             .surfaces
             .thermal_numerator_cache
             .iter()
-            .map(|numerator| numerator.to_atom(&[]).to_canonical_string())
+            .map(|numerator| numerator.to_atom(true, &[]).to_canonical_string())
             .collect::<BTreeSet<_>>();
         assert_eq!(
             unique_cached_numerators.len(),
@@ -2166,7 +2194,7 @@ mod tests_cff {
 
         let substituted = thermal
             .surfaces
-            .substitute_energies(&atom_with_placeholders, &[]);
+            .substitute_energies(&atom_with_placeholders, true, &[]);
         let substituted_string = substituted.to_canonical_string();
         assert!(
             !substituted_string.contains("Tnum("),

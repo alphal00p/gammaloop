@@ -4690,11 +4690,13 @@ pub(crate) fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
 pub(crate) fn thermal_distribution_atom_from_index(
     index: EdgeIndex,
     derivative_order: usize,
+    finite_temperature: bool,
     sign: Sign,
 ) -> Atom {
     GS.thermal_distribution(
         usize::from(index) as i64,
         derivative_order as i64,
+        Atom::num(if finite_temperature { 1 } else { 0 }),
         sign * Atom::num(1),
     )
 }

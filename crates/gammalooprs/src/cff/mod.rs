@@ -186,7 +186,9 @@ impl Graph {
 
         let mut terms = BTreeMap::new();
 
-        let replacement_rules = self.surface_cache.get_all_replacements(&[]);
+        let replacement_rules = self
+            .surface_cache
+            .get_all_replacements(medium_mode.finite_temperature(), &[]);
 
         for (cut_cff_index, expr) in residues.into_iter() {
             let mut cff_term = CFFTerm {

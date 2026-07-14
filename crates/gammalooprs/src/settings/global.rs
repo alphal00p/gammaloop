@@ -712,4 +712,11 @@ pub enum MediumMode {
     #[default]
     Vacuum,
     ThermodynamicEquilibrium,
+    ZeroTemperatureEquilibrium,
+}
+
+impl MediumMode {
+    pub fn finite_temperature(&self) -> bool {
+        matches!(self, MediumMode::ThermodynamicEquilibrium)
+    }
 }

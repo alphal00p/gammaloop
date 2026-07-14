@@ -140,7 +140,7 @@ where
         derivative_order: usize,
         thermal_sign: Atom,
         limit: ThermalDistributionLimit,
-    ) -> Atom {
+    ) -> Option<Atom> {
         self.1
             .explicit_thermal_distribution_atom(edge, derivative_order, thermal_sign, limit)
     }
@@ -202,7 +202,7 @@ where
         derivative_order: usize,
         thermal_sign: Atom,
         limit: ThermalDistributionLimit,
-    ) -> Atom {
+    ) -> Option<Atom> {
         match limit {
             ThermalDistributionLimit::Default => {
                 let chemical_potential = self[edge].chemical_potential_atom();
@@ -219,32 +219,32 @@ where
                 let is_fermion = self[edge].is_fermion();
 
                 match (is_fermion, derivative_order) {
-                    (true, 0) => (thermal_sign + tanh_arg.clone()) / Atom::num(2),
-                    (false, 0) => (thermal_sign + Atom::num(1) / tanh_arg.clone()) / Atom::num(2),
+                    (true, 0) => Some((thermal_sign + tanh_arg.clone()) / Atom::num(2)),
+                    (false, 0) => {
+                        Some((thermal_sign + Atom::num(1) / tanh_arg.clone()) / Atom::num(2))
+                    }
                     (true, 1) => {
-                        -beta.clone() * (Atom::num(1) - tanh_squared.clone()) / Atom::num(4)
+                        Some(-beta.clone() * (Atom::num(1) - tanh_squared.clone()) / Atom::num(4))
                     }
-                    (false, 1) => {
+                    (false, 1) => Some(
                         beta.clone() * (Atom::num(1) / tanh_squared.clone() - Atom::num(1))
-                            / Atom::num(4)
-                    }
-                    (true, 2) => {
+                            / Atom::num(4),
+                    ),
+                    (true, 2) => Some(
                         -beta.clone()
                             * beta.clone()
                             * (Atom::num(1) - tanh_squared.clone())
                             * tanh_arg.clone()
-                            / Atom::num(4)
-                    }
-                    (false, 2) => {
+                            / Atom::num(4),
+                    ),
+                    (false, 2) => Some(
                         beta.clone()
                             * beta.clone()
                             * (Atom::num(1) / tanh_squared.clone() - Atom::num(1))
                             * (Atom::num(1) / tanh_arg.clone())
-                            / Atom::num(4)
-                    }
-                    (_, order) => {
-                        panic!("thermal distribution derivative order {order} not supported")
-                    }
+                            / Atom::num(4),
+                    ),
+                    (_, _) => None,
                 }
             }
             ThermalDistributionLimit::ZeroTemperature => {
@@ -255,17 +255,19 @@ where
                 };
                 let chemical_potential = self[edge].chemical_potential_atom();
                 match (chemical_potential, derivative_order) {
-                    (Some(_), 0) => thermal_sign.clone() * GS.heaviside(thermal_sign * shifted_ose),
-                    (None, 0) => (Atom::num(1) + thermal_sign) / Atom::num(2),
-                    (None, _) => Atom::num(0),
-                    _ => panic!(
-                        "zero-temperature thermal distribution derivative order {derivative_order} not supported"
-                    ),
+                    (Some(_), 0) => {
+                        Some(thermal_sign.clone() * GS.heaviside(thermal_sign * shifted_ose))
+                    }
+                    (None, 0) => Some((Atom::num(1) + thermal_sign) / Atom::num(2)),
+                    (None, _) => Some(Atom::num(0)),
+                    // TODO: distribution derivatives with chemical potential not yet
+                    // supported at zero temperature
+                    _ => None,
                 }
             }
             ThermalDistributionLimit::Vacuum => match derivative_order {
-                0 => (Atom::num(1) + thermal_sign) / Atom::num(2),
-                _ => Atom::num(0),
+                0 => Some((Atom::num(1) + thermal_sign) / Atom::num(2)),
+                _ => Some(Atom::num(0)),
             },
         }
     }
@@ -363,7 +365,7 @@ impl ParamBuilderGraph for Graph {
         derivative_order: usize,
         thermal_sign: Atom,
         limit: ThermalDistributionLimit,
-    ) -> Atom {
+    ) -> Option<Atom> {
         self.underlying.explicit_thermal_distribution_atom(
             edge,
             derivative_order,

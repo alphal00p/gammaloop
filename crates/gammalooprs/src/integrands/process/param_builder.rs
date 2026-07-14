@@ -115,7 +115,7 @@ pub trait ParamBuilderGraph {
         derivative_order: usize,
         thermal_sign: Atom,
         limit: ThermalDistributionLimit,
-    ) -> Atom;
+    ) -> Option<Atom>;
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
 
@@ -1283,20 +1283,34 @@ impl<T: FloatLike> ParamBuilder<T> {
                 .iter()
                 .any(|sign| sign.is_sign())
             {
-                for derivative_order in 0..=MAX_THERMAL_DISTRIBUTION_DERIVATIVE_ORDER {
-                    new.add_tagged_function::<Symbol>(
-                        GS.thermal_distribution,
-                        vec![Atom::num(e.0 as i64), Atom::num(derivative_order as i64)],
-                        format!("N{e}_{derivative_order}"),
-                        vec![thermal_sign],
-                        graph.explicit_thermal_distribution_atom(
+                let limits = [
+                    ThermalDistributionLimit::Default,
+                    ThermalDistributionLimit::ZeroTemperature,
+                ]
+                .into_iter();
+                for limit in limits {
+                    let temperature_flag = limit.temperature_flag();
+                    for derivative_order in 0..=MAX_THERMAL_DISTRIBUTION_DERIVATIVE_ORDER {
+                        if let Some(body) = graph.explicit_thermal_distribution_atom(
                             e,
                             derivative_order,
                             Atom::var(thermal_sign),
-                            ThermalDistributionLimit::Default,
-                        ),
-                    )
-                    .unwrap();
+                            limit,
+                        ) {
+                            new.add_tagged_function::<Symbol>(
+                                GS.thermal_distribution,
+                                vec![
+                                    Atom::num(e.0 as i64),
+                                    Atom::num(derivative_order as i64),
+                                    temperature_flag.clone(),
+                                ],
+                                format!("N{e}_{derivative_order}_{temperature_flag}"),
+                                vec![thermal_sign],
+                                body,
+                            )
+                            .unwrap();
+                        }
+                    }
                 }
             }
         }
