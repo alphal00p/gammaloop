@@ -49,7 +49,7 @@ renormalization_localization_scale = 5.0
 type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
-momenta = [[4.0, 0.0, 0.0, 2.0], [4.0, 0.0, 0.0, -2.0], "dependent"]
+momenta = [[2.8, 0.0, 0.5, 0.5], [2.4, 0.2, -0.2, 0.1], "dependent"]
 helicities = [0, 0, 0]
 
 [default_runtime_settings.subtraction]
