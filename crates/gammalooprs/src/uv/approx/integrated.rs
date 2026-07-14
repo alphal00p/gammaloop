@@ -173,15 +173,10 @@ impl Integrated<'_> {
                     -finite_part(&expanded)?
                 };
 
-                // Freeze this vacuum scale while retaining the consumed loop measures for
-                // subsequent UV rescalings. Both effects disappear when the CT is consumed.
+                // Retain the consumed loop measures for subsequent UV rescalings. Keep this
+                // marker independent of mUV so enclosing limits still rescale the vacuum mass.
                 let scale = Atom::var(GS.integrated_loop_scale);
-                Ok(IntegratedCts(
-                    counterterm
-                        .replace(GS.m_uv_vacuum)
-                        .with(Atom::var(GS.m_uv_vacuum) * &scale)
-                        * scale.pow(4 * n_loops as i64),
-                ))
+                Ok(IntegratedCts(counterterm * scale.pow(4 * n_loops as i64)))
             }
             ApproximationType::IR => Err(eyre!("Not yet implemented IR")),
             ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),

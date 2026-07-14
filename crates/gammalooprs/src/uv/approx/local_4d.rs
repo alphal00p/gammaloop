@@ -114,8 +114,8 @@ impl Graph {
             .replace(GS.m_uv_vacuum)
             .with(Atom::var(GS.m_uv_vacuum) / GS.rescale);
 
-        // The stored scale freezes integrated vacuum masses while its prefactor restores
-        // the consumed loop measures. It is set to one when the next integration consumes it.
+        // The stored scale restores consumed loop measures independently of mUV. It is set to
+        // one when the next integration consumes it.
         atomarg = atomarg
             .replace(GS.integrated_loop_scale)
             .with(Atom::var(GS.integrated_loop_scale) * GS.rescale);
