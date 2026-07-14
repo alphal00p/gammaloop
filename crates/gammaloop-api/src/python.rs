@@ -2824,7 +2824,7 @@ impl GammaLoopAPI {
         let result = atoms
             .into_iter()
             .map(|(atom, orientation_data)| {
-                let energy_sub = cff.surfaces.substitute_energies(&atom, &[]) * &inverse_energies;
+                let energy_sub = cff.surfaces.substitute_energies(&atom, medium_mode.finite_temperature(), &[]) * &inverse_energies;
                 let string_atom = energy_sub.to_string();
 
                 let mut orientation_as_hashmap = HashMap::new();
