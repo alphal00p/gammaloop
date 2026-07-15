@@ -6,7 +6,7 @@ use crate::cff::esurface::ExistingEsurfaces;
 use crate::cff::esurface::GroupEsurfaceId;
 use crate::cff::esurface::RaisedEsurfaceData;
 use crate::cff::esurface::RaisedEsurfaceId;
-use crate::cff::esurface::get_representative;
+use crate::cff::esurface::{esurface_value_is_strictly_inside, get_representative};
 use crate::graph::GraphGroupPosition;
 use crate::graph::LoopMomentumBasis;
 use crate::integrands::process::GenericEvaluator;
@@ -45,6 +45,8 @@ use typed_index_collections::TiVec;
 pub struct OverlapGroup {
     pub existing_esurfaces: Vec<ExistingEsurfaceId>,
     pub complement: Vec<ExistingEsurfaceId>,
+    /// Amplitude overlap centers are stored in the identity-probe frame.
+    /// Counterterm evaluation rotates them exactly once into the current probe frame.
     pub center: LoopMomenta<F<f64>>,
     pub prefactor_evaluator: Option<Vec<RefCell<GenericEvaluator>>>,
 }
@@ -477,44 +479,32 @@ pub(crate) fn find_center(
         .loop_edges
         .len();
 
+    let group_esurfaces_to_check = esurfaces_to_consider
+        .iter()
+        .map(|&existing_esurface_id| existing_esurfaces[existing_esurface_id])
+        .collect_vec();
+
     if solver.solution.status == SolverStatus::Solved {
         let center = extract_center(loop_number, &solver.solution.x);
-        Some(center)
+        check_center_for_group_esurfaces(
+            overlap_input,
+            &group_esurfaces_to_check,
+            &center,
+            external_momenta,
+        )
+        .then_some(center)
     } else if solver.solution.status == SolverStatus::AlmostSolved
         || solver.solution.status == SolverStatus::InsufficientProgress
     {
         // if the solver did not converge, we check if the solution is still valid
         let center = extract_center(loop_number, &solver.solution.x);
 
-        let is_valid = esurfaces_to_consider.iter().all(|&existing_esurface_id| {
-            let group_esurface_id = existing_esurfaces[existing_esurface_id];
-            let mut has_local_esurface = false;
-
-            let all_local_valid = overlap_input.group_esurface_map[group_esurface_id]
-                .iter_enumerated()
-                .filter_map(|(graph_group_pos, option_raised_esurface_id)| {
-                    option_raised_esurface_id.and_then(|raised_esurface_id| {
-                        overlap_input.local_esurface_exists[graph_group_pos][group_esurface_id]
-                            .then_some((graph_group_pos, raised_esurface_id))
-                    })
-                })
-                .all(|(graph_group_pos, raised_esurface_id)| {
-                    has_local_esurface = true;
-                    let esurface_id = representative_local_esurface_id(
-                        &overlap_input.graph_data[graph_group_pos],
-                        raised_esurface_id,
-                    );
-
-                    let lmb = overlap_input.graph_data[graph_group_pos].lmb;
-                    let edge_masses = &overlap_input.graph_data[graph_group_pos].edge_masses;
-                    let esurface =
-                        &overlap_input.graph_data[graph_group_pos].esurfaces[esurface_id];
-                    esurface.compute_from_momenta(lmb, edge_masses, &center, external_momenta)
-                        < F::from_f64(0.0)
-                });
-
-            has_local_esurface && all_local_valid
-        });
+        let is_valid = check_center_for_group_esurfaces(
+            overlap_input,
+            &group_esurfaces_to_check,
+            &center,
+            external_momenta,
+        );
 
         if is_valid { Some(center) } else { None }
     } else {
@@ -548,14 +538,13 @@ fn representative_local_esurface_id(
     graph_data.raised_data.raised_groups[raised_esurface_id].esurface_ids[0]
 }
 
-pub(crate) fn check_global_center(
+fn check_center_for_group_esurfaces(
     overlap_input: &OverlapInput,
-    existing_esurfaces: &ExistingEsurfaces,
+    group_esurfaces: &[GroupEsurfaceId],
     center: &LoopMomenta<F<f64>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
 ) -> bool {
-    existing_esurfaces.iter().all(|existing_esurface_id| {
-        let group_esurface_id = *existing_esurface_id;
+    group_esurfaces.iter().all(|&group_esurface_id| {
         let mut has_local_esurface = false;
 
         let all_local_valid = overlap_input.group_esurface_map[group_esurface_id]
@@ -581,15 +570,28 @@ pub(crate) fn check_global_center(
                 let esurface_val =
                     esurface.compute_from_momenta(lmb, edge_masses, center, external_momenta);
 
-                esurface_val < F(0.0)
+                esurface_value_is_strictly_inside(
+                    &esurface_val,
+                    &F(overlap_input.settings.kinematics.e_cm),
+                )
             });
 
         has_local_esurface && all_local_valid
     })
 }
 
-/// TODO: When this function will be called at runtime, panics should be removed and this function should return result.
-/// When the overlap finding fails, treat the point as unstable
+pub(crate) fn check_global_center(
+    overlap_input: &OverlapInput,
+    existing_esurfaces: &ExistingEsurfaces,
+    center: &LoopMomenta<F<f64>>,
+    external_momenta: &ExternalFourMomenta<F<f64>>,
+) -> bool {
+    let group_esurfaces = existing_esurfaces.iter().copied().collect_vec();
+    check_center_for_group_esurfaces(overlap_input, &group_esurfaces, center, external_momenta)
+}
+
+/// Runtime overlap failures are returned so the stability machinery can retry at higher precision.
+/// Structural generation invariants are still asserted where malformed generated data is unrecoverable.
 pub(crate) fn find_maximal_overlap(
     overlap_input: &OverlapInput,
     existing_esurfaces: &ExistingEsurfaces,
@@ -617,19 +619,23 @@ pub(crate) fn find_maximal_overlap(
             })
             .collect();
 
-        if settings.subtraction.overlap_settings.check_global_center {
-            let is_valid = check_global_center(
-                overlap_input,
-                existing_esurfaces,
-                &global_center_f,
-                external_momenta,
+        if !settings.subtraction.overlap_settings.check_global_center {
+            tracing::warn!(
+                "overlap_settings.check_global_center=false is deprecated; forced centers are always validated"
             );
+        }
 
-            if !is_valid {
-                return Err(eyre!(
-                    "Center provided is not inside all existing esurfaces"
-                ));
-            }
+        let is_valid = check_global_center(
+            overlap_input,
+            existing_esurfaces,
+            &global_center_f,
+            external_momenta,
+        );
+
+        if !is_valid {
+            return Err(eyre!(
+                "Center provided is not finite and strictly inside all existing esurfaces"
+            ));
         }
 
         let single_group = OverlapGroup {
@@ -994,7 +1000,8 @@ mod tests {
         cff::{
             cff_graph::VertexSet,
             esurface::{
-                Esurface, EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId,
+                Esurface, EsurfaceExistence, EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup,
+                RaisedEsurfaceId,
             },
         },
         graph::LoopMomentumBasis,
@@ -1510,6 +1517,15 @@ mod tests {
     fn test_banana() {
         let banana = HelperBananaStructure::new();
 
+        let classification = banana.esurfaces[EsurfaceID::from(0)].classify_existence(
+            &banana.external_momenta,
+            &banana.lmb,
+            &banana.edge_masses,
+            &F(10.0),
+            &F(crate::utils::DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
+        );
+        assert!(matches!(classification, EsurfaceExistence::Pinched { .. }));
+
         let overlap_input = OverlapInput {
             graph_data: ti_vec![SingleGraphOverlapData {
                 lmb: &banana.lmb,
@@ -1522,18 +1538,45 @@ mod tests {
             local_esurface_exists: ti_vec![ti_vec![true]],
         };
 
-        let maximal_overlap = find_maximal_overlap(
+        let result = find_maximal_overlap(
             &overlap_input,
             &banana.existing_esurfaces,
             &banana.external_momenta,
-        )
-        .unwrap();
-
-        assert_eq!(maximal_overlap.overlap_groups.len(), 1);
-        assert_eq!(
-            maximal_overlap.overlap_groups[0].existing_esurfaces.len(),
-            1
         );
-        assert!(maximal_overlap.overlap_groups[0].complement.is_empty());
+
+        assert!(
+            result.is_err(),
+            "a caller that manually marks a pinched surface as existing must be rejected"
+        );
+
+        let mut forced_settings = RuntimeSettings::default();
+        forced_settings
+            .subtraction
+            .overlap_settings
+            .force_global_center = Some(vec![[0.0, 0.0, 0.0]; 2]);
+        forced_settings
+            .subtraction
+            .overlap_settings
+            .check_global_center = false;
+        let forced_overlap_input = OverlapInput {
+            graph_data: ti_vec![SingleGraphOverlapData {
+                lmb: &banana.lmb,
+                esurfaces: &banana.esurfaces,
+                raised_data: &banana.raised_data,
+                edge_masses: banana.edge_masses.clone(),
+            }],
+            settings: &forced_settings,
+            group_esurface_map: ti_vec![ti_vec![Some(Into::<RaisedEsurfaceId>::into(0)),]],
+            local_esurface_exists: ti_vec![ti_vec![true]],
+        };
+        assert!(
+            find_maximal_overlap(
+                &forced_overlap_input,
+                &banana.existing_esurfaces,
+                &banana.external_momenta,
+            )
+            .is_err(),
+            "check_global_center=false must not allow a forced center to bypass the invariant"
+        );
     }
 }

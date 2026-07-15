@@ -70,7 +70,9 @@ impl Spinney {
             .map(|component| g.as_ref().cyclotomatic_number(component))
             .max()
             .unwrap_or(0);
-        let lmb = g.compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb);
+        let lmb = g
+            .try_compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb)
+            .ok()?;
 
         let dod = g.compute_dod(&subgraph);
 

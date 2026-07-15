@@ -1,12 +1,16 @@
-use std::{collections::BTreeSet, fmt};
+use std::fmt;
 
 use color_eyre::Result;
 use eyre::{eyre, Context};
 use gammalooprs::{
     graph::Graph,
-    integrands::process::{ActiveF64Backend, LmbMultiChannelingSetup},
-    processes::{Amplitude, CrossSection, CrossSectionCut, ProcessCollection, RaisedCutId},
-    settings::{global::FrozenCompilationMode, runtime::ParameterizationSettings},
+    integrands::process::{ActiveF64Backend, LmbMultiChannelingSetup, ParamBuilder},
+    model::Model,
+    processes::{
+        Amplitude, CrossSection, CrossSectionCut, CutId, ProcessCollection,
+        ThresholdCountertermAssociation, ThresholdCountertermStatus,
+    },
+    settings::{global::FrozenCompilationMode, runtime::ParameterizationSettings, RuntimeSettings},
 };
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use schemars::JsonSchema;
@@ -56,14 +60,161 @@ pub struct IntegrandCutInfo {
     pub cut_id: usize,
     pub edge_ids: Vec<usize>,
     pub raising_power: usize,
-    pub left_threshold_esurface_ids: Vec<usize>,
-    pub right_threshold_esurface_ids: Vec<usize>,
+    pub left_thresholds: Vec<IntegrandCutThresholdInfo>,
+    pub right_thresholds: Vec<IntegrandCutThresholdInfo>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum IntegrandThresholdStatus {
+    NoRadialDependence,
+    AlwaysPinched,
+    CanBecomePinched,
+    ProvenNonExisting,
+    PotentiallyExisting,
+}
+
+impl IntegrandThresholdStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NoRadialDependence => "no_radial_dependence",
+            Self::AlwaysPinched => "always_pinched",
+            Self::CanBecomePinched => "can_become_pinched",
+            Self::ProvenNonExisting => "proven_non_existing",
+            Self::PotentiallyExisting => "potentially_existing",
+        }
+    }
+
+    pub fn is_currently_viable(self) -> bool {
+        matches!(self, Self::CanBecomePinched | Self::PotentiallyExisting)
+    }
+
+    pub fn can_become_pinched(self) -> bool {
+        self == Self::CanBecomePinched
+    }
+}
+
+impl From<ThresholdCountertermStatus> for IntegrandThresholdStatus {
+    fn from(value: ThresholdCountertermStatus) -> Self {
+        match value {
+            ThresholdCountertermStatus::NoRadialDependence => Self::NoRadialDependence,
+            ThresholdCountertermStatus::AlwaysPinched => Self::AlwaysPinched,
+            ThresholdCountertermStatus::CanBecomePinched => Self::CanBecomePinched,
+            ThresholdCountertermStatus::ProvenNonExisting => Self::ProvenNonExisting,
+            ThresholdCountertermStatus::PotentiallyExisting => Self::PotentiallyExisting,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct IntegrandCutThresholdInfo {
+    pub esurface_id: usize,
+    pub status: IntegrandThresholdStatus,
+    pub cut_boundary_edge_ids: Vec<usize>,
+    pub threshold_boundary_edge_ids: Vec<usize>,
+    pub invariant_bound_is_applicable: bool,
+}
+
+impl IntegrandCutThresholdInfo {
+    fn from_association(
+        association: &ThresholdCountertermAssociation,
+        graph: &Graph,
+        cut: &CrossSectionCut,
+        model: &Model,
+        param_builder: &ParamBuilder,
+        settings: &RuntimeSettings,
+    ) -> Self {
+        Self {
+            esurface_id: association.esurface_id.0,
+            status: association
+                .classify_for_model(
+                    graph,
+                    cut,
+                    model,
+                    param_builder,
+                    settings,
+                    settings.subtraction.esurface_existence_threshold,
+                )
+                .into(),
+            cut_boundary_edge_ids: association
+                .cut_boundary_edges
+                .iter()
+                .map(|edge_id| edge_id.0)
+                .collect(),
+            threshold_boundary_edge_ids: association
+                .threshold_boundary_edges
+                .iter()
+                .map(|edge_id| edge_id.0)
+                .collect(),
+            invariant_bound_is_applicable: association.invariant_bound_is_applicable,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct IntegrandActiveThresholdCutInfo {
+    pub cut_id: usize,
+    pub can_become_pinched: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct IntegrandThresholdEsurfaceInfo {
     pub esurface_id: usize,
     pub edge_ids: Vec<usize>,
+    pub active_cuts: Vec<IntegrandActiveThresholdCutInfo>,
+}
+
+impl IntegrandCutInfo {
+    fn from_cross_section_cut(
+        graph_term: &gammalooprs::integrands::process::cross_section::CrossSectionGraphTerm,
+        cut_id: CutId,
+        cut: &CrossSectionCut,
+        raising_power: usize,
+        model: &Model,
+        param_builder: &ParamBuilder,
+        settings: &RuntimeSettings,
+    ) -> Self {
+        let associations = &graph_term.cut_threshold_associations[cut_id];
+        let threshold_info = |association| {
+            IntegrandCutThresholdInfo::from_association(
+                association,
+                &graph_term.graph,
+                cut,
+                model,
+                param_builder,
+                settings,
+            )
+        };
+
+        Self {
+            // Retain `CutId` for internal indexing and convert only at the API boundary.
+            cut_id: usize::from(cut_id),
+            edge_ids: cut_edge_ids(&graph_term.graph, cut),
+            raising_power,
+            left_thresholds: associations.left.iter().map(&threshold_info).collect(),
+            right_thresholds: associations.right.iter().map(threshold_info).collect(),
+        }
+    }
+
+    fn active_threshold_cut(&self, esurface_id: usize) -> Option<IntegrandActiveThresholdCutInfo> {
+        let mut is_currently_viable = false;
+        let mut can_become_pinched = false;
+
+        for threshold in self
+            .left_thresholds
+            .iter()
+            .chain(self.right_thresholds.iter())
+            .filter(|threshold| threshold.esurface_id == esurface_id)
+        {
+            is_currently_viable |= threshold.status.is_currently_viable();
+            can_become_pinched |= threshold.status.can_become_pinched();
+        }
+
+        is_currently_viable.then_some(IntegrandActiveThresholdCutInfo {
+            cut_id: self.cut_id,
+            can_become_pinched,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
@@ -157,6 +308,10 @@ pub(crate) fn collect_integrand_info(
                         process.definition.folder_name
                     )
                 })?;
+            let model = state.resolve_model_for_integrand(
+                process.definition.process_id,
+                &resolved.canonical_name,
+            )?;
             Ok(IntegrandInfo {
                 process_id: process.definition.process_id,
                 process_name: process.definition.folder_name.clone(),
@@ -167,7 +322,7 @@ pub(crate) fn collect_integrand_info(
                 graph_count: cross_section.supergraphs.len(),
                 graph_group_count: cross_section.graph_group_structure.len(),
                 record_size_bytes: integrand_record_size_from_cross_section(cross_section)?,
-                graph_groups: cross_section_graph_groups(integrand)?,
+                graph_groups: cross_section_graph_groups(integrand, &model)?,
             })
         }
         _ => Err(eyre!(
@@ -211,12 +366,13 @@ fn cut_edge_ids(graph: &Graph, cut: &CrossSectionCut) -> Vec<usize> {
 
 fn cut_raising_powers(
     graph: &gammalooprs::integrands::process::cross_section::CrossSectionGraphTerm,
-) -> Vec<usize> {
-    let mut raising_powers = vec![1; graph.cuts.len()];
+) -> typed_index_collections::TiVec<CutId, usize> {
+    let mut raising_powers: typed_index_collections::TiVec<CutId, usize> =
+        vec![1; graph.cuts.len()].into();
     for raised_cut_group in graph.raised_data.raised_cut_groups.iter() {
         let raising_power = raised_cut_group.related_esurface_group.max_occurence;
         for cut_id in &raised_cut_group.cuts {
-            raising_powers[cut_id.0] = raising_power;
+            raising_powers[*cut_id] = raising_power;
         }
     }
     raising_powers
@@ -253,8 +409,7 @@ fn amplitude_graph_groups(
     integrand
         .data
         .graph_group_structure
-        .iter()
-        .enumerate()
+        .iter_enumerated()
         .map(|(group_id, group)| {
             let master_graph_id = group
                 .into_iter()
@@ -267,22 +422,45 @@ fn amplitude_graph_groups(
                 &master_graph.graph.name,
                 &parameterization_settings,
             )?;
-            let threshold_esurface_ids = master_graph
-                .threshold_counterterm
-                .generated_mask
+            // Amplitude overlap centers are solved from the canonical union across all members
+            // of the graph group. Report that same union rather than the master graph's local
+            // raised-surface numbering.
+            let threshold_esurfaces = integrand.data.group_derived_data[group_id]
+                .esurface_map
                 .iter_enumerated()
-                .filter_map(|(esurface_id, is_generated)| is_generated.then_some(esurface_id.0))
-                .collect::<Vec<_>>();
-            let threshold_esurfaces = threshold_esurface_ids
-                .iter()
-                .copied()
-                .map(|esurface_id| IntegrandThresholdEsurfaceInfo {
-                    esurface_id,
-                    edge_ids: threshold_esurface_edge_ids(&master_graph.esurfaces, esurface_id),
+                .filter_map(|(group_esurface_id, raised_esurface_map)| {
+                    let (graph_term, raised_esurface_id) = raised_esurface_map
+                        .iter_enumerated()
+                        .filter_map(|(graph_group_position, raised_esurface_id)| {
+                            raised_esurface_id.map(|raised_esurface_id| {
+                                let graph_id = group[graph_group_position];
+                                (&integrand.data.graph_terms[graph_id], raised_esurface_id)
+                            })
+                        })
+                        .find(|(graph_term, raised_esurface_id)| {
+                            graph_term.threshold_counterterm.generated_mask[*raised_esurface_id]
+                        })?;
+                    let local_esurface_id =
+                        graph_term.threshold_counterterm.raised_data.raised_groups
+                            [raised_esurface_id]
+                            .esurface_ids[0];
+
+                    Some(IntegrandThresholdEsurfaceInfo {
+                        esurface_id: group_esurface_id.0,
+                        edge_ids: threshold_esurface_edge_ids(
+                            &graph_term.esurfaces,
+                            local_esurface_id.0,
+                        ),
+                        active_cuts: Vec::new(),
+                    })
                 })
                 .collect::<Vec<_>>();
+            let threshold_esurface_ids = threshold_esurfaces
+                .iter()
+                .map(|threshold| threshold.esurface_id)
+                .collect();
             Ok(IntegrandGraphGroupInfo {
-                group_id,
+                group_id: usize::from(group_id),
                 graphs: group
                     .into_iter()
                     .map(|graph_id| IntegrandGraphInfo {
@@ -326,6 +504,7 @@ fn amplitude_graph_groups(
 
 fn cross_section_graph_groups(
     integrand: &gammalooprs::integrands::process::cross_section::CrossSectionIntegrand,
+    model: &Model,
 ) -> Result<Vec<IntegrandGraphGroupInfo>> {
     let parameterization_settings = integrand
         .settings
@@ -343,6 +522,9 @@ fn cross_section_graph_groups(
                 .next()
                 .expect("graph group should not be empty");
             let master_graph = &integrand.data.graph_terms[master_graph_id];
+            let mut active_model_param_builder: ParamBuilder =
+                master_graph.graph.param_builder.clone();
+            active_model_param_builder.update_model_values(model);
             let channel_ids = lmb_channel_ids(
                 &master_graph.lmbs,
                 &master_graph.multi_channeling_setup,
@@ -350,59 +532,46 @@ fn cross_section_graph_groups(
                 &parameterization_settings,
             )?;
             let cut_raising_powers = cut_raising_powers(master_graph);
-            let mut cut_to_raised_cut = vec![None; master_graph.cuts.len()];
-            for (raised_cut_id, raised_cut_group) in
-                master_graph.raised_data.raised_cut_groups.iter_enumerated()
-            {
-                for cut_id in &raised_cut_group.cuts {
-                    cut_to_raised_cut[cut_id.0] = Some(raised_cut_id);
-                }
-            }
 
             let cuts = master_graph
                 .cuts
-                .iter()
-                .enumerate()
+                .iter_enumerated()
                 .map(|(cut_id, cut)| {
-                    let (left_threshold_esurface_ids, right_threshold_esurface_ids) =
-                        cut_to_raised_cut[cut_id].map_or_else(
-                            || (Vec::new(), Vec::new()),
-                            |raised_cut_id: RaisedCutId| {
-                                master_graph.threshold_esurface_ids_for_raised_cut(raised_cut_id)
-                            },
-                        );
-
-                    IntegrandCutInfo {
+                    IntegrandCutInfo::from_cross_section_cut(
+                        master_graph,
                         cut_id,
-                        edge_ids: cut_edge_ids(&master_graph.graph, cut),
-                        raising_power: cut_raising_powers[cut_id],
-                        left_threshold_esurface_ids,
-                        right_threshold_esurface_ids,
-                    }
+                        cut,
+                        cut_raising_powers[cut_id],
+                        model,
+                        &active_model_param_builder,
+                        &integrand.settings,
+                    )
                 })
                 .collect::<Vec<_>>();
 
-            let threshold_esurface_ids = cuts
+            let threshold_esurface_ids = master_graph
+                .threshold_candidate_esurface_ids
                 .iter()
-                .flat_map(|cut| {
-                    cut.left_threshold_esurface_ids
-                        .iter()
-                        .chain(cut.right_threshold_esurface_ids.iter())
-                })
-                .copied()
-                .collect::<BTreeSet<_>>()
-                .into_iter()
+                .map(|esurface_id| esurface_id.0)
                 .collect::<Vec<_>>();
 
             let threshold_esurfaces = threshold_esurface_ids
                 .iter()
                 .copied()
-                .map(|esurface_id| IntegrandThresholdEsurfaceInfo {
-                    esurface_id,
-                    edge_ids: threshold_esurface_edge_ids(
-                        &master_graph.graph.surface_cache.esurface_cache,
+                .map(|esurface_id| {
+                    let active_cuts = cuts
+                        .iter()
+                        .filter_map(|cut| cut.active_threshold_cut(esurface_id))
+                        .collect();
+
+                    IntegrandThresholdEsurfaceInfo {
                         esurface_id,
-                    ),
+                        edge_ids: threshold_esurface_edge_ids(
+                            &master_graph.graph.surface_cache.esurface_cache,
+                            esurface_id,
+                        ),
+                        active_cuts,
+                    }
                 })
                 .collect::<Vec<_>>();
 

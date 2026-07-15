@@ -28,8 +28,9 @@ use crate::{
         Evaluate,
     },
     integrand_info::{
-        IntegrandCutInfo, IntegrandGraphGroupInfo, IntegrandGraphInfo, IntegrandInfo,
-        IntegrandLoopMomentumBasisInfo, IntegrandOrientationInfo, IntegrandThresholdEsurfaceInfo,
+        IntegrandActiveThresholdCutInfo, IntegrandCutInfo, IntegrandCutThresholdInfo,
+        IntegrandGraphGroupInfo, IntegrandGraphInfo, IntegrandInfo, IntegrandLoopMomentumBasisInfo,
+        IntegrandOrientationInfo, IntegrandThresholdEsurfaceInfo,
     },
     render_smart_toml,
     session::{display_command, CliSession, CliSessionState},
@@ -121,6 +122,8 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyIntegrandOrientationInfo>()?;
     m.add_class::<PyIntegrandLoopMomentumBasisInfo>()?;
     m.add_class::<PyIntegrandCutInfo>()?;
+    m.add_class::<PyIntegrandCutThresholdInfo>()?;
+    m.add_class::<PyIntegrandActiveThresholdCutInfo>()?;
     m.add_class::<PyIntegrandThresholdEsurfaceInfo>()?;
     m.add_class::<PyAdditionalWeight>()?;
     m.add_class::<PyHistogramAccumulator>()?;
@@ -511,8 +514,25 @@ pub struct PyIntegrandCutInfo {
     pub cut_id: usize,
     pub edge_ids: Vec<usize>,
     pub raising_power: usize,
-    pub left_threshold_esurface_ids: Vec<usize>,
-    pub right_threshold_esurface_ids: Vec<usize>,
+    pub left_thresholds: Vec<PyIntegrandCutThresholdInfo>,
+    pub right_thresholds: Vec<PyIntegrandCutThresholdInfo>,
+}
+
+#[pyclass(from_py_object, name = "IntegrandCutThreshold", get_all)]
+#[derive(Clone)]
+pub struct PyIntegrandCutThresholdInfo {
+    pub esurface_id: usize,
+    pub status: String,
+    pub cut_boundary_edge_ids: Vec<usize>,
+    pub threshold_boundary_edge_ids: Vec<usize>,
+    pub invariant_bound_is_applicable: bool,
+}
+
+#[pyclass(from_py_object, name = "IntegrandActiveThresholdCut", get_all)]
+#[derive(Clone)]
+pub struct PyIntegrandActiveThresholdCutInfo {
+    pub cut_id: usize,
+    pub can_become_pinched: bool,
 }
 
 #[pyclass(from_py_object, name = "IntegrandThresholdEsurface", get_all)]
@@ -520,6 +540,7 @@ pub struct PyIntegrandCutInfo {
 pub struct PyIntegrandThresholdEsurfaceInfo {
     pub esurface_id: usize,
     pub edge_ids: Vec<usize>,
+    pub active_cuts: Vec<PyIntegrandActiveThresholdCutInfo>,
 }
 
 #[pyclass(from_py_object, name = "IntegrandGraphGroup", get_all)]
@@ -1656,8 +1677,37 @@ fn py_integrand_cut_info_from_info(cut: IntegrandCutInfo) -> PyIntegrandCutInfo 
         cut_id: cut.cut_id,
         edge_ids: cut.edge_ids,
         raising_power: cut.raising_power,
-        left_threshold_esurface_ids: cut.left_threshold_esurface_ids,
-        right_threshold_esurface_ids: cut.right_threshold_esurface_ids,
+        left_thresholds: cut
+            .left_thresholds
+            .into_iter()
+            .map(py_integrand_cut_threshold_info_from_info)
+            .collect(),
+        right_thresholds: cut
+            .right_thresholds
+            .into_iter()
+            .map(py_integrand_cut_threshold_info_from_info)
+            .collect(),
+    }
+}
+
+fn py_integrand_cut_threshold_info_from_info(
+    threshold: IntegrandCutThresholdInfo,
+) -> PyIntegrandCutThresholdInfo {
+    PyIntegrandCutThresholdInfo {
+        esurface_id: threshold.esurface_id,
+        status: threshold.status.as_str().to_string(),
+        cut_boundary_edge_ids: threshold.cut_boundary_edge_ids,
+        threshold_boundary_edge_ids: threshold.threshold_boundary_edge_ids,
+        invariant_bound_is_applicable: threshold.invariant_bound_is_applicable,
+    }
+}
+
+fn py_integrand_active_threshold_cut_info_from_info(
+    cut: IntegrandActiveThresholdCutInfo,
+) -> PyIntegrandActiveThresholdCutInfo {
+    PyIntegrandActiveThresholdCutInfo {
+        cut_id: cut.cut_id,
+        can_become_pinched: cut.can_become_pinched,
     }
 }
 
@@ -1667,6 +1717,11 @@ fn py_integrand_threshold_esurface_info_from_info(
     PyIntegrandThresholdEsurfaceInfo {
         esurface_id: threshold.esurface_id,
         edge_ids: threshold.edge_ids,
+        active_cuts: threshold
+            .active_cuts
+            .into_iter()
+            .map(py_integrand_active_threshold_cut_info_from_info)
+            .collect(),
     }
 }
 

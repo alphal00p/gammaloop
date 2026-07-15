@@ -502,14 +502,14 @@ where
         f: impl Fn(Self::Structure) -> Result<O, Er>,
     ) -> std::result::Result<Self::Store<O>, Er> {
         Ok(match self {
-            DataTensor::Dense(d) => match d.map_structure_result(f) {
-                Ok(d) => DataTensor::Dense(d),
-                Err(e) => return Err(e),
-            },
-            DataTensor::Sparse(s) => match s.map_structure_result(f) {
-                Ok(s) => DataTensor::Sparse(s),
-                Err(e) => return Err(e),
-            },
+            DataTensor::Dense(d) => {
+                let d = d.map_structure_result(f)?;
+                DataTensor::Dense(d)
+            }
+            DataTensor::Sparse(s) => {
+                let s = s.map_structure_result(f)?;
+                DataTensor::Sparse(s)
+            }
         })
     }
 

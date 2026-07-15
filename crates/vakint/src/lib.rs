@@ -1089,7 +1089,7 @@ impl Integral {
 
         let mut alphaloop_expression = Atom::num(1);
 
-        for (_n_id, node) in graph.nodes.iter() {
+        for node in graph.nodes.values() {
             let mut fb = FunctionBuilder::new(vk_symbol!("vxs"));
             for (e_id, dir) in &node.edges {
                 fb = fb.add_arg(

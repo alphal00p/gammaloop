@@ -1,6 +1,10 @@
 # Nextest configuration for gammaloop
 # This file configures test execution, timeouts, and partitioning behavior
 
+# Required for emulated libtest `--skip` and `--exact` arguments used by the
+# test recipes. Older versions fail before running the selected tests.
+nextest-version = "0.9.80"
+
 [profile.default]
 # Slow tests get extra time
 slow-timeout = { period = "10s", terminate-after = 6 }

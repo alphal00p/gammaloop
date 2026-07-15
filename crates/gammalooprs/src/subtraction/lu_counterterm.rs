@@ -11,14 +11,17 @@ use symbolica::domains::{
     dual::{DualNumberStructure, HyperDual},
     float::{Real, RealLike},
 };
-use tracing::debug;
+use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 
 use crate::{
     GammaLoopContext,
     cff::{
         CutCFFIndex,
-        esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
+        esurface::{
+            Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId,
+            esurface_value_is_strictly_inside,
+        },
         expression::OrientationID,
     },
     graph::{Graph, LmbIndex, LoopMomentumBasis},
@@ -58,7 +61,7 @@ use crate::{
             extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape, variable_indices_from_cut_cff_index,
         },
-        newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
+        newton_solver::{NewtonIterationResult, safeguarded_newton_iteration_and_derivative},
     },
 };
 
@@ -850,17 +853,17 @@ impl LUCounterTermEvaluators {
         mut f: impl FnMut(&mut GenericEvaluator) -> color_eyre::Result<()>,
     ) -> color_eyre::Result<()> {
         for evaluators in self.left_thresholds_evaluator.iter_mut() {
-            for (_, evaluator) in evaluators.iter_mut() {
+            for evaluator in evaluators.values_mut() {
                 evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
         for evaluators in self.right_thresholds_evaluator.iter_mut() {
-            for (_, evaluator) in evaluators.iter_mut() {
+            for evaluator in evaluators.values_mut() {
                 evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
         for evaluators in self.iterated_evaluator.iter_mut() {
-            for (_, evaluator) in evaluators.iter_mut() {
+            for evaluator in evaluators.values_mut() {
                 evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
@@ -1076,7 +1079,7 @@ impl LUCounterTerm {
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         graph: &Graph,
         masses: &EdgeVec<F<T>>,
-        rotation: &Rotation,
+        probe_rotation: &Rotation,
         settings: &RuntimeSettings,
         param_builder: &mut ParamBuilder<f64>,
         orientations: SingleOrAllOrientations<'_, OrientationID>,
@@ -1128,12 +1131,14 @@ impl LUCounterTerm {
             .collect();
 
         let e_cm = F::from_f64(settings.kinematics.e_cm);
+        let esurface_existence_threshold =
+            F::from_f64(settings.subtraction.esurface_existence_threshold);
 
         let left_existing_esurfaces = self.thresholds[cut_id]
             .0
             .iter_enumerated()
             .filter_map(|(left_id, esurface)| {
-                if esurface.exists_subspace(
+                let classification = esurface.classify_existence_subspace(
                     sample_left_transformed.representative_sample().loop_moms(),
                     kinematic_point.representative_sample().external_moms(),
                     left_subspace,
@@ -1142,7 +1147,18 @@ impl LUCounterTerm {
                     masses,
                     reversed_edges,
                     &e_cm,
-                ) {
+                    &esurface_existence_threshold,
+                );
+                debug!(
+                    graph = %graph.name,
+                    side = "left",
+                    esurface_id = left_id.0,
+                    status = classification.label(),
+                    normalized_margin = ?classification.normalized_margin(),
+                    non_existing_reason = ?classification.non_existing_reason(),
+                    "classified LU threshold surface"
+                );
+                if classification.is_existing() {
                     Some(EsurfaceID::from(left_id.0))
                 } else {
                     None
@@ -1154,7 +1170,7 @@ impl LUCounterTerm {
             .1
             .iter_enumerated()
             .filter_map(|(right_id, esurface)| {
-                if esurface.exists_subspace(
+                let classification = esurface.classify_existence_subspace(
                     sample_right_transformed.representative_sample().loop_moms(),
                     kinematic_point.representative_sample().external_moms(),
                     right_subspace,
@@ -1163,7 +1179,18 @@ impl LUCounterTerm {
                     masses,
                     reversed_edges,
                     &e_cm,
-                ) {
+                    &esurface_existence_threshold,
+                );
+                debug!(
+                    graph = %graph.name,
+                    side = "right",
+                    esurface_id = right_id.0,
+                    status = classification.label(),
+                    normalized_margin = ?classification.normalized_margin(),
+                    non_existing_reason = ?classification.non_existing_reason(),
+                    "classified LU threshold surface"
+                );
+                if classification.is_existing() {
                     Some(EsurfaceID::from(right_id.0))
                 } else {
                     None
@@ -1204,26 +1231,44 @@ impl LUCounterTerm {
             thresholds: right_thresholds,
         };
 
-        let left_overlap = if let Ok(left_overlap) = overlap_subspace::find_maximal_overlap(
+        let left_overlap = match overlap_subspace::find_maximal_overlap(
             &left_overlap_input,
             &left_existing_esurfaces,
             &sample_left_transformed_f64,
             &external_moms_f64,
+            probe_rotation,
         ) {
-            left_overlap
-        } else {
-            return Ok(Complex::new_re(F::from_f64(f64::NAN)));
+            Ok(left_overlap) => left_overlap,
+            Err(error) => {
+                evaluation_meta_data.record_threshold_counterterm_error(format!(
+                    "LU graph '{}' raised cut {} left subspace failed overlap-center construction in probe rotation {}: {}",
+                    graph.name,
+                    cut_id.0,
+                    probe_rotation.method,
+                    error,
+                ));
+                return Ok(Complex::new_re(F::from_f64(f64::NAN)));
+            }
         };
 
-        let right_overlap = if let Ok(right_overlap) = overlap_subspace::find_maximal_overlap(
+        let right_overlap = match overlap_subspace::find_maximal_overlap(
             &right_overlap_input,
             &right_existing_esurfaces,
             &sample_right_transformed_f64,
             &external_moms_f64,
+            probe_rotation,
         ) {
-            right_overlap
-        } else {
-            return Ok(Complex::new_re(F::from_f64(f64::NAN)));
+            Ok(right_overlap) => right_overlap,
+            Err(error) => {
+                evaluation_meta_data.record_threshold_counterterm_error(format!(
+                    "LU graph '{}' raised cut {} right subspace failed overlap-center construction in probe rotation {}: {}",
+                    graph.name,
+                    cut_id.0,
+                    probe_rotation.method,
+                    error,
+                ));
+                return Ok(Complex::new_re(F::from_f64(f64::NAN)));
+            }
         };
 
         debug!("left overlap structure: {}", left_overlap);
@@ -1232,7 +1277,6 @@ impl LUCounterTerm {
 
         let left_counterterm_builder = CounterTermBuilder::new(
             graph,
-            rotation,
             settings,
             left_overlap_input.thresholds,
             sample_left_transformed,
@@ -1240,6 +1284,7 @@ impl LUCounterTerm {
             masses,
             all_lmbs,
             left_subspace,
+            probe_rotation,
         );
 
         let left_overlap_builders = left_overlap
@@ -1248,25 +1293,33 @@ impl LUCounterTerm {
             .map(|overlap_group| left_counterterm_builder.new_overlap_builder(overlap_group))
             .collect_vec();
 
-        let left_overlap_solutions = left_overlap_builders
-            .iter()
-            .map(|overlap_builder| {
-                overlap_builder
-                    .overlap_group
-                    .existing_esurfaces
-                    .iter()
-                    .map(|esurface| {
-                        overlap_builder
-                            .new_esurface_builder(*esurface)
-                            .solve_rstar(&mut self.rstar_dependence_calculator[cut_id])
-                    })
-                    .collect_vec()
-            })
-            .collect_vec();
+        let mut left_overlap_solutions = Vec::with_capacity(left_overlap_builders.len());
+        for (overlap_group_index, overlap_builder) in left_overlap_builders.iter().enumerate() {
+            let mut group_solutions =
+                Vec::with_capacity(overlap_builder.overlap_group.existing_esurfaces.len());
+            for &existing_esurface_id in &overlap_builder.overlap_group.existing_esurfaces {
+                let esurface_id = left_overlap.existing_esurfaces[existing_esurface_id];
+                let Some(solution) = overlap_builder
+                    .new_esurface_builder(existing_esurface_id)
+                    .solve_rstar(&mut self.rstar_dependence_calculator[cut_id])
+                else {
+                    evaluation_meta_data.record_threshold_counterterm_error(format!(
+                        "LU graph '{}' raised cut {} left overlap group {} E-surface {} failed center or radial-root validation in probe rotation {}",
+                        graph.name,
+                        cut_id.0,
+                        overlap_group_index,
+                        esurface_id.0,
+                        probe_rotation.method,
+                    ));
+                    return Ok(Complex::new_re(F::from_f64(f64::NAN)));
+                };
+                group_solutions.push(solution);
+            }
+            left_overlap_solutions.push(group_solutions);
+        }
 
         let right_counterterm_builder = CounterTermBuilder::new(
             graph,
-            rotation,
             settings,
             right_overlap_input.thresholds,
             sample_right_transformed,
@@ -1274,6 +1327,7 @@ impl LUCounterTerm {
             masses,
             all_lmbs,
             right_subspace,
+            probe_rotation,
         );
 
         let right_overlap_builders = right_overlap
@@ -1282,21 +1336,30 @@ impl LUCounterTerm {
             .map(|overlap_group| right_counterterm_builder.new_overlap_builder(overlap_group))
             .collect_vec();
 
-        let right_overlap_solutions = right_overlap_builders
-            .iter()
-            .map(|overlap_builder| {
-                overlap_builder
-                    .overlap_group
-                    .existing_esurfaces
-                    .iter()
-                    .map(|esurface| {
-                        overlap_builder
-                            .new_esurface_builder(*esurface)
-                            .solve_rstar(&mut self.rstar_dependence_calculator[cut_id])
-                    })
-                    .collect_vec()
-            })
-            .collect_vec();
+        let mut right_overlap_solutions = Vec::with_capacity(right_overlap_builders.len());
+        for (overlap_group_index, overlap_builder) in right_overlap_builders.iter().enumerate() {
+            let mut group_solutions =
+                Vec::with_capacity(overlap_builder.overlap_group.existing_esurfaces.len());
+            for &existing_esurface_id in &overlap_builder.overlap_group.existing_esurfaces {
+                let esurface_id = right_overlap.existing_esurfaces[existing_esurface_id];
+                let Some(solution) = overlap_builder
+                    .new_esurface_builder(existing_esurface_id)
+                    .solve_rstar(&mut self.rstar_dependence_calculator[cut_id])
+                else {
+                    evaluation_meta_data.record_threshold_counterterm_error(format!(
+                        "LU graph '{}' raised cut {} right overlap group {} E-surface {} failed center or radial-root validation in probe rotation {}",
+                        graph.name,
+                        cut_id.0,
+                        overlap_group_index,
+                        esurface_id.0,
+                        probe_rotation.method,
+                    ));
+                    return Ok(Complex::new_re(F::from_f64(f64::NAN)));
+                };
+                group_solutions.push(solution);
+            }
+            right_overlap_solutions.push(group_solutions);
+        }
 
         let zero = kinematic_point.representative_sample().zero();
         let mut total_result = Complex::new_re(zero.clone());
@@ -1682,17 +1745,16 @@ struct CounterTermBuilder<'a, T: FloatLike> {
     graph: &'a Graph,
     subspace: &'a SubspaceData,
     all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
-    rotation_for_overlap: &'a Rotation,
     settings: &'a RuntimeSettings,
     esurface_collection: &'a EsurfaceCollection,
     transformed_kinematic_point: LUCTKinematicPoint<T>,
+    probe_rotation: &'a Rotation,
 }
 
 impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
     #[allow(clippy::too_many_arguments)]
     fn new(
         graph: &'a Graph,
-        rotation_for_overlap: &'a Rotation,
         settings: &'a RuntimeSettings,
         esurface_collection: &'a EsurfaceCollection,
         transformed_kinematic_point: LUCTKinematicPoint<T>,
@@ -1700,6 +1762,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         masses: &'a EdgeVec<F<T>>,
         all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
         subspace: &'a SubspaceData,
+        probe_rotation: &'a Rotation,
     ) -> Self {
         let e_cm = F::from_f64(settings.kinematics.e_cm);
 
@@ -1707,27 +1770,26 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             real_mass_vector: masses,
             e_cm,
             graph,
-            rotation_for_overlap,
             settings,
             esurface_collection,
             overlap_structure,
             transformed_kinematic_point,
             all_lmbs,
             subspace,
+            probe_rotation,
         }
     }
 
     fn new_overlap_builder(&'a self, overlap_group: &'a OverlapGroup) -> OverlapBuilder<'a, T> {
-        let center = &overlap_group.center;
         let subspace = self.subspace;
 
-        let rotated_center = center.rotate(self.rotation_for_overlap).cast();
+        let center = overlap_group.center.cast();
 
         let shifted_loop_momenta = self
             .transformed_kinematic_point
             .representative_sample()
             .loop_moms()
-            - &rotated_center;
+            - &center;
 
         let radius = shifted_loop_momenta
             .hyper_radius_squared(Some(&subspace.iter_lmb_indices().collect_vec()))
@@ -1740,7 +1802,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         OverlapBuilder {
             counterterm_builder: self,
             overlap_group,
-            rotated_center,
+            center,
             unit_shifted_momenta,
             radius,
         }
@@ -1750,7 +1812,8 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
 struct OverlapBuilder<'a, T: FloatLike> {
     counterterm_builder: &'a CounterTermBuilder<'a, T>,
     overlap_group: &'a OverlapGroup,
-    rotated_center: LoopMomenta<F<T>>,
+    /// Solver-derived centers already belong to the current probe and cut-side LMB frame.
+    center: LoopMomenta<F<T>>,
     unit_shifted_momenta: LoopMomenta<F<T>>,
     radius: F<T>,
 }
@@ -1775,7 +1838,6 @@ impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
 }
 
 const MAX_ITERATIONS: usize = 40;
-const TOLERANCE: f64 = 1.0;
 
 struct EsurfaceCTBuilder<'a, T: FloatLike> {
     overlap_builder: &'a OverlapBuilder<'a, T>,
@@ -1788,13 +1850,96 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
     fn solve_rstar(
         self,
         rstar_t_dependence_evaluator: &mut RstarTDependenceEvaluator,
-    ) -> RstarSolution<'a, T> {
+    ) -> Option<RstarSolution<'a, T>> {
         let subspace = self.overlap_builder.counterterm_builder.subspace;
         let graph = self.overlap_builder.counterterm_builder.graph;
         let lmbs = self.overlap_builder.counterterm_builder.all_lmbs;
         let masses = self.overlap_builder.counterterm_builder.real_mass_vector;
 
         debug!("subspace: {:?}", subspace);
+
+        let representative_sample = self
+            .overlap_builder
+            .counterterm_builder
+            .transformed_kinematic_point
+            .representative_sample();
+        let mut center_with_fixed_complement = representative_sample.loop_moms().clone();
+        for loop_index in subspace.iter_lmb_indices() {
+            center_with_fixed_complement[loop_index] =
+                self.overlap_builder.center[loop_index].clone();
+        }
+
+        let center_surface_values = self
+            .overlap_builder
+            .overlap_group
+            .existing_esurfaces
+            .iter()
+            .map(|&existing_esurface_id| {
+                let esurface_id = self
+                    .overlap_builder
+                    .counterterm_builder
+                    .overlap_structure
+                    .existing_esurfaces[existing_esurface_id];
+                let esurface =
+                    &self.overlap_builder.counterterm_builder.esurface_collection[esurface_id];
+                let value = esurface.compute_from_momenta(
+                    subspace.get_lmb(lmbs),
+                    masses,
+                    &center_with_fixed_complement,
+                    representative_sample.external_moms(),
+                );
+                let is_valid = esurface_value_is_strictly_inside(
+                    &value,
+                    &self.overlap_builder.counterterm_builder.e_cm,
+                );
+                (esurface_id, value, is_valid)
+            })
+            .collect_vec();
+        let all_center_values_valid = center_surface_values
+            .iter()
+            .all(|(_, _, is_valid)| *is_valid);
+
+        crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #center;
+            stage = "lu_threshold_center_values",
+            graph = %graph.name,
+            selected_esurface_id = self.esurface_id.0,
+            rotation_id = %self.overlap_builder.counterterm_builder.probe_rotation.method,
+            center_provenance = "current_probe_cut_lmb_frame",
+            subspace_loop_indices = ?subspace.iter_lmb_indices().collect_vec(),
+            file.active_center = %format!("{}", self.overlap_builder.center),
+            file.center_with_fixed_complement = %format!("{}", center_with_fixed_complement),
+            file.surface_values = %center_surface_values
+                .iter()
+                .map(|(esurface_id, value, is_valid)| format!(
+                    "local={} value={:+16e} inside={}",
+                    esurface_id.0,
+                    value,
+                    is_valid,
+                ))
+                .join("\n"),
+            "LU threshold center values"
+        );
+
+        if !all_center_values_valid {
+            warn!(
+                graph = %graph.name,
+                selected_esurface_id = self.esurface_id.0,
+                rotation_id = %self.overlap_builder.counterterm_builder.probe_rotation.method,
+                center_provenance = "current_probe_cut_lmb_frame",
+                center = %center_with_fixed_complement,
+                surface_values = %center_surface_values
+                    .iter()
+                    .map(|(esurface_id, value, is_valid)| format!(
+                        "local={} value={:+16e} inside={}",
+                        esurface_id.0,
+                        value,
+                        is_valid,
+                    ))
+                    .join("; "),
+                "refusing to evaluate an LU threshold counterterm with an invalid probe-frame overlap center"
+            );
+            return None;
+        }
 
         let (raw_radius_guess, _) = self.esurface.get_radius_guess_subspace(
             &self.overlap_builder.unit_shifted_momenta,
@@ -1813,7 +1958,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             self.esurface.compute_self_and_r_derivative_subspace(
                 r,
                 &self.overlap_builder.unit_shifted_momenta,
-                &self.overlap_builder.rotated_center,
+                &self.overlap_builder.center,
                 self.overlap_builder
                     .counterterm_builder
                     .transformed_kinematic_point
@@ -1827,35 +1972,40 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
         };
 
         let zero = raw_radius_guess.zero();
-        let (inside_value, _) = function(&zero);
-        if inside_value >= zero {
-            debug!("overlap center is not inside threshold surface: {inside_value}");
-        }
         let mut radius_guess = raw_radius_guess.clone();
         if radius_guess.is_nan() || radius_guess.is_infinite() || radius_guess <= zero {
             radius_guess = self.overlap_builder.counterterm_builder.e_cm.clone();
         }
 
-        let mut outside_value = function(&radius_guess).0;
-        let mut outside_search_iterations = 0;
-        while !(outside_value.is_nan() || outside_value.is_infinite())
-            && outside_value <= zero
-            && outside_search_iterations < 64
-        {
-            radius_guess *= F::from_f64(2.0);
-            outside_value = function(&radius_guess).0;
-            outside_search_iterations += 1;
-        }
-
         debug!("initial radius guess: {:?}", radius_guess);
 
-        let solution = newton_iteration_and_derivative(
+        // A few ULPs of residual are expected when Newton stagnates at the
+        // representable value nearest the root.
+        let tolerance = raw_radius_guess.from_i64(8);
+        let solution = match safeguarded_newton_iteration_and_derivative(
+            &zero,
             &radius_guess,
             function,
-            &F::from_f64(TOLERANCE),
+            &tolerance,
             MAX_ITERATIONS,
+            64,
             &self.overlap_builder.counterterm_builder.e_cm,
-        );
+        ) {
+            Ok(solution) => solution,
+            Err(error) => {
+                warn!(
+                    graph = %graph.name,
+                    esurface_id = self.esurface_id.0,
+                    rotation_id = %self.overlap_builder.counterterm_builder.probe_rotation.method,
+                    center_provenance = "current_probe_cut_lmb_frame",
+                    raw_radius_guess = %raw_radius_guess,
+                    radius_guess = %radius_guess,
+                    error = %error,
+                    "refusing to evaluate a threshold counterterm with an invalid radial solution"
+                );
+                return None;
+            }
+        };
 
         debug!("r* solution: {:?}", solution);
 
@@ -1877,7 +2027,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 rstar_t_dependence_evaluator.evaluate(RstarTDependenceInput {
                     t_star: &t_star,
                     radius_star: &solution.solution,
-                    overlap_center: &self.overlap_builder.rotated_center,
+                    overlap_center: &self.overlap_builder.center,
                     subspace,
                     unrescaled_momentum_sample: self
                         .overlap_builder
@@ -1898,11 +2048,11 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             None
         };
 
-        RstarSolution {
+        Some(RstarSolution {
             esurface_ct_builder: self,
             solution,
             t_dependent_solution,
-        }
+        })
     }
 }
 
@@ -1940,7 +2090,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .overlap_builder
             .unit_shifted_momenta
             .rescale(&self.solution.solution, subspace.as_subspace_simple())
-            + &self.esurface_ct_builder.overlap_builder.rotated_center
+            + &self.esurface_ct_builder.overlap_builder.center
     }
 
     fn truncated_rstar_solution(&self, order: usize) -> HyperDual<F<T>> {
@@ -1992,7 +2142,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         let radius_star = self.truncated_rstar_solution(order);
         let center = dualize_loop_momenta(
             &radius_star,
-            &self.esurface_ct_builder.overlap_builder.rotated_center,
+            &self.esurface_ct_builder.overlap_builder.center,
         );
         let external_moms = dualize_external_momenta(&radius_star, source_sample.external_moms());
 
@@ -2096,7 +2246,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         activate_threshold_variable_in_target_shape(&mut radius_star, threshold_variable);
         let center = dualize_loop_momenta(
             &radius_star,
-            &self.esurface_ct_builder.overlap_builder.rotated_center,
+            &self.esurface_ct_builder.overlap_builder.center,
         );
         let external_moms = dualize_external_momenta(&radius_star, source_sample.external_moms());
 

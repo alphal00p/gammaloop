@@ -1909,7 +1909,7 @@ n_couplings = format!("{}", self.couplings.len()).green(),
 
         // Set all external parameters with value 0 to constant internal parameters with expression zero.
         let mut removed_parameters = vec![];
-        for (_p_name, param) in self.parameters.iter_mut() {
+        for param in self.parameters.values_mut() {
             if param.nature == ParameterNature::External
                 && let Some(value) = param.value
                 && value == Complex::new(F(0.0), F(0.0))

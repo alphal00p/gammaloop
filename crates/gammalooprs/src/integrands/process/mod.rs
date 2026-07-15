@@ -304,6 +304,10 @@ impl ProcessIntegrand {
         }
     }
 
+    pub fn kind_name(&self) -> &'static str {
+        self.variant_tag()
+    }
+
     pub fn export_standalone(
         &self,
         path: impl AsRef<Path>,
@@ -445,6 +449,66 @@ impl ProcessIntegrand {
                 .graph_terms
                 .get(graph_id)
                 .map(|term| term.graph.name.as_str()),
+        }
+    }
+
+    pub fn graph_group_id_by_graph_id(&self, graph_id: usize) -> Option<usize> {
+        self.find_group_id_containing_graph(graph_id)
+            .map(usize::from)
+    }
+
+    pub fn cut_edge_ids(&self, graph_id: usize, cut_id: usize) -> Option<Vec<usize>> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                (cut_id == 0 && graph_id < integrand.data.graph_terms.len()).then(Vec::new)
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                let graph_term = integrand.data.graph_terms.get(graph_id)?;
+                let cut = graph_term.cuts.get(crate::processes::CutId::from(cut_id))?;
+                Some(
+                    graph_term
+                        .graph
+                        .underlying
+                        .iter_edges_of(&cut.cut)
+                        .map(|(_, edge_id, _)| edge_id.0)
+                        .sorted()
+                        .collect(),
+                )
+            }
+        }
+    }
+
+    pub fn lmb_sample_id_for_channel(
+        &self,
+        graph_id: usize,
+        lmb_channel_id: usize,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<Option<usize>> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                let Some(graph_term) = integrand.data.graph_terms.get(graph_id) else {
+                    return Ok(None);
+                };
+                Ok(Some(usize::from(
+                    graph_term.multi_channeling_setup.effective_channel_lmb_id(
+                        ChannelIndex::from(lmb_channel_id),
+                        &graph_term.multi_channeling_setup.graph.name,
+                        parameterization_settings,
+                    )?,
+                )))
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                let Some(graph_term) = integrand.data.graph_terms.get(graph_id) else {
+                    return Ok(None);
+                };
+                Ok(Some(usize::from(
+                    graph_term.multi_channeling_setup.effective_channel_lmb_id(
+                        ChannelIndex::from(lmb_channel_id),
+                        &graph_term.multi_channeling_setup.graph.name,
+                        parameterization_settings,
+                    )?,
+                )))
+            }
         }
     }
 
@@ -1745,6 +1809,7 @@ type LmbChannelSamples<T> = TiVec<ChannelIndex, (MomentumSample<T>, F<T>)>;
 #[trait_decode(trait = GammaLoopContext)]
 pub struct LmbMultiChannelingSetup {
     pub channels: TiVec<ChannelIndex, LmbIndex>,
+    /// Canonical group-master graph used to resolve group-level channel overrides.
     pub graph: Graph,
     pub all_bases: TiVec<LmbIndex, LoopMomentumBasis>,
 }
@@ -2737,6 +2802,19 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
         context.is_primary_stability_level,
         context.record_rotated_results,
     )?;
+    let threshold_counterterm_failed = context
+        .evaluation_metadata
+        .threshold_counterterm_error
+        .is_some();
+    if context.is_final_level
+        && let Some(threshold_error) = &context.evaluation_metadata.threshold_counterterm_error
+    {
+        return Err(eyre!(
+            "threshold-counterterm evaluation remained invalid after the final {} stability level: {}",
+            context.stability_level.precision,
+            threshold_error,
+        ));
+    }
     let results = graph_results
         .iter()
         .map(|result| result.integrand_result.clone())
@@ -2791,7 +2869,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
             .evaluation_metadata
             .evaluator_evaluation_time
             .saturating_sub(evaluator_time_before),
-        is_stable,
+        is_stable: is_stable && !threshold_counterterm_failed,
         instability_reason,
         rotated_results,
     })
@@ -3449,6 +3527,7 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
 
     let total_levels = stability_iterator.len();
     for (level_index, stability_level) in stability_iterator.into_iter().enumerate() {
+        evaluation_metadata.clear_threshold_counterterm_error();
         let is_final_level = level_index + 1 == total_levels;
         let record_rotated_results = integrand
             .get_settings()
@@ -3603,6 +3682,7 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
                 is_nan: true,
                 loop_momenta_escalation: None,
                 stability_results: Vec::new(),
+                threshold_counterterm_error: None,
             },
         })
     }
@@ -3881,16 +3961,21 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
 #[cfg(test)]
 mod tests {
     use super::{
-        ChannelIndex, LmbMultiChannelingSetup, RuntimeCache, filtered_orientation_count,
-        resolve_visible_orientation_id,
+        ChannelIndex, LmbChannelWeightingSettings, LmbMultiChannelingSetup, RuntimeCache,
+        filtered_orientation_count, resolve_visible_orientation_id,
     };
     use crate::cff::expression::OrientationID;
     use crate::{
         dot,
-        graph::{Graph, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph},
+        graph::{Graph, LMBext, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph},
         initialisation::test_initialise,
-        momentum::signature::LoopExtSignature,
-        settings::runtime::ParameterizationSettings,
+        momentum::{
+            ThreeMomentum,
+            sample::{BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample},
+            signature::LoopExtSignature,
+        },
+        settings::runtime::{LmbChannelWeight, ParameterizationSettings},
+        utils::{F, load_generic_model},
     };
     use linnet::half_edge::{
         involution::{EdgeIndex, EdgeVec, Orientation},
@@ -4014,5 +4099,91 @@ mod tests {
                 .selected_lmb_basis_id("G", &out_of_range_settings)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn lmb_channel_prefactors_form_a_partition_of_unity() {
+        test_initialise().unwrap();
+        let mut graph: Graph = dot!(
+            digraph lmb_prefactor_partition {
+                edge [num=1 mass=0]
+                node [num=1]
+                ext [style=invis]
+                ext -> A [id=0]
+                A -> B [id=1]
+                A -> B [id=2]
+                B -> ext [id=3]
+            }
+        )
+        .unwrap();
+        let all_bases = graph.generate_loop_momentum_bases();
+        assert!(all_bases.len() >= 2);
+        graph.loop_momentum_basis = all_bases[LmbIndex::from(0)].clone();
+        let setup = LmbMultiChannelingSetup {
+            channels: vec![LmbIndex::from(0), LmbIndex::from(1)].into(),
+            graph: graph.clone(),
+            all_bases,
+        };
+        let loop_moms: LoopMomenta<F<f64>> = graph
+            .loop_momentum_basis
+            .loop_edges
+            .iter()
+            .enumerate()
+            .map(|(index, _)| {
+                let offset = index as f64;
+                ThreeMomentum::new(F(0.4 + offset), F(-0.3), F(0.2 - offset))
+            })
+            .collect();
+        let external_moms: ExternalFourMomenta<F<f64>> =
+            (0..graph.loop_momentum_basis.ext_edges.len())
+                .map(|_| [F(0.0), F(0.0), F(0.0), F(0.0)].into())
+                .collect();
+        let sample = MomentumSample {
+            sample: BareMomentumSample {
+                loop_moms,
+                dual_loop_moms: None,
+                loop_mom_cache_id: 0,
+                loop_mom_base_cache_id: 0,
+                external_moms,
+                external_mom_cache_id: 0,
+                external_mom_base_cache_id: 0,
+                jacobian: F(1.0),
+                orientation: None,
+                parameterization_branch: None,
+            },
+        };
+        let model = load_generic_model("sm");
+        let parameterization_settings = ParameterizationSettings::default();
+        let alpha = F(1.3);
+
+        for channel_weight in [LmbChannelWeight::Ose, LmbChannelWeight::InverseJacobian] {
+            let weighting_settings = LmbChannelWeightingSettings {
+                graph_name: "G",
+                model: &model,
+                alpha: &alpha,
+                channel_weight,
+                parameterization_settings: &parameterization_settings,
+                e_cm: 1.0,
+            };
+            let sum = [ChannelIndex::from(0), ChannelIndex::from(1)]
+                .into_iter()
+                .map(|channel_index| {
+                    let selected_lmb = setup
+                        .effective_channel_lmb_id(channel_index, "G", &parameterization_settings)
+                        .unwrap();
+                    setup
+                        .compute_prefactor_impl(
+                            channel_index,
+                            selected_lmb,
+                            &sample,
+                            weighting_settings,
+                        )
+                        .unwrap()
+                })
+                .fold(F(0.0), |sum, weight| sum + weight);
+
+            let difference = (sum - sum.one()).abs();
+            assert!(difference <= sum.epsilon() * sum.from_usize(16));
+        }
     }
 }

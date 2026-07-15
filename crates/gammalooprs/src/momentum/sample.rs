@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::graph::{Graph, LmbIndex, LoopMomentumBasis};
+use crate::graph::{Graph, LMBext, LmbIndex, LoopMomentumBasis};
 use crate::integrands::process::evaluators::SingleOrAllOrientations;
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, SignOrZero, ThreeMomentum};
 
@@ -174,18 +174,38 @@ impl SubspaceData {
             .collect::<Vec<_>>();
         let complement_subgraph = graph.full_filter().subtract(&subgraph.filter);
 
-        let mut lmb_indices = Vec::new();
-        for (loop_index, edge_index) in all_lmbs[lmb].loop_edges.iter_enumerated() {
-            if edges_in_subgraph.contains(edge_index) {
-                lmb_indices.push(loop_index);
-            }
-        }
+        let parent_lmb = &all_lmbs[lmb];
+        let compatible_sub_lmb =
+            graph.try_compatible_sub_lmb(&subgraph, graph.full_crown(&subgraph), parent_lmb)?;
+        let mut lmb_indices = compatible_sub_lmb
+            .loop_edges
+            .iter()
+            .map(|edge_index| {
+                parent_lmb
+                    .loop_edges
+                    .iter_enumerated()
+                    .find_map(|(loop_index, parent_edge)| {
+                        (parent_edge == edge_index).then_some(loop_index)
+                    })
+                    .ok_or_else(|| {
+                        eyre!(
+                            "Compatible subgraph LMB edge {:?} is not a defining edge of parent LMB {:?}",
+                            edge_index,
+                            parent_lmb.loop_edges,
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        lmb_indices.sort();
 
-        if lmb_indices.len() != subgraph.loopcount.unwrap() {
+        if lmb_indices.len() != subgraph.loopcount.unwrap()
+            || compatible_sub_lmb.loop_edges.len() != subgraph.loopcount.unwrap()
+        {
             return Err(color_eyre::eyre::eyre!(
-                "Provided loop momentum basis does not align with subgraph, lmb_indices: {:?}, lmb_edges: {:?}, subgraph loopcount: {}, edges_in_subgraph: {:?}",
+                "Provided loop momentum basis is not topologically compatible with subgraph, lmb_indices: {:?}, lmb_edges: {:?}, compatible_sub_lmb_edges: {:?}, subgraph loopcount: {}, edges_in_subgraph: {:?}",
                 lmb_indices,
-                all_lmbs[lmb].loop_edges,
+                parent_lmb.loop_edges,
+                compatible_sub_lmb.loop_edges,
                 subgraph.loopcount.unwrap(),
                 edges_in_subgraph,
             ));
@@ -206,34 +226,18 @@ impl SubspaceData {
         graph: &Graph,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> Result<Self> {
-        let mut subgraph = InternalSubGraph::cleaned_filter_pessimist(subgraph, graph);
-        subgraph.set_loopcount(graph);
-        let complement_subgraph = graph.full_filter().subtract(&subgraph.filter);
-
-        let edges_in_subgraph = graph
-            .iter_edges_of(&subgraph.filter)
-            .map(|ed| ed.1)
-            .collect::<Vec<_>>();
-
-        for (lmb_index, lmb) in all_lmbs.iter_enumerated() {
-            let mut lmb_indices = Vec::new();
-            for (loop_index, edge_index) in lmb.loop_edges.iter_enumerated() {
-                if edges_in_subgraph.contains(edge_index) {
-                    lmb_indices.push(loop_index);
-                }
-            }
-
-            if lmb_indices.len() == subgraph.loopcount.unwrap() {
-                return Ok(Self {
-                    subgraph,
-                    complement_subgraph,
-                    lmb: lmb_index,
-                    lmb_indices,
-                });
+        let mut errors = Vec::new();
+        for (lmb_index, _) in all_lmbs.iter_enumerated() {
+            match Self::new_with_user_selected_lmb(subgraph.clone(), lmb_index, graph, all_lmbs) {
+                Ok(subspace) => return Ok(subspace),
+                Err(error) => errors.push(format!("LMB {}: {error:#}", usize::from(lmb_index))),
             }
         }
 
-        Err(eyre!("No suitable loop momentum basis found for subgraph"))
+        Err(eyre!(
+            "No topology-compatible loop momentum basis found for subgraph:\n{}",
+            errors.join("\n")
+        ))
     }
     pub(crate) fn get_lmb<'a>(
         &self,

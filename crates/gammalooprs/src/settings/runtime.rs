@@ -21,9 +21,10 @@ use crate::{
     observables::ObservableFileFormat,
     settings::runtime::kinematic::{Externals, improvement::generate_default_momenta},
     utils::{
-        ApproxEq, F, FloatLike, format_uncertainty,
+        ApproxEq, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, F, FloatLike, format_uncertainty,
         serde_utils::{
-            _default_rotation_axis, _default_stability_levels, IsDefault, is_default_rotation_axis,
+            _default_rotation_axis, _default_stability_levels, IsDefault,
+            is_default_esurface_existence_threshold, is_default_rotation_axis,
             is_default_stability_levels, is_false, is_float, is_true, is_u64, is_usize,
             show_defaults_helper,
         },
@@ -48,7 +49,7 @@ pub struct RuntimeModelSettings {
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
 )]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct SubtractionSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -57,8 +58,24 @@ pub struct SubtractionSettings {
     pub integrated_ct_settings: IntegratedCounterTermSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub overlap_settings: OverlapSettings,
+    /// Dimensionless tolerance used to compare the energy-squared E-surface invariant margin
+    /// against `esurface_existence_threshold * E_cm^2` at runtime.
+    #[serde(skip_serializing_if = "is_default_esurface_existence_threshold")]
+    pub esurface_existence_threshold: f64,
     #[serde(skip_serializing_if = "is_false")]
     pub disable_threshold_subtraction: bool,
+}
+
+impl Default for SubtractionSettings {
+    fn default() -> Self {
+        Self {
+            local_ct_settings: LocalCounterTermSettings::default(),
+            integrated_ct_settings: IntegratedCounterTermSettings::default(),
+            overlap_settings: OverlapSettings::default(),
+            esurface_existence_threshold: DEFAULT_ESURFACE_EXISTENCE_THRESHOLD,
+            disable_threshold_subtraction: false,
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -122,21 +139,25 @@ impl<'a> LockedRuntimeSettings<'a> {
         masses: &EdgeVec<F<f64>>,
         external_signature: &SignatureLike<ExternalIndex>,
         lmb: &LoopMomentumBasis,
+        esurface_existence_threshold: f64,
     ) -> bool {
         let dependent_momenta_constructor =
             DependentMomentaConstructor::Amplitude(external_signature);
 
-        esurface.exists(
-            &self
-                .0
-                .kinematics
-                .externals
-                .get_dependent_externals(dependent_momenta_constructor)
-                .unwrap(),
-            lmb,
-            masses,
-            &F(self.0.kinematics.e_cm),
-        )
+        esurface
+            .classify_existence(
+                &self
+                    .0
+                    .kinematics
+                    .externals
+                    .get_dependent_externals(dependent_momenta_constructor)
+                    .unwrap(),
+                lmb,
+                masses,
+                &F(self.0.kinematics.e_cm),
+                &F(esurface_existence_threshold),
+            )
+            .is_existing()
     }
 }
 

@@ -226,7 +226,9 @@ macro_rules! debug_tags {
 #[allow(unused)]
 const MAX_DIMENSION: usize = MAX_LOOP * 3;
 
-pub const PINCH_TEST_THRESHOLD: f64 = 1e-10;
+pub(crate) const ESURFACE_SHIFT_THRESHOLD: f64 = 1.0e-13;
+/// Default dimensionless tolerance for E-surface invariant-mass-squared margins.
+pub const DEFAULT_ESURFACE_EXISTENCE_THRESHOLD: f64 = 1.0e-7;
 
 pub const LEFT: usize = 0;
 pub const RIGHT: usize = 1;
@@ -3377,35 +3379,6 @@ pub(crate) fn one_loop_e_surface_bilinear_form<T: FloatLike>(
         - (&m1_sq - &m2_sq + &p1_sq - &p2_sq) * (&m1_sq - &m2_sq + &p1_sq - &p2_sq);
 
     (a, b, c)
-}
-
-#[allow(unused)]
-pub(crate) fn one_loop_e_surface_exists<T: FloatLike>(
-    p1: &[F<T>; 3],
-    p2: &[F<T>; 3],
-    m1_sq: F<T>,
-    m2_sq: F<T>,
-    e_shift: F<T>,
-) -> (bool, bool) {
-    let p_norm_sq = (&p1[0] - &p2[0]) * (&p1[0] - &p2[0])
-        + (&p1[1] - &p2[1]) * (&p1[1] - &p2[1])
-        + (&p1[2] - &p2[2]) * (&p1[2] - &p2[2]);
-
-    // /!\ In alphaLoop this should be done without numerical check but purely symbolically, or at least
-    // mul_unit must make sure there is no weird transition from non-pinched to pinched for the 2->2 massless E-surface sandwich,
-    // i.e. such cases should be *both* existing and pinched!
-    if e_shift > F::<T>::from_f64(PINCH_TEST_THRESHOLD) {
-        return (false, false);
-    }
-    let test = (e_shift.square() - &p_norm_sq)
-        - (m1_sq.sqrt() + m2_sq.sqrt()) * (m1_sq.sqrt() + m2_sq.sqrt());
-    if test.norm() < F::<T>::from_f64(PINCH_TEST_THRESHOLD) {
-        (false, true)
-    } else if test < e_shift.zero() {
-        (false, false)
-    } else {
-        (true, false)
-    }
 }
 
 use color_eyre::Result;

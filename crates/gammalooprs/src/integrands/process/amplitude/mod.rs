@@ -470,7 +470,7 @@ impl AmplitudeGraphTerm {
                     .expect("LMB channel event metadata requires a parameterization.");
                 self.multi_channeling_setup.effective_channel_edge_ids(
                     channel_id,
-                    &self.graph.name,
+                    &self.multi_channeling_setup.graph.name,
                     &parameterization_settings,
                 )
             })
@@ -516,7 +516,7 @@ impl AmplitudeGraphTerm {
                     .get_parameterization_settings()
                     .expect("LMB multichanneling requires a parameterization.");
                 let weighting_settings = LmbChannelWeightingSettings {
-                    graph_name: &self.graph.name,
+                    graph_name: &self.multi_channeling_setup.graph.name,
                     model: context.model,
                     alpha,
                     channel_weight: *channel_weight,
@@ -783,7 +783,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         Ok(Some(format_lmb_channel_label(
             &self.multi_channeling_setup.effective_channel_edge_ids(
                 channel_id,
-                &self.graph.name,
+                &self.multi_channeling_setup.graph.name,
                 parameterization_settings,
             )?,
         )))
@@ -794,16 +794,20 @@ impl GraphTerm for AmplitudeGraphTerm {
     }
 
     fn get_num_channels(&self, parameterization_settings: &ParameterizationSettings) -> usize {
-        self.multi_channeling_setup
-            .effective_channel_count(&self.graph.name, parameterization_settings)
+        self.multi_channeling_setup.effective_channel_count(
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )
     }
 
     fn selected_lmb_basis_id(
         &self,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<LmbIndex> {
-        self.multi_channeling_setup
-            .selected_lmb_basis_id(&self.graph.name, parameterization_settings)
+        self.multi_channeling_setup.selected_lmb_basis_id(
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )
     }
 
     fn evaluate<T: FloatLike>(
@@ -1308,8 +1312,14 @@ impl AmplitudeIntegrand {
                         let esurface = &graph_term.esurfaces[esurface_id];
                         let lmb = &graph.loop_momentum_basis;
                         let real_mass_vector = graph.get_real_mass_vector(model);
-                        let candidate_exists =
-                            esurface.exists(&external_moms, lmb, &real_mass_vector, &F(e_cm));
+                        let candidate_existence = esurface.classify_existence(
+                            &external_moms,
+                            lmb,
+                            &real_mass_vector,
+                            &F(e_cm),
+                            &F(self.settings.subtraction.esurface_existence_threshold),
+                        );
+                        let candidate_exists = candidate_existence.is_existing();
                         if tracing::event_enabled!(tracing::Level::DEBUG) {
                             let shift_part =
                                 esurface.compute_shift_part_from_momenta(&external_moms, lmb);
@@ -1377,6 +1387,10 @@ impl AmplitudeIntegrand {
                                 representative_graph_group_pos = representative_graph_group_pos.0,
                                 representative_raised_esurface_id = representative_raised_esurface_id.0,
                                 candidate_exists,
+                                candidate_status = candidate_existence.label(),
+                                normalized_existence_margin = ?candidate_existence.normalized_margin(),
+                                non_existing_reason = ?candidate_existence.non_existing_reason(),
+                                classification = ?candidate_existence,
                                 generated = ?generated,
                                 active = ?active,
                                 max_occurrence = raised_group.max_occurence,

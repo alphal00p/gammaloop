@@ -34,6 +34,125 @@
       },
       "additionalProperties": false
     },
+    "Approach": {
+      "type": "object",
+      "properties": {
+        "approach_axes": {
+          "description": "Direction vector for one approach axis, as comma-separated components",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "discrete_dim": {
+          "description": "The discrete dimensions of the sample",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "graph_id": {
+          "description": "Select a specific graph in momentum-space approach",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "integrand_name": {
+          "description": "The integrand name to approach",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "linear": {
+          "description": "Use linear spacing in t",
+          "type": "boolean"
+        },
+        "logarithmic": {
+          "description": "Use logarithmic spacing in |t|",
+          "type": "boolean"
+        },
+        "min_abs_t": {
+          "description": "Smallest non-zero |t| for logarithmic spacing",
+          "type": "number",
+          "format": "double"
+        },
+        "momentum_space": {
+          "description": "Interpret point as momentum-space coordinates",
+          "type": "boolean"
+        },
+        "n_cores": {
+          "description": "Number of worker threads for approach evaluations",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "n_points": {
+          "description": "Number of points on each side of the midpoint",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "orientation_id": {
+          "description": "Select a specific orientation of the selected graph in momentum-space approach",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "output_results": {
+          "description": "Path to the JSON output file",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "point": {
+          "description": "The midpoint to inspect (x y) or (p0 px ...)",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "process": {
+          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "use_arb_prec": {
+          "description": "Evaluate in f128 precision",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "point",
+        "approach_axes",
+        "n_points",
+        "linear",
+        "logarithmic",
+        "min_abs_t",
+        "use_arb_prec",
+        "momentum_space",
+        "discrete_dim"
+      ]
+    },
     "ApproximationType": {
       "type": "string",
       "enum": [
@@ -287,6 +406,19 @@
           "additionalProperties": false,
           "required": [
             "Inspect"
+          ]
+        },
+        {
+          "description": "Approach a phase-space point along one or more axes",
+          "type": "object",
+          "properties": {
+            "Approach": {
+              "$ref": "#/$defs/Approach"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Approach"
           ]
         },
         {
@@ -4891,6 +5023,11 @@
         "disable_threshold_subtraction": {
           "type": "boolean"
         },
+        "esurface_existence_threshold": {
+          "description": "Dimensionless tolerance used to compare the energy-squared E-surface invariant margin\nagainst `esurface_existence_threshold * E_cm^2` at runtime.",
+          "type": "number",
+          "format": "double"
+        },
         "integrated_ct_settings": {
           "$ref": "#/$defs/IntegratedCounterTermSettings"
         },
@@ -4933,6 +5070,11 @@
         },
         "enable_thresholds": {
           "type": "boolean"
+        },
+        "esurface_existence_threshold": {
+          "description": "Dimensionless tolerance used to compare the energy-squared E-surface invariant margin\nagainst `esurface_existence_threshold * E_cm^2` during generation-time checks.",
+          "type": "number",
+          "format": "double"
         },
         "skip_thresholds_that_are_cuts": {
           "type": "boolean"

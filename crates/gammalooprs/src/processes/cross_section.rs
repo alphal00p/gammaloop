@@ -21,7 +21,7 @@ use tracing::info;
 use vakint::Vakint;
 
 use crate::{
-    GammaLoopContext, GammaLoopContextContainer,
+    DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
         CutCFFIndex,
         esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
@@ -30,7 +30,9 @@ use crate::{
     debug_tags, define_index,
     graph::{
         GraphGroup, GroupId, LMBext, LmbChannelFallback, LmbIndex, LoopMomentumBasis,
+        ThresholdPinchStatus,
         cuts::{CutSet, ResidueSelector},
+        edge::EdgeMass,
         parse::complete_group_parsing,
     },
     integrands::process::{
@@ -48,7 +50,9 @@ use crate::{
         GraphSelectionSignatureInventory, GraphSelectionSubject, NamedGraphGenerationReport,
         RaisedCutSignatureInventory,
     },
-    settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
+    settings::{
+        GlobalSettings, RuntimeSettings, global::GenerationSettings, runtime::LockedRuntimeSettings,
+    },
     utils::{
         F, GS, W_,
         hyperdual_utils::{shape_from_cut_cff_index, simple_n_deriv_shape},
@@ -60,7 +64,7 @@ use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Orientation},
     subgraph::{
         HedgeNode, Inclusion, InternalSubGraph, ModifySubSet, OrientedCut, SuBitGraph,
-        SubGraphLike, SubSetOps,
+        SubGraphLike, SubSetLike, SubSetOps,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -159,10 +163,237 @@ fn max_dual_size_for_cut_cff_indices<'a>(
         .unwrap_or(1)
 }
 
-define_index! {pub struct GlobalThresholdId;}
 define_index! {pub struct RightThresholdId;}
 define_index! {pub struct LeftThresholdId;}
 define_index! {pub struct RaisedCutId;}
+
+/// Eligibility of one threshold E-surface relative to one side of one physical cut.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ThresholdCountertermStatus {
+    /// The E-surface does not depend on any active loop coordinate of the cut-side subspace.
+    NoRadialDependence,
+    /// The zero can only occur at a pinched boundary and has no strictly existing region.
+    AlwaysPinched,
+    /// A strictly existing region is possible, but its boundary includes a pinched limit.
+    CanBecomePinched,
+    /// Current resolved masses and kinematics rigorously exclude a zero over the full cut phase space.
+    ProvenNonExisting,
+    /// A zero is possible, or the available metadata is insufficient to exclude one safely.
+    PotentiallyExisting,
+}
+
+impl ThresholdCountertermStatus {
+    pub fn is_eligible_for_generation(self, check_current_model: bool) -> bool {
+        match self {
+            Self::NoRadialDependence | Self::AlwaysPinched => false,
+            Self::ProvenNonExisting => !check_current_model,
+            Self::CanBecomePinched | Self::PotentiallyExisting => true,
+        }
+    }
+}
+
+/// Persisted topology and invariant-bound metadata for one generated cut-relative CT association.
+#[derive(Clone, Debug, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct ThresholdCountertermAssociation {
+    pub esurface_id: EsurfaceID,
+    pub cut_boundary_edges: Vec<EdgeIndex>,
+    pub threshold_boundary_edges: Vec<EdgeIndex>,
+    pub invariant_bound_is_applicable: bool,
+}
+
+#[derive(Clone, Debug, Default, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct CutThresholdCountertermAssociations {
+    pub left: Vec<ThresholdCountertermAssociation>,
+    pub right: Vec<ThresholdCountertermAssociation>,
+}
+
+impl ThresholdCountertermAssociation {
+    fn mass_sum(edges: &[EdgeIndex], masses: &EdgeVec<Option<F<f64>>>) -> Option<F<f64>> {
+        edges.iter().try_fold(F(0.0), |sum, edge_id| {
+            masses[*edge_id].as_ref().map(|mass| sum + mass.abs())
+        })
+    }
+
+    fn incoming_invariant_mass(
+        graph: &Graph,
+        runtime_settings: &RuntimeSettings,
+    ) -> Option<F<f64>> {
+        let external_momenta = runtime_settings
+            .kinematics
+            .externals
+            .get_dependent_externals(DependentMomentaConstructor::CrossSection)
+            .ok()?;
+        if external_momenta.is_empty()
+            || external_momenta.len() != graph.get_edges_in_initial_state_cut().len()
+        {
+            return None;
+        }
+
+        let total = external_momenta
+            .into_iter()
+            .reduce(|sum, momentum| sum + momentum)?;
+        let invariant_squared = total.square();
+        if invariant_squared.is_nan()
+            || invariant_squared.is_infinite()
+            || invariant_squared <= F(0.0)
+        {
+            None
+        } else {
+            Some(invariant_squared.sqrt())
+        }
+    }
+
+    fn classify_from_invariant_bounds(
+        &self,
+        cut_boundary_mass: &F<f64>,
+        threshold_boundary_mass: &F<f64>,
+        maximum_cut_invariant: Option<F<f64>>,
+        tolerance: &F<f64>,
+    ) -> ThresholdCountertermStatus {
+        if !self.invariant_bound_is_applicable
+            || cut_boundary_mass.is_nan()
+            || cut_boundary_mass.is_infinite()
+            || threshold_boundary_mass.is_nan()
+            || threshold_boundary_mass.is_infinite()
+            || tolerance.is_nan()
+            || tolerance.is_infinite()
+            || maximum_cut_invariant
+                .as_ref()
+                .is_some_and(|bound| bound.is_nan() || bound.is_infinite())
+        {
+            return ThresholdCountertermStatus::PotentiallyExisting;
+        }
+
+        let minimum_margin = cut_boundary_mass * cut_boundary_mass
+            - threshold_boundary_mass * threshold_boundary_mass;
+        let masses_match = minimum_margin.abs() <= *tolerance;
+        let threshold_minimum_is_reachable = minimum_margin <= *tolerance;
+
+        if masses_match
+            && (self.cut_boundary_edges.len() <= 1 || self.threshold_boundary_edges.len() <= 1)
+        {
+            return ThresholdCountertermStatus::AlwaysPinched;
+        }
+
+        if self.cut_boundary_edges.len() == 1 && self.threshold_boundary_edges.len() == 1 {
+            return ThresholdCountertermStatus::ProvenNonExisting;
+        }
+
+        if self.cut_boundary_edges.len() > 1 && self.threshold_boundary_edges.len() == 1 {
+            let lower_margin = threshold_boundary_mass * threshold_boundary_mass
+                - cut_boundary_mass * cut_boundary_mass;
+            if lower_margin <= *tolerance {
+                return ThresholdCountertermStatus::ProvenNonExisting;
+            }
+        }
+
+        let Some(maximum_cut_invariant) = maximum_cut_invariant else {
+            return if masses_match
+                && self.cut_boundary_edges.len() > 1
+                && self.threshold_boundary_edges.len() > 1
+            {
+                ThresholdCountertermStatus::CanBecomePinched
+            } else {
+                ThresholdCountertermStatus::PotentiallyExisting
+            };
+        };
+
+        let maximum_margin = maximum_cut_invariant * maximum_cut_invariant
+            - threshold_boundary_mass * threshold_boundary_mass;
+        if maximum_margin.abs() <= *tolerance {
+            ThresholdCountertermStatus::AlwaysPinched
+        } else if maximum_margin < -*tolerance {
+            ThresholdCountertermStatus::ProvenNonExisting
+        } else if threshold_minimum_is_reachable
+            && self.cut_boundary_edges.len() > 1
+            && self.threshold_boundary_edges.len() > 1
+        {
+            ThresholdCountertermStatus::CanBecomePinched
+        } else {
+            ThresholdCountertermStatus::PotentiallyExisting
+        }
+    }
+
+    pub fn classify_for_model(
+        &self,
+        graph: &Graph,
+        cut: &CrossSectionCut,
+        model: &Model,
+        param_builder: &ParamBuilder,
+        runtime_settings: &RuntimeSettings,
+        normalized_margin_tolerance: f64,
+    ) -> ThresholdCountertermStatus {
+        if !self.invariant_bound_is_applicable {
+            return ThresholdCountertermStatus::PotentiallyExisting;
+        }
+
+        match graph
+            .classify_threshold_pinch(&self.cut_boundary_edges, &self.threshold_boundary_edges)
+        {
+            ThresholdPinchStatus::Always => {
+                return ThresholdCountertermStatus::AlwaysPinched;
+            }
+            ThresholdPinchStatus::CanBecome | ThresholdPinchStatus::NotProven => {}
+        }
+
+        // Unlike `get_real_mass_vector`, retain unresolved or complex masses as unknown:
+        // replacing either with zero could turn an inconclusive bound into a false rejection.
+        let masses = graph.new_edgevec(|edge, _, _| {
+            if matches!(edge.mass, EdgeMass::Zero) {
+                Some(F(0.0))
+            } else {
+                edge.mass_value::<f64>(model, param_builder)
+                    .and_then(|mass| IsZero::is_zero(&mass.im).then_some(mass.re))
+            }
+        });
+        let Some(cut_boundary_mass) = Self::mass_sum(&self.cut_boundary_edges, &masses) else {
+            return ThresholdCountertermStatus::PotentiallyExisting;
+        };
+        let Some(threshold_boundary_mass) = Self::mass_sum(&self.threshold_boundary_edges, &masses)
+        else {
+            return ThresholdCountertermStatus::PotentiallyExisting;
+        };
+        let e_cm = F(runtime_settings.kinematics.e_cm.abs());
+        // The classified margins are differences of invariant masses squared, so the
+        // dimensionless threshold is normalized by E_cm squared.
+        let tolerance = F(normalized_margin_tolerance.abs()) * e_cm * e_cm;
+
+        let maximum_cut_invariant = if self.cut_boundary_edges.len() == 1 {
+            Some(cut_boundary_mass)
+        } else {
+            let incoming_invariant = Self::incoming_invariant_mass(graph, runtime_settings);
+            let complement_mass = graph
+                .iter_edges_of(&cut.cut)
+                .map(|(_, edge_id, _)| edge_id)
+                .filter(|edge_id| !self.cut_boundary_edges.contains(edge_id))
+                .try_fold(F(0.0), |sum, edge_id| {
+                    masses[edge_id].as_ref().map(|mass| sum + mass.abs())
+                });
+            incoming_invariant
+                .zip(complement_mass)
+                .and_then(|(invariant, complement_mass)| {
+                    let maximum = invariant - complement_mass;
+                    (maximum > F(0.0)).then_some(maximum)
+                })
+        };
+        self.classify_from_invariant_bounds(
+            &cut_boundary_mass,
+            &threshold_boundary_mass,
+            maximum_cut_invariant,
+            &tolerance,
+        )
+    }
+}
+
+#[derive(Clone)]
+struct TopologicalThresholdCandidate {
+    left: SuBitGraph,
+    cut: OrientedCut,
+    right: SuBitGraph,
+    esurface_id: EsurfaceID,
+}
 
 use derive_more::{From, Into};
 #[derive(Clone, Encode, Decode)]
@@ -1152,10 +1383,27 @@ impl CrossSectionGraph {
         self.build_parametric_integrand(settings, vk)?;
         //self.build_parametric_integrand_raised_cuts(settings)?;
 
+        let threshold_candidates = self.topological_threshold_candidates()?;
+        self.derived_data.threshold_candidate_esurface_ids = threshold_candidates
+            .iter()
+            .map(|candidate| candidate.esurface_id)
+            .sorted()
+            .dedup()
+            .collect();
+        self.derived_data.cut_threshold_associations =
+            ti_vec![CutThresholdCountertermAssociations::default(); self.cuts.len()];
+
         if settings.threshold_subtraction.enable_thresholds {
             debug_tags!(#generation, #subtraction; "building threshold counterterm");
             self.build_subspace_data()?;
-            self.build_threshold_counterterm(settings, vk)?;
+            let runtime_settings: RuntimeSettings = runtime_default.into();
+            self.build_threshold_counterterm(
+                model,
+                settings,
+                &runtime_settings,
+                &threshold_candidates,
+                vk,
+            )?;
         }
 
         stats.total_time += preprocess_started.elapsed();
@@ -2219,123 +2467,283 @@ impl CrossSectionGraph {
         }
     }
 
-    fn build_threshold_counterterm(
-        &mut self,
-        settings: &GenerationSettings,
-        vakint: &Vakint,
-    ) -> Result<()> {
-        // threshold enumeration as st cuts
-        let all_possible_thresholds: TiVec<GlobalThresholdId, _> = {
-            let mut unsorted = self.graph.all_st_cuts_for_cs(
-                self.source_nodes.clone(),
-                self.target_nodes.clone(),
-                &self.graph.get_initial_state_tree().0,
-            );
-            unsorted.retain(|(_left, cut, _right)| cut.nedges(&self.graph) > 1);
-            if settings.threshold_subtraction.skip_thresholds_that_are_cuts {
-                unsorted.retain(|(_left, cut, _right)| {
-                    !self.cuts.iter().any(|cs_cut| &cs_cut.cut == cut)
-                });
-            }
-
-            unsorted.sort_by(|a, b| a.1.cmp(&b.1));
-            unsorted.into()
+    fn threshold_counterterm_association(
+        &self,
+        threshold_candidate: &TopologicalThresholdCandidate,
+        sandwich: &SuBitGraph,
+        cut: &OrientedCut,
+    ) -> ThresholdCountertermAssociation {
+        let boundary_edges = |boundary: &OrientedCut| {
+            let boundary_filter = boundary.left.union(&boundary.right).intersection(sandwich);
+            let edges = self
+                .graph
+                .iter_edges_of(&boundary_filter)
+                .map(|(_, edge_id, _)| edge_id)
+                .sorted()
+                .collect();
+            let has_left_orientation =
+                boundary_filter.intersection(&boundary.left).n_included() > 0;
+            let has_right_orientation =
+                boundary_filter.intersection(&boundary.right).n_included() > 0;
+            (edges, has_left_orientation != has_right_orientation)
         };
 
-        let mut left_cut_threshold_data: TiVec<CutId, TiVec<LeftThresholdId, EsurfaceID>> =
-            ti_vec![TiVec::new(); self.cuts.len()];
+        let (cut_boundary_edges, cut_bound_is_applicable) = boundary_edges(cut);
+        let (threshold_boundary_edges, threshold_bound_is_applicable) =
+            boundary_edges(&threshold_candidate.cut);
 
-        let mut right_cut_threshold_data: TiVec<CutId, TiVec<RightThresholdId, EsurfaceID>> =
-            ti_vec![TiVec::new(); self.cuts.len()];
+        ThresholdCountertermAssociation {
+            esurface_id: threshold_candidate.esurface_id,
+            cut_boundary_edges,
+            threshold_boundary_edges,
+            invariant_bound_is_applicable: cut_bound_is_applicable && threshold_bound_is_applicable,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn classify_threshold_counterterm_association(
+        &self,
+        association: &ThresholdCountertermAssociation,
+        cut_id: CutId,
+        cut: &CrossSectionCut,
+        subspace: &SubspaceData,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        model: &Model,
+        runtime_settings: &RuntimeSettings,
+        settings: &GenerationSettings,
+    ) -> ThresholdCountertermStatus {
+        let esurface = &self.graph.surface_cache.esurface_cache[association.esurface_id];
+        if !esurface.has_radial_dependence_in_subspace(subspace, all_lmbs, &self.graph) {
+            debug!(
+                "Skipping graph '{}' cut {} threshold E-surface {} after cut-relative classification {:?}",
+                self.graph.name,
+                cut_id.0,
+                association.esurface_id.0,
+                ThresholdCountertermStatus::NoRadialDependence,
+            );
+            return ThresholdCountertermStatus::NoRadialDependence;
+        }
+
+        let structural_status = if association.invariant_bound_is_applicable {
+            self.graph.classify_threshold_pinch(
+                &association.cut_boundary_edges,
+                &association.threshold_boundary_edges,
+            )
+        } else {
+            ThresholdPinchStatus::NotProven
+        };
+        if structural_status == ThresholdPinchStatus::Always {
+            debug!(
+                "Skipping graph '{}' cut {} threshold E-surface {} after cut-relative classification {:?}",
+                self.graph.name,
+                cut_id.0,
+                association.esurface_id.0,
+                ThresholdCountertermStatus::AlwaysPinched,
+            );
+            return ThresholdCountertermStatus::AlwaysPinched;
+        }
+
+        let status = if settings.threshold_subtraction.check_esurface_at_generation {
+            association.classify_for_model(
+                &self.graph,
+                cut,
+                model,
+                &self.graph.param_builder,
+                runtime_settings,
+                settings.threshold_subtraction.esurface_existence_threshold,
+            )
+        } else {
+            match structural_status {
+                ThresholdPinchStatus::CanBecome => ThresholdCountertermStatus::CanBecomePinched,
+                ThresholdPinchStatus::NotProven => ThresholdCountertermStatus::PotentiallyExisting,
+                ThresholdPinchStatus::Always => unreachable!(
+                    "identically pinched threshold associations return before classification"
+                ),
+            }
+        };
+        if !status
+            .is_eligible_for_generation(settings.threshold_subtraction.check_esurface_at_generation)
+        {
+            debug!(
+                "Skipping graph '{}' cut {} threshold E-surface {} after cut-relative classification {:?}",
+                self.graph.name, cut_id.0, association.esurface_id.0, status,
+            );
+        }
+        status
+    }
+
+    fn topological_threshold_candidates(&self) -> Result<Vec<TopologicalThresholdCandidate>> {
+        let mut candidates = self.graph.all_st_cuts_for_cs(
+            self.source_nodes.clone(),
+            self.target_nodes.clone(),
+            &self.graph.get_initial_state_tree().0,
+        );
+        candidates.retain(|(_left, cut, _right)| cut.nedges(&self.graph) > 1);
+        candidates.sort_by(|a, b| a.1.cmp(&b.1));
+
+        candidates
+            .into_iter()
+            .map(|(left, cut, right)| {
+                let threshold_esurface = Esurface::new_from_cut_left(
+                    &self.graph.underlying,
+                    &CrossSectionCut {
+                        cut: cut.clone(),
+                        left: left.clone(),
+                        right: right.clone(),
+                    },
+                    Some(&self.graph.initial_state_cut),
+                );
+                let esurface_id = self
+                    .graph
+                    .surface_cache
+                    .esurface_cache
+                    .position(|esurface| esurface == &threshold_esurface)
+                    .ok_or_else(|| {
+                        eyre!(
+                            "Topology-discovered threshold surface {:?} is missing from graph '{}' CFF surface cache",
+                            threshold_esurface.energies,
+                            self.graph.name,
+                        )
+                    })?;
+                Ok(TopologicalThresholdCandidate {
+                    left,
+                    cut,
+                    right,
+                    esurface_id,
+                })
+            })
+            .collect()
+    }
+
+    fn build_threshold_counterterm(
+        &mut self,
+        model: &Model,
+        settings: &GenerationSettings,
+        runtime_settings: &RuntimeSettings,
+        all_possible_thresholds: &[TopologicalThresholdCandidate],
+        vakint: &Vakint,
+    ) -> Result<()> {
+        // Thresholds are topology-discovered independently of whether a CT association survives
+        // the structural and optional current-model checks below.
+        let mut cut_threshold_associations: TiVec<CutId, CutThresholdCountertermAssociations> =
+            ti_vec![CutThresholdCountertermAssociations::default(); self.cuts.len()];
+
+        let mut cut_to_raised_cut = vec![None; self.cuts.len()];
+        for (raised_cut_id, raised_cut_group) in self
+            .derived_data
+            .raised_data
+            .raised_cut_groups
+            .iter_enumerated()
+        {
+            for cut_id in &raised_cut_group.cuts {
+                cut_to_raised_cut[cut_id.0] = Some(raised_cut_id);
+            }
+        }
+        let all_lmbs = self
+            .derived_data
+            .lmbs
+            .as_ref()
+            .expect("threshold generation requires loop-momentum bases");
 
         for (cut_id, cut) in self.cuts.iter_enumerated() {
-            for (_threshold_id, (left_threshold_diagram, threshold_cut, right_threshold_diagram)) in
-                all_possible_thresholds.iter_enumerated()
-            {
-                if &cut.cut == threshold_cut
+            let raised_cut_id = cut_to_raised_cut[cut_id.0].ok_or_else(|| {
+                eyre!(
+                    "Physical cut {} in graph '{}' is missing from the raised-cut partition",
+                    cut_id.0,
+                    self.graph.name,
+                )
+            })?;
+            let (left_subspace, right_subspace) = &self.derived_data.subspace_data[raised_cut_id];
+
+            for threshold_candidate in all_possible_thresholds {
+                if cut.cut == threshold_candidate.cut
                     && settings.threshold_subtraction.skip_thresholds_that_are_cuts
                 {
                     continue;
                 }
 
                 // if the subgraph on the left of the threshold cut is a subgraph of the left amplitude, then the threshold is on the left of the cut
-                if cut.left.includes(left_threshold_diagram) {
-                    let sandwich = cut.left.intersection(right_threshold_diagram);
+                if cut.left.includes(&threshold_candidate.left) {
+                    let sandwich = cut.left.intersection(&threshold_candidate.right);
 
-                    // now we must check that the threshold cuts a loop and that the sandwich is connected
-                    if self.graph.underlying.cyclotomatic_number(&cut.left)
-                        > self
-                            .graph
-                            .underlying
-                            .cyclotomatic_number(left_threshold_diagram)
-                        && self.graph.underlying.is_connected(&sandwich)
-                        && !self
-                            .graph
-                            .is_always_pinch(&sandwich, &cut.cut, threshold_cut)
-                    {
-                        let cross_section_cut_for_threshold = CrossSectionCut {
-                            cut: threshold_cut.clone(),
-                            left: left_threshold_diagram.clone(),
-                            right: right_threshold_diagram.clone(),
-                        };
-
-                        let threshold_esurface = Esurface::new_from_cut_left(
-                            &self.graph.underlying,
-                            &cross_section_cut_for_threshold,
-                            Some(&self.graph.initial_state_cut),
+                    // The shared projected-signature check below determines whether the threshold
+                    // cuts an active loop. Connectivity remains a separate structural requirement.
+                    if self.graph.underlying.is_connected(&sandwich) {
+                        let association = self.threshold_counterterm_association(
+                            threshold_candidate,
+                            &sandwich,
+                            &cut.cut,
                         );
-
-                        let threshold_id = self
-                            .graph
-                            .surface_cache
-                            .esurface_cache
-                            .position(|esurface| esurface == &threshold_esurface)
-                            .unwrap();
-
-                        left_cut_threshold_data[cut_id].push(threshold_id);
+                        let status = self.classify_threshold_counterterm_association(
+                            &association,
+                            cut_id,
+                            cut,
+                            left_subspace,
+                            all_lmbs,
+                            model,
+                            runtime_settings,
+                            settings,
+                        );
+                        if status.is_eligible_for_generation(
+                            settings.threshold_subtraction.check_esurface_at_generation,
+                        ) {
+                            cut_threshold_associations[cut_id].left.push(association);
+                        }
                     }
-                } else if cut.right.includes(right_threshold_diagram) {
-                    let sandwich = cut.right.intersection(left_threshold_diagram);
-                    if self.graph.underlying.cyclotomatic_number(&cut.right)
-                        > self
-                            .graph
-                            .underlying
-                            .cyclotomatic_number(right_threshold_diagram)
-                        && self.graph.underlying.is_connected(&sandwich)
-                        && !self
-                            .graph
-                            .is_always_pinch(&sandwich, &cut.cut, threshold_cut)
-                    {
-                        let cross_section_cut_for_threshold = CrossSectionCut {
-                            cut: threshold_cut.clone(),
-                            left: left_threshold_diagram.clone(),
-                            right: right_threshold_diagram.clone(),
-                        };
-
-                        let threshold_esurface = Esurface::new_from_cut_left(
-                            &self.graph.underlying,
-                            &cross_section_cut_for_threshold,
-                            Some(&self.graph.initial_state_cut),
-                        );
-
+                } else if cut.right.includes(&threshold_candidate.right) {
+                    let sandwich = cut.right.intersection(&threshold_candidate.left);
+                    if self.graph.underlying.is_connected(&sandwich) {
                         // threshold_esurface.subspace_graph =
                         //     InternalSubGraph::cleaned_filter_pessimist(
                         //         cut.right.clone(),
                         //         &self.graph,
                         //     );
-
-                        let threshold_id = self
-                            .graph
-                            .surface_cache
-                            .esurface_cache
-                            .position(|esurface| esurface == &threshold_esurface)
-                            .unwrap();
-
-                        right_cut_threshold_data[cut_id].push(threshold_id);
+                        let association = self.threshold_counterterm_association(
+                            threshold_candidate,
+                            &sandwich,
+                            &cut.cut,
+                        );
+                        let status = self.classify_threshold_counterterm_association(
+                            &association,
+                            cut_id,
+                            cut,
+                            right_subspace,
+                            all_lmbs,
+                            model,
+                            runtime_settings,
+                            settings,
+                        );
+                        if status.is_eligible_for_generation(
+                            settings.threshold_subtraction.check_esurface_at_generation,
+                        ) {
+                            cut_threshold_associations[cut_id].right.push(association);
+                        }
                     }
                 }
             }
         }
+
+        let left_cut_threshold_data: TiVec<CutId, Vec<EsurfaceID>> = cut_threshold_associations
+            .iter()
+            .map(|associations| {
+                associations
+                    .left
+                    .iter()
+                    .map(|association| association.esurface_id)
+                    .collect()
+            })
+            .collect();
+        let right_cut_threshold_data: TiVec<CutId, Vec<EsurfaceID>> = cut_threshold_associations
+            .iter()
+            .map(|associations| {
+                associations
+                    .right
+                    .iter()
+                    .map(|association| association.esurface_id)
+                    .collect()
+            })
+            .collect();
+        self.derived_data.cut_threshold_associations = cut_threshold_associations;
 
         let threshold_raised_data = self.graph.determine_raised_esurfaces_from_expression(
             self.derived_data
@@ -2610,15 +3018,22 @@ impl CrossSectionGraph {
             .derived_data
             .raised_data
             .raised_cut_groups
-            .iter()
-            .map(|cut_group| {
+            .iter_enumerated()
+            .map(|(raised_cut_id, cut_group)| {
+                let representative_cut_id = cut_group.cuts.first().copied().ok_or_else(|| {
+                    eyre!(
+                        "Graph '{}' has an empty raised cut group {} while building threshold-counterterm subspaces",
+                        self.graph.name,
+                        raised_cut_id.0,
+                    )
+                })?;
                 let valid_subspace_lmbs = all_lmbs
                     .iter_enumerated()
                     .filter_map(|(index, lmb)| {
                         let mut edges_in_cut = self
                             .graph
                             .underlying
-                            .iter_edges_of(&self.cuts[cut_group.cuts[0]].cut)
+                            .iter_edges_of(&self.cuts[representative_cut_id].cut)
                             .map(|(_, e, _)| e)
                             .collect_vec();
 
@@ -2653,30 +3068,60 @@ impl CrossSectionGraph {
                     })
                     .collect_vec();
 
-                let smallest_left_subgraph = left_subgraphs.first().unwrap().clone();
-                let smallest_right_subgraph = right_subgraphs.first().unwrap().clone();
+                let smallest_left_subgraph = left_subgraphs.first().cloned().ok_or_else(|| {
+                    eyre!(
+                        "Graph '{}' raised cut group {} has no left subgraph",
+                        self.graph.name,
+                        raised_cut_id.0,
+                    )
+                })?;
+                let smallest_right_subgraph = right_subgraphs.first().cloned().ok_or_else(|| {
+                    eyre!(
+                        "Graph '{}' raised cut group {} has no right subgraph",
+                        self.graph.name,
+                        raised_cut_id.0,
+                    )
+                })?;
 
-                let mut possible_subspaces = valid_subspace_lmbs
-                    .iter()
-                    .map(|lmb_index| {
-                        (
-                            SubspaceData::new_with_user_selected_lmb(
-                                smallest_left_subgraph.clone(),
-                                *lmb_index,
-                                &self.graph,
-                                all_lmbs,
-                            )
-                            .unwrap(),
-                            SubspaceData::new_with_user_selected_lmb(
-                                smallest_right_subgraph.clone(),
-                                *lmb_index,
-                                &self.graph,
-                                all_lmbs,
-                            )
-                            .unwrap(),
-                        )
-                    })
-                    .collect_vec();
+                let mut possible_subspaces = Vec::new();
+                let mut rejected_lmbs = Vec::new();
+                for lmb_index in valid_subspace_lmbs {
+                    let left = SubspaceData::new_with_user_selected_lmb(
+                        smallest_left_subgraph.clone(),
+                        lmb_index,
+                        &self.graph,
+                        all_lmbs,
+                    );
+                    let right = SubspaceData::new_with_user_selected_lmb(
+                        smallest_right_subgraph.clone(),
+                        lmb_index,
+                        &self.graph,
+                        all_lmbs,
+                    );
+
+                    match (left, right) {
+                        (Ok(left), Ok(right)) if left.is_mergable_with(&right) => {
+                            possible_subspaces.push((left, right));
+                        }
+                        (Ok(left), Ok(right)) => rejected_lmbs.push(format!(
+                            "LMB {} produced non-disjoint subspaces: left={:?}, right={:?}",
+                            usize::from(lmb_index),
+                            left.iter_lmb_indices().collect_vec(),
+                            right.iter_lmb_indices().collect_vec(),
+                        )),
+                        (left, right) => rejected_lmbs.push(format!(
+                            "LMB {}: left={}, right={}",
+                            usize::from(lmb_index),
+                            left.err()
+                                .map(|error| format!("{error:#}"))
+                                .unwrap_or_else(|| "compatible".to_string()),
+                            right
+                                .err()
+                                .map(|error| format!("{error:#}"))
+                                .unwrap_or_else(|| "compatible".to_string()),
+                        )),
+                    }
+                }
 
                 possible_subspaces.sort_by_key(|(left, right)| {
                     (
@@ -2685,7 +3130,14 @@ impl CrossSectionGraph {
                     )
                 });
 
-                Ok(possible_subspaces.first().unwrap().clone())
+                possible_subspaces.first().cloned().ok_or_else(|| {
+                    eyre!(
+                        "No topology-compatible parent LMB found for graph '{}' raised cut group {}. Rejections:\n{}",
+                        self.graph.name,
+                        raised_cut_id.0,
+                        rejected_lmbs.join("\n"),
+                    )
+                })
             })
             .collect::<Result<_>>()?;
 
@@ -2711,6 +3163,13 @@ pub struct CrossSectionDerivedData {
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub threshold_counterterms: TiVec<RaisedCutId, LUCounterTermData>,
+    /// Graph-level inventory of every topology-discovered threshold E-surface. This remains
+    /// independent of whether a counterterm is generated for any particular physical cut.
+    pub threshold_candidate_esurface_ids: Vec<EsurfaceID>,
+    /// Exact generated left/right threshold associations for each physical cut. Runtime
+    /// evaluators aggregate these into raised-cut groups, but display and model reclassification
+    /// must retain the physical-cut-relative eligibility information.
+    pub cut_threshold_associations: TiVec<CutId, CutThresholdCountertermAssociations>,
     pub subspace_data: TiVec<RaisedCutId, (SubspaceData, SubspaceData)>,
     pub raised_data: RaisedCutData,
 }
@@ -2822,6 +3281,8 @@ impl CrossSectionDerivedData {
             lmbs: None,
             multi_channeling_setup: None,
             threshold_counterterms: TiVec::new(),
+            threshold_candidate_esurface_ids: Vec::new(),
+            cut_threshold_associations: TiVec::new(),
             subspace_data: TiVec::new(),
             raised_data: RaisedCutData::new(),
         }
@@ -3031,7 +3492,168 @@ mod tests {
         cff::CutCFFIndex, dot, graph::parse::from_dot::IntoGraph, initialisation::test_initialise,
         utils::GS,
     };
-    use linnet::half_edge::involution::EdgeIndex;
+    use linnet::half_edge::{
+        involution::EdgeIndex,
+        subgraph::{OrientedCut, SuBitGraph},
+    };
+
+    fn threshold_association(
+        cut_boundary_size: usize,
+        threshold_boundary_size: usize,
+    ) -> super::ThresholdCountertermAssociation {
+        super::ThresholdCountertermAssociation {
+            esurface_id: crate::cff::esurface::EsurfaceID(0),
+            cut_boundary_edges: (0..cut_boundary_size).map(EdgeIndex::from).collect(),
+            threshold_boundary_edges: (0..threshold_boundary_size)
+                .map(|index| EdgeIndex::from(cut_boundary_size + index))
+                .collect(),
+            invariant_bound_is_applicable: true,
+        }
+    }
+
+    #[test]
+    fn singleton_boundary_classification_uses_generic_mass_hierarchy() {
+        use super::ThresholdCountertermStatus;
+        use crate::utils::F;
+
+        let association = threshold_association(1, 2);
+        let tolerance = F(1.0e-12);
+
+        assert_eq!(
+            association.classify_from_invariant_bounds(&F(3.0), &F(4.0), Some(F(3.0)), &tolerance,),
+            ThresholdCountertermStatus::ProvenNonExisting,
+        );
+        assert_eq!(
+            association.classify_from_invariant_bounds(&F(4.0), &F(4.0), Some(F(4.0)), &tolerance,),
+            ThresholdCountertermStatus::AlwaysPinched,
+        );
+        assert_eq!(
+            association.classify_from_invariant_bounds(&F(5.0), &F(4.0), Some(F(5.0)), &tolerance,),
+            ThresholdCountertermStatus::PotentiallyExisting,
+        );
+
+        let fixed_association = threshold_association(1, 1);
+        assert_eq!(
+            fixed_association.classify_from_invariant_bounds(
+                &F(3.0),
+                &F(4.0),
+                Some(F(3.0)),
+                &tolerance,
+            ),
+            ThresholdCountertermStatus::ProvenNonExisting,
+        );
+        assert_eq!(
+            fixed_association.classify_from_invariant_bounds(
+                &F(5.0),
+                &F(4.0),
+                Some(F(5.0)),
+                &tolerance,
+            ),
+            ThresholdCountertermStatus::ProvenNonExisting,
+        );
+    }
+
+    #[test]
+    fn current_model_filter_is_controlled_only_by_generation_setting() {
+        use super::ThresholdCountertermStatus;
+
+        assert!(ThresholdCountertermStatus::ProvenNonExisting.is_eligible_for_generation(false));
+        assert!(!ThresholdCountertermStatus::ProvenNonExisting.is_eligible_for_generation(true));
+        assert!(!ThresholdCountertermStatus::AlwaysPinched.is_eligible_for_generation(false));
+        assert!(!ThresholdCountertermStatus::NoRadialDependence.is_eligible_for_generation(false));
+        assert!(ThresholdCountertermStatus::PotentiallyExisting.is_eligible_for_generation(true));
+    }
+
+    #[test]
+    fn multiparticle_boundary_classification_is_conservative() {
+        use super::ThresholdCountertermStatus;
+        use crate::utils::F;
+
+        let association = threshold_association(2, 2);
+        let tolerance = F(1.0e-12);
+
+        assert_eq!(
+            association.classify_from_invariant_bounds(&F(4.0), &F(4.0), Some(F(8.0)), &tolerance,),
+            ThresholdCountertermStatus::CanBecomePinched,
+        );
+        assert_eq!(
+            association.classify_from_invariant_bounds(&F(3.0), &F(5.0), Some(F(4.0)), &tolerance,),
+            ThresholdCountertermStatus::ProvenNonExisting,
+        );
+        assert_eq!(
+            association.classify_from_invariant_bounds(&F(3.0), &F(5.0), Some(F(5.0)), &tolerance,),
+            ThresholdCountertermStatus::AlwaysPinched,
+        );
+        assert_eq!(
+            association.classify_from_invariant_bounds(&F(3.0), &F(5.0), Some(F(8.0)), &tolerance,),
+            ThresholdCountertermStatus::CanBecomePinched,
+        );
+        assert_eq!(
+            association.classify_from_invariant_bounds(&F(5.0), &F(3.0), Some(F(8.0)), &tolerance,),
+            ThresholdCountertermStatus::PotentiallyExisting,
+        );
+        assert_eq!(
+            association.classify_from_invariant_bounds(&F(3.0), &F(5.0), None, &tolerance,),
+            ThresholdCountertermStatus::PotentiallyExisting,
+        );
+    }
+
+    #[test]
+    fn invariant_bound_rejects_mixed_or_unresolved_inputs_conservatively() {
+        use super::ThresholdCountertermStatus;
+        use crate::utils::F;
+
+        let mut association = threshold_association(2, 2);
+        let tolerance = F(1.0e-12);
+        association.invariant_bound_is_applicable = false;
+        assert_eq!(
+            association.classify_from_invariant_bounds(&F(3.0), &F(5.0), Some(F(4.0)), &tolerance,),
+            ThresholdCountertermStatus::PotentiallyExisting,
+        );
+
+        association.invariant_bound_is_applicable = true;
+        assert_eq!(
+            association.classify_from_invariant_bounds(
+                &F(f64::NAN),
+                &F(5.0),
+                Some(F(4.0)),
+                &tolerance,
+            ),
+            ThresholdCountertermStatus::PotentiallyExisting,
+        );
+
+        let masses: linnet::half_edge::involution::EdgeVec<Option<F<f64>>> =
+            vec![Some(F(3.0)), None].into();
+        assert_eq!(
+            super::ThresholdCountertermAssociation::mass_sum(
+                &[EdgeIndex::from(0), EdgeIndex::from(1)],
+                &masses,
+            ),
+            None,
+        );
+    }
+
+    #[test]
+    fn singleton_threshold_must_lie_strictly_inside_available_interval() {
+        use super::ThresholdCountertermStatus;
+        use crate::utils::F;
+
+        let association = threshold_association(2, 1);
+        let tolerance = F(1.0e-12);
+
+        assert_eq!(
+            association.classify_from_invariant_bounds(&F(5.0), &F(4.0), Some(F(9.0)), &tolerance,),
+            ThresholdCountertermStatus::ProvenNonExisting,
+        );
+        assert_eq!(
+            association.classify_from_invariant_bounds(&F(3.0), &F(5.0), Some(F(9.0)), &tolerance,),
+            ThresholdCountertermStatus::PotentiallyExisting,
+        );
+        assert_eq!(
+            association.classify_from_invariant_bounds(&F(3.0), &F(9.0), Some(F(9.0)), &tolerance,),
+            ThresholdCountertermStatus::AlwaysPinched,
+        );
+    }
 
     fn fresh_temp_dir(name: &str) -> PathBuf {
         let unique = SystemTime::now()
@@ -3064,8 +3686,9 @@ mod tests {
                 node [num=1]
                 A -> B [id=0 particle="g"]
                 A -> B [id=1 particle="d"]
-                A -> B [id=2 particle="t"]
+                A -> B [id=2 particle="t" mass=1]
                 A -> B [id=3 particle="a"]
+                A -> B [id=4 mass=0]
             }
         )
         .unwrap();
@@ -3090,6 +3713,43 @@ mod tests {
                 &[EdgeIndex::from(0), EdgeIndex::from(3)]
             ),
             Some(EdgeIndex::from(0))
+        );
+
+        // A structural zero and a DOT-overridden mass are resolved information for current-model
+        // invariant bounds. Keep genuinely unresolved and complex masses conservative, but do not
+        // let a massless edge disable a proof independent of model parameters.
+        assert_eq!(
+            graph.underlying[EdgeIndex::from(2)]
+                .particle
+                .mass_atom()
+                .to_string(),
+            "1"
+        );
+        let empty: SuBitGraph = graph.underlying.empty_subgraph();
+        let cut = super::CrossSectionCut {
+            cut: OrientedCut {
+                left: empty.clone(),
+                right: empty.clone(),
+            },
+            left: empty.clone(),
+            right: empty,
+        };
+        let association = super::ThresholdCountertermAssociation {
+            esurface_id: crate::cff::esurface::EsurfaceID(0),
+            cut_boundary_edges: vec![EdgeIndex::from(4)],
+            threshold_boundary_edges: vec![EdgeIndex::from(2)],
+            invariant_bound_is_applicable: true,
+        };
+        assert_eq!(
+            association.classify_for_model(
+                &graph,
+                &cut,
+                &crate::model::Model::default(),
+                &graph.param_builder,
+                &crate::settings::RuntimeSettings::default(),
+                1.0e-7,
+            ),
+            super::ThresholdCountertermStatus::ProvenNonExisting,
         );
     }
 

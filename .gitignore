@@ -113,6 +113,9 @@ TEST_OUTPUT*/
 ignore/
 .ignore/
 /~/
+# The repository root is commonly used for an ad-hoc CLI run card. Canonical run cards live in
+# examples, tests, or generated state folders and are unaffected by this root-only rule.
+/run.toml
 
 src/test_resources/gammaloop_models/*.dat
 crates/gammalooprs/src/test_resources/gammaloop_models/*.dat

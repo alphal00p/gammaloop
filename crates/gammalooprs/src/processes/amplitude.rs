@@ -1384,6 +1384,7 @@ impl AmplitudeGraph {
                     &masses,
                     &self.graph.get_external_signature(),
                     lmb,
+                    settings.threshold_subtraction.esurface_existence_threshold,
                 ) {
                     continue;
                 }
