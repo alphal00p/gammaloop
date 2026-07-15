@@ -46,7 +46,9 @@ pub(crate) struct Localizer<'a> {
 impl<'a> Localizer<'a> {
     pub fn cff(self, graph: &mut Graph, to_contract: &SuBitGraph) -> Result<CutCFF> {
         graph.cff(
-            to_contract,
+            &to_contract
+                .union(&graph.tree_edges)
+                .subtract(&graph.initial_state_cut),
             self.cutset,
             self.orientation.orientation_pattern,
         )
