@@ -227,7 +227,8 @@ macro_rules! debug_tags {
 const MAX_DIMENSION: usize = MAX_LOOP * 3;
 
 pub(crate) const ESURFACE_SHIFT_THRESHOLD: f64 = 1.0e-13;
-pub(crate) const DEFAULT_ESURFACE_EXISTENCE_THRESHOLD: f64 = 1.0e-7;
+/// Default dimensionless tolerance for E-surface invariant-mass-squared margins.
+pub const DEFAULT_ESURFACE_EXISTENCE_THRESHOLD: f64 = 1.0e-7;
 
 pub const LEFT: usize = 0;
 pub const RIGHT: usize = 1;

@@ -176,7 +176,7 @@ impl SubspaceData {
 
         let parent_lmb = &all_lmbs[lmb];
         let compatible_sub_lmb =
-            graph.compatible_sub_lmb(&subgraph, graph.full_crown(&subgraph), parent_lmb)?;
+            graph.try_compatible_sub_lmb(&subgraph, graph.full_crown(&subgraph), parent_lmb)?;
         let mut lmb_indices = compatible_sub_lmb
             .loop_edges
             .iter()

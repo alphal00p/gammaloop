@@ -71,7 +71,7 @@ impl Spinney {
             .max()
             .unwrap_or(0);
         let lmb = g
-            .compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb)
+            .try_compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb)
             .ok()?;
 
         let dod = g.compute_dod(&subgraph);

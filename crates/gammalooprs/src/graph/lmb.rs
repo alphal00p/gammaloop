@@ -483,13 +483,33 @@ pub trait LMBext {
         subgraph: &S,
         externals: S::Base,
         lmb: &LoopMomentumBasis,
-    ) -> LmbResult<LoopMomentumBasis>
+    ) -> LoopMomentumBasis
     where
         S::Base: SubGraphLike<Base = S::Base>
             + SubSetOps
             + Clone
             + ModifySubSet<HedgePair>
             + ModifySubSet<Hedge>;
+
+    /// Fallible form of [`Self::compatible_sub_lmb`] for callers that must handle
+    /// an unavailable parent-compatible basis without panicking. The default
+    /// preserves compatibility with external trait implementations that only
+    /// implement the original infallible method.
+    fn try_compatible_sub_lmb<S: SubGraphLike>(
+        &self,
+        subgraph: &S,
+        externals: S::Base,
+        lmb: &LoopMomentumBasis,
+    ) -> LmbResult<LoopMomentumBasis>
+    where
+        S::Base: SubGraphLike<Base = S::Base>
+            + SubSetOps
+            + Clone
+            + ModifySubSet<HedgePair>
+            + ModifySubSet<Hedge>,
+    {
+        Ok(self.compatible_sub_lmb(subgraph, externals, lmb))
+    }
 
     /// Construct a basis from a chosen cotree of `subgraph`.
     ///
@@ -659,6 +679,25 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
     }
 
     fn compatible_sub_lmb<S: SubGraphLike>(
+        &self,
+        subgraph: &S,
+        externals: S::Base,
+        lmb: &LoopMomentumBasis,
+    ) -> LoopMomentumBasis
+    where
+        S::Base: SubGraphLike<Base = S::Base>
+            + SubSetOps
+            + Clone
+            + ModifySubSet<HedgePair>
+            + ModifySubSet<Hedge>,
+    {
+        self.try_compatible_sub_lmb(subgraph, externals, lmb)
+            .unwrap_or_else(|err| {
+                panic!("Failed to build compatible subgraph loop momentum basis:\n{err}")
+            })
+    }
+
+    fn try_compatible_sub_lmb<S: SubGraphLike>(
         &self,
         subgraph: &S,
         externals: S::Base,
@@ -1381,6 +1420,25 @@ impl LMBext for Graph {
         subgraph: &S,
         externals: S::Base,
         lmb: &LoopMomentumBasis,
+    ) -> LoopMomentumBasis
+    where
+        S::Base: SubGraphLike<Base = S::Base>
+            + SubSetOps
+            + Clone
+            + ModifySubSet<HedgePair>
+            + ModifySubSet<Hedge>,
+    {
+        self.try_compatible_sub_lmb(subgraph, externals, lmb)
+            .unwrap_or_else(|err| {
+                panic!("Failed to build compatible subgraph loop momentum basis:\n{err}")
+            })
+    }
+
+    fn try_compatible_sub_lmb<S: SubGraphLike>(
+        &self,
+        subgraph: &S,
+        externals: S::Base,
+        lmb: &LoopMomentumBasis,
     ) -> LmbResult<LoopMomentumBasis>
     where
         S::Base: SubGraphLike<Base = S::Base>
@@ -1391,7 +1449,7 @@ impl LMBext for Graph {
     {
         let mut sub_lmb = self
             .underlying
-            .compatible_sub_lmb(subgraph, externals, lmb)?;
+            .try_compatible_sub_lmb(subgraph, externals, lmb)?;
         self.canonicalize_lmb_external_order(&mut sub_lmb);
         Ok(sub_lmb)
     }
@@ -1519,6 +1577,25 @@ impl LMBext for &Graph {
         subgraph: &S,
         externals: S::Base,
         lmb: &LoopMomentumBasis,
+    ) -> LoopMomentumBasis
+    where
+        S::Base: SubGraphLike<Base = S::Base>
+            + SubSetOps
+            + Clone
+            + ModifySubSet<HedgePair>
+            + ModifySubSet<Hedge>,
+    {
+        self.try_compatible_sub_lmb(subgraph, externals, lmb)
+            .unwrap_or_else(|err| {
+                panic!("Failed to build compatible subgraph loop momentum basis:\n{err}")
+            })
+    }
+
+    fn try_compatible_sub_lmb<S: SubGraphLike>(
+        &self,
+        subgraph: &S,
+        externals: S::Base,
+        lmb: &LoopMomentumBasis,
     ) -> LmbResult<LoopMomentumBasis>
     where
         S::Base: SubGraphLike<Base = S::Base>
@@ -1529,7 +1606,7 @@ impl LMBext for &Graph {
     {
         let mut sub_lmb = self
             .underlying
-            .compatible_sub_lmb(subgraph, externals, lmb)?;
+            .try_compatible_sub_lmb(subgraph, externals, lmb)?;
         self.canonicalize_lmb_external_order(&mut sub_lmb);
         Ok(sub_lmb)
     }
@@ -1871,7 +1948,7 @@ pub mod test {
         let mut incompatible_parent_lmb = lmb.clone();
         incompatible_parent_lmb.loop_edges.clear();
         let unavailable =
-            g.compatible_sub_lmb(&subgraph, g.full_crown(&subgraph), &incompatible_parent_lmb);
+            g.try_compatible_sub_lmb(&subgraph, g.full_crown(&subgraph), &incompatible_parent_lmb);
         assert!(matches!(
             unavailable,
             Err(LmbError::NoCompatibleSubLmb { .. })
@@ -1905,7 +1982,7 @@ pub mod test {
         let non_dummy_sub_ext = g.full_crown(&subgraph).subtract(&dummy);
 
         let sub_lmb = g
-            .compatible_sub_lmb(&subgraph, non_dummy_sub_ext, &lmb)
+            .try_compatible_sub_lmb(&subgraph, non_dummy_sub_ext, &lmb)
             .unwrap();
 
         assert_snapshot!(g.dot_lmb_of(&non_dummy, &lmb));
@@ -1924,7 +2001,7 @@ pub mod test {
         let subgraph: SuBitGraph = g.compass_subgraph(Some(dot_parser::ast::CompassPt::S));
         let non_dummy = g.full_filter();
         let lmb = g.lmb_of(&non_dummy);
-        let sub_lmb = g.compatible_sub_lmb(&subgraph, non_dummy, &lmb).unwrap();
+        let sub_lmb = g.compatible_sub_lmb(&subgraph, non_dummy, &lmb);
         assert_snapshot!(g.dot_lmb_of(&subgraph, &sub_lmb));
     }
 
