@@ -842,6 +842,17 @@ impl AmplitudeGraph {
 
         self.generate_cff(&settings.orientation_pattern)?;
 
+        // UV orchestration can extend the graph surface cache, while raised IDs
+        // belong to the CFF expression generated above.
+        let raised_data = settings.threshold_subtraction.enable_thresholds.then(|| {
+            self.graph.determine_raised_esurfaces_from_expression(
+                self.derived_data
+                    .cff_expression
+                    .as_ref()
+                    .expect("cff_expression should have been created"),
+            )
+        });
+
         self.build_integrands(settings, vk)?;
 
         if self.graph.is_group_master {
@@ -854,13 +865,7 @@ impl AmplitudeGraph {
             self.build_multi_channeling_channels(settings.override_lmb_heuristics);
         }
 
-        if settings.threshold_subtraction.enable_thresholds {
-            let mut raised_data = self.graph.determine_raised_esurfaces_from_expression(
-                self.derived_data
-                    .cff_expression
-                    .as_ref()
-                    .expect("cff_expression should have been created"),
-            );
+        if let Some(mut raised_data) = raised_data {
             let max_order = raised_data
                 .raised_groups
                 .iter()
@@ -1260,13 +1265,18 @@ impl AmplitudeGraph {
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
+        let global_cff = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .expect("cff_expression should have been created");
         let esurface_raising = &self.derived_data.raised_data;
         let mut counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom> = ti_vec![
             AmplitudeCountertermAtom::new();
             esurface_raising.raised_groups.len()
         ];
         let mut raised_esurface_ids: TiVec<EsurfaceID, Option<RaisedEsurfaceId>> =
-            ti_vec![None; self.graph.surface_cache.esurface_cache.len()];
+            ti_vec![None; global_cff.surfaces.esurface_cache.len()];
 
         for (raised_esurface_id, raised_group) in esurface_raising.raised_groups.iter_enumerated() {
             for &esurface_id in &raised_group.esurface_ids {
@@ -1303,7 +1313,7 @@ impl AmplitudeGraph {
 
         for raised_data in esurface_raising.raised_groups.iter().cloned() {
             let esurface_id = raised_data.esurface_ids[0];
-            let esurface = &self.graph.surface_cache.esurface_cache[esurface_id];
+            let esurface = &global_cff.surfaces.esurface_cache[esurface_id];
 
             if esurface.external_shift.is_empty() {
                 continue;

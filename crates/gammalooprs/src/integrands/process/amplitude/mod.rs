@@ -111,7 +111,7 @@ impl AmplitudeGraphTerm {
             momentum_sample,
             &self.graph,
             model,
-            &self.graph.surface_cache.esurface_cache,
+            &self.esurfaces,
             &Rotation::new(RotationMethod::Identity),
             settings,
         )
@@ -959,7 +959,7 @@ impl AmplitudeIntegrand {
                 let esurface_id = graph_term.threshold_counterterm.raised_data.raised_groups
                     [raised_esurface_id]
                     .esurface_ids[0];
-                let esurface = &graph_term.graph.surface_cache.esurface_cache[esurface_id];
+                let esurface = &graph_term.esurfaces[esurface_id];
                 let loop_order = esurface.energies.len().saturating_sub(1);
                 let edge_ids = esurface.energies.iter().map(|edge_id| edge_id.0).join(",");
 
@@ -1309,7 +1309,7 @@ impl AmplitudeIntegrand {
                             &graph_term.threshold_counterterm.raised_data.raised_groups
                                 [raised_esurface_id];
                         let esurface_id = raised_group.esurface_ids[0];
-                        let esurface = &graph.surface_cache.esurface_cache[esurface_id];
+                        let esurface = &graph_term.esurfaces[esurface_id];
                         let lmb = &graph.loop_momentum_basis;
                         let real_mass_vector = graph.get_real_mass_vector(model);
                         let candidate_existence = esurface.classify_existence(
@@ -1684,8 +1684,8 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                             &graph.loop_momentum_basis,
                             &[W_.x___],
                         );
-                        let atom = graph.surface_cache.esurface_cache[esurface_id]
-                            .lmb_atom_simplified(graph, &lmb_reps);
+                        let atom =
+                            graph_term.esurfaces[esurface_id].lmb_atom_simplified(graph, &lmb_reps);
                         crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #esurface;
                             stage = "amplitude_threshold_existing_esurface",
                             group_id = group_id.0,
@@ -1706,7 +1706,7 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                         let graph = &self.data.graph_terms[graph_id];
                         SingleGraphOverlapData {
                             lmb: &graph.graph.loop_momentum_basis,
-                            esurfaces: &graph.graph.surface_cache.esurface_cache,
+                            esurfaces: &graph.esurfaces,
                             raised_data: &graph.threshold_counterterm.raised_data,
                             edge_masses: graph.graph.get_real_mass_vector::<f64>(model),
                         }
@@ -1763,8 +1763,7 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
                                         &[W_.x___],
                                     );
 
-                                    let esurface =
-                                        &graph_term.graph.surface_cache.esurface_cache[esurface_id];
+                                    let esurface = &graph_term.esurfaces[esurface_id];
                                     let atom = esurface.lmb_atom_simplified(graph, &lmb_reps);
                                     (esurface_id, atom)
                                 })
