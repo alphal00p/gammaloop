@@ -96,9 +96,14 @@ pub(crate) fn safeguarded_newton_iteration_and_derivative<T: FloatLike>(
     let mut lower_bound = inside_radius.clone();
     let mut upper_bound = outside_radius_guess.clone();
     if !is_finite(&upper_bound) || upper_bound <= lower_bound {
+        let upper_value = if is_finite(&upper_bound) {
+            f_x_and_df_x(&upper_bound).0
+        } else {
+            upper_bound.clone()
+        };
         return Err(SafeguardedNewtonError::InvalidOutside {
             radius: upper_bound,
-            value: inside_value,
+            value: upper_value,
             bracket_expansions: 0,
         });
     }
@@ -368,6 +373,56 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn safeguarded_newton_reports_invalid_outside_endpoint_value() {
+        let error = safeguarded_newton_iteration_and_derivative(
+            &F(1.0),
+            &F(0.5),
+            |x| (x - F(2.0), F(1.0)),
+            &F(8.0),
+            40,
+            64,
+            &F(1.0),
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            SafeguardedNewtonError::InvalidOutside {
+                radius: F(0.5),
+                value: F(-1.5),
+                bracket_expansions: 0,
+            }
+        ));
+    }
+
+    #[test]
+    fn safeguarded_newton_reports_non_finite_outside_radius() {
+        let nan = F(0.0) / F(0.0);
+        let error = safeguarded_newton_iteration_and_derivative(
+            &F(0.0),
+            &nan,
+            |x| (x - F(1.0), F(1.0)),
+            &F(8.0),
+            40,
+            64,
+            &F(1.0),
+        )
+        .unwrap_err();
+
+        match error {
+            SafeguardedNewtonError::InvalidOutside {
+                radius,
+                value,
+                bracket_expansions: 0,
+            } => {
+                assert!(radius.is_nan());
+                assert!(value.is_nan());
+            }
+            unexpected => panic!("unexpected safeguarded Newton error: {unexpected:?}"),
+        }
     }
 
     #[test]

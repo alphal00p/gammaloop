@@ -369,7 +369,8 @@ impl Approach {
                                 axes.len(),
                                 t_values.len(),
                             );
-                            let completed_total = completed_jobs.fetch_add(1, Ordering::SeqCst) + 1;
+                            let completed_total =
+                                completed_jobs.fetch_add(1, Ordering::Relaxed) + 1;
                             progress.inc(1);
                             progress.set_message(progress_message(
                                 job.axis_index,
@@ -382,7 +383,7 @@ impl Approach {
                             records.push(record?);
                         }
                         let completed_worker_count =
-                            completed_workers.fetch_add(1, Ordering::SeqCst) + 1;
+                            completed_workers.fetch_add(1, Ordering::Relaxed) + 1;
                         progress.set_message(format!(
                             "{} {}",
                             "collecting worker results".bright_magenta().bold(),
@@ -763,6 +764,11 @@ fn approach_evaluation_record(
     let mut additional_weight_sums = BTreeMap::<String, Complex<F<f64>>>::new();
     let mut contribution_sums = BTreeMap::<ContributionKey, Complex<F<f64>>>::new();
     let mut events = Vec::new();
+    let parameterization_settings = integrand
+        .get_settings()
+        .sampling
+        .get_parameterization_settings()
+        .unwrap_or_default();
 
     for (event_group_index, event_group) in evaluation.event_groups.iter().enumerate() {
         for (event_index, event) in event_group.iter().enumerate() {
@@ -776,7 +782,13 @@ fn approach_evaluation_record(
             let cut_edges = integrand.cut_edge_ids(graph_id, cut_id).unwrap_or_default();
             let lmb_channel_id = event.cut_info.lmb_channel_id;
             let lmb_sample_id = lmb_channel_id
-                .map(|channel_id| integrand.lmb_sample_id_for_channel(graph_id, channel_id))
+                .map(|channel_id| {
+                    integrand.lmb_sample_id_for_channel(
+                        graph_id,
+                        channel_id,
+                        &parameterization_settings,
+                    )
+                })
                 .transpose()?
                 .flatten();
 

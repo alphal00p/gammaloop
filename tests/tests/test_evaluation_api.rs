@@ -1151,9 +1151,14 @@ lmb_basis_ids = {{ "{master_name}" = [{override_basis_id}] }}
         .process_list
         .get_integrand(info.process_id, &info.integrand_name)?
         .require_generated()?;
+    let parameterization_settings = generated
+        .get_settings()
+        .sampling
+        .get_parameterization_settings()
+        .unwrap_or_default();
     for graph_id in &grouped_graph_ids {
         assert_eq!(
-            generated.lmb_sample_id_for_channel(*graph_id, 0)?,
+            generated.lmb_sample_id_for_channel(*graph_id, 0, &parameterization_settings)?,
             Some(override_basis_id),
             "grouped member metadata must resolve lmb_basis_ids through the master graph name"
         );

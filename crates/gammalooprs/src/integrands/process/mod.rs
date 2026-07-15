@@ -482,12 +482,8 @@ impl ProcessIntegrand {
         &self,
         graph_id: usize,
         lmb_channel_id: usize,
+        parameterization_settings: &ParameterizationSettings,
     ) -> Result<Option<usize>> {
-        let parameterization_settings = self
-            .get_settings()
-            .sampling
-            .get_parameterization_settings()
-            .unwrap_or_default();
         match self {
             ProcessIntegrand::Amplitude(integrand) => {
                 let Some(graph_term) = integrand.data.graph_terms.get(graph_id) else {
@@ -497,7 +493,7 @@ impl ProcessIntegrand {
                     graph_term.multi_channeling_setup.effective_channel_lmb_id(
                         ChannelIndex::from(lmb_channel_id),
                         &graph_term.multi_channeling_setup.graph.name,
-                        &parameterization_settings,
+                        parameterization_settings,
                     )?,
                 )))
             }
@@ -509,7 +505,7 @@ impl ProcessIntegrand {
                     graph_term.multi_channeling_setup.effective_channel_lmb_id(
                         ChannelIndex::from(lmb_channel_id),
                         &graph_term.multi_channeling_setup.graph.name,
-                        &parameterization_settings,
+                        parameterization_settings,
                     )?,
                 )))
             }

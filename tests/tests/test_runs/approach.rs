@@ -522,6 +522,7 @@ lmb_basis_ids = {{ {master_graph_name} = [1, 0] }}
 }
 
 #[test]
+#[serial]
 fn plot_approach_result_script_smoke() -> Result<()> {
     if !command_succeeds("python3", &["-c", "import matplotlib"]) {
         eprintln!("skipping plot smoke test because python3/matplotlib is unavailable");
@@ -532,7 +533,8 @@ fn plot_approach_result_script_smoke() -> Result<()> {
         return Ok(());
     }
 
-    let output_dir = get_tests_workspace_path().join("plot_approach_result_smoke");
+    let test_name = "plot_approach_result_script_smoke";
+    let output_dir = get_tests_workspace_path().join(test_name);
     clean_test(&output_dir);
     std::fs::create_dir_all(&output_dir)?;
 
@@ -571,8 +573,13 @@ fn plot_approach_result_script_smoke() -> Result<()> {
         .output()?;
     assert!(default_pdfinfo_output.status.success());
     let default_pdfinfo_text = String::from_utf8_lossy(&default_pdfinfo_output.stdout);
-    assert!(
-        default_pdfinfo_text.contains("Pages:           4"),
+    let default_page_count = default_pdfinfo_text
+        .lines()
+        .find_map(|line| line.strip_prefix("Pages:"))
+        .and_then(|value| value.trim().parse::<usize>().ok());
+    assert_eq!(
+        default_page_count,
+        Some(4),
         "default plotting should produce one PDF page per result/axis: {default_pdfinfo_text}",
     );
 
