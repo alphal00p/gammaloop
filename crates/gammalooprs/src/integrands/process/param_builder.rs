@@ -1292,7 +1292,8 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
     }
 
-    pub(crate) fn update_model_values(&mut self, model: &Model) {
+    /// Refresh model-dependent parameter slots while preserving the builder's graph layout.
+    pub fn update_model_values(&mut self, model: &Model) {
         for (value_index, values) in self.values.iter_mut().enumerate() {
             let multiplicative_offset = value_index + 1;
             let mut pos = self.pairs.model_parameters.value_range.start * multiplicative_offset;

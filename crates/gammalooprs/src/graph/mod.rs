@@ -30,13 +30,13 @@ use crate::{
     cff::generation::SurfaceCache,
     define_index,
     feyngen::diagram_generator::evaluate_overall_factor,
-    graph::edge::EdgeMass,
     integrands::process::{ChannelIndex, LmbMultiChannelingSetup, ParamBuilder},
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::GlobalPrefactor,
     processes::DotExportSettings,
     settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
     utils::{F, Length, ose_atom_from_index, symbolica_ext::LogPrint},
+    uv::uv_graph::UVE,
 };
 
 pub(crate) mod attribute_warnings;
@@ -86,6 +86,13 @@ pub mod ext;
 pub(crate) enum LmbChannelFallback {
     CurrentGraphBasis,
     FirstBasis,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ThresholdPinchStatus {
+    Always,
+    CanBecome,
+    NotProven,
 }
 
 impl Graph {
@@ -565,54 +572,37 @@ impl Graph {
             .map(|hedge| self.underlying[&hedge])
             .collect_vec()
     }
-    pub(crate) fn is_always_pinch(
+    pub(crate) fn classify_threshold_pinch(
         &self,
-        sandwich: &SuBitGraph,
-        cut_a: &OrientedCut,
-        cut_b: &OrientedCut,
-    ) -> bool {
-        let cut_a_all_edges = cut_a.left.union(&cut_a.right);
-        let cut_b_all_edges = cut_b.left.union(&cut_b.right);
+        cut_boundary_edges: &[EdgeIndex],
+        threshold_boundary_edges: &[EdgeIndex],
+    ) -> ThresholdPinchStatus {
+        // The caller has already intersected both cut boundaries with the connected sandwich.
+        // These edge sets therefore carry the same graph-relative information that the former
+        // `is_always_pinch` implementation derived from the two cuts and sandwich internally.
+        // Keep every mass representation symbolic here. A non-zero difference is not a
+        // model-independent conclusion; resolved values handle that case during generation.
+        let boundary_mass_sum = |edges: &[EdgeIndex]| {
+            edges
+                .iter()
+                .map(|edge_id| self[*edge_id].mass_atom())
+                .fold(Atom::new(), |sum, mass| sum + mass)
+        };
 
-        let cut_a_sandwich = cut_a_all_edges.intersection(sandwich);
-        let cut_b_sandwich = cut_b_all_edges.intersection(sandwich);
+        let mass_sums_are_identical = (boundary_mass_sum(cut_boundary_edges)
+            - boundary_mass_sum(threshold_boundary_edges))
+        .expand()
+        .is_zero();
 
-        let n_edges_cut_a_sandwich = cut_a_sandwich.n_included();
-        let n_edges_cut_b_sandwich = cut_b_sandwich.n_included();
-
-        if n_edges_cut_a_sandwich > 1 && n_edges_cut_b_sandwich > 1 {
-            return false;
+        if !mass_sums_are_identical {
+            return ThresholdPinchStatus::NotProven;
         }
 
-        let mut cut_a_mass_sum = Atom::new();
-        for (_, _, edge_data) in self.iter_edges_of(&cut_a_sandwich) {
-            match edge_data.data.mass {
-                EdgeMass::Zero => {}
-                EdgeMass::ModelVar(m) => {
-                    cut_a_mass_sum += m;
-                }
-                _ => {
-                    // If there is a non-zero, non-model-var mass, we can't make any statements about pinches without runtime information, so we return false
-                    return false;
-                }
-            }
+        if cut_boundary_edges.len() > 1 && threshold_boundary_edges.len() > 1 {
+            ThresholdPinchStatus::CanBecome
+        } else {
+            ThresholdPinchStatus::Always
         }
-
-        let mut cut_b_mass_sum = Atom::new();
-        for (_, _, edge_data) in self.iter_edges_of(&cut_b_sandwich) {
-            match edge_data.data.mass {
-                EdgeMass::Zero => {}
-                EdgeMass::ModelVar(m) => {
-                    cut_b_mass_sum += m;
-                }
-                _ => {
-                    // If there is a non-zero, non-model-var mass, we can't make any statements about pinches without runtime information, so we return false
-                    return false;
-                }
-            }
-        }
-
-        (cut_a_mass_sum - cut_b_mass_sum).expand().is_zero()
     }
 }
 
@@ -845,6 +835,27 @@ mod tests {
         assert_eq!(
             selected_first.into_iter().collect_vec(),
             vec![LmbIndex::from(0)]
+        );
+    }
+
+    #[test]
+    fn threshold_pinch_classification_distinguishes_fixed_and_multiparticle_boundaries() {
+        let graph = selector_test_graph();
+
+        assert_eq!(
+            graph.classify_threshold_pinch(&[EdgeIndex::from(0)], &[EdgeIndex::from(1)],),
+            ThresholdPinchStatus::Always,
+        );
+        assert_eq!(
+            graph.classify_threshold_pinch(
+                &[EdgeIndex::from(0), EdgeIndex::from(1)],
+                &[EdgeIndex::from(2), EdgeIndex::from(3)],
+            ),
+            ThresholdPinchStatus::CanBecome,
+        );
+        assert_eq!(
+            graph.classify_threshold_pinch(&[EdgeIndex::from(0)], &[EdgeIndex::from(4)],),
+            ThresholdPinchStatus::NotProven,
         );
     }
 }

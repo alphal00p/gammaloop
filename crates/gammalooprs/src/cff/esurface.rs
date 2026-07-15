@@ -119,6 +119,20 @@ impl PartialEq for Esurface {
 impl Eq for Esurface {}
 
 impl Esurface {
+    pub(crate) fn has_radial_dependence_in_subspace(
+        &self,
+        subspace: &SubspaceData,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        graph: &Graph,
+    ) -> bool {
+        let lmb = subspace.get_lmb(all_lmbs);
+        subspace.contains(&self.energies, graph).any(|index| {
+            subspace
+                .project_loop_signature(&lmb.edge_signatures[index].internal)
+                .any(|sign| sign.is_sign())
+        })
+    }
+
     pub(crate) fn contains_all_with_minus_sign(&self, edges: &[EdgeIndex]) -> bool {
         edges.iter().all(|edge| {
             self.external_shift
@@ -351,14 +365,9 @@ impl Esurface {
             real_mass_vector,
         );
 
-        let lmb = subspace.get_lmb(all_lmbs);
         let subspace_energy_indices = subspace.contains(&self.energies, graph).collect_vec();
 
-        if !subspace_energy_indices.iter().any(|&index| {
-            subspace
-                .project_loop_signature(&lmb.edge_signatures[index].internal)
-                .any(|sign| sign.is_sign())
-        }) {
+        if !self.has_radial_dependence_in_subspace(subspace, all_lmbs, graph) {
             debug!(
                 "esurface has no radial energy in this subspace, cannot bound a threshold region"
             );
@@ -368,6 +377,7 @@ impl Esurface {
             };
         }
 
+        let lmb = subspace.get_lmb(all_lmbs);
         let mass_sum: F<T> = subspace_energy_indices
             .iter()
             .map(|&index| &real_mass_vector[index])

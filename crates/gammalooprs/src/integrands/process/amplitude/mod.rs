@@ -470,7 +470,7 @@ impl AmplitudeGraphTerm {
                     .expect("LMB channel event metadata requires a parameterization.");
                 self.multi_channeling_setup.effective_channel_edge_ids(
                     channel_id,
-                    &self.graph.name,
+                    &self.multi_channeling_setup.graph.name,
                     &parameterization_settings,
                 )
             })
@@ -516,7 +516,7 @@ impl AmplitudeGraphTerm {
                     .get_parameterization_settings()
                     .expect("LMB multichanneling requires a parameterization.");
                 let weighting_settings = LmbChannelWeightingSettings {
-                    graph_name: &self.graph.name,
+                    graph_name: &self.multi_channeling_setup.graph.name,
                     model: context.model,
                     alpha,
                     channel_weight: *channel_weight,
@@ -783,7 +783,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         Ok(Some(format_lmb_channel_label(
             &self.multi_channeling_setup.effective_channel_edge_ids(
                 channel_id,
-                &self.graph.name,
+                &self.multi_channeling_setup.graph.name,
                 parameterization_settings,
             )?,
         )))
@@ -794,16 +794,20 @@ impl GraphTerm for AmplitudeGraphTerm {
     }
 
     fn get_num_channels(&self, parameterization_settings: &ParameterizationSettings) -> usize {
-        self.multi_channeling_setup
-            .effective_channel_count(&self.graph.name, parameterization_settings)
+        self.multi_channeling_setup.effective_channel_count(
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )
     }
 
     fn selected_lmb_basis_id(
         &self,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<LmbIndex> {
-        self.multi_channeling_setup
-            .selected_lmb_basis_id(&self.graph.name, parameterization_settings)
+        self.multi_channeling_setup.selected_lmb_basis_id(
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )
     }
 
     fn evaluate<T: FloatLike>(

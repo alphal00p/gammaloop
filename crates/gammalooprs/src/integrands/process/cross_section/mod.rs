@@ -2,7 +2,7 @@ use crate::{
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
         CutCFFIndex,
-        esurface::Esurface,
+        esurface::{Esurface, EsurfaceID},
         expression::{GraphOrientation, OrientationID},
         surface::HybridSurfaceID,
     },
@@ -26,8 +26,8 @@ use crate::{
     },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
     processes::{
-        self, CrossSectionCut, CrossSectionGraph, CutId, GraphGenerationStats,
-        IteratedCtCollection, RaisedCutData, RaisedCutId,
+        self, CrossSectionCut, CrossSectionGraph, CutId, CutThresholdCountertermAssociations,
+        GraphGenerationStats, IteratedCtCollection, RaisedCutData, RaisedCutId,
     },
     settings::{
         GlobalSettings, RuntimeSettings,
@@ -456,6 +456,8 @@ pub struct CrossSectionGraphTerm {
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cuts: TiVec<CutId, CrossSectionCut>,
+    pub threshold_candidate_esurface_ids: Vec<EsurfaceID>,
+    pub cut_threshold_associations: TiVec<CutId, CutThresholdCountertermAssociations>,
     pub reversed_edges: TiVec<RaisedCutId, Vec<EdgeIndex>>,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
@@ -475,35 +477,6 @@ struct CutEventGenerationContext<'a> {
 }
 
 impl CrossSectionGraphTerm {
-    pub fn threshold_esurface_ids_for_raised_cut(
-        &self,
-        raised_cut_id: RaisedCutId,
-    ) -> (Vec<usize>, Vec<usize>) {
-        if self.counterterm.thresholds.is_empty() {
-            return (vec![], vec![]);
-        }
-
-        let (left_thresholds, right_thresholds) = &self.counterterm.thresholds[raised_cut_id];
-        let resolve_ids = |thresholds: &[Esurface]| {
-            thresholds
-                .iter()
-                .map(|threshold| {
-                    self.graph
-                        .surface_cache
-                        .esurface_cache
-                        .iter()
-                        .position(|candidate| candidate == threshold)
-                        .expect("threshold esurface should resolve in graph")
-                })
-                .collect::<Vec<_>>()
-        };
-
-        (
-            resolve_ids(left_thresholds.raw.as_slice()),
-            resolve_ids(right_thresholds.raw.as_slice()),
-        )
-    }
-
     pub fn from_cross_section_graph(
         graph: &CrossSectionGraph,
         settings: &GlobalSettings,
@@ -927,6 +900,11 @@ impl CrossSectionGraphTerm {
                 graph: graph.graph.clone(),
                 cut_esurface: graph.cut_esurface.clone(),
                 cuts: graph.cuts.clone(),
+                threshold_candidate_esurface_ids: graph
+                    .derived_data
+                    .threshold_candidate_esurface_ids
+                    .clone(),
+                cut_threshold_associations: graph.derived_data.cut_threshold_associations.clone(),
                 multi_channeling_setup: LmbMultiChannelingSetup {
                     channels: TiVec::new(),
                     graph: graph.graph.clone(), // will be overwritten later,
@@ -1038,7 +1016,7 @@ impl CrossSectionGraphTerm {
                     .expect("LMB channel event metadata requires a parameterization.");
                 self.multi_channeling_setup.effective_channel_edge_ids(
                     channel_id,
-                    &self.graph.name,
+                    &self.multi_channeling_setup.graph.name,
                     &parameterization_settings,
                 )
             })
@@ -1152,16 +1130,20 @@ impl GraphTerm for CrossSectionGraphTerm {
     }
 
     fn get_num_channels(&self, parameterization_settings: &ParameterizationSettings) -> usize {
-        self.multi_channeling_setup
-            .effective_channel_count(&self.graph.name, parameterization_settings)
+        self.multi_channeling_setup.effective_channel_count(
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )
     }
 
     fn selected_lmb_basis_id(
         &self,
         parameterization_settings: &ParameterizationSettings,
     ) -> Result<LmbIndex> {
-        self.multi_channeling_setup
-            .selected_lmb_basis_id(&self.graph.name, parameterization_settings)
+        self.multi_channeling_setup.selected_lmb_basis_id(
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )
     }
 
     fn orientation_label(&self, orientation_id: usize) -> Option<String> {
@@ -1181,7 +1163,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         Ok(Some(format_lmb_channel_label(
             &self.multi_channeling_setup.effective_channel_edge_ids(
                 channel_id,
-                &self.graph.name,
+                &self.multi_channeling_setup.graph.name,
                 parameterization_settings,
             )?,
         )))
@@ -1317,7 +1299,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     .expect("LMB multichanneling requires a parameterization.");
                 let lmb_index = self.multi_channeling_setup.effective_channel_lmb_id(
                     *channel_id,
-                    &self.graph.name,
+                    &self.multi_channeling_setup.graph.name,
                     &parameterization_settings,
                 )?;
                 self.multi_channeling_setup
@@ -1438,6 +1420,43 @@ impl GraphTerm for CrossSectionGraphTerm {
             let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
             let mut threshold_counterterm_weights = Vec::with_capacity(max_occurance);
             let mut kinematic_point = LUCTKinematicPoint::new(momentum_sample.clone());
+            // LMB channel weights partition the fully subtracted LU-cut integrand. Apply the
+            // sampling partition after the raised-residue derivatives: it is not part of the
+            // differentiated physical integrand. This is distinct from the overlap-group
+            // multi-channeling internal to threshold subtraction.
+            let lmb_channel_prefactor = Complex::new_re(
+                if let Some((channel_index, alpha, channel_weight)) = &context.channel_id {
+                    let parameterization_settings = context
+                        .settings
+                        .sampling
+                        .get_parameterization_settings()
+                        .expect("LMB multichanneling requires a parameterization.");
+                    let weighting_settings = LmbChannelWeightingSettings {
+                        graph_name: &self.multi_channeling_setup.graph.name,
+                        model: context.model,
+                        alpha,
+                        channel_weight: *channel_weight,
+                        parameterization_settings: &parameterization_settings,
+                        e_cm: context.settings.kinematics.e_cm,
+                    };
+                    let selected_lmb = self.multi_channeling_setup.effective_channel_lmb_id(
+                        *channel_index,
+                        &self.multi_channeling_setup.graph.name,
+                        &parameterization_settings,
+                    )?;
+                    let cut_momentum_sample =
+                        momentum_sample.rescaled_loop_momenta(&solution.solution, Subspace::None);
+
+                    self.multi_channeling_setup.compute_prefactor_impl(
+                        *channel_index,
+                        selected_lmb,
+                        &cut_momentum_sample,
+                        weighting_settings,
+                    )?
+                } else {
+                    momentum_sample.one()
+                },
+            );
             for num_esurfaces in 1..=max_occurance {
                 let dual_shape = if num_esurfaces > 1 {
                     Some(HyperDual::<F<T>>::new(
@@ -1538,41 +1557,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                         .push(esurface_derivatives.clone());
                 }
 
-                let prefactor = Complex::new_re(
-                    if let Some((_channel_index, _alpha, _channel_weight)) = &context.channel_id {
-                        if matches!(lu_params.tstar, DualOrNot::Dual(_)) {
-                            panic!("multi channeling with duals not supported yet");
-                        }
-                        let parameterization_settings = context
-                            .settings
-                            .sampling
-                            .get_parameterization_settings()
-                            .expect("LMB multichanneling requires a parameterization.");
-                        let weighting_settings = LmbChannelWeightingSettings {
-                            graph_name: &self.graph.name,
-                            model: context.model,
-                            alpha: _alpha,
-                            channel_weight: *_channel_weight,
-                            parameterization_settings: &parameterization_settings,
-                            e_cm: context.settings.kinematics.e_cm,
-                        };
-
-                        let selected_lmb = self.multi_channeling_setup.effective_channel_lmb_id(
-                            *_channel_index,
-                            &self.graph.name,
-                            &parameterization_settings,
-                        )?;
-                        self.multi_channeling_setup.compute_prefactor_impl(
-                            *_channel_index,
-                            selected_lmb,
-                            &rescaled_momenta,
-                            weighting_settings,
-                        )?
-                    } else {
-                        F::from_f64(1.0)
-                    },
-                );
-
                 let params = T::get_parameters(
                     &mut self.param_builder,
                     (
@@ -1647,7 +1631,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 debug!("pass_two_result: {:+16e}", pass_two_result);
                 //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
-                let bare_contribution = pass_two_result * prefactor;
+                let bare_contribution = pass_two_result * lmb_channel_prefactor.clone();
                 bare_cut_total += bare_contribution.clone();
                 cut_results[raised_cut].push(bare_contribution);
             }
@@ -1668,7 +1652,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     orientations,
                     context.evaluation_metadata,
                     context.record_primary_timing,
-                )?
+                )? * lmb_channel_prefactor.clone()
             };
 
             threshold_counterterm_weights.push(ct_result.clone());

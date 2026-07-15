@@ -3,10 +3,11 @@ use std::{collections::BTreeMap, time::Duration};
 use color_eyre::Result;
 use gammaloop_api::{
     commands::evaluate_samples::{EvaluateSamples, EvaluateSamplesPrecise},
-    integrand_info::IntegrandKind,
+    integrand_info::{IntegrandKind, IntegrandThresholdStatus},
 };
 use gammaloop_integration_tests::{
-    CLIState, default_momentum_space_point, default_xspace_point, setup_sm_differential_lu_cli,
+    CLIState, default_momentum_space_point, default_xspace_point, get_test_cli,
+    get_tests_workspace_path, setup_sm_differential_lu_cli,
 };
 use ndarray::{Array1, Array2};
 use serial_test::serial;
@@ -395,6 +396,52 @@ fn lu_rust_get_integrand_info_reports_groups_orientations_lmbs_and_cuts() -> Res
             assert_eq!(cut.cut_id, expected_id);
             assert!(!cut.edge_ids.is_empty());
             assert!(cut.raising_power >= 1);
+
+            for threshold in cut
+                .left_thresholds
+                .iter()
+                .chain(cut.right_thresholds.iter())
+            {
+                assert!(
+                    group
+                        .threshold_esurface_ids
+                        .contains(&threshold.esurface_id)
+                );
+                if threshold.invariant_bound_is_applicable {
+                    assert!(!threshold.cut_boundary_edge_ids.is_empty());
+                    assert!(!threshold.threshold_boundary_edge_ids.is_empty());
+                }
+            }
+        }
+
+        assert_eq!(
+            group.threshold_esurface_ids,
+            group
+                .threshold_esurfaces
+                .iter()
+                .map(|threshold| threshold.esurface_id)
+                .collect::<Vec<_>>()
+        );
+        for threshold in &group.threshold_esurfaces {
+            for active_cut in &threshold.active_cuts {
+                let cut = &group.cuts[active_cut.cut_id];
+                let matching_statuses = cut
+                    .left_thresholds
+                    .iter()
+                    .chain(cut.right_thresholds.iter())
+                    .filter(|candidate| candidate.esurface_id == threshold.esurface_id)
+                    .map(|candidate| candidate.status)
+                    .collect::<Vec<_>>();
+                assert!(matching_statuses.iter().any(|status| matches!(
+                    status,
+                    IntegrandThresholdStatus::CanBecomePinched
+                        | IntegrandThresholdStatus::PotentiallyExisting
+                )));
+                assert_eq!(
+                    active_cut.can_become_pinched,
+                    matching_statuses.contains(&IntegrandThresholdStatus::CanBecomePinched)
+                );
+            }
         }
     }
 
@@ -1036,6 +1083,422 @@ lmb_basis_ids = {{ {master_graph_name} = [1, 0] }}
         override_channel_tags[0], override_channel_tags[1],
         "overridden discrete channel ids should resolve to distinct requested generated LMB bases"
     );
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn amplitude_group_members_resolve_lmb_overrides_through_the_master() -> Result<()> {
+    let test_name = "amplitude_group_members_resolve_lmb_overrides_through_the_master";
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    cli.run_command("import model scalars-default")?;
+    cli.run_command(
+        r#"set default-runtime kv kinematics.e_cm=2.0 general.m_uv=1.0 general.mu_r=91.188 subtraction.disable_threshold_subtraction=true kinematics.externals='{"type":"constant","data":{"momenta":["dependent",[-0.29166666667,0.0,0.0,-0.4061164310337068],[0.70833333333,0.0,0.0,0.4061164310337068],[0.32,0.0,0.0,0.64]],"helicities":[1,1,1,1]}}'"#,
+    )?;
+    cli.run_command("import graphs ./tests/resources/graphs/grouped_subtraction/group.dot")?;
+    cli.run_command("generate")?;
+    cli.run_command(
+        "set process kv general.generate_events=true general.store_additional_weights_in_event=true",
+    )?;
+
+    let info = cli.state.get_integrand_info(None, None)?;
+    assert_eq!(info.kind, IntegrandKind::Amplitude);
+    let group = info
+        .graph_groups
+        .iter()
+        .find(|group| group.graphs.len() > 1 && group.loop_momentum_bases.len() > 1)
+        .expect("expected a multi-member amplitude group with multiple generated LMBs");
+    let master_name = group
+        .graphs
+        .iter()
+        .find(|graph| graph.is_master)
+        .expect("expected a grouped master graph")
+        .name
+        .clone();
+    let override_basis = group
+        .loop_momentum_bases
+        .iter()
+        .find(|basis| basis.channel_id != Some(0))
+        .expect("expected a non-default generated LMB channel");
+    let group_id = group.group_id;
+    let override_basis_id = override_basis.basis_id;
+    let override_basis_edges = override_basis.edge_ids.clone();
+    let grouped_graph_ids = group
+        .graphs
+        .iter()
+        .map(|graph| graph.graph_id)
+        .collect::<std::collections::BTreeSet<_>>();
+
+    cli.run_command(&format!(
+        r#"set process string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+lmb_basis_ids = {{ "{master_name}" = [{override_basis_id}] }}
+'"#,
+    ))?;
+
+    let generated = cli
+        .state
+        .process_list
+        .get_integrand(info.process_id, &info.integrand_name)?
+        .require_generated()?;
+    for graph_id in &grouped_graph_ids {
+        assert_eq!(
+            generated.lmb_sample_id_for_channel(*graph_id, 0)?,
+            Some(override_basis_id),
+            "grouped member metadata must resolve lmb_basis_ids through the master graph name"
+        );
+    }
+
+    let point = default_xspace_point(&cli)?;
+    let mut results = evaluate_x_samples_with_discrete_dims(
+        &mut cli,
+        std::slice::from_ref(&point),
+        &[vec![group_id, 0]],
+    )?;
+    let result = results.samples.remove(0);
+    let events = result
+        .evaluation
+        .event_groups
+        .iter()
+        .flat_map(|group| group.iter())
+        .collect::<Vec<_>>();
+    assert!(!events.is_empty());
+    let represented_graph_ids = events
+        .iter()
+        .map(|event| event.cut_info.graph_id)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        represented_graph_ids, grouped_graph_ids,
+        "the grouped override regression must exercise every graph term in the group"
+    );
+    for event in events {
+        assert_eq!(
+            event
+                .cut_info
+                .lmb_channel_edge_ids
+                .as_ref()
+                .expect("grouped LMB events should carry channel metadata")
+                .iter()
+                .copied()
+                .collect::<Vec<_>>(),
+            override_basis_edges,
+            "grouped member terms must resolve lmb_basis_ids through the master graph name"
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_threshold_counterterms_follow_lmb_channel_normalization() -> Result<()> {
+    let test_name = "lu_threshold_counterterms_follow_lmb_channel_normalization";
+    let mut cli = get_test_cli(
+        Some("generate_threshold_subtraction_mass_approach_dotted.toml".into()),
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    cli.run_command(
+        "set process kv general.generate_events=true general.store_additional_weights_in_event=true stability.rotation_axis=[]",
+    )?;
+
+    let info = cli.state.get_integrand_info(None, None)?;
+    assert_eq!(info.kind, IntegrandKind::CrossSection);
+    let group =
+        info.graph_groups
+            .iter()
+            .find(|group| {
+                !group.loop_momentum_bases.is_empty()
+                    && group.cuts.iter().any(|cut| cut.raising_power > 1)
+                    && group.cuts.iter().any(|cut| {
+                        !cut.left_thresholds.is_empty() || !cut.right_thresholds.is_empty()
+                    })
+            })
+            .expect(
+                "expected a raised cross-section graph group with generated threshold counterterms",
+            );
+    let group_id = group.group_id;
+    let graph_name = group
+        .graphs
+        .iter()
+        .find(|graph| graph.is_master)
+        .expect("expected a master graph")
+        .name
+        .clone();
+    let basis_ids = group
+        .loop_momentum_bases
+        .iter()
+        .map(|basis| basis.basis_id)
+        .take(2)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        basis_ids.len(),
+        2,
+        "regression fixture must provide two distinct LMBs"
+    );
+    let point = default_xspace_point(&cli)?;
+
+    let summarize_events =
+        |result: &gammalooprs::integrands::evaluation::SampleEvaluationResult| {
+            let mut event_weight = (0.0, 0.0);
+            let mut original_weight = (0.0, 0.0);
+            let mut threshold_weight = (0.0, 0.0);
+            let mut threshold_magnitude = 0.0;
+            for event in result
+                .evaluation
+                .event_groups
+                .iter()
+                .flat_map(|group| group.iter())
+            {
+                event_weight.0 += event.weight.re.0;
+                event_weight.1 += event.weight.im.0;
+                for (key, value) in &event.additional_weights.weights {
+                    match key {
+                        gammalooprs::observables::events::AdditionalWeightKey::Original => {
+                            original_weight.0 += value.re.0;
+                            original_weight.1 += value.im.0;
+                        }
+                        gammalooprs::observables::events::AdditionalWeightKey::ThresholdCounterterm {
+                            ..
+                        } => {
+                            threshold_weight.0 += value.re.0;
+                            threshold_weight.1 += value.im.0;
+                            threshold_magnitude += value.re.0.abs() + value.im.0.abs();
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            (
+                (
+                    result.evaluation.integrand_result.re.0,
+                    result.evaluation.integrand_result.im.0,
+                ),
+                event_weight,
+                original_weight,
+                threshold_weight,
+                threshold_magnitude,
+            )
+        };
+    let assert_pair_close = |actual: (f64, f64), expected: (f64, f64), label: &str| {
+        let re_scale = expected.0.abs().max(actual.0.abs()).max(1.0e-30);
+        let im_scale = expected.1.abs().max(actual.1.abs()).max(1.0e-30);
+        assert!(
+            (actual.0 - expected.0).abs() <= 1.0e-9 * re_scale,
+            "{label} real mismatch: got {}, expected {}",
+            actual.0,
+            expected.0,
+        );
+        assert!(
+            (actual.1 - expected.1).abs() <= 1.0e-9 * im_scale,
+            "{label} imaginary mismatch: got {}, expected {}",
+            actual.1,
+            expected.1,
+        );
+    };
+
+    let mut baseline_summaries = Vec::new();
+    for basis_id in &basis_ids {
+        cli.run_command(&format!(
+            r#"set process string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+lmb_basis_ids = {{ "{graph_name}" = [{basis_id}] }}
+'"#,
+        ))?;
+        let mut baseline_results = evaluate_x_samples_with_discrete_dims(
+            &mut cli,
+            std::slice::from_ref(&point),
+            &[vec![group_id]],
+        )?;
+        baseline_summaries.push(summarize_events(&baseline_results.samples.remove(0)));
+    }
+    assert!(
+        baseline_summaries.iter().any(|summary| summary.4 > 0.0),
+        "regression fixture must evaluate at least one nonzero threshold counterterm"
+    );
+
+    for channel_weight in ["ose", "inverse_jacobian"] {
+        cli.run_command(&format!(
+            r#"set process string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+lmb_channel_weight = "{channel_weight}"
+lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
+'"#,
+            basis_ids[0], basis_ids[1],
+        ))?;
+        let mut monte_carlo_sum = ((0.0, 0.0), (0.0, 0.0), (0.0, 0.0), (0.0, 0.0));
+        for (channel_id, baseline_summary) in baseline_summaries.iter().copied().enumerate() {
+            let mut channel_results = evaluate_x_samples_with_discrete_dims(
+                &mut cli,
+                std::slice::from_ref(&point),
+                &[vec![group_id, channel_id]],
+            )?;
+            let channel = channel_results.samples.remove(0);
+            let channel_summary = summarize_events(&channel);
+            let factor = if baseline_summary.2.0.abs() >= baseline_summary.2.1.abs() {
+                assert!(baseline_summary.2.0.abs() > 1.0e-30);
+                channel_summary.2.0 / baseline_summary.2.0
+            } else {
+                assert!(baseline_summary.2.1.abs() > 1.0e-30);
+                channel_summary.2.1 / baseline_summary.2.1
+            };
+            assert!(
+                factor.is_finite() && factor > 0.0 && factor < 1.0,
+                "{channel_weight} channel {channel_id} produced invalid LMB weight {factor}"
+            );
+            let scale_pair = |pair: (f64, f64)| (pair.0 * factor, pair.1 * factor);
+            assert_pair_close(
+                channel_summary.0,
+                scale_pair(baseline_summary.0),
+                "channel integrand",
+            );
+            assert_pair_close(
+                channel_summary.1,
+                scale_pair(baseline_summary.1),
+                "channel event weight",
+            );
+            assert_pair_close(
+                channel_summary.2,
+                scale_pair(baseline_summary.2),
+                "channel original weight",
+            );
+            assert_pair_close(
+                channel_summary.3,
+                scale_pair(baseline_summary.3),
+                "channel threshold-counterterm weight",
+            );
+            let expected_threshold_magnitude = baseline_summary.4 * factor;
+            let threshold_scale = expected_threshold_magnitude
+                .abs()
+                .max(channel_summary.4.abs())
+                .max(1.0e-30);
+            assert!(
+                (channel_summary.4 - expected_threshold_magnitude).abs()
+                    <= 1.0e-9 * threshold_scale,
+                "{channel_weight} channel {channel_id} threshold-counterterm magnitudes were not scaled by the LMB weight"
+            );
+            monte_carlo_sum.0.0 += channel_summary.0.0;
+            monte_carlo_sum.0.1 += channel_summary.0.1;
+            monte_carlo_sum.1.0 += channel_summary.1.0;
+            monte_carlo_sum.1.1 += channel_summary.1.1;
+            monte_carlo_sum.2.0 += channel_summary.2.0;
+            monte_carlo_sum.2.1 += channel_summary.2.1;
+            monte_carlo_sum.3.0 += channel_summary.3.0;
+            monte_carlo_sum.3.1 += channel_summary.3.1;
+        }
+
+        cli.run_command(&format!(
+            r#"set process string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "{channel_weight}"
+lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
+'"#,
+            basis_ids[0], basis_ids[1],
+        ))?;
+        let mut summed_results = evaluate_x_samples_with_discrete_dims(
+            &mut cli,
+            std::slice::from_ref(&point),
+            &[vec![group_id]],
+        )?;
+        let summed_summary = summarize_events(&summed_results.samples.remove(0));
+        assert_pair_close(
+            summed_summary.0,
+            monte_carlo_sum.0,
+            "summed versus Monte Carlo channel integrand",
+        );
+        assert_pair_close(
+            summed_summary.1,
+            monte_carlo_sum.1,
+            "summed versus Monte Carlo channel event weight",
+        );
+        assert_pair_close(
+            summed_summary.2,
+            monte_carlo_sum.2,
+            "summed versus Monte Carlo channel original weight",
+        );
+        assert_pair_close(
+            summed_summary.3,
+            monte_carlo_sum.3,
+            "summed versus Monte Carlo channel threshold-counterterm weight",
+        );
+
+        let mut all_group_sum = [(0.0, 0.0); 4];
+        for graph_group in &info.graph_groups {
+            let mut group_results = evaluate_x_samples_with_discrete_dims(
+                &mut cli,
+                std::slice::from_ref(&point),
+                &[vec![graph_group.group_id]],
+            )?;
+            let group_summary = summarize_events(&group_results.samples.remove(0));
+            for (sum, contribution) in all_group_sum.iter_mut().zip([
+                group_summary.0,
+                group_summary.1,
+                group_summary.2,
+                group_summary.3,
+            ]) {
+                sum.0 += contribution.0;
+                sum.1 += contribution.1;
+            }
+        }
+
+        cli.run_command(&format!(
+            r#"set process string '
+[sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "{channel_weight}"
+lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
+'"#,
+            basis_ids[0], basis_ids[1],
+        ))?;
+        let mut top_level_results = evaluate_x_samples(&mut cli, std::slice::from_ref(&point))?;
+        let top_level_summary = summarize_events(&top_level_results.samples.remove(0));
+        assert_pair_close(
+            top_level_summary.0,
+            all_group_sum[0],
+            "top-level summed graph integrand",
+        );
+        assert_pair_close(
+            top_level_summary.1,
+            all_group_sum[1],
+            "top-level summed graph event weight",
+        );
+        assert_pair_close(
+            top_level_summary.2,
+            all_group_sum[2],
+            "top-level summed graph original weight",
+        );
+        assert_pair_close(
+            top_level_summary.3,
+            all_group_sum[3],
+            "top-level summed graph threshold-counterterm weight",
+        );
+    }
 
     Ok(())
 }

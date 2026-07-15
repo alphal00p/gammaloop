@@ -983,6 +983,7 @@ mod tests {
             external_shift: vec![(EdgeIndex::from(0), -1)],
             vertex_set: VertexSet::dummy(),
         };
+        assert!(radial_surface.has_radial_dependence_in_subspace(&subspace, &all_lmbs, &graph,));
         let zero_loop_momenta = LoopMomenta::from_iter([
             ThreeMomentum::new(F(0.0), F(0.0), F(0.0)),
             ThreeMomentum::new(F(0.0), F(0.0), F(0.0)),
@@ -1019,12 +1020,16 @@ mod tests {
         ));
 
         let complement_edge = graph.loop_momentum_basis.loop_edges[LoopIndex(2)];
-        let thresholds = vec![Esurface {
+        let thresholds: crate::cff::esurface::EsurfaceCollection = vec![Esurface {
             energies: vec![complement_edge],
             external_shift: vec![(EdgeIndex::from(0), -1)],
             vertex_set: VertexSet::dummy(),
         }]
         .into();
+        assert!(
+            !thresholds[EsurfaceID::from(0)]
+                .has_radial_dependence_in_subspace(&subspace, &all_lmbs, &graph,)
+        );
         let masses = graph.underlying.new_edgevec(|_, _, _| F(0.0));
         let settings = RuntimeSettings::default();
         let overlap_input = OverlapInput {
