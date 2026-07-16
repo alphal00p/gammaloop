@@ -14,6 +14,7 @@ use crate::{
         approx::{CutStructure, OrientationProjection, local_3d::Localizer},
         forest::ParametricIntegrands,
         hedge_poset::Wood as HedgePosetWood,
+        marker::UvMarker,
         settings::FinalIntegrandDimension,
         wood::CutWoods,
     },
@@ -34,7 +35,7 @@ impl UVOrchestrator {
             ));
         }
 
-        match self {
+        let result = match self {
             Self::LegacyDagForest => {
                 legacy_parametric_integrands(graph, cut_structure, vakint, orientation, settings)
             }
@@ -48,7 +49,12 @@ impl UVOrchestrator {
             Self::Compare => {
                 compare_parametric_integrands(graph, cut_structure, vakint, orientation, settings)
             }
-        }
+        }?;
+        let marker = UvMarker::new(settings);
+        Ok(result
+            .into_iter()
+            .map(|integrands| integrands.map(|atom| marker.finish(&atom)))
+            .collect())
     }
 
     pub(crate) fn renormalization_part(
@@ -61,11 +67,13 @@ impl UVOrchestrator {
             final_integrand: FinalIntegrandDimension::FourD,
             ..settings.clone()
         };
-        match self {
+        let mut result = match self {
             Self::LegacyDagForest => legacy_renormalization_part(graph, orientation, &settings),
             Self::HedgePoset => hedge_poset_renormalization_part(graph, &settings),
             Self::Compare => compare_renormalization_part(graph, orientation, &settings),
-        }
+        }?;
+        result.expression = UvMarker::new(&settings).finish(&result.expression);
+        Ok(result)
     }
 }
 
@@ -135,7 +143,7 @@ fn legacy_renormalization_part(
     let cuts = CutSet::empty(graph.n_hedges());
     forest.compute(graph, vk, Localizer::new(&cuts, orientation), settings)?;
 
-    forest.renormalization_part_of_ends(graph)
+    forest.renormalization_part_of_ends(graph, settings)
 }
 
 fn hedge_poset_renormalization_part(
@@ -146,7 +154,7 @@ fn hedge_poset_renormalization_part(
     let wood = HedgePosetWood::new(cuts, graph, settings);
     let mut forest = wood.unfold();
     forest.integrate(graph, crate::utils::vakint()?, settings)?;
-    forest.renormalization_part_of_ends(graph)
+    forest.renormalization_part_of_ends(graph, settings)
 }
 
 fn compare_renormalization_part(

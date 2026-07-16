@@ -36,6 +36,7 @@ use crate::{
     uv::{
         ApproximationType, UltravioletGraph,
         approx::{ForestNodeLike, Rooted, UVCtx, local_4d::Local4dCts},
+        marker::{UvMarker, UvOperation},
         settings::VakintSettings,
         uv_graph::UVE,
     },
@@ -165,13 +166,32 @@ impl Integrated<'_> {
                     .replace(GS.integrated_loop_scale)
                     .with(Atom::one());
                 let simplified = simplify(&integrand)?;
-                let integrated = self.integrate(&simplified, ctx, current, given)?;
-                let expanded = series(&integrated, n_loops + 1)?;
+                let marker = UvMarker::new(ctx.settings);
+                let integrated = marker.apply(
+                    UvOperation::Integrate,
+                    current.subgraph(),
+                    given.subgraph(),
+                    &self.integrate(&simplified, ctx, current, given)?,
+                );
+                let expanded = series(&integrated, n_loops + 1)?.map_coeff(|coefficient| {
+                    marker.apply(
+                        UvOperation::Series,
+                        current.subgraph(),
+                        given.subgraph(),
+                        coefficient,
+                    )
+                });
                 let counterterm = if ctx.settings.pole_part {
                     pole_part(&expanded)?
                 } else {
                     -finite_part(&expanded)?
                 };
+                let counterterm = marker.apply(
+                    UvOperation::Truncate,
+                    current.subgraph(),
+                    given.subgraph(),
+                    &counterterm,
+                );
 
                 // Retain the consumed loop measures for subsequent UV rescalings. Keep this
                 // marker independent of mUV so enclosing limits still rescale the vacuum mass.

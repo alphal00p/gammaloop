@@ -48,38 +48,49 @@ b = 1.0
 mu_r = 3.0
 m_uv = 20.0
 additional_param_values = [
-#uv_local(S_47⊛0)
+#CT(gammalooprs::uv::subgraph(S_47,0))
 1.0,
-#uv_local(S_47⊛y*Top(S_y⊛0))
+#CT(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_y,0))*gammalooprs::uv::subgraph(S_47,S_y))
 1.0,
-#uv_local(S_47⊛3s*Top(S_3s⊛0))
+#CT(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3s,0))*gammalooprs::uv::subgraph(S_47,S_3s))
 1.0,
-#uv_local(S_47⊛3I*Top(S_3I⊛0))
+#CT(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3I,0))*gammalooprs::uv::subgraph(S_47,S_3I))
 1.0,
-#uv_local(S_47⊛44*Top(S_44⊛0))
+#CT(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_44,0))*gammalooprs::uv::subgraph(S_47,S_44))
 1.0,
-#uv_local(S_47⊛44*Top(S_44⊛y*Top(S_y⊛0)))
+#CT(gammalooprs::uv::Approx(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_y,0))*gammalooprs::uv::subgraph(S_44,S_y))*gammalooprs::uv::subgraph(S_47,S_44))
 1.0,
-#uv_local(S_47⊛44*Top(S_44⊛3s*Top(S_3s⊛0)))
+#CT(gammalooprs::uv::Approx(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3s,0))*gammalooprs::uv::subgraph(S_44,S_3s))*gammalooprs::uv::subgraph(S_47,S_44))
 1.0,
-#uv_local(S_47⊛44*Top(S_44⊛3I*Top(S_3I⊛0)))
+#CT(gammalooprs::uv::Approx(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3I,0))*gammalooprs::uv::subgraph(S_44,S_3I))*gammalooprs::uv::subgraph(S_47,S_44))
 1.0,
-#uv_integrated(S_47⊛0)
+#CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_y,0)))))*gammalooprs::uv::subgraph(S_47,S_y))
 1.0,
-#uv_integrated(S_47⊛y*Top(S_y⊛0))
+#CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3s,0)))))*gammalooprs::uv::subgraph(S_47,S_3s))
 1.0,
-#uv_integrated(S_47⊛3s*Top(S_3s⊛0))
+#CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3I,0)))))*gammalooprs::uv::subgraph(S_47,S_3I))
 1.0,
-#uv_integrated(S_47⊛3I*Top(S_3I⊛0))
+#CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_44,0)))))*gammalooprs::uv::subgraph(S_47,S_44))
 1.0,
-#uv_integrated(S_47⊛44*Top(S_44⊛0))
+#CT(gammalooprs::uv::Approx(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_y,0)))))*gammalooprs::uv::subgraph(S_44,S_y))*gammalooprs::uv::subgraph(S_47,S_44))
 1.0,
-#uv_integrated(S_47⊛44*Top(S_44⊛y*Top(S_y⊛0)))
+#CT(gammalooprs::uv::Approx(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3s,0)))))*gammalooprs::uv::subgraph(S_44,S_3s))*gammalooprs::uv::subgraph(S_47,S_44))
 1.0,
-#uv_integrated(S_47⊛44*Top(S_44⊛3s*Top(S_3s⊛0)))
+#CT(gammalooprs::uv::Approx(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3I,0)))))*gammalooprs::uv::subgraph(S_44,S_3I))*gammalooprs::uv::subgraph(S_47,S_44))
 1.0,
-#uv_integrated(S_47⊛44*Top(S_44⊛3I*Top(S_3I⊛0)))
-1.0]
+#CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_y,0))*gammalooprs::uv::subgraph(S_44,S_y)))))*gammalooprs::uv::subgraph(S_47,S_44))
+1.0,
+#CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3s,0))*gammalooprs::uv::subgraph(S_44,S_3s)))))*gammalooprs::uv::subgraph(S_47,S_44))
+1.0,
+#CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3I,0))*gammalooprs::uv::subgraph(S_44,S_3I)))))*gammalooprs::uv::subgraph(S_47,S_44))
+1.0,
+#CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_y,0)))))*gammalooprs::uv::subgraph(S_44,S_y)))))*gammalooprs::uv::subgraph(S_47,S_44))
+1.0,
+#CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3s,0)))))*gammalooprs::uv::subgraph(S_44,S_3s)))))*gammalooprs::uv::subgraph(S_47,S_44))
+1.0,
+#CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3I,0)))))*gammalooprs::uv::subgraph(S_44,S_3I)))))*gammalooprs::uv::subgraph(S_47,S_44))
+1.0
+]
 
 
 [default_runtime_settings.kinematics.externals]

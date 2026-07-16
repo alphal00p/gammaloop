@@ -21,6 +21,7 @@ use crate::{
     uv::{
         ApproximationType, Integrands, UVgenerationSettings, UltravioletGraph,
         approx::{ForestNodeLike, OrientationProjection, UVCtx, integrated::IntegratedCts},
+        marker::{UvMarker, UvOperation},
         uv_graph::UVE,
     },
 };
@@ -236,7 +237,14 @@ impl<'a> Local3DApproximation<'a> {
             .fallible_map(reduced(&ctx, current, given))?
             .zip_mul(&integrated_t.frozen_integrands)?);
 
-        local.zip_add(&integrated)
+        local.zip_add(&integrated)?.map(|atom| {
+            Ok(UvMarker::new(ctx.settings).apply(
+                UvOperation::Approx,
+                current.subgraph(),
+                given.subgraph(),
+                atom,
+            ))
+        })
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

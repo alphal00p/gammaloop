@@ -15,6 +15,7 @@ display_directive = "gammaloop_api=info,gammalooprs=info"
 generate_integrated = false
 softct = false
 add_marker = true
+keep_marker = false
 inner_products = true
 
 [cli_settings.global.generation.threshold_subtraction]
@@ -49,7 +50,7 @@ check_on_norm = true
 [default_runtime_settings.general]
 m_uv = 5.0
 
-# additional_param_values = [1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
+# Marker histories are stripped before evaluation, so no additional values are needed.
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = false
 

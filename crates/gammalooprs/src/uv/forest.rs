@@ -5,6 +5,7 @@ use crate::{
     uv::{
         Integrands,
         approx::{CutStructure, ForestNodeLike, OrientationProjection, local_3d::Localizer},
+        marker::UvMarker,
         settings::FinalIntegrandDimension,
     },
 };
@@ -226,8 +227,10 @@ impl Forest {
     pub(crate) fn renormalization_part_of_ends(
         &self,
         graph: &Graph,
+        settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
         let mut sum = Atom::Zero;
+        let marker = UvMarker::new(settings);
 
         let wild = Atom::var(W_.x___);
 
@@ -238,7 +241,11 @@ impl Forest {
                 continue;
             }
 
-            let atom = n.data.integrated(graph)?.physical_atom();
+            let atom = marker.prefix(
+                &graph.full_filter(),
+                n.data.subgraph(),
+                &n.data.integrated(graph)?.physical_atom(),
+            );
 
             let expanded_atom = atom.expand_num();
             debug_tags!(#generation, #uv, #graph, #term;

@@ -12,6 +12,7 @@ use crate::{
             local_3d::{Local3DApproximation, Local3DCts, Localizer},
             local_4d::{Full4DCts, Local4dCts},
         },
+        marker::UvMarker,
         settings::FinalIntegrandDimension,
     },
 };
@@ -22,8 +23,8 @@ use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use std::hash::Hash;
 
 use symbolica::{
-    atom::{Atom, AtomOrView, Symbol},
-    function, symbol,
+    atom::{Atom, AtomOrView},
+    function,
 };
 
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
@@ -105,16 +106,8 @@ pub struct SimpleApprox {
 }
 
 impl SimpleApprox {
-    fn subgraph_shadow(graph: &SuBitGraph, subgraph: &InternalSubGraph) -> Symbol {
-        symbol!(&format!(
-            "S_{}⊛{}",
-            graph.string_label(),
-            subgraph.string_label()
-        ))
-    }
-
     pub(crate) fn expr(&self, bigger_graph: &SuBitGraph) -> Atom {
-        let reduced = Atom::var(Self::subgraph_shadow(bigger_graph, &self.graph));
+        let reduced = UvMarker::subgraph(bigger_graph, &self.graph.filter);
         let mut mul = Atom::num(1);
         for i in &self.t_args {
             mul *= i;
@@ -291,7 +284,7 @@ impl Approximation {
         let integrated = IntegratedCts::root();
         if let FinalIntegrandDimension::ThreeD = settings.final_integrand {
             let local_3d = Local3DCts::root(graph, localizer)?;
-            self.final_integrand = Some(FinalIntegrandBuilder::new(localizer).build_3d(
+            self.final_integrand = Some(FinalIntegrandBuilder::new(localizer, settings).build_3d(
                 graph,
                 self,
                 &local_3d,
@@ -375,7 +368,8 @@ impl Approximation {
         let integrated = self.integrated(graph)?;
 
         self.final_integrand = Some(
-            FinalIntegrandBuilder::new(localizer).build_3d(graph, self, &local_3d, integrated)?,
+            FinalIntegrandBuilder::new(localizer, settings)
+                .build_3d(graph, self, &local_3d, integrated)?,
         );
         self.local_3d = Some(local_3d);
         Ok(())

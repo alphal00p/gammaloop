@@ -4,12 +4,13 @@ use crate::{
     graph::Graph,
     utils::{GS, W_},
     uv::{
-        Integrands, UltravioletGraph,
+        Integrands, UVgenerationSettings, UltravioletGraph,
         approx::{
             ForestNodeLike,
             integrated::IntegratedCts,
             local_3d::{Local3DCts, Localizer},
         },
+        marker::UvMarker,
     },
 };
 use color_eyre::Result;
@@ -34,6 +35,7 @@ impl FinalIntegrands {
 
 pub(crate) struct FinalIntegrandBuilder<'a> {
     localizer: Localizer<'a>,
+    marker: UvMarker,
 }
 
 pub(crate) struct LocalizedIntegratedCt {
@@ -50,8 +52,11 @@ impl TryFrom<LocalizedIntegratedCt> for Integrands {
 }
 
 impl<'a> FinalIntegrandBuilder<'a> {
-    pub(crate) fn new(localizer: Localizer<'a>) -> Self {
-        Self { localizer }
+    pub(crate) fn new(localizer: Localizer<'a>, settings: &UVgenerationSettings) -> Self {
+        Self {
+            localizer,
+            marker: UvMarker::new(settings),
+        }
     }
 
     #[debug_instrument(
@@ -81,7 +86,13 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .subtract(current.subgraph())
             .subtract(&graph.initial_state_cut);
 
-        let final_int = localized_integrated.zip_add(local_terms.integrands())?;
+        let full_graph = graph.full_filter();
+        let localized_integrated = localized_integrated
+            .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
+        let local_terms = local_terms
+            .integrands()
+            .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
+        let final_int = localized_integrated.zip_add(&local_terms)?;
         let mut resnum = graph
             .numerator(&reduced, current.subgraph())
             .get_single_atom()

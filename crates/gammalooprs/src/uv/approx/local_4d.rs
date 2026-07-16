@@ -26,6 +26,7 @@ use crate::{
     uv::{
         ApproximationType, UltravioletGraph,
         approx::{ForestNodeLike, Rooted, UVCtx, integrated::IntegratedCts},
+        marker::{UvMarker, UvOperation},
     },
 };
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -308,7 +309,12 @@ pub(crate) fn uv_limit<S: ForestNodeLike>(
         ApproximationType::MUV => {
             let grown = grow(integrand, ctx, current, given)?;
             let result = -t(&grown, ctx, current, given)?;
-            Ok(result)
+            Ok(Local4dCts(UvMarker::new(ctx.settings).apply(
+                UvOperation::Approx,
+                current.subgraph(),
+                given.subgraph(),
+                result.atom(),
+            )))
         }
         atype => Err(eyre!("Not yet implemented {:?}", atype)),
     }
