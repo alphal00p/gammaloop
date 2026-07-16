@@ -1331,10 +1331,10 @@ impl GraphTerm for CrossSectionGraphTerm {
         );
 
         for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
-            let max_occurance = cut_group.related_esurface_group.max_occurence;
+            let max_occurrence = cut_group.related_esurface_group.max_occurence;
             if !self.counterterm.cut_group_is_active(cut_group_id) {
                 let zero = Complex::new_re(momentum_sample.zero());
-                for _ in 1..=max_occurance {
+                for _ in 1..=max_occurrence {
                     cut_results[cut_group_id].push(zero.clone());
                 }
                 cut_threshold_counterterms.push(zero);
@@ -1415,7 +1415,7 @@ impl GraphTerm for CrossSectionGraphTerm {
 
             if !prepared_event.selectors_pass {
                 let zero = Complex::new_re(momentum_sample.zero());
-                for _ in 1..=max_occurance {
+                for _ in 1..=max_occurrence {
                     cut_results[cut_group_id].push(zero.clone());
                 }
                 cut_threshold_counterterms.push(zero);
@@ -1424,7 +1424,7 @@ impl GraphTerm for CrossSectionGraphTerm {
 
             let accepted_event = prepared_event.buffered_event;
             let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
-            let mut threshold_counterterm_weights = Vec::with_capacity(max_occurance);
+            let mut threshold_counterterm_weights = Vec::with_capacity(max_occurrence);
             let mut kinematic_point = LUCTKinematicPoint::new(momentum_sample.clone());
             // LMB channel weights partition the fully subtracted LU-cut integrand. Apply the
             // sampling partition after the raised-residue derivatives: it is not part of the
@@ -1463,7 +1463,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     momentum_sample.one()
                 },
             );
-            for num_esurfaces in 1..=max_occurance {
+            for num_esurfaces in 1..=max_occurrence {
                 let dual_shape = if num_esurfaces > 1 {
                     Some(HyperDual::<F<T>>::new(
                         self.cut_group_data.dual_shapes[num_esurfaces - 2].clone(),

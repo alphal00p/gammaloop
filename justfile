@@ -250,7 +250,9 @@ test_gammaloop *args:
         )
     fi
     if [ "$run_ignored" -eq 1 ]; then
-        cmd+=(--run-ignored all)
+        # Explicit slow/failing selections must bypass the profile filter that
+        # excludes those classes from the curated base suite.
+        cmd+=(--run-ignored all --ignore-default-filter)
     fi
     for package in "${gammaloop_packages[@]}"; do
         cmd+=(-p "$package")
@@ -259,7 +261,6 @@ test_gammaloop *args:
     # Symbolica updates its pinned SymJIT dependency. The test remains available
     # for direct nextest invocations.
     known_broken_filter='not test(/^aa_aa::important::aa_aa_local_inspect_backend_consistency$/)'
-    cmd+=(--ignore-default-filter)
     if [ ${#filter_terms[@]} -gt 0 ]; then
         filterset="${filter_terms[0]}"
         for term in "${filter_terms[@]:1}"; do

@@ -2826,7 +2826,7 @@ impl CrossSectionGraph {
             let left_thresholds = &left_cut_group_threshold_data[cut_group_id];
             let right_thresholds = &right_cut_group_threshold_data[cut_group_id];
 
-            let cutcosky_cut_untion = cut_group
+            let cutkosky_cut_union = cut_group
                 .cuts
                 .iter()
                 .map(|cut_id| self.cuts[*cut_id].cut.as_subgraph())
@@ -2846,10 +2846,8 @@ impl CrossSectionGraph {
                 };
 
             for raised_esurface_group in left_thresholds {
-                let esurface_cut_union = add_threshold_group_to_union(
-                    cutcosky_cut_untion.clone(),
-                    raised_esurface_group,
-                );
+                let esurface_cut_union =
+                    add_threshold_group_to_union(cutkosky_cut_union.clone(), raised_esurface_group);
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
@@ -2863,10 +2861,8 @@ impl CrossSectionGraph {
             }
 
             for raised_esurface_group in right_thresholds {
-                let esurface_cut_union = add_threshold_group_to_union(
-                    cutcosky_cut_untion.clone(),
-                    raised_esurface_group,
-                );
+                let esurface_cut_union =
+                    add_threshold_group_to_union(cutkosky_cut_union.clone(), raised_esurface_group);
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
@@ -2885,7 +2881,7 @@ impl CrossSectionGraph {
             {
                 let esurface_cut_union = add_threshold_group_to_union(
                     add_threshold_group_to_union(
-                        cutcosky_cut_untion.clone(),
+                        cutkosky_cut_union.clone(),
                         left_raised_esurface_group,
                     ),
                     right_raised_esurface_group,
