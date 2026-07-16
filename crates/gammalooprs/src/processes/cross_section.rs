@@ -2645,6 +2645,21 @@ impl CrossSectionGraph {
             .as_ref()
             .expect("threshold generation requires loop-momentum bases");
 
+        // Keep topology-discovered E-surfaces in the graph inventory, but do not generate a
+        // threshold CT association for any E-surface that is also one of this graph's physical
+        // Cutkosky cuts when the corresponding generation setting is enabled. This comparison
+        // must cover every physical cut, not only the cut currently being processed below.
+        let subtraction_threshold_candidates = all_possible_thresholds
+            .iter()
+            .filter(|threshold_candidate| {
+                !settings.threshold_subtraction.skip_thresholds_that_are_cuts
+                    || !self
+                        .cuts
+                        .iter()
+                        .any(|physical_cut| physical_cut.cut == threshold_candidate.cut)
+            })
+            .collect_vec();
+
         for (cut_id, cut) in self.cuts.iter_enumerated() {
             let cut_group_id = cut_group_by_cut[cut_id.0].ok_or_else(|| {
                 eyre!(
@@ -2655,13 +2670,7 @@ impl CrossSectionGraph {
             })?;
             let (left_subspace, right_subspace) = &self.derived_data.subspace_data[cut_group_id];
 
-            for threshold_candidate in all_possible_thresholds {
-                if cut.cut == threshold_candidate.cut
-                    && settings.threshold_subtraction.skip_thresholds_that_are_cuts
-                {
-                    continue;
-                }
-
+            for threshold_candidate in &subtraction_threshold_candidates {
                 // if the subgraph on the left of the threshold cut is a subgraph of the left amplitude, then the threshold is on the left of the cut
                 if cut.left.includes(&threshold_candidate.left) {
                     let sandwich = cut.left.intersection(&threshold_candidate.right);
