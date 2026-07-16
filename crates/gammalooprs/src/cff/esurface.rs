@@ -1111,28 +1111,31 @@ impl Graph {
 
         let mut raised_groups = TiVec::<RaisedEsurfaceId, RaisedEsurfaceGroup>::new();
 
-        for (cut_id, normalized_cut_esurface) in normalized_cut_esurfaces.iter_enumerated() {
-            let raised_cut_id =
-                raised_groups
-                    .iter_enumerated()
-                    .find_map(|(raised_cut_id, cuts)| {
-                        if cuts.esurface_ids.iter().all(|cut_in_raised_group_id| {
-                            normalized_cut_esurfaces[*cut_in_raised_group_id].energies
+        for (esurface_id, normalized_cut_esurface) in normalized_cut_esurfaces.iter_enumerated() {
+            let raised_esurface_group_id = raised_groups.iter_enumerated().find_map(
+                |(raised_esurface_group_id, esurface_group)| {
+                    if esurface_group
+                        .esurface_ids
+                        .iter()
+                        .all(|esurface_id_in_group| {
+                            normalized_cut_esurfaces[*esurface_id_in_group].energies
                                 == normalized_cut_esurface.energies
-                                && normalized_cut_esurfaces[*cut_in_raised_group_id].external_shift
+                                && normalized_cut_esurfaces[*esurface_id_in_group].external_shift
                                     == normalized_cut_esurface.external_shift
-                        }) {
-                            Some(raised_cut_id)
-                        } else {
-                            None
-                        }
-                    });
+                        })
+                    {
+                        Some(raised_esurface_group_id)
+                    } else {
+                        None
+                    }
+                },
+            );
 
-            if let Some(found_raised_cut_id) = raised_cut_id {
-                raised_groups[found_raised_cut_id].esurface_ids.push(cut_id);
+            if let Some(found_group_id) = raised_esurface_group_id {
+                raised_groups[found_group_id].esurface_ids.push(esurface_id);
             } else {
                 raised_groups.push(RaisedEsurfaceGroup {
-                    esurface_ids: vec![cut_id],
+                    esurface_ids: vec![esurface_id],
                     max_occurence: 0,
                 });
             }

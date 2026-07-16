@@ -369,9 +369,9 @@ fn cut_raising_powers(
 ) -> typed_index_collections::TiVec<CutId, usize> {
     let mut raising_powers: typed_index_collections::TiVec<CutId, usize> =
         vec![1; graph.cuts.len()].into();
-    for raised_cut_group in graph.raised_data.raised_cut_groups.iter() {
-        let raising_power = raised_cut_group.related_esurface_group.max_occurence;
-        for cut_id in &raised_cut_group.cuts {
+    for cut_group in graph.cut_group_data.cut_groups.iter() {
+        let raising_power = cut_group.related_esurface_group.max_occurence;
+        for cut_id in &cut_group.cuts {
             raising_powers[*cut_id] = raising_power;
         }
     }

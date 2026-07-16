@@ -165,7 +165,7 @@ fn max_dual_size_for_cut_cff_indices<'a>(
 
 define_index! {pub struct RightThresholdId;}
 define_index! {pub struct LeftThresholdId;}
-define_index! {pub struct RaisedCutId;}
+define_index! {pub struct CutGroupId;}
 
 /// Eligibility of one threshold E-surface relative to one side of one physical cut.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -867,8 +867,8 @@ impl CrossSection {
             .iter()
             .map(|sg| {
                 sg.derived_data
-                    .raised_data
-                    .raised_cut_groups
+                    .cut_group_data
+                    .cut_groups
                     .iter()
                     .map(|cut_group| cut_group.cuts.len())
                     .sum::<usize>()
@@ -1381,7 +1381,7 @@ impl CrossSectionGraph {
         let vk = crate::utils::vakint()?;
         debug_tags!(#generation; "building parametric integrand");
         self.build_parametric_integrand(settings, vk)?;
-        //self.build_parametric_integrand_raised_cuts(settings)?;
+        //self.build_parametric_integrand_cut_groups(settings)?;
 
         let threshold_candidates = self.topological_threshold_candidates()?;
         self.derived_data.threshold_candidate_esurface_ids = threshold_candidates
@@ -1479,16 +1479,16 @@ impl CrossSectionGraph {
             .graph
             .determine_raised_esurfaces_from_expression(&global_cff);
 
-        let (raised_cut_data, raised_cut_stats) = RaisedCutData::new_from_esurface(
+        let (cut_group_data, cut_group_stats) = CutGroupData::new_from_esurface(
             &esurface_raised_data,
             &self.cut_esurface_id_map,
             &settings.evaluator,
         );
 
         self.derived_data.global_cff_expression = Some(global_cff);
-        self.derived_data.raised_data = raised_cut_data;
+        self.derived_data.cut_group_data = cut_group_data;
 
-        Ok(raised_cut_stats)
+        Ok(cut_group_stats)
     }
 
     pub(crate) fn process_valid_cuts(
@@ -1616,7 +1616,7 @@ impl CrossSectionGraph {
         &mut self,
         settings: &GenerationSettings,
         vakint: &Vakint,
-    ) -> Result<TiVec<RaisedCutId, ParametricIntegrands>> {
+    ) -> Result<TiVec<CutGroupId, ParametricIntegrands>> {
         let started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "supergraph_build_integrand_start",
@@ -1628,8 +1628,8 @@ impl CrossSectionGraph {
         );
         let max_order = self
             .derived_data
-            .raised_data
-            .raised_cut_groups
+            .cut_group_data
+            .cut_groups
             .iter()
             .map(|cut_group| cut_group.related_esurface_group.max_occurence)
             .max()
@@ -1646,8 +1646,8 @@ impl CrossSectionGraph {
 
         let cuts = self
             .derived_data
-            .raised_data
-            .raised_cut_groups
+            .cut_group_data
+            .cut_groups
             .iter()
             .map(|cuts| CutSet {
                 residue_selector: ResidueSelector {
@@ -2628,15 +2628,15 @@ impl CrossSectionGraph {
         let mut cut_threshold_associations: TiVec<CutId, CutThresholdCountertermAssociations> =
             ti_vec![CutThresholdCountertermAssociations::default(); self.cuts.len()];
 
-        let mut cut_to_raised_cut = vec![None; self.cuts.len()];
-        for (raised_cut_id, raised_cut_group) in self
+        let mut cut_group_by_cut = vec![None; self.cuts.len()];
+        for (cut_group_id, cut_group) in self
             .derived_data
-            .raised_data
-            .raised_cut_groups
+            .cut_group_data
+            .cut_groups
             .iter_enumerated()
         {
-            for cut_id in &raised_cut_group.cuts {
-                cut_to_raised_cut[cut_id.0] = Some(raised_cut_id);
+            for cut_id in &cut_group.cuts {
+                cut_group_by_cut[cut_id.0] = Some(cut_group_id);
             }
         }
         let all_lmbs = self
@@ -2646,14 +2646,14 @@ impl CrossSectionGraph {
             .expect("threshold generation requires loop-momentum bases");
 
         for (cut_id, cut) in self.cuts.iter_enumerated() {
-            let raised_cut_id = cut_to_raised_cut[cut_id.0].ok_or_else(|| {
+            let cut_group_id = cut_group_by_cut[cut_id.0].ok_or_else(|| {
                 eyre!(
-                    "Physical cut {} in graph '{}' is missing from the raised-cut partition",
+                    "Physical cut {} in graph '{}' is missing from the cut-group partition",
                     cut_id.0,
                     self.graph.name,
                 )
             })?;
-            let (left_subspace, right_subspace) = &self.derived_data.subspace_data[raised_cut_id];
+            let (left_subspace, right_subspace) = &self.derived_data.subspace_data[cut_group_id];
 
             for threshold_candidate in all_possible_thresholds {
                 if cut.cut == threshold_candidate.cut
@@ -2782,19 +2782,19 @@ impl CrossSectionGraph {
             groups
         };
 
-        let mut left_raised_cut_threshold_data: TiVec<
-            RaisedCutId,
+        let mut left_cut_group_threshold_data: TiVec<
+            CutGroupId,
             TiVec<LeftThresholdId, RaisedEsurfaceGroup>,
         > = TiVec::new();
 
-        let mut right_raised_cut_threshold_data: TiVec<
-            RaisedCutId,
+        let mut right_cut_group_threshold_data: TiVec<
+            CutGroupId,
             TiVec<RightThresholdId, RaisedEsurfaceGroup>,
         > = TiVec::new();
 
-        for raised_cut_group in self.derived_data.raised_data.raised_cut_groups.iter() {
+        for cut_group in self.derived_data.cut_group_data.cut_groups.iter() {
             let left_thresholds = collect_raised_threshold_groups(
-                raised_cut_group
+                cut_group
                     .cuts
                     .iter()
                     .flat_map(|cut_id| left_cut_threshold_data[*cut_id].iter().copied())
@@ -2802,7 +2802,7 @@ impl CrossSectionGraph {
             );
 
             let mut right_thresholds = collect_raised_threshold_groups(
-                raised_cut_group
+                cut_group
                     .cuts
                     .iter()
                     .flat_map(|cut_id| right_cut_threshold_data[*cut_id].iter().copied())
@@ -2811,22 +2811,22 @@ impl CrossSectionGraph {
 
             right_thresholds.retain(|raised_group| !left_thresholds.contains(raised_group));
 
-            left_raised_cut_threshold_data.push(left_thresholds.into());
-            right_raised_cut_threshold_data.push(right_thresholds.into());
+            left_cut_group_threshold_data.push(left_thresholds.into());
+            right_cut_group_threshold_data.push(right_thresholds.into());
         }
 
         let mut cut_structure = vec![];
 
-        for (raised_cut_id, raised_cut_group) in self
+        for (cut_group_id, cut_group) in self
             .derived_data
-            .raised_data
-            .raised_cut_groups
+            .cut_group_data
+            .cut_groups
             .iter_enumerated()
         {
-            let left_thresholds = &left_raised_cut_threshold_data[raised_cut_id];
-            let right_thresholds = &right_raised_cut_threshold_data[raised_cut_id];
+            let left_thresholds = &left_cut_group_threshold_data[cut_group_id];
+            let right_thresholds = &right_cut_group_threshold_data[cut_group_id];
 
-            let cutcosky_cut_untion = raised_cut_group
+            let cutcosky_cut_untion = cut_group
                 .cuts
                 .iter()
                 .map(|cut_id| self.cuts[*cut_id].cut.as_subgraph())
@@ -2853,7 +2853,7 @@ impl CrossSectionGraph {
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
-                        lu_cut: Some(raised_cut_group.related_esurface_group.clone()),
+                        lu_cut: Some(cut_group.related_esurface_group.clone()),
                         left_th_cut: Some(raised_esurface_group.clone()),
                         right_th_cut: None,
                     },
@@ -2870,7 +2870,7 @@ impl CrossSectionGraph {
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
-                        lu_cut: Some(raised_cut_group.related_esurface_group.clone()),
+                        lu_cut: Some(cut_group.related_esurface_group.clone()),
                         left_th_cut: None,
                         right_th_cut: Some(raised_esurface_group.clone()),
                     },
@@ -2893,7 +2893,7 @@ impl CrossSectionGraph {
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
-                        lu_cut: Some(raised_cut_group.related_esurface_group.clone()),
+                        lu_cut: Some(cut_group.related_esurface_group.clone()),
                         left_th_cut: Some(left_raised_esurface_group.clone()),
                         right_th_cut: Some(right_raised_esurface_group.clone()),
                     },
@@ -2933,14 +2933,14 @@ impl CrossSectionGraph {
 
         let lu_prefactor = self.lu_prefactor_helper();
 
-        let mut result = TiVec::<RaisedCutId, LUCounterTermData>::new();
-        for (raised_cut_id, _raised_cut_group) in self
+        let mut result = TiVec::<CutGroupId, LUCounterTermData>::new();
+        for (cut_group_id, _cut_group) in self
             .derived_data
-            .raised_data
-            .raised_cut_groups
+            .cut_group_data
+            .cut_groups
             .iter_enumerated()
         {
-            let (left_subspace, right_subspace) = &self.derived_data.subspace_data[raised_cut_id];
+            let (left_subspace, right_subspace) = &self.derived_data.subspace_data[cut_group_id];
 
             let left_rstar_pow =
                 Atom::var(GS.radius_star_left).pow(left_subspace.loopcount() as i32 * 3 - 1);
@@ -2952,7 +2952,7 @@ impl CrossSectionGraph {
             let mut right_atoms = TiVec::<RightThresholdId, _>::new();
             let mut iterated_atoms = vec![];
 
-            for _ in 0..left_raised_cut_threshold_data[raised_cut_id].len() {
+            for _ in 0..left_cut_group_threshold_data[cut_group_id].len() {
                 left_atoms.push(
                     threshold_counterterms
                         .next()
@@ -2961,7 +2961,7 @@ impl CrossSectionGraph {
                 );
             }
 
-            for _ in 0..right_raised_cut_threshold_data[raised_cut_id].len() {
+            for _ in 0..right_cut_group_threshold_data[cut_group_id].len() {
                 right_atoms.push(
                     threshold_counterterms
                         .next()
@@ -2970,8 +2970,8 @@ impl CrossSectionGraph {
                 );
             }
 
-            for _ in 0..(left_raised_cut_threshold_data[raised_cut_id].len()
-                * right_raised_cut_threshold_data[raised_cut_id].len())
+            for _ in 0..(left_cut_group_threshold_data[cut_group_id].len()
+                * right_cut_group_threshold_data[cut_group_id].len())
             {
                 iterated_atoms.push(
                     threshold_counterterms
@@ -2987,8 +2987,8 @@ impl CrossSectionGraph {
             };
 
             let counterterm_data = LUCounterTermData {
-                left_thresholds: left_raised_cut_threshold_data[raised_cut_id].clone(),
-                right_thresholds: right_raised_cut_threshold_data[raised_cut_id].clone(),
+                left_thresholds: left_cut_group_threshold_data[cut_group_id].clone(),
+                right_thresholds: right_cut_group_threshold_data[cut_group_id].clone(),
                 left_atoms,
                 right_atoms,
                 iterated: iterated_collection,
@@ -3016,15 +3016,15 @@ impl CrossSectionGraph {
 
         let subspace_data = self
             .derived_data
-            .raised_data
-            .raised_cut_groups
+            .cut_group_data
+            .cut_groups
             .iter_enumerated()
-            .map(|(raised_cut_id, cut_group)| {
+            .map(|(cut_group_id, cut_group)| {
                 let representative_cut_id = cut_group.cuts.first().copied().ok_or_else(|| {
                     eyre!(
-                        "Graph '{}' has an empty raised cut group {} while building threshold-counterterm subspaces",
+                        "Graph '{}' has an empty cut group {} while building threshold-counterterm subspaces",
                         self.graph.name,
-                        raised_cut_id.0,
+                        cut_group_id.0,
                     )
                 })?;
                 let valid_subspace_lmbs = all_lmbs
@@ -3070,16 +3070,16 @@ impl CrossSectionGraph {
 
                 let smallest_left_subgraph = left_subgraphs.first().cloned().ok_or_else(|| {
                     eyre!(
-                        "Graph '{}' raised cut group {} has no left subgraph",
+                        "Graph '{}' cut group {} has no left subgraph",
                         self.graph.name,
-                        raised_cut_id.0,
+                        cut_group_id.0,
                     )
                 })?;
                 let smallest_right_subgraph = right_subgraphs.first().cloned().ok_or_else(|| {
                     eyre!(
-                        "Graph '{}' raised cut group {} has no right subgraph",
+                        "Graph '{}' cut group {} has no right subgraph",
                         self.graph.name,
-                        raised_cut_id.0,
+                        cut_group_id.0,
                     )
                 })?;
 
@@ -3132,9 +3132,9 @@ impl CrossSectionGraph {
 
                 possible_subspaces.first().cloned().ok_or_else(|| {
                     eyre!(
-                        "No topology-compatible parent LMB found for graph '{}' raised cut group {}. Rejections:\n{}",
+                        "No topology-compatible parent LMB found for graph '{}' cut group {}. Rejections:\n{}",
                         self.graph.name,
-                        raised_cut_id.0,
+                        cut_group_id.0,
                         rejected_lmbs.join("\n"),
                     )
                 })
@@ -3158,47 +3158,49 @@ impl CrossSectionGraph {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionDerivedData {
     pub orientations: Option<TiVec<OrientationID, EdgeVec<Orientation>>>,
-    pub cut_paramatric_integrand: TiVec<RaisedCutId, ParametricIntegrands>,
+    pub cut_paramatric_integrand: TiVec<CutGroupId, ParametricIntegrands>,
     pub global_cff_expression: Option<CFFExpression<OrientationID>>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
-    pub threshold_counterterms: TiVec<RaisedCutId, LUCounterTermData>,
+    pub threshold_counterterms: TiVec<CutGroupId, LUCounterTermData>,
     /// Graph-level inventory of every topology-discovered threshold E-surface. This remains
     /// independent of whether a counterterm is generated for any particular physical cut.
     pub threshold_candidate_esurface_ids: Vec<EsurfaceID>,
     /// Exact generated left/right threshold associations for each physical cut. Runtime
-    /// evaluators aggregate these into raised-cut groups, but display and model reclassification
+    /// evaluators aggregate these into cut groups, but display and model reclassification
     /// must retain the physical-cut-relative eligibility information.
     pub cut_threshold_associations: TiVec<CutId, CutThresholdCountertermAssociations>,
-    pub subspace_data: TiVec<RaisedCutId, (SubspaceData, SubspaceData)>,
-    pub raised_data: RaisedCutData,
+    pub subspace_data: TiVec<CutGroupId, (SubspaceData, SubspaceData)>,
+    pub cut_group_data: CutGroupData,
 }
 
+/// Partition and residue-derivative metadata for all Cutkosky cuts, including order-one cuts.
 #[derive(Clone, Encode, Decode, Debug)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct RaisedCutData {
-    pub raised_cut_groups: TiVec<RaisedCutId, RaisedCutGroup>,
+pub struct CutGroupData {
+    pub cut_groups: TiVec<CutGroupId, CutGroup>,
     pub dual_shapes: Vec<Vec<Vec<usize>>>,
     pub pass_two_evaluators: Vec<GenericEvaluator>,
 }
 
+/// Physical cuts that share one normalized E-surface residue, whether ordinary or raised.
 #[derive(Clone, Encode, Decode, Debug)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct RaisedCutGroup {
+pub struct CutGroup {
     pub cuts: Vec<CutId>,
     pub related_esurface_group: RaisedEsurfaceGroup,
 }
 
-impl Default for RaisedCutData {
+impl Default for CutGroupData {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl RaisedCutData {
+impl CutGroupData {
     pub fn new() -> Self {
-        RaisedCutData {
-            raised_cut_groups: TiVec::new(),
+        CutGroupData {
+            cut_groups: TiVec::new(),
             dual_shapes: vec![],
             pass_two_evaluators: vec![],
         }
@@ -3227,12 +3229,12 @@ impl RaisedCutData {
                     .map(|esurface_id| reversed_map[esurface_id])
                     .collect::<Vec<_>>();
 
-                let raised_cut_group = RaisedCutGroup {
+                let cut_group = CutGroup {
                     cuts,
                     related_esurface_group: raised_esurface_group.clone(),
                 };
 
-                groups.push(raised_cut_group);
+                groups.push(cut_group);
             } else {
                 continue;
             }
@@ -3263,7 +3265,7 @@ impl RaisedCutData {
 
         (
             Self {
-                raised_cut_groups: groups,
+                cut_groups: groups,
                 dual_shapes,
                 pass_two_evaluators,
             },
@@ -3284,7 +3286,7 @@ impl CrossSectionDerivedData {
             threshold_candidate_esurface_ids: Vec::new(),
             cut_threshold_associations: TiVec::new(),
             subspace_data: TiVec::new(),
-            raised_data: RaisedCutData::new(),
+            cut_group_data: CutGroupData::new(),
         }
     }
 }
