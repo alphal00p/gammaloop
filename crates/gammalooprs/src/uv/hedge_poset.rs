@@ -38,6 +38,7 @@ use crate::{
             local_4d::{self, Full4DCts, Local4dCts},
         },
         forest::ParametricIntegrands,
+        marker::UvMarker,
         settings::VakintSettings,
     },
 };
@@ -806,7 +807,7 @@ impl Forests {
             .require(operation)?
             .integrated(operation)?;
         let forest_node = operation.forest_node(graph, operation.key.op_count());
-        let final_integrands = FinalIntegrandBuilder::new(localizer).build_3d(
+        let final_integrands = FinalIntegrandBuilder::new(localizer, settings).build_3d(
             graph,
             &forest_node,
             &local_3d,
@@ -976,8 +977,10 @@ impl Forests {
     pub(crate) fn renormalization_part_of_ends(
         &self,
         graph: &Graph,
+        settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
         let mut sum = Atom::Zero;
+        let marker = UvMarker::new(settings);
 
         let wild = Atom::var(W_.x___);
 
@@ -988,11 +991,16 @@ impl Forests {
                 continue;
             }
 
-            let atom = self
-                .compute_store
-                .require(key)?
-                .integrated(key)?
-                .physical_atom();
+            let forest_node = key.forest_node(graph, key.key.op_count());
+            let atom = marker.prefix(
+                &graph.full_filter(),
+                forest_node.subgraph(),
+                &self
+                    .compute_store
+                    .require(key)?
+                    .integrated(key)?
+                    .physical_atom(),
+            );
             debug!(
                 key=%key,
                expr = % atom.expand_num().log_print(None),"Term before simplification"

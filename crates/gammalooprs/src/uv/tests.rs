@@ -25,6 +25,7 @@ use crate::uv::wood::CutWoods;
 use crate::uv::{
     ApproximationType, RenormalizationPrescriptionSettings, Spinney, UVOrchestrator,
     UVgenerationSettings, UltravioletGraph,
+    marker::{UvMarker, UvOperation},
 };
 
 use linnet::half_edge::involution::EdgeIndex;
@@ -125,7 +126,7 @@ fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
             edge [particle=scalar_1]
             node [num=1]
             e        [style=invis]
-            // params = "uv_local(S_11⊛y*Top(S_y⊛0));uv_local(S_11⊛F*Top(S_F⊛0));uv_local(S_11⊛p*Top(S_p⊛0));uv_local(S_11⊛0);uv_local(S_11⊛11*Top(S_11⊛0));uv_local(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));uv_local(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));uv_local(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
+            // Retained markers require complete canonical CT(...) parameters with namespaced operation and subgraph heads.
             e -> A:0   [ id=5]
             B:1 -> e   [ id=4]
             A -> B    [ id=1]
@@ -138,7 +139,7 @@ fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
             edge [particle=scalar_1]
             node [num=1]
             e        [style=invis]
-            // params = "uv_local(S_11⊛y*Top(S_y⊛0));uv_local(S_11⊛F*Top(S_F⊛0));uv_local(S_11⊛p*Top(S_p⊛0));uv_local(S_11⊛0);uv_local(S_11⊛11*Top(S_11⊛0));uv_local(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));uv_local(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));uv_local(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
+            // Retained markers require complete canonical CT(...) parameters with namespaced operation and subgraph heads.
             e -> A:0   [ id=3]
             B:1 -> e   [ id=4]
             A -> B    [ id=1]
@@ -149,7 +150,7 @@ fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
             edge [particle=scalar_1]
             node [num=1]
             e        [style=invis]
-            // params = "uv_local(S_11⊛y*Top(S_y⊛0));uv_local(S_11⊛F*Top(S_F⊛0));uv_local(S_11⊛p*Top(S_p⊛0));uv_local(S_11⊛0);uv_local(S_11⊛11*Top(S_11⊛0));uv_local(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));uv_local(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));uv_local(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
+            // Retained markers require complete canonical CT(...) parameters with namespaced operation and subgraph heads.
             e -> A:0   [ id=3]
             B:1 -> e   [ id=2]
             A -> B    [ id=1]
@@ -288,16 +289,17 @@ fn spinney_partial_cmp_is_equal_for_identical_subgraphs() {
 }
 
 #[test]
-fn uv_marker_stripping_removes_local_and_integrated_markers() {
+fn uv_marker_stripping_removes_operation_histories() {
     test_initialise().unwrap();
-    let marker = Atom::var(symbol!("marker"));
-    let expr = Atom::num(2) * function!(GS.uv_local, marker.clone())
-        + Atom::num(3) * function!(GS.uv_integrate, marker);
-    let stripped = expr
-        .replace(function!(GS.uv_local, W_.a___))
-        .with(Atom::num(1))
-        .replace(function!(GS.uv_integrate, W_.a___))
-        .with(Atom::num(1));
+    let graph = SuBitGraph::empty(1);
+    let marker = UvMarker::new(&UVgenerationSettings {
+        add_marker: true,
+        keep_marker: false,
+        ..Default::default()
+    });
+    let local = marker.apply(UvOperation::Approx, &graph, &graph, &Atom::num(2));
+    let integrated = marker.apply(UvOperation::Integrate, &graph, &graph, &Atom::num(3));
+    let stripped = marker.finish(&(local + integrated));
 
     assert_eq!(stripped, Atom::num(5));
 }

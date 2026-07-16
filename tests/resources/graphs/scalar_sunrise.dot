@@ -2,17 +2,19 @@ digraph sunrise{
     node [num = "1" ]
     edge [num = "1" ]
     e        [style=invis]
-    params = "uv_local(S_47⊛0);uv_local(S_47⊛y*Top(S_y⊛0));uv_local(S_47⊛3s*Top(S_3s⊛0));uv_local(S_47⊛3I*Top(S_3I⊛0));uv_local(S_47⊛44*Top(S_44⊛0));uv_local(S_47⊛44*Top(S_44⊛y*Top(S_y⊛0)));uv_local(S_47⊛44*Top(S_44⊛3s*Top(S_3s⊛0)));uv_local(S_47⊛44*Top(S_44⊛3I*Top(S_3I⊛0)));uv_integrated(S_47⊛0);uv_integrated(S_47⊛y*Top(S_y⊛0));uv_integrated(S_47⊛3s*Top(S_3s⊛0));uv_integrated(S_47⊛3I*Top(S_3I⊛0));uv_integrated(S_47⊛44*Top(S_44⊛0));uv_integrated(S_47⊛44*Top(S_44⊛y*Top(S_y⊛0)));uv_integrated(S_47⊛44*Top(S_44⊛3s*Top(S_3s⊛0)));uv_integrated(S_47⊛44*Top(S_44⊛3I*Top(S_3I⊛0)))"
+    params = "CT(gammalooprs::uv::subgraph(S_47,0));CT(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_y,0))*gammalooprs::uv::subgraph(S_47,S_y));CT(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3s,0))*gammalooprs::uv::subgraph(S_47,S_3s));CT(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3I,0))*gammalooprs::uv::subgraph(S_47,S_3I));CT(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_44,0))*gammalooprs::uv::subgraph(S_47,S_44));CT(gammalooprs::uv::Approx(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_y,0))*gammalooprs::uv::subgraph(S_44,S_y))*gammalooprs::uv::subgraph(S_47,S_44));CT(gammalooprs::uv::Approx(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3s,0))*gammalooprs::uv::subgraph(S_44,S_3s))*gammalooprs::uv::subgraph(S_47,S_44));CT(gammalooprs::uv::Approx(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3I,0))*gammalooprs::uv::subgraph(S_44,S_3I))*gammalooprs::uv::subgraph(S_47,S_44));CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_y,0)))))*gammalooprs::uv::subgraph(S_47,S_y));CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3s,0)))))*gammalooprs::uv::subgraph(S_47,S_3s));CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3I,0)))))*gammalooprs::uv::subgraph(S_47,S_3I));CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_44,0)))))*gammalooprs::uv::subgraph(S_47,S_44));CT(gammalooprs::uv::Approx(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_y,0)))))*gammalooprs::uv::subgraph(S_44,S_y))*gammalooprs::uv::subgraph(S_47,S_44));CT(gammalooprs::uv::Approx(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3s,0)))))*gammalooprs::uv::subgraph(S_44,S_3s))*gammalooprs::uv::subgraph(S_47,S_44));CT(gammalooprs::uv::Approx(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3I,0)))))*gammalooprs::uv::subgraph(S_44,S_3I))*gammalooprs::uv::subgraph(S_47,S_44));CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_y,0))*gammalooprs::uv::subgraph(S_44,S_y)))))*gammalooprs::uv::subgraph(S_47,S_44));CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3s,0))*gammalooprs::uv::subgraph(S_44,S_3s)))))*gammalooprs::uv::subgraph(S_47,S_44));CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3I,0))*gammalooprs::uv::subgraph(S_44,S_3I)))))*gammalooprs::uv::subgraph(S_47,S_44));CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_y,0)))))*gammalooprs::uv::subgraph(S_44,S_y)))))*gammalooprs::uv::subgraph(S_47,S_44));CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3s,0)))))*gammalooprs::uv::subgraph(S_44,S_3s)))))*gammalooprs::uv::subgraph(S_47,S_44));CT(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::Truncate(gammalooprs::uv::Series(gammalooprs::uv::Integrate(gammalooprs::uv::Approx(gammalooprs::uv::subgraph(S_3I,0)))))*gammalooprs::uv::subgraph(S_44,S_3I)))))*gammalooprs::uv::subgraph(S_47,S_44))"
 
 
-   //(S_47⊛0);
-   //(S_47⊛y*Top(S_y⊛0)); C * T(AB)
-   //(S_47⊛3s*Top(S_3s⊛0)); B * T(BC)
-   //(S_47⊛3I*Top(S_3I⊛0)); A * T(BC)
-   //(S_47⊛44*Top(S_44⊛0)); T(ABC)
-   //(S_47⊛44*Top(S_44⊛3I*Top(S_3I⊛0))) T(A * T(BC)) ;
-   //(S_47⊛44*Top(S_44⊛y*Top(S_y⊛0))); T(C * T(AB))
-   //(S_47⊛44*Top(S_44⊛3s*Top(S_3s⊛0))) T(B * T(BC))"
+   // S_47⊛0;
+   // S_47⊛y*K[S_y⊛0]; C * K[AB]
+   // S_47⊛3s*K[S_3s⊛0]; B * K[BC]
+   // S_47⊛3I*K[S_3I⊛0]; A * K[BC]
+   // S_47⊛44*K[S_44⊛0]; K[ABC]
+   // S_47⊛44*K[S_44⊛3I*K[S_3I⊛0]]; K[A * K[BC]]
+   // S_47⊛44*K[S_44⊛y*K[S_y⊛0]]; K[C * K[AB]]
+   // S_47⊛44*K[S_44⊛3s*K[S_3s⊛0]]; K[B * K[BC]]
+   // Spenso output hides the CT head and colors these histories magenta.
+   // Integrated histories add the ⟨...⟩, Σ(...), and Tr(...) wrappers.
 
     e -> A:1   [ id=3 particle=scalar_1]
     B:0 -> e   [ id=4 particle=scalar_1]

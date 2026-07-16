@@ -188,8 +188,10 @@ pub struct GammaloopSymbols {
 
     pub localizing_integrand: Symbol,
 
-    pub uv_local: Symbol,
+    pub uv_subgraph: Symbol,
+    pub uv_approx: Symbol,
     pub uv_integrate: Symbol,
+    pub uv_series: Symbol,
     pub uv_truncate: Symbol,
     /// Marker for the ct term in the UV integrand
     pub ct_marker: Symbol,
@@ -469,6 +471,31 @@ macro_rules! spenso_print_simple_indexed {
     }};
 }
 
+macro_rules! spenso_print_uv_unary {
+    ($a:ident, $opt:ident, $prefix:expr, $suffix:expr) => {{
+        match $opt.custom_print_mode.get("spenso") {
+            Some(PrintUserData::Integer(_)) => {
+                let AtomView::Fun(f) = $a else {
+                    return None;
+                };
+                if f.get_nargs() != 1 {
+                    return None;
+                }
+
+                let mut out = $prefix.to_string();
+                f.iter()
+                    .next()
+                    .unwrap()
+                    .format(&mut out, $opt, PrintState::new())
+                    .unwrap();
+                out.push_str($suffix);
+                Some(out)
+            }
+            _ => None,
+        }
+    }};
+}
+
 spenso::symbolica_init_lazy_static! {
 pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     renormalization_localization_scale: symbol!("rls"),
@@ -649,10 +676,75 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         tags = [SPENSO_TAG.index.clone()]
     ),
     override_if: symbol!("override_if"),
-    uv_local: symbol!("T"),
-    uv_integrate: symbol!("I"),
-    uv_truncate: symbol!("uv_truncate"),
-    ct_marker: symbol!("CT"),
+    uv_subgraph: symbol!(
+        "gammalooprs::uv::subgraph",
+        print = |a, opt, _state| {
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(_)) => {
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+                    if f.get_nargs() != 2 {
+                        return None;
+                    }
+
+                    let mut args = f.iter();
+                    let current = args.next().unwrap();
+                    let mut out = String::new();
+                    if let AtomView::Var(current) = current
+                        && current.get_symbol().get_stripped_name().starts_with("S_")
+                    {
+                        out.push_str(current.get_symbol().get_stripped_name());
+                    } else {
+                        out.push_str("S_");
+                        current
+                            .format(&mut out, opt, PrintState::new())
+                            .unwrap();
+                    }
+                    out.push('⊛');
+                    let given = args.next().unwrap();
+                    if let AtomView::Var(given) = given
+                        && let Some(label) =
+                            given.get_symbol().get_stripped_name().strip_prefix("S_")
+                    {
+                        out.push_str(label);
+                    } else {
+                        given.format(&mut out, opt, PrintState::new()).unwrap();
+                    }
+                    Some(out)
+                }
+                _ => None,
+            }
+        }
+    ),
+    uv_approx: symbol!(
+        "gammalooprs::uv::Approx",
+        print = |a, opt, _state| spenso_print_uv_unary!(a, opt, "K[", "]")
+    ),
+    uv_integrate: symbol!(
+        "gammalooprs::uv::Integrate",
+        print = |a, opt, _state| spenso_print_uv_unary!(a, opt, "⟨", "⟩")
+    ),
+    uv_series: symbol!(
+        "gammalooprs::uv::Series",
+        print = |a, opt, _state| spenso_print_uv_unary!(a, opt, "Σ(", ")")
+    ),
+    uv_truncate: symbol!(
+        "gammalooprs::uv::Truncate",
+        print = |a, opt, _state| spenso_print_uv_unary!(a, opt, "Tr(", ")")
+    ),
+    ct_marker: symbol!(
+        "CT",
+        print = |a, opt, _state| {
+            spenso_print_uv_unary!(a, opt, "", "").map(|out| {
+                if opt.color_builtin_symbols {
+                    nu_ansi_term::Color::Magenta.paint(out).to_string()
+                } else {
+                    out
+                }
+            })
+        }
+    ),
     is_function: symbol!("is_function"),
     is_symbol: symbol!("is_symbol"),
     nc2_1: symbol!("NC2_1"),
