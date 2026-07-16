@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Duration,
+};
 
 use color_eyre::Result;
 use gammaloop_api::{
@@ -6,7 +9,7 @@ use gammaloop_api::{
     integrand_info::{IntegrandKind, IntegrandThresholdStatus},
 };
 use gammaloop_integration_tests::{
-    CLIState, default_momentum_space_point, default_xspace_point, get_test_cli,
+    CLIState, clean_test, default_momentum_space_point, default_xspace_point, get_test_cli,
     get_tests_workspace_path, setup_sm_differential_lu_cli,
 };
 use ndarray::{Array1, Array2};
@@ -445,6 +448,194 @@ fn lu_rust_get_integrand_info_reports_groups_orientations_lmbs_and_cuts() -> Res
         }
     }
 
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn skip_thresholds_that_are_cuts_excludes_every_physical_cut_association() -> Result<()> {
+    let cli = get_test_cli(
+        Some("test_epem_tth_inspect_nlo_gl18.toml".into()),
+        get_tests_workspace_path()
+            .join("skip_thresholds_that_are_cuts_excludes_every_physical_cut_association"),
+        None,
+        true,
+    )?;
+    let info = cli.state.get_integrand_info(None, None)?;
+    assert!(!info.graph_groups.is_empty());
+
+    for group in &info.graph_groups {
+        let physical_cut_edge_sets = group
+            .cuts
+            .iter()
+            .map(|cut| cut.edge_ids.iter().copied().collect::<BTreeSet<_>>())
+            .collect::<Vec<_>>();
+        let physical_cut_esurface_ids = group
+            .threshold_esurfaces
+            .iter()
+            .filter(|esurface| {
+                let edge_set = esurface.edge_ids.iter().copied().collect::<BTreeSet<_>>();
+                physical_cut_edge_sets.contains(&edge_set)
+            })
+            .map(|esurface| esurface.esurface_id)
+            .collect::<BTreeSet<_>>();
+
+        assert!(
+            !physical_cut_esurface_ids.is_empty(),
+            "the regression fixture must retain topology-discovered E-surfaces that coincide with physical cuts"
+        );
+        for cut in &group.cuts {
+            for threshold in cut
+                .left_thresholds
+                .iter()
+                .chain(cut.right_thresholds.iter())
+            {
+                assert!(
+                    !physical_cut_esurface_ids.contains(&threshold.esurface_id),
+                    "physical-cut E-surface {} was generated as a threshold CT association for cut {}",
+                    threshold.esurface_id,
+                    cut.cut_id,
+                );
+            }
+        }
+    }
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
+    let test_name = "gl20_multichannel_local_inspect_event_snapshot";
+    let mut cli = get_test_cli(
+        Some("test_epem_tth_multichannel_gl20.toml".into()),
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+
+    let info = cli.state.get_integrand_info(None, None)?;
+    assert_eq!(info.graph_groups.len(), 1);
+    let group = &info.graph_groups[0];
+    assert_eq!(
+        group
+            .graphs
+            .iter()
+            .find(|graph| graph.is_master)
+            .map(|graph| graph.name.as_str()),
+        Some("GL20"),
+    );
+    let active_channel_bases = group
+        .loop_momentum_bases
+        .iter()
+        .filter(|basis| basis.channel_id.is_some())
+        .map(|basis| basis.edge_ids.clone())
+        .collect::<BTreeSet<_>>();
+    assert!(
+        active_channel_bases.len() > 1,
+        "GL20 snapshot fixture must exercise explicit LMB multichanneling"
+    );
+
+    // This is the former GL20 high-weight point. It exercises every summed LMB channel and all
+    // generated cuts while remaining finite after physical Cutkosky surfaces are excluded from
+    // threshold subtraction.
+    let point = vec![
+        0.16580369091616945,
+        0.526_257_890_741_737_3,
+        0.13405592891503063,
+        0.42630767453517626,
+        0.483_232_064_156_230_6,
+        0.28439282574429803,
+        0.033_834_598_952_534_74,
+        0.984_751_664_239_553_8,
+        0.722_895_411_958_026_5,
+    ];
+    let mut results = evaluate_x_samples_with_discrete_dims(
+        &mut cli,
+        std::slice::from_ref(&point),
+        &[vec![group.group_id]],
+    )?;
+    let result = results.samples.remove(0);
+    let evaluation = &result.evaluation;
+    let metadata = evaluation
+        .evaluation_metadata
+        .as_ref()
+        .expect("local inspect snapshot must retain evaluation metadata");
+
+    let mut represented_channels = BTreeSet::new();
+    let event_groups = evaluation
+        .event_groups
+        .iter()
+        .enumerate()
+        .map(|(event_group_index, event_group)| {
+            event_group
+                .iter()
+                .enumerate()
+                .map(|(event_index, event)| {
+                    let channel_edges = event
+                        .cut_info
+                        .lmb_channel_edge_ids
+                        .as_ref()
+                        .expect("summed LMB events must carry their effective channel basis")
+                        .iter()
+                        .copied()
+                        .collect::<Vec<_>>();
+                    represented_channels.insert(channel_edges);
+
+                    let additional_weights = event
+                        .additional_weights
+                        .weights
+                        .iter()
+                        .map(|(key, value)| (key.to_string(), serde_json::json!(value)))
+                        .collect::<serde_json::Map<_, _>>();
+
+                    serde_json::json!({
+                        "event_group_index": event_group_index,
+                        "event_index": event_index,
+                        "cut_info": &event.cut_info,
+                        "incoming_momenta": &event.kinematic_configuration.0,
+                        "outgoing_momenta": &event.kinematic_configuration.1,
+                        "weight": &event.weight,
+                        "additional_weights": additional_weights,
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        represented_channels, active_channel_bases,
+        "the snapshot must include events from every active GL20 LMB channel"
+    );
+    assert_eq!(
+        metadata.generated_event_count,
+        metadata.accepted_event_count
+    );
+    assert_eq!(
+        metadata.generated_event_count,
+        event_groups.iter().map(Vec::len).sum::<usize>(),
+    );
+    assert!(!metadata.is_nan);
+
+    let snapshot = serde_json::json!({
+        "process": info.process_name,
+        "integrand": info.integrand_name,
+        "graph": "GL20",
+        "point": point,
+        "integrand_result": evaluation.integrand_result,
+        "parameterization_jacobian": evaluation.parameterization_jacobian,
+        "integrator_weight": evaluation.integrator_weight,
+        "metadata": {
+            "generated_event_count": metadata.generated_event_count,
+            "accepted_event_count": metadata.accepted_event_count,
+            "is_nan": metadata.is_nan,
+        },
+        "event_groups": event_groups,
+    });
+    insta::assert_json_snapshot!("gl20_multichannel_local_inspect_events", snapshot);
+
+    clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
 
