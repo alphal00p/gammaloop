@@ -674,12 +674,25 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
         .join("cross_sections")
         .join("z_ddx")
         .join("default");
-    assert!(exported_base.join("standalone_cross_section.json").exists());
+    let archive_path = exported_base.join("standalone_cross_section.json");
+    assert!(archive_path.exists());
     assert!(
         exported_base
             .join("standalone_cross_section_rust.rs")
             .exists()
     );
+
+    let archive: serde_json::Value = serde_json::from_slice(&fs::read(archive_path)?)?;
+    let graph_term = archive["graph_terms"]
+        .as_array()
+        .and_then(|graph_terms| graph_terms.first())
+        .ok_or_else(|| eyre!("standalone cross-section archive has no graph terms"))?;
+    let cut_group_integrands = graph_term
+        .get("cut_group_integrands")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| eyre!("standalone graph term has no cut-group integrands"))?;
+    assert!(!cut_group_integrands.is_empty());
+    assert!(graph_term.get("raised_cut_integrands").is_none());
 
     fs::remove_dir_all(workspace)?;
     Ok(())

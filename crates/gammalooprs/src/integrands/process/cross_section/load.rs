@@ -32,7 +32,7 @@ type RationalExpressionTree = (
     ExpressionEvaluator<Complex<Fraction<IntegerRing>>>,
 );
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 5;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 6;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
@@ -56,7 +56,7 @@ pub struct StandaloneCrossSectionGraphTermArchive<A = Vec<u8>> {
     pub(crate) orientations: Vec<Vec<i8>>,
     pub(crate) param_builder_params: Vec<A>,
     pub(crate) fn_map_entries: Vec<SerializedFnMapEntry<A>>,
-    pub(crate) raised_cut_integrands: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
+    pub(crate) cut_group_integrands: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
     pub(crate) counterterms: Vec<StandaloneCountertermArchive<A>>,
 }
 
@@ -357,7 +357,7 @@ pub struct LoadedStandaloneCrossSectionGraphTerm {
     pub graph_name: String,
     pub orientations: Vec<Vec<i8>>,
     pub param_builder_params: Vec<Atom>,
-    pub raised_cut_integrands: Vec<BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>>,
+    pub cut_group_integrands: Vec<BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>>,
     pub counterterms: Vec<LoadedStandaloneCounterterm>,
 }
 
@@ -493,14 +493,14 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
                     .collect::<Result<BTreeMap<_, _>>>()
             };
 
-            let raised_cut_integrands = graph
-                .raised_cut_integrands
+            let cut_group_integrands = graph
+                .cut_group_integrands
                 .into_iter()
                 .enumerate()
-                .map(|(raised_cut_id, derivative_stacks)| {
+                .map(|(cut_group_id, derivative_stacks)| {
                     build_indexed_stack_collection(
                         derivative_stacks,
-                        &format!("raised_cut[{raised_cut_id}]"),
+                        &format!("cut_group[{cut_group_id}]"),
                     )
                 })
                 .collect::<Result<Vec<_>>>()?;
@@ -657,7 +657,7 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
                 graph_name: graph.graph_name,
                 orientations: graph.orientations,
                 param_builder_params: params,
-                raised_cut_integrands,
+                cut_group_integrands,
                 counterterms,
             });
         }
@@ -714,15 +714,15 @@ fn main() -> Result<()> {
     println!("Loaded {} graph terms", loaded.graph_terms.len());
     for graph in &loaded.graph_terms {
         println!(
-            "graph={} orientations={} raised_cuts={} counterterms={}",
+            "graph={} orientations={} cut_groups={} counterterms={}",
             graph.graph_name,
             graph.orientations.len(),
-            graph.raised_cut_integrands.len(),
+            graph.cut_group_integrands.len(),
             graph.counterterms.len()
         );
-        for (raised_cut_id, derivative_stacks) in graph.raised_cut_integrands.iter().enumerate() {
+        for (cut_group_id, derivative_stacks) in graph.cut_group_integrands.iter().enumerate() {
             println!(
-                "  raised_cut[{raised_cut_id}] derivative_evaluators={}",
+                "  cut_group[{cut_group_id}] derivative_evaluators={}",
                 derivative_stacks.len()
             );
         }
