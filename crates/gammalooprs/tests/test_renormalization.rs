@@ -6,7 +6,8 @@ use gammalooprs::{
     processes::{Amplitude, AmplitudeGraph},
     utils::{GS, load_generic_model, symbolica_ext::LogPrint},
     uv::{
-        RenormalizationPart, UVOrchestrator, UVgenerationSettings,
+        ApproximationType, RenormalizationPart, RenormalizationPrescriptionSettings,
+        UVOrchestrator, UVgenerationSettings,
         settings::{AlphaLoopSettings, MATADSettings, VakintSettings},
     },
 };
@@ -21,7 +22,7 @@ use symbolica::{
     parse, parse_lit,
 };
 
-fn finite_part_uv_settings() -> UVgenerationSettings {
+fn pole_part_uv_settings() -> UVgenerationSettings {
     let undoing_normalization = parse!(
         "(
      𝑖*(𝜋^((4-2*eps)/2))
@@ -32,7 +33,12 @@ fn finite_part_uv_settings() -> UVgenerationSettings {
     );
     UVgenerationSettings {
         softct: false,
-        pole_part: true,
+        renormalization_prescription: RenormalizationPrescriptionSettings {
+            log_divergent: ApproximationType::PolePart,
+            massive_power_divergent: ApproximationType::PolePart,
+            massless_power_divergent: ApproximationType::PolePart,
+            ..Default::default()
+        },
         vakint: VakintSettings {
             normalization: undoing_normalization.to_plain_string(),
             ..Default::default()
@@ -132,7 +138,7 @@ fn finite_part_quark_lo() {
     let model = load_generic_model("sm");
 
     let a = amp.graphs[0]
-        .renormalization_part(&finite_part_uv_settings())
+        .renormalization_part(&pole_part_uv_settings())
         .unwrap();
 
     println!("ren part: {:>}", a.log_print(Some(80)));
@@ -374,7 +380,7 @@ fn finite_part_ghost_2loop() {
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
 
-    let settings = finite_part_uv_settings();
+    let settings = pole_part_uv_settings();
 
     let new_settings = UVgenerationSettings {
         orchestrator: UVOrchestrator::HedgePoset,
@@ -529,7 +535,7 @@ fn finit_part_ghlo() {
 
     let model = load_generic_model("sm");
     let a = amp.graphs[0]
-        .renormalization_part(&finite_part_uv_settings())
+        .renormalization_part(&pole_part_uv_settings())
         .unwrap();
 
     println!("ren part: {:>}", a);
@@ -549,7 +555,12 @@ mod failing {
     fn ghost_3loop_settings() -> UVgenerationSettings {
         UVgenerationSettings {
             softct: false,
-            pole_part: true,
+            renormalization_prescription: RenormalizationPrescriptionSettings {
+                log_divergent: ApproximationType::PolePart,
+                massive_power_divergent: ApproximationType::PolePart,
+                massless_power_divergent: ApproximationType::PolePart,
+                ..Default::default()
+            },
             vakint: VakintSettings {
                 normalization: "(
                 𝑖*(𝜋^((4-2*eps)/2))

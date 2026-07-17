@@ -1,4 +1,4 @@
-use std::ops::{Add, Neg};
+use std::ops::Neg;
 
 use color_eyre::Result;
 use eyre::eyre;
@@ -39,25 +39,20 @@ impl Full4DCts {
         &self.0
     }
 
-    /// RQFT inserts only completed poles; ordinary MSbar keeps the full counterterm.
+    /// Pole-part subtraction inserts only completed poles; MUV keeps the local
+    /// counterterm together with its integrated finite contribution.
     pub(crate) fn recursion_input(
         local: &Local4dCts,
         integrated: &IntegratedCts,
-        pole_part: bool,
+        scheme: ApproximationType,
         is_root: bool,
-    ) -> Self {
-        if pole_part && !is_root {
-            Self(integrated.atom().clone())
-        } else {
-            local + integrated
+    ) -> Result<Self> {
+        match scheme {
+            ApproximationType::MUV => Ok(Self(&local.0 + integrated.finite_counterterm_atom())),
+            ApproximationType::PolePart if !is_root => Ok(Self(integrated.pole_atom())),
+            ApproximationType::PolePart => Ok(Self(&local.0 + integrated.pole_atom())),
+            scheme => Err(eyre!("No recursive counterterm projection for {scheme}")),
         }
-    }
-}
-
-impl Add<&IntegratedCts> for &Local4dCts {
-    type Output = Full4DCts;
-    fn add(self, other: &IntegratedCts) -> Self::Output {
-        Full4DCts(&self.0 + other.atom())
     }
 }
 
@@ -306,7 +301,7 @@ pub(crate) fn uv_limit<S: ForestNodeLike>(
     given: &S,
 ) -> Result<Local4dCts> {
     match current.renormalization_scheme() {
-        ApproximationType::MUV => {
+        ApproximationType::MUV | ApproximationType::PolePart => {
             let grown = grow(integrand, ctx, current, given)?;
             let result = -t(&grown, ctx, current, given)?;
             Ok(Local4dCts(UvMarker::new(ctx.settings).apply(

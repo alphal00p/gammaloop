@@ -227,9 +227,11 @@ impl<'a> Local3DApproximation<'a> {
         current: &S,
         given: &S,
     ) -> Result<Local3DCts> {
-        let integrated_t =
-            self.localizer
-                .localize(&integrated.physical_atom(), self.graph, given)?;
+        let integrated_t = self.localizer.localize(
+            &integrated.physical_finite_counterterm_atom(),
+            self.graph,
+            given,
+        )?;
         let ctx = UVCtx::new(self.graph, self.settings);
         let local = -(local.map(full(&ctx, current, given))?);
         let integrated = -(integrated_t
@@ -617,7 +619,7 @@ impl Local3DLoopRescaling {
         given: &S,
     ) -> impl FnMut(&Atom) -> Result<Atom> {
         move |integrand| match current.renormalization_scheme() {
-            ApproximationType::MUV => {
+            ApproximationType::MUV | ApproximationType::PolePart => {
                 let started = start(ctx, current, given, integrand)?;
                 crate::debug_tags!(#generation, #profile, #uv, #local, #summary;
                     stage = "local_3d_kernel_after_start",

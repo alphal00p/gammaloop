@@ -41,16 +41,40 @@ use crate::{
         uv_graph::UVE,
     },
 };
+
+/// A canonical Laurent expansion of an integrated counterterm.
+///
+/// Consumers select either its pole or signed nonnegative-power projection.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct IntegratedCts(Atom);
+pub struct IntegratedCts {
+    expansion: Series<AtomField>,
+    scale_power: i64,
+}
 
 impl IntegratedCts {
-    pub(crate) fn atom(&self) -> &Atom {
-        &self.0
+    fn projected_atom(&self, finite: bool) -> Atom {
+        truncate(&self.expansion, finite)
+            * Atom::var(GS.integrated_loop_scale).pow(self.scale_power)
     }
 
-    pub(crate) fn physical_atom(&self) -> Atom {
-        self.0.replace(GS.integrated_loop_scale).with(Atom::one())
+    pub(crate) fn pole_atom(&self) -> Atom {
+        self.projected_atom(false)
+    }
+
+    pub(crate) fn finite_counterterm_atom(&self) -> Atom {
+        -self.projected_atom(true)
+    }
+
+    pub(crate) fn physical_pole_atom(&self) -> Atom {
+        self.pole_atom()
+            .replace(GS.integrated_loop_scale)
+            .with(Atom::one())
+    }
+
+    pub(crate) fn physical_finite_counterterm_atom(&self) -> Atom {
+        self.finite_counterterm_atom()
+            .replace(GS.integrated_loop_scale)
+            .with(Atom::one())
     }
 }
 
@@ -58,7 +82,7 @@ fn series(expr: &Atom, depth: usize) -> Result<Series<AtomField>> {
     Ok(expr.series(GS.dim_epsilon, 0, depth)?)
 }
 
-fn truncate(series: &Series<AtomField>, finite: bool) -> Result<Atom> {
+fn truncate(series: &Series<AtomField>, finite: bool) -> Atom {
     let mut truncated = Atom::Zero;
 
     for (power, p) in series.terms() {
@@ -67,20 +91,15 @@ fn truncate(series: &Series<AtomField>, finite: bool) -> Result<Atom> {
         }
     }
 
-    Ok(truncated)
-}
-
-fn finite_part(series: &Series<AtomField>) -> Result<Atom> {
-    truncate(series, true)
-}
-
-fn pole_part(series: &Series<AtomField>) -> Result<Atom> {
-    truncate(series, false)
+    truncated
 }
 
 impl Rooted for IntegratedCts {
     fn root() -> Self {
-        Self(Atom::Zero)
+        Self {
+            expansion: series(&Atom::Zero, 1).expect("zero has a Laurent expansion"),
+            scale_power: 0,
+        }
     }
 }
 
@@ -159,8 +178,9 @@ impl Integrated<'_> {
 
         let n_loops = graph.n_loops(current.subgraph());
 
-        match current.renormalization_scheme() {
-            ApproximationType::MUV => {
+        let scheme = current.renormalization_scheme();
+        match scheme {
+            ApproximationType::MUV | ApproximationType::PolePart => {
                 let integrand = integrand
                     .atom()
                     .replace(GS.integrated_loop_scale)
@@ -181,22 +201,21 @@ impl Integrated<'_> {
                         coefficient,
                     )
                 });
-                let counterterm = if ctx.settings.pole_part {
-                    pole_part(&expanded)?
-                } else {
-                    -finite_part(&expanded)?
-                };
-                let counterterm = marker.apply(
-                    UvOperation::Truncate,
-                    current.subgraph(),
-                    given.subgraph(),
-                    &counterterm,
-                );
+                let expansion = expanded.map_coeff(|coefficient| {
+                    marker.apply(
+                        UvOperation::Truncate,
+                        current.subgraph(),
+                        given.subgraph(),
+                        coefficient,
+                    )
+                });
 
                 // Retain the consumed loop measures for subsequent UV rescalings. Keep this
                 // marker independent of mUV so enclosing limits still rescale the vacuum mass.
-                let scale = Atom::var(GS.integrated_loop_scale);
-                Ok(IntegratedCts(counterterm * scale.pow(4 * n_loops as i64)))
+                Ok(IntegratedCts {
+                    expansion,
+                    scale_power: 4 * n_loops as i64,
+                })
             }
             ApproximationType::IR => Err(eyre!("Not yet implemented IR")),
             ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
@@ -995,6 +1014,39 @@ mod tests {
     use crate::initialisation::test_initialise;
 
     use super::*;
+
+    #[test]
+    fn integrated_counterterm_projects_one_laurent_expansion() {
+        test_initialise().unwrap();
+
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let expansion = series(
+            &(Atom::num(2) * epsilon.pow(-2)
+                + Atom::num(3) * epsilon.pow(-1)
+                + Atom::num(5)
+                + Atom::num(7) * &epsilon),
+            2,
+        )
+        .unwrap();
+        let integrated = IntegratedCts {
+            expansion,
+            scale_power: 4,
+        };
+        let scale = Atom::var(GS.integrated_loop_scale).pow(4);
+
+        assert_eq!(
+            integrated.pole_atom().expand(),
+            ((Atom::num(2) * epsilon.pow(-2) + Atom::num(3) * epsilon.pow(-1)) * &scale).expand()
+        );
+        assert_eq!(
+            integrated.finite_counterterm_atom().expand(),
+            (-(Atom::num(5) + Atom::num(7) * epsilon) * scale).expand()
+        );
+        assert_eq!(
+            integrated.physical_finite_counterterm_atom(),
+            -(Atom::num(5) + Atom::num(7) * Atom::var(GS.dim_epsilon))
+        );
+    }
 
     // #[test]
     // fn integrated_triangle_norm_is_euclidean() {

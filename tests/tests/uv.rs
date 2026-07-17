@@ -15,6 +15,7 @@ use gammalooprs::integrands::{HasIntegrand, evaluation::EvaluationMetaData};
 use gammalooprs::observables::events::AdditionalWeightKey;
 use gammalooprs::settings::runtime::{IntegralEstimate, SlotIntegrationResult};
 use gammalooprs::utils::F;
+use gammalooprs::uv::{ApproximationType, UVOrchestrator};
 use ndarray::Array2;
 use serde_json::{Map, Value, json};
 use spenso::algebra::complex::Complex;
@@ -1536,6 +1537,65 @@ fn assert_json_approx_eq(actual: &Value, expected: &Value, path: &str) {
 
 mod slow {
     use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn sunrise_pole_part_matches_muv_inspect() -> Result<()> {
+        let process = "sunrise_scalar_1";
+        let integrand_name = "scalar_sunrise";
+        let setup = |test_name: &str, scheme| -> Result<CLIState> {
+            let mut cli = get_test_cli(
+                Some("uv/sunrise_scalar_1.toml".into()),
+                get_tests_workspace_path().join(test_name),
+                Some(test_name.to_string()),
+                true,
+            )?;
+            let uv = &mut cli.cli_settings.global.generation.uv;
+            uv.orchestrator = UVOrchestrator::Compare;
+            let prescription = &mut uv.renormalization_prescription;
+            prescription.log_divergent = scheme;
+            prescription.massive_power_divergent = scheme;
+            prescription.massless_power_divergent = scheme;
+            cli.run_command("run generate")?;
+            Ok(cli)
+        };
+        let mut muv = setup("sunrise_muv_inspect", ApproximationType::MUV)?;
+        let point = deterministic_uv_momentum_points(&mut muv, process, integrand_name)?.remove(0);
+        let mut pole_part = setup("sunrise_pole_part_inspect", ApproximationType::PolePart)?;
+
+        let muv_value = evaluate_summed_momentum_sample(
+            &mut muv,
+            process,
+            integrand_name,
+            &point.point,
+            f64::EPSILON,
+        )?
+        .value;
+        let pole_part_value = evaluate_summed_momentum_sample(
+            &mut pole_part,
+            process,
+            integrand_name,
+            &point.point,
+            f64::EPSILON,
+        )?
+        .value;
+
+        clean_test(&muv.cli_settings.state.folder);
+        clean_test(&pole_part.cli_settings.state.folder);
+
+        let delta = (muv_value.re - pole_part_value.re).hypot(muv_value.im - pole_part_value.im);
+        let scale = muv_value
+            .re
+            .hypot(muv_value.im)
+            .max(pole_part_value.re.hypot(pole_part_value.im))
+            .max(f64::MIN_POSITIVE);
+        assert!(
+            delta / scale <= 1.0e-10,
+            "MUV and PolePart inspect values differ: MUV={muv_value:?}, PolePart={pole_part_value:?}, relative delta={}",
+            delta / scale
+        );
+        Ok(())
+    }
 
     macro_rules! aa_aa_2l_uv_rich_inspect_tests {
         ($($name:ident => $graph:literal),+ $(,)?) => {

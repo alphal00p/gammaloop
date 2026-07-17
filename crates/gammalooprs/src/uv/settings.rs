@@ -36,6 +36,8 @@ pub enum ApproximationType {
     #[default]
     #[serde(rename = "MUV", alias = "muv")]
     MUV,
+    #[serde(rename = "PolePart", alias = "pole_part")]
+    PolePart,
     #[serde(rename = "OS", alias = "os")]
     OS,
     #[serde(rename = "IR", alias = "ir")]
@@ -50,6 +52,7 @@ impl Display for ApproximationType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ApproximationType::MUV => write!(f, "MUV"),
+            ApproximationType::PolePart => write!(f, "PolePart"),
             ApproximationType::OS => write!(f, "OS"),
             ApproximationType::IR => write!(f, "IR"),
             ApproximationType::Unsubtracted => write!(f, "Unsubtracted"),
@@ -460,8 +463,6 @@ pub struct UVgenerationSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub final_integrand: FinalIntegrandDimension,
     #[serde(skip_serializing_if = "is_false")]
-    pub pole_part: bool,
-    #[serde(skip_serializing_if = "is_false")]
     pub add_marker: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub keep_marker: bool,
@@ -481,7 +482,6 @@ impl Default for UVgenerationSettings {
             softct: true,
             generate_integrated: true,
             subtract_uv: true,
-            pole_part: false,
             final_integrand: FinalIntegrandDimension::default(),
             inner_products: true,
             orchestrator: UVOrchestrator::LegacyDagForest,
@@ -630,6 +630,28 @@ mod tests {
                 false
             ),
             ApproximationType::MUV
+        );
+    }
+
+    #[test]
+    fn renormalization_prescription_accepts_blanket_pole_part() {
+        let settings: RenormalizationPrescriptionSettings = toml::from_str(
+            r#"
+log_divergent = "PolePart"
+massive_power_divergent = "PolePart"
+massless_power_divergent = "PolePart"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(settings.log_divergent, ApproximationType::PolePart);
+        assert_eq!(
+            settings.massive_power_divergent,
+            ApproximationType::PolePart
+        );
+        assert_eq!(
+            settings.massless_power_divergent,
+            ApproximationType::PolePart
         );
     }
 

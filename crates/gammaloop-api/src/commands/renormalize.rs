@@ -7,7 +7,10 @@ use crate::CLISettings;
 use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
-use gammalooprs::{utils::symbolica_ext::TypstFormat, uv::settings::FinalIntegrandDimension};
+use gammalooprs::{
+    utils::symbolica_ext::TypstFormat,
+    uv::{settings::FinalIntegrandDimension, ApproximationType},
+};
 use idenso::color::{ColorSimplifier, CS};
 use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
 use schemars::JsonSchema;
@@ -66,7 +69,21 @@ impl Renormalize {
 
         settings.final_integrand = FinalIntegrandDimension::FourD;
         settings.generate_integrated = true;
-        settings.pole_part = true;
+        let prescription = &mut settings.renormalization_prescription;
+        for scheme in [
+            &mut prescription.log_divergent,
+            &mut prescription.massive_power_divergent,
+            &mut prescription.massless_power_divergent,
+        ] {
+            if *scheme == ApproximationType::MUV {
+                *scheme = ApproximationType::PolePart;
+            }
+        }
+        for rule in &mut prescription.overrides {
+            if rule.prescription == ApproximationType::MUV {
+                rule.prescription = ApproximationType::PolePart;
+            }
+        }
 
         let mut renormalization_part: Vec<Atom> = Vec::new();
         let output_dir = if let Some(path) = self.result_path.clone() {
