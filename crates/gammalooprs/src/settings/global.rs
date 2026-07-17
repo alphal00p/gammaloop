@@ -13,8 +13,8 @@ use crate::{
     utils::{
         DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, W_,
         serde_utils::{
-            IsDefault, is_default_esurface_existence_threshold, is_false, is_float, is_true,
-            is_usize, show_defaults_helper,
+            IsDefault, deserialize_nonnegative_finite_f64, is_default_esurface_existence_threshold,
+            is_false, is_float, is_true, is_usize, show_defaults_helper,
         },
         symbolica_ext::StringSerializedAtom,
     },
@@ -68,7 +68,11 @@ pub struct ThresholdSubtractionSettings {
     pub check_esurface_at_generation: bool,
     /// Dimensionless tolerance used to compare the energy-squared E-surface invariant margin
     /// against `esurface_existence_threshold * E_cm^2` during generation-time checks.
-    #[serde(skip_serializing_if = "is_default_esurface_existence_threshold")]
+    #[serde(
+        deserialize_with = "deserialize_nonnegative_finite_f64",
+        skip_serializing_if = "is_default_esurface_existence_threshold"
+    )]
+    #[schemars(range(min = 0.0))]
     pub esurface_existence_threshold: f64,
     #[serde(skip_serializing_if = "is_true")]
     pub skip_thresholds_that_are_cuts: bool,

@@ -32,7 +32,7 @@ type RationalExpressionTree = (
     ExpressionEvaluator<Complex<Fraction<IntegerRing>>>,
 );
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 6;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 7;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
@@ -76,7 +76,7 @@ pub struct StandaloneCountertermArchive<A = Vec<u8>> {
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneIteratedCollectionArchive<T> {
     pub(crate) data: Vec<T>,
-    pub(crate) num_left_thresholds: usize,
+    pub(crate) num_right_thresholds: usize,
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
@@ -378,7 +378,7 @@ pub struct LoadedStandaloneCounterterm {
 
 pub struct LoadedStandaloneIteratedCollection<T> {
     pub data: Vec<T>,
-    pub num_left_thresholds: usize,
+    pub num_right_thresholds: usize,
 }
 
 pub struct LoadedStandaloneEvaluatorStack {
@@ -522,12 +522,28 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
 
                     let build_stack_iterated =
                         |payloads: StandaloneIteratedCollectionArchive<_>,
-                         label: &str|
+                         label: &str,
+                         num_left_thresholds: usize,
+                         num_right_thresholds: usize|
                          -> Result<
                             LoadedStandaloneIteratedCollection<
                                 BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>,
                             >,
                         > {
+                            let expected_len = num_left_thresholds
+                                .checked_mul(num_right_thresholds)
+                                .ok_or_else(|| eyre!("{label} dimensions overflow usize"))?;
+                            if payloads.num_right_thresholds != num_right_thresholds
+                                || payloads.data.len() != expected_len
+                            {
+                                return Err(eyre!(
+                                    "counterterm[{cut_id}]::{label} has dimensions inconsistent with its left/right threshold collections: data_len={}, stored_right_count={}, expected={}x{}",
+                                    payloads.data.len(),
+                                    payloads.num_right_thresholds,
+                                    num_left_thresholds,
+                                    num_right_thresholds,
+                                ));
+                            }
                             let data = payloads
                                 .data
                                 .into_iter()
@@ -539,18 +555,34 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
 
                             Ok(LoadedStandaloneIteratedCollection {
                                 data,
-                                num_left_thresholds: payloads.num_left_thresholds,
+                                num_right_thresholds: payloads.num_right_thresholds,
                             })
                         };
 
                     let build_helper_iterated =
                         |payloads: StandaloneIteratedCollectionArchive<_>,
-                         label: &str|
+                         label: &str,
+                         num_left_thresholds: usize,
+                         num_right_thresholds: usize|
                          -> Result<
                             LoadedStandaloneIteratedCollection<
                                 BTreeMap<StandaloneCutCFFIndex, LoadedGenericEvaluator>,
                             >,
                         > {
+                            let expected_len = num_left_thresholds
+                                .checked_mul(num_right_thresholds)
+                                .ok_or_else(|| eyre!("{label} dimensions overflow usize"))?;
+                            if payloads.num_right_thresholds != num_right_thresholds
+                                || payloads.data.len() != expected_len
+                            {
+                                return Err(eyre!(
+                                    "counterterm[{cut_id}]::{label} has dimensions inconsistent with its left/right threshold collections: data_len={}, stored_right_count={}, expected={}x{}",
+                                    payloads.data.len(),
+                                    payloads.num_right_thresholds,
+                                    num_left_thresholds,
+                                    num_right_thresholds,
+                                ));
+                            }
                             let data = payloads
                                 .data
                                 .into_iter()
@@ -565,7 +597,7 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
 
                             Ok(LoadedStandaloneIteratedCollection {
                                 data,
-                                num_left_thresholds: payloads.num_left_thresholds,
+                                num_right_thresholds: payloads.num_right_thresholds,
                             })
                         };
 
@@ -591,63 +623,74 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
                         })
                         .collect::<Result<Vec<_>>>()?;
 
+                    let left_thresholds_evaluator = counterterm
+                        .left_thresholds_evaluator
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, payload)| {
+                            build_stack_collection(
+                                payload,
+                                &format!("left_thresholds_evaluator[{i}]"),
+                            )
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let right_thresholds_evaluator = counterterm
+                        .right_thresholds_evaluator
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, payload)| {
+                            build_stack_collection(
+                                payload,
+                                &format!("right_thresholds_evaluator[{i}]"),
+                            )
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let left_threshold_helpers = counterterm
+                        .left_threshold_helpers
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, payload)| {
+                            build_indexed_generic_evaluator_collection(
+                                payload,
+                                &format!(
+                                    "counterterm[{cut_id}]::left_threshold_helpers[{i}]"
+                                ),
+                            )
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let right_threshold_helpers = counterterm
+                        .right_threshold_helpers
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, payload)| {
+                            build_indexed_generic_evaluator_collection(
+                                payload,
+                                &format!(
+                                    "counterterm[{cut_id}]::right_threshold_helpers[{i}]"
+                                ),
+                            )
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let iterated_evaluator = build_stack_iterated(
+                        counterterm.iterated_evaluator,
+                        "iterated_evaluator",
+                        left_thresholds_evaluator.len(),
+                        right_thresholds_evaluator.len(),
+                    )?;
+                    let iterated_helpers = build_helper_iterated(
+                        counterterm.iterated_helpers,
+                        "iterated_helpers",
+                        left_threshold_helpers.len(),
+                        right_threshold_helpers.len(),
+                    )?;
+
                     Ok(LoadedStandaloneCounterterm {
-                        left_thresholds_evaluator: counterterm
-                            .left_thresholds_evaluator
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, payload)| {
-                                build_stack_collection(
-                                    payload,
-                                    &format!("left_thresholds_evaluator[{i}]"),
-                                )
-                            })
-                            .collect::<Result<Vec<_>>>()?,
-                        right_thresholds_evaluator: counterterm
-                            .right_thresholds_evaluator
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, payload)| {
-                                build_stack_collection(
-                                    payload,
-                                    &format!("right_thresholds_evaluator[{i}]"),
-                                )
-                            })
-                            .collect::<Result<Vec<_>>>()?,
-                        iterated_evaluator: build_stack_iterated(
-                            counterterm.iterated_evaluator,
-                            "iterated_evaluator",
-                        )?,
-                        left_threshold_helpers: counterterm
-                            .left_threshold_helpers
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, payload)| {
-                                build_indexed_generic_evaluator_collection(
-                                    payload,
-                                    &format!(
-                                        "counterterm[{cut_id}]::left_threshold_helpers[{i}]"
-                                    ),
-                                )
-                            })
-                            .collect::<Result<Vec<_>>>()?,
-                        right_threshold_helpers: counterterm
-                            .right_threshold_helpers
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, payload)| {
-                                build_indexed_generic_evaluator_collection(
-                                    payload,
-                                    &format!(
-                                        "counterterm[{cut_id}]::right_threshold_helpers[{i}]"
-                                    ),
-                                )
-                            })
-                            .collect::<Result<Vec<_>>>()?,
-                        iterated_helpers: build_helper_iterated(
-                            counterterm.iterated_helpers,
-                            "iterated_helpers",
-                        )?,
+                        left_thresholds_evaluator,
+                        right_thresholds_evaluator,
+                        iterated_evaluator,
+                        left_threshold_helpers,
+                        right_threshold_helpers,
+                        iterated_helpers,
                         pass_two_evaluator,
                     })
                 })

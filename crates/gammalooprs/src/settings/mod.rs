@@ -224,6 +224,34 @@ mod tests {
         let runtime: RuntimeSettings =
             toml::from_str("[subtraction]\nesurface_existence_threshold = 4.0e-9\n").unwrap();
         assert_eq!(runtime.subtraction.esurface_existence_threshold, 4.0e-9,);
+
+        let zero_generation: GenerationSettings =
+            toml::from_str("[threshold_subtraction]\nesurface_existence_threshold = 0.0\n")
+                .unwrap();
+        assert_eq!(
+            zero_generation
+                .threshold_subtraction
+                .esurface_existence_threshold,
+            0.0,
+        );
+
+        for invalid in ["-1.0e-7", "nan", "inf", "-inf"] {
+            let generation = toml::from_str::<GenerationSettings>(&format!(
+                "[threshold_subtraction]\nesurface_existence_threshold = {invalid}\n"
+            ));
+            assert!(
+                generation.is_err(),
+                "generation-time E-surface tolerance {invalid} must be rejected"
+            );
+
+            let runtime = toml::from_str::<RuntimeSettings>(&format!(
+                "[subtraction]\nesurface_existence_threshold = {invalid}\n"
+            ));
+            assert!(
+                runtime.is_err(),
+                "runtime E-surface tolerance {invalid} must be rejected"
+            );
+        }
     }
 
     #[test]

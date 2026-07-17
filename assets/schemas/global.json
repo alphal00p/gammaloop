@@ -440,7 +440,8 @@
         "esurface_existence_threshold": {
           "description": "Dimensionless tolerance used to compare the energy-squared E-surface invariant margin\nagainst `esurface_existence_threshold * E_cm^2` during generation-time checks.",
           "type": "number",
-          "format": "double"
+          "format": "double",
+          "minimum": 0.0
         },
         "skip_thresholds_that_are_cuts": {
           "type": "boolean"

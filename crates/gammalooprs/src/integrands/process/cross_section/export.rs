@@ -144,7 +144,7 @@ where
             .iter()
             .map(export_item)
             .collect::<Result<Vec<_>>>()?,
-        num_left_thresholds: collection.num_left_thresholds(),
+        num_right_thresholds: collection.num_right_thresholds(),
     })
 }
 
