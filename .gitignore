@@ -43,7 +43,8 @@ gammaloop_state_integration_workspace/
 result/
 examples/amplitude_computation/GL_*
 gammaloop_state/
-examples/cli/epem_a_ttxh/NNLO
+examples/cli/epem_a_ttxh/NNLO/*
+!examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO.toml
 examples/**/*state*/
 examples/**/OLD_*
 examples/**/gammaloop_state/
