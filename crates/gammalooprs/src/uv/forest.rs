@@ -291,7 +291,10 @@ impl Forest {
                     );
                 }
                 _ => {
-                    unimplemented!("Union not implemented");
+                    unimplemented!(
+                        "Union not implemented for UV forest node {n:?} with {parent_count} parents in diagram '{}'",
+                        graph.name,
+                    );
                 }
             }
             debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;

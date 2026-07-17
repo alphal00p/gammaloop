@@ -29,7 +29,7 @@ use symbolica::numerical_integration::Sample;
 use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use toml::Value as TomlValue;
 use tracing::{debug, info, info_span, Span};
-use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use gammalooprs::{
     clear_interrupt_request,
@@ -289,10 +289,7 @@ impl AggregateGenerationProgressReporter {
             indicatif.pb_show = true,
             indicatif.pb_msg = "Starting integrand generation"
         );
-        span.pb_set_style(&ProgressStyle::with_template(
-            "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} ({percent}%) {msg}",
-        )
-        .unwrap());
+        span.pb_set_style(&gammalooprs::utils::long_running_progress_style());
         span.pb_start();
         span.pb_set_length(0);
         span.pb_set_position(0);

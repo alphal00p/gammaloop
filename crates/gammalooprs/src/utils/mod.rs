@@ -74,8 +74,10 @@ pub const GIT_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const VERSION: &str = "0.0.1";
 pub mod fitting;
 pub mod hyperdual_utils;
+pub mod progress;
 pub mod representations;
 pub mod serde_utils;
+pub use progress::long_running_progress_style;
 /// can be used instead of commenting out code
 #[macro_export]
 macro_rules! disable {
