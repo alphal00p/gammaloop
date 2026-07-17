@@ -29,7 +29,8 @@ use crate::{
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet, parse::string_utils::ToOrderedSimple},
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{
-        Integrands, RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
+        ApproximationType, Integrands, RenormalizationPart, Spinney, UVgenerationSettings,
+        UltravioletGraph,
         approx::{
             CutStructure, ForestNodeLike, OrientationProjection, Rooted, UVCtx,
             final_integrand::{FinalIntegrandBuilder, FinalIntegrands},
@@ -331,19 +332,15 @@ pub struct OwnedForestNode {
 
 struct LocalLeafOperation {
     op: HiddenData<SuBitGraph, EdgeIndex>,
-    frontier: OperationNode,
+    frontier: NodeIndex,
 }
 
 impl LocalLeafOperation {
-    fn new(op: &HiddenData<SuBitGraph, EdgeIndex>, frontier: &OperationNode) -> Self {
+    fn new(op: &HiddenData<SuBitGraph, EdgeIndex>, frontier: NodeIndex) -> Self {
         Self {
             op: op.clone(),
-            frontier: frontier.clone(),
+            frontier,
         }
-    }
-
-    fn frontier_depth(&self) -> usize {
-        self.frontier.key.op_count()
     }
 }
 
@@ -567,15 +564,6 @@ impl ComputeNode {
             .ok_or_else(|| eyre!("{operation} has no computed integrated counterterm"))
     }
 
-    fn recursion_input_4d(&self, operation: &OperationNode, pole_part: bool) -> Result<Full4DCts> {
-        Ok(Full4DCts::recursion_input(
-            self.local_4d(operation)?,
-            self.integrated(operation)?,
-            pole_part,
-            operation.key.is_empty(),
-        ))
-    }
-
     fn cut(&self, operation: &OperationNode, cutset: &CutSet) -> Result<&CutComputation> {
         self.cuts.get(cutset).ok_or_else(|| {
             eyre!("{operation} has no computed local counterterms for cut {cutset:?}")
@@ -584,6 +572,21 @@ impl ComputeNode {
 }
 
 impl Forests {
+    fn source_spinney(&self, node: NodeIndex) -> &Spinney {
+        &self.wood.graph[self.graph.source_node(node)]
+    }
+
+    fn recursion_input_4d(&self, node: NodeIndex) -> Result<Full4DCts> {
+        let operation = &self.graph[node];
+        let computed = self.compute_store.require(operation)?;
+        Full4DCts::recursion_input(
+            computed.local_4d(operation)?,
+            computed.integrated(operation)?,
+            self.source_spinney(node).renormalization_scheme,
+            node == self.root,
+        )
+    }
+
     fn cached_node_label_atom(&self, node: NodeIndex) -> Option<Atom> {
         self.cached_node_label_atoms
             .as_ref()
@@ -683,12 +686,12 @@ impl Forests {
         let mut leaves = self
             .graph
             .leaf_op_dependency_frontiers(node, &self.wood)
-            .map(|(op, frontier)| LocalLeafOperation::new(op, &self.graph[frontier]))
+            .map(|(op, frontier)| LocalLeafOperation::new(op, frontier))
             .collect::<Vec<_>>();
 
         leaves.sort_by_key(|leaf| {
             (
-                Reverse(leaf.frontier_depth()),
+                Reverse(self.graph[leaf.frontier].key.op_count()),
                 leaf.op.order.clone(),
                 usize::from(leaf.op.data),
             )
@@ -712,22 +715,20 @@ impl Forests {
         let first_leaf = leaves
             .first()
             .ok_or_else(|| eyre!("{operation} has no leaf operations"))?;
-        let mut full = self
-            .compute_store
-            .require(&first_leaf.frontier)?
-            .recursion_input_4d(&first_leaf.frontier, settings.pole_part)
-            .wrap_err_with(|| {
-                format!(
-                    "while loading 4D dependency frontier {} for {operation}",
-                    first_leaf.frontier
-                )
-            })?;
+        let first_frontier = first_leaf.frontier;
+        let first_frontier_depth = self.graph[first_frontier].key.op_count();
+        let mut full = self.recursion_input_4d(first_frontier).wrap_err_with(|| {
+            format!(
+                "while loading 4D dependency frontier {} for {operation}",
+                self.graph[first_frontier]
+            )
+        })?;
         let mut local_4d = None;
         let mut integrated = None;
         let ctx = UVCtx::new(graph, settings);
         let integrated_approximation = Integrated::new(vakint, &self.wood.vakint_settings);
 
-        for (step_order, leaf) in (first_leaf.frontier_depth()..).zip(leaves) {
+        for (step_order, leaf) in (first_frontier_depth..).zip(leaves) {
             let (current, given) = self.wood.current_given_pair(leaf.op.data, step_order);
             let next_local = local_4d::uv_limit(&full, &ctx, &current, &given)?;
             let next_integrated = if settings.generate_integrated {
@@ -738,9 +739,9 @@ impl Forests {
             full = Full4DCts::recursion_input(
                 &next_local,
                 &next_integrated,
-                settings.pole_part,
+                current.renormalization_scheme(),
                 false,
-            );
+            )?;
             local_4d = Some(next_local);
             integrated = Some(next_integrated);
         }
@@ -767,26 +768,29 @@ impl Forests {
             let first_leaf = leaves
                 .first()
                 .ok_or_else(|| eyre!("{operation} has no local leaf operations"))?;
+            let first_frontier = first_leaf.frontier;
+            let first_frontier_depth = self.graph[first_frontier].key.op_count();
             // An empty dependency frontier starts from the per-cut root integrand;
             // otherwise its typed local result is the sequential accumulator.
-            let mut accumulator = if first_leaf.frontier.key.is_empty() {
+            let mut accumulator = if self.graph[first_frontier].key.is_empty() {
                 Local3DCts::root(graph, localizer)?
             } else {
+                let frontier = &self.graph[first_frontier];
                 self.compute_store
-                    .require(&first_leaf.frontier)?
-                    .cut(&first_leaf.frontier, cutset)?
+                    .require(frontier)?
+                    .cut(frontier, cutset)?
                     .local_3d
                     .clone()
             };
-            for (step_order, leaf) in (first_leaf.frontier_depth()..).zip(leaves) {
+            for (step_order, leaf) in (first_frontier_depth..).zip(leaves) {
+                let frontier = &self.graph[leaf.frontier];
                 let frontier_integrated = self
                     .compute_store
-                    .require(&leaf.frontier)?
-                    .integrated(&leaf.frontier)
+                    .require(frontier)?
+                    .integrated(frontier)
                     .wrap_err_with(|| {
                         format!(
-                            "while loading integrated dependency frontier {} for {operation}",
-                            leaf.frontier
+                            "while loading integrated dependency frontier {frontier} for {operation}"
                         )
                     })?;
                 let (current, given) = self.wood.current_given_pair(leaf.op.data, step_order);
@@ -986,21 +990,20 @@ impl Forests {
 
         let replacements =
             graph.integrand_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[wild]);
-        for (_, mut crown, key) in self.graph.iter_nodes() {
+        for (node, mut crown, key) in self.graph.iter_nodes() {
             if crown.any(|r| self.graph.flow(r).is_source()) {
                 continue;
             }
 
             let forest_node = key.forest_node(graph, key.key.op_count());
-            let atom = marker.prefix(
-                &graph.full_filter(),
-                forest_node.subgraph(),
-                &self
-                    .compute_store
-                    .require(key)?
-                    .integrated(key)?
-                    .physical_atom(),
-            );
+            let computed = self.compute_store.require(key)?;
+            let integrated = computed.integrated(key)?;
+            let physical = match self.source_spinney(node).renormalization_scheme {
+                ApproximationType::MUV => integrated.physical_finite_counterterm_atom(),
+                ApproximationType::PolePart => integrated.physical_pole_atom(),
+                scheme => return Err(eyre!("No terminal counterterm projection for {scheme}")),
+            };
+            let atom = marker.prefix(&graph.full_filter(), forest_node.subgraph(), &physical);
             debug!(
                 key=%key,
                expr = % atom.expand_num().log_print(None),"Term before simplification"

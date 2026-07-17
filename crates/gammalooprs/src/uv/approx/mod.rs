@@ -167,13 +167,13 @@ impl Approximation {
             .ok_or(eyre!("No local CT for {}", self.simple_display(graph)))
     }
 
-    pub(crate) fn recursion_input_4d(&self, graph: &Graph, pole_part: bool) -> Result<Full4DCts> {
-        Ok(Full4DCts::recursion_input(
+    pub(crate) fn recursion_input_4d(&self, graph: &Graph) -> Result<Full4DCts> {
+        Full4DCts::recursion_input(
             self.local(graph)?,
             self.integrated(graph)?,
-            pole_part,
+            self.renormalization_scheme(),
             self.spinney.subgraph.is_empty(),
-        ))
+        )
     }
 
     pub fn local_3d(&self, graph: &Graph) -> Result<&Local3DCts> {
@@ -323,12 +323,12 @@ impl Approximation {
         settings: &UVgenerationSettings,
     ) -> Result<()> {
         let ctx = UVCtx { graph, settings };
-        debug_tags!(#generation,#uv,#fourd;pole_part = %settings.pole_part,
+        debug_tags!(#generation,#uv,#fourd;
             simple = %self.simple_display(graph),
             "Computing 4D",
         );
 
-        let old_full = dependent.recursion_input_4d(graph, settings.pole_part)?;
+        let old_full = dependent.recursion_input_4d(graph)?;
         let local = local_4d::uv_limit(&old_full, &ctx, self, dependent)?;
         let integrated = if settings.generate_integrated {
             Integrated::new(vakint.0, vakint.1).run(&local, &ctx, self, dependent)?

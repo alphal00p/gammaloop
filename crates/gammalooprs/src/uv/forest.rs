@@ -3,7 +3,7 @@ use crate::{
     graph::{Graph, LMBext, cuts::CutSet},
     utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{
-        Integrands,
+        ApproximationType, Integrands,
         approx::{CutStructure, ForestNodeLike, OrientationProjection, local_3d::Localizer},
         marker::UvMarker,
         settings::FinalIntegrandDimension,
@@ -238,11 +238,13 @@ impl Forest {
                 continue;
             }
 
-            let atom = marker.prefix(
-                &graph.full_filter(),
-                n.data.subgraph(),
-                &n.data.integrated(graph)?.physical_atom(),
-            );
+            let integrated = n.data.integrated(graph)?;
+            let physical = match n.data.renormalization_scheme() {
+                ApproximationType::MUV => integrated.physical_finite_counterterm_atom(),
+                ApproximationType::PolePart => integrated.physical_pole_atom(),
+                scheme => return Err(eyre!("No terminal counterterm projection for {scheme}")),
+            };
+            let atom = marker.prefix(&graph.full_filter(), n.data.subgraph(), &physical);
 
             let expanded_atom = atom.expand_num();
             debug_tags!(#generation, #uv, #graph, #term;

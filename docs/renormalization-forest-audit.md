@@ -135,25 +135,31 @@ pole-only output projection:
 2. The MS-bar integrated counterterm is negative relative to that signed local
    term: `-finite(integral(local))` removes the finite part so the local
    counterterm retains the poles.
-3. `pole_part=true` asks for the pole output itself. That branch must preserve
-   the sign already supplied by the `T` operations rather than adding the
-   integrated-counterterm minus.
+3. The `PolePart` prescription asks for the pole output itself. That branch
+   must preserve the sign already supplied by the `T` operations rather than
+   adding the integrated-counterterm minus.
 
 No extra terminal parity should be applied. Doing so would move the operation
 sign out of `T` and double-sign correctly composed terms. `SimpleApprox.sign` is
 currently unused metadata, and `OperationNode.key.op_count()` should not be
 applied by either terminal aggregator.
 
-The correction is consequently limited to `Integrated::run`:
+The integrated result is consequently stored once as a canonical Laurent
+series. Its consumers select the required projection:
 
 ```text
-pole_part=true:   pole(integral(local))
-pole_part=false: -finite(integral(local))
+pole projection:               pole(integral(local))
+finite-counterterm projection: -finite(integral(local))
 ```
 
-This preserves operation parity in pole mode without changing the actual
-MS-bar addback. It advances the suite from one passing test to three; graph `d1`
-also reaches and passes its legacy/hedge equality and forest-size checks.
+`PolePart` uses the pole projection while constructing recursive 4D
+counterterms; `MUV` uses the finite-counterterm projection together with the
+local counterterm. Final 3D integrand assembly always uses the finite
+counterterm projection, regardless of the prescription that produced the
+canonical series. This preserves operation parity in pole mode without
+changing the actual MS-bar addback. It advances the suite from one passing test
+to three; graph `d1` also reaches and passes its legacy/hedge equality and
+forest-size checks.
 
 With the pole-sign correction but before selecting the RQFT recursion input,
 graph `d2` gives

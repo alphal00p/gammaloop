@@ -157,6 +157,7 @@
       "type": "string",
       "enum": [
         "MUV",
+        "PolePart",
         "OS",
         "IR",
         "Unsubtracted",
@@ -5168,9 +5169,6 @@
             "hedge_poset",
             "compare"
           ]
-        },
-        "pole_part": {
-          "type": "boolean"
         },
         "renormalization_prescription": {
           "$ref": "#/$defs/RenormalizationPrescriptionSettings"

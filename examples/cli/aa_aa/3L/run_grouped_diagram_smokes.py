@@ -95,7 +95,6 @@ softct = false
 generate_integrated = false
 subtract_uv = false
 final_integrand = "ThreeD"
-pole_part = false
 add_marker = false
 keep_marker = true
 inner_products = true
