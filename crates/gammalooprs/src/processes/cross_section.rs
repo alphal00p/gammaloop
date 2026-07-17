@@ -827,7 +827,7 @@ impl CrossSection {
     ) -> Result<Vec<NamedGraphGenerationReport>> {
         let integrand_name = self.name.clone();
         generation_progress::begin_phase(
-            GenerationProgressPhase::CutDiscovery,
+            GenerationProgressPhase::GraphPreprocessing,
             GenerationProcessKind::CrossSection,
             &process_definition.folder_name,
             &integrand_name,
@@ -841,6 +841,13 @@ impl CrossSection {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
+                    let graph_name = supergraph.graph.name.clone();
+                    generation_progress::graph_started(
+                        GenerationProcessKind::CrossSection,
+                        &integrand_name,
+                        &graph_name,
+                        None,
+                    );
                     let stats = supergraph.preprocess(
                         model,
                         process_definition,
@@ -850,9 +857,16 @@ impl CrossSection {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
+                    generation_progress::graph_finished(
+                        GenerationProcessKind::CrossSection,
+                        &integrand_name,
+                        &graph_name,
+                        &stats,
+                        None,
+                    );
                     Ok(NamedGraphGenerationReport {
                         integrand_name: integrand_name.clone(),
-                        graph_name: supergraph.graph.name.clone(),
+                        graph_name,
                         stats,
                     })
                 })
