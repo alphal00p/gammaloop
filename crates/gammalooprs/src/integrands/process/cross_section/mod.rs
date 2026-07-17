@@ -790,7 +790,8 @@ impl CrossSectionGraphTerm {
                     .iter()
                     .map(build_iterated_helpers)
                     .collect::<Result<Vec<_>>>()?,
-                ct_data.iterated.num_left_thresholds(),
+                left_thresholds.len(),
+                right_thresholds.len(),
             );
             let threshold_helpers = LUThresholdHelperEvaluators {
                 left_thresholds,

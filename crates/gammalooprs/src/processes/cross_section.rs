@@ -54,7 +54,7 @@ use crate::{
         GlobalSettings, RuntimeSettings, global::GenerationSettings, runtime::LockedRuntimeSettings,
     },
     utils::{
-        F, GS, W_,
+        DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, F, GS, W_,
         hyperdual_utils::{shape_from_cut_cff_index, simple_n_deriv_shape},
     },
     uv::{approx::CutStructure, forest::ParametricIntegrands, wood::CutWoods},
@@ -89,14 +89,26 @@ use crate::processes::ProcessDefinition;
 #[derive(Clone, Debug, Encode, Decode)]
 pub struct IteratedCtCollection<T> {
     data: Vec<T>,
-    num_left_thresholds: usize,
+    num_right_thresholds: usize,
 }
 
 impl<T> IteratedCtCollection<T> {
-    pub(crate) fn new(data: Vec<T>, num_left_thresholds: usize) -> Self {
+    pub(crate) fn new(
+        data: Vec<T>,
+        num_left_thresholds: usize,
+        num_right_thresholds: usize,
+    ) -> Self {
+        let expected_len = num_left_thresholds
+            .checked_mul(num_right_thresholds)
+            .expect("iterated threshold-counterterm dimensions overflow usize");
+        assert_eq!(
+            data.len(),
+            expected_len,
+            "iterated threshold-counterterm data must contain one entry per left/right pair"
+        );
         Self {
             data,
-            num_left_thresholds,
+            num_right_thresholds,
         }
     }
 
@@ -107,7 +119,7 @@ impl<T> IteratedCtCollection<T> {
         let data = self.data.iter().map(f).collect();
         IteratedCtCollection {
             data,
-            num_left_thresholds: self.num_left_thresholds,
+            num_right_thresholds: self.num_right_thresholds,
         }
     }
 
@@ -119,8 +131,8 @@ impl<T> IteratedCtCollection<T> {
         self.data.iter_mut()
     }
 
-    pub(crate) fn num_left_thresholds(&self) -> usize {
-        self.num_left_thresholds
+    pub(crate) fn num_right_thresholds(&self) -> usize {
+        self.num_right_thresholds
     }
 }
 
@@ -129,14 +141,14 @@ impl<T> Index<(LeftThresholdId, RightThresholdId)> for IteratedCtCollection<T> {
 
     fn index(&self, index: (LeftThresholdId, RightThresholdId)) -> &Self::Output {
         let (left_id, right_id) = index;
-        &self.data[left_id.0 * self.num_left_thresholds + right_id.0]
+        &self.data[left_id.0 * self.num_right_thresholds + right_id.0]
     }
 }
 
 impl<T> IndexMut<(LeftThresholdId, RightThresholdId)> for IteratedCtCollection<T> {
     fn index_mut(&mut self, index: (LeftThresholdId, RightThresholdId)) -> &mut Self::Output {
         let (left_id, right_id) = index;
-        &mut self.data[left_id.0 * self.num_left_thresholds + right_id.0]
+        &mut self.data[left_id.0 * self.num_right_thresholds + right_id.0]
     }
 }
 
@@ -358,7 +370,12 @@ impl ThresholdCountertermAssociation {
         let e_cm = F(runtime_settings.kinematics.e_cm.abs());
         // The classified margins are differences of invariant masses squared, so the
         // dimensionless threshold is normalized by E_cm squared.
-        let tolerance = F(normalized_margin_tolerance.abs()) * e_cm * e_cm;
+        let normalized_margin_tolerance = if normalized_margin_tolerance.is_finite() {
+            normalized_margin_tolerance.abs()
+        } else {
+            DEFAULT_ESURFACE_EXISTENCE_THRESHOLD
+        };
+        let tolerance = F(normalized_margin_tolerance) * e_cm * e_cm;
 
         let maximum_cut_invariant = if self.cut_boundary_edges.len() == 1 {
             Some(cut_boundary_mass)
@@ -2986,10 +3003,8 @@ impl CrossSectionGraph {
                 );
             }
 
-            let iterated_collection = IteratedCtCollection {
-                data: iterated_atoms,
-                num_left_thresholds: left_atoms.len(),
-            };
+            let iterated_collection =
+                IteratedCtCollection::new(iterated_atoms, left_atoms.len(), right_atoms.len());
 
             let counterterm_data = LUCounterTermData {
                 left_thresholds: left_cut_group_threshold_data[cut_group_id].clone(),
@@ -3757,6 +3772,62 @@ mod tests {
                 1.0e-7,
             ),
             super::ThresholdCountertermStatus::ProvenNonExisting,
+        );
+    }
+
+    #[test]
+    fn iterated_counterterms_use_the_right_threshold_count_as_row_stride() {
+        let two_by_three = super::IteratedCtCollection::new((0..6).collect(), 2, 3);
+        assert_eq!(
+            two_by_three[(
+                super::LeftThresholdId::from(0),
+                super::RightThresholdId::from(0)
+            )],
+            0
+        );
+        assert_eq!(
+            two_by_three[(
+                super::LeftThresholdId::from(0),
+                super::RightThresholdId::from(2)
+            )],
+            2
+        );
+        assert_eq!(
+            two_by_three[(
+                super::LeftThresholdId::from(1),
+                super::RightThresholdId::from(0)
+            )],
+            3
+        );
+        assert_eq!(
+            two_by_three[(
+                super::LeftThresholdId::from(1),
+                super::RightThresholdId::from(2)
+            )],
+            5
+        );
+
+        let three_by_two = super::IteratedCtCollection::new((0..6).collect(), 3, 2);
+        assert_eq!(
+            three_by_two[(
+                super::LeftThresholdId::from(0),
+                super::RightThresholdId::from(1)
+            )],
+            1
+        );
+        assert_eq!(
+            three_by_two[(
+                super::LeftThresholdId::from(1),
+                super::RightThresholdId::from(0)
+            )],
+            2
+        );
+        assert_eq!(
+            three_by_two[(
+                super::LeftThresholdId::from(2),
+                super::RightThresholdId::from(1)
+            )],
+            5
         );
     }
 

@@ -32,9 +32,9 @@ use crate::momentum::{SignOrZero, ThreeMomentum};
 use crate::processes::CrossSectionCut;
 use crate::utils::hyperdual_utils::new_constant;
 use crate::utils::{
-    ESURFACE_SHIFT_THRESHOLD, F, FloatLike, GS, compute_loop_part, compute_loop_part_subspace,
-    compute_shift_part, compute_shift_part_subspace, compute_t_part_of_shift_part, cut_energy,
-    external_energy_atom_from_index, ose_atom_from_index,
+    DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F, FloatLike, GS,
+    compute_loop_part, compute_loop_part_subspace, compute_shift_part, compute_shift_part_subspace,
+    compute_t_part_of_shift_part, cut_energy, external_energy_atom_from_index, ose_atom_from_index,
 };
 use crate::uv::uv_graph::UVE;
 use color_eyre::Result;
@@ -304,7 +304,16 @@ impl Esurface {
         // statuses are exclusive and only `Existing` surfaces are subtraction targets.
         // Keep the decision in the original, dimensionful scale. Besides avoiding an
         // unnecessary division, this preserves the previous existence boundary exactly.
-        let invariant_tolerance = normalized_margin_tolerance * e_cm * e_cm;
+        // Deserialization rejects invalid configured tolerances. Keep this defensive fallback for
+        // settings mutated programmatically (for example through a language binding), so an
+        // invalid sign can never invert the existence test.
+        let normalized_margin_tolerance =
+            if normalized_margin_tolerance.is_nan() || normalized_margin_tolerance.is_infinite() {
+                F::from_f64(DEFAULT_ESURFACE_EXISTENCE_THRESHOLD)
+            } else {
+                normalized_margin_tolerance.abs()
+            };
+        let invariant_tolerance = &normalized_margin_tolerance * e_cm * e_cm;
         let normalized_margin = &invariant_margin / (e_cm * e_cm);
         let shift_tolerance = F::from_f64(ESURFACE_SHIFT_THRESHOLD) * e_cm;
 
@@ -1226,6 +1235,30 @@ mod tests {
                     "existence changed for shift factor {shift_factor} and margin factor {margin_factor}",
                 );
             }
+        }
+    }
+
+    #[test]
+    fn invalid_programmatic_tolerances_cannot_invert_classification() {
+        let e_cm = F(10.0);
+        let shift_part = F(-1.0);
+        let invariant_margin = F(0.0);
+
+        for tolerance in [
+            F(DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
+            F(-DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
+            F(f64::NAN),
+            F(f64::INFINITY),
+        ] {
+            assert!(matches!(
+                Esurface::classify_invariant_margin(
+                    &shift_part,
+                    invariant_margin,
+                    &e_cm,
+                    &tolerance,
+                ),
+                EsurfaceExistence::Pinched { .. }
+            ));
         }
     }
 

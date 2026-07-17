@@ -24,9 +24,9 @@ use crate::{
         ApproxEq, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, F, FloatLike, format_uncertainty,
         serde_utils::{
             _default_rotation_axis, _default_stability_levels, IsDefault,
-            is_default_esurface_existence_threshold, is_default_rotation_axis,
-            is_default_stability_levels, is_false, is_float, is_true, is_u64, is_usize,
-            show_defaults_helper,
+            deserialize_nonnegative_finite_f64, is_default_esurface_existence_threshold,
+            is_default_rotation_axis, is_default_stability_levels, is_false, is_float, is_true,
+            is_u64, is_usize, show_defaults_helper,
         },
     },
 };
@@ -60,7 +60,11 @@ pub struct SubtractionSettings {
     pub overlap_settings: OverlapSettings,
     /// Dimensionless tolerance used to compare the energy-squared E-surface invariant margin
     /// against `esurface_existence_threshold * E_cm^2` at runtime.
-    #[serde(skip_serializing_if = "is_default_esurface_existence_threshold")]
+    #[serde(
+        deserialize_with = "deserialize_nonnegative_finite_f64",
+        skip_serializing_if = "is_default_esurface_existence_threshold"
+    )]
+    #[schemars(range(min = 0.0))]
     pub esurface_existence_threshold: f64,
     #[serde(skip_serializing_if = "is_false")]
     pub disable_threshold_subtraction: bool,
