@@ -48,45 +48,39 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
             let p_sq = inv(0);
             let m1_sq = mass(0);
             let m2_sq = mass(1);
-            let (c_b0, c_a1, c_a2) = if family.numerator == Atom::num(1) {
-                reduce_bubble(exponents[0], exponents[1], &p_sq, &m1_sq, &m2_sq)
+            if family.numerator == Atom::num(1) {
+                let m = [m1_sq, m2_sq];
+                reduce_cayley(&modified_cayley(&m, &[p_sq]), &m, exponents)
             } else {
-                bubble_numerator(
+                let (c_b0, c_a1, c_a2) = bubble_numerator(
                     &family.numerator,
                     exponents[0],
                     exponents[1],
                     &p_sq,
                     &m1_sq,
                     &m2_sq,
-                )
-            };
-            let mut terms = Vec::new();
-            push_nonzero(
-                &mut terms,
-                c_b0,
-                MasterIntegral::Bubble {
-                    p_sq,
-                    m1_sq: m1_sq.clone(),
-                    m2_sq: m2_sq.clone(),
-                },
-            );
-            push_nonzero(&mut terms, c_a1, MasterIntegral::Tadpole { m_sq: m1_sq });
-            push_nonzero(&mut terms, c_a2, MasterIntegral::Tadpole { m_sq: m2_sq });
-            terms
+                );
+                let mut terms = Vec::new();
+                push_nonzero(
+                    &mut terms,
+                    c_b0,
+                    MasterIntegral::Bubble {
+                        p_sq,
+                        m1_sq: m1_sq.clone(),
+                        m2_sq: m2_sq.clone(),
+                    },
+                );
+                push_nonzero(&mut terms, c_a1, MasterIntegral::Tadpole { m_sq: m1_sq });
+                push_nonzero(&mut terms, c_a2, MasterIntegral::Tadpole { m_sq: m2_sq });
+                terms
+            }
         }
         3 => {
             if family.numerator == Atom::num(1) {
-                reduce_triangle(
-                    exponents[0],
-                    exponents[1],
-                    exponents[2],
-                    &inv(0),
-                    &inv(1),
-                    &inv(2),
-                    &mass(0),
-                    &mass(1),
-                    &mass(2),
-                )
+                // Triangle invariants (s1,s2,s3)
+                let masses: Vec<Atom> = (0..3).map(mass).collect();
+                let lex = [inv(0), inv(2), inv(1)];
+                reduce_cayley(&modified_cayley(&masses, &lex), &masses, exponents)
             } else {
                 triangle_numerator(
                     &family.numerator,
@@ -104,22 +98,10 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
         }
         4 => {
             if family.numerator == Atom::num(1) {
-                reduce_box(
-                    exponents[0],
-                    exponents[1],
-                    exponents[2],
-                    exponents[3],
-                    &inv(0),
-                    &inv(1),
-                    &inv(2),
-                    &inv(3),
-                    &inv(4),
-                    &inv(5),
-                    &mass(0),
-                    &mass(1),
-                    &mass(2),
-                    &mass(3),
-                )
+                // Box invariants (p1,p2,p3,p4,s,t)
+                let masses: Vec<Atom> = (0..4).map(mass).collect();
+                let lex = [inv(0), inv(4), inv(3), inv(1), inv(5), inv(2)];
+                reduce_cayley(&modified_cayley(&masses, &lex), &masses, exponents)
             } else {
                 box_numerator(
                     &family.numerator,
@@ -188,179 +170,6 @@ fn push_nonzero(terms: &mut Vec<(Atom, MasterIntegral)>, coeff: Atom, master: Ma
     }
 }
 
-// Reduce a bubble B(a1,a2) to (coeff of B0, coeff of A0(m1^2), coeff of A0(m2^2))
-fn reduce_bubble(a1: i32, a2: i32, p_sq: &Atom, m1_sq: &Atom, m2_sq: &Atom) -> (Atom, Atom, Atom) {
-    if a1 == 1 && a2 == 1 {
-        return (Atom::num(1), Atom::Zero, Atom::Zero);
-    }
-    if a2 == 0 {
-        return (Atom::Zero, tadpole_coefficient(a1, m1_sq), Atom::Zero);
-    }
-    if a1 == 0 {
-        return (Atom::Zero, Atom::Zero, tadpole_coefficient(a2, m2_sq));
-    }
-
-    let d = Atom::var(S.d);
-    let lam = kallen(p_sq, m1_sq, m2_sq);
-    let pinch = (p_sq - m1_sq - m2_sq) / &lam;
-
-    if a1 >= 2 {
-        let den = Atom::num(i64::from(a1 - 1)) * &lam;
-        let c = (&d + Atom::num(i64::from(1 - a1 - 2 * a2))) * m1_sq
-            + (Atom::num(i64::from(3 * a1 - 3)) - &d) * m2_sq
-            + (Atom::num(i64::from(a1 + 2 * a2 - 1)) - &d) * p_sq;
-        combine(
-            &(Atom::num(i64::from(2 * a2)) * m2_sq / &den),
-            reduce_bubble(a1 - 2, a2 + 1, p_sq, m1_sq, m2_sq),
-            &(c / &den),
-            reduce_bubble(a1 - 1, a2, p_sq, m1_sq, m2_sq),
-            &pinch,
-            reduce_bubble(a1, a2 - 1, p_sq, m1_sq, m2_sq),
-        )
-    } else {
-        let den = Atom::num(i64::from(a2 - 1)) * &lam;
-        let c = (&d + Atom::num(i64::from(1 - a2 - 2 * a1))) * m2_sq
-            + (Atom::num(i64::from(3 * a2 - 3)) - &d) * m1_sq
-            + (Atom::num(i64::from(a2 + 2 * a1 - 1)) - &d) * p_sq;
-        combine(
-            &(Atom::num(i64::from(2 * a1)) * m1_sq / &den),
-            reduce_bubble(a1 + 1, a2 - 2, p_sq, m1_sq, m2_sq),
-            &(c / &den),
-            reduce_bubble(a1, a2 - 1, p_sq, m1_sq, m2_sq),
-            &pinch,
-            reduce_bubble(a1 - 1, a2, p_sq, m1_sq, m2_sq),
-        )
-    }
-}
-
-fn combine(
-    k1: &Atom,
-    r1: (Atom, Atom, Atom),
-    k2: &Atom,
-    r2: (Atom, Atom, Atom),
-    k3: &Atom,
-    r3: (Atom, Atom, Atom),
-) -> (Atom, Atom, Atom) {
-    (
-        k1 * &r1.0 + k2 * &r2.0 + k3 * &r3.0,
-        k1 * &r1.1 + k2 * &r2.1 + k3 * &r3.1,
-        k1 * &r1.2 + k2 * &r2.2 + k3 * &r3.2,
-    )
-}
-
-fn kallen(p_sq: &Atom, m1_sq: &Atom, m2_sq: &Atom) -> Atom {
-    p_sq * p_sq + m1_sq * m1_sq + m2_sq * m2_sq
-        - Atom::num(2) * p_sq * m1_sq
-        - Atom::num(2) * p_sq * m2_sq
-        - Atom::num(2) * m1_sq * m2_sq
-}
-
-fn cayley(
-    s1: &Atom,
-    s2: &Atom,
-    s3: &Atom,
-    m1: &Atom,
-    m2: &Atom,
-    m3: &Atom,
-) -> (Atom, Atom, Atom, Atom) {
-    let y11 = Atom::num(2) * m1;
-    let y22 = Atom::num(2) * m2;
-    let y33 = Atom::num(2) * m3;
-    let y12 = m1 + m2 - s1;
-    let y13 = m1 + m3 - s3;
-    let y23 = m2 + m3 - s2;
-
-    let m11 = &y22 * &y33 - &y23 * &y23;
-    let m12 = &y12 * &y33 - &y13 * &y23;
-    let m13 = &y12 * &y23 - &y13 * &y22;
-    let det = &y11 * &m11 - &y12 * &m12 + &y13 * &m13;
-
-    let r12 = &y13 * &y23 - &y12 * &y33;
-    let r13 = &y12 * &y23 - &y13 * &y22;
-    let r23 = &y12 * &y13 - &y11 * &y23;
-    (det, r12, r13, r23)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn diag1(
-    a1: i32,
-    a2: i32,
-    a3: i32,
-    s1: &Atom,
-    s2: &Atom,
-    s3: &Atom,
-    m1: &Atom,
-    m2: &Atom,
-    m3: &Atom,
-) -> Atom {
-    let p1 = Atom::num(2) * m1 * s2 + m2 * m2 - Atom::num(2) * m2 * m3 + m2 * s1
-        - Atom::num(3) * m2 * s2
-        - m2 * s3
-        + m3 * m3
-        - m3 * s1
-        - Atom::num(3) * m3 * s2
-        + m3 * s3
-        - s1 * s2
-        + Atom::num(2) * s2 * s2
-        - s2 * s3;
-    let p2 = m1 * m3 - m1 * m2 + Atom::num(3) * m1 * s2 + m2 * m3 + m2 * s1
-        - m2 * s2
-        - m3 * m3
-        - Atom::num(3) * m3 * s1
-        + Atom::num(2) * m3 * s3
-        - s1 * s2
-        + s2 * s2
-        - Atom::num(2) * s2 * s3;
-    let p3 =
-        m1 * m2 - m1 * m3 + Atom::num(3) * m1 * s2 - m2 * m2 + m2 * m3 + Atom::num(2) * m2 * s1
-            - Atom::num(3) * m2 * s3
-            - m3 * s2
-            + m3 * s3
-            - Atom::num(2) * s1 * s2
-            + s2 * s2
-            - s2 * s3;
-    let pd = m2 * s2 - Atom::num(2) * m1 * s2 - m2 * s1 + m2 * s3 + m3 * s1 + m3 * s2 - m3 * s3
-        + s1 * s2
-        - s2 * s2
-        + s2 * s3;
-    let pc = Atom::num(2) * m2 * m3 - Atom::num(2) * m1 * s2 - m2 * m2 - m2 * s1
-        + Atom::num(3) * m2 * s2
-        + m2 * s3
-        - m3 * m3
-        + m3 * s1
-        + Atom::num(3) * m3 * s2
-        - m3 * s3
-        + s1 * s2
-        - Atom::num(2) * s2 * s2
-        + s2 * s3;
-    Atom::num(i64::from(a1)) * &p1
-        + Atom::num(i64::from(a2)) * &p2
-        + Atom::num(i64::from(a3)) * &p3
-        + Atom::var(S.d) * &pd
-        + pc
-}
-
-fn promote_bubble(
-    r: (Atom, Atom, Atom),
-    p_sq: Atom,
-    ma: Atom,
-    mb: Atom,
-) -> Vec<(Atom, MasterIntegral)> {
-    let mut terms = Vec::new();
-    push_nonzero(
-        &mut terms,
-        r.0,
-        MasterIntegral::Bubble {
-            p_sq,
-            m1_sq: ma.clone(),
-            m2_sq: mb.clone(),
-        },
-    );
-    push_nonzero(&mut terms, r.1, MasterIntegral::Tadpole { m_sq: ma });
-    push_nonzero(&mut terms, r.2, MasterIntegral::Tadpole { m_sq: mb });
-    terms
-}
-
 fn add_scaled(
     acc: &mut Vec<(Atom, MasterIntegral)>,
     coeff: &Atom,
@@ -376,117 +185,6 @@ fn add_scaled(
             None => acc.push((scaled, m)),
         }
     }
-}
-
-// Reduce a triangle C(a1,a2,a3) to C0 + pinched bubbles/tadpoles
-#[allow(clippy::too_many_arguments)]
-fn reduce_triangle(
-    a1: i32,
-    a2: i32,
-    a3: i32,
-    s1: &Atom,
-    s2: &Atom,
-    s3: &Atom,
-    m1: &Atom,
-    m2: &Atom,
-    m3: &Atom,
-) -> Vec<(Atom, MasterIntegral)> {
-    if a1 == 1 && a2 == 1 && a3 == 1 {
-        return vec![(
-            Atom::num(1),
-            MasterIntegral::Triangle {
-                p1_sq: s1.clone(),
-                p2_sq: s2.clone(),
-                p12_sq: s3.clone(),
-                m1_sq: m1.clone(),
-                m2_sq: m2.clone(),
-                m3_sq: m3.clone(),
-            },
-        )];
-    }
-    if a2 == 0 {
-        return promote_bubble(
-            reduce_bubble(a1, a3, s3, m1, m3),
-            s3.clone(),
-            m1.clone(),
-            m3.clone(),
-        );
-    }
-    if a1 == 0 {
-        return promote_bubble(
-            reduce_bubble(a2, a3, s2, m2, m3),
-            s2.clone(),
-            m2.clone(),
-            m3.clone(),
-        );
-    }
-    if a3 == 0 {
-        return promote_bubble(
-            reduce_bubble(a1, a2, s1, m1, m2),
-            s1.clone(),
-            m1.clone(),
-            m2.clone(),
-        );
-    }
-
-    let (det, r12, r13, r23) = cayley(s1, s2, s3, m1, m2, m3);
-    let (den, table) = if a1 >= 2 && a1 >= a2 && a1 >= a3 {
-        let k = kallen(s2, m2, m3);
-        (
-            Atom::num(i64::from(a1 - 1)) * &det,
-            [
-                (a1 - 2, a2, a3 + 1, Atom::num(i64::from(a3)) * &k),
-                (a1 - 2, a2 + 1, a3, Atom::num(i64::from(a2)) * &k),
-                (a1 - 1, a2 - 1, a3 + 1, Atom::num(i64::from(-a3)) * &r12),
-                (a1 - 1, a2 + 1, a3 - 1, Atom::num(i64::from(-a2)) * &r13),
-                (a1, a2 - 1, a3, Atom::num(i64::from(-(a1 - 1))) * &r12),
-                (a1, a2, a3 - 1, Atom::num(i64::from(-(a1 - 1))) * &r13),
-                (a1 - 1, a2, a3, diag1(a1, a2, a3, s1, s2, s3, m1, m2, m3)),
-            ],
-        )
-    } else if a2 >= 2 && a2 >= a3 {
-        let k = kallen(s3, m1, m3);
-        (
-            Atom::num(i64::from(a2 - 1)) * &det,
-            [
-                (a1 - 1, a2 - 1, a3 + 1, Atom::num(i64::from(-a3)) * &r12),
-                (a1 - 1, a2, a3, Atom::num(i64::from(-(a2 - 1))) * &r12),
-                (a1, a2 - 2, a3 + 1, Atom::num(i64::from(a3)) * &k),
-                (a1 + 1, a2 - 2, a3, Atom::num(i64::from(a1)) * &k),
-                (a1, a2, a3 - 1, Atom::num(i64::from(-(a2 - 1))) * &r23),
-                (a1 + 1, a2 - 1, a3 - 1, Atom::num(i64::from(-a1)) * &r23),
-                (a1, a2 - 1, a3, diag1(a2, a3, a1, s2, s3, s1, m2, m3, m1)),
-            ],
-        )
-    } else {
-        let k = kallen(s1, m1, m2);
-        (
-            Atom::num(i64::from(a3 - 1)) * &det,
-            [
-                (a1 - 1, a2, a3, Atom::num(i64::from(-(a3 - 1))) * &r13),
-                (a1 - 1, a2 + 1, a3 - 1, Atom::num(i64::from(-a2)) * &r13),
-                (a1, a2 - 1, a3, Atom::num(i64::from(-(a3 - 1))) * &r23),
-                (a1 + 1, a2 - 1, a3 - 1, Atom::num(i64::from(-a1)) * &r23),
-                (a1, a2 + 1, a3 - 2, Atom::num(i64::from(a2)) * &k),
-                (a1 + 1, a2, a3 - 2, Atom::num(i64::from(a1)) * &k),
-                (a1, a2, a3 - 1, diag1(a3, a1, a2, s3, s1, s2, m3, m1, m2)),
-            ],
-        )
-    };
-
-    let mut acc: Vec<(Atom, MasterIntegral)> = Vec::new();
-    for (b1, b2, b3, num) in table {
-        if b1 < 0 || b2 < 0 || b3 < 0 {
-            continue;
-        }
-        let coeff = num / &den;
-        add_scaled(
-            &mut acc,
-            &coeff,
-            reduce_triangle(b1, b2, b3, s1, s2, s3, m1, m2, m3),
-        );
-    }
-    acc
 }
 
 // General symbolic determinant by cofactor expansion along the first row.
@@ -649,6 +347,40 @@ fn high_point_coeffs(y: &[Vec<Atom>]) -> Vec<Atom> {
 }
 
 // Reduce an N-point (N>=4) from its Cayley matrix, masses, and powers.
+fn emit_master(y: &[Vec<Atom>], masses: &[Atom]) -> Vec<(Atom, MasterIntegral)> {
+    let pair = |a: usize, b: usize| (&masses[a] + &masses[b] - &y[a][b]).expand();
+    let m = |i: usize| masses[i].clone();
+    let master = match y.len() {
+        2 => MasterIntegral::Bubble {
+            p_sq: pair(0, 1),
+            m1_sq: m(0),
+            m2_sq: m(1),
+        },
+        3 => MasterIntegral::Triangle {
+            p1_sq: pair(0, 1),
+            p2_sq: pair(1, 2),
+            p12_sq: pair(0, 2),
+            m1_sq: m(0),
+            m2_sq: m(1),
+            m3_sq: m(2),
+        },
+        4 => MasterIntegral::Box {
+            p1_sq: pair(0, 1),
+            p2_sq: pair(1, 2),
+            p3_sq: pair(2, 3),
+            p4_sq: pair(0, 3),
+            s: pair(0, 2),
+            t: pair(1, 3),
+            m1_sq: m(0),
+            m2_sq: m(1),
+            m3_sq: m(2),
+            m4_sq: m(3),
+        },
+        _ => unreachable!("emit_master: scalar leaf must be a bubble/triangle/box"),
+    };
+    vec![(Atom::num(1), master)]
+}
+
 fn reduce_cayley(
     y: &[Vec<Atom>],
     masses: &[Atom],
@@ -662,8 +394,23 @@ fn reduce_cayley(
             .collect()
     };
     let n = y.len();
-
-    if n > 4 && exponents.contains(&0) {
+    if n == 0 {
+        return Vec::new();
+    }
+    if n == 1 {
+        let c = tadpole_coefficient(exponents[0], &masses[0]);
+        return if c == Atom::Zero {
+            Vec::new()
+        } else {
+            vec![(
+                c,
+                MasterIntegral::Tadpole {
+                    m_sq: masses[0].clone(),
+                },
+            )]
+        };
+    }
+    if exponents.contains(&0) {
         let z = exponents.iter().position(|&e| e == 0).unwrap();
         let sub_exp: Vec<i32> = exponents
             .iter()
@@ -673,26 +420,10 @@ fn reduce_cayley(
             .collect();
         return reduce_cayley(&delete_row_col(y, z, z), &drop(z, masses), &sub_exp);
     }
-    if n == 4 {
-        let pair = |a: usize, b: usize| &masses[a] + &masses[b] - &y[a][b];
-        return reduce_box(
-            exponents[0],
-            exponents[1],
-            exponents[2],
-            exponents[3],
-            &pair(0, 1),
-            &pair(1, 2),
-            &pair(2, 3),
-            &pair(0, 3),
-            &pair(0, 2),
-            &pair(1, 3),
-            &masses[0],
-            &masses[1],
-            &masses[2],
-            &masses[3],
-        );
-    }
     if exponents.iter().all(|&e| e == 1) {
+        if n <= 4 {
+            return emit_master(y, masses);
+        }
         let ones = vec![1; n - 1];
         let mut terms = Vec::new();
         for (i, c_i) in high_point_coeffs(y).iter().enumerate() {
@@ -750,153 +481,6 @@ fn reduce_cayley(
             ch[j] += 1;
             ch[i] -= 1;
             add_scaled(&mut acc, &(num / &den), reduce_cayley(y, masses, &ch));
-        }
-    }
-    acc
-}
-
-fn det3(m: &[[Atom; 3]; 3]) -> Atom {
-    let c0 = &m[1][1] * &m[2][2] - &m[1][2] * &m[2][1];
-    let c1 = &m[1][0] * &m[2][2] - &m[1][2] * &m[2][0];
-    let c2 = &m[1][0] * &m[2][1] - &m[1][1] * &m[2][0];
-    &m[0][0] * &c0 - &m[0][1] * &c1 + &m[0][2] * &c2
-}
-
-fn minor3(y: &[[Atom; 4]; 4], skip_row: usize, skip_col: usize) -> [[Atom; 3]; 3] {
-    let rows: Vec<usize> = (0..4).filter(|&r| r != skip_row).collect();
-    let cols: Vec<usize> = (0..4).filter(|&c| c != skip_col).collect();
-    std::array::from_fn(|r| std::array::from_fn(|c| y[rows[r]][cols[c]].clone()))
-}
-
-#[allow(clippy::too_many_arguments)]
-fn cayley4(
-    p1: &Atom,
-    p2: &Atom,
-    p3: &Atom,
-    p4: &Atom,
-    s: &Atom,
-    t: &Atom,
-    m1: &Atom,
-    m2: &Atom,
-    m3: &Atom,
-    m4: &Atom,
-) -> (Atom, [[Atom; 4]; 4]) {
-    let two = Atom::num(2);
-    let y: [[Atom; 4]; 4] = [
-        [&two * m1, m1 + m2 - p1, m1 + m3 - s, m1 + m4 - p4],
-        [m1 + m2 - p1, &two * m2, m2 + m3 - p2, m2 + m4 - t],
-        [m1 + m3 - s, m2 + m3 - p2, &two * m3, m3 + m4 - p3],
-        [m1 + m4 - p4, m2 + m4 - t, m3 + m4 - p3, &two * m4],
-    ];
-
-    let adj: [[Atom; 4]; 4] = std::array::from_fn(|k| {
-        std::array::from_fn(|i| {
-            let minor = det3(&minor3(&y, i, k));
-            if (i + k) % 2 == 0 {
-                minor
-            } else {
-                Atom::num(-1) * &minor
-            }
-        })
-    });
-
-    let mut det = Atom::Zero;
-    for j in 0..4 {
-        det += &y[0][j] * &adj[j][0];
-    }
-    (det, adj)
-}
-
-// Reduce a box D(a1,a2,a3,a4) to D0 + pinched triangles
-#[allow(clippy::too_many_arguments)]
-fn reduce_box(
-    a1: i32,
-    a2: i32,
-    a3: i32,
-    a4: i32,
-    p1: &Atom,
-    p2: &Atom,
-    p3: &Atom,
-    p4: &Atom,
-    s: &Atom,
-    t: &Atom,
-    m1: &Atom,
-    m2: &Atom,
-    m3: &Atom,
-    m4: &Atom,
-) -> Vec<(Atom, MasterIntegral)> {
-    if a4 == 0 {
-        return reduce_triangle(a1, a2, a3, p1, p2, s, m1, m2, m3);
-    }
-    if a1 == 0 {
-        return reduce_triangle(a2, a3, a4, p2, p3, t, m2, m3, m4);
-    }
-    if a2 == 0 {
-        return reduce_triangle(a1, a3, a4, s, p3, p4, m1, m3, m4);
-    }
-    if a3 == 0 {
-        return reduce_triangle(a1, a2, a4, p1, t, p4, m1, m2, m4);
-    }
-    if a1 == 1 && a2 == 1 && a3 == 1 && a4 == 1 {
-        return vec![(
-            Atom::num(1),
-            MasterIntegral::Box {
-                p1_sq: p1.clone(),
-                p2_sq: p2.clone(),
-                p3_sq: p3.clone(),
-                p4_sq: p4.clone(),
-                s: s.clone(),
-                t: t.clone(),
-                m1_sq: m1.clone(),
-                m2_sq: m2.clone(),
-                m3_sq: m3.clone(),
-                m4_sq: m4.clone(),
-            },
-        )];
-    }
-
-    let (det, adj) = cayley4(p1, p2, p3, p4, s, t, m1, m2, m3, m4);
-    let b = [a1, a2, a3, a4];
-    let mut k = 0;
-    for i in 1..4 {
-        if b[i] > b[k] {
-            k = i;
-        }
-    }
-    let mut a = b;
-    a[k] -= 1;
-    let total: i32 = a.iter().sum();
-    let den = Atom::num(i64::from(a[k])) * &det;
-
-    let d = Atom::var(S.d);
-    let mut diag = Atom::Zero;
-    for i in 0..4 {
-        let factor = &d - Atom::num(i64::from(total + a[i]));
-        diag += &adj[k][i] * &factor;
-    }
-
-    let mut acc: Vec<(Atom, MasterIntegral)> = Vec::new();
-    add_scaled(
-        &mut acc,
-        &(diag / &den),
-        reduce_box(a[0], a[1], a[2], a[3], p1, p2, p3, p4, s, t, m1, m2, m3, m4),
-    );
-    for i in 0..4 {
-        for j in 0..4 {
-            if i == j {
-                continue;
-            }
-            let num = Atom::num(i64::from(-a[j])) * &adj[k][i];
-            let mut ch = a;
-            ch[j] += 1;
-            ch[i] -= 1;
-            add_scaled(
-                &mut acc,
-                &(num / &den),
-                reduce_box(
-                    ch[0], ch[1], ch[2], ch[3], p1, p2, p3, p4, s, t, m1, m2, m3, m4,
-                ),
-            );
         }
     }
     acc
@@ -1230,7 +814,7 @@ fn dir_in_span(dirs: &[Dir], v: &Dir) -> bool {
 }
 
 // Rational c with v = sum c_i dirs[i] (None if v is not in the coordinate span), by exact
-// Gauss-Jordan. 
+// Gauss-Jordan.
 fn span_coeffs(dirs: &[Dir], v: &Dir) -> Option<Vec<Atom>> {
     let n_ext = v.len();
     let n = dirs.len();
@@ -1431,7 +1015,7 @@ fn di_as_dots(r_coeff: &[i32], mass: &Atom, gram: &dyn Fn(usize, usize) -> Atom)
 // The generic engine: reduce a dot-polynomial numerator on topology `topo`.
 #[allow(clippy::needless_range_loop)]
 fn reduce_num(topo: &Topo, numerator_monos: &[DotMono]) -> Vec<(Atom, MasterIntegral)> {
-    // Step 1: ISP projection (no-op for the top topology). 
+    // Step 1: ISP projection (no-op for the top topology).
     let projected = isp_project(topo, numerator_monos);
     if projected.is_empty() {
         return Vec::new();
@@ -1599,12 +1183,8 @@ fn bubble_topo_general(
         r_coeffs: vec![r_a, r_b],
         masses: vec![m_a.clone(), m_b.clone()],
         scalar: Box::new(move |b| {
-            promote_bubble(
-                reduce_bubble(b[0], b[1], &p1, &m1a, &m2a),
-                p1.clone(),
-                m1a.clone(),
-                m2a.clone(),
-            )
+            let m = [m1a.clone(), m2a.clone()];
+            reduce_cayley(&modified_cayley(&m, std::slice::from_ref(&p1)), &m, b)
         }),
         // A bubble can pinch to a tadpole carrying a residual; route generically.
         pinch: Box::new(move |keep, exps, num| {
@@ -1754,7 +1334,9 @@ fn triangle_topo_general(
         r_coeffs: r.to_vec(),
         masses: vec![m1, m2, m3],
         scalar: Box::new(move |b| {
-            reduce_triangle(b[0], b[1], b[2], &ss1, &ss2, &ss3, &sm1, &sm2, &sm3)
+            let m = [sm1.clone(), sm2.clone(), sm3.clone()];
+            let lex = [ss1.clone(), ss3.clone(), ss2.clone()];
+            reduce_cayley(&modified_cayley(&m, &lex), &m, b)
         }),
         pinch: Box::new(move |keep, exps, num| {
             triangle_pinch(
@@ -1770,7 +1352,7 @@ fn triangle_topo_general(
 }
 
 // Pinch a triangle to a sub-topology (bubble or tadpole) carrying a residual
-// numerator. 
+// numerator.
 fn triangle_pinch(
     keep: &[usize],
     exps: &[i32],
@@ -1981,9 +1563,16 @@ fn box_topo(
         r_coeffs: r.to_vec(),
         masses: masses.to_vec(),
         scalar: Box::new(move |b| {
-            reduce_box(
-                b[0], b[1], b[2], b[3], &sp1, &sp2, &sp3, &sp4, &ss, &st, &sm1, &sm2, &sm3, &sm4,
-            )
+            let m = [sm1.clone(), sm2.clone(), sm3.clone(), sm4.clone()];
+            let lex = [
+                sp1.clone(),
+                ss.clone(),
+                sp4.clone(),
+                sp2.clone(),
+                st.clone(),
+                sp3.clone(),
+            ];
+            reduce_cayley(&modified_cayley(&m, &lex), &m, b)
         }),
         pinch: Box::new(move |keep, exps, num| {
             box_pinch(keep, exps, num, &r, &pinch_masses, &*pinch_gram)
@@ -2062,9 +1651,16 @@ fn box_topo_general(
         r_coeffs: r.to_vec(),
         masses: vec![m1, m2, m3, m4],
         scalar: Box::new(move |b| {
-            reduce_box(
-                b[0], b[1], b[2], b[3], &sp1, &sp2, &sp3, &sp4, &ss, &st, &sm1, &sm2, &sm3, &sm4,
-            )
+            let m = [sm1.clone(), sm2.clone(), sm3.clone(), sm4.clone()];
+            let lex = [
+                sp1.clone(),
+                ss.clone(),
+                sp4.clone(),
+                sp2.clone(),
+                st.clone(),
+                sp3.clone(),
+            ];
+            reduce_cayley(&modified_cayley(&m, &lex), &m, b)
         }),
         pinch: Box::new(move |keep, exps, num| {
             pinch_to_subtopo(
@@ -2713,13 +2309,13 @@ mod tests {
         crate::ensure_symbolica_license();
         let v = |s: &str| Atom::var(symbol!(format!("oneloop::{s}")));
         let mut bub = family(vec![v("m1sq"), v("m2sq")], vec![v("psq")], vec![2, 1]);
-        bub.numerator = lq(0);
+        bub.numerator = super::dot_lq(0);
         let mut bx = family(
             vec![v("m1sq"), v("m2sq"), v("m3sq"), v("m4sq")],
             vec![v("p1"), v("p2"), v("p3"), v("p4"), v("sinv"), v("tinv")],
             vec![2, 1, 1, 1],
         );
-        bx.numerator = ll();
+        bx.numerator = super::dot_ll();
         for fam in [bub, bx] {
             let r = reduce(&fam);
             assert!(!r.terms.is_empty());
