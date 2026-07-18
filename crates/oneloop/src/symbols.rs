@@ -2,9 +2,7 @@ use std::sync::LazyLock;
 use symbolica::{atom::Symbol, symbol};
 
 pub struct OneLoopSymbols {
-    /// Regulator, `d = 4 - 2*ep`
-    pub ep: Symbol,
-    /// Spacetime dimension `d`.
+    /// Spacetime dimension `d`
     pub d: Symbol,
     /// The bubble invariant `p^2`.
     pub psq: Symbol,
@@ -24,7 +22,6 @@ pub struct OneLoopSymbols {
 }
 
 pub static S: LazyLock<OneLoopSymbols> = LazyLock::new(|| OneLoopSymbols {
-    ep: symbol!("oneloop::ep"),
     d: symbol!("oneloop::d"),
     psq: symbol!("oneloop::psq"),
     k: symbol!("oneloop::k"),

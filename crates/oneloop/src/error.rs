@@ -1,6 +1,3 @@
-//! Error type for the (not-yet-wired) `Graph` -> `IntegralFamily` extraction.
-//! `reduce` does not fail on a well-formed family.
-
 use thiserror::Error;
 
 #[derive(Debug, Error)]

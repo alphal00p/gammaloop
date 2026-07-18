@@ -36,23 +36,12 @@ pub enum MasterIntegral {
 }
 
 pub trait MasterBasis {
-    fn is_master(&self, integral: &MasterIntegral) -> bool;
     fn symbol(&self, integral: &MasterIntegral) -> Atom;
 }
 
 pub struct OneLoopMasters;
 
 impl MasterBasis for OneLoopMasters {
-    fn is_master(&self, integral: &MasterIntegral) -> bool {
-        matches!(
-            integral,
-            MasterIntegral::Tadpole { .. }
-                | MasterIntegral::Bubble { .. }
-                | MasterIntegral::Triangle { .. }
-                | MasterIntegral::Box { .. }
-        )
-    }
-
     fn symbol(&self, integral: &MasterIntegral) -> Atom {
         match integral {
             MasterIntegral::Tadpole { m_sq } => function!(S.a0, m_sq),

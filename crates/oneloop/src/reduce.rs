@@ -23,7 +23,7 @@ impl Reduction {
     }
 }
 
-/// Reduce a one-loop integral family to the masters A0/B0/C0/D0
+/// Reduce a one-loop integral family to the scalar masters `A0`/`B0`/`C0`/`D0`.
 pub fn reduce(family: &IntegralFamily) -> Reduction {
     let inv = |i: usize| {
         family
@@ -540,11 +540,11 @@ fn extract_monomials(expr: &Atom, vars: &[Symbol]) -> Vec<DotMono> {
             }
             deriv = next;
             c += 1;
+            assert!(
+                c <= 20,
+                "numerator degree in one variable exceeds the supported bound (20)"
+            );
             factorial *= i64::from(c);
-            // safety: loop degree is bounded by the numerator rank
-            if c > 64 {
-                break;
-            }
         }
         exps[idx] = 0;
     }
@@ -592,18 +592,9 @@ struct Topo {
 }
 
 impl Topo {
-    // Gram dot of two directions u, v over (q1,q2,q3): sum u_a v_b (q_a.q_b).
-    #[allow(clippy::needless_range_loop)]
+    // Gram dot of two directions u, v over the external momenta: sum u_a v_b (q_a.q_b).
     fn dir_dot(&self, u: &Dir, v: &Dir) -> Atom {
-        let mut out = Atom::Zero;
-        for a in 0..u.len() {
-            for b in 0..v.len() {
-                if u[a] != 0 && v[b] != 0 {
-                    out += Atom::num(i64::from(u[a]) * i64::from(v[b])) * (self.base_gram)(a, b);
-                }
-            }
-        }
-        out
+        dir_dot_with(&*self.base_gram, u, v)
     }
 }
 
@@ -1332,7 +1323,7 @@ fn triangle_topo_general(
             reduce_cayley(&modified_cayley(&m, &lex), &m, b)
         }),
         pinch: Box::new(move |keep, exps, num| {
-            triangle_pinch(
+            pinch_to_subtopo(
                 keep,
                 exps,
                 num,
@@ -1342,19 +1333,6 @@ fn triangle_topo_general(
             )
         }),
     }
-}
-
-// Pinch a triangle to a sub-topology (bubble or tadpole) carrying a residual
-// numerator.
-fn triangle_pinch(
-    keep: &[usize],
-    exps: &[i32],
-    num: &[DotMono],
-    r: &[Dir; 3],
-    masses: &[Atom; 3],
-    base_gram: &dyn Fn(usize, usize) -> Atom,
-) -> Vec<(Atom, MasterIntegral)> {
-    pinch_to_subtopo(keep, exps, num, r, masses, base_gram)
 }
 
 fn pinch_to_subtopo(
@@ -1568,22 +1546,9 @@ fn box_topo(
             reduce_cayley(&modified_cayley(&m, &lex), &m, b)
         }),
         pinch: Box::new(move |keep, exps, num| {
-            box_pinch(keep, exps, num, &r, &pinch_masses, &*pinch_gram)
+            pinch_to_subtopo(keep, exps, num, &r, &pinch_masses, &*pinch_gram)
         }),
     }
-}
-
-// Pinch a box to a sub-topology (triangle/bubble/tadpole) carrying a residual
-// numerator.
-fn box_pinch(
-    keep: &[usize],
-    exps: &[i32],
-    num: &[DotMono],
-    r: &[Dir; 4],
-    masses: &[Atom; 4],
-    base_gram: &dyn Fn(usize, usize) -> Atom,
-) -> Vec<(Atom, MasterIntegral)> {
-    pinch_to_subtopo(keep, exps, num, r, masses, base_gram)
 }
 
 // A general box sub-topology: lines r[0..4], parent Gram for ISP projection and the six D0 invariants.
@@ -1997,10 +1962,7 @@ mod tests {
                 })
                 .collect(),
             isps: vec![],
-            kinematics: Kinematics {
-                invariants,
-                masses_sq: vec![],
-            },
+            kinematics: Kinematics { invariants },
             targets: vec![Integral {
                 propagator_exponents: exponents,
                 isp_exponents: vec![],
@@ -2101,7 +2063,6 @@ mod tests {
             isps: vec![],
             kinematics: Kinematics {
                 invariants: vec![psq],
-                masses_sq: vec![],
             },
             targets: vec![Integral {
                 propagator_exponents: vec![1, 1],
@@ -2233,7 +2194,6 @@ mod tests {
             isps: vec![],
             kinematics: Kinematics {
                 invariants: vec![s1, s2, s3],
-                masses_sq: vec![],
             },
             targets: vec![Integral {
                 propagator_exponents: vec![1, 1, 1],
@@ -2405,7 +2365,6 @@ mod tests {
             isps: vec![],
             kinematics: Kinematics {
                 invariants: vec![p1, p2, p3, p4, s, t],
-                masses_sq: vec![],
             },
             targets: vec![Integral {
                 propagator_exponents: vec![1, 1, 1, 1],

@@ -1,4 +1,4 @@
-//! `oneloop`: one-loop IBP reduction
+//! One-loop IBP reduction of Feynman integrals to the four scalar master integrals.
 
 pub mod amplitude;
 pub mod error;
@@ -19,6 +19,6 @@ pub(crate) fn ensure_symbolica_license() {
     static INIT: Once = Once::new();
     INIT.call_once(|| {
         gammalooprs::initialisation::initialise()
-            .expect("gammaloop initialisation (activates the Symbolica license)");
+            .expect("gammaloop initialisation (activates the Symbolica OEM license)");
     });
 }

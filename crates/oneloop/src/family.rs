@@ -4,6 +4,7 @@ use symbolica::atom::Atom;
 #[derive(Debug, Clone)]
 pub struct Propagator {
     pub momentum: Atom,
+    /// The propagator mass squared.
     pub mass_sq: Atom,
 }
 
@@ -16,8 +17,8 @@ pub struct Isp {
 /// External kinematics.
 #[derive(Debug, Clone, Default)]
 pub struct Kinematics {
+    /// The `C(N, 2)` pairwise invariants `(r_i - r_j)^2`
     pub invariants: Vec<Atom>,
-    pub masses_sq: Vec<Atom>,
 }
 
 /// A target integral
