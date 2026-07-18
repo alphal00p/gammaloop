@@ -1,2 +1,5 @@
 # Validation / oracle / benchmark code is local-only
 /benchmarks/
+
+# Local-only benchmark / stress harness
+/examples/
