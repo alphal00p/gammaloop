@@ -39,7 +39,7 @@ use crate::{
     },
     graph::{
         FeynmanGraph, Graph, GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex,
-        LoopMomentumBasis,
+        LoopMomentumBasis, parse::complete_group_parsing,
     },
     integrands::{
         HasIntegrand,
@@ -47,6 +47,7 @@ use crate::{
         process::{
             ChannelIndex, LmbChannelWeightingSettings, ParamBuilder,
             evaluators::{ActiveF64Backend, EvaluatorStack},
+            graph_to_group_id_for_group_structure,
         },
     },
     model::Model,
@@ -56,7 +57,7 @@ use crate::{
         signature::SignatureLike,
     },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent},
-    processes::{AmplitudeGraph, GraphGenerationStats, GroupDerivedData},
+    processes::{AmplitudeGraph, GraphGenerationStats, GraphGroupSelectionPlan, GroupDerivedData},
     settings::{
         GlobalSettings, RuntimeSettings, global::FrozenCompilationMode,
         runtime::ParameterizationSettings,
@@ -931,6 +932,112 @@ pub mod export;
 pub mod load;
 
 impl AmplitudeIntegrand {
+    pub(crate) fn clone_with_graph_group_selection(
+        &self,
+        plan: &GraphGroupSelectionPlan,
+    ) -> Result<Self> {
+        if !self.data.group_derived_data.is_empty()
+            && self.data.group_derived_data.len() != self.data.graph_group_structure.len()
+        {
+            return Err(eyre!(
+                "Amplitude integrand '{}' has {} graph groups but {} group-derived metadata entries.",
+                self.data.name,
+                self.data.graph_group_structure.len(),
+                self.data.group_derived_data.len(),
+            ));
+        }
+
+        let mut old_graph_to_new_group = vec![None; self.data.graph_terms.len()];
+        let mut old_graph_is_master = vec![false; self.data.graph_terms.len()];
+        for &old_group_id in plan.retained_group_ids() {
+            let new_group_id = plan.new_group_id_for_old(old_group_id).ok_or_else(|| {
+                eyre!(
+                    "Graph-group selection is missing a compact id for amplitude group {}.",
+                    old_group_id.0
+                )
+            })?;
+            let group = self
+                .data
+                .graph_group_structure
+                .get(old_group_id)
+                .ok_or_else(|| {
+                    eyre!(
+                        "Graph-group selection refers to missing amplitude group {}.",
+                        old_group_id.0
+                    )
+                })?;
+            for old_graph_id in group {
+                if old_graph_id >= old_graph_to_new_group.len() {
+                    return Err(eyre!(
+                        "Amplitude graph group {} refers to missing graph id {}.",
+                        old_group_id.0,
+                        old_graph_id
+                    ));
+                }
+                old_graph_to_new_group[old_graph_id] = Some(new_group_id);
+            }
+            old_graph_is_master[group.master()] = true;
+        }
+
+        let mut graph_terms = self
+            .data
+            .graph_terms
+            .iter()
+            .enumerate()
+            .filter_map(|(old_graph_id, source_graph_term)| {
+                let new_group_id = old_graph_to_new_group[old_graph_id]?;
+                let mut graph_term = source_graph_term.clone();
+                graph_term.graph.group_id = Some(new_group_id);
+                graph_term.graph.is_group_master = old_graph_is_master[old_graph_id];
+                graph_term.multi_channeling_setup.graph.group_id = Some(new_group_id);
+                graph_term.multi_channeling_setup.graph.is_group_master =
+                    old_graph_is_master[old_graph_id];
+                Some(graph_term)
+            })
+            .collect::<Vec<_>>();
+
+        let mut parsed_graphs = graph_terms
+            .iter()
+            .map(|graph_term| graph_term.graph.clone())
+            .collect::<Vec<_>>();
+        let graph_group_structure = complete_group_parsing(&mut parsed_graphs)?;
+        for (graph_term, parsed_graph) in graph_terms.iter_mut().zip(parsed_graphs) {
+            graph_term.graph.group_id = parsed_graph.group_id;
+            graph_term.graph.is_group_master = parsed_graph.is_group_master;
+            graph_term.multi_channeling_setup.graph.group_id = parsed_graph.group_id;
+            graph_term.multi_channeling_setup.graph.is_group_master = parsed_graph.is_group_master;
+        }
+
+        let group_derived_data = if self.data.group_derived_data.is_empty() {
+            TiVec::new()
+        } else {
+            plan.retained_group_ids()
+                .iter()
+                .map(|&old_group_id| self.data.group_derived_data[old_group_id].clone())
+                .collect()
+        };
+        let graph_to_group_id = graph_to_group_id_for_group_structure(&graph_group_structure);
+
+        Ok(Self {
+            settings: self.settings.clone(),
+            data: AmplitudeIntegrandData {
+                rotations: self.data.rotations.clone(),
+                name: self.data.name.clone(),
+                compilation: self.data.compilation.clone(),
+                loop_cache_id: self.data.loop_cache_id,
+                external_cache_id: self.data.external_cache_id,
+                base_external_cache_id: self.data.base_external_cache_id,
+                graph_terms,
+                external_signature: self.data.external_signature.clone(),
+                graph_group_structure,
+                graph_to_group_id,
+                group_derived_data,
+            },
+            event_processing_runtime: RuntimeCache::default(),
+            active_f64_backend: self.active_f64_backend.clone(),
+        })
+    }
+
     fn threshold_esurface_specifier(
         &self,
         group_id: GroupId,

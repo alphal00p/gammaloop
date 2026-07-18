@@ -1484,6 +1484,12 @@
         "coordinate_system": {
           "$ref": "#/$defs/CoordinateSystem"
         },
+        "graph_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "graphs": {
           "$ref": "#/$defs/SumMode"
         },
