@@ -83,7 +83,7 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
             if family.numerator == Atom::num(1) {
                 // Triangle invariants (s1,s2,s3)
                 let masses: Vec<Atom> = (0..3).map(mass).collect();
-                let lex = [inv(0), inv(2), inv(1)];
+                let lex = [inv(0), inv(1), inv(2)];
                 reduce_cayley(&modified_cayley(&masses, &lex), &masses, exponents)
             } else {
                 triangle_numerator(
@@ -104,7 +104,7 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
             if family.numerator == Atom::num(1) {
                 // Box invariants (p1,p2,p3,p4,s,t)
                 let masses: Vec<Atom> = (0..4).map(mass).collect();
-                let lex = [inv(0), inv(4), inv(3), inv(1), inv(5), inv(2)];
+                let lex = [inv(0), inv(1), inv(2), inv(3), inv(4), inv(5)];
                 reduce_cayley(&modified_cayley(&masses, &lex), &masses, exponents)
             } else {
                 box_numerator(
@@ -2223,6 +2223,8 @@ mod tests {
     #[test]
     fn scalar_triangle_reduces_to_unit_c0() {
         crate::ensure_symbolica_license();
+        // Invariants are lexicographic pairwise (s01, s02, s12); the C0 legs come out in the
+        // physical (adjacent, opposite) order (leg01, leg12, leg02) = (s01, s12, s02).
         let r = reduce(&scalar_family(
             vec![Atom::Zero, Atom::Zero, Atom::Zero],
             vec![Atom::num(1), Atom::num(2), Atom::num(3)],
@@ -2238,8 +2240,8 @@ mod tests {
                 ..
             } => {
                 assert_eq!(*p1_sq, Atom::num(1));
-                assert_eq!(*p2_sq, Atom::num(2));
-                assert_eq!(*p12_sq, Atom::num(3));
+                assert_eq!(*p2_sq, Atom::num(3));
+                assert_eq!(*p12_sq, Atom::num(2));
             }
             other => panic!("expected a triangle master, got {other:?}"),
         }
