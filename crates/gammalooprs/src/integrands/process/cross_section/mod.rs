@@ -764,7 +764,17 @@ impl CrossSectionGraphTerm {
                             dual_shape,
                             optimization_settings.clone(),
                             &settings.generation.evaluator,
-                        )?;
+                        )
+                        .with_context(|| {
+                            format!(
+                                "Failed to build iterated threshold helper for graph '{}' cut group {} with index {:?} (left loops {}, right loops {})",
+                                graph.graph.name,
+                                cut_group_id.0,
+                                cut_cff_index,
+                                left_subspace.loopcount(),
+                                right_subspace.loopcount(),
+                            )
+                        })?;
                         Ok((*cut_cff_index, evaluator))
                     })
                     .collect::<Result<BTreeMap<_, _>>>()

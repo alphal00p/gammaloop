@@ -1803,7 +1803,6 @@ impl CrossSectionGraph {
     }
 
     fn single_th_prefactor_helper_atom(
-        &self,
         order: u8,
         subspace_loop_count: usize,
         is_on_right: bool,
@@ -1884,34 +1883,40 @@ impl CrossSectionGraph {
     }
 
     fn iterated_th_prefactor_helper_atom(
-        &self,
         left_order: u8,
         right_order: u8,
         left_subspace_loop_count: usize,
         right_subspace_loop_count: usize,
         include_integrated: bool,
     ) -> Atom {
-        let left_prefactor = self.single_th_prefactor_helper_atom(
+        let left_prefactor = Self::single_th_prefactor_helper_atom(
             left_order,
             left_subspace_loop_count,
             false,
             include_integrated,
-        );
-        let right_prefactor = self.single_th_prefactor_helper_atom(
+        )
+        .replace(GS.eta)
+        .with(Atom::var(GS.eta_left));
+        let right_prefactor = Self::single_th_prefactor_helper_atom(
             right_order,
             right_subspace_loop_count,
             true,
             include_integrated,
-        );
+        )
+        .replace(GS.eta)
+        .with(Atom::var(GS.eta_right));
 
-        let mut product = left_prefactor * right_prefactor;
+        let mut product = (left_prefactor * right_prefactor).expand();
 
+        // The two single-side helpers start with the same generic `f` and `η` families.
+        // Iterated subtraction evaluates one bivariate `f` and distinct left/right inverse-map
+        // derivatives. Expansion exposes every product of univariate `f` derivatives so the
+        // replacements below can fuse them into the corresponding bivariate derivative.
         product = product.replace_multiple(Self::fuse_left_right_replacement());
         product
     }
 
     fn single_th_prefactor_helper_params(
-        &self,
         order: u8,
         _subspace_loop_count: usize,
         is_on_right: bool,
@@ -1957,7 +1962,7 @@ impl CrossSectionGraph {
         params
     }
 
-    fn iterated_th_prefactor_helper_params(&self, left_order: u8, right_order: u8) -> Vec<Atom> {
+    fn iterated_th_prefactor_helper_params(left_order: u8, right_order: u8) -> Vec<Atom> {
         let mut iterated_params = params_for_iterated_threshold_ct(left_order, right_order);
         let left_radius_star = Atom::var(GS.radius_star_left);
         let right_radius_star = Atom::var(GS.radius_star_right);
@@ -1994,14 +1999,14 @@ impl CrossSectionGraph {
         optimization_settings: OptimizationSettings,
         evaluator_settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
-        let atom = self.single_th_prefactor_helper_atom(
+        let atom = Self::single_th_prefactor_helper_atom(
             order,
             subspace_loop_count,
             is_on_right,
             include_integrated,
         );
         let params =
-            self.single_th_prefactor_helper_params(order, subspace_loop_count, is_on_right);
+            Self::single_th_prefactor_helper_params(order, subspace_loop_count, is_on_right);
 
         let mut fn_map = FunctionMap::new();
         fn_map
@@ -2037,7 +2042,7 @@ impl CrossSectionGraph {
         optimization_settings: OptimizationSettings,
         evaluator_settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
-        let atom = self.iterated_th_prefactor_helper_atom(
+        let atom = Self::iterated_th_prefactor_helper_atom(
             left_order,
             right_order,
             left_subspace_loop_count,
@@ -2045,7 +2050,7 @@ impl CrossSectionGraph {
             include_integrated,
         );
 
-        let params = self.iterated_th_prefactor_helper_params(left_order, right_order);
+        let params = Self::iterated_th_prefactor_helper_params(left_order, right_order);
 
         let mut fn_map = FunctionMap::new();
         fn_map
@@ -3347,11 +3352,11 @@ pub(crate) fn build_derivative_structure_atom(
     let laurent_coefficient = laurent_coefficient as i32;
     let f = symbol!("f");
 
-    let expansion = parse!("η(t)")
+    let expansion = function!(GS.eta, GS.rescale)
         .series(GS.rescale, Atom::var(GS.rescale_star), (order, 1))
         .unwrap()
         .to_atom()
-        .replace(function!(symbol!("η"), GS.rescale_star))
+        .replace(function!(GS.eta, GS.rescale_star))
         .level_range((0, Some(0)))
         .with(0);
 
@@ -3431,10 +3436,9 @@ fn ordered_f_derivative_params(
 
 pub(crate) fn params_for_derivative_order(singularity_order: u8) -> Vec<Atom> {
     let f = symbol!("f");
-    let eta = symbol!("η");
 
     let f_0 = function!(f, GS.rescale_star);
-    let eta_1 = function!(eta, GS.rescale_star).derivative(GS.rescale_star);
+    let eta_1 = function!(GS.eta, GS.rescale_star).derivative(GS.rescale_star);
 
     let f_derivative_shape = shape_from_cut_cff_index(&CutCFFIndex {
         left_threshold_order: None,
@@ -3462,8 +3466,6 @@ pub(crate) fn params_for_iterated_threshold_ct(
     right_singularity_order: u8,
 ) -> Vec<Atom> {
     let f = symbol!("f");
-    let eta_left = symbol!("η_left");
-    let eta_right = symbol!("η_right");
 
     let cut_cff_index = CutCFFIndex {
         left_threshold_order: Some(left_singularit_order as usize),
@@ -3480,8 +3482,9 @@ pub(crate) fn params_for_iterated_threshold_ct(
         (false, false) => vec![],
     };
 
-    let eta_left_d1 = function!(eta_left, GS.radius_star_left).derivative(GS.radius_star_left);
-    let eta_right_d1 = function!(eta_right, GS.radius_star_right).derivative(GS.radius_star_right);
+    let eta_left_d1 = function!(GS.eta_left, GS.radius_star_left).derivative(GS.radius_star_left);
+    let eta_right_d1 =
+        function!(GS.eta_right, GS.radius_star_right).derivative(GS.radius_star_right);
 
     let mut eta_left_params = vec![eta_left_d1.clone()];
     let mut eta_right_params = vec![eta_right_d1.clone()];
@@ -3870,9 +3873,8 @@ mod tests {
     fn single_threshold_params_follow_effective_f_then_eta_contract() {
         let params = super::params_for_derivative_order(3);
         let f = symbol!("f");
-        let eta = symbol!("η");
         let f_base = function!(f, GS.rescale_star);
-        let eta_base = function!(eta, GS.rescale_star);
+        let eta_base = function!(GS.eta, GS.rescale_star);
 
         let expected = [
             f_base.clone(),
@@ -3928,16 +3930,14 @@ mod tests {
     #[test]
     fn iterated_threshold_params_append_left_then_right_eta_families() {
         let params = super::params_for_iterated_threshold_ct(2, 2);
-        let eta_left = symbol!("η_left");
-        let eta_right = symbol!("η_right");
 
         let expected = [
-            function!(eta_left, GS.radius_star_left).derivative(GS.radius_star_left),
-            function!(eta_left, GS.radius_star_left)
+            function!(GS.eta_left, GS.radius_star_left).derivative(GS.radius_star_left),
+            function!(GS.eta_left, GS.radius_star_left)
                 .derivative(GS.radius_star_left)
                 .derivative(GS.radius_star_left),
-            function!(eta_right, GS.radius_star_right).derivative(GS.radius_star_right),
-            function!(eta_right, GS.radius_star_right)
+            function!(GS.eta_right, GS.radius_star_right).derivative(GS.radius_star_right),
+            function!(GS.eta_right, GS.radius_star_right)
                 .derivative(GS.radius_star_right)
                 .derivative(GS.radius_star_right),
         ]
@@ -3951,6 +3951,50 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn iterated_threshold_helper_atom_matches_its_left_right_parameter_families() {
+        test_initialise().unwrap();
+
+        let mut fn_map = super::FunctionMap::new();
+        fn_map
+            .add_aliases([(
+                GS.pi.into(),
+                super::Atom::num(super::Rational::try_from(std::f64::consts::PI).unwrap()),
+            )])
+            .unwrap();
+
+        for left_order in 1..=3 {
+            for right_order in 1..=3 {
+                let atom = super::CrossSectionGraph::iterated_th_prefactor_helper_atom(
+                    left_order,
+                    right_order,
+                    1,
+                    1,
+                    true,
+                );
+                let params = super::CrossSectionGraph::iterated_th_prefactor_helper_params(
+                    left_order,
+                    right_order,
+                );
+
+                super::GenericEvaluator::new_from_raw_params(
+                    [atom],
+                    &params,
+                    &fn_map,
+                    vec![],
+                    super::OptimizationSettings::default(),
+                    None,
+                    &super::EvaluatorSettings::default(),
+                )
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "iterated {left_order}x{right_order} threshold helper atom and parameter families must agree: {error}"
+                    )
+                });
+            }
+        }
     }
 
     #[test]
