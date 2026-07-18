@@ -1040,6 +1040,8 @@ pub enum SamplingSettings {
 pub struct SamplingSettingsParser {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub graphs: SumMode,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub graph_names: Vec<String>,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientations: SumMode,
     #[serde(skip_serializing_if = "is_false")]
@@ -1066,6 +1068,7 @@ impl Default for SamplingSettingsParser {
     fn default() -> Self {
         Self {
             graphs: SumMode::Summed,
+            graph_names: Vec::new(),
             orientations: SumMode::Summed,
             lmb_multichanneling: false,
             lmb_channels: SumMode::Summed,
@@ -1167,6 +1170,7 @@ impl SamplingSettings {
         match self {
             SamplingSettings::Default(settings) => SamplingSettingsParser {
                 graphs: SumMode::Summed,
+                graph_names: Vec::new(),
                 orientations: SumMode::Summed,
                 lmb_multichanneling: false,
                 lmb_channels: SumMode::Summed,
@@ -1180,6 +1184,7 @@ impl SamplingSettings {
             },
             SamplingSettings::MultiChanneling(settings) => SamplingSettingsParser {
                 graphs: SumMode::Summed,
+                graph_names: Vec::new(),
                 orientations: SumMode::Summed,
                 lmb_multichanneling: true,
                 lmb_channels: SumMode::Summed,
@@ -1204,6 +1209,7 @@ impl SamplingSettings {
                     DiscreteGraphSamplingType::Default(parameterization_settings) => {
                         SamplingSettingsParser {
                             graphs: SumMode::MonteCarlo,
+                            graph_names: settings.graph_names.clone(),
                             orientations,
                             lmb_multichanneling: false,
                             lmb_channels: SumMode::Summed,
@@ -1221,6 +1227,7 @@ impl SamplingSettings {
                     DiscreteGraphSamplingType::MultiChanneling(multichanneling_settings) => {
                         SamplingSettingsParser {
                             graphs: SumMode::MonteCarlo,
+                            graph_names: settings.graph_names.clone(),
                             orientations,
                             lmb_multichanneling: true,
                             lmb_channels: SumMode::Summed,
@@ -1248,6 +1255,7 @@ impl SamplingSettings {
                         multichanneling_settings,
                     ) => SamplingSettingsParser {
                         graphs: SumMode::MonteCarlo,
+                        graph_names: settings.graph_names.clone(),
                         orientations,
                         lmb_multichanneling: true,
                         lmb_channels: SumMode::MonteCarlo,
@@ -1272,6 +1280,7 @@ impl SamplingSettings {
                     },
                     DiscreteGraphSamplingType::TropicalSampling(_) => SamplingSettingsParser {
                         graphs: SumMode::MonteCarlo,
+                        graph_names: settings.graph_names.clone(),
                         orientations,
                         lmb_multichanneling: false,
                         lmb_channels: SumMode::Summed,
@@ -1291,6 +1300,7 @@ impl SamplingSettings {
     fn from_parser(parser: SamplingSettingsParser) -> Result<Self, String> {
         let SamplingSettingsParser {
             graphs,
+            graph_names,
             orientations,
             lmb_multichanneling,
             lmb_channels,
@@ -1304,6 +1314,21 @@ impl SamplingSettings {
         } = parser;
 
         validate_lmb_basis_ids(&lmb_basis_ids)?;
+
+        let mut seen_graph_names = BTreeSet::new();
+        for graph_name in &graph_names {
+            if !seen_graph_names.insert(graph_name) {
+                return Err(format!(
+                    "Invalid sampling settings: graph_names contains duplicate graph name '{graph_name}'."
+                ));
+            }
+        }
+        if !graph_names.is_empty() && matches!(graphs, SumMode::Summed) {
+            return Err(
+                "Invalid sampling settings: graph_names requires graphs = 'monte_carlo'."
+                    .to_string(),
+            );
+        }
 
         let sample_orientations = match (graphs.clone(), orientations) {
             (SumMode::Summed, SumMode::Summed) => false,
@@ -1339,6 +1364,7 @@ impl SamplingSettings {
 
             return Ok(SamplingSettings::DiscreteGraphs(
                 DiscreteGraphSamplingSettings {
+                    graph_names,
                     sample_orientations,
                     sampling_type: DiscreteGraphSamplingType::TropicalSampling(
                         GammaloopTropicalSamplingSettings::default(),
@@ -1439,6 +1465,7 @@ impl SamplingSettings {
 
                 Ok(SamplingSettings::DiscreteGraphs(
                     DiscreteGraphSamplingSettings {
+                        graph_names,
                         sample_orientations,
                         sampling_type,
                     },
@@ -1513,6 +1540,13 @@ impl CoordinateSystem {
 }
 
 impl SamplingSettings {
+    pub fn selected_graph_names(&self) -> &[String] {
+        match self {
+            SamplingSettings::DiscreteGraphs(settings) => &settings.graph_names,
+            SamplingSettings::Default(_) | SamplingSettings::MultiChanneling(_) => &[],
+        }
+    }
+
     pub fn get_parameterization_settings(&self) -> Option<ParameterizationSettings> {
         match self {
             SamplingSettings::Default(settings) => Some(settings.clone()),
@@ -1563,7 +1597,14 @@ impl SamplingSettings {
                 )
             }
             SamplingSettings::DiscreteGraphs(settings) => {
-                let discrete_graph_string = "Monte Carlo over graphs";
+                let discrete_graph_string = if settings.graph_names.is_empty() {
+                    "Monte Carlo over graphs".to_string()
+                } else {
+                    format!(
+                        "Monte Carlo over selected graph groups [{}]",
+                        settings.graph_names.join(", ")
+                    )
+                };
                 let orientation_sampling_string = if settings.sample_orientations {
                     "and Monte Carlo over orientations"
                 } else {
@@ -1692,6 +1733,8 @@ impl Default for DiscreteGraphSamplingType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct DiscreteGraphSamplingSettings {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub graph_names: Vec<String>,
     #[serde(skip_serializing_if = "is_false")]
     pub sample_orientations: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]

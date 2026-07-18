@@ -873,6 +873,7 @@ impl AmplitudeIntegrand {
     ) -> Result<IrLimitTestReport> {
         // override the sampling to be in momentum space
         self.settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            graph_names: Vec::new(),
             sample_orientations: false,
             sampling_type: DiscreteGraphSamplingType::Default(ParameterizationSettings {
                 mode: ParameterizationMode::MomentumSpace,
@@ -1182,6 +1183,7 @@ impl CrossSectionIntegrand {
     ) -> Result<IrLimitTestReport> {
         // override the sampling to be in momentum space
         self.settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            graph_names: Vec::new(),
             sample_orientations: false,
             sampling_type: DiscreteGraphSamplingType::Default(ParameterizationSettings {
                 mode: ParameterizationMode::MomentumSpace,

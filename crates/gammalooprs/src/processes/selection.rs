@@ -2191,6 +2191,43 @@ mod tests {
     }
 
     #[test]
+    fn master_graph_name_selection_rejects_members_and_preserves_group_order() -> Result<()> {
+        let mut graphs = vec![
+            graph_with_vertex_rules("master_0", &["V_A"])?,
+            graph_with_vertex_rules("member_0", &["V_A"])?,
+            graph_with_vertex_rules("master_1", &["V_B"])?,
+        ];
+        graphs[0].group_id = Some(GroupId(0));
+        graphs[0].is_group_master = true;
+        graphs[1].group_id = Some(GroupId(0));
+        graphs[1].is_group_master = false;
+        graphs[2].group_id = Some(GroupId(1));
+        graphs[2].is_group_master = true;
+        let graph_group_structure = complete_group_parsing(&mut graphs)?;
+
+        let member_error =
+            GraphGroupSelectionSpec::from_master_graph_names(vec!["member_0".to_string()])
+                .plan(&graph_group_structure, |graph_id| graphs.get(graph_id))
+                .unwrap_err();
+        assert!(
+            member_error.chain().any(|cause| cause
+                .to_string()
+                .contains("is not the master graph of its group; use 'master_0' instead")),
+            "{member_error:?}"
+        );
+
+        let plan = GraphGroupSelectionSpec::from_master_graph_names(vec![
+            "master_1".to_string(),
+            "master_0".to_string(),
+        ])
+        .plan(&graph_group_structure, |graph_id| graphs.get(graph_id))?;
+        assert_eq!(plan.retained_group_ids(), &[GroupId(0), GroupId(1)]);
+        assert_eq!(plan.report().kept_master_graphs, ["master_0", "master_1"]);
+
+        Ok(())
+    }
+
+    #[test]
     fn with_graph_names_are_authoritative_over_vetoes() -> Result<()> {
         let mut graphs = vec![
             graph_with_vertex_rules("g0", &["V_A"])?,

@@ -8,6 +8,7 @@ use crate::{
     },
     graph::{
         ExternalConnection, FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis,
+        parse::complete_group_parsing,
     },
     integrands::{
         HasIntegrand,
@@ -15,6 +16,7 @@ use crate::{
         process::{
             ChannelIndex, GraphTermEvaluationContext, LmbChannelWeightingSettings, ParamBuilder,
             evaluators::{ActiveF64Backend, EvaluatorStack, evaluate_evaluator_single},
+            graph_to_group_id_for_group_structure,
             param_builder::LUParams,
             prepare_buffered_event,
         },
@@ -27,7 +29,8 @@ use crate::{
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
     processes::{
         self, CrossSectionCut, CrossSectionGraph, CutGroupData, CutGroupId, CutId,
-        CutThresholdCountertermAssociations, GraphGenerationStats, IteratedCtCollection,
+        CutThresholdCountertermAssociations, GraphGenerationStats, GraphGroupSelectionPlan,
+        IteratedCtCollection,
     },
     settings::{
         GlobalSettings, RuntimeSettings,
@@ -131,6 +134,92 @@ pub struct CrossSectionIntegrandData {
 }
 
 impl CrossSectionIntegrand {
+    pub(crate) fn clone_with_graph_group_selection(
+        &self,
+        plan: &GraphGroupSelectionPlan,
+    ) -> Result<Self> {
+        let mut old_graph_to_new_group = vec![None; self.data.graph_terms.len()];
+        let mut old_graph_is_master = vec![false; self.data.graph_terms.len()];
+        for &old_group_id in plan.retained_group_ids() {
+            let new_group_id = plan.new_group_id_for_old(old_group_id).ok_or_else(|| {
+                eyre!(
+                    "Graph-group selection is missing a compact id for cross-section group {}.",
+                    old_group_id.0
+                )
+            })?;
+            let group = self
+                .data
+                .graph_group_structure
+                .get(old_group_id)
+                .ok_or_else(|| {
+                    eyre!(
+                        "Graph-group selection refers to missing cross-section group {}.",
+                        old_group_id.0
+                    )
+                })?;
+            for old_graph_id in group {
+                if old_graph_id >= old_graph_to_new_group.len() {
+                    return Err(eyre!(
+                        "Cross-section graph group {} refers to missing graph id {}.",
+                        old_group_id.0,
+                        old_graph_id
+                    ));
+                }
+                old_graph_to_new_group[old_graph_id] = Some(new_group_id);
+            }
+            old_graph_is_master[group.master()] = true;
+        }
+
+        let mut graph_terms = self
+            .data
+            .graph_terms
+            .iter()
+            .enumerate()
+            .filter_map(|(old_graph_id, source_graph_term)| {
+                let new_group_id = old_graph_to_new_group[old_graph_id]?;
+                let mut graph_term = source_graph_term.clone();
+                graph_term.graph.group_id = Some(new_group_id);
+                graph_term.graph.is_group_master = old_graph_is_master[old_graph_id];
+                graph_term.multi_channeling_setup.graph.group_id = Some(new_group_id);
+                graph_term.multi_channeling_setup.graph.is_group_master =
+                    old_graph_is_master[old_graph_id];
+                Some(graph_term)
+            })
+            .collect::<Vec<_>>();
+
+        let mut parsed_graphs = graph_terms
+            .iter()
+            .map(|graph_term| graph_term.graph.clone())
+            .collect::<Vec<_>>();
+        let graph_group_structure = complete_group_parsing(&mut parsed_graphs)?;
+        for (graph_term, parsed_graph) in graph_terms.iter_mut().zip(parsed_graphs) {
+            graph_term.graph.group_id = parsed_graph.group_id;
+            graph_term.graph.is_group_master = parsed_graph.is_group_master;
+            graph_term.multi_channeling_setup.graph.group_id = parsed_graph.group_id;
+            graph_term.multi_channeling_setup.graph.is_group_master = parsed_graph.is_group_master;
+        }
+        let graph_to_group_id = graph_to_group_id_for_group_structure(&graph_group_structure);
+
+        Ok(Self {
+            settings: self.settings.clone(),
+            data: CrossSectionIntegrandData {
+                name: self.data.name.clone(),
+                compilation: self.data.compilation.clone(),
+                loop_cache_id: self.data.loop_cache_id,
+                external_cache_id: self.data.external_cache_id,
+                base_external_cache_id: self.data.base_external_cache_id,
+                rotations: self.data.rotations.clone(),
+                graph_terms,
+                n_incoming: self.data.n_incoming,
+                external_connections: self.data.external_connections.clone(),
+                graph_group_structure,
+                graph_to_group_id,
+            },
+            event_processing_runtime: RuntimeCache::default(),
+            active_f64_backend: self.active_f64_backend.clone(),
+        })
+    }
+
     pub(crate) fn frozen_compilation(&self) -> &FrozenCompilationMode {
         &self.data.compilation
     }
