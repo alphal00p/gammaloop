@@ -1,4 +1,8 @@
 use symbolica::atom::{Atom, AtomCore, Symbol};
+use symbolica::domains::integer::{IntegerRing, Z};
+use symbolica::domains::rational::Q;
+use symbolica::domains::rational_polynomial::{RationalPolynomial, RationalPolynomialField};
+use symbolica::tensors::matrix::Matrix;
 use symbolica::{function, symbol};
 
 use crate::family::IntegralFamily;
@@ -188,26 +192,35 @@ fn add_scaled(
 }
 
 // General symbolic determinant by cofactor expansion along the first row.
+type Rp = RationalPolynomial<IntegerRing, u16>;
+
+fn to_matrix(m: &[Vec<Atom>]) -> Matrix<RationalPolynomialField<IntegerRing, u16>> {
+    let rows: Vec<Vec<Rp>> = m
+        .iter()
+        .map(|r| {
+            r.iter()
+                .map(|a| a.to_rational_polynomial::<_, _, u16>(&Q, &Z, None))
+                .collect()
+        })
+        .collect();
+    Matrix::from_nested_vec(rows, RationalPolynomialField::new(Z)).unwrap()
+}
+
+// Exact symbolic determinant
 fn det(m: &[Vec<Atom>]) -> Atom {
-    let n = m.len();
-    if n == 1 {
-        return m[0][0].clone();
-    }
-    let mut acc = Atom::Zero;
-    for j in 0..n {
-        let cols: Vec<usize> = (0..n).filter(|&c| c != j).collect();
-        let minor: Vec<Vec<Atom>> = m[1..]
-            .iter()
-            .map(|row| cols.iter().map(|&c| row[c].clone()).collect())
-            .collect();
-        let cofactor = &m[0][j] * &det(&minor);
-        if j % 2 == 0 {
-            acc += &cofactor;
-        } else {
-            acc -= &cofactor;
-        }
-    }
-    acc
+    to_matrix(m).det().unwrap().to_expression()
+}
+
+// Inverse as an Atom matrix
+fn matrix_inv(m: &[Vec<Atom>]) -> Vec<Vec<Atom>> {
+    let inv = to_matrix(m).inv().unwrap();
+    (0..inv.nrows())
+        .map(|i| {
+            (0..inv.ncols())
+                .map(|j| inv[(i as u32, j as u32)].to_expression())
+                .collect()
+        })
+        .collect()
 }
 
 // Modified Cayley matrix Y_ij = m_i^2 + m_j^2 - (r_i - r_j)^2 from the masses and the
@@ -237,21 +250,6 @@ fn delete_row_col(m: &[Vec<Atom>], skip_row: usize, skip_col: usize) -> Vec<Vec<
     (0..n)
         .filter(|&r| r != skip_row)
         .map(|r| cols.iter().map(|&c| m[r][c].clone()).collect())
-        .collect()
-}
-
-// Adjugate matrix: adj[k][i] = (-1)^{i+k} det(m without row i, col k)
-fn adjugate(m: &[Vec<Atom>]) -> Vec<Vec<Atom>> {
-    let n = m.len();
-    (0..n)
-        .map(|k| {
-            (0..n)
-                .map(|i| {
-                    let minor = det(&delete_row_col(m, i, k));
-                    if (i + k) % 2 == 0 { minor } else { -minor }
-                })
-                .collect()
-        })
         .collect()
 }
 
@@ -460,14 +458,15 @@ fn reduce_cayley(
     let mut a = exponents.to_vec();
     a[k] -= 1;
     let total: i32 = a.iter().sum();
-    let adj = adjugate(y);
-    let den = Atom::num(i64::from(a[k])) * &det_y;
+    // inv[k][i] = adj[k][i]/det(y)
+    let inv = matrix_inv(y);
+    let den = Atom::num(i64::from(a[k]));
 
     let d = Atom::var(S.d);
     let mut diag = Atom::Zero;
     for i in 0..n {
         let factor = &d - Atom::num(i64::from(total + a[i]));
-        diag += &adj[k][i] * &factor;
+        diag += &inv[k][i] * &factor;
     }
     let mut acc = Vec::new();
     add_scaled(&mut acc, &(diag / &den), reduce_cayley(y, masses, &a));
@@ -476,7 +475,7 @@ fn reduce_cayley(
             if i == j {
                 continue;
             }
-            let num = Atom::num(i64::from(-a[j])) * &adj[k][i];
+            let num = Atom::num(i64::from(-a[j])) * &inv[k][i];
             let mut ch = a.clone();
             ch[j] += 1;
             ch[i] -= 1;
@@ -619,16 +618,10 @@ fn gram_solve(topo: &Topo, rhs: &[Atom]) -> Vec<Atom> {
     let g: Vec<Vec<Atom>> = (0..n)
         .map(|i| (0..n).map(|j| topo.dir_dot(&dirs[i], &dirs[j])).collect())
         .collect();
-    let det_g = det(&g);
-    (0..n)
-        .map(|col| {
-            let mut mc = g.clone();
-            for row in 0..n {
-                mc[row][col] = rhs[row].clone();
-            }
-            det(&mc) / &det_g
-        })
-        .collect()
+    // Solve G c = rhs
+    let b: Vec<Vec<Atom>> = rhs.iter().map(|x| vec![x.clone()]).collect();
+    let sol = to_matrix(&g).solve(&to_matrix(&b)).unwrap();
+    (0..n).map(|i| sol[(i as u32, 0)].to_expression()).collect()
 }
 
 // All perfect matchings (pairings) of 0..m (m even).  Each pairing is a Vec of
@@ -1765,8 +1758,7 @@ mod tests {
     use symbolica::symbol;
 
     #[test]
-    #[allow(clippy::needless_range_loop)]
-    fn adjugate_times_matrix_is_det_identity() {
+    fn det_matches_a_known_value() {
         crate::ensure_symbolica_license();
         // M = [[2,1,0],[1,3,1],[0,1,2]], det 8
         let m = vec![
@@ -1774,18 +1766,7 @@ mod tests {
             vec![Atom::num(1), Atom::num(3), Atom::num(1)],
             vec![Atom::num(0), Atom::num(1), Atom::num(2)],
         ];
-        let adj = super::adjugate(&m);
-        let det = super::det(&m);
-        for k in 0..3 {
-            for i in 0..3 {
-                let mut entry = Atom::Zero;
-                for j in 0..3 {
-                    entry += &(&m[k][j] * &adj[j][i]);
-                }
-                let want = if k == i { det.clone() } else { Atom::Zero };
-                assert_eq!(entry, want, "(M*adj)[{k}][{i}]");
-            }
-        }
+        assert_eq!(super::det(&m), Atom::num(8));
     }
 
     #[test]
