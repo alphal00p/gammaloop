@@ -17,6 +17,7 @@ use crate::{
     cff::CutCFFIndex,
     debug_tags,
     graph::{Graph, LMBext, cuts::CutSet},
+    integrands::process::param_builder::{ParamBuilderGraph, ThermalDistributionReplacement},
     settings::global::{MediumMode, OrientationPattern},
     utils::{
         GS, W_,
@@ -25,7 +26,7 @@ use crate::{
     },
     uv::{
         ApproximationType, UltravioletGraph,
-        approx::{ApproximationKernel, UVCtx},
+        approx::{ApproximationKernel, UVCtx, simplify_thermal_distributions},
         uv_graph::UVE,
     },
 };
@@ -56,10 +57,14 @@ impl Local3DApproximation {
             graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
         );
 
-        Ok(cff
-            .iter()
-            .map(|(index, a)| (*index, a * &fourddenoms))
-            .collect())
+        cff.iter()
+            .map(|(index, atom)| {
+                Ok((
+                    *index,
+                    simplify_thermal_distributions(graph, atom, medium_mode)? * &fourddenoms,
+                ))
+            })
+            .collect()
     }
 
     pub(crate) fn root(
@@ -251,11 +256,12 @@ impl Local3DApproximation {
         let settings = ctx.settings;
         let reduced = current.reduced_subgraph(given);
         let reduced_graph_edges = graph.iter_edges_of(&reduced).map(|(_, edge_id, _)| edge_id);
-        let cff = GS.apply_thermal_distribution_limit(
+        let cff = graph.make_thermal_distributions_explicit(
             cff,
             ThermalDistributionLimit::Vacuum,
             reduced_graph_edges,
-        );
+            ThermalDistributionReplacement::All,
+        )?;
         let mut atomarg = cff
             * graph
                 .numerator(&reduced, given.subgraph())
@@ -301,11 +307,12 @@ impl Local3DApproximation {
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
         let reduced_graph_edges = graph.iter_edges_of(&reduced).map(|(_, edge_id, _)| edge_id);
-        let cff = GS.apply_thermal_distribution_limit(
+        let cff = graph.make_thermal_distributions_explicit(
             cff,
             ThermalDistributionLimit::Vacuum,
             reduced_graph_edges,
-        );
+            ThermalDistributionReplacement::All,
+        )?;
 
         let atomarg = cff
             * graph

@@ -2,10 +2,11 @@ use crate::{
     cff::CutCFFIndex,
     debug_tags,
     graph::{Graph, LoopMomentumBasis, cuts::CutSet},
+    integrands::process::param_builder::{ParamBuilderGraph, ThermalDistributionReplacement},
     momentum::Sign,
     numerator::symbolica_ext::AtomCoreExt,
-    settings::global::GenerationSettings,
-    utils::{GS, W_, symbolica_ext::LogPrint},
+    settings::global::{GenerationSettings, MediumMode},
+    utils::{GS, W_, symbolica_ext::LogPrint, symbols::ThermalDistributionLimit},
     uv::{
         ApproximationType, Spinney,
         approx::{integrated::Integrated, local_3d::Local3DApproximation},
@@ -36,6 +37,25 @@ pub mod local_3d;
 pub mod orientation_localization;
 
 use orientation_localization::localize_reduced_orientation_term;
+
+fn simplify_thermal_distributions(
+    graph: &Graph,
+    atom: &Atom,
+    medium_mode: MediumMode,
+) -> Result<Atom> {
+    let limit = match medium_mode {
+        MediumMode::Vacuum => ThermalDistributionLimit::Vacuum,
+        MediumMode::ZeroTemperatureEquilibrium => ThermalDistributionLimit::ZeroTemperature,
+        MediumMode::ThermodynamicEquilibrium => return Ok(atom.clone()),
+    };
+    let edges = graph.iter_edge_ids().collect::<Vec<_>>();
+    graph.make_thermal_distributions_explicit(
+        atom,
+        limit,
+        edges,
+        ThermalDistributionReplacement::ConstantOnly,
+    )
+}
 
 pub trait ForestNodeLike {
     fn subgraph(&self) -> &SuBitGraph;
@@ -226,8 +246,14 @@ impl CFFapprox {
             t_arg: IntegrandExpr {
                 integrands: cff
                     .iter()
-                    .map(|(index, a)| (*index, a * &fourddenoms))
-                    .collect(),
+                    .map(|(index, atom)| {
+                        Ok((
+                            *index,
+                            simplify_thermal_distributions(graph, atom, settings.medium.mode)?
+                                * &fourddenoms,
+                        ))
+                    })
+                    .collect::<Result<_>>()?,
             },
         })
     }

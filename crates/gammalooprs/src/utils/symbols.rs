@@ -905,46 +905,6 @@ impl GammaloopSymbols {
         ])
     }
 
-    pub fn apply_thermal_distribution_limit<'a>(
-        &self,
-        arg: impl Into<AtomOrView<'a>>,
-        limit: ThermalDistributionLimit,
-        edges: impl IntoIterator<Item = EdgeIndex>,
-    ) -> Atom {
-        let mut atom = arg.into().as_view().into();
-        match limit {
-            ThermalDistributionLimit::Default => atom,
-            ThermalDistributionLimit::ZeroTemperature => atom,
-            ThermalDistributionLimit::Vacuum => {
-                for edge in edges {
-                    atom = atom
-                        .replace(self.thermal_distribution(
-                            usize::from(edge) as i64,
-                            Atom::num(0),
-                            W_.t_,
-                            Atom::num(1),
-                        ))
-                        .with(Atom::one())
-                        .replace(self.thermal_distribution(
-                            usize::from(edge) as i64,
-                            Atom::num(0),
-                            W_.t_,
-                            Atom::num(-1),
-                        ))
-                        .with(Atom::zero())
-                        .replace(self.thermal_distribution(
-                            usize::from(edge) as i64,
-                            W_.o_,
-                            W_.t_,
-                            W_.s_,
-                        ))
-                        .with(Atom::zero());
-                }
-                atom
-            }
-        }
-    }
-
     pub fn wrap_tree_denoms<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
         self.tree_denom_wrapper.f(&[arg.into().as_view()])
     }

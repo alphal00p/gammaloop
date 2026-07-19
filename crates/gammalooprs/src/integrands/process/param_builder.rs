@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::BTreeSet,
     fmt::Display,
     ops::{Deref, Range},
 };
@@ -22,7 +23,7 @@ use spenso::{
     tensors::parametric::AtomViewOrConcrete,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Indeterminate, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Indeterminate, Symbol},
     domains::rational::Rational,
     evaluate::FunctionMap,
     id::Replacement,
@@ -103,6 +104,12 @@ pub trait SplitPolarizations {
     fn polarizations(&self) -> Vec<Atom>;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThermalDistributionReplacement {
+    All,
+    ConstantOnly,
+}
+
 pub trait ParamBuilderGraph {
     fn get_external_energy_atoms(&self) -> Vec<Atom>;
     fn iter_edge_ids(&self) -> impl Iterator<Item = EdgeIndex> + '_;
@@ -116,6 +123,82 @@ pub trait ParamBuilderGraph {
         thermal_sign: Atom,
         limit: ThermalDistributionLimit,
     ) -> Option<Atom>;
+    fn make_thermal_distributions_explicit(
+        &self,
+        atom: &Atom,
+        limit: ThermalDistributionLimit,
+        edges: impl IntoIterator<Item = EdgeIndex>,
+        replacement_mode: ThermalDistributionReplacement,
+    ) -> Result<Atom> {
+        let edges = edges.into_iter().collect::<BTreeSet<_>>();
+        let mut error = None;
+        let explicit = atom.replace_map(|term, _, out| {
+            if error.is_some() {
+                return;
+            }
+
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            if function.get_symbol() != GS.thermal_distribution {
+                return;
+            }
+            if function.get_nargs() != 4 {
+                error = Some(color_eyre::eyre::eyre!(
+                    "Thermal distribution must have four arguments, got {}",
+                    function.get_nargs()
+                ));
+                return;
+            }
+
+            let mut args = function.iter();
+            let edge_arg = args.next().unwrap();
+            let Ok(edge_id) = usize::try_from(edge_arg) else {
+                error = Some(color_eyre::eyre::eyre!(
+                    "Thermal distribution edge must be a non-negative integer, got {edge_arg}"
+                ));
+                return;
+            };
+            let edge = EdgeIndex::from(edge_id);
+            if !edges.contains(&edge) {
+                return;
+            }
+
+            let derivative_order_arg = args.next().unwrap();
+            let Ok(derivative_order) = usize::try_from(derivative_order_arg) else {
+                error = Some(color_eyre::eyre::eyre!(
+                    "Thermal distribution derivative order must be a non-negative integer, got \
+                     {derivative_order_arg}"
+                ));
+                return;
+            };
+            let _temperature_flag = args.next().unwrap();
+            let thermal_sign = args.next().unwrap().into();
+            let Some(replacement) = self.explicit_thermal_distribution_atom(
+                edge,
+                derivative_order,
+                thermal_sign,
+                limit,
+            ) else {
+                error = Some(color_eyre::eyre::eyre!(
+                    "Thermal distribution for edge {edge}, derivative order {derivative_order}, \
+                     and limit {limit:?} is unsupported"
+                ));
+                return;
+            };
+            if replacement_mode == ThermalDistributionReplacement::ConstantOnly
+                && !replacement.is_constant()
+            {
+                return;
+            }
+            **out = replacement;
+        });
+
+        match error {
+            Some(error) => Err(error),
+            None => Ok(explicit),
+        }
+    }
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
 
