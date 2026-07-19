@@ -1319,7 +1319,7 @@ fn triangle_topo_general(
         masses: vec![m1, m2, m3],
         scalar: Box::new(move |b| {
             let m = [sm1.clone(), sm2.clone(), sm3.clone()];
-            let lex = [ss1.clone(), ss3.clone(), ss2.clone()];
+            let lex = [ss1.clone(), ss2.clone(), ss3.clone()];
             reduce_cayley(&modified_cayley(&m, &lex), &m, b)
         }),
         pinch: Box::new(move |keep, exps, num| {
@@ -1537,11 +1537,11 @@ fn box_topo(
             let m = [sm1.clone(), sm2.clone(), sm3.clone(), sm4.clone()];
             let lex = [
                 sp1.clone(),
-                ss.clone(),
-                sp4.clone(),
                 sp2.clone(),
-                st.clone(),
                 sp3.clone(),
+                sp4.clone(),
+                ss.clone(),
+                st.clone(),
             ];
             reduce_cayley(&modified_cayley(&m, &lex), &m, b)
         }),
@@ -1612,11 +1612,11 @@ fn box_topo_general(
             let m = [sm1.clone(), sm2.clone(), sm3.clone(), sm4.clone()];
             let lex = [
                 sp1.clone(),
-                ss.clone(),
-                sp4.clone(),
                 sp2.clone(),
-                st.clone(),
                 sp3.clone(),
+                sp4.clone(),
+                ss.clone(),
+                st.clone(),
             ];
             reduce_cayley(&modified_cayley(&m, &lex), &m, b)
         }),
@@ -2321,13 +2321,15 @@ mod tests {
 
         let r = reduce(&family(
             vec![m1.clone(), m2.clone(), m3.clone(), m4],
-            vec![p1.clone(), p2.clone(), p3, p4, s.clone(), t],
+            vec![p1.clone(), p2.clone(), p3, p4.clone(), s, t],
             vec![1, 1, 1, 0],
         ));
+        // lex invariants: pinching line 3 leaves triangle{0,1,2} with legs
+        // (leg01, leg12, leg02) = (p1, p4, p2).
         assert!(r.terms.iter().any(|(_, m)| matches!(
             m,
             MasterIntegral::Triangle { p1_sq, p2_sq, p12_sq, m1_sq, m2_sq, m3_sq }
-                if *p1_sq == p1 && *p2_sq == p2 && *p12_sq == s
+                if *p1_sq == p1 && *p2_sq == p4 && *p12_sq == p2
                     && *m1_sq == m1 && *m2_sq == m2 && *m3_sq == m3
         )));
         assert!(
@@ -2412,9 +2414,10 @@ mod tests {
         let (coeff, master) = &r.terms[0];
         assert_eq!(*coeff, Atom::num(1));
         match master {
+            // lex invariants (s01..s23) = [1..6]; the Mandelstam diagonals are s02=2, s13=5.
             MasterIntegral::Box { s, t, .. } => {
-                assert_eq!(*s, Atom::num(5));
-                assert_eq!(*t, Atom::num(6));
+                assert_eq!(*s, Atom::num(2));
+                assert_eq!(*t, Atom::num(5));
             }
             other => panic!("expected a box master, got {other:?}"),
         }
