@@ -620,6 +620,86 @@ fn thermal_vacuum_inspect() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn cold_dense_vacuum_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("cold_dense_vacuum_inspect.toml".into()),
+        get_tests_workspace_path().join("cold_dense_vacuum_inspect"),
+        None,
+        true,
+    )?;
+
+    let (_, inspect) = Inspect {
+        process: Some(ProcessRef::Id(0)),
+        integrand_name: Some("default".to_string()),
+        point: vec![1.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        momentum_space: true,
+        use_arb_prec: true,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    let target = Complex::new(0.0, -4.310_928_789_772_213e-4);
+    assert_complex_approx_eq(
+        inspect,
+        target,
+        "cold dense sunrise inspect f64 benchmark at point 0 at muB=3.0",
+    );
+
+    let (_, inspect) = Inspect {
+        process: Some(ProcessRef::Id(0)),
+        integrand_name: Some("default".to_string()),
+        point: vec![1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
+        momentum_space: true,
+        use_arb_prec: true,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    let target = Complex::new(0.0, -1.850_837_097_150_558e-4);
+    assert_complex_approx_eq(
+        inspect,
+        target,
+        "cold dense sunrise inspect f64 benchmark at point 1 at muB=3.0",
+    );
+
+    let (_, inspect) = Inspect {
+        process: Some(ProcessRef::Id(1)),
+        integrand_name: Some("default".to_string()),
+        point: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        momentum_space: true,
+        use_arb_prec: true,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    let target = Complex::new(9.891_479_783_716_468e-6, 0.0);
+    assert_complex_approx_eq(
+        inspect,
+        target,
+        "cold dense mercedes inspect f64 benchmark at point 0 at muB=3.0",
+    );
+
+    let (_, inspect) = Inspect {
+        process: Some(ProcessRef::Id(1)),
+        integrand_name: Some("default".to_string()),
+        point: vec![1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
+        momentum_space: true,
+        use_arb_prec: true,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    let target = Complex::new(-2.452_375_990_392_057e-7, 0.0);
+    assert_complex_approx_eq(
+        inspect,
+        target,
+        "cold dense mercedes inspect f64 benchmark at point 1 at muB=3.0",
+    );
+
+    Ok(())
+}
+
 mod failing {
     use super::*;
 
