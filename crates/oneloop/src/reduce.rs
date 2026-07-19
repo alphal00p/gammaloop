@@ -92,8 +92,8 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
                     exponents[1],
                     exponents[2],
                     &inv(0),
-                    &inv(1),
                     &inv(2),
+                    &inv(1),
                     &mass(0),
                     &mass(1),
                     &mass(2),
@@ -114,11 +114,11 @@ pub fn reduce(family: &IntegralFamily) -> Reduction {
                     exponents[2],
                     exponents[3],
                     &inv(0),
-                    &inv(1),
-                    &inv(2),
                     &inv(3),
-                    &inv(4),
                     &inv(5),
+                    &inv(2),
+                    &inv(1),
+                    &inv(4),
                     &mass(0),
                     &mass(1),
                     &mass(2),
@@ -1319,7 +1319,8 @@ fn triangle_topo_general(
         masses: vec![m1, m2, m3],
         scalar: Box::new(move |b| {
             let m = [sm1.clone(), sm2.clone(), sm3.clone()];
-            let lex = [ss1.clone(), ss2.clone(), ss3.clone()];
+            // physics (s1,s2,s3) -> lexicographic Cayley order (s01, s02, s12)
+            let lex = [ss1.clone(), ss3.clone(), ss2.clone()];
             reduce_cayley(&modified_cayley(&m, &lex), &m, b)
         }),
         pinch: Box::new(move |keep, exps, num| {
@@ -1535,13 +1536,14 @@ fn box_topo(
         masses: masses.to_vec(),
         scalar: Box::new(move |b| {
             let m = [sm1.clone(), sm2.clone(), sm3.clone(), sm4.clone()];
+            // physics (p1,p2,p3,p4,s,t) -> lexicographic Cayley (s01,s02,s03,s12,s13,s23)
             let lex = [
                 sp1.clone(),
-                sp2.clone(),
-                sp3.clone(),
-                sp4.clone(),
                 ss.clone(),
+                sp4.clone(),
+                sp2.clone(),
                 st.clone(),
+                sp3.clone(),
             ];
             reduce_cayley(&modified_cayley(&m, &lex), &m, b)
         }),
@@ -1612,11 +1614,11 @@ fn box_topo_general(
             let m = [sm1.clone(), sm2.clone(), sm3.clone(), sm4.clone()];
             let lex = [
                 sp1.clone(),
-                sp2.clone(),
-                sp3.clone(),
-                sp4.clone(),
                 ss.clone(),
+                sp4.clone(),
+                sp2.clone(),
                 st.clone(),
+                sp3.clone(),
             ];
             reduce_cayley(&modified_cayley(&m, &lex), &m, b)
         }),
