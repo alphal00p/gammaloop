@@ -46,7 +46,7 @@ use crate::{
     },
 };
 use color_eyre::Result;
-use spenso::shadowing::symbolica_utils::LogPrint;
+use spenso::shadowing::symbolica_utils::{LogPrint, SpensoPrintSettings};
 
 pub struct Wood {
     pub graph: HedgeGraph<SuBitGraph, Spinney>,
@@ -717,13 +717,14 @@ impl Forests {
         frontier: NodeIndex,
         op: &HiddenData<SuBitGraph, EdgeIndex>,
     ) -> Atom {
+        let frontier_depth = self.graph[frontier].key.op_count();
+        let (current, given) = self.wood.current_given_pair(op.data, frontier_depth);
+        // Structured forest-DOT approximation records use the same operation and subgraph
+        // markers as the computed UV expressions.
         function!(
-            GS.t_op,
-            function!(op.order.symbol(), usize::from(op.data)),
-            self.graph[frontier]
-                .covers()
-                .map_or(Atom::Zero, |cover| cover.symbol().to_atom()),
-            self.dot_serialize_node_atom(frontier)
+            GS.uv_approx,
+            UvMarker::subgraph(current.subgraph(), given.subgraph())
+                * self.dot_serialize_node_atom(frontier)
         )
     }
 
@@ -741,9 +742,11 @@ impl Forests {
 
     fn dot_serialize_node_attrs(&self, node: NodeIndex) -> String {
         let key = &self.graph[node];
+        let mut options = PrintOptions::typst();
+        options.custom_print_mode = SpensoPrintSettings::typst().into();
         let label = self
             .dot_serialize_node_atom(node)
-            .printer(PrintOptions::typst())
+            .printer(options)
             .to_string();
         let cover = key
             .covers()
@@ -1358,6 +1361,36 @@ mod tests {
                 ("F".to_string(), "∅".to_string())
             ]
         );
+        let structured_dot = forests.dot_serialize();
+        let mut join_markers = Vec::new();
+        for (node, _, _) in forests.graph.iter_nodes() {
+            for leaf in forests.local_leaf_operations(node) {
+                let frontier_depth = forests.graph[leaf.frontier].key.op_count();
+                let (current, given) = forests
+                    .wood
+                    .current_given_pair(leaf.op.data, frontier_depth);
+                if current.subgraph() == &leaf.op.order {
+                    continue;
+                }
+                let mut options = PrintOptions::typst();
+                options.custom_print_mode = SpensoPrintSettings::typst().into();
+                join_markers.push(
+                    UvMarker::subgraph(current.subgraph(), given.subgraph())
+                        .printer(options)
+                        .to_string(),
+                );
+            }
+        }
+        assert!(
+            !join_markers.is_empty(),
+            "lopsided dumbbell must contain a disconnected join"
+        );
+        for marker in join_markers {
+            assert!(
+                structured_dot.contains(&marker),
+                "structured DOT must use the runtime current/given marker {marker}"
+            );
+        }
 
         let dependent_disconnected = forests
             .graph
@@ -1593,7 +1626,10 @@ mod tests {
         );
 
         let f = f.unfold();
-        println!("{}", f.dot_serialize());
+        let structured_dot = f.dot_serialize();
+        assert!(structured_dot.contains(r#"label="K[#expr S_44⊛0]""#));
+        assert!(!structured_dot.contains("#T("));
+        println!("{structured_dot}");
         insta::assert_snapshot!(
             f.graph.n_nodes(),
             @"8");
