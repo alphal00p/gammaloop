@@ -32,7 +32,8 @@ use crate::{
     },
     completion::CompletionArgExt,
     integrand_info::{
-        IntegrandCutThresholdInfo, IntegrandGraphGroupInfo, IntegrandInfo, IntegrandKind,
+        IntegrandCutThresholdInfo, IntegrandEsurfaceClassification, IntegrandGraphGroupInfo,
+        IntegrandInfo, IntegrandKind,
     },
     session::display_command,
     settings_tree::{serialize_settings_with_defaults, value_at_path},
@@ -646,14 +647,19 @@ fn category_group_header(
 
 fn render_integrand_thresholds_table(
     groups: &[&IntegrandGraphGroupInfo],
+    integrand_kind: IntegrandKind,
 ) -> Result<Option<String>> {
+    let status_header = match integrand_kind {
+        IntegrandKind::Amplitude => "Classification",
+        IntegrandKind::CrossSection => "Active in cuts",
+    };
     let mut builder = Builder::new();
     builder.push_record([
         "Group #".bold().blue().to_string(),
         "Graph".bold().blue().to_string(),
         "Esurface".bold().blue().to_string(),
         "edges".bold().blue().to_string(),
-        "Active in cuts".bold().blue().to_string(),
+        status_header.bold().blue().to_string(),
     ]);
 
     let mut inserted_blocks = 0usize;
@@ -681,28 +687,72 @@ fn render_integrand_thresholds_table(
         separator_rows.push(next_row);
 
         for threshold in &group.threshold_esurfaces {
+            let representative_graph = group
+                .graphs
+                .iter()
+                .find(|graph| graph.graph_id == threshold.representative_graph_id)
+                .ok_or_else(|| {
+                    eyre!(
+                        "Threshold E-surface #{} in graph group #{} references missing representative graph #{}",
+                        threshold.esurface_id,
+                        group.group_id,
+                        threshold.representative_graph_id,
+                    )
+                })?;
+            let graph_label = if representative_graph.is_master {
+                String::new()
+            } else {
+                format!(
+                    "#{} : {}",
+                    representative_graph.graph_id, representative_graph.name
+                )
+                .yellow()
+                .to_string()
+            };
+            let status = match integrand_kind {
+                IntegrandKind::Amplitude => match threshold.classification.ok_or_else(|| {
+                    eyre!(
+                        "Amplitude threshold E-surface #{} in graph group #{} has no classification",
+                        threshold.esurface_id,
+                        group.group_id,
+                    )
+                })? {
+                    IntegrandEsurfaceClassification::Existing => {
+                        "existing".cyan().to_string()
+                    }
+                    IntegrandEsurfaceClassification::Pinched => {
+                        "pinched".yellow().to_string()
+                    }
+                    IntegrandEsurfaceClassification::NonExisting => {
+                        "non-existing".dimmed().to_string()
+                    }
+                },
+                IntegrandKind::CrossSection => {
+                    if threshold.active_cuts.is_empty() {
+                        "none".dimmed().to_string()
+                    } else {
+                        threshold
+                            .active_cuts
+                            .iter()
+                            .map(|cut| {
+                                if cut.can_become_pinched {
+                                    format!("#{}*", cut.cut_id)
+                                } else {
+                                    format!("#{}", cut.cut_id)
+                                }
+                            })
+                            .join(",")
+                            .cyan()
+                            .to_string()
+                    }
+                }
+            };
             builder.push_record([
                 String::new(),
-                String::new(),
+                graph_label,
                 format!("#{}", threshold.esurface_id).yellow().to_string(),
                 render_threshold_esurface(&threshold.edge_ids),
-                if threshold.active_cuts.is_empty() {
-                    "none".dimmed().to_string()
-                } else {
-                    threshold
-                        .active_cuts
-                        .iter()
-                        .map(|cut| {
-                            if cut.can_become_pinched {
-                                format!("#{}*", cut.cut_id)
-                            } else {
-                                format!("#{}", cut.cut_id)
-                            }
-                        })
-                        .join(",")
-                        .cyan()
-                        .to_string()
-                },
+                status,
             ]);
             next_row += 1;
         }
@@ -1002,7 +1052,7 @@ fn render_integrand_detail_from_info(
         }
 
         if category == IntegrandDisplayCategory::Cuts {
-            if let Some(table) = render_integrand_thresholds_table(&groups)? {
+            if let Some(table) = render_integrand_thresholds_table(&groups, detail.kind)? {
                 info!(
                     "
 {}
@@ -1730,8 +1780,9 @@ mod test {
     use crate::{
         commands::Commands,
         integrand_info::{
-            IntegrandActiveThresholdCutInfo, IntegrandCutThresholdInfo, IntegrandGraphGroupInfo,
-            IntegrandGraphInfo, IntegrandThresholdEsurfaceInfo, IntegrandThresholdStatus,
+            IntegrandActiveThresholdCutInfo, IntegrandCutThresholdInfo,
+            IntegrandEsurfaceClassification, IntegrandGraphGroupInfo, IntegrandGraphInfo,
+            IntegrandKind, IntegrandThresholdEsurfaceInfo, IntegrandThresholdStatus,
         },
         state::{CommandHistory, CommandsBlock, ProcessRef, RunHistory},
         CLISettings, Repl,
@@ -1788,7 +1839,9 @@ mod test {
             threshold_esurface_ids: vec![5],
             threshold_esurfaces: vec![IntegrandThresholdEsurfaceInfo {
                 esurface_id: 5,
+                representative_graph_id: 0,
                 edge_ids: vec![1, 2],
+                classification: None,
                 active_cuts: vec![IntegrandActiveThresholdCutInfo {
                     cut_id: 7,
                     can_become_pinched: true,
@@ -1797,11 +1850,50 @@ mod test {
             cuts: Vec::new(),
         };
 
-        let rendered = render_integrand_thresholds_table(&[&group])
+        let rendered = render_integrand_thresholds_table(&[&group], IntegrandKind::CrossSection)
             .unwrap()
             .unwrap();
         assert!(rendered.contains("Active in cuts"));
         assert!(rendered.contains("#7*"));
+    }
+
+    #[test]
+    fn amplitude_threshold_inventory_reports_source_graph_and_classification() {
+        let group = IntegrandGraphGroupInfo {
+            group_id: 0,
+            graphs: vec![
+                IntegrandGraphInfo {
+                    graph_id: 0,
+                    name: "master".to_string(),
+                    is_master: true,
+                },
+                IntegrandGraphInfo {
+                    graph_id: 1,
+                    name: "member".to_string(),
+                    is_master: false,
+                },
+            ],
+            orientation_edge_ids: Vec::new(),
+            orientations: Vec::new(),
+            loop_momentum_bases: Vec::new(),
+            threshold_esurface_ids: vec![5],
+            threshold_esurfaces: vec![IntegrandThresholdEsurfaceInfo {
+                esurface_id: 5,
+                representative_graph_id: 1,
+                edge_ids: vec![1, 2],
+                classification: Some(IntegrandEsurfaceClassification::Pinched),
+                active_cuts: Vec::new(),
+            }],
+            cuts: Vec::new(),
+        };
+
+        let rendered = render_integrand_thresholds_table(&[&group], IntegrandKind::Amplitude)
+            .unwrap()
+            .unwrap();
+        assert!(rendered.contains("Classification"));
+        assert!(!rendered.contains("Active in cuts"));
+        assert!(rendered.contains("#1 : member"));
+        assert!(rendered.contains("pinched"));
     }
 
     #[test]

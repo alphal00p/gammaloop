@@ -1573,6 +1573,9 @@ impl AmplitudeIntegrand {
         &self,
         existing_esurfaces: &TiVec<GroupId, ExistingEsurfaces>,
     ) -> Result<()> {
+        // This is the runtime safety boundary for every generation-time threshold filter:
+        // a surface required by the active masses and kinematics must have persisted symbolic
+        // content, irrespective of why it was omitted while generating the integrand.
         for (group_id, group_existing_esurfaces) in existing_esurfaces.iter_enumerated() {
             for group_esurface_id in group_existing_esurfaces.iter().copied() {
                 for (graph_group_pos, raised_esurface_id) in self.data.group_derived_data[group_id]
@@ -1609,14 +1612,14 @@ impl AmplitudeIntegrand {
 
                     if !is_generated {
                         return Err(eyre!(
-                            "Amplitude integrand '{}' was generated with specialized threshold-subtraction assumptions, but the current runtime model parameters require a trimmed threshold counterterm for graph '{}' and group e-surface {} ({})",
+                            "Amplitude integrand '{}' was generated with specialized threshold-subtraction assumptions, but the current runtime model parameters or external kinematics require a trimmed threshold counterterm for graph '{}' and group e-surface {} ({})",
                             self.name(),
                             graph_term.graph.name,
                             group_esurface_id.0,
                             self.data.group_derived_data[group_id].esurface_atoms[group_esurface_id]
                         ))
                         .with_note(|| {
-                            "Regenerate the integrand or restore compatible shared/per-integrand model parameters.".to_string()
+                            "Regenerate the integrand or restore compatible shared/per-integrand model parameters and external kinematics.".to_string()
                         });
                     }
                 }
