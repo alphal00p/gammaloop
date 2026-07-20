@@ -67,6 +67,17 @@ impl Local4dCts {
     pub(crate) fn atom(&self) -> &Atom {
         &self.0
     }
+
+    pub(crate) fn factorized_product(
+        &self,
+        integrated: &IntegratedCts,
+        other: &Self,
+        other_integrated: &IntegratedCts,
+    ) -> Self {
+        let finite = integrated.finite_counterterm_atom();
+        let other_finite = other_integrated.finite_counterterm_atom();
+        Self(&self.0 * &other.0 + &self.0 * other_finite + finite * &other.0)
+    }
 }
 
 impl Rooted for Local4dCts {
@@ -294,11 +305,13 @@ fn t<S: super::ForestNodeLike>(
     Ok(Local4dCts(dotted))
 }
 
-pub(crate) fn uv_limit<S: ForestNodeLike>(
+pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
     integrand: &Full4DCts,
     ctx: &UVCtx<'_>,
     current: &S,
     given: &S,
+    marker_current: &M,
+    marker_given: &M,
 ) -> Result<Local4dCts> {
     match current.renormalization_scheme() {
         ApproximationType::MUV | ApproximationType::PolePart => {
@@ -306,8 +319,8 @@ pub(crate) fn uv_limit<S: ForestNodeLike>(
             let result = -t(&grown, ctx, current, given)?;
             Ok(Local4dCts(UvMarker::new(ctx.settings).apply(
                 UvOperation::Approx,
-                current.subgraph(),
-                given.subgraph(),
+                marker_current.subgraph(),
+                marker_given.subgraph(),
                 result.atom(),
             )))
         }

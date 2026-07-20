@@ -1,7 +1,7 @@
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
-    function,
+    function, symbol,
 };
 
 use crate::{
@@ -50,7 +50,7 @@ impl UvMarker {
         if subgraph.is_empty() {
             Atom::Zero
         } else {
-            Atom::var(subgraph.symbol())
+            Atom::var(symbol!(&format!("S_{}", subgraph.string_label())))
         }
     }
 

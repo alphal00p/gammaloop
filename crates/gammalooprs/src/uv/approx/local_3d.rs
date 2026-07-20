@@ -16,7 +16,7 @@ use symbolica::{
 use crate::{
     cff::{CutCFF, orientations::GraphOrientation},
     debug_tags,
-    graph::{Graph, LMBext, cuts::CutSet},
+    graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
     utils::{GS, W_},
     uv::{
         ApproximationType, Integrands, UVgenerationSettings, UltravioletGraph,
@@ -220,12 +220,14 @@ impl<'a> Local3DApproximation<'a> {
         }
     }
 
-    pub(crate) fn run<S: ForestNodeLike>(
+    pub(crate) fn run<S: ForestNodeLike, M: ForestNodeLike>(
         self,
         local: &Local3DCts,
         integrated: &IntegratedCts,
         current: &S,
         given: &S,
+        marker_current: &M,
+        marker_given: &M,
     ) -> Result<Local3DCts> {
         let integrated_t = self.localizer.localize(
             &integrated.physical_finite_counterterm_atom(),
@@ -233,6 +235,45 @@ impl<'a> Local3DApproximation<'a> {
             given,
         )?;
         let ctx = UVCtx::new(self.graph, self.settings);
+        let marker = UvMarker::new(ctx.settings);
+
+        if let Some(active_sectors) = local.active_sectors() {
+            let reduced_subgraph = current.reduced_subgraph(given);
+            let mut next_sectors = Vec::with_capacity(active_sectors.len() + 1);
+
+            for (active_subgraph, integrands) in active_sectors {
+                let active_subgraph = active_subgraph.union(&reduced_subgraph);
+                let integrands =
+                    -integrands.fallible_map(Local3DLoopRescaling::FullSubgraph.map(
+                        &ctx,
+                        current,
+                        given,
+                        Some(active_subgraph.clone()),
+                    ))?;
+                next_sectors.push((active_subgraph, integrands));
+            }
+
+            let integrated = -(integrated_t
+                .active
+                .fallible_map(Local3DLoopRescaling::ReducedSubgraph.map(
+                    &ctx,
+                    current,
+                    given,
+                    Some(reduced_subgraph.clone()),
+                ))?
+                .zip_mul(&integrated_t.frozen_integrands)?);
+            next_sectors.push((reduced_subgraph, integrated));
+
+            return Local3DCts::from_active_sectors(next_sectors)?.map(|atom| {
+                Ok(marker.apply(
+                    UvOperation::Approx,
+                    marker_current.subgraph(),
+                    marker_given.subgraph(),
+                    atom,
+                ))
+            });
+        }
+
         let local = -(local.map(full(&ctx, current, given))?);
         let integrated = -(integrated_t
             .active
@@ -240,36 +281,95 @@ impl<'a> Local3DApproximation<'a> {
             .zip_mul(&integrated_t.frozen_integrands)?);
 
         local.zip_add(&integrated)?.map(|atom| {
-            Ok(UvMarker::new(ctx.settings).apply(
+            Ok(marker.apply(
                 UvOperation::Approx,
-                current.subgraph(),
-                given.subgraph(),
+                marker_current.subgraph(),
+                marker_given.subgraph(),
                 atom,
             ))
         })
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Local3DCts(Integrands);
+pub struct Local3DCts {
+    integrands: Integrands,
+    // A disconnected join can leave a different set of loop variables active
+    // in each local/integrated cross term.
+    active_sectors: Option<Vec<(SuBitGraph, Integrands)>>,
+}
+
+impl From<Integrands> for Local3DCts {
+    fn from(integrands: Integrands) -> Self {
+        Self {
+            integrands,
+            active_sectors: None,
+        }
+    }
+}
 
 impl Neg for Local3DCts {
     type Output = Self;
 
     fn neg(self) -> Self::Output {
-        Self(self.0.map(|a| a.neg()))
+        Self {
+            integrands: self.integrands.map(|a| a.neg()),
+            active_sectors: self.active_sectors.map(|sectors| {
+                sectors
+                    .into_iter()
+                    .map(|(active, integrands)| (active, -integrands))
+                    .collect()
+            }),
+        }
     }
 }
 
 impl Local3DCts {
     pub fn zip_add(&self, other: &Integrands) -> Result<Self> {
-        Ok(Self(self.0.zip_add(other)?))
-    }
-    pub(crate) fn integrands(&self) -> &Integrands {
-        &self.0
+        if self.active_sectors.is_some() {
+            return Err(eyre!(
+                "an unlabelled local term cannot be added to active UV sectors"
+            ));
+        }
+        Ok(Self::from(self.integrands.zip_add(other)?))
     }
 
-    pub fn map<F: FnMut(&Atom) -> Result<Atom>>(&self, f: F) -> Result<Self> {
-        self.0.fallible_map(f).map(Self)
+    pub(crate) fn integrands(&self) -> &Integrands {
+        &self.integrands
+    }
+
+    pub(crate) fn active_sectors(&self) -> Option<&[(SuBitGraph, Integrands)]> {
+        self.active_sectors.as_deref()
+    }
+
+    pub(crate) fn from_active_sectors(
+        active_sectors: Vec<(SuBitGraph, Integrands)>,
+    ) -> Result<Self> {
+        let mut sectors = active_sectors.iter();
+        let mut integrands = sectors
+            .next()
+            .ok_or_else(|| eyre!("active UV counterterm sectors cannot be empty"))?
+            .1
+            .clone();
+        for (_, sector) in sectors {
+            integrands = integrands.zip_add(sector)?;
+        }
+
+        Ok(Self {
+            integrands,
+            active_sectors: Some(active_sectors),
+        })
+    }
+
+    pub fn map<F: FnMut(&Atom) -> Result<Atom>>(&self, mut f: F) -> Result<Self> {
+        if let Some(active_sectors) = &self.active_sectors {
+            let active_sectors = active_sectors
+                .iter()
+                .map(|(active, integrands)| Ok((active.clone(), integrands.fallible_map(&mut f)?)))
+                .collect::<Result<_>>()?;
+            Self::from_active_sectors(active_sectors)
+        } else {
+            self.integrands.fallible_map(f).map(Self::from)
+        }
     }
 
     pub(crate) fn root(graph: &mut Graph, localizer: Localizer<'_>) -> Result<Self> {
@@ -281,7 +381,7 @@ impl Local3DCts {
             graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
         );
 
-        Ok(Local3DCts(cff * fourddenoms))
+        Ok(Local3DCts::from(cff * fourddenoms))
     }
 }
 
@@ -314,17 +414,25 @@ pub(crate) fn t_tilde<S: super::ForestNodeLike>(
     current: &S,
     given: &S,
     cff: &Atom,
+    active_subgraph: Option<&SuBitGraph>,
+    lmb: &LoopMomentumBasis,
 ) -> Result<Atom> {
     let graph = ctx.graph;
     let settings = ctx.settings;
     let reduced = current.reduced_subgraph(given);
+    let rescaled_subgraph = active_subgraph.unwrap_or_else(|| current.subgraph());
+    let lmb_id = lmb
+        .loop_edges
+        .first()
+        .copied()
+        .unwrap_or_else(|| current.lmb_id());
 
     // split numerator momenta into OSEs and spatial parts
     let mut reps = Vec::new();
-    for (p, eid, e) in graph.iter_edges_of(current.subgraph()) {
+    for (p, eid, e) in graph.iter_edges_of(rescaled_subgraph) {
         if p.is_paired() {
             let e_mass = e.data.mass_atom();
-            reps.push(GS.split_mom_pattern(eid, current.lmb_id(), e_mass, settings.inner_products));
+            reps.push(GS.split_mom_pattern(eid, lmb_id, e_mass, settings.inner_products));
         }
     }
 
@@ -335,7 +443,7 @@ pub(crate) fn t_tilde<S: super::ForestNodeLike>(
         .replace_multiple(&reps);
 
     // rescale the external momenta in the added numerator subgraph
-    for e in &current.lmb().ext_edges {
+    for e in &lmb.ext_edges {
         // println!("Rescale {}", e);
         numerator = numerator
             .replace(GS.emr_vec_index(*e, W_.x___))
@@ -345,7 +453,7 @@ pub(crate) fn t_tilde<S: super::ForestNodeLike>(
     let mut atomarg = cff * numerator;
 
     // add data for OSE computation and add an explicit sqrt
-    for (p, ei, e) in graph.iter_edges_of(current.subgraph()) {
+    for (p, ei, e) in graph.iter_edges_of(rescaled_subgraph) {
         let eid = usize::from(ei) as i64;
         if p.is_paired() {
             // set energies from inner_t on-shell
@@ -354,7 +462,7 @@ pub(crate) fn t_tilde<S: super::ForestNodeLike>(
             let e_mass = e.data.mass_atom();
             atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
                 ei,
-                current.lmb_id(),
+                lmb_id,
                 e_mass,
                 None,
                 settings.inner_products,
@@ -384,7 +492,7 @@ pub(crate) fn t_tilde<S: super::ForestNodeLike>(
             )
         },
         &reduced,
-        current.lmb(),
+        lmb,
         GS.emr_vec,
         GS.emr_vec,
         &[],
@@ -429,10 +537,18 @@ pub(crate) fn start<S: super::ForestNodeLike>(
     current: &S,
     given: &S,
     cff: &Atom,
+    active_subgraph: Option<&SuBitGraph>,
+    lmb: &LoopMomentumBasis,
 ) -> Result<Atom> {
     let graph = ctx.graph;
     let settings = ctx.settings;
     let reduced = current.reduced_subgraph(given);
+    let rescaled_subgraph = active_subgraph.unwrap_or_else(|| current.subgraph());
+    let lmb_id = lmb
+        .loop_edges
+        .first()
+        .copied()
+        .unwrap_or_else(|| current.lmb_id());
     let mut atomarg = cff
         * graph
             .numerator(&reduced, given.subgraph())
@@ -447,7 +563,7 @@ pub(crate) fn start<S: super::ForestNodeLike>(
     // println!("CFF: {}", cff);
 
     // add data for OSE computation and add an explicit sqrt
-    for (p, ei, e) in graph.iter_edges_of(current.subgraph()) {
+    for (p, ei, e) in graph.iter_edges_of(rescaled_subgraph) {
         let eid = usize::from(ei) as i64;
         if p.is_paired() {
             // set energies from inner_t on-shell
@@ -456,7 +572,7 @@ pub(crate) fn start<S: super::ForestNodeLike>(
             let e_mass = e.data.mass_atom();
             atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
                 ei,
-                current.lmb_id(),
+                lmb_id,
                 e_mass,
                 None,
                 settings.inner_products,
@@ -472,10 +588,10 @@ pub(crate) fn start<S: super::ForestNodeLike>(
 
     // split numerator momenta into OSEs and spatial parts
     let mut reps = Vec::new();
-    for (p, eid, e) in graph.iter_edges_of(current.subgraph()) {
+    for (p, eid, e) in graph.iter_edges_of(rescaled_subgraph) {
         if p.is_paired() {
             let e_mass = e.data.mass_atom();
-            let rep = GS.split_mom_pattern(eid, current.lmb_id(), e_mass, settings.inner_products);
+            let rep = GS.split_mom_pattern(eid, lmb_id, e_mass, settings.inner_products);
             debug_tags!(#uv, #local, #momentum, #trace;
                 stage = "local_3d_start_split_mom_pattern",
                 split_rep = %rep,
@@ -499,14 +615,14 @@ fn full<S: super::ForestNodeLike>(
     current: &S,
     given: &S,
 ) -> impl FnMut(&Atom) -> Result<Atom> {
-    Local3DLoopRescaling::FullSubgraph.map(ctx, current, given)
+    Local3DLoopRescaling::FullSubgraph.map(ctx, current, given, None)
 }
 fn reduced<S: super::ForestNodeLike>(
     ctx: &UVCtx<'_>,
     current: &S,
     given: &S,
 ) -> impl FnMut(&Atom) -> Result<Atom> {
-    Local3DLoopRescaling::ReducedSubgraph.map(ctx, current, given)
+    Local3DLoopRescaling::ReducedSubgraph.map(ctx, current, given, None)
 }
 impl Local3DLoopRescaling {
     // #[debug_instrument(
@@ -520,12 +636,14 @@ impl Local3DLoopRescaling {
         current: &S,
         given: &S,
         integrand: &Atom,
+        active_subgraph: Option<&SuBitGraph>,
+        lmb: &LoopMomentumBasis,
     ) -> Result<Atom> {
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
 
         // only apply replacements for edges in the reduced graph
-        let mom_reps = graph.uv_spatial_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]);
+        let mom_reps = graph.uv_spatial_wrapped_replacement(&reduced, lmb, &[W_.x___]);
         for m in &mom_reps {
             debug_tags!(#uv,#momentum,#trace;mom_rep=%m,"Mom rep");
         }
@@ -542,10 +660,9 @@ impl Local3DLoopRescaling {
             "Local 3D T size checkpoint"
         );
 
-        // Rescale the loop momenta in the current subgraph, including
-        // previously expanded cycles. Nested integrated loop variables are
-        // absent after integration, so these replacements are harmless no-ops.
-        for e in &current.lmb().loop_edges {
+        // Rescale every loop momentum still active in this sector, including
+        // cycles expanded by earlier local operations.
+        for e in &lmb.loop_edges {
             // println!("Rescale {}", e);
             atomarg = atomarg
                 .replace(GS.emr_vec_index(*e, W_.x___))
@@ -558,7 +675,7 @@ impl Local3DLoopRescaling {
         );
 
         // (re-)expand OSEs from the subgraph only
-        for eid in current.lmb().loop_edges.iter() {
+        for eid in lmb.loop_edges.iter() {
             let eid = eid.0 as i64;
             // rescale the whole OSE so that the function itself has no poles during the expansion
             atomarg = atomarg.replace(function!(GS.ose, eid, W_.prop_)).with(
@@ -579,12 +696,12 @@ impl Local3DLoopRescaling {
             "Local 3D T size checkpoint"
         );
 
-        atomarg = (atomarg * self.measure_scaling(ctx, current, given))
+        atomarg = (atomarg * self.measure_scaling(ctx, current, given, active_subgraph))
             .replace(GS.rescale)
             .with(Atom::num(1) / GS.rescale);
         debug_tags!(#generation, #profile, #uv, #local, #summary;
             stage = "local_3d_t_before_series",
-            loop_edges = ?current.lmb().loop_edges,
+            loop_edges = ?lmb.loop_edges,
             byte_size = atomarg.as_view().get_byte_size(),
             "Local 3D T size checkpoint"
         );
@@ -617,34 +734,71 @@ impl Local3DLoopRescaling {
         ctx: &UVCtx<'_>,
         current: &S,
         given: &S,
+        active_subgraph: Option<SuBitGraph>,
     ) -> impl FnMut(&Atom) -> Result<Atom> {
-        move |integrand| match current.renormalization_scheme() {
-            ApproximationType::MUV | ApproximationType::PolePart => {
-                let started = start(ctx, current, given, integrand)?;
-                crate::debug_tags!(#generation, #profile, #uv, #local, #summary;
-                    stage = "local_3d_kernel_after_start",
-                    input_byte_size = integrand.as_view().get_byte_size(),
-                    output_byte_size = started.as_view().get_byte_size(),
-                    "Local 3D kernel size checkpoint"
-                );
-                self.t(ctx, current, given, &started)
-            }
-            ApproximationType::IR => {
-                Ok(
-                    self.t(ctx, current, given, &start(ctx, current, given, integrand)?)?
-                        + t_tilde(ctx, current, given, integrand)?
-                        - self.t(
+        move |integrand| {
+            let active_lmb = active_subgraph
+                .as_ref()
+                .filter(|active| *active != current.subgraph())
+                .map(|active| {
+                    ctx.graph.try_compatible_sub_lmb(
+                        active,
+                        ctx.graph.dummy_less_full_crown(active),
+                        current.lmb(),
+                    )
+                })
+                .transpose()?;
+            let lmb = active_lmb.as_ref().unwrap_or_else(|| current.lmb());
+
+            match current.renormalization_scheme() {
+                ApproximationType::MUV | ApproximationType::PolePart => {
+                    let started = start(
+                        ctx,
+                        current,
+                        given,
+                        integrand,
+                        active_subgraph.as_ref(),
+                        lmb,
+                    )?;
+                    crate::debug_tags!(#generation, #profile, #uv, #local, #summary;
+                        stage = "local_3d_kernel_after_start",
+                        input_byte_size = integrand.as_view().get_byte_size(),
+                        output_byte_size = started.as_view().get_byte_size(),
+                        "Local 3D kernel size checkpoint"
+                    );
+                    self.t(ctx, current, given, &started, active_subgraph.as_ref(), lmb)
+                }
+                ApproximationType::IR => {
+                    let t_tilde = t_tilde(
+                        ctx,
+                        current,
+                        given,
+                        integrand,
+                        active_subgraph.as_ref(),
+                        lmb,
+                    )?;
+                    Ok(self.t(
+                        ctx,
+                        current,
+                        given,
+                        &start(
                             ctx,
                             current,
                             given,
-                            &t_tilde(ctx, current, given, integrand)?,
+                            integrand,
+                            active_subgraph.as_ref(),
+                            lmb,
                         )?,
-                )
-            }
-            ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
-            ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
-            ApproximationType::Unsubtracted => {
-                panic!("should have been kept out of the wood");
+                        active_subgraph.as_ref(),
+                        lmb,
+                    )? + &t_tilde
+                        - self.t(ctx, current, given, &t_tilde, active_subgraph.as_ref(), lmb)?)
+                }
+                ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
+                ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
+                ApproximationType::Unsubtracted => {
+                    panic!("should have been kept out of the wood");
+                }
             }
         }
     }
@@ -654,12 +808,16 @@ impl Local3DLoopRescaling {
         ctx: &UVCtx<'_>,
         current: &S,
         given: &S,
+        active_subgraph: Option<&SuBitGraph>,
     ) -> Atom {
-        let n_rescaled_loops = match self {
-            Local3DLoopRescaling::FullSubgraph => ctx.graph.n_loops(current.subgraph()),
-            Local3DLoopRescaling::ReducedSubgraph => {
-                ctx.graph.n_loops(current.subgraph()) - ctx.graph.n_loops(given.subgraph())
-            }
+        let n_rescaled_loops = match active_subgraph {
+            Some(active_subgraph) => ctx.graph.n_loops(active_subgraph),
+            None => match self {
+                Local3DLoopRescaling::FullSubgraph => ctx.graph.n_loops(current.subgraph()),
+                Local3DLoopRescaling::ReducedSubgraph => {
+                    ctx.graph.n_loops(current.subgraph()) - ctx.graph.n_loops(given.subgraph())
+                }
+            },
         };
 
         Atom::var(GS.rescale).pow(3 * n_rescaled_loops as i64)

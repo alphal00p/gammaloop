@@ -329,9 +329,10 @@ impl Approximation {
         );
 
         let old_full = dependent.recursion_input_4d(graph)?;
-        let local = local_4d::uv_limit(&old_full, &ctx, self, dependent)?;
+        let local = local_4d::uv_limit(&old_full, &ctx, self, dependent, self, dependent)?;
         let integrated = if settings.generate_integrated {
-            Integrated::new(vakint.0, vakint.1).run(&local, &ctx, self, dependent)?
+            Integrated::new(vakint.0, vakint.1)
+                .run(&local, &ctx, self, dependent, self, dependent)?
         } else {
             IntegratedCts::root()
         };
@@ -361,6 +362,8 @@ impl Approximation {
         let local_3d = Local3DApproximation::new(localizer, graph, settings).run(
             parent_local,
             parent_integrated,
+            self,
+            dependent,
             self,
             dependent,
         )?;

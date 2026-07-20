@@ -60,6 +60,18 @@ pub struct IntegratedCts {
 }
 
 impl IntegratedCts {
+    pub(crate) fn factorized_product(&self, other: &Self, depth: usize) -> Result<Self> {
+        let pole = truncate(&self.expansion, false) * truncate(&other.expansion, false);
+        let nonnegative = truncate(&self.expansion, true) * truncate(&other.expansion, true);
+
+        Ok(Self {
+            // `finite_counterterm_atom` negates the nonnegative projection, so
+            // storing its negative gives the positive product of two counterterms.
+            expansion: series(&(pole - nonnegative), depth)?,
+            scale_power: self.scale_power + other.scale_power,
+        })
+    }
+
     fn projected_atom(&self, finite: bool) -> Atom {
         truncate(&self.expansion, finite)
             * Atom::var(GS.integrated_loop_scale).pow(self.scale_power)
@@ -175,12 +187,14 @@ impl Integrated<'_> {
         }
     }
 
-    pub fn run<S: super::ForestNodeLike>(
+    pub fn run<S: super::ForestNodeLike, M: super::ForestNodeLike>(
         &self,
         integrand: &Local4dCts,
         ctx: &UVCtx<'_>,
         current: &S,
         given: &S,
+        marker_current: &M,
+        marker_given: &M,
     ) -> Result<IntegratedCts> {
         let graph = ctx.graph;
 
@@ -197,23 +211,23 @@ impl Integrated<'_> {
                 let marker = UvMarker::new(ctx.settings);
                 let integrated = marker.apply(
                     UvOperation::Integrate,
-                    current.subgraph(),
-                    given.subgraph(),
+                    marker_current.subgraph(),
+                    marker_given.subgraph(),
                     &self.integrate(&simplified, ctx, current, given)?,
                 );
                 let expanded = series(&integrated, n_loops + 1)?.map_coeff(|coefficient| {
                     marker.apply(
                         UvOperation::Series,
-                        current.subgraph(),
-                        given.subgraph(),
+                        marker_current.subgraph(),
+                        marker_given.subgraph(),
                         coefficient,
                     )
                 });
                 let expansion = expanded.map_coeff(|coefficient| {
                     marker.apply(
                         UvOperation::Truncate,
-                        current.subgraph(),
-                        given.subgraph(),
+                        marker_current.subgraph(),
+                        marker_given.subgraph(),
                         coefficient,
                     )
                 });
