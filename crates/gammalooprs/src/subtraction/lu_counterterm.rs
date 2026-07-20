@@ -1981,9 +1981,15 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
 
         debug!("initial radius guess: {:?}", radius_guess);
 
-        // A few ULPs of residual are expected when Newton stagnates at the
-        // representable value nearest the root.
-        let tolerance = raw_radius_guess.from_i64(8);
+        // Some residual is expected when Newton stagnates at the representable value nearest the
+        // root. Scale the configured tolerance with the active precision in the shared solver.
+        let tolerance = F::from_f64(
+            self.overlap_builder
+                .counterterm_builder
+                .settings
+                .subtraction
+                .radial_root_residual_tolerance,
+        );
         let solution = match safeguarded_newton_iteration_and_derivative(
             &zero,
             &radius_guess,

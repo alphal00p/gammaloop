@@ -751,7 +751,13 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
         if radius_guess.is_nan() || radius_guess.is_infinite() || radius_guess <= zero {
             radius_guess = self.overlap_builder.counterterm_builder.e_cm.clone();
         }
-        let tolerance = raw_radius_guess.from_i64(8);
+        let tolerance = F::from_f64(
+            self.overlap_builder
+                .counterterm_builder
+                .settings
+                .subtraction
+                .radial_root_residual_tolerance,
+        );
         let solution = match safeguarded_newton_iteration_and_derivative(
             &zero,
             &radius_guess,

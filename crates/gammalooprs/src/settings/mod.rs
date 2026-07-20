@@ -255,6 +255,28 @@ mod tests {
     }
 
     #[test]
+    fn radial_root_residual_tolerance_defaults_and_overrides() {
+        assert_eq!(
+            SubtractionSettings::default().radial_root_residual_tolerance,
+            1000.0,
+        );
+
+        let runtime: RuntimeSettings =
+            toml::from_str("[subtraction]\nradial_root_residual_tolerance = 64.0\n").unwrap();
+        assert_eq!(runtime.subtraction.radial_root_residual_tolerance, 64.0);
+
+        for invalid in ["-1.0", "nan", "inf", "-inf"] {
+            let runtime = toml::from_str::<RuntimeSettings>(&format!(
+                "[subtraction]\nradial_root_residual_tolerance = {invalid}\n"
+            ));
+            assert!(
+                runtime.is_err(),
+                "radial-root residual tolerance {invalid} must be rejected"
+            );
+        }
+    }
+
+    #[test]
     fn evaluator_settings_partial_tables_use_evaluator_defaults() {
         use crate::processes::EvaluatorSettings;
 
