@@ -429,11 +429,15 @@
       workspaceSourcePackageNamesFor = package: dependencies:
         sortedUnique ([package] ++ dependencies);
 
-      workspaceNormalSourcePackageNamesFor = package:
-        workspaceSourcePackageNamesFor package (workspaceResolvedDependencyNamesFor package);
+      workspaceNormalSourcePackageNamesFor =
+        workspaceDependencyClosureFor workspaceResolvedDependencyNamesFor;
 
       workspaceTestSourcePackageNamesFor = package:
-        workspaceSourcePackageNamesFor package (workspaceResolvedTestDependencyNamesFor package);
+        sortedUnique (
+          lib.concatMap workspaceNormalSourcePackageNamesFor (
+            workspaceSourcePackageNamesFor package (workspaceResolvedTestDependencyNamesFor package)
+          )
+        );
 
       workspaceDirectNormalSourcePackageNamesFor = package:
         workspaceSourcePackageNamesFor package (workspaceDependencyNamesFor package);
@@ -1794,7 +1798,7 @@
             dependencySourcePackages =
               lib.filter (sourcePackage: sourcePackage != package) (workspaceNormalSourcePackageNamesFor package);
             preservedWorkspaceArtifactPackages =
-              lib.filter workspacePackageIsProcMacro (workspaceResolvedDependencyNamesFor package);
+              lib.filter workspacePackageIsProcMacro dependencySourcePackages;
           in
             buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
               // {
@@ -1828,8 +1832,7 @@
               then workspaceHackBuildArtifacts
               else self.${dependency};
             sourcePackages = workspaceNormalSourcePackageNamesFor package;
-            preservedWorkspaceArtifactPackages =
-              sortedUnique ([package] ++ workspaceResolvedDependencyNamesFor package);
+            preservedWorkspaceArtifactPackages = sourcePackages;
           in
             buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
               // {
@@ -2197,10 +2200,7 @@
           package: builtins.elem "python-api-tests" (nextestTargetExtraFeaturesFor target package)
         ) target.packages;
       nextestSourcePackagesFor = target:
-        sortedUnique (
-          target.packages
-          ++ lib.concatMap workspaceResolvedTestDependencyNamesFor target.packages
-        );
+        sortedUnique (lib.concatMap workspaceTestSourcePackageNamesFor target.packages);
       nextestSrcFor = target: let
         sourcePackages = nextestSourcePackagesFor target;
       in
