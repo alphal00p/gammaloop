@@ -1458,7 +1458,7 @@
           local names="$tmp/$(basename "$output").names"
           : > "$names"
           while IFS= read -r package; do
-            if guppy_names "$package" all "$include_dev" | grep -Eq '^(symbolica|numerica|graphica)$'; then
+            if guppy_names "$package" all "$include_dev" | grep -E '^(symbolica|numerica|graphica)$' >/dev/null; then
               printf '%s\n' "$package" >> "$names"
             fi
           done < "$tmp/workspace-packages"
