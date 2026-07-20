@@ -1456,8 +1456,7 @@ mod tests {
             .local_leaf_operations(dependent_disconnected)
             .first()
             .expect("dependent disconnected operation has a leaf")
-            .frontier
-            .clone();
+            .frontier;
         assert_eq!(
             forests.graph[non_root_frontier]
                 .covers()
