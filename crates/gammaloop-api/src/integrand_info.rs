@@ -3,7 +3,8 @@ use std::fmt;
 use color_eyre::Result;
 use eyre::{eyre, Context};
 use gammalooprs::{
-    graph::Graph,
+    cff::esurface::EsurfaceExistenceStatus,
+    graph::{FeynmanGraph, Graph},
     integrands::process::{ActiveF64Backend, LmbMultiChannelingSetup, ParamBuilder},
     model::Model,
     processes::{
@@ -11,6 +12,8 @@ use gammalooprs::{
         ThresholdCountertermAssociation, ThresholdCountertermStatus,
     },
     settings::{global::FrozenCompilationMode, runtime::ParameterizationSettings, RuntimeSettings},
+    utils::F,
+    DependentMomentaConstructor,
 };
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use schemars::JsonSchema;
@@ -157,10 +160,30 @@ pub struct IntegrandActiveThresholdCutInfo {
     pub can_become_pinched: bool,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum IntegrandEsurfaceClassification {
+    NonExisting,
+    Pinched,
+    Existing,
+}
+
+impl IntegrandEsurfaceClassification {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NonExisting => "non_existing",
+            Self::Pinched => "pinched",
+            Self::Existing => "existing",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct IntegrandThresholdEsurfaceInfo {
     pub esurface_id: usize,
+    pub representative_graph_id: usize,
     pub edge_ids: Vec<usize>,
+    pub classification: Option<IntegrandEsurfaceClassification>,
     pub active_cuts: Vec<IntegrandActiveThresholdCutInfo>,
 }
 
@@ -281,6 +304,10 @@ pub(crate) fn collect_integrand_info(
                     process.definition.folder_name
                 )
             })?;
+            let model = state.resolve_model_for_integrand(
+                process.definition.process_id,
+                &resolved.canonical_name,
+            )?;
             Ok(IntegrandInfo {
                 process_id: process.definition.process_id,
                 process_name: process.definition.folder_name.clone(),
@@ -291,7 +318,7 @@ pub(crate) fn collect_integrand_info(
                 graph_count: amplitude.graphs.len(),
                 graph_group_count: amplitude.graph_group_structure.len(),
                 record_size_bytes: integrand_record_size_from_amplitude(amplitude)?,
-                graph_groups: amplitude_graph_groups(integrand)?,
+                graph_groups: amplitude_graph_groups(integrand, &model)?,
             })
         }
         (
@@ -400,12 +427,29 @@ fn lmb_channel_ids(
 
 fn amplitude_graph_groups(
     integrand: &gammalooprs::integrands::process::amplitude::AmplitudeIntegrand,
+    model: &Model,
 ) -> Result<Vec<IntegrandGraphGroupInfo>> {
     let parameterization_settings = integrand
         .settings
         .sampling
         .get_parameterization_settings()
         .unwrap_or_default();
+    let external_momenta = integrand
+        .settings
+        .kinematics
+        .externals
+        .get_dependent_externals::<f64>(DependentMomentaConstructor::Amplitude(
+            &integrand.data.external_signature,
+        ))
+        .context("While constructing amplitude external momenta for integrand information")?;
+    let e_cm = F(integrand.settings.kinematics.e_cm);
+    let existence_tolerance = F(integrand.settings.subtraction.esurface_existence_threshold);
+    let real_mass_vectors = integrand
+        .data
+        .graph_terms
+        .iter()
+        .map(|graph_term| graph_term.graph.get_real_mass_vector::<f64>(model))
+        .collect::<Vec<_>>();
     integrand
         .data
         .graph_group_structure
@@ -429,28 +473,68 @@ fn amplitude_graph_groups(
                 .esurface_map
                 .iter_enumerated()
                 .filter_map(|(group_esurface_id, raised_esurface_map)| {
-                    let (graph_term, raised_esurface_id) = raised_esurface_map
+                    let (representative_graph_id, raised_esurface_id) = raised_esurface_map
                         .iter_enumerated()
                         .filter_map(|(graph_group_position, raised_esurface_id)| {
                             raised_esurface_id.map(|raised_esurface_id| {
                                 let graph_id = group[graph_group_position];
-                                (&integrand.data.graph_terms[graph_id], raised_esurface_id)
+                                (graph_id, raised_esurface_id)
                             })
                         })
-                        .find(|(graph_term, raised_esurface_id)| {
-                            graph_term.threshold_counterterm.generated_mask[*raised_esurface_id]
+                        .find(|(graph_id, raised_esurface_id)| {
+                            integrand.data.graph_terms[*graph_id]
+                                .threshold_counterterm
+                                .generated_mask[*raised_esurface_id]
                         })?;
+                    let graph_term = &integrand.data.graph_terms[representative_graph_id];
                     let local_esurface_id =
                         graph_term.threshold_counterterm.raised_data.raised_groups
                             [raised_esurface_id]
                             .esurface_ids[0];
 
+                    let mut classification = IntegrandEsurfaceClassification::NonExisting;
+                    for (graph_group_position, raised_esurface_id) in raised_esurface_map
+                        .iter_enumerated()
+                        .filter_map(|(graph_group_position, raised_esurface_id)| {
+                            raised_esurface_id.map(|raised_esurface_id| {
+                                (graph_group_position, raised_esurface_id)
+                            })
+                        })
+                    {
+                        let graph_id = group[graph_group_position];
+                        let candidate = &integrand.data.graph_terms[graph_id];
+                        let candidate_esurface_id =
+                            candidate.threshold_counterterm.raised_data.raised_groups
+                                [raised_esurface_id]
+                                .esurface_ids[0];
+                        let candidate_status = candidate.esurfaces[candidate_esurface_id]
+                            .existence_status(
+                                &external_momenta,
+                                &candidate.graph.loop_momentum_basis,
+                                &real_mass_vectors[graph_id],
+                                &e_cm,
+                                &existence_tolerance,
+                            );
+                        match candidate_status {
+                            EsurfaceExistenceStatus::Existing => {
+                                classification = IntegrandEsurfaceClassification::Existing;
+                                break;
+                            }
+                            EsurfaceExistenceStatus::Pinched => {
+                                classification = IntegrandEsurfaceClassification::Pinched;
+                            }
+                            EsurfaceExistenceStatus::NonExisting => {}
+                        }
+                    }
+
                     Some(IntegrandThresholdEsurfaceInfo {
                         esurface_id: group_esurface_id.0,
+                        representative_graph_id,
                         edge_ids: threshold_esurface_edge_ids(
                             &graph_term.esurfaces,
                             local_esurface_id.0,
                         ),
+                        classification: Some(classification),
                         active_cuts: Vec::new(),
                     })
                 })
@@ -490,8 +574,15 @@ fn amplitude_graph_groups(
                         basis_id: usize::from(basis_id),
                         channel_id: channel_ids[usize::from(basis_id)],
                         edge_ids: lmb.loop_edges.iter().map(|edge_id| edge_id.0).collect(),
-                        matches_generation_basis: lmb.loop_edges
-                            == master_graph.graph.loop_momentum_basis.loop_edges,
+                        matches_generation_basis: lmb.loop_edges.len()
+                            == master_graph.graph.loop_momentum_basis.loop_edges.len()
+                            && lmb.loop_edges.iter().all(|edge_id| {
+                                master_graph
+                                    .graph
+                                    .loop_momentum_basis
+                                    .loop_edges
+                                    .contains(edge_id)
+                            }),
                     })
                     .collect(),
                 threshold_esurface_ids,
@@ -566,10 +657,12 @@ fn cross_section_graph_groups(
 
                     IntegrandThresholdEsurfaceInfo {
                         esurface_id,
+                        representative_graph_id: master_graph_id,
                         edge_ids: threshold_esurface_edge_ids(
                             &master_graph.graph.surface_cache.esurface_cache,
                             esurface_id,
                         ),
+                        classification: None,
                         active_cuts,
                     }
                 })
@@ -606,8 +699,15 @@ fn cross_section_graph_groups(
                         basis_id: usize::from(basis_id),
                         channel_id: channel_ids[usize::from(basis_id)],
                         edge_ids: lmb.loop_edges.iter().map(|edge_id| edge_id.0).collect(),
-                        matches_generation_basis: lmb.loop_edges
-                            == master_graph.graph.loop_momentum_basis.loop_edges,
+                        matches_generation_basis: lmb.loop_edges.len()
+                            == master_graph.graph.loop_momentum_basis.loop_edges.len()
+                            && lmb.loop_edges.iter().all(|edge_id| {
+                                master_graph
+                                    .graph
+                                    .loop_momentum_basis
+                                    .loop_edges
+                                    .contains(edge_id)
+                            }),
                     })
                     .collect(),
                 threshold_esurface_ids,

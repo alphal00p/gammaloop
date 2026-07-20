@@ -6,7 +6,7 @@ use std::{
 use color_eyre::Result;
 use gammaloop_api::{
     commands::evaluate_samples::{EvaluateSamples, EvaluateSamplesPrecise},
-    integrand_info::{IntegrandKind, IntegrandThresholdStatus},
+    integrand_info::{IntegrandEsurfaceClassification, IntegrandKind, IntegrandThresholdStatus},
 };
 use gammaloop_integration_tests::{
     CLIState, clean_test, default_momentum_space_point, default_xspace_point, get_test_cli,
@@ -356,6 +356,12 @@ fn lu_rust_get_integrand_info_reports_groups_orientations_lmbs_and_cuts() -> Res
     assert!(info.record_size_bytes > 0);
 
     for group in &info.graph_groups {
+        let master_graph_id = group
+            .graphs
+            .iter()
+            .find(|graph| graph.is_master)
+            .expect("expected one cross-section master graph")
+            .graph_id;
         assert_eq!(
             group.graphs.iter().filter(|graph| graph.is_master).count(),
             1
@@ -426,6 +432,8 @@ fn lu_rust_get_integrand_info_reports_groups_orientations_lmbs_and_cuts() -> Res
                 .collect::<Vec<_>>()
         );
         for threshold in &group.threshold_esurfaces {
+            assert_eq!(threshold.representative_graph_id, master_graph_id);
+            assert_eq!(threshold.classification, None);
             for active_cut in &threshold.active_cuts {
                 let cut = &group.cuts[active_cut.cut_id];
                 let matching_statuses = cut
@@ -1305,6 +1313,33 @@ fn amplitude_group_members_resolve_lmb_overrides_through_the_master() -> Result<
         .iter()
         .find(|group| group.graphs.len() > 1 && group.loop_momentum_bases.len() > 1)
         .expect("expected a multi-member amplitude group with multiple generated LMBs");
+    assert_eq!(
+        group
+            .loop_momentum_bases
+            .iter()
+            .filter(|basis| basis.matches_generation_basis)
+            .count(),
+        1,
+        "exactly one generated LMB must be identified independent of loop-edge ordering"
+    );
+    for threshold in &group.threshold_esurfaces {
+        assert!(
+            group
+                .graphs
+                .iter()
+                .any(|graph| graph.graph_id == threshold.representative_graph_id),
+            "the displayed E-surface representative must belong to its graph group"
+        );
+        assert!(matches!(
+            threshold.classification,
+            Some(
+                IntegrandEsurfaceClassification::NonExisting
+                    | IntegrandEsurfaceClassification::Pinched
+                    | IntegrandEsurfaceClassification::Existing
+            )
+        ));
+        assert!(threshold.active_cuts.is_empty());
+    }
     let master_name = group
         .graphs
         .iter()

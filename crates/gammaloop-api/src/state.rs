@@ -3031,8 +3031,8 @@ impl State {
     }
 
     pub fn new(log_dir: impl AsRef<Path>, log_file_name: Option<String>) -> Self {
-        let _ = initialise();
         super::tracing::init_tracing(log_dir.as_ref().join("logs"), log_file_name);
+        let _ = initialise();
 
         Self {
             model: Model::default(),
@@ -3088,6 +3088,10 @@ impl State {
         // let root_folder = root_folder.join("gammaloop_state");
         let manifest = load_state_manifest(&save_path)?;
         run_state_migration_checks(&manifest, &save_path)?;
+        // Install GammaLoop's subscriber before importing Symbolica state. Symbolica warnings
+        // initialize its fallback subscriber on first use, which would otherwise claim the global
+        // tracing dispatch and escape ANSI styling in all subsequent GammaLoop output.
+        let mut loaded_state = State::new(&save_path, trace_logs_filename);
         debug!("Loading state manifest version {}", manifest.version);
 
         let mut model = if let Some(model_path) = &model_path {
@@ -3113,28 +3117,26 @@ impl State {
             InputParamCard::default_from_model(&model)
         };
 
-        let state = symbolica::state::State::import(
+        let symbolica_state = symbolica::state::State::import(
             &mut fs::File::open(save_path.join("symbolica_state.bin"))
                 .context("Trying to open symbolica state binary")?,
             None,
         )?;
 
         let context: GammaLoopContextContainer<'_> = GammaLoopContextContainer {
-            state_map: &state,
+            state_map: &symbolica_state,
             model: &model,
         };
 
         let process_list =
             ProcessList::load(&save_path, context).context("Trying to load processList")?;
 
-        let mut state = State::new(&save_path, trace_logs_filename);
-
-        state.process_list = process_list;
-        state.model = model;
-        state.model_parameters = input_param_card;
-        state.generation_summaries =
-            load_integrand_generation_summaries(&save_path, &state.process_list)?;
-        Ok(state)
+        loaded_state.process_list = process_list;
+        loaded_state.model = model;
+        loaded_state.model_parameters = input_param_card;
+        loaded_state.generation_summaries =
+            load_integrand_generation_summaries(&save_path, &loaded_state.process_list)?;
+        Ok(loaded_state)
     }
 
     pub fn activate_loaded_integrand_backends(

@@ -73,7 +73,23 @@ pub(crate) enum EsurfaceExistence<T: FloatLike> {
     },
 }
 
+/// Pointwise existence classification exposed without the internal diagnostic margin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EsurfaceExistenceStatus {
+    NonExisting,
+    Pinched,
+    Existing,
+}
+
 impl<T: FloatLike> EsurfaceExistence<T> {
+    fn status(&self) -> EsurfaceExistenceStatus {
+        match self {
+            Self::NonExisting { .. } => EsurfaceExistenceStatus::NonExisting,
+            Self::Pinched { .. } => EsurfaceExistenceStatus::Pinched,
+            Self::Existing { .. } => EsurfaceExistenceStatus::Existing,
+        }
+    }
+
     pub(crate) fn is_existing(&self) -> bool {
         matches!(self, Self::Existing { .. })
     }
@@ -133,23 +149,68 @@ impl Esurface {
         })
     }
 
-    pub(crate) fn contains_all_with_minus_sign(&self, edges: &[EdgeIndex]) -> bool {
-        edges.iter().all(|edge| {
+    pub(crate) fn external_shift_is_strictly_negative_for_positive_energies(
+        &self,
+        incoming_edges: &[EdgeIndex],
+        outgoing_edges: &[EdgeIndex],
+    ) -> bool {
+        if incoming_edges.is_empty()
+            || outgoing_edges.is_empty()
+            || incoming_edges
+                .iter()
+                .any(|edge| outgoing_edges.contains(edge))
+            || self
+                .external_shift
+                .iter()
+                .any(|(edge, _)| !incoming_edges.contains(edge) && !outgoing_edges.contains(edge))
+        {
+            return false;
+        }
+
+        let coefficient = |edge: &EdgeIndex| {
             self.external_shift
                 .iter()
-                .any(|(index, sign)| *index == *edge && *sign == -1)
-        })
+                .filter(|(shift_edge, _)| shift_edge == edge)
+                .map(|(_, coefficient)| i128::from(*coefficient))
+                .sum::<i128>()
+        };
+
+        // Energy conservation makes external-energy coefficient vectors `c` and
+        // `c + lambda * sigma` equivalent, where sigma is +1 for incoming and -1
+        // for outgoing momenta. The shift is strictly negative for all positive
+        // external energies if one representative is component-wise non-positive
+        // and not identically zero.
+        let lambda_lower_bound = outgoing_edges
+            .iter()
+            .map(&coefficient)
+            .max()
+            .expect("outgoing external edges were checked to be non-empty");
+        let lambda_upper_bound = incoming_edges
+            .iter()
+            .map(|edge| -coefficient(edge))
+            .min()
+            .expect("incoming external edges were checked to be non-empty");
+
+        if lambda_lower_bound > lambda_upper_bound {
+            return false;
+        }
+
+        let lambda = lambda_lower_bound;
+        let adjusted_coefficients = incoming_edges
+            .iter()
+            .map(|edge| coefficient(edge) + lambda)
+            .chain(outgoing_edges.iter().map(|edge| coefficient(edge) - lambda));
+        let mut has_strictly_negative_coefficient = false;
+        for adjusted_coefficient in adjusted_coefficients {
+            if adjusted_coefficient > 0 {
+                return false;
+            }
+            has_strictly_negative_coefficient |= adjusted_coefficient < 0;
+        }
+
+        has_strictly_negative_coefficient
     }
 
-    pub(crate) fn contains_only_with_minus_sign(&self, edges: &[EdgeIndex]) -> bool {
-        self.external_shift.iter().all(|(index, sign)| {
-            if edges.contains(index) {
-                *sign == -1
-            } else {
-                false
-            }
-        })
-    }
     pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
         self.to_atom_impl(cut_edges, external_energy_atom_from_index)
     }
@@ -497,6 +558,26 @@ impl Esurface {
             e_cm,
             normalized_margin_tolerance,
         )
+    }
+
+    /// Classify a full-space surface while keeping normalized margins and rejection reasons
+    /// internal to the subtraction implementation.
+    pub fn existence_status<T: FloatLike>(
+        &self,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        lmb: &LoopMomentumBasis,
+        real_mass_vector: &EdgeVec<F<T>>,
+        e_cm: &F<T>,
+        normalized_margin_tolerance: &F<T>,
+    ) -> EsurfaceExistenceStatus {
+        self.classify_existence(
+            external_moms,
+            lmb,
+            real_mass_vector,
+            e_cm,
+            normalized_margin_tolerance,
+        )
+        .status()
     }
 
     /// Only compute the shift part, useful for center finding.
@@ -1260,6 +1341,61 @@ mod tests {
                 EsurfaceExistence::Pinched { .. }
             ));
         }
+    }
+
+    #[test]
+    fn positive_external_energy_filter_uses_energy_conservation() {
+        let incoming_edges = (0..4).map(EdgeIndex::from).collect_vec();
+        let outgoing_edges = (4..9).map(EdgeIndex::from).collect_vec();
+        let shift_is_negative = |external_shift: &[(usize, i64)]| {
+            Esurface {
+                energies: vec![],
+                external_shift: external_shift
+                    .iter()
+                    .map(|(edge, coefficient)| (EdgeIndex::from(*edge), *coefficient))
+                    .collect(),
+                vertex_set: VertexSet::dummy(),
+            }
+            .external_shift_is_strictly_negative_for_positive_energies(
+                &incoming_edges,
+                &outgoing_edges,
+            )
+        };
+
+        assert!(
+            shift_is_negative(&[(0, -1), (1, -1)]),
+            "a negative proper subset of incoming energies must be retained"
+        );
+        assert!(
+            shift_is_negative(&[(4, -1)]),
+            "a negative proper subset of outgoing energies must be retained"
+        );
+        assert!(
+            shift_is_negative(&[(0, -1), (1, -1), (2, -1), (3, -1), (4, 1)]),
+            "energy conservation turns minus all incoming plus one outgoing into minus the remaining outgoing energies"
+        );
+        assert!(
+            !shift_is_negative(&[
+                (0, -1),
+                (1, -1),
+                (2, -1),
+                (3, -1),
+                (4, 1),
+                (5, 1),
+                (6, 1),
+                (7, 1),
+                (8, 1),
+            ]),
+            "the energy-conservation identity is zero rather than strictly negative"
+        );
+        assert!(
+            !shift_is_negative(&[(0, -1), (4, 1)]),
+            "a sign-indefinite difference must not be accepted from positivity alone"
+        );
+        assert!(
+            !shift_is_negative(&[(9, -1)]),
+            "a shift outside the external-energy partition must be rejected conservatively"
+        );
     }
 
     #[test]
