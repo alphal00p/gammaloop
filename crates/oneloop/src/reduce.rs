@@ -611,7 +611,9 @@ fn gram_solve(topo: &Topo, rhs: &[Atom]) -> Vec<Atom> {
         .collect();
     // Solve G c = rhs
     let b: Vec<Vec<Atom>> = rhs.iter().map(|x| vec![x.clone()]).collect();
-    let sol = to_matrix(&g).solve(&to_matrix(&b)).unwrap();
+    let sol = to_matrix(&g).solve(&to_matrix(&b)).expect(
+        "singular Gram matrix: external momenta linearly dependent (degenerate kinematics)",
+    );
     (0..n).map(|i| sol[(i as u32, 0)].to_expression()).collect()
 }
 
