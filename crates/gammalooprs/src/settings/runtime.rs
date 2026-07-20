@@ -66,6 +66,14 @@ pub struct SubtractionSettings {
     )]
     #[schemars(range(min = 0.0))]
     pub esurface_existence_threshold: f64,
+    /// Multiplier of `epsilon(T) * E_cm` used as the maximum accepted residual for
+    /// threshold-counterterm radial roots at the active numerical precision `T`.
+    #[serde(
+        deserialize_with = "deserialize_nonnegative_finite_f64",
+        skip_serializing_if = "is_float::<1000>"
+    )]
+    #[schemars(range(min = 0.0))]
+    pub radial_root_residual_tolerance: f64,
     #[serde(skip_serializing_if = "is_false")]
     pub disable_threshold_subtraction: bool,
 }
@@ -77,6 +85,7 @@ impl Default for SubtractionSettings {
             integrated_ct_settings: IntegratedCounterTermSettings::default(),
             overlap_settings: OverlapSettings::default(),
             esurface_existence_threshold: DEFAULT_ESURFACE_EXISTENCE_THRESHOLD,
+            radial_root_residual_tolerance: 1000.0,
             disable_threshold_subtraction: false,
         }
     }
