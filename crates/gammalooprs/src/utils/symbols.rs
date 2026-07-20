@@ -200,8 +200,6 @@ pub struct GammaloopSymbols {
     pub uv_truncate: Symbol,
     /// Marker for the ct term in the UV integrand
     pub ct_marker: Symbol,
-    /// Structured forest-DOT approximation record.
-    pub t_op: Symbol,
 
     pub nc2_1: Symbol,
     pub expr: Symbol,
@@ -750,32 +748,6 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                     out
                 }
             })
-        }
-    ),
-    t_op: symbol!(
-        "T",
-        print = |a, opt, _state| {
-            let mut out = match opt.typst_mode()? {
-                TypstMode::Math | TypstMode::Markup => "#T".to_string(),
-                TypstMode::Code => "T".to_string(),
-            };
-            let mut opt = opt.clone();
-            opt.set_typst_mode(TypstMode::Code);
-            if let AtomView::Fun(f) = a {
-                out.push('(');
-                let mut first = true;
-                for arg in f.iter() {
-                    if first {
-                        first = false;
-                    } else {
-                        out.push(',');
-                    }
-                    arg.format(&mut out, &opt, PrintState::new()).ok()?;
-                }
-                out.push(')');
-            }
-
-            Some(out)
         }
     ),
     is_function: symbol!("is_function"),
