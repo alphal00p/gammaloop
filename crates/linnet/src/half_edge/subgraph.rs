@@ -472,7 +472,7 @@ pub trait SubSetLike<ID = Hedge>:
     #[cfg(feature = "symbolica")]
     fn symbol(&self) -> symbolica::atom::Symbol {
         use symbolica::{
-            atom::{AtomCore, AtomView, UserData},
+            atom::{AtomCore, AtomView},
             get_symbol,
             printer::PrintState,
             symbol,
@@ -485,7 +485,6 @@ pub trait SubSetLike<ID = Hedge>:
         get_symbol!(&name).unwrap_or_else(|| {
             symbol!(
                 &name,
-                data = UserData::String(label.clone()),
                 print = move |a, opt, _state| {
                     let mut out = match opt.typst_mode()? {
                         TypstMode::Math | TypstMode::Markup => "#S".to_string(),
