@@ -4343,7 +4343,10 @@ impl ProcessDefinition {
                     .expand()
                     .is_zero()
                 {
-                    println!("{combined_overall_factor}");
+                    debug!(
+                        combined_overall_factor = %combined_overall_factor,
+                        "Numerator-aware grouping produced an exact cancellation"
+                    );
                     n_cancellations += 1;
                 } else {
                     bare_graph_representative.overall_factor = combined_overall_factor;

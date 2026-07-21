@@ -40,7 +40,7 @@ use gammalooprs::{
     is_interrupt_requested,
     model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
     processes::{
-        merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
+        begin_phase, merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
         GenerationProcessKind, GenerationProgressMode, GenerationProgressModeGuard,
         GenerationProgressObserver, GenerationProgressObserverGuard, GenerationProgressPhase,
         GraphGenerationStats, GraphGroupSelectionMode, GraphGroupSelectionPlan,
@@ -405,15 +405,19 @@ impl AggregateGenerationProgressReporter {
             None => "gen",
         };
         let last_graph = state.last_graph.as_deref().unwrap_or("-");
-        let cut_context = match (state.phase, state.total_cuts) {
-            (Some(GenerationProgressPhase::GraphPreprocessing), _) => format!(
+        let cut_context = match (state.phase, state.kind, state.total_cuts) {
+            (
+                Some(GenerationProgressPhase::GraphPreprocessing),
+                Some(GenerationProcessKind::Amplitude),
+                _,
+            ) => None,
+            (Some(GenerationProgressPhase::GraphPreprocessing), _, _) => Some(format!(
                 "{:>4}/{:<4}",
                 state.discovered_valid_cuts, state.discovered_st_cuts
-            ),
-            (_, Some(total_cuts)) => format!("{:>4}/{:<4}", state.done_cuts, total_cuts),
-            _ => format!("{:>4}/{:<4}", "-", "-"),
-        }
-        .green();
+            )),
+            (_, _, Some(total_cuts)) => Some(format!("{:>4}/{:<4}", state.done_cuts, total_cuts)),
+            _ => Some(format!("{:>4}/{:<4}", "-", "-")),
+        };
         let phase = Self::fixed_field(phase, 7).bold().blue();
         let kind = Self::fixed_field(kind, 3).cyan();
         let identifier = if state.process.is_empty() {
@@ -432,11 +436,13 @@ impl AggregateGenerationProgressReporter {
         );
         let ram = format!("{current_ram}/{peak_ram}").yellow();
         let phase_detail = if state.phase == Some(GenerationProgressPhase::GraphPreprocessing) {
-            format!(
-                "{} {}",
-                "step".bold().blue(),
-                "cuts + CFFs + LMBs + integrands + threshold CTs".cyan(),
-            )
+            let steps = match state.kind {
+                Some(GenerationProcessKind::Amplitude) => {
+                    "CFFs + LMBs + integrands + threshold CTs + tropical samplers"
+                }
+                _ => "cuts + CFFs + LMBs + integrands + threshold CTs",
+            };
+            format!("{} {}", "step".bold().blue(), steps.cyan())
         } else {
             let total_time = state.stats.total_time;
             let expression_share =
@@ -460,21 +466,17 @@ impl AggregateGenerationProgressReporter {
                 compile_share.yellow(),
             )
         };
-        self.progress_span.pb_set_message(&format!(
-            "{} {} {} | {} {} | {} {} | {} {} | {} {} | {}",
-            phase,
-            kind,
-            identifier,
-            "g".bold().blue(),
-            graph_ratio,
-            "last".bold().blue(),
-            last_graph,
-            "cut".bold().blue(),
-            cut_context,
-            "ram".bold().blue(),
-            ram,
-            phase_detail,
-        ));
+        let mut sections = vec![
+            format!("{} {} {}", phase, kind, identifier),
+            format!("{} {}", "g".bold().blue(), graph_ratio),
+            format!("{} {}", "last".bold().blue(), last_graph),
+        ];
+        if let Some(cut_context) = cut_context {
+            sections.push(format!("{} {}", "cut".bold().blue(), cut_context.green()));
+        }
+        sections.push(format!("{} {}", "ram".bold().blue(), ram));
+        sections.push(phase_detail);
+        self.progress_span.pb_set_message(&sections.join(" | "));
         self.progress_span.pb_tick();
     }
 }
@@ -2634,6 +2636,14 @@ impl State {
                 match &mut p.collection {
                     ProcessCollection::Amplitudes(a) => {
                         if let Some(a) = a.get_mut(name) {
+                            begin_phase(
+                                GenerationProgressPhase::GraphPreprocessing,
+                                GenerationProcessKind::Amplitude,
+                                &process_name,
+                                &a.name,
+                                a.graphs.len(),
+                                None,
+                            );
                             merge_generated_graph_reports(
                                 &mut reports,
                                 Self::attach_process_id_to_named_reports(
@@ -3482,6 +3492,65 @@ mod tests {
         assert_eq!(state.done_graphs, 2);
         assert_eq!(state.stats.total_time, Duration::from_secs(12));
         assert_eq!(state.stats.evaluator_compile_time, Duration::from_secs(2));
+    }
+
+    #[test]
+    fn aggregate_generation_progress_tracks_amplitude_preprocessing() {
+        let reporter = AggregateGenerationProgressReporter::new_hidden(
+            Arc::new(AtomicU64::new(0)),
+            Arc::new(AtomicU64::new(0)),
+        );
+
+        reporter.begin_phase(
+            GenerationProgressPhase::GraphPreprocessing,
+            GenerationProcessKind::Amplitude,
+            "proc",
+            "amp",
+            3,
+            None,
+        );
+        reporter.graph_started(GenerationProcessKind::Amplitude, "amp", "GL01", None);
+        reporter.graph_started(GenerationProcessKind::Amplitude, "amp", "GL02", None);
+
+        {
+            let state = reporter
+                .state
+                .lock()
+                .expect("aggregate generation progress state mutex is poisoned");
+            assert_eq!(state.kind, Some(GenerationProcessKind::Amplitude));
+            assert_eq!(state.process, "proc");
+            assert_eq!(state.integrand, "amp");
+            assert_eq!(
+                AggregateGenerationProgressReporter::progress_units(&state),
+                (0, 3)
+            );
+            assert_eq!(
+                AggregateGenerationProgressReporter::graph_progress_counts(&state),
+                (0, 2, 3)
+            );
+        }
+
+        reporter.graph_finished(
+            GenerationProcessKind::Amplitude,
+            "amp",
+            "GL01",
+            &GraphGenerationStats::default(),
+            None,
+        );
+
+        let state = reporter
+            .state
+            .lock()
+            .expect("aggregate generation progress state mutex is poisoned");
+        assert_eq!(
+            AggregateGenerationProgressReporter::progress_units(&state),
+            (1, 3)
+        );
+        assert_eq!(
+            AggregateGenerationProgressReporter::graph_progress_counts(&state),
+            (1, 1, 3)
+        );
+        assert_eq!(state.last_graph.as_deref(), Some("GL01"));
     }
 
     #[test]

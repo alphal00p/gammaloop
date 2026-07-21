@@ -41,7 +41,10 @@ use crate::{
     settings::global::GenerationSettings,
 };
 
-use super::{Amplitude, CrossSection, GeneratedGraphReport, NamedGraphGenerationReport};
+use super::{
+    Amplitude, CrossSection, GeneratedGraphReport, GenerationProcessKind, GenerationProgressPhase,
+    NamedGraphGenerationReport, generation_progress,
+};
 
 const SETTINGS_HISTORY_TOML: &str = "settings_history.toml";
 const SETTINGS_HISTORY_YAML: &str = "settings_history.yaml";
@@ -1064,6 +1067,14 @@ impl ProcessCollection {
             Self::Amplitudes(amplitudes) => {
                 let mut reports = Vec::new();
                 for amplitude in amplitudes.values_mut() {
+                    generation_progress::begin_phase(
+                        GenerationProgressPhase::GraphPreprocessing,
+                        GenerationProcessKind::Amplitude,
+                        &process_definition.folder_name,
+                        &amplitude.name,
+                        amplitude.graphs.len(),
+                        None,
+                    );
                     reports.extend(amplitude.preprocess(
                         model,
                         settings,
