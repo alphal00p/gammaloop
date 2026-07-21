@@ -604,9 +604,15 @@ mod failing {
         let settings = ghost_3loop_settings();
 
         let a = amp.graphs[0].renormalization_part(&settings).unwrap();
-        // `Fi` denotes summand i of RQFT's `Fill forest(0)`.
+        // `Fi` denotes textual summand i of RQFT's `Fill forest(0)`. These values
+        // come from FORM runs with each summand tagged before the forest reduction;
+        // they already include the diagram's overall prefactor.
         // d1: RQFT `ghost_nnlo_0`.
         // H = p1.p1*gs^6*ca^3
+        // Forest paths: F0=[0]; F1=[1→2]; F2=[3→4]; F3=[5→6]; F4=[7→8];
+        // F5=[9→10]; F6=[11→12]; F7=[13→14]; F8=[1→10→6];
+        // F9=[1→15→10]; F10=[3→12→6]; F11=[3→15→12];
+        // F12=[7→14→6]; F13=[7→15→14], where each number identifies `uvdiag`.
         // F0/H = rat(39/16*ep^-2 + 185/32*ep^-1)
         // F1/H = rat(-3/2*ep^-2 - 5/6*ep^-1)
         // F2/H = rat(-3/2*ep^-2 - 5/6*ep^-1)
