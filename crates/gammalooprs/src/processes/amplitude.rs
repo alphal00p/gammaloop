@@ -400,6 +400,13 @@ impl Amplitude {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
+                    let graph_name = amplitude_graph.graph.name.clone();
+                    generation_progress::graph_started(
+                        GenerationProcessKind::Amplitude,
+                        &integrand_name,
+                        &graph_name,
+                        None,
+                    );
                     let _guard = parent.as_ref().map(|span| span.enter());
                     let stats =
                         amplitude_graph.preprocess(model, settings, locked_runtime_settings);
@@ -411,10 +418,17 @@ impl Amplitude {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
+                    generation_progress::graph_finished(
+                        GenerationProcessKind::Amplitude,
+                        &integrand_name,
+                        &graph_name,
+                        &stats,
+                        None,
+                    );
 
                     Ok(NamedGraphGenerationReport {
                         integrand_name: integrand_name.clone(),
-                        graph_name: amplitude_graph.graph.name.clone(),
+                        graph_name,
                         stats,
                     })
                 })
