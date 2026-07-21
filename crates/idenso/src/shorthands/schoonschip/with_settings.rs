@@ -6,9 +6,9 @@ use spenso::{
     shadowing, trace, trace_sym,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView},
+    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder},
     function,
-    id::Replacement,
+    id::{Condition, ConditionResult, Match, ReplaceWith, Replacement},
 };
 use symbolica_utils::PatternReplacement;
 
@@ -20,31 +20,60 @@ static METRIC_FUNCTION_CONTRACTIONS: LazyLock<[Replacement; 3]> = LazyLock::new(
     let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
     let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
     let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
-    let function_with_replacement = function!(W_.a_, W_.a___, W_.c_, W_.b___);
 
     [
         // g(i,j)*T(...,j,...)->T(...,i,...)
-        Replacement::new(
-            (function!(ETS.metric, &self_dual, W_.c_)
-                * function!(W_.a_, W_.a___, &self_dual, W_.b___))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
+        (self_dual.clone(), self_dual),
         // g(i,j)*T(...,d(j),...)->T(...,i,...)
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable)
-                * function!(W_.a_, W_.a___, &dualizable_dual, W_.b___))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
+        (dualizable, dualizable_dual.clone()),
         // g(i,d(j))*T(...,j,...)->T(...,i,...)
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable_dual)
-                * function!(W_.a_, W_.a___, &dualizable, W_.b___))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
+        (dualizable_dual, T.dualizable_::<0, _>([W_.d_, W_.i_])),
     ]
+    .map(|(metric_slot, tensor_slot)| {
+        let tensor_slot = tensor_slot.to_pattern();
+        let condition_slot = tensor_slot.clone();
+        let replacement_slot = tensor_slot;
+        // Match the tensor as a whole: Symbolica treats antisymmetric argument
+        // lists as unordered, but its match stack does not carry permutation parity.
+        Replacement::new(
+            (function!(ETS.metric, metric_slot, W_.c_) * Atom::var(W_.a_)).to_pattern(),
+            ReplaceWith::Map(Box::new(move |m| {
+                let tensor = m.get(W_.a_).unwrap().to_atom();
+                let AtomView::Fun(function) = tensor.as_view() else {
+                    return tensor;
+                };
+                let slot = replacement_slot.replace_wildcards_with_matches(m);
+                let replacement = m.get(W_.c_).unwrap().to_atom();
+                let mut replaced = false;
+                let mut rebuilt = FunctionBuilder::new(function.get_symbol());
+                for argument in function.iter() {
+                    if !replaced && argument == slot.as_view() {
+                        rebuilt = rebuilt.add_arg(&replacement);
+                        replaced = true;
+                    } else {
+                        rebuilt = rebuilt.add_arg(argument);
+                    }
+                }
+                rebuilt.finish()
+            })),
+        )
+        .when(Condition::match_stack(move |m| {
+            let Some(tensor_match) = m.get(W_.a_) else {
+                return ConditionResult::Inconclusive;
+            };
+            let Match::Single(AtomView::Fun(tensor)) = tensor_match else {
+                return ConditionResult::False;
+            };
+            if m.get(W_.d_).is_none() || m.get(W_.i_).is_none() {
+                return ConditionResult::Inconclusive;
+            }
+            let slot = condition_slot.replace_wildcards_with_matches(m);
+            tensor
+                .iter()
+                .any(|argument| argument == slot.as_view())
+                .into()
+        }))
+    })
 });
 
 static METRIC_FUNCTION_CONTRACTIONS_ON_CHAIN: LazyLock<[Replacement; 3]> = LazyLock::new(|| {

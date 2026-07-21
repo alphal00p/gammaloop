@@ -400,7 +400,7 @@ fn three_loop_pole_part_color() {
 
     let color_zero_candidate = input.cook_indices().simplify_color().collect_color();
 
-    assert_snapshot!(&color_zero_candidate.collect_symbol::<i16>(SPENSO_TAG.dot).to_bare_ordered_string(),@"(((-16+-26*eps^2+-8/3*eps^2*𝜋^2+56/3*eps)*1/128*CA*eps^(-3)*gs^6+(-88/3*eps+16+26*eps^2+8/3*eps^2*𝜋^2)*-1/128*CA*eps^(-3)*gs^6)*16+(-16+-26*eps^2+-8/3*eps^2*𝜋^2+88/3*eps)*-1/8*CA*eps^(-3)*gs^6+(-16/3*eps^2*𝜋^2+-32+-52*eps^2+176/3*eps)*1/8*CA*eps^(-3)*gs^6+(-16/3*eps^2*𝜋^2+-32+-52*eps^2+48*eps)*1/4*CA*eps^(-3)*gs^6)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))");
+    assert_snapshot!(&color_zero_candidate.collect_symbol::<i16>(SPENSO_TAG.dot).to_bare_ordered_string(),@"(((-16+-26*eps^2+-8/3*eps^2*𝜋^2+56/3*eps)*1/128*CA*eps^(-3)*gs^6+(-88/3*eps+16+26*eps^2+8/3*eps^2*𝜋^2)*-1/128*CA*eps^(-3)*gs^6)*16+(-16+-26*eps^2+-8/3*eps^2*𝜋^2+88/3*eps)*1/8*CA*eps^(-3)*gs^6+(-16/3*eps^2*𝜋^2+-32+-52*eps^2+176/3*eps)*1/8*CA*eps^(-3)*gs^6+(-16/3*eps^2*𝜋^2+-32+-52*eps^2+48*eps)*1/4*CA*eps^(-3)*gs^6)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))");
 
     let input = parse_lit!(
         ((8 * eps + 8 / 3) * 1 / 64

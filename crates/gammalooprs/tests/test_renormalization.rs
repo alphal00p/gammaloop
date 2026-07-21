@@ -12,14 +12,18 @@ use gammalooprs::{
     },
 };
 use idenso::{
+    Cookable, IndexTooling, W_,
     color::{CS, ColorSimplifier},
     dirac::GammaSimplifier,
     shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
-use spenso::shadowing::symbolica_utils::LogPrint;
+use spenso::{
+    network::tags::SPENSO_TAG, shadowing::symbolica_utils::LogPrint,
+    structure::abstract_index::AbstractIndex,
+};
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
-    parse, parse_lit,
+    function, parse, parse_lit,
 };
 use symbolica_utils::AtomPrintExt;
 
@@ -474,10 +478,10 @@ fn finite_part_ghost_2loop() {
     // RQFT ghost_nlo_3_in.h, H = p1.p1*i_*gs^4*ca*nf:
     // F0 (140 -> 0) / H = -1/4*ep^-2 - 13/24*ep^-1.
     // F1 (140 -> zw -> 0) / H = +1/2*ep^-2 + 1/3*ep^-1.
-    // Sum / H = +1/4*ep^-2 - 5/24*ep^-1; native GammaLoop / RQFT = +1.
-    // The quark-vertex phase cancels the single ghost-propagator convention sign.
+    // Sum / H = +1/4*ep^-2 - 5/24*ep^-1; native GammaLoop / RQFT = -1
+    // after preserving the antisymmetric color orientation.
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-5𝑖/12*ε+1𝑖/2)*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*idx(2,cof(3))*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/2+5𝑖/12*ε)*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*idx(2,cof(3))*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[3], a, &new_settings);
     insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
@@ -542,11 +546,11 @@ fn finit_part_ghlo() {
     println!("ren part: {:>}", a);
     // RQFT ghost_lo_0_in.h forest order, H = p1.p1*gs^2*ca:
     // F0 (direct) / H = +1/2*ep^-1.
-    // Sum / H = +1/2*ep^-1; native GammaLoop / RQFT = +1. GammaLoop's +i
-    // ghost propagator differs from RQFT's -i, but the one-loop Vakint sign cancels it.
+    // Sum / H = +1/2*ep^-1; native GammaLoop / RQFT = -1 after preserving
+    // the antisymmetric color orientation.
     insta::assert_snapshot!(
         align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"1/2*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
+        .to_bare_ordered_string(),@"-1/2*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
 }
 
@@ -556,6 +560,7 @@ mod failing {
     fn ghost_3loop_settings() -> UVgenerationSettings {
         UVgenerationSettings {
             softct: false,
+            orchestrator: UVOrchestrator::HedgePoset,
             renormalization_prescription: RenormalizationPrescriptionSettings {
                 log_divergent: ApproximationType::PolePart,
                 massive_power_divergent: ApproximationType::PolePart,
@@ -622,10 +627,11 @@ mod failing {
         // F10/H = rat(3/2*ep^-2 + 5/6*ep^-1)
         // F12/H = rat(3/2*ep^-2 + 5/6*ep^-1)
         // F5..F7, F9, F11, F13 = 0
-        // sum(Fi)/H = rat(-3/8*ep^-2 + 29/32*ep^-1)
+        // sum(Fi)/H = rat(-3/8*ep^-2 + 29/32*ep^-1);
+        // native GammaLoop / RQFT = +1.
         insta::assert_snapshot!(amp.graphs[0].graph.name,@"d1");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1456*ε^2+-448/3*ε^2*𝜋^2+-896+4160/3*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3/8+29/32*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );
 
         let a = amp.graphs[1].renormalization_part(&settings).unwrap();
@@ -635,10 +641,27 @@ mod failing {
         // F3/H = rat(-3/64*ep^-2)
         // F6/H = rat(-3/64*ep^-2)
         // F1..F2, F4..F5, F7..F16 = 0
-        // sum(Fi)/H = rat(-1/16*ep^-2 + 5/192*ep^-1)
+        // sum(Fi)/H = rat(-1/16*ep^-2 + 5/192*ep^-1);
+        // native GammaLoop / RQFT = +1.
+        // The two remaining six-f terms have opposite coefficients and differ only
+        // by dummy labels. Since `f` already put its permutation signs in those
+        // coefficients, treat its slots as ordered while canonicalizing the labels.
+        let ordered_f = SPENSO_TAG.tensor_symbol("rqft_ordered_color_f");
+        let aligned = align_to_rqft(&a, &model)
+            .replace(function!(CS.f, W_.a___).to_pattern())
+            .with(function!(ordered_f, W_.a___))
+            .expand()
+            .map_terms_single_core(|term| {
+                term.cook_indices()
+                    .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            })
+            .collect_factors()
+            .replace(function!(ordered_f, W_.a___).to_pattern())
+            .with(function!(CS.f, W_.a___))
+            .to_dots();
         insta::assert_snapshot!(amp.graphs[1].graph.name,@"d2");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"((-32+40/3*ε)*1/64*CA^3+-3/16*f(coad(8,hedge(1)),coad(8,hedge(10)),coad(8,hedge(7)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(8)))*f(coad(8,hedge(10)),coad(8,hedge(12)),coad(8,vertex(4,1)))*f(coad(8,hedge(12)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(14)),coad(8,hedge(5)),coad(8,hedge(7)))*f(coad(8,hedge(14)),coad(8,hedge(8)),coad(8,vertex(4,1)))+3/16*f(coad(8,hedge(1)),coad(8,hedge(10)),coad(8,hedge(6)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(8)))*f(coad(8,hedge(10)),coad(8,hedge(12)),coad(8,vertex(4,1)))*f(coad(8,hedge(12)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(14)),coad(8,hedge(5)),coad(8,hedge(6)))*f(coad(8,hedge(14)),coad(8,hedge(8)),coad(8,vertex(4,1))))*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
+           aligned.to_bare_ordered_string(),@"(-1/16+5/192*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );
 
         let a = amp.graphs[2].renormalization_part(&settings).unwrap();
@@ -655,14 +678,36 @@ mod failing {
         // F8/H = rat(27/64*ep^-3 - 9/32*ep^-2)
         //        + pi^2*rat(9/256*ep^-1)
         // F1, F3..F5, F7, F9 = 0
-        // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1)
+        // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1);
+        // Hedge terminals F0={H2y}, F2={GEe}{H2y}, F6={Fyy}{H2y}, and
+        // F8={Fyy}{GEe}{H2y} match these coefficients before coupling replacement.
+        // Their common i*GC_10^4*GC_12 becomes -gs^6, so native GammaLoop / RQFT
+        // = -1 at the model/RQFT convention boundary, not in the forest recursion.
         insta::assert_snapshot!(amp.graphs[2].graph.name,@"d3");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-52*ε+24+24*ε^2)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9/128+-9/128*ε^2+39/256*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[3].renormalization_part(&settings).unwrap();
-        // d4: RQFT `ghost_nnlo_3`.
+        // d4: SM-UFO counterpart of RQFT `ghost_nnlo_4` (RQFT d5).
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(9/32*ep^-2 + 33/64*ep^-1)
+        //        + cl2*sqrt3*rat(-3/4*ep^-1)
+        // F7/H = rat(-27/64*ep^-2 - 45/128*ep^-1)
+        //        + cl2*sqrt3*rat(3/4*ep^-1)
+        // F1..F6, F8..F13 = 0
+        // sum(Fi)/H = rat(-9/64*ep^-2 + 21/128*ep^-1)
+        // RQFT uses the ghost momentum at a ghost-gluon vertex, whereas the SM UFO
+        // uses minus the antighost momentum. This exchanges the mirror pair d4/d5:
+        // Hedge terminals {H2y}=F0 and {Fyy}{H2y}=F7, while the others are zero.
+        // Their common i*GC_10^4*GC_12 gives native GammaLoop / RQFT = -1.
+        insta::assert_snapshot!(amp.graphs[3].graph.name,@"d4");
+        insta::assert_snapshot!(
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-21/128*ε+9/64)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
+        );
+
+        let a = amp.graphs[4].renormalization_part(&settings).unwrap();
+        // d5: SM-UFO counterpart of RQFT `ghost_nnlo_3` (RQFT d4).
         // H = p1.p1*gs^6*ca^3
         // F0/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 99/512*ep^-1)
         //        + cl2*sqrt3*rat(-3/32*ep^-1)
@@ -676,24 +721,11 @@ mod failing {
         //         + pi^2*rat(9/256*ep^-1)
         // F1..F4, F6, F8..F12 = 0
         // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)
-        insta::assert_snapshot!(amp.graphs[3].graph.name,@"d4");
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-48+56*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
-        );
-
-        let a = amp.graphs[4].renormalization_part(&settings).unwrap();
-        // d5: RQFT `ghost_nnlo_4`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(9/32*ep^-2 + 33/64*ep^-1)
-        //        + cl2*sqrt3*rat(-3/4*ep^-1)
-        // F7/H = rat(-27/64*ep^-2 - 45/128*ep^-1)
-        //        + cl2*sqrt3*rat(3/4*ep^-1)
-        // F1..F6, F8..F13 = 0
-        // sum(Fi)/H = rat(-9/64*ep^-2 + 21/128*ep^-1)
-        // The expression snapshot is not yet aligned to this RQFT reference.
+        // Hedge terminals {H2y}=F0, {GqO}{H2y}=F5, {Fyy}{H2y}=F7, and
+        // {Fyy}{GqO}{H2y}=F13. By the mirror mapping, native GammaLoop / RQFT = -1.
         insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-24+-72*ε^2+52*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-27/128*ε^2+-9/128+39/256*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[5].renormalization_part(&settings).unwrap();
@@ -715,9 +747,10 @@ mod failing {
         //         + pi^2*rat(3/128*ep^-1)
         // F1, F3, F6..F7, F9, F11..F12, F15 = 0
         // sum(Fi)/H = rat(3/64*ep^-3 + 35/128*ep^-2 - ep^-1)
+        // native GammaLoop / RQFT = +1.
         insta::assert_snapshot!(amp.graphs[5].graph.name,@"d6");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-10712/3*ε+-5576*ε^2+120*ε^2*𝜋^2+3968/3*cl2*sqrt(3)*ε^2+640)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1*ε^2+3/64+35/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[6].renormalization_part(&settings).unwrap();
@@ -739,9 +772,10 @@ mod failing {
         //         + pi^2*rat(3/128*ep^-1)
         // F1, F3, F6..F7, F9, F11..F12, F15 = 0
         // sum(Fi)/H = rat(3/64*ep^-3 + 35/128*ep^-2 - ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
+        // native GammaLoop / RQFT = +1.
+        insta::assert_snapshot!(amp.graphs[6].graph.name,@"d7");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-10712/3*ε+-5576*ε^2+-80+3968/3*cl2*sqrt(3)*ε^2)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1*ε^2+3/64+35/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[7].renormalization_part(&settings).unwrap();
@@ -764,9 +798,10 @@ mod failing {
         //         + pi^2*rat(27/128*ep^-1)
         // F1..F2, F4, F6, F8..F9, F12..F13 = 0
         // sum(Fi)/H = rat(27/32*ep^-3 - 63/64*ep^-2 - 99/128*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
+        // native GammaLoop / RQFT = +1.
+        insta::assert_snapshot!(amp.graphs[7].graph.name,@"d8");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-288+264*ε^2+336*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-63/64*ε+-99/128*ε^2+27/32)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[8].renormalization_part(&settings).unwrap();
