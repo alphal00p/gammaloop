@@ -54,6 +54,12 @@ impl Full4DCts {
             scheme => Err(eyre!("No recursive counterterm projection for {scheme}")),
         }
     }
+
+    /// A disconnected local value already contains every component's recursive
+    /// projection, so it must not be projected again when used by an outer limit.
+    pub(crate) fn from_factorized_local(local: &Local4dCts) -> Self {
+        Self(local.0.clone())
+    }
 }
 
 impl Neg for Local4dCts {
@@ -68,15 +74,12 @@ impl Local4dCts {
         &self.0
     }
 
-    pub(crate) fn factorized_product(
-        &self,
-        integrated: &IntegratedCts,
-        other: &Self,
-        other_integrated: &IntegratedCts,
-    ) -> Self {
-        let finite = integrated.finite_counterterm_atom();
-        let other_finite = other_integrated.finite_counterterm_atom();
-        Self(&self.0 * &other.0 + &self.0 * other_finite + finite * &other.0)
+    pub(crate) fn from_full_product(factors: impl IntoIterator<Item = Full4DCts>) -> Self {
+        Self(
+            factors
+                .into_iter()
+                .fold(Atom::one(), |product, factor| product * factor.0),
+        )
     }
 }
 

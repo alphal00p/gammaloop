@@ -1,8 +1,10 @@
 use std::{
-    cmp::Reverse,
     collections::{BTreeMap, BTreeSet},
     fmt::Display,
 };
+
+#[cfg(test)]
+use std::cmp::Reverse;
 
 use ahash::AHashMap;
 use eyre::{WrapErr, eyre};
@@ -41,7 +43,7 @@ use crate::{
         },
         export::UVForestNodeExpression,
         forest::ParametricIntegrands,
-        marker::{UvMarker, UvOperation},
+        marker::UvMarker,
         settings::VakintSettings,
     },
 };
@@ -172,13 +174,14 @@ impl Wood {
         let mut max_loops = 0;
         let mut spinneys = BTreeMap::new();
         for spinney in s {
-            max_loops = max_loops.max(spinney.max_comp_loop_count());
+            max_loops = max_loops.max(graph.n_loops(spinney.filter()));
             spinneys.entry(spinney.filter().clone()).or_insert(spinney);
         }
         let empty = Spinney::empty(graph);
         spinneys.entry(empty.filter().clone()).or_insert(empty);
         let mut vakint_settings = vakint_settings.true_settings();
-        // Set the number of terms in epsilon expansion to max number of loops across all components + 1
+        // Retain enough positive epsilon powers for finite terms formed when disconnected
+        // integrated counterterms are multiplied.
         vakint_settings.number_of_terms_in_epsilon_expansion = max_loops as i64 + 1;
 
         let mut unions = BTreeSet::new();
@@ -368,11 +371,18 @@ pub struct OwnedForestNode {
     pub topo_order: usize,
 }
 
+#[cfg(test)]
 struct LocalLeafOperation {
     op: HiddenData<SuBitGraph, EdgeIndex>,
     frontier: NodeIndex,
 }
 
+struct UnionReplayState {
+    integrated: NodeIndex,
+    local_edges: Vec<EdgeIndex>,
+}
+
+#[cfg(test)]
 impl LocalLeafOperation {
     fn new(op: &HiddenData<SuBitGraph, EdgeIndex>, frontier: NodeIndex) -> Self {
         Self {
@@ -626,6 +636,11 @@ impl Forests {
     fn recursion_input_4d(&self, node: NodeIndex) -> Result<Full4DCts> {
         let operation = &self.graph[node];
         let computed = self.compute_store.require(operation)?;
+        if self.graph.is_disjoint_union(node) {
+            return Ok(Full4DCts::from_factorized_local(
+                computed.local_4d(operation)?,
+            ));
+        }
         Full4DCts::recursion_input(
             computed.local_4d(operation)?,
             computed.integrated(operation)?,
@@ -817,6 +832,7 @@ impl Forests {
         Ok(order)
     }
 
+    #[cfg(test)]
     fn local_leaf_operations(&self, node: NodeIndex) -> Vec<LocalLeafOperation> {
         let mut leaves = self
             .graph
@@ -834,6 +850,128 @@ impl Forests {
         leaves
     }
 
+    fn disconnected_component_nodes(&self, node: NodeIndex) -> Result<Vec<NodeIndex>> {
+        let operation = &self.graph[node];
+        let factors = self
+            .wood
+            .join_factors(self.graph.source_node(node))
+            .ok_or_else(|| eyre!("{operation} has no disconnected component factors"))?;
+        let target_ops = operation
+            .key
+            .iter_levels_top_down()
+            .flat_map(|level| level.iter_leaf_ops())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        for op in &target_ops {
+            let owners = factors
+                .iter()
+                .filter(|factor| factor.includes(&op.order))
+                .count();
+            if owners != 1 {
+                return Err(eyre!(
+                    "operation {} in {operation} belongs to {owners} disconnected factors",
+                    op.order.string_label()
+                ));
+            }
+        }
+
+        factors
+            .into_iter()
+            .map(|factor| {
+                let key = target_ops
+                    .iter()
+                    .filter(|op| factor.includes(&op.order))
+                    .fold(TraceKey::empty(), |key, op| {
+                        key.push(&self.wood, op.clone())
+                    });
+                self.graph
+                    .iter_nodes()
+                    .find_map(|(component, _, candidate)| {
+                        (candidate.key == key && self.source_spinney(component).filter() == &factor)
+                            .then_some(component)
+                    })
+                    .ok_or_else(|| {
+                        eyre!(
+                            "component {} of {operation} is not in the unfolded forest",
+                            factor.string_label()
+                        )
+                    })
+            })
+            .collect()
+    }
+
+    fn operation_node_index(&self, operation: &OperationNode) -> Result<NodeIndex> {
+        let cover = operation.covers();
+        self.graph
+            .iter_nodes()
+            .find_map(|(node, _, candidate)| {
+                let source_matches = cover.as_ref().map_or_else(
+                    || self.source_spinney(node).filter().is_empty(),
+                    |cover| self.source_spinney(node).filter() == cover,
+                );
+                (candidate == operation && source_matches).then_some(node)
+            })
+            .ok_or_else(|| eyre!("{operation} is not in the unfolded forest"))
+    }
+
+    fn union_replay_states(&self, node: NodeIndex) -> Result<Vec<UnionReplayState>> {
+        let operation = &self.graph[node];
+        if operation.key.is_empty() {
+            return Ok(vec![UnionReplayState {
+                integrated: node,
+                local_edges: Vec::new(),
+            }]);
+        }
+
+        if !self.graph.is_disjoint_union(node) {
+            let (parent, edge) = self
+                .graph
+                .unique_parent(node)
+                .ok_or_else(|| eyre!("{operation} has no unique replay parent"))?;
+            let mut states = self.union_replay_states(parent)?;
+            for state in &mut states {
+                state.local_edges.push(edge);
+            }
+            states.push(UnionReplayState {
+                integrated: node,
+                local_edges: Vec::new(),
+            });
+            return Ok(states);
+        }
+
+        let component_states = self
+            .disconnected_component_nodes(node)?
+            .into_iter()
+            .map(|component| self.union_replay_states(component))
+            .collect::<Result<Vec<_>>>()?;
+        let mut states = Vec::new();
+        for components in component_states
+            .iter()
+            .map(|states| states.iter())
+            .multi_cartesian_product()
+        {
+            let key = TraceKey::try_foata_join(
+                components
+                    .iter()
+                    .map(|component| &self.graph[component.integrated].key),
+                &self.wood,
+            )
+            .ok_or_else(|| eyre!("cannot join integrated prefixes for {operation}"))?;
+            let mut local_edges = Vec::new();
+            for component in components {
+                local_edges.extend_from_slice(&component.local_edges);
+            }
+            let integrated = self.operation_node_index(&OperationNode { key })?;
+            states.push(UnionReplayState {
+                integrated,
+                local_edges,
+            });
+        }
+
+        Ok(states)
+    }
+
     fn compute_4d_for_node(
         &self,
         node: NodeIndex,
@@ -846,108 +984,52 @@ impl Forests {
             return Ok((Local4dCts::root(), IntegratedCts::root()));
         }
 
-        let leaves = self.local_leaf_operations(node);
-        let factorized = self.graph.is_disjoint_union(node)
-            && leaves.len() == 2
-            && leaves
-                .iter()
-                .all(|leaf| self.graph[leaf.frontier].key.is_empty());
-        let first_leaf = leaves
-            .first()
-            .ok_or_else(|| eyre!("{operation} has no leaf operations"))?;
-        let first_frontier_depth = self.graph[first_leaf.frontier].key.op_count();
-        let mut full = self
-            .recursion_input_4d(first_leaf.frontier)
-            .wrap_err_with(|| format!("while loading the first 4D frontier for {operation}"))?;
-        let mut local_4d: Option<Local4dCts> = None;
-        let mut integrated: Option<IntegratedCts> = None;
-        let ctx = UVCtx::new(graph, settings);
-        let integrated_approximation = Integrated::new(vakint, &self.wood.vakint_settings);
-
-        for (offset, leaf) in leaves.into_iter().enumerate() {
-            let frontier = leaf.frontier;
-            let step_order = first_frontier_depth + offset;
-            let (next_local, next_integrated) = if factorized {
-                full = self.recursion_input_4d(frontier).wrap_err_with(|| {
-                    format!(
-                        "while loading 4D dependency frontier {} for {operation}",
-                        self.graph[frontier]
-                    )
-                })?;
-                let active_operation = OperationNode {
-                    key: self.graph[frontier].key.push(&self.wood, leaf.op.clone()),
-                };
-                let (marker_current, marker_given) =
-                    self.wood.current_given_pair(leaf.op.data, step_order);
-                let mut current = active_operation.forest_node(graph, step_order);
-                current.spinney.renormalization_scheme = self
-                    .graph
-                    .iter_nodes()
-                    .find_map(|(node, _, operation)| {
-                        (operation == &active_operation)
-                            .then(|| self.source_spinney(node).renormalization_scheme)
-                    })
-                    .ok_or_else(|| eyre!("{active_operation} is not in the unfolded forest"))?;
-                let given = self.graph[frontier].forest_node(graph, step_order);
-                let local = local_4d::uv_limit(
-                    &full,
-                    &ctx,
-                    &current,
-                    &given,
-                    &marker_current,
-                    &marker_given,
-                )?;
-                let integrated = if settings.generate_integrated {
-                    integrated_approximation.run(
-                        &local,
-                        &ctx,
-                        &current,
-                        &given,
-                        &marker_current,
-                        &marker_given,
-                    )?
-                } else {
-                    IntegratedCts::root()
-                };
-                (local, integrated)
-            } else {
-                let (current, given) = self.wood.current_given_pair(leaf.op.data, step_order);
-                let local = local_4d::uv_limit(&full, &ctx, &current, &given, &current, &given)?;
-                let integrated = if settings.generate_integrated {
-                    integrated_approximation
-                        .run(&local, &ctx, &current, &given, &current, &given)?
-                } else {
-                    IntegratedCts::root()
-                };
-                full = Full4DCts::recursion_input(
-                    &local,
-                    &integrated,
-                    current.renormalization_scheme(),
-                    false,
-                )?;
-                (local, integrated)
-            };
-
-            if factorized && let (Some(local), Some(integrated_ct)) = (&local_4d, &integrated) {
-                local_4d =
-                    Some(local.factorized_product(integrated_ct, &next_local, &next_integrated));
-                let expansion_depth = graph.n_loops(
-                    &operation
-                        .covers()
-                        .expect("a non-root operation has a cover"),
-                ) + 1;
-                integrated =
-                    Some(integrated_ct.factorized_product(&next_integrated, expansion_depth)?);
-            } else {
-                local_4d = Some(next_local);
-                integrated = Some(next_integrated);
+        if self.graph.is_disjoint_union(node) {
+            let components = self.disconnected_component_nodes(node)?;
+            let mut full_components = Vec::with_capacity(components.len());
+            let mut integrated_components = Vec::with_capacity(components.len());
+            for component in components {
+                let component_operation = &self.graph[component];
+                full_components.push(self.recursion_input_4d(component).wrap_err_with(|| {
+                    format!("while loading 4D component {component_operation} for {operation}")
+                })?);
+                integrated_components.push(
+                    self.compute_store
+                        .require(component_operation)?
+                        .integrated(component_operation)?,
+                );
             }
+
+            let depth = graph.n_loops(
+                &operation
+                    .covers()
+                    .expect("a non-root operation has a cover"),
+            ) + 1;
+            return Ok((
+                Local4dCts::from_full_product(full_components),
+                IntegratedCts::factorized_product(integrated_components, depth)?,
+            ));
         }
 
-        Ok((
-            local_4d.expect("a non-root operation has at least one leaf"),
-            integrated.expect("a non-root operation has at least one leaf"),
-        ))
+        let (parent, edge) = self
+            .graph
+            .unique_parent(node)
+            .ok_or_else(|| eyre!("{operation} has no unique 4D parent"))?;
+        let full = self
+            .recursion_input_4d(parent)
+            .wrap_err_with(|| format!("while loading the 4D parent for {operation}"))?;
+        let step_order = self.graph[parent].key.op_count();
+        let (current, given) = self.wood.current_given_pair(edge, step_order);
+        let ctx = UVCtx::new(graph, settings);
+        let integrated_approximation = Integrated::new(vakint, &self.wood.vakint_settings);
+        let local = local_4d::uv_limit(&full, &ctx, &current, &given, &current, &given)?;
+        let integrated = if settings.generate_integrated {
+            integrated_approximation.run(&local, &ctx, &current, &given, &current, &given)?
+        } else {
+            IntegratedCts::root()
+        };
+
+        Ok((local, integrated))
     }
 
     fn local_3d_for_node(
@@ -959,184 +1041,114 @@ impl Forests {
         settings: &UVgenerationSettings,
     ) -> Result<CutComputation> {
         let operation = &self.graph[node];
-        let active_forest_node = |operation: &OperationNode, topo_order: usize, graph: &Graph| {
-            let mut forest_node = operation.forest_node(graph, topo_order);
-            forest_node.spinney.renormalization_scheme = self
-                .graph
-                .iter_nodes()
-                .find_map(|(node, _, candidate)| {
-                    (candidate == operation)
-                        .then(|| self.source_spinney(node).renormalization_scheme)
-                })
-                .ok_or_else(|| eyre!("{operation} is not in the unfolded forest"))?;
-            Ok::<_, eyre::Report>(forest_node)
-        };
         let local_3d = if operation.key.is_empty() {
             Local3DCts::root(graph, localizer)?
+        } else if self.graph.is_disjoint_union(node) {
+            let mut active_sectors = Vec::new();
+            for state in self
+                .union_replay_states(node)?
+                .into_iter()
+                .filter(|state| !state.local_edges.is_empty())
+            {
+                let integrated_operation = &self.graph[state.integrated];
+                let mut edges = state.local_edges.into_iter().enumerate();
+                let (offset, first_edge) = edges
+                    .next()
+                    .expect("a proper integrated prefix has a local suffix");
+                let step_order = integrated_operation.key.op_count() + offset;
+                let (current, given) = self.wood.current_given_pair(first_edge, step_order);
+
+                // An empty integrated prefix starts from the per-cut root integrand. Every
+                // other prefix enters through the reduced branch of its first local operation.
+                let mut sector = if integrated_operation.key.is_empty() {
+                    let root = Local3DCts::root(graph, localizer)?;
+                    Local3DApproximation::new(localizer, graph, settings)
+                        .run_local(&root, &current, &given, &current, &given)?
+                } else {
+                    let integrated = self
+                        .compute_store
+                        .require(integrated_operation)?
+                        .integrated(integrated_operation)?;
+                    let prefix_node = ForestNode {
+                        spinney: self.source_spinney(state.integrated),
+                        topo_order: integrated_operation.key.op_count(),
+                    };
+                    Local3DApproximation::new(localizer, graph, settings).run_integrated(
+                        integrated,
+                        &prefix_node,
+                        &current,
+                        &given,
+                        &current,
+                        &given,
+                    )?
+                };
+
+                for (offset, edge) in edges {
+                    let step_order = integrated_operation.key.op_count() + offset;
+                    let (current, given) = self.wood.current_given_pair(edge, step_order);
+                    sector = Local3DApproximation::new(localizer, graph, settings)
+                        .run_local(&sector, &current, &given, &current, &given)?;
+                }
+
+                // Keep each active/frozen split after its root-path replay so any connected
+                // descendants rescale only the loop variables still active in that sector.
+                active_sectors.extend(
+                    sector
+                        .active_sectors()
+                        .expect("a replayed union sector retains its active subgraph")
+                        .iter()
+                        .cloned(),
+                );
+            }
+
+            Local3DCts::from_active_sectors(active_sectors)
+                .wrap_err_with(|| format!("{operation} has no proper integrated prefixes"))?
         } else {
-            let leaves = self.local_leaf_operations(node);
-            let first_leaf = leaves
-                .first()
-                .ok_or_else(|| eyre!("{operation} has no local leaf operations"))?;
-            let first_frontier = first_leaf.frontier;
-            let first_frontier_depth = self.graph[first_frontier].key.op_count();
-            let factorized = self.graph.is_disjoint_union(node)
-                && leaves.len() == 2
-                && leaves
-                    .iter()
-                    .all(|leaf| self.graph[leaf.frontier].key.is_empty());
+            let (parent, edge) = self
+                .graph
+                .unique_parent(node)
+                .ok_or_else(|| eyre!("{operation} has no unique local parent"))?;
+            let parent_operation = &self.graph[parent];
             // An empty dependency frontier starts from the per-cut root integrand;
-            // otherwise its typed local result is the sequential accumulator.
-            let mut accumulator = if self.graph[first_frontier].key.is_empty() {
+            // otherwise its typed local result remains the sequential accumulator.
+            let parent_local = if parent_operation.key.is_empty() {
                 Local3DCts::root(graph, localizer)?
             } else {
-                let frontier = &self.graph[first_frontier];
                 self.compute_store
-                    .require(frontier)?
-                    .cut(frontier, cutset)?
+                    .require(parent_operation)?
+                    .cut(parent_operation, cutset)?
                     .local_3d
                     .clone()
             };
-            for (offset, leaf) in leaves.iter().enumerate() {
-                let frontier = &self.graph[leaf.frontier];
-                let step_order = first_frontier_depth + offset;
-                let frontier_integrated = self
-                    .compute_store
-                    .require(frontier)?
-                    .integrated(frontier)
-                    .wrap_err_with(|| {
-                        format!(
-                            "while loading integrated dependency frontier {frontier} for {operation}"
-                        )
-                    })?;
-                let active_operation = OperationNode {
-                    key: frontier.key.push(&self.wood, leaf.op.clone()),
-                };
-                let (marker_current, marker_given) =
-                    self.wood.current_given_pair(leaf.op.data, step_order);
-                // `run` applies the local and integrated subtraction signs; no external
-                // sign or raw Foata-level product is introduced here.
-                accumulator = if factorized {
-                    let current = active_forest_node(&active_operation, step_order, graph)?;
-                    let given = frontier.forest_node(graph, step_order);
-                    Local3DApproximation::new(localizer, graph, settings).run(
-                        &accumulator,
-                        frontier_integrated,
-                        &current,
-                        &given,
-                        &marker_current,
-                        &marker_given,
-                    )?
-                } else {
-                    Local3DApproximation::new(localizer, graph, settings).run(
-                        &accumulator,
-                        frontier_integrated,
-                        &marker_current,
-                        &marker_given,
-                        &marker_current,
-                        &marker_given,
-                    )?
-                };
-            }
-
-            if factorized {
-                let marker = UvMarker::new(settings);
-                let operation_marker = |leaf_index: usize, integrated: bool| {
-                    let leaf = &leaves[leaf_index];
-                    let (current, given) = self
-                        .wood
-                        .current_given_pair(leaf.op.data, first_frontier_depth + leaf_index);
-                    let mut history = marker.apply(
-                        UvOperation::Approx,
-                        current.subgraph(),
-                        given.subgraph(),
-                        &Atom::one(),
-                    );
-                    if integrated {
-                        for operation in [
-                            UvOperation::Integrate,
-                            UvOperation::Series,
-                            UvOperation::Truncate,
-                        ] {
-                            history = marker.apply(
-                                operation,
-                                current.subgraph(),
-                                given.subgraph(),
-                                &history,
-                            );
-                        }
-                    }
-                    history
-                };
-                let strip_marker = |atom: &Atom| {
-                    atom.replace(function!(GS.ct_marker, W_.a_))
-                        .with(Atom::one())
-                };
-                let local_marker = operation_marker(0, false) * operation_marker(1, false);
-                accumulator = accumulator.map(|atom| Ok(strip_marker(atom) * &local_marker))?;
-                let mut active_sectors = vec![(
-                    operation
-                        .covers()
-                        .expect("a non-root operation has a cover"),
-                    accumulator.integrands().clone(),
-                )];
-
-                for (leaf_index, other_index) in [(0, 1), (1, 0)] {
-                    let leaf = &leaves[leaf_index];
-                    let other = &leaves[other_index];
-                    let other_operation = OperationNode {
-                        key: self.graph[other.frontier]
-                            .key
-                            .push(&self.wood, other.op.clone()),
-                    };
-                    let other_integrated = self
-                        .compute_store
-                        .require(&other_operation)?
-                        .integrated(&other_operation)?;
-                    let other_node =
-                        other_operation.forest_node(graph, other_operation.key.op_count());
-                    let seed = Local3DCts::from(
-                        localizer
-                            .localize(
-                                &other_integrated.physical_finite_counterterm_atom(),
-                                graph,
-                                &other_node,
-                            )?
-                            .combine()?,
-                    );
-                    let step_order = first_frontier_depth + leaf_index;
-                    let active_operation = OperationNode {
-                        key: self.graph[leaf.frontier]
-                            .key
-                            .push(&self.wood, leaf.op.clone()),
-                    };
-                    let (marker_current, marker_given) =
-                        self.wood.current_given_pair(leaf.op.data, step_order);
-                    let current = active_forest_node(&active_operation, step_order, graph)?;
-                    let given = self.graph[leaf.frontier].forest_node(graph, step_order);
-                    let cross = Local3DApproximation::new(localizer, graph, settings).run(
-                        &seed,
-                        &IntegratedCts::root(),
-                        &current,
-                        &given,
-                        &marker_current,
-                        &marker_given,
-                    )?;
-                    let sector_marker =
-                        operation_marker(leaf_index, false) * operation_marker(other_index, true);
-                    let cross = cross.map(|atom| Ok(strip_marker(atom) * &sector_marker))?;
-                    active_sectors.push((current.subgraph().clone(), cross.integrands().clone()));
-                }
-                accumulator = Local3DCts::from_active_sectors(active_sectors)?;
-            }
-            accumulator
+            let parent_integrated = self
+                .compute_store
+                .require(parent_operation)?
+                .integrated(parent_operation)
+                .wrap_err_with(|| {
+                    format!("while loading integrated parent {parent_operation} for {operation}")
+                })?;
+            let step_order = parent_operation.key.op_count();
+            let (current, given) = self.wood.current_given_pair(edge, step_order);
+            // `run` applies both subtraction signs; no external sign or raw
+            // Foata-level product is introduced for an ordinary single-parent node.
+            Local3DApproximation::new(localizer, graph, settings).run(
+                &parent_local,
+                parent_integrated,
+                &current,
+                &given,
+                &current,
+                &given,
+            )?
         };
 
         let integrated = self
             .compute_store
             .require(operation)?
             .integrated(operation)?;
-        let forest_node = operation.forest_node(graph, operation.key.op_count());
+        let forest_node = ForestNode {
+            spinney: self.source_spinney(node),
+            topo_order: operation.key.op_count(),
+        };
         let final_integrands = FinalIntegrandBuilder::new(localizer, settings).build_3d(
             graph,
             &forest_node,
@@ -1600,11 +1612,20 @@ mod tests {
                 ("36".to_string(), "∅".to_string())
             ]
         );
+        let replay_states = forests.union_replay_states(dependent_disconnected)?;
+        assert_eq!(replay_states.len(), 6);
+        assert_eq!(
+            replay_states
+                .iter()
+                .filter(|state| !state.local_edges.is_empty())
+                .count(),
+            5
+        );
         Ok(())
     }
 
     #[test]
-    fn local_frontier_terms_read_non_root_compute_store() -> Result<()> {
+    fn union_terms_replay_component_paths_from_typed_roots() -> Result<()> {
         test_initialise().unwrap();
         let mut graph: Graph = dot!(
             digraph G{
@@ -1661,7 +1682,7 @@ mod tests {
             .iter_nodes()
             .map(|(_, _, operation)| operation.clone())
             .collect::<Vec<_>>();
-        // Zero integrated terms isolate dependency-frontier selection in the local accumulator.
+        // Zero integrated terms isolate component-path replay in the local accumulator.
         for operation in operations {
             forests
                 .compute_store
@@ -1679,7 +1700,7 @@ mod tests {
             forests.local_3d_for_node(forests.root, &mut graph, &cutset, localizer, &settings)?;
         let root_store_marker = symbolica::symbol!("root_store_marker");
         let frontier_store_marker = symbolica::symbol!("frontier_store_marker");
-        // The cached entries need valid typed shells, but only `local_3d` is read by this path.
+        // Mark cached local terms so the union result proves that replay starts from typed roots.
         let marked_computation = |marker| -> Result<CutComputation> {
             Ok(CutComputation {
                 local_3d: seed.local_3d.map(|_| Ok(Atom::var(marker)))?,
@@ -1708,6 +1729,14 @@ mod tests {
             localizer,
             &settings,
         )?;
+        assert_eq!(
+            root_result
+                .local_3d
+                .active_sectors()
+                .expect("a root union keeps its active sectors")
+                .len(),
+            3
+        );
         assert!(
             root_result
                 .local_3d
@@ -1724,13 +1753,54 @@ mod tests {
             localizer,
             &settings,
         )?;
+        assert_eq!(
+            frontier_result
+                .local_3d
+                .active_sectors()
+                .expect("a dependent union keeps its active sectors")
+                .len(),
+            5
+        );
+        let replay_states = forests.union_replay_states(dependent_disconnected)?;
+        let (state, (active_subgraph, _)) = replay_states
+            .iter()
+            .filter(|state| !state.local_edges.is_empty())
+            .zip(
+                frontier_result
+                    .local_3d
+                    .active_sectors()
+                    .expect("a dependent union keeps its active sectors"),
+            )
+            .find(|(state, _)| {
+                state.local_edges.len() == 2
+                    && forests
+                        .normalized_node_label(state.integrated)
+                        .starts_with("{36}:")
+            })
+            .expect("the integrated 36 prefix has the two-step C-to-F suffix");
+        let expected_active = state
+            .local_edges
+            .iter()
+            .enumerate()
+            .map(|(offset, edge)| {
+                let step_order = forests.graph[state.integrated].key.op_count() + offset;
+                let (current, given) = forests.wood.current_given_pair(*edge, step_order);
+                current.reduced_subgraph(&given)
+            })
+            .reduce(|active, reduced| active.union(&reduced))
+            .expect("the selected replay state has a local suffix");
+        assert_eq!(active_subgraph, &expected_active);
+        assert!(
+            active_subgraph.empty_intersection(forests.source_spinney(state.integrated).filter())
+        );
         assert!(
             frontier_result
                 .local_3d
                 .integrands()
                 .iter()
-                .any(|(_, term)| term.contains_symbol(frontier_store_marker)),
-            "a non-root dependency frontier must start from its cached local result"
+                .all(|(_, term)| !term.contains_symbol(root_store_marker)
+                    && !term.contains_symbol(frontier_store_marker)),
+            "a union must replay every component path from its typed root"
         );
         Ok(())
     }
@@ -1784,6 +1854,27 @@ mod tests {
         insta::assert_snapshot!(
             f.graph.n_nodes(),
             @"8");
+
+        let three_component_union = f
+            .graph
+            .iter_nodes()
+            .find_map(|(node, _, operation)| {
+                (operation.key.op_count() == 3
+                    && f.wood
+                        .join_factors(f.graph.source_node(node))
+                        .is_some_and(|factors| factors.len() == 3))
+                .then_some(node)
+            })
+            .expect("triple tadpole should contain a three-component union");
+        let replay_states = f.union_replay_states(three_component_union)?;
+        assert_eq!(replay_states.len(), 8);
+        assert_eq!(
+            replay_states
+                .iter()
+                .filter(|state| !state.local_edges.is_empty())
+                .count(),
+            7
+        );
 
         Ok(())
     }
@@ -2104,7 +2195,7 @@ mod tests {
     fn spectacles() -> Result<()> {
         test_initialise().unwrap();
 
-        let spectacles: Graph = dot!(
+        let mut spectacles: Graph = dot!(
             digraph G{
                 edge [particle="scalar_1"];
                 v1 -> v2;
@@ -2119,11 +2210,14 @@ mod tests {
         )?;
 
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
-        let f = Wood::new(
-            CutStructure::empty(&spectacles),
-            &spectacles,
-            &UVgenerationSettings::default(),
-        );
+        let settings = UVgenerationSettings::default();
+        let cut_structure = CutStructure::empty(&spectacles);
+        let cutset = cut_structure
+            .cuts
+            .first()
+            .expect("empty cut structure has one cut")
+            .clone();
+        let f = Wood::new(cut_structure, &spectacles, &settings);
         println!("{}", f);
         insta::assert_snapshot!(
         f.graph.n_nodes(),
@@ -2135,6 +2229,72 @@ mod tests {
         f.graph.n_nodes(),
         @"8",
          );
+
+        let (union, edge) = f
+            .graph
+            .iter_nodes()
+            .find_map(|(child, _, _)| {
+                let (parent, edge) = f.graph.unique_parent(child)?;
+                (!f.graph.is_disjoint_union(child) && f.graph.is_disjoint_union(parent))
+                    .then_some((parent, edge))
+            })
+            .expect("spectacles has a connected child above its disconnected union");
+        let orientation_pattern = crate::settings::global::OrientationPattern::default();
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::new(&[], &orientation_pattern),
+        );
+        let union_active = f
+            .union_replay_states(union)?
+            .into_iter()
+            .filter(|state| !state.local_edges.is_empty())
+            .map(|state| {
+                state
+                    .local_edges
+                    .iter()
+                    .enumerate()
+                    .map(|(offset, edge)| {
+                        let step_order = f.graph[state.integrated].key.op_count() + offset;
+                        let (current, given) = f.wood.current_given_pair(*edge, step_order);
+                        current.reduced_subgraph(&given)
+                    })
+                    .reduce(|active, reduced| active.union(&reduced))
+                    .expect("a proper union replay state has a local suffix")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(union_active.len(), 3);
+        let union_local = Local3DCts::from_active_sectors(
+            union_active
+                .iter()
+                .cloned()
+                .map(|active| (active, Integrands::root()))
+                .collect(),
+        )?;
+
+        let step_order = f.graph[union].key.op_count();
+        let (current, given) = f.wood.current_given_pair(edge, step_order);
+        let reduced = current.reduced_subgraph(&given);
+        let expected_active = union_active
+            .iter()
+            .map(|active| active.union(&reduced))
+            .chain(std::iter::once(reduced.clone()))
+            .collect::<Vec<_>>();
+        let child_local = Local3DApproximation::new(localizer, &mut spectacles, &settings).run(
+            &union_local,
+            &IntegratedCts::root(),
+            &current,
+            &given,
+            &current,
+            &given,
+        )?;
+        let child_active = child_local
+            .active_sectors()
+            .expect("a connected child keeps its parent's active sectors")
+            .iter()
+            .map(|(active, _)| active.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(child_active.len(), 4);
+        assert_eq!(child_active, expected_active);
 
         Ok(())
     }

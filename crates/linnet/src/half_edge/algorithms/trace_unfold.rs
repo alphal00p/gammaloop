@@ -1296,7 +1296,11 @@ impl<O, D> TraceKey<O, D> {
         Self { levels }
     }
 
-    fn try_foata_join<'a, I>(keys: impl IntoIterator<Item = &'a Self>, indep: &I) -> Option<Self>
+    /// Right-aligns independent traces into their common Foata normal form.
+    pub fn try_foata_join<'a, I>(
+        keys: impl IntoIterator<Item = &'a Self>,
+        indep: &I,
+    ) -> Option<Self>
     where
         I: Independence<HiddenData<O, D>>,
         O: Clone + Eq + Ord + 'a,

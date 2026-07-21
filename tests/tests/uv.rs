@@ -1072,7 +1072,7 @@ fn run_single_integrated_uv_case(case: &IntegratedUvCase<'_>) {
 }
 
 #[test]
-fn scalar_spectacles_integrated_uv_factorizes_into_bubble_square() -> Result<()> {
+fn scalar_spectacles_integrated_uv_factorizes_over_bridge() -> Result<()> {
     let mut cli = get_test_cli(
         Some("uv/scalar_spectacles_self_energy.toml".into()),
         get_tests_workspace_path().join("scalar_spectacles_self_energy"),
@@ -1080,7 +1080,76 @@ fn scalar_spectacles_integrated_uv_factorizes_into_bubble_square() -> Result<()>
         true,
     )?;
     cli.run_command("run generate")?;
-    set_fast_deterministic_integrator(&mut cli, DEFAULT_INTEGRATED_UV_INTEGRATOR)?;
+    let bubble_accuracy_floor =
+        required_stability_accuracy_floor(&mut cli, "bubble", "scalar_bubble")?;
+    let spectacles_accuracy_floor =
+        required_stability_accuracy_floor(&mut cli, "spectacles", "scalar_spectacles")?;
+
+    // The massless B-C propagator contributes i/s and the graph numerator -i/2,
+    // so the spectacles graph is the product of both bubbles divided by 2s.
+    let external_s = 1.0_f64;
+    let bridge_factor = 1.0 / (2.0 * external_s);
+    let bubble_left = evaluate_summed_momentum_sample(
+        &mut cli,
+        "bubble",
+        "scalar_bubble",
+        &[0.11, -0.07, 0.19],
+        bubble_accuracy_floor,
+    )?;
+    let bubble_right = evaluate_summed_momentum_sample(
+        &mut cli,
+        "bubble",
+        "scalar_bubble",
+        &[0.23, 0.31, -0.17],
+        bubble_accuracy_floor,
+    )?;
+    let spectacles_point = evaluate_summed_momentum_sample(
+        &mut cli,
+        "spectacles",
+        "scalar_spectacles",
+        &[0.11, -0.07, 0.19, 0.23, 0.31, -0.17],
+        spectacles_accuracy_floor,
+    )?;
+    let expected_point = Complex::new(
+        bridge_factor
+            * (bubble_left.value.re * bubble_right.value.re
+                - bubble_left.value.im * bubble_right.value.im),
+        bridge_factor
+            * (bubble_left.value.re * bubble_right.value.im
+                + bubble_left.value.im * bubble_right.value.re),
+    );
+    let point_delta = (spectacles_point.value.re - expected_point.re)
+        .hypot(spectacles_point.value.im - expected_point.im);
+    let point_scale = spectacles_point
+        .value
+        .re
+        .hypot(spectacles_point.value.im)
+        .max(expected_point.re.hypot(expected_point.im))
+        .max(f64::MIN_POSITIVE);
+    let point_accuracy = bubble_left
+        .relative_accuracy
+        .max(bubble_right.relative_accuracy)
+        .max(spectacles_point.relative_accuracy)
+        .max(f64::EPSILON);
+    assert!(
+        point_delta / point_scale <= INSPECT_DEPENDENCE_ACCURACY_FACTOR * point_accuracy,
+        "expected pointwise spectacles = bubble_left*bubble_right/(2s); relative delta={:.3e}, accuracy={point_accuracy:.3e}",
+        point_delta / point_scale,
+    );
+
+    cli.run_command("set process kv integrator.integrated_phase=imag")?;
+    set_fast_deterministic_integrator(
+        &mut cli,
+        IntegratedUvIntegratorSettings {
+            target_relative_accuracy: 0.04,
+            n_start: 50_000,
+            n_increase: 0,
+            n_max: 2_000_000,
+            n_cores: 1,
+        },
+    )?;
+    // The bubble-derived target and spectacles estimate need independent errors.
+    cli.run_command("set process kv integrator.seed=7331")?;
 
     let bubble = Integrate {
         process: vec![ProcessRef::Unqualified("bubble".to_string())],
@@ -1100,6 +1169,18 @@ fn scalar_spectacles_integrated_uv_factorizes_into_bubble_square() -> Result<()>
     .integral
     .clone();
 
+    cli.run_command("set process kv integrator.integrated_phase=real")?;
+    set_fast_deterministic_integrator(
+        &mut cli,
+        IntegratedUvIntegratorSettings {
+            target_relative_accuracy: 0.08,
+            n_start: 50_000,
+            n_increase: 0,
+            n_max: 2_000_000,
+            n_cores: 1,
+        },
+    )?;
+    cli.run_command("set process kv integrator.seed=1337")?;
     let spectacles = Integrate {
         process: vec![ProcessRef::Unqualified("spectacles".to_string())],
         integrand_name: vec!["scalar_spectacles".to_string()],
@@ -1117,16 +1198,30 @@ fn scalar_spectacles_integrated_uv_factorizes_into_bubble_square() -> Result<()>
     .ok_or_else(|| eyre::eyre!("single spectacles slot should exist"))?
     .integral
     .clone();
-    let expected = squared_integral_estimate(&bubble);
+    let mut expected = squared_integral_estimate(&bubble);
+    expected.result *= F(bridge_factor);
+    expected.error *= F(bridge_factor.abs());
 
     println!("bubble: {bubble:#}");
     println!("spectacles: {spectacles:#}");
-    println!("bubble squared: {expected:#}");
+    println!("bubble squared over 2s: {expected:#}");
 
+    for (name, estimate) in [
+        ("bubble", &bubble),
+        ("spectacles", &spectacles),
+        ("bubble squared over 2s", &expected),
+    ] {
+        let relative_error = integral_relative_error(estimate);
+        assert!(
+            relative_error < 0.10,
+            "{name} relative error must be below 10%; got {:.2}%",
+            100.0 * relative_error,
+        );
+    }
+    let delta_sigma = integral_estimate_change_sigma(&spectacles, &expected);
     assert!(
-        spectacles.is_compatible_with_result(&expected, 4),
-        "expected spectacles self-energy to factorize into the square of the single bubble; delta={}sigma",
-        integral_estimate_change_sigma(&spectacles, &expected)
+        delta_sigma <= 1.0,
+        "expected spectacles self-energy = bubble^2/(2s) within 1sigma; delta={delta_sigma}sigma"
     );
 
     clean_test(&cli.cli_settings.state.folder);

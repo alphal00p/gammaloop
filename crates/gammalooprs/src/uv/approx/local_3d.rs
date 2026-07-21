@@ -289,6 +289,93 @@ impl<'a> Local3DApproximation<'a> {
             ))
         })
     }
+
+    pub(crate) fn run_local<S: ForestNodeLike, M: ForestNodeLike>(
+        self,
+        local: &Local3DCts,
+        current: &S,
+        given: &S,
+        marker_current: &M,
+        marker_given: &M,
+    ) -> Result<Local3DCts> {
+        let ctx = UVCtx::new(self.graph, self.settings);
+        let reduced_subgraph = current.reduced_subgraph(given);
+        let active_sectors = match local.active_sectors() {
+            Some(active_sectors) => active_sectors
+                .iter()
+                .map(|(active_subgraph, integrands)| {
+                    let active_subgraph = active_subgraph.union(&reduced_subgraph);
+                    // Retain the full mask for descendants, but this replay step acts only
+                    // on the part of that mask covered by its component-local path.
+                    let rescaled_subgraph = active_subgraph.intersection(current.subgraph());
+                    Ok((
+                        active_subgraph,
+                        -integrands.fallible_map(Local3DLoopRescaling::FullSubgraph.map(
+                            &ctx,
+                            current,
+                            given,
+                            Some(rescaled_subgraph),
+                        ))?,
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?,
+            None => vec![(
+                reduced_subgraph.clone(),
+                -local
+                    .integrands()
+                    .fallible_map(Local3DLoopRescaling::FullSubgraph.map(
+                        &ctx,
+                        current,
+                        given,
+                        Some(reduced_subgraph),
+                    ))?,
+            )],
+        };
+        Local3DCts::from_active_sectors(active_sectors)?.map(|atom| {
+            Ok(UvMarker::new(ctx.settings).apply(
+                UvOperation::Approx,
+                marker_current.subgraph(),
+                marker_given.subgraph(),
+                atom,
+            ))
+        })
+    }
+
+    pub(crate) fn run_integrated<S: ForestNodeLike, I: ForestNodeLike, M: ForestNodeLike>(
+        self,
+        integrated: &IntegratedCts,
+        integrated_node: &I,
+        current: &S,
+        given: &S,
+        marker_current: &M,
+        marker_given: &M,
+    ) -> Result<Local3DCts> {
+        let integrated = self.localizer.localize(
+            &integrated.physical_finite_counterterm_atom(),
+            self.graph,
+            integrated_node,
+        )?;
+        let ctx = UVCtx::new(self.graph, self.settings);
+        let active_subgraph = current.reduced_subgraph(given);
+        let integrated = -(integrated
+            .active
+            .fallible_map(Local3DLoopRescaling::ReducedSubgraph.map(
+                &ctx,
+                current,
+                given,
+                Some(active_subgraph.clone()),
+            ))?
+            .zip_mul(&integrated.frozen_integrands)?);
+
+        Local3DCts::from_active_sectors(vec![(active_subgraph, integrated)])?.map(|atom| {
+            Ok(UvMarker::new(ctx.settings).apply(
+                UvOperation::Approx,
+                marker_current.subgraph(),
+                marker_given.subgraph(),
+                atom,
+            ))
+        })
+    }
 }
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Local3DCts {
