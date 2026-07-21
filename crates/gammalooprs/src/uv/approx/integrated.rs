@@ -50,9 +50,10 @@ use crate::{
     },
 };
 
-/// A canonical Laurent expansion of an integrated counterterm.
+/// Laurent projections of an integrated counterterm.
 ///
-/// Consumers select either its pole or signed nonnegative-power projection.
+/// Connected values store their canonical expansion. Factorized values encode
+/// componentwise pole and signed nonnegative-power products under the same accessors.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IntegratedCts {
     expansion: Series<AtomField>,
@@ -60,15 +61,29 @@ pub struct IntegratedCts {
 }
 
 impl IntegratedCts {
-    pub(crate) fn factorized_product(&self, other: &Self, depth: usize) -> Result<Self> {
-        let pole = truncate(&self.expansion, false) * truncate(&other.expansion, false);
-        let nonnegative = truncate(&self.expansion, true) * truncate(&other.expansion, true);
+    pub(crate) fn factorized_product<'a>(
+        factors: impl IntoIterator<Item = &'a Self>,
+        depth: usize,
+    ) -> Result<Self> {
+        let mut factors = factors.into_iter();
+        let first = factors
+            .next()
+            .ok_or_else(|| eyre!("a factorized integrated counterterm cannot be empty"))?;
+        let mut pole = truncate(&first.expansion, false);
+        let mut finite_counterterm = -truncate(&first.expansion, true);
+        let mut scale_power = first.scale_power;
+
+        for factor in factors {
+            pole *= truncate(&factor.expansion, false);
+            finite_counterterm *= -truncate(&factor.expansion, true);
+            scale_power += factor.scale_power;
+        }
 
         Ok(Self {
-            // `finite_counterterm_atom` negates the nonnegative projection, so
-            // storing its negative gives the positive product of two counterterms.
-            expansion: series(&(pole - nonnegative), depth)?,
-            scale_power: self.scale_power + other.scale_power,
+            // The public projections add the finite-counterterm sign, so store
+            // its negative while keeping the pole product unchanged.
+            expansion: series(&(pole - finite_counterterm), depth)?,
+            scale_power,
         })
     }
 
@@ -215,14 +230,19 @@ impl Integrated<'_> {
                     marker_given.subgraph(),
                     &self.integrate(&simplified, ctx, current, given)?,
                 );
-                let expanded = series(&integrated, n_loops + 1)?.map_coeff(|coefficient| {
-                    marker.apply(
-                        UvOperation::Series,
-                        marker_current.subgraph(),
-                        marker_given.subgraph(),
-                        coefficient,
-                    )
-                });
+                let expansion_depth =
+                    usize::try_from(self.vakint_settings.number_of_terms_in_epsilon_expansion)
+                        .wrap_err("Vakint epsilon expansion depth must be nonnegative")?;
+                let expanded = series(&integrated, expansion_depth.max(n_loops + 1))?.map_coeff(
+                    |coefficient| {
+                        marker.apply(
+                            UvOperation::Series,
+                            marker_current.subgraph(),
+                            marker_given.subgraph(),
+                            coefficient,
+                        )
+                    },
+                );
                 let expansion = expanded.map_coeff(|coefficient| {
                     marker.apply(
                         UvOperation::Truncate,
@@ -1215,6 +1235,25 @@ mod tests {
             integrated.physical_finite_counterterm_atom(),
             -(Atom::num(5) + Atom::num(7) * Atom::var(GS.dim_epsilon))
         );
+    }
+
+    #[test]
+    fn factorized_product_projects_each_component() {
+        test_initialise().unwrap();
+
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let factors = [2, 3, 5].map(|finite| IntegratedCts {
+            expansion: series(&(epsilon.pow(-1) + Atom::num(finite)), 1).unwrap(),
+            scale_power: 0,
+        });
+        let product = IntegratedCts::factorized_product(&factors[..2], 1).unwrap();
+
+        assert_eq!(product.physical_pole_atom(), epsilon.pow(-2));
+        assert_eq!(product.physical_finite_counterterm_atom(), Atom::num(6));
+
+        let product = IntegratedCts::factorized_product(&factors, 1).unwrap();
+        assert_eq!(product.physical_pole_atom(), epsilon.pow(-3));
+        assert_eq!(product.physical_finite_counterterm_atom(), Atom::num(-30));
     }
 
     // #[test]
