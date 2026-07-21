@@ -822,28 +822,76 @@ impl ColorAlgebraSimplifier {
                 continue;
             };
 
-            let all_args = f_args.iter().flatten().cloned().collect::<Vec<_>>();
-            let externals = all_args
-                .iter()
-                .filter(|arg| {
-                    all_args
-                        .iter()
-                        .filter(|candidate| *candidate == *arg)
-                        .count()
-                        == 1
-                })
-                .cloned()
-                .collect::<Vec<_>>();
-            if externals.len() != 3 {
+            let common01 = common_structure_positions(&f_args[0], &f_args[1]);
+            let common12 = common_structure_positions(&f_args[1], &f_args[2]);
+            let common20 = common_structure_positions(&f_args[2], &f_args[0]);
+            let ([edge01], [edge12], [edge20]) = (
+                common01.as_slice(),
+                common12.as_slice(),
+                common20.as_slice(),
+            ) else {
+                continue;
+            };
+            if edge01.left == edge20.right
+                || edge01.right == edge12.left
+                || edge12.right == edge20.left
+            {
                 continue;
             }
 
-            let [a, b, c] = externals.as_slice() else {
+            let Some(external0) =
+                (0..3).find(|position| *position != edge01.left && *position != edge20.right)
+            else {
                 continue;
             };
-            let replacement = adjoint_casimir_for_dimension(color_structure_dimension(&f_args[0])?)
+            let Some(external1) =
+                (0..3).find(|position| *position != edge01.right && *position != edge12.left)
+            else {
+                continue;
+            };
+            let Some(external2) =
+                (0..3).find(|position| *position != edge12.right && *position != edge20.left)
+            else {
+                continue;
+            };
+
+            let internal01 = f_args[0][edge01.left].clone();
+            let internal12 = f_args[1][edge12.left].clone();
+            let internal20 = f_args[2][edge20.left].clone();
+            let externals = [
+                f_args[0][external0].clone(),
+                f_args[1][external1].clone(),
+                f_args[2][external2].clone(),
+            ];
+            let actual = f_args
+                .iter()
+                .map(|args| color_f!(args[0].clone(), args[1].clone(), args[2].clone()))
+                .collect::<Vec<_>>();
+            let oriented = [
+                color_f!(internal20.clone(), internal01.clone(), externals[0].clone()),
+                color_f!(internal01, internal12.clone(), externals[1].clone()),
+                color_f!(internal12, internal20, externals[2].clone()),
+            ];
+            // Orient all three structures around the cycle; their coefficient
+            // product carries the permutation parity into the reduced f.
+            let prefactor = oriented
+                .iter()
+                .zip(actual)
+                .fold(Atom::num(1), |prefactor, (oriented, actual)| {
+                    prefactor * oriented.coefficient(actual.as_view())
+                });
+            if prefactor.is_zero() {
+                continue;
+            }
+
+            let replacement = prefactor
+                * adjoint_casimir_for_dimension(color_structure_dimension(&f_args[0])?)
                 / Atom::num(2)
-                * color_f!(a.clone(), b.clone(), c.clone());
+                * color_f!(
+                    externals[0].clone(),
+                    externals[1].clone(),
+                    externals[2].clone()
+                );
             let mut excluded = vec![false; product.factors.len()];
             for index in indices {
                 excluded[index] = true;

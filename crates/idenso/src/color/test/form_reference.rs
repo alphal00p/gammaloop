@@ -148,6 +148,96 @@ fn two_f_loop_contracts_to_ca_metric() {
 }
 
 #[test]
+fn metric_contracted_f_square_is_positive() {
+    test_initialize();
+    // Seed the symbol order from the three-loop graph that exposed the lost
+    // permutation parity in the old sequence-wildcard contraction.
+    let _ = parse_lit!(
+        f(
+            coad(8, metric_orientation_a),
+            coad(8, metric_orientation_x),
+            coad(8, metric_orientation_u)
+        ) * f(
+            coad(8, metric_orientation_a),
+            coad(8, metric_orientation_x),
+            coad(8, metric_orientation_v)
+        ),
+        default_namespace = "spenso"
+    )
+    .simplify_metrics();
+    let contracted = parse_lit!(
+        g(coad(8, metric_orientation_r), coad(8, metric_orientation_s))
+            * f(
+                coad(8, metric_orientation_u),
+                coad(8, metric_orientation_j),
+                coad(8, metric_orientation_r)
+            ),
+        default_namespace = "spenso"
+    )
+    .simplify_metrics();
+    let expected = parse_lit!(
+        f(
+            coad(8, metric_orientation_u),
+            coad(8, metric_orientation_j),
+            coad(8, metric_orientation_s)
+        ),
+        default_namespace = "spenso"
+    );
+    assert_eq!(
+        contracted.to_bare_ordered_string(),
+        expected.to_bare_ordered_string()
+    );
+
+    let nested = parse_lit!(
+        g(coad(8, metric_orientation_r), coad(8, metric_orientation_s))
+            * metric_orientation_probe(
+                f(
+                    coad(8, metric_orientation_u),
+                    coad(8, metric_orientation_j),
+                    coad(8, metric_orientation_r)
+                ),
+                coad(8, metric_orientation_r)
+            ),
+        default_namespace = "spenso"
+    )
+    .simplify_metrics();
+    let nested_expected = parse_lit!(
+        metric_orientation_probe(
+            f(
+                coad(8, metric_orientation_u),
+                coad(8, metric_orientation_j),
+                coad(8, metric_orientation_r)
+            ),
+            coad(8, metric_orientation_s)
+        ),
+        default_namespace = "spenso"
+    );
+    assert_eq!(
+        nested.to_bare_ordered_string(),
+        nested_expected.to_bare_ordered_string()
+    );
+
+    let expr = parse_lit!(
+        g(coad(8, metric_orientation_u), coad(8, metric_orientation_v))
+            * g(coad(8, metric_orientation_r), coad(8, metric_orientation_s))
+            * f(
+                coad(8, metric_orientation_u),
+                coad(8, metric_orientation_j),
+                coad(8, metric_orientation_r)
+            )
+            * f(
+                coad(8, metric_orientation_v),
+                coad(8, metric_orientation_j),
+                coad(8, metric_orientation_s)
+            ),
+        default_namespace = "spenso"
+    );
+
+    assert_snapshot!(expr.simplify_metrics().to_bare_ordered_string(), @"(f(coad(8,metric_orientation_j),coad(8,metric_orientation_s),coad(8,metric_orientation_v)))^2");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"8*cas(2,coad(8))");
+}
+
+#[test]
 fn three_f_loop_contracts_to_ca_f() {
     test_initialize();
     let expr = parse_lit!(
@@ -158,6 +248,52 @@ fn three_f_loop_contracts_to_ca_f() {
     );
 
     assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1/2*cas(2,coad(NA))*f(coad(NA,e),coad(NA,f_),coad(NA,g_))");
+}
+
+#[test]
+fn three_f_loop_preserves_antisymmetric_orientation() {
+    test_initialize();
+    // Seed the symbol order that made the unoriented triangle reduction pick
+    // the wrong sign in the three-loop graph.
+    let _ = parse_lit!(
+        g(
+            coad(8, triangle_orientation_r),
+            coad(8, triangle_orientation_s)
+        ) * f(
+            coad(8, triangle_orientation_x),
+            coad(8, triangle_orientation_z),
+            coad(8, triangle_orientation_r)
+        ),
+        default_namespace = "spenso"
+    );
+    let triangle = parse_lit!(
+        f(
+            coad(8, triangle_orientation_u),
+            coad(8, triangle_orientation_x),
+            coad(8, triangle_orientation_r)
+        ) * f(
+            coad(8, triangle_orientation_y),
+            coad(8, triangle_orientation_z),
+            coad(8, triangle_orientation_r)
+        ) * f(
+            coad(8, triangle_orientation_u),
+            coad(8, triangle_orientation_z),
+            coad(8, triangle_orientation_s)
+        ),
+        default_namespace = "spenso"
+    );
+    let closing_structure = parse_lit!(
+        f(
+            coad(8, triangle_orientation_x),
+            coad(8, triangle_orientation_y),
+            coad(8, triangle_orientation_s)
+        ),
+        default_namespace = "spenso"
+    );
+
+    assert_snapshot!(triangle.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(8))*f(coad(8,triangle_orientation_s),coad(8,triangle_orientation_x),coad(8,triangle_orientation_y))");
+    assert_snapshot!((&triangle * &closing_structure).simplify_color().to_bare_ordered_string(), @"(cas(2,coad(8)))^2*-4");
+    assert_snapshot!((triangle.simplify_color() * closing_structure).simplify_color().to_bare_ordered_string(), @"(cas(2,coad(8)))^2*-4");
 }
 
 #[test]
