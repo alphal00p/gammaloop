@@ -61,7 +61,7 @@ use crate::{
             extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape, variable_indices_from_cut_cff_index,
         },
-        newton_solver::{NewtonIterationResult, safeguarded_newton_iteration_and_derivative},
+        newton_solver::{NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity},
     },
 };
 
@@ -985,6 +985,20 @@ impl<T: FloatLike> LUCTKinematicPoint<T> {
 }
 
 impl LUCounterTerm {
+    fn radial_root_identity(
+        graph_name: &str,
+        cut_group_id: CutGroupId,
+        side: &str,
+        overlap_group: usize,
+        esurface_id: EsurfaceID,
+        probe_rotation: &Rotation,
+    ) -> RadialRootIdentity {
+        RadialRootIdentity::new(format!(
+            "LU graph '{graph_name}' cut group {} {side} overlap group {overlap_group} E-surface {} probe rotation {}",
+            cut_group_id.0, esurface_id.0, probe_rotation.method,
+        ))
+    }
+
     pub(crate) fn cut_group_is_active(&self, cut_group_id: CutGroupId) -> bool {
         self.active_cut_groups[cut_group_id]
     }
@@ -1299,9 +1313,21 @@ impl LUCounterTerm {
                 Vec::with_capacity(overlap_builder.overlap_group.existing_esurfaces.len());
             for &existing_esurface_id in &overlap_builder.overlap_group.existing_esurfaces {
                 let esurface_id = left_overlap.existing_esurfaces[existing_esurface_id];
+                let radial_root_identity = Self::radial_root_identity(
+                    &graph.name,
+                    cut_group_id,
+                    "left",
+                    overlap_group_index,
+                    esurface_id,
+                    probe_rotation,
+                );
                 let Some(solution) = overlap_builder
                     .new_esurface_builder(existing_esurface_id)
-                    .solve_rstar(&mut self.rstar_dependence_calculator[cut_group_id])
+                    .solve_rstar(
+                        &mut self.rstar_dependence_calculator[cut_group_id],
+                        &radial_root_identity,
+                        &mut evaluation_meta_data.radial_root_diagnostics,
+                    )
                 else {
                     evaluation_meta_data.record_threshold_counterterm_error(format!(
                         "LU graph '{}' cut group {} left overlap group {} E-surface {} failed center or radial-root validation in probe rotation {}",
@@ -1342,9 +1368,21 @@ impl LUCounterTerm {
                 Vec::with_capacity(overlap_builder.overlap_group.existing_esurfaces.len());
             for &existing_esurface_id in &overlap_builder.overlap_group.existing_esurfaces {
                 let esurface_id = right_overlap.existing_esurfaces[existing_esurface_id];
+                let radial_root_identity = Self::radial_root_identity(
+                    &graph.name,
+                    cut_group_id,
+                    "right",
+                    overlap_group_index,
+                    esurface_id,
+                    probe_rotation,
+                );
                 let Some(solution) = overlap_builder
                     .new_esurface_builder(existing_esurface_id)
-                    .solve_rstar(&mut self.rstar_dependence_calculator[cut_group_id])
+                    .solve_rstar(
+                        &mut self.rstar_dependence_calculator[cut_group_id],
+                        &radial_root_identity,
+                        &mut evaluation_meta_data.radial_root_diagnostics,
+                    )
                 else {
                     evaluation_meta_data.record_threshold_counterterm_error(format!(
                         "LU graph '{}' cut group {} right overlap group {} E-surface {} failed center or radial-root validation in probe rotation {}",
@@ -1852,6 +1890,8 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
     fn solve_rstar(
         self,
         rstar_t_dependence_evaluator: &mut RstarTDependenceEvaluator,
+        radial_root_identity: &RadialRootIdentity,
+        radial_root_diagnostics: &mut RadialRootDiagnostics,
     ) -> Option<RstarSolution<'a, T>> {
         let subspace = self.overlap_builder.counterterm_builder.subspace;
         let graph = self.overlap_builder.counterterm_builder.graph;
@@ -1982,7 +2022,8 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
         debug!("initial radius guess: {:?}", radius_guess);
 
         // Some residual is expected when Newton stagnates at the representable value nearest the
-        // root. Scale the configured tolerance with the active precision in the shared solver.
+        // root. Direct convergence uses the active precision; the shared diagnostics may also
+        // certify a residual-limited higher-precision result against the preceding precision.
         let tolerance = F::from_f64(
             self.overlap_builder
                 .counterterm_builder
@@ -1990,7 +2031,8 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 .subtraction
                 .radial_root_residual_tolerance,
         );
-        let solution = match safeguarded_newton_iteration_and_derivative(
+        let solution = match radial_root_diagnostics.solve(
+            radial_root_identity,
             &zero,
             &radius_guess,
             function,

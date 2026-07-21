@@ -1649,7 +1649,7 @@
           "$ref": "#/$defs/OverlapSettings"
         },
         "radial_root_residual_tolerance": {
-          "description": "Multiplier of `epsilon(T) * E_cm` used as the maximum accepted residual for\nthreshold-counterterm radial roots at the active numerical precision `T`.",
+          "description": "Multiplier of `epsilon(T) * E_cm` used as the direct residual limit for\nthreshold-counterterm radial roots at numerical precision `T`. A residual-limited\nhigher-precision root may instead be accepted against the corresponding lower-precision\nlimit after satisfying the cross-precision consistency checks.",
           "type": "number",
           "format": "double",
           "minimum": 0.0
