@@ -49,7 +49,7 @@ use crate::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape,
         },
-        newton_solver::{NewtonIterationResult, safeguarded_newton_iteration_and_derivative},
+        newton_solver::{NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity},
     },
 };
 use symbolica::domains::dual::HyperDual;
@@ -178,6 +178,18 @@ pub struct AmplitudeCountertermEvaluation<T: FloatLike> {
 }
 
 impl AmplitudeCountertermData {
+    fn radial_root_identity(
+        graph_name: &str,
+        overlap_group: usize,
+        raised_esurface_id: RaisedEsurfaceId,
+        rotation: &Rotation,
+    ) -> RadialRootIdentity {
+        RadialRootIdentity::new(format!(
+            "amplitude graph '{graph_name}' overlap group {overlap_group} raised E-surface {} probe rotation {}",
+            raised_esurface_id.0, rotation.method,
+        ))
+    }
+
     pub(crate) fn generic_evaluator_count(&self) -> usize {
         let stack_count = self
             .evaluators
@@ -370,7 +382,16 @@ impl AmplitudeCountertermData {
 
                 let raised_esurface_id = esurface_builder.raised_esurface_id;
                 self.ensure_active_raised_esurface(raised_esurface_id)?;
-                let Some(rstar_solution) = esurface_builder.solve_rstar() else {
+                let radial_root_identity = Self::radial_root_identity(
+                    &graph.name,
+                    overlap_group,
+                    raised_esurface_id,
+                    rotation,
+                );
+                let Some(rstar_solution) = esurface_builder.solve_rstar(
+                    &radial_root_identity,
+                    &mut evaluation_metadata.radial_root_diagnostics,
+                ) else {
                     evaluation_metadata.record_threshold_counterterm_error(format!(
                         "amplitude graph '{}' overlap group {} raised E-surface {} failed center or radial-root validation in probe rotation {}",
                         graph.name,
@@ -444,8 +465,9 @@ impl AmplitudeCountertermData {
             existing_esurfaces: self.overlap.existing_esurfaces.clone(),
             overlap_groups_with_kinematics: Vec::new(),
         };
+        let mut radial_root_diagnostics = RadialRootDiagnostics::default();
 
-        for group in self.overlap.overlap_groups.iter() {
+        for (overlap_group, group) in self.overlap.overlap_groups.iter().enumerate() {
             let overlap_builder = counter_term_builder.new_overlap_builder(group);
 
             let mut loop_momenta_at_esurface: TiVec<ExistingEsurfaceId, Option<MomentumSample<T>>> =
@@ -456,8 +478,17 @@ impl AmplitudeCountertermData {
                     .map(|esurface_builder| -> Result<_> {
                         self.ensure_active_raised_esurface(esurface_builder.raised_esurface_id)?;
                         let raised_esurface_id = esurface_builder.raised_esurface_id;
+                        let radial_root_identity = Self::radial_root_identity(
+                            &graph.name,
+                            overlap_group,
+                            raised_esurface_id,
+                            rotation,
+                        );
                         let rstar_sample = esurface_builder
-                            .solve_rstar()
+                            .solve_rstar(
+                                &radial_root_identity,
+                                &mut radial_root_diagnostics,
+                            )
                             .ok_or_else(|| {
                                 eyre!(
                                     "Could not construct threshold-counterterm kinematics for raised E-surface {} in probe rotation {}",
@@ -620,7 +651,11 @@ struct EsurfaceCTBuilder<'a, T: FloatLike> {
 }
 
 impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
-    fn solve_rstar(self) -> Option<RstarSolution<'a, T>> {
+    fn solve_rstar(
+        self,
+        radial_root_identity: &RadialRootIdentity,
+        radial_root_diagnostics: &mut RadialRootDiagnostics,
+    ) -> Option<RstarSolution<'a, T>> {
         let mut all_center_values_valid = true;
         let center_surface_values = self
             .overlap_builder
@@ -758,7 +793,8 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 .subtraction
                 .radial_root_residual_tolerance,
         );
-        let solution = match safeguarded_newton_iteration_and_derivative(
+        let solution = match radial_root_diagnostics.solve(
+            radial_root_identity,
             &zero,
             &radius_guess,
             function,

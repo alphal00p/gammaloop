@@ -3776,6 +3776,7 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
                 loop_momenta_escalation: None,
                 stability_results: Vec::new(),
                 threshold_counterterm_error: None,
+                radial_root_diagnostics: Default::default(),
             },
         })
     }

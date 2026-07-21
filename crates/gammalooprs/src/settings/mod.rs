@@ -258,12 +258,17 @@ mod tests {
     fn radial_root_residual_tolerance_defaults_and_overrides() {
         assert_eq!(
             SubtractionSettings::default().radial_root_residual_tolerance,
-            1000.0,
+            64.0,
+        );
+        assert!(
+            !toml::to_string(&RuntimeSettings::default())
+                .unwrap()
+                .contains("radial_root_residual_tolerance")
         );
 
         let runtime: RuntimeSettings =
-            toml::from_str("[subtraction]\nradial_root_residual_tolerance = 64.0\n").unwrap();
-        assert_eq!(runtime.subtraction.radial_root_residual_tolerance, 64.0);
+            toml::from_str("[subtraction]\nradial_root_residual_tolerance = 128.0\n").unwrap();
+        assert_eq!(runtime.subtraction.radial_root_residual_tolerance, 128.0);
 
         for invalid in ["-1.0", "nan", "inf", "-inf"] {
             let runtime = toml::from_str::<RuntimeSettings>(&format!(
