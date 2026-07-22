@@ -52,6 +52,9 @@ use symbolica::api::python::PythonExpression;
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{PyStubType, TypeInfo, define_stub_info_gatherer, derive::*};
 
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::derive::{gen_stub_pyclass_enum, gen_stub_pyfunction};
+
 pub mod library;
 pub mod library_tensor;
 pub mod network;
@@ -65,6 +68,43 @@ trait ModuleInit: PyClass {
 
 pub struct SpensoModule;
 
+/// Policy for Rayon operations that manipulate Symbolica expressions.
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
+#[pyclass(from_py_object, eq, eq_int, module = "symbolica.community.spenso")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SymbolicParallelism {
+    /// Resolve the setting from the Symbolica license when configured.
+    Auto,
+    /// Keep symbolic operations on the calling thread.
+    Serial,
+    /// Allow symbolic operations to use Rayon workers.
+    Parallel,
+}
+
+impl From<SymbolicParallelism> for spenso::symbolic_parallelism::SymbolicParallelism {
+    fn from(value: SymbolicParallelism) -> Self {
+        match value {
+            SymbolicParallelism::Auto => Self::Auto,
+            SymbolicParallelism::Serial => Self::Serial,
+            SymbolicParallelism::Parallel => Self::Parallel,
+        }
+    }
+}
+
+/// Configure whether Spenso may use Rayon for Symbolica operations.
+///
+/// `Auto` checks the Symbolica license once during this call. Tensor operations
+/// subsequently use the cached result without querying the license again.
+#[cfg_attr(
+    feature = "python_stubgen",
+    gen_stub_pyfunction(module = "symbolica.community.spenso")
+)]
+#[pyfunction]
+fn set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> bool {
+    spenso::symbolic_parallelism::set_symbolica_rayon_enabled(policy.into());
+    spenso::symbolic_parallelism::symbolica_rayon_enabled()
+}
+
 impl SymbolicaCommunityModule for SpensoModule {
     fn get_name() -> String {
         "spenso".to_string()
@@ -76,6 +116,9 @@ impl SymbolicaCommunityModule for SpensoModule {
 
     fn initialize(_py: Python) -> PyResult<()> {
         idenso::representations::initialize();
+        spenso::symbolic_parallelism::set_symbolica_rayon_enabled(
+            spenso::symbolic_parallelism::SymbolicParallelism::Auto,
+        );
         Ok(())
     }
 }
@@ -87,6 +130,8 @@ pub(crate) fn initialize_spenso(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // m.add_function(?)?;
     SpensoNet::init(m)?;
     ExecutionMode::init(m)?;
+    m.add_class::<SymbolicParallelism>()?;
+    m.add_function(wrap_pyfunction!(set_symbolica_rayon_enabled, m)?)?;
     Spensor::init(m)?;
     LibrarySpensor::init(m)?;
     SpensoIndices::init(m)?;

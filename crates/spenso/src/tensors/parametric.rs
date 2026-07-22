@@ -2146,13 +2146,15 @@ where
         other_iter.reset();
     }
 
-    let elements = grouped
-        .into_par_iter()
-        .filter_map(|(index, terms)| {
-            let value = grouped_atom_sum(terms);
-            (!value.as_view().is_zero()).then_some((index, value))
-        })
-        .collect();
+    let finish_group = |(index, terms)| {
+        let value = grouped_atom_sum(terms);
+        (!value.as_view().is_zero()).then_some((index, value))
+    };
+    let elements = if crate::symbolic_parallelism::symbolica_rayon_enabled() {
+        grouped.into_par_iter().filter_map(finish_group).collect()
+    } else {
+        grouped.into_iter().filter_map(finish_group).collect()
+    };
 
     Ok(SparseTensor {
         zero: Atom::Zero,
@@ -2227,13 +2229,15 @@ where
         other_iter.reset();
     }
 
-    let elements = grouped
-        .into_par_iter()
-        .filter_map(|(index, terms)| {
-            let value = grouped_atom_sum(terms);
-            (!value.as_view().is_zero()).then_some((index, value))
-        })
-        .collect();
+    let finish_group = |(index, terms)| {
+        let value = grouped_atom_sum(terms);
+        (!value.as_view().is_zero()).then_some((index, value))
+    };
+    let elements = if crate::symbolic_parallelism::symbolica_rayon_enabled() {
+        grouped.into_par_iter().filter_map(finish_group).collect()
+    } else {
+        grouped.into_iter().filter_map(finish_group).collect()
+    };
 
     Ok(SparseTensor {
         zero: Atom::Zero,
