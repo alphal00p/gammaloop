@@ -88,6 +88,8 @@ These rules are intentionally broad and should shape most code changes.
   keep formatting consistent.
 - Run clippy before finishing a change and address warnings where practical.
 - Naming: `snake_case` for functions/modules, `CamelCase` for types/traits.
+- Prefer narrow imports and method-call syntax over repeated fully qualified
+  paths; retain qualification for disambiguation or macro hygiene.
 - Prefer methods on types to bare functions.
 - Prefer explicit function composition over function nesting: when a value
   crosses a semantic boundary, bind it or use `From`/`TryFrom` so the

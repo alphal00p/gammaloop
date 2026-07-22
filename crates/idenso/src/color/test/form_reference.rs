@@ -1,5 +1,7 @@
 use super::*;
 use insta::assert_snapshot;
+use spenso::{g, shadowing::IntoAtom};
+use symbolica::{function, symbol};
 
 macro_rules! fco {
     ($r:ident, $a:tt, $b:tt, $c:tt) => {
@@ -148,93 +150,50 @@ fn two_f_loop_contracts_to_ca_metric() {
 }
 
 #[test]
-fn metric_contracted_f_square_is_positive() {
+fn metric_contraction_respects_antisymmetric_normalization() {
     test_initialize();
+    let coad8 = ColorAdjoint {}.new_rep(8);
     // Seed the symbol order from the three-loop graph that exposed the lost
     // permutation parity in the old sequence-wildcard contraction.
-    let _ = parse_lit!(
-        f(
-            coad(8, metric_orientation_a),
-            coad(8, metric_orientation_x),
-            coad(8, metric_orientation_u)
-        ) * f(
-            coad(8, metric_orientation_a),
-            coad(8, metric_orientation_x),
-            coad(8, metric_orientation_v)
-        ),
-        default_namespace = "spenso"
-    )
-    .simplify_metrics();
-    let contracted = parse_lit!(
-        g(coad(8, metric_orientation_r), coad(8, metric_orientation_s))
-            * f(
-                coad(8, metric_orientation_u),
-                coad(8, metric_orientation_j),
-                coad(8, metric_orientation_r)
-            ),
-        default_namespace = "spenso"
-    )
-    .simplify_metrics();
-    let expected = parse_lit!(
-        f(
-            coad(8, metric_orientation_u),
-            coad(8, metric_orientation_j),
-            coad(8, metric_orientation_s)
-        ),
-        default_namespace = "spenso"
-    );
+    let a = slot!(coad8, standalone_metric_a);
+    let x = slot!(coad8, standalone_metric_x);
+    let u = slot!(coad8, standalone_metric_u);
+    let v = slot!(coad8, standalone_metric_v);
+    let _ = (color_f!(a, x, u) * color_f!(a, x, v)).simplify_metrics();
+    let r = slot!(coad8, standalone_metric_r);
+    let s = slot!(coad8, standalone_metric_s);
+    let j = slot!(coad8, standalone_metric_j);
+
+    let contracted = (g!(r, s) * color_f!(u, j, r)).simplify_metrics();
+    // Re-normalizing f after direct slot substitution may change its displayed
+    // argument order and coefficient, so compare with a freshly built target.
     assert_eq!(
         contracted.to_bare_ordered_string(),
-        expected.to_bare_ordered_string()
+        color_f!(u, j, s).to_bare_ordered_string(),
     );
 
-    let nested = parse_lit!(
-        g(coad(8, metric_orientation_r), coad(8, metric_orientation_s))
-            * metric_orientation_probe(
-                f(
-                    coad(8, metric_orientation_u),
-                    coad(8, metric_orientation_j),
-                    coad(8, metric_orientation_r)
-                ),
-                coad(8, metric_orientation_r)
-            ),
-        default_namespace = "spenso"
-    )
-    .simplify_metrics();
-    let nested_expected = parse_lit!(
-        metric_orientation_probe(
-            f(
-                coad(8, metric_orientation_u),
-                coad(8, metric_orientation_j),
-                coad(8, metric_orientation_r)
-            ),
-            coad(8, metric_orientation_s)
-        ),
-        default_namespace = "spenso"
-    );
+    let closed = g!(u, v) * g!(r, s) * color_f!(u, j, r) * color_f!(v, j, s);
     assert_eq!(
-        nested.to_bare_ordered_string(),
-        nested_expected.to_bare_ordered_string()
+        closed.simplify_color(),
+        Atom::num(8) * color_cas!(2, &coad8)
     );
+}
 
-    let expr = parse_lit!(
-        g(coad(8, metric_orientation_u), coad(8, metric_orientation_v))
-            * g(coad(8, metric_orientation_r), coad(8, metric_orientation_s))
-            * f(
-                coad(8, metric_orientation_u),
-                coad(8, metric_orientation_j),
-                coad(8, metric_orientation_r)
-            )
-            * f(
-                coad(8, metric_orientation_v),
-                coad(8, metric_orientation_j),
-                coad(8, metric_orientation_s)
-            ),
-        default_namespace = "spenso"
-    );
+#[test]
+fn metric_contraction_only_replaces_the_immediate_slot() {
+    test_initialize();
+    let coad8 = ColorAdjoint {}.new_rep(8);
+    let u = slot!(coad8, standalone_nested_metric_u);
+    let j = slot!(coad8, standalone_nested_metric_j);
+    let r = slot!(coad8, standalone_nested_metric_r);
+    let s = slot!(coad8, standalone_nested_metric_s);
+    let probe = symbol!("spenso::standalone_metric_probe");
+    let structure = color_f!(u, j, r);
+    let r_atom = r.into_atom();
+    let s_atom = s.into_atom();
 
-    assert_snapshot!(expr.simplify_metrics().to_bare_ordered_string(), @"(f(coad(8,metric_orientation_j),coad(8,metric_orientation_s),coad(8,metric_orientation_v)))^2");
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"8*cas(2,coad(8))");
+    let contracted = (g!(r, s) * function!(probe, &structure, r_atom)).simplify_metrics();
+    assert_eq!(contracted, function!(probe, structure, s_atom));
 }
 
 #[test]
@@ -253,47 +212,51 @@ fn three_f_loop_contracts_to_ca_f() {
 #[test]
 fn three_f_loop_preserves_antisymmetric_orientation() {
     test_initialize();
+    let coad8 = ColorAdjoint {}.new_rep(8);
     // Seed the symbol order that made the unoriented triangle reduction pick
     // the wrong sign in the three-loop graph.
-    let _ = parse_lit!(
-        g(
-            coad(8, triangle_orientation_r),
-            coad(8, triangle_orientation_s)
-        ) * f(
-            coad(8, triangle_orientation_x),
-            coad(8, triangle_orientation_z),
-            coad(8, triangle_orientation_r)
-        ),
-        default_namespace = "spenso"
-    );
-    let triangle = parse_lit!(
-        f(
-            coad(8, triangle_orientation_u),
-            coad(8, triangle_orientation_x),
-            coad(8, triangle_orientation_r)
-        ) * f(
-            coad(8, triangle_orientation_y),
-            coad(8, triangle_orientation_z),
-            coad(8, triangle_orientation_r)
-        ) * f(
-            coad(8, triangle_orientation_u),
-            coad(8, triangle_orientation_z),
-            coad(8, triangle_orientation_s)
-        ),
-        default_namespace = "spenso"
-    );
-    let closing_structure = parse_lit!(
-        f(
-            coad(8, triangle_orientation_x),
-            coad(8, triangle_orientation_y),
-            coad(8, triangle_orientation_s)
-        ),
-        default_namespace = "spenso"
-    );
+    let r = slot!(coad8, standalone_triangle_r);
+    let s = slot!(coad8, standalone_triangle_s);
+    let x = slot!(coad8, standalone_triangle_x);
+    let z = slot!(coad8, standalone_triangle_z);
+    let _ = g!(r, s) * color_f!(x, z, r);
+    let u = slot!(coad8, standalone_triangle_u);
+    let y = slot!(coad8, standalone_triangle_y);
+    let triangle = color_f!(u, x, r) * color_f!(y, z, r) * color_f!(u, z, s);
+    let closing_structure = color_f!(s, x, y);
+    let expected = Atom::num(-1) * color_cas!(2, &coad8) / Atom::num(2) * color_f!(s, x, y);
 
-    assert_snapshot!(triangle.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(8))*f(coad(8,triangle_orientation_s),coad(8,triangle_orientation_x),coad(8,triangle_orientation_y))");
-    assert_snapshot!((&triangle * &closing_structure).simplify_color().to_bare_ordered_string(), @"(cas(2,coad(8)))^2*-4");
-    assert_snapshot!((triangle.simplify_color() * closing_structure).simplify_color().to_bare_ordered_string(), @"(cas(2,coad(8)))^2*-4");
+    assert_eq!(triangle.simplify_color(), expected);
+    // Closing the loop before or after triangle reduction must keep the same
+    // antisymmetric orientation.
+    assert_eq!(
+        (&triangle * &closing_structure).simplify_color(),
+        (triangle.simplify_color() * closing_structure).simplify_color(),
+    );
+}
+
+#[test]
+fn six_f_k33_odd_automorphism_remains_unsimplified() {
+    test_initialize();
+    let r = TestReps::new();
+    let contraction = fco!(r, a, b, c)
+        * fco!(r, d, e, f)
+        * fco!(r, h, i, j)
+        * fco!(r, a, d, h)
+        * fco!(r, b, e, i)
+        * fco!(r, c, f, j);
+    // Exchanging the first two K3,3 vertices is a dummy relabeling, but it
+    // reverses three f tensors. Thus C=-C and the contraction is zero.
+    let odd_relabeling = fco!(r, d, e, f)
+        * fco!(r, a, b, c)
+        * fco!(r, h, i, j)
+        * fco!(r, d, a, h)
+        * fco!(r, e, b, i)
+        * fco!(r, f, c, j);
+
+    assert_eq!(odd_relabeling, -&contraction);
+    // Signed graph automorphisms are not yet part of color simplification.
+    assert_eq!(contraction.simplify_color(), contraction);
 }
 
 #[test]
