@@ -66,7 +66,7 @@ pub struct CFFNodeData {
     #[bincode(with_serde)]
     pub thermal_distribution_factors: Vec<ThermalDistributionFactor>,
     #[bincode(with_serde)]
-    pub finite_temperature: bool,
+    pub is_finite_temperature: bool,
 }
 
 impl From<CFFNodeData> for Atom {
@@ -75,7 +75,7 @@ impl From<CFFNodeData> for Atom {
         let thermal_factor_product = data
             .thermal_distribution_factors
             .into_iter()
-            .map(|factor| factor.to_atom(data.finite_temperature))
+            .map(|factor| factor.to_atom(data.is_finite_temperature))
             .fold(Atom::num(1), |acc, factor| acc * factor);
         let term = match data.thermal_numerator_id {
             Some(id) => surface / Atom::from(id),
@@ -98,7 +98,7 @@ fn forget_graphs(data: GenerationData) -> CFFNodeData {
         thermal_numerator_id: data.thermal_numerator_id,
         thermal_sign: data.thermal_sign,
         thermal_distribution_factors: data.thermal_distribution_factors,
-        finite_temperature: data.medium_mode.finite_temperature(),
+        is_finite_temperature: data.medium_mode.is_finite_temperature(),
     }
 }
 
@@ -798,10 +798,10 @@ impl SurfaceCache {
     pub fn substitute_energies(
         &self,
         atom: &Atom,
-        finite_temperature: bool,
+        is_finite_temperature: bool,
         cut_edges: &[EdgeIndex],
     ) -> Atom {
-        let replacement_rules = self.get_all_replacements(finite_temperature, cut_edges);
+        let replacement_rules = self.get_all_replacements(is_finite_temperature, cut_edges);
         atom.replace_multiple(&replacement_rules)
     }
 
@@ -827,7 +827,7 @@ impl SurfaceCache {
 
     pub(crate) fn get_all_replacements(
         &self,
-        finite_temperature: bool,
+        is_finite_temperature: bool,
         cut_edges: &[EdgeIndex],
     ) -> Vec<Replacement> {
         let surface_replacements = self.iter_all_surfaces().map(|(id, surface)| {
@@ -842,7 +842,7 @@ impl SurfaceCache {
                 .map(|(id, thermal_numerator)| {
                     let id_atom = Pattern::from(Atom::from(id));
                     let numerator_atom =
-                        Pattern::from(thermal_numerator.to_atom(finite_temperature, cut_edges));
+                        Pattern::from(thermal_numerator.to_atom(is_finite_temperature, cut_edges));
                     Replacement::new(id_atom, numerator_atom)
                 });
 

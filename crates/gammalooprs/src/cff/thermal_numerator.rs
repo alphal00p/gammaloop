@@ -22,11 +22,11 @@ pub struct ThermalDistributionFactor {
 }
 
 impl ThermalDistributionFactor {
-    pub(crate) fn to_atom(self, finite_temperature: bool) -> Atom {
+    pub(crate) fn to_atom(self, is_finite_temperature: bool) -> Atom {
         thermal_distribution_atom_from_index(
             self.edge_id,
             self.derivative_order,
-            finite_temperature,
+            is_finite_temperature,
             self.sign,
         )
     }
@@ -71,7 +71,7 @@ impl ThermalNumerator {
         self.positive_energies.len() == 1 && self.negative_energies.is_empty()
     }
 
-    pub(crate) fn to_atom(&self, finite_temperature: bool, _cut_edges: &[EdgeIndex]) -> Atom {
+    pub(crate) fn to_atom(&self, is_finite_temperature: bool, _cut_edges: &[EdgeIndex]) -> Atom {
         let product = |positive_part_sign: Sign, negative_part_sign: Sign| {
             let positive_part = self
                 .positive_energies
@@ -80,7 +80,7 @@ impl ThermalNumerator {
                     acc * thermal_distribution_atom_from_index(
                         edge,
                         0,
-                        finite_temperature,
+                        is_finite_temperature,
                         positive_part_sign,
                     )
                 });
@@ -92,7 +92,7 @@ impl ThermalNumerator {
                     acc * thermal_distribution_atom_from_index(
                         edge,
                         0,
-                        finite_temperature,
+                        is_finite_temperature,
                         negative_part_sign,
                     )
                 });

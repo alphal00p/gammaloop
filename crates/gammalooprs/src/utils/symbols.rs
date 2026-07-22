@@ -207,11 +207,11 @@ pub enum ThermalDistributionLimit {
 }
 
 impl ThermalDistributionLimit {
-    pub fn finite_temperature(&self) -> bool {
+    pub fn is_finite_temperature(&self) -> bool {
         matches!(self, ThermalDistributionLimit::Default)
     }
     pub fn temperature_flag(&self) -> Atom {
-        Atom::num(if self.finite_temperature() { 1 } else { 0 })
+        Atom::num(if self.is_finite_temperature() { 1 } else { 0 })
     }
 }
 

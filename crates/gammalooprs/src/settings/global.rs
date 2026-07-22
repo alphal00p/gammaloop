@@ -716,7 +716,7 @@ pub enum MediumMode {
 }
 
 impl MediumMode {
-    pub fn finite_temperature(&self) -> bool {
+    pub fn is_finite_temperature(&self) -> bool {
         matches!(self, MediumMode::ThermodynamicEquilibrium)
     }
 }
