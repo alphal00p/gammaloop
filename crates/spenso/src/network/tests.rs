@@ -52,8 +52,7 @@ fn auto_serializes_unlicensed_symbolic_fast_tensor_sum() {
             representation::{Euclidean, RepName},
         },
         symbolic_parallelism::{
-            SymbolicParallelism, set_symbolica_rayon_enabled, set_symbolica_rayon_enabled_for_test,
-            symbolica_rayon_enabled,
+            SymbolicParallelism, scoped_symbolica_rayon_setting_for_test, symbolica_rayon_enabled,
         },
         tensors::{
             data::{DataTensor, SparseTensor},
@@ -64,7 +63,7 @@ fn auto_serializes_unlicensed_symbolic_fast_tensor_sum() {
     // The repository's Symbolica build may itself be licensed. Injecting the
     // unlicensed result makes this failure mode deterministic while exercising
     // the exact same Auto resolution and cached global used in production.
-    set_symbolica_rayon_enabled_for_test(SymbolicParallelism::Auto, || false);
+    let _guard = scoped_symbolica_rayon_setting_for_test(SymbolicParallelism::Auto, || false);
     assert!(!symbolica_rayon_enabled());
 
     let structure: OrderedStructure<Euclidean> =
@@ -88,8 +87,6 @@ fn auto_serializes_unlicensed_symbolic_fast_tensor_sum() {
     };
     assert_eq!(result.elements[&FlatIndex::from(0)], parse!("a+x"));
     assert_eq!(result.elements[&FlatIndex::from(1)], parse!("b+y"));
-
-    set_symbolica_rayon_enabled(SymbolicParallelism::Parallel);
 }
 
 #[test]

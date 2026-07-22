@@ -55,14 +55,42 @@ fn set_symbolica_rayon_enabled_with(
 }
 
 #[cfg(test)]
-pub(crate) fn set_symbolica_rayon_enabled_for_test(
-    policy: SymbolicParallelism,
-    is_licensed: impl FnOnce() -> bool,
-) {
-    set_symbolica_rayon_enabled_with(policy, is_licensed);
+pub(crate) struct SymbolicParallelismTestGuard {
+    previous: bool,
+    _lock: std::sync::MutexGuard<'static, ()>,
 }
 
-/// Return the resolved symbolic Rayon setting without querying the license.
+#[cfg(test)]
+static SYMBOLIC_PARALLELISM_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+impl Drop for SymbolicParallelismTestGuard {
+    fn drop(&mut self) {
+        cached_setting().store(self.previous, Ordering::Relaxed);
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn scoped_symbolica_rayon_setting_for_test(
+    policy: SymbolicParallelism,
+    is_licensed: impl FnOnce() -> bool,
+) -> SymbolicParallelismTestGuard {
+    let lock = SYMBOLIC_PARALLELISM_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let previous = symbolica_rayon_enabled();
+    set_symbolica_rayon_enabled_with(policy, is_licensed);
+    SymbolicParallelismTestGuard {
+        previous,
+        _lock: lock,
+    }
+}
+
+/// Return the resolved symbolic Rayon setting.
+///
+/// If no policy has been configured yet, this performs the default
+/// [`SymbolicParallelism::Auto`] initialization and queries the license once.
+/// Subsequent reads only load the cached boolean.
 pub fn symbolica_rayon_enabled() -> bool {
     cached_setting().load(Ordering::Relaxed)
 }
@@ -104,7 +132,7 @@ mod tests {
 
     #[test]
     fn setter_caches_the_resolved_boolean() {
-        set_symbolica_rayon_enabled(SymbolicParallelism::Serial);
+        let _guard = scoped_symbolica_rayon_setting_for_test(SymbolicParallelism::Serial, || false);
         assert!(!symbolica_rayon_enabled());
 
         set_symbolica_rayon_enabled(SymbolicParallelism::Parallel);
