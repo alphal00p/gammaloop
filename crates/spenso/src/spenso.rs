@@ -36,6 +36,8 @@ pub mod tensors;
 #[cfg(feature = "shadowing")]
 pub mod shadowing;
 #[cfg(feature = "shadowing")]
+pub mod symbolic_parallelism;
+#[cfg(feature = "shadowing")]
 pub mod symbolica_init;
 
 pub mod utils;

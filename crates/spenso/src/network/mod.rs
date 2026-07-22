@@ -355,23 +355,30 @@ where
             );
         }
 
-        let merged = entries
-            .into_iter()
-            .collect::<Vec<_>>()
-            .into_par_iter()
-            .filter_map(|(index, atoms)| {
-                let atom = match atoms.len() {
-                    0 => Atom::Zero,
-                    1 => atoms
-                        .into_iter()
-                        .next()
-                        .expect("single atom exists")
-                        .to_owned(),
-                    _ => Atom::add_many(&atoms),
-                };
-                (!atom.as_view().is_zero()).then_some((index, atom))
-            })
-            .collect::<Vec<_>>();
+        let entries = entries.into_iter().collect::<Vec<_>>();
+        let merge_entry = |(index, atoms): (FlatIndex, Vec<AtomView<'_>>)| {
+            let atom = match atoms.len() {
+                0 => Atom::Zero,
+                1 => atoms
+                    .into_iter()
+                    .next()
+                    .expect("single atom exists")
+                    .to_owned(),
+                _ => Atom::add_many(&atoms),
+            };
+            (!atom.as_view().is_zero()).then_some((index, atom))
+        };
+        let merged = if crate::symbolic_parallelism::symbolica_rayon_enabled() {
+            entries
+                .into_par_iter()
+                .filter_map(merge_entry)
+                .collect::<Vec<_>>()
+        } else {
+            entries
+                .into_iter()
+                .filter_map(merge_entry)
+                .collect::<Vec<_>>()
+        };
 
         let mut elements = HashMap::with_capacity(merged.len());
         for (index, atom) in merged {
@@ -903,10 +910,18 @@ where
                 .map(|term| FastTensorSumContract::ScaledTerms(vec![term]))
         } else if terms.len() >= MIN_LAZY_FUSED_NUMERIC_CONTRACT_TERMS {
             let start = profile::enabled().then(std::time::Instant::now);
-            let contracted_terms = terms
-                .par_iter()
-                .map(|term| plan.contract_term(term))
-                .collect::<Result<Vec<_>, _>>()?;
+            let contract_term = |term: &&ParamTensor<_>| plan.contract_term(term);
+            let contracted_terms = if crate::symbolic_parallelism::symbolica_rayon_enabled() {
+                terms
+                    .par_iter()
+                    .map(contract_term)
+                    .collect::<Result<Vec<_>, _>>()?
+            } else {
+                terms
+                    .iter()
+                    .map(contract_term)
+                    .collect::<Result<Vec<_>, _>>()?
+            };
             if let Some(start) = start {
                 let output_entries = contracted_terms
                     .iter()
@@ -1199,30 +1214,40 @@ where
         &self,
         groups: HashMap<(FlatIndex, usize, bool), Vec<AtomView<'_>>>,
     ) -> Result<ParamTensor<S>, ContractionError> {
-        let contributions = groups
-            .into_iter()
-            .collect::<Vec<_>>()
-            .into_par_iter()
-            .filter_map(|((flat_index, coefficient_class, left_negative), atoms)| {
-                let mut contribution = match atoms.len() {
-                    0 => Atom::Zero,
-                    1 => atoms
-                        .into_iter()
-                        .next()
-                        .expect("single grouped atom exists")
-                        .to_owned(),
-                    _ => Atom::add_many(&atoms),
-                };
-                if left_negative {
-                    contribution = -contribution;
-                }
-                contribution = multiply_atom_by_numeric_coefficient(
-                    contribution,
-                    &self.coefficient_classes[coefficient_class],
-                );
-                (!contribution.as_view().is_zero()).then_some((flat_index, contribution))
-            })
-            .collect::<Vec<_>>();
+        let groups = groups.into_iter().collect::<Vec<_>>();
+        let finish_group = |((flat_index, coefficient_class, left_negative), atoms): (
+            (FlatIndex, usize, bool),
+            Vec<AtomView<'_>>,
+        )| {
+            let mut contribution = match atoms.len() {
+                0 => Atom::Zero,
+                1 => atoms
+                    .into_iter()
+                    .next()
+                    .expect("single grouped atom exists")
+                    .to_owned(),
+                _ => Atom::add_many(&atoms),
+            };
+            if left_negative {
+                contribution = -contribution;
+            }
+            contribution = multiply_atom_by_numeric_coefficient(
+                contribution,
+                &self.coefficient_classes[coefficient_class],
+            );
+            (!contribution.as_view().is_zero()).then_some((flat_index, contribution))
+        };
+        let contributions = if crate::symbolic_parallelism::symbolica_rayon_enabled() {
+            groups
+                .into_par_iter()
+                .filter_map(finish_group)
+                .collect::<Vec<_>>()
+        } else {
+            groups
+                .into_iter()
+                .filter_map(finish_group)
+                .collect::<Vec<_>>()
+        };
 
         Ok(ParamTensor::composite(DataTensor::Sparse(SparseTensor {
             elements: self.collect_output_groups(contributions),
@@ -1235,29 +1260,39 @@ where
         &self,
         groups: HashMap<(FlatIndex, usize, bool), Vec<Atom>>,
     ) -> Result<ParamTensor<S>, ContractionError> {
-        let contributions = groups
-            .into_iter()
-            .collect::<Vec<_>>()
-            .into_par_iter()
-            .filter_map(|((flat_index, coefficient_class, left_negative), atoms)| {
-                let mut contribution = match atoms.len() {
-                    0 => Atom::Zero,
-                    1 => atoms
-                        .into_iter()
-                        .next()
-                        .expect("single grouped atom exists"),
-                    _ => Atom::add_many(&atoms),
-                };
-                if left_negative {
-                    contribution = -contribution;
-                }
-                contribution = multiply_atom_by_numeric_coefficient(
-                    contribution,
-                    &self.coefficient_classes[coefficient_class],
-                );
-                (!contribution.as_view().is_zero()).then_some((flat_index, contribution))
-            })
-            .collect::<Vec<_>>();
+        let groups = groups.into_iter().collect::<Vec<_>>();
+        let finish_group = |((flat_index, coefficient_class, left_negative), atoms): (
+            (FlatIndex, usize, bool),
+            Vec<Atom>,
+        )| {
+            let mut contribution = match atoms.len() {
+                0 => Atom::Zero,
+                1 => atoms
+                    .into_iter()
+                    .next()
+                    .expect("single grouped atom exists"),
+                _ => Atom::add_many(&atoms),
+            };
+            if left_negative {
+                contribution = -contribution;
+            }
+            contribution = multiply_atom_by_numeric_coefficient(
+                contribution,
+                &self.coefficient_classes[coefficient_class],
+            );
+            (!contribution.as_view().is_zero()).then_some((flat_index, contribution))
+        };
+        let contributions = if crate::symbolic_parallelism::symbolica_rayon_enabled() {
+            groups
+                .into_par_iter()
+                .filter_map(finish_group)
+                .collect::<Vec<_>>()
+        } else {
+            groups
+                .into_iter()
+                .filter_map(finish_group)
+                .collect::<Vec<_>>()
+        };
 
         Ok(ParamTensor::composite(DataTensor::Sparse(SparseTensor {
             elements: self.collect_output_groups(contributions),
@@ -1278,19 +1313,26 @@ where
                 .push(contribution);
         }
 
-        output_groups
-            .into_iter()
-            .collect::<Vec<_>>()
-            .into_par_iter()
-            .filter_map(|(flat_index, atoms)| {
-                let atom = match atoms.len() {
-                    0 => Atom::Zero,
-                    1 => atoms.into_iter().next().expect("single output atom exists"),
-                    _ => Atom::add_many(&atoms),
-                };
-                (!atom.as_view().is_zero()).then_some((flat_index, atom))
-            })
-            .collect::<HashMap<_, _>>()
+        let output_groups = output_groups.into_iter().collect::<Vec<_>>();
+        let finish_group = |(flat_index, atoms): (FlatIndex, Vec<Atom>)| {
+            let atom = match atoms.len() {
+                0 => Atom::Zero,
+                1 => atoms.into_iter().next().expect("single output atom exists"),
+                _ => Atom::add_many(&atoms),
+            };
+            (!atom.as_view().is_zero()).then_some((flat_index, atom))
+        };
+        if crate::symbolic_parallelism::symbolica_rayon_enabled() {
+            output_groups
+                .into_par_iter()
+                .filter_map(finish_group)
+                .collect::<HashMap<_, _>>()
+        } else {
+            output_groups
+                .into_iter()
+                .filter_map(finish_group)
+                .collect::<HashMap<_, _>>()
+        }
     }
 }
 
@@ -4052,6 +4094,18 @@ impl Parallel {
         FK: Clone + Debug + Display + Send + Sync,
         Aind: AbsInd + Send + Sync,
     {
+        #[cfg(feature = "shadowing")]
+        if !crate::symbolic_parallelism::symbolica_rayon_enabled() {
+            return <Sequential as ExecutionStrategy<
+                NetworkStore<T, Sc>,
+                FL,
+                L,
+                K,
+                FK,
+                Aind,
+            >>::execute_all::<C>(executor, graph, lib, fnlib);
+        }
+
         if <C as ContractionStrategy<NetworkStore<T, Sc>, L, K, FK, Aind>>::SUPPORTS_PARTIAL_GRAPH_REWRITE
         {
             return <Sequential as ExecutionStrategy<

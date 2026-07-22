@@ -37,6 +37,58 @@ fn scalar_alias_refs_resolve_to_original_atom() {
     );
 }
 
+#[cfg(feature = "shadowing")]
+#[test]
+fn auto_serializes_unlicensed_symbolic_fast_tensor_sum() {
+    use std::collections::HashMap;
+
+    use symbolica::{atom::Atom, parse};
+
+    use crate::{
+        network::FastTensorSum,
+        structure::{
+            OrderedStructure,
+            concrete_index::FlatIndex,
+            representation::{Euclidean, RepName},
+        },
+        symbolic_parallelism::{
+            SymbolicParallelism, scoped_symbolica_rayon_setting_for_test, symbolica_rayon_enabled,
+        },
+        tensors::{
+            data::{DataTensor, SparseTensor},
+            parametric::ParamTensor,
+        },
+    };
+
+    // The repository's Symbolica build may itself be licensed. Injecting the
+    // unlicensed result makes this failure mode deterministic while exercising
+    // the exact same Auto resolution and cached global used in production.
+    let _guard = scoped_symbolica_rayon_setting_for_test(SymbolicParallelism::Auto, || false);
+    assert!(!symbolica_rayon_enabled());
+
+    let structure: OrderedStructure<Euclidean> =
+        OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).structure;
+    let tensor = |first: Atom, second: Atom| {
+        ParamTensor::composite(DataTensor::Sparse(SparseTensor {
+            elements: HashMap::from([(FlatIndex::from(0), first), (FlatIndex::from(1), second)]),
+            zero: Atom::Zero,
+            structure: structure.clone(),
+        }))
+    };
+    let left = tensor(parse!("x"), parse!("y"));
+    let right = tensor(parse!("a"), parse!("b"));
+
+    // Each output entry contains two atoms, so this executes the guarded
+    // Atom::add_many path that previously always ran on a Rayon worker.
+    let result = <ParamTensor<_> as FastTensorSum>::fast_tensor_sum(&[&left, &right], None)
+        .expect("two compatible sparse tensors should use the fast symbolic sum");
+    let DataTensor::Sparse(result) = result.tensor else {
+        panic!("the fast sparse sum should remain sparse");
+    };
+    assert_eq!(result.elements[&FlatIndex::from(0)], parse!("a+x"));
+    assert_eq!(result.elements[&FlatIndex::from(1)], parse!("b+y"));
+}
+
 #[test]
 fn executed_scaled_tensors_add_distinct_tensors() {
     use crate::{
