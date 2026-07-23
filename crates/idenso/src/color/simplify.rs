@@ -4,8 +4,12 @@ use itertools::Itertools;
 use spenso::{
     chain,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
-    rep_, shadowing,
-    structure::{abstract_index::AIND_SYMBOLS, representation::RepName},
+    rep_,
+    shadowing::{self, TensorCollectExt},
+    structure::{
+        abstract_index::{AIND_SYMBOLS, AbstractIndex},
+        representation::RepName,
+    },
     trace, trace_sym,
 };
 use symbolica::{
@@ -21,6 +25,7 @@ use crate::{
     W_, color_f, color_t,
     representations::{ColorAdjoint, ColorFundamental},
     shorthands::{chain::Chain, metric::MetricSimplifier},
+    tensor::remove_antisymmetric_zero_terms,
 };
 
 use super::{CS, ColorSimplifier, ColorSimplifySettings};
@@ -44,7 +49,27 @@ impl ColorAlgebraSimplifier {
         loop {
             let next = self.apply_once(current.as_view());
             if next == current {
-                let simplified = restore_explicit_default_generator_chains(next).simplify_metrics();
+                // Every antisymmetric color tensor carries adjoint slots, so this
+                // isolates its complete network without expanding other sectors.
+                let mut pruned = false;
+                let canonicalized =
+                    next.collect_rep_with_map(ColorAdjoint {}.into(), |factor, _context, out| {
+                        let AtomView::Fun(collected) = factor else {
+                            return;
+                        };
+                        let Some(color) = collected.iter().next() else {
+                            return;
+                        };
+                        let reduced = remove_antisymmetric_zero_terms::<AbstractIndex>(color);
+                        pruned |= reduced.as_view() != color;
+                        **out = reduced;
+                    });
+                if pruned {
+                    current = canonicalized;
+                    continue;
+                }
+                let simplified =
+                    restore_explicit_default_generator_chains(canonicalized).simplify_metrics();
                 return if self.settings.substitute_cof_dimension_invariants {
                     simplified.to_cof_dimension_invariants()
                 } else {

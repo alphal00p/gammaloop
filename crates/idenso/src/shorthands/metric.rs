@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::{
     shorthands::schoonschip::DotNormalizer,
-    tensor::{SymbolicNetParse, SymbolicTensor},
+    tensor::{SymbolicNetParse, SymbolicTensor, remove_antisymmetric_zero_terms},
 };
 
 use super::schoonschip::{Schoonschip, SchoonschipSettings};
@@ -51,6 +51,8 @@ spenso::symbolica_init_lazy_static! {
 }
 
 pub fn canonize_impl(view: AtomView) -> Atom {
+    let filtered = remove_antisymmetric_zero_terms::<AbstractIndex>(view);
+    let view = filtered.as_view();
     let lib = DummyLibrary::<SymbolicTensor>::new();
     let settings =
         ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
@@ -63,7 +65,6 @@ pub fn canonize_impl(view: AtomView) -> Atom {
     let mut redual_reps = vec![];
 
     let mut indices = vec![];
-
     for t in net.store.tensors.iter_mut() {
         let mut reps = vec![];
         let mut pat = FunctionBuilder::new(t.name().unwrap());
@@ -71,7 +72,8 @@ pub fn canonize_impl(view: AtomView) -> Atom {
         for s in t.structure.external_structure_iter() {
             if !s.rep_name().is_self_dual() && s.rep_name().is_dual() {
                 pat = pat.add_arg(s.rep().dual().to_symbolic([Atom::var(RS.a_)]));
-                indices.push((s.dual().to_atom(), s.dual().rep()));
+                let slot = s.dual();
+                indices.push((slot.to_atom(), slot.rep()));
                 reps.push(Replacement::new(
                     s.rep().to_symbolic([Atom::var(RS.a_)]).to_pattern(),
                     s.rep().dual().to_symbolic([Atom::var(RS.a_)]),

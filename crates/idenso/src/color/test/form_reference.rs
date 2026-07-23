@@ -1,6 +1,7 @@
 use super::*;
+use crate::coad;
 use insta::assert_snapshot;
-use spenso::{g, shadowing::IntoAtom};
+use spenso::{antisym, g, mink, shadowing::IntoAtom};
 use symbolica::{function, symbol};
 
 macro_rules! fco {
@@ -236,7 +237,7 @@ fn three_f_loop_preserves_antisymmetric_orientation() {
 }
 
 #[test]
-fn six_f_k33_odd_automorphism_remains_unsimplified() {
+fn six_f_k33_odd_automorphism_simplifies_to_zero() {
     test_initialize();
     let r = TestReps::new();
     let contraction = fco!(r, a, b, c)
@@ -255,8 +256,89 @@ fn six_f_k33_odd_automorphism_remains_unsimplified() {
         * fco!(r, f, c, j);
 
     assert_eq!(odd_relabeling, -&contraction);
-    // Signed graph automorphisms are not yet part of color simplification.
-    assert_eq!(contraction.simplify_color(), contraction);
+    // Color simplification applies signed tensor canonicalization only to its
+    // extracted color factor.
+    assert!(contraction.simplify_color().is_zero());
+}
+
+#[test]
+fn six_f_k33_with_structured_indices_simplifies_to_zero() {
+    test_initialize();
+    let hedge = symbol!("spenso::hedge");
+    let structured_slot = |index| coad!(8, function!(hedge, Atom::num(index as i64)));
+    let a = structured_slot(1);
+    let b = structured_slot(2);
+    let c = structured_slot(3);
+    let d = structured_slot(4);
+    let e = structured_slot(5);
+    let f = structured_slot(6);
+    let h = structured_slot(7);
+    let i = structured_slot(8);
+    let j = structured_slot(9);
+    let contraction = color_f!(&a, &b, &c)
+        * color_f!(&d, &e, &f)
+        * color_f!(&h, &i, &j)
+        * color_f!(&a, &d, &h)
+        * color_f!(&b, &e, &i)
+        * color_f!(&c, &f, &j);
+
+    assert!(contraction.simplify_color().is_zero());
+}
+
+#[test]
+fn signed_pruning_reenters_color_simplification() {
+    test_initialize();
+    let r = TestReps::new();
+    let odd = fco!(r, a, b, c)
+        * fco!(r, d, e, f)
+        * fco!(r, h, i, j)
+        * fco!(r, a, d, h)
+        * fco!(r, b, e, i)
+        * fco!(r, c, f, j);
+    let vanishing_factor = fco!(r, u, v, w);
+    let surviving_factor = fco!(r, x, y, z);
+    let expected = surviving_factor.clone().pow(2).simplify_color();
+
+    assert_eq!(
+        ((odd * vanishing_factor + &surviving_factor) * surviving_factor).simplify_color(),
+        expected
+    );
+}
+
+#[test]
+fn color_simplification_does_not_canonicalize_lorentz_tensors() {
+    test_initialize();
+    let r = TestReps::new();
+    let a = mink!(4, color_only_canonicalization_a);
+    let b = mink!(4, color_only_canonicalization_b);
+    let c = mink!(4, color_only_canonicalization_c);
+    let odd_lorentz =
+        antisym!(a.clone(), b.clone()) * antisym!(b.clone(), c.clone()) * antisym!(c, a);
+    let color = fco!(r, x, y, z);
+    let expected = color.simplify_color() * &odd_lorentz;
+
+    assert!(!expected.is_zero());
+    assert_eq!((color * &odd_lorentz).simplify_color(), expected);
+    assert!(
+        odd_lorentz
+            .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .is_zero()
+    );
+}
+
+#[test]
+fn two_f_even_automorphism_survives_canonicalization() {
+    test_initialize();
+    let r = TestReps::new();
+    let contraction = fco!(r, a, b, c) * fco!(r, a, b, c);
+
+    // Exchanging two contracted edges reverses both f tensors, so the total
+    // graph-automorphism sign is positive.
+    assert!(
+        !contraction
+            .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .is_zero()
+    );
 }
 
 #[test]

@@ -12,18 +12,15 @@ use gammalooprs::{
     },
 };
 use idenso::{
-    Cookable, IndexTooling, W_,
+    Cookable, IndexTooling,
     color::{CS, ColorSimplifier},
     dirac::GammaSimplifier,
     shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
-use spenso::{
-    network::tags::SPENSO_TAG, shadowing::symbolica_utils::LogPrint,
-    structure::abstract_index::AbstractIndex,
-};
+use spenso::{shadowing::symbolica_utils::LogPrint, structure::abstract_index::AbstractIndex};
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
-    function, parse, parse_lit,
+    parse, parse_lit,
 };
 use symbolica_utils::AtomPrintExt;
 
@@ -605,6 +602,10 @@ mod failing {
         .unwrap();
 
         let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
+        assert_eq!(amp.graphs.len(), 78);
+        for (index, graph) in amp.graphs.iter().enumerate() {
+            assert_eq!(graph.graph.name, format!("d{}", index + 1));
+        }
 
         let settings = ghost_3loop_settings();
 
@@ -629,7 +630,6 @@ mod failing {
         // F5..F7, F9, F11, F13 = 0
         // sum(Fi)/H = rat(-3/8*ep^-2 + 29/32*ep^-1);
         // native GammaLoop / RQFT = +1.
-        insta::assert_snapshot!(amp.graphs[0].graph.name,@"d1");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3/8+29/32*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );
@@ -643,23 +643,16 @@ mod failing {
         // F1..F2, F4..F5, F7..F16 = 0
         // sum(Fi)/H = rat(-1/16*ep^-2 + 5/192*ep^-1);
         // native GammaLoop / RQFT = +1.
-        // The two remaining six-f terms have opposite coefficients and differ only
-        // by dummy labels. Since `f` already put its permutation signs in those
-        // coefficients, treat its slots as ordered while canonicalizing the labels.
-        let ordered_f = SPENSO_TAG.tensor_symbol("rqft_ordered_color_f");
+        // The two remaining six-f terms have an odd signed graph automorphism and
+        // vanish independently during tensor canonicalization.
         let aligned = align_to_rqft(&a, &model)
-            .replace(function!(CS.f, W_.a___).to_pattern())
-            .with(function!(ordered_f, W_.a___))
             .expand()
             .map_terms_single_core(|term| {
                 term.cook_indices()
                     .canonize::<AbstractIndex>(AbstractIndex::Dummy)
             })
             .collect_factors()
-            .replace(function!(ordered_f, W_.a___).to_pattern())
-            .with(function!(CS.f, W_.a___))
             .to_dots();
-        insta::assert_snapshot!(amp.graphs[1].graph.name,@"d2");
         insta::assert_snapshot!(
            aligned.to_bare_ordered_string(),@"(-1/16+5/192*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );
@@ -683,7 +676,6 @@ mod failing {
         // F8={Fyy}{GEe}{H2y} match these coefficients before coupling replacement.
         // Their common i*GC_10^4*GC_12 becomes -gs^6, so native GammaLoop / RQFT
         // = -1 at the model/RQFT convention boundary, not in the forest recursion.
-        insta::assert_snapshot!(amp.graphs[2].graph.name,@"d3");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9/128+-9/128*ε^2+39/256*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
@@ -701,7 +693,6 @@ mod failing {
         // uses minus the antighost momentum. This exchanges the mirror pair d4/d5:
         // Hedge terminals {H2y}=F0 and {Fyy}{H2y}=F7, while the others are zero.
         // Their common i*GC_10^4*GC_12 gives native GammaLoop / RQFT = -1.
-        insta::assert_snapshot!(amp.graphs[3].graph.name,@"d4");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-21/128*ε+9/64)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );
@@ -723,7 +714,6 @@ mod failing {
         // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)
         // Hedge terminals {H2y}=F0, {GqO}{H2y}=F5, {Fyy}{H2y}=F7, and
         // {Fyy}{GqO}{H2y}=F13. By the mirror mapping, native GammaLoop / RQFT = -1.
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-27/128*ε^2+-9/128+39/256*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
@@ -748,7 +738,6 @@ mod failing {
         // F1, F3, F6..F7, F9, F11..F12, F15 = 0
         // sum(Fi)/H = rat(3/64*ep^-3 + 35/128*ep^-2 - ep^-1)
         // native GammaLoop / RQFT = +1.
-        insta::assert_snapshot!(amp.graphs[5].graph.name,@"d6");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1*ε^2+3/64+35/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
@@ -773,7 +762,6 @@ mod failing {
         // F1, F3, F6..F7, F9, F11..F12, F15 = 0
         // sum(Fi)/H = rat(3/64*ep^-3 + 35/128*ep^-2 - ep^-1)
         // native GammaLoop / RQFT = +1.
-        insta::assert_snapshot!(amp.graphs[6].graph.name,@"d7");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1*ε^2+3/64+35/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
@@ -799,7 +787,6 @@ mod failing {
         // F1..F2, F4, F6, F8..F9, F12..F13 = 0
         // sum(Fi)/H = rat(27/32*ep^-3 - 63/64*ep^-2 - 99/128*ep^-1)
         // native GammaLoop / RQFT = +1.
-        insta::assert_snapshot!(amp.graphs[7].graph.name,@"d8");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-63/64*ε+-99/128*ε^2+27/32)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
@@ -809,9 +796,8 @@ mod failing {
         // H = p1.p1*gs^6*ca^3
         // F0..F25 = 0
         // sum(Fi)/H = 0
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(208*z3*ε+60*ε+64)*-1/64*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge(1)),coad(8,hedge(15)),coad(8,hedge(9)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(11)),coad(8,hedge(17)),coad(8,hedge(5)))*f(coad(8,hedge(13)),coad(8,hedge(3)),coad(8,hedge(7)))*f(coad(8,hedge(15)),coad(8,hedge(17)),coad(8,hedge(7)))*gs^6*ε^(-2)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
         );
 
         let a = amp.graphs[9].renormalization_part(&settings).unwrap();
@@ -819,9 +805,8 @@ mod failing {
         // H = p1.p1*gs^6*ca^3
         // F0..F25 = 0
         // sum(Fi)/H = 0
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"((8*ε+8/3)*1/64*f(coad(8,hedge(1)),coad(8,hedge(11)),coad(8,hedge(15)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(13)),coad(8,hedge(5)),coad(8,hedge(7)))*f(coad(8,hedge(15)),coad(8,hedge(17)),coad(8,hedge(7)))+-1/16*f(coad(8,hedge(1)),coad(8,hedge(11)),coad(8,hedge(15)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(4)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(13)),coad(8,hedge(4)),coad(8,hedge(7)))*f(coad(8,hedge(15)),coad(8,hedge(17)),coad(8,hedge(7)))+1/16*f(coad(8,hedge(1)),coad(8,hedge(10)),coad(8,hedge(14)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(10)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(13)),coad(8,hedge(5)),coad(8,hedge(7)))*f(coad(8,hedge(14)),coad(8,hedge(17)),coad(8,hedge(7))))*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge(17)),coad(8,hedge(3)),coad(8,hedge(9)))*gs^6*ε^(-2)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
         );
 
         let a = amp.graphs[10].renormalization_part(&settings).unwrap();
@@ -840,7 +825,6 @@ mod failing {
         //        + pi^2*rat(1/48*ep^-1)
         // F1, F4..F5, F7 = 0
         // sum(Fi)/H = rat(1/12*ep^-3 - 1/12*ep^-2 - 1/12*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -861,7 +845,6 @@ mod failing {
         //        + pi^2*rat(-5/96*ep^-1)
         // F1..F2, F5..F8, F10..F11 = 0
         // sum(Fi)/H = rat(-5/24*ep^-3 + 1/4*ep^-2 + 3/16*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -878,7 +861,6 @@ mod failing {
         // F9/H = rat(-7/96*ep^-2 + 7/288*ep^-1)
         // F1..F2, F5..F8, F10..F11 = 0
         // sum(Fi)/H = 0
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -907,7 +889,6 @@ mod failing {
         //         + pi^2*rat(-3/512*ep^-1)
         // F3, F6..F8, F12..F14 = 0
         // sum(Fi)/H = rat(-3/64*ep^-3 + 7/64*ep^-2 - 173/1536*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -936,7 +917,6 @@ mod failing {
         //         + pi^2*rat(-1/1536*ep^-1)
         // F3, F6..F8, F12..F14 = 0
         // sum(Fi)/H = rat(-1/192*ep^-3 - 1/192*ep^-2 + 1/1536*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -965,7 +945,6 @@ mod failing {
         //         + pi^2*rat(-1/512*ep^-1)
         // F3, F6..F8, F12..F14 = 0
         // sum(Fi)/H = rat(-1/64*ep^-3 + 1/384*ep^-2 - 17/1536*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -994,7 +973,6 @@ mod failing {
         //         + pi^2*rat(-1/512*ep^-1)
         // F3, F6..F8, F12..F14 = 0
         // sum(Fi)/H = rat(-1/64*ep^-3 + 7/384*ep^-2 - 9/512*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1020,7 +998,6 @@ mod failing {
         // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
         // sum(Fi)/H = rat(-1/128*ep^-3 + 7/768*ep^-2 + 11/128*ep^-1)
         //             + z3*rat(-1/8*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1046,7 +1023,6 @@ mod failing {
         // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
         // sum(Fi)/H = rat(-3/128*ep^-3 + 23/256*ep^-2 - 3/128*ep^-1)
         //             + z3*rat(-1/8*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1070,7 +1046,6 @@ mod failing {
         //         + pi^2*rat(-1/512*ep^-1)
         // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
         // sum(Fi)/H = rat(-1/128*ep^-3 + 1/768*ep^-2 - 5/128*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1094,7 +1069,6 @@ mod failing {
         //         + pi^2*rat(-1/1536*ep^-1)
         // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
         // sum(Fi)/H = rat(-1/384*ep^-3 + 1/256*ep^-2 - 1/192*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1118,7 +1092,6 @@ mod failing {
         //         + pi^2*rat(-1/512*ep^-1)
         // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
         // sum(Fi)/H = rat(-1/128*ep^-3 + 1/768*ep^-2 - 1/128*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1142,7 +1115,6 @@ mod failing {
         //         + pi^2*rat(-1/1536*ep^-1)
         // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
         // sum(Fi)/H = rat(-1/384*ep^-3 + 1/256*ep^-2 - 1/192*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1168,7 +1140,6 @@ mod failing {
         // F3, F7 = 0
         // sum(Fi)/H = rat(-1/48*ep^-3 + 5/96*ep^-2 - 1/16*ep^-1)
         //             + z3*rat(1/4*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1194,7 +1165,6 @@ mod failing {
         // F3, F7 = 0
         // sum(Fi)/H = rat(-1/48*ep^-3 + 5/96*ep^-2 - 1/16*ep^-1)
         //             + z3*rat(1/4*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1220,7 +1190,6 @@ mod failing {
         // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
         // sum(Fi)/H = rat(-13/128*ep^-3 + 199/768*ep^-2 - 191/768*ep^-1)
         //             + z3*rat(-3/8*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1244,7 +1213,6 @@ mod failing {
         //         + pi^2*rat(1/768*ep^-1)
         // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
         // sum(Fi)/H = rat(1/192*ep^-3 - 3/128*ep^-2 + 11/384*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1268,7 +1236,6 @@ mod failing {
         //         + pi^2*rat(-1/1536*ep^-1)
         // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
         // sum(Fi)/H = rat(-1/384*ep^-3 + 1/768*ep^-2 + 1/256*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1293,7 +1260,6 @@ mod failing {
         //        + pi^2*rat(-1/128*ep^-1)
         // F3, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-3/64*ep^-3 + 9/128*ep^-2 - 5/128*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1316,7 +1282,6 @@ mod failing {
         //        + pi^2*rat(1/192*ep^-1)
         // F4, F7 = 0
         // sum(Fi)/H = rat(1/48*ep^-3 - 1/48*ep^-2 - 1/48*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1341,7 +1306,6 @@ mod failing {
         //        + pi^2*rat(-5/384*ep^-1)
         // F3, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-19/384*ep^-3 + 15/256*ep^-2 + 19/384*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1364,7 +1328,6 @@ mod failing {
         // F9/H = rat(-1/48*ep^-2)
         // F3, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-1/384*ep^-3 + 1/256*ep^-2 - 1/384*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1389,7 +1352,6 @@ mod failing {
         //        + pi^2*rat(-1/384*ep^-1)
         // F3, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-1/64*ep^-3 + 5/384*ep^-2 - 5/384*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1412,7 +1374,6 @@ mod failing {
         //        + pi^2*rat(1/64*ep^-1)
         // F4, F7 = 0
         // sum(Fi)/H = rat(1/16*ep^-3 - 5/48*ep^-2 - 1/24*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1437,7 +1398,6 @@ mod failing {
         //        + pi^2*rat(-5/128*ep^-1)
         // F3, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-19/128*ep^-3 + 211/768*ep^-2 + 11/384*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1460,7 +1420,6 @@ mod failing {
         // F9/H = rat(-1/16*ep^-2)
         // F3, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-1/128*ep^-3 + 13/768*ep^-2 - 3/128*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1485,7 +1444,6 @@ mod failing {
         //        + pi^2*rat(-1/128*ep^-1)
         // F3, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-3/64*ep^-3 + 9/128*ep^-2 - 5/128*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1508,7 +1466,6 @@ mod failing {
         //        + pi^2*rat(1/192*ep^-1)
         // F4, F7 = 0
         // sum(Fi)/H = rat(1/48*ep^-3 - 1/96*ep^-2 - 5/192*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1533,7 +1490,6 @@ mod failing {
         //        + pi^2*rat(-5/384*ep^-1)
         // F3, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-19/384*ep^-3 + 23/768*ep^-2 + 65/768*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1556,7 +1512,6 @@ mod failing {
         // F9/H = rat(-1/48*ep^-2)
         // F3, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-1/384*ep^-3 + 5/768*ep^-2 - 1/256*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1581,7 +1536,6 @@ mod failing {
         //        + pi^2*rat(-1/384*ep^-1)
         // F3, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-1/64*ep^-3 + 5/384*ep^-2 - 5/384*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1606,7 +1560,6 @@ mod failing {
         //        + pi^2*rat(1/64*ep^-1)
         // F4, F7 = 0
         // sum(Fi)/H = rat(1/12*ep^-3 - 5/48*ep^-2 - 1/192*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1631,7 +1584,6 @@ mod failing {
         //        + pi^2*rat(-5/128*ep^-1)
         // F3, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-79/384*ep^-3 + 81/256*ep^-2 - 31/768*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1654,7 +1606,6 @@ mod failing {
         // F9/H = rat(-1/16*ep^-2)
         // F3, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-1/384*ep^-3 + 13/768*ep^-2 - 11/768*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1676,7 +1627,6 @@ mod failing {
         // F6/H = rat(1/8*ep^-2)
         // F4, F7 = 0
         // sum(Fi)/H = rat(1/48*ep^-3 - 11/96*ep^-2 + 7/96*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1700,7 +1650,6 @@ mod failing {
         //        + pi^2*rat(1/256*ep^-1)
         // F2, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-1/24*ep^-3 + 59/192*ep^-2 - 1/3*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1724,7 +1673,6 @@ mod failing {
         //        + pi^2*rat(-1/256*ep^-1)
         // F2, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-1/96*ep^-3 + 1/48*ep^-2 - 3/64*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1748,7 +1696,6 @@ mod failing {
         //        + pi^2*rat(-1/384*ep^-1)
         // F2, F5..F6, F8, F10..F11 = 0
         // sum(Fi)/H = rat(-1/96*ep^-3 + 1/64*ep^-2 - 1/96*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1775,7 +1722,6 @@ mod failing {
         // F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
         // sum(Fi)/H = rat(-1/32*ep^-3 + 13/192*ep^-2 - 13/192*ep^-1)
         //             + z3*rat(1/8*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1800,7 +1746,6 @@ mod failing {
         //         + pi^2*rat(-1/384*ep^-1)
         // F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
         // sum(Fi)/H = rat(-1/96*ep^-3 + 1/64*ep^-2 - 1/96*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1849,7 +1794,6 @@ mod failing {
         //             + ca*rat(-1/12*ep^-3 + 29/72*ep^-2 - 55/48*ep^-1)
         //             + z3*cf*rat(-2*ep^-1)
         //             + z3*ca*rat(ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1874,7 +1818,6 @@ mod failing {
         //        + pi^2*rat(1/16*ep^-1)
         // F2..F3, F6..F7 = 0
         // sum(Fi)/H = rat(-1/72*ep^-3 - 13/48*ep^-2 + 143/216*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1899,7 +1842,6 @@ mod failing {
         //        + pi^2*rat(-5/72*ep^-1)
         // F3..F4, F8..F9 = 0
         // sum(Fi)/H = rat(-1/72*ep^-3 - 13/48*ep^-2 + 143/216*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1928,7 +1870,6 @@ mod failing {
         // F2, F4, F6..F7, F9..F11, F14, F16..F17 = 0
         // sum(Fi)/H = rat(-65/96*ep^-3 + 161/288*ep^-2 + 2759/2304*ep^-1)
         //             + z3*rat(1/4*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1951,7 +1892,6 @@ mod failing {
         //         + pi^2*rat(5/1152*ep^-1)
         // F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
         // sum(Fi)/H = rat(5/576*ep^-3 - 11/1152*ep^-2 - 157/6912*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1974,7 +1914,6 @@ mod failing {
         // F15/H = rat(-1/16*ep^-2 - 1/16*ep^-1)
         // F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
         // sum(Fi)/H = rat(5/576*ep^-3 - 11/1152*ep^-2 - 157/6912*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -1995,7 +1934,6 @@ mod failing {
         // F15/H = rat(-1/48*ep^-2 - 1/48*ep^-1)
         // F2, F4, F6..F7, F9..F11, F14, F16..F17 = 0
         // sum(Fi)/H = rat(5/576*ep^-2 - 91/2304*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2016,7 +1954,6 @@ mod failing {
         //         + pi^2*rat(-1/96*ep^-1)
         // F1..F4, F7..F10 = 0
         // sum(Fi)/H = rat(-1/24*ep^-3 + 1/48*ep^-2 + 5/96*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2036,7 +1973,6 @@ mod failing {
         // F3/H = rat(-1/3*ep^-3 - 5/6*ep^-2 - 7/54*ep^-1)
         //        + pi^2*rat(-1/36*ep^-1)
         // sum(Fi)/H = rat(-1/9*ep^-3 + 5/54*ep^-2 + 35/324*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2057,7 +1993,6 @@ mod failing {
         //        + pi^2*rat(19/288*ep^-1)
         // F1..F2, F5..F6 = 0
         // sum(Fi)/H = rat(19/72*ep^-3 - 29/108*ep^-2 - 343/1296*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2078,7 +2013,6 @@ mod failing {
         //        + pi^2*rat(1/288*ep^-1)
         // F1..F2, F5..F6 = 0
         // sum(Fi)/H = rat(1/72*ep^-3 - 1/54*ep^-2 - 19/1296*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2099,7 +2033,6 @@ mod failing {
         //        + pi^2*rat(19/288*ep^-1)
         // F1..F2, F5..F6 = 0
         // sum(Fi)/H = rat(19/72*ep^-3 - 29/108*ep^-2 - 343/1296*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2120,7 +2053,6 @@ mod failing {
         //         + pi^2*rat(-179/1152*ep^-1)
         // F1..F4, F7..F10 = 0
         // sum(Fi)/H = rat(-179/288*ep^-3 + 1297/1728*ep^-2 + 5767/10368*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2141,7 +2073,6 @@ mod failing {
         //         + pi^2*rat(-11/1152*ep^-1)
         // F1..F4, F7..F10 = 0
         // sum(Fi)/H = rat(-11/288*ep^-3 + 91/1728*ep^-2 + 313/10368*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2162,7 +2093,6 @@ mod failing {
         //        + pi^2*rat(1/288*ep^-1)
         // F1..F2, F5..F6 = 0
         // sum(Fi)/H = rat(1/72*ep^-3 - 1/54*ep^-2 - 19/1296*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2183,7 +2113,6 @@ mod failing {
         //         + pi^2*rat(-11/1152*ep^-1)
         // F1..F4, F7..F10 = 0
         // sum(Fi)/H = rat(-11/288*ep^-3 + 91/1728*ep^-2 + 313/10368*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2204,7 +2133,6 @@ mod failing {
         //         + pi^2*rat(1/1152*ep^-1)
         // F1..F4, F7..F10 = 0
         // sum(Fi)/H = rat(1/288*ep^-3 + 1/1728*ep^-2 - 65/10368*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2224,7 +2152,6 @@ mod failing {
         //         + pi^2*rat(-1/96*ep^-1)
         // F1..F2, F4, F6..F12, F14..F17 = 0
         // sum(Fi)/H = rat(-1/48*ep^-3 + 1/32*ep^-2 - 1/48*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2244,7 +2171,6 @@ mod failing {
         //        + pi^2*rat(1/48*ep^-1)
         // F2, F4, F6..F7 = 0
         // sum(Fi)/H = rat(1/24*ep^-3 - 1/16*ep^-2 + 5/48*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2264,7 +2190,6 @@ mod failing {
         //         + pi^2*rat(-5/96*ep^-1)
         // F1..F2, F4, F6..F12, F14..F17 = 0
         // sum(Fi)/H = rat(-5/48*ep^-3 + 7/32*ep^-2 - 29/96*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2280,7 +2205,6 @@ mod failing {
         // F13/H = rat(-1/12*ep^-2 + 1/36*ep^-1)
         // F1..F2, F4, F6..F12, F14..F17 = 0
         // sum(Fi)/H = rat(1/48*ep^-2 - 1/48*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2302,7 +2226,6 @@ mod failing {
         //        + pi^2*rat(-1/24*ep^-1)
         // F4, F6 = 0
         // sum(Fi)/H = rat(-1/12*ep^-3 + 11/72*ep^-2 - 5/24*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2324,7 +2247,6 @@ mod failing {
         //        + pi^2*rat(-1/24*ep^-1)
         // F4, F6 = 0
         // sum(Fi)/H = rat(-1/12*ep^-3 + 11/72*ep^-2 - 5/24*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2344,7 +2266,6 @@ mod failing {
         //        + pi^2*rat(23/144*ep^-1)
         // F2, F4, F6..F7 = 0
         // sum(Fi)/H = rat(23/72*ep^-3 - 73/144*ep^-2 + 55/108*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2368,7 +2289,6 @@ mod failing {
         // F14/H = rat(7/2*ep^-2 + 79/36*ep^-1)
         // F2, F4, F6..F7, F10..F12, F15..F17 = 0
         // sum(Fi)/H = rat(-223/288*ep^-3 + 113/64*ep^-2 - 857/432*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2388,7 +2308,6 @@ mod failing {
         //         + pi^2*rat(-7/576*ep^-1)
         // F1..F2, F4, F6..F12, F14..F17 = 0
         // sum(Fi)/H = rat(-7/288*ep^-3 + 9/64*ep^-2 - 37/216*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2406,7 +2325,6 @@ mod failing {
         // F14/H = rat(-1/12*ep^-2 - 1/18*ep^-1)
         // F1..F2, F4, F6..F7, F9..F12, F15..F17 = 0
         // sum(Fi)/H = rat(1/144*ep^-2 - 7/288*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
@@ -2424,7 +2342,6 @@ mod failing {
         // F14/H = rat(-1/12*ep^-2 - 1/18*ep^-1)
         // F1..F2, F4, F6..F7, F9..F12, F15..F17 = 0
         // sum(Fi)/H = rat(1/144*ep^-2 - 7/288*ep^-1)
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );

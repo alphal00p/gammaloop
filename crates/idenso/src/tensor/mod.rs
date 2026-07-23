@@ -44,6 +44,9 @@ use symbolica::{
     function,
 };
 
+mod canonicalize;
+pub(crate) use canonicalize::remove_antisymmetric_zero_terms;
+
 #[cfg(test)]
 pub mod tests;
 

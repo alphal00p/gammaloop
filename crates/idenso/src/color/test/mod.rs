@@ -431,7 +431,12 @@ fn three_loop_pole_part_color() {
 
     let color_zero_candidate = input.cook_indices().simplify_color().collect_color();
 
-    assert_snapshot!(&color_zero_candidate.collect_symbol::<i16>(SPENSO_TAG.dot).to_bare_ordered_string(),@"((8*eps+8/3)*1/64*eps^(-2)*f(coad(8,hedge_1),coad(8,hedge_11),coad(8,hedge_15))*f(coad(8,hedge_1),coad(8,hedge_3),coad(8,hedge_5))*f(coad(8,hedge_11),coad(8,hedge_13),coad(8,hedge_9))*f(coad(8,hedge_13),coad(8,hedge_5),coad(8,hedge_7))*f(coad(8,hedge_15),coad(8,hedge_17),coad(8,hedge_7))*f(coad(8,hedge_17),coad(8,hedge_3),coad(8,hedge_9))*gs^6+-1/16*eps^(-2)*f(coad(8,hedge_1),coad(8,hedge_11),coad(8,hedge_15))*f(coad(8,hedge_1),coad(8,hedge_3),coad(8,hedge_4))*f(coad(8,hedge_11),coad(8,hedge_13),coad(8,hedge_9))*f(coad(8,hedge_13),coad(8,hedge_4),coad(8,hedge_7))*f(coad(8,hedge_15),coad(8,hedge_17),coad(8,hedge_7))*f(coad(8,hedge_17),coad(8,hedge_3),coad(8,hedge_9))*gs^6+1/16*eps^(-2)*f(coad(8,hedge_1),coad(8,hedge_10),coad(8,hedge_14))*f(coad(8,hedge_1),coad(8,hedge_3),coad(8,hedge_5))*f(coad(8,hedge_10),coad(8,hedge_13),coad(8,hedge_9))*f(coad(8,hedge_13),coad(8,hedge_5),coad(8,hedge_7))*f(coad(8,hedge_14),coad(8,hedge_17),coad(8,hedge_7))*f(coad(8,hedge_17),coad(8,hedge_3),coad(8,hedge_9))*gs^6)*dot(P(0,mink(4)),P(0,mink(4)))")
+    assert_snapshot!(
+        &color_zero_candidate
+            .collect_symbol::<i16>(SPENSO_TAG.dot)
+            .to_bare_ordered_string(),
+        @"0"
+    )
 }
 
 #[test]

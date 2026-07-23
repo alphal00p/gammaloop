@@ -40,7 +40,7 @@ use crate::{
     rep_symbols::RS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, SpinFundamental},
     shorthands::metric::{MS, MetricSimplifier},
-    tensor::{SymbolicNetExt, SymbolicNetParse},
+    tensor::{SymbolicNetExt, SymbolicNetParse, remove_antisymmetric_zero_terms},
 };
 
 initialize!(|| {
@@ -317,7 +317,9 @@ impl IndexTooling for AtomView<'_> {
         &self,
         mut new_dummy: impl FnMut(usize) -> Aind,
     ) -> Atom {
-        let mut net = self
+        let filtered = remove_antisymmetric_zero_terms::<Aind>(*self);
+        let mut net = filtered
+            .as_view()
             .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
             .unwrap();
 
@@ -356,23 +358,17 @@ impl IndexTooling for AtomView<'_> {
         }
 
         let mut dummies = BTreeMap::new();
-
         for (p, _, d) in net.graph.graph.iter_edges() {
             if p.is_paired()
                 && let NetworkEdge::Slot(s) = d.data
             {
-                let (ind, group) = if s.rep_name().is_dual() {
-                    (s.dual().to_atom(), s.rep().dual())
-                } else {
-                    (s.to_atom(), s.rep())
-                };
+                let slot = if s.rep_name().is_dual() { s.dual() } else { *s };
                 // println!("{}:{:?}", ind, group);
-                dummies.insert(ind, group);
+                dummies.insert(slot.to_atom(), slot.rep());
             }
         }
 
         let expr = net.simple_execute::<()>();
-
         let a = expr.canonize_tensors(dummies).unwrap();
 
         let mut reps = vec![];
