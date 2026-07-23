@@ -2796,6 +2796,145 @@ mod tests_cff {
         );
     }
 
+    #[test]
+    fn thermal_bugblatter() {
+        let bugblatter = vec![
+            (3, 0),
+            (4, 3),
+            (0, 1),
+            (1, 4),
+            (2, 5),
+            (5, 4),
+            (1, 2),
+            (3, 5),
+            (2, 0),
+        ];
+
+        let incoming_vertices = vec![];
+        let orientations = generate_all_orientations_for_testing(bugblatter, incoming_vertices);
+        assert_eq!(orientations.len(), 512);
+
+        let mut surface_cache = SurfaceCache::new();
+        let cff = generate_cff_from_orientations::<OrientationID>(
+            orientations,
+            &mut surface_cache,
+            &[],
+            &None,
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+        assert_eq!(cff.orientations.len(), 512);
+        assert_eq!(
+            cff.surfaces.esurface_cache.len(),
+            22,
+            "incorrect number of esurfaces: {:#?}",
+            cff.surfaces.esurface_cache,
+        );
+        assert_eq!(
+            cff.surfaces.hsurface_cache.len(),
+            174,
+            "incorrect number of hsurfaces: {:#?}",
+            cff.surfaces.hsurface_cache,
+        );
+
+        let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
+        let m = F(0.);
+
+        let k1 = ThreeMomentum::new(F(0.1), F(0.2), F(0.3));
+        let k2 = ThreeMomentum::new(F(0.5), F(0.4), F(0.6));
+        let k3 = ThreeMomentum::new(F(0.9), F(0.8), F(0.7));
+        let k4 = ThreeMomentum::new(F(1.1), F(1.2), F(1.3));
+
+        let virtual_energy_cache = [
+            compute_one_loop_energy(k1, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+            compute_one_loop_energy(k3, zero.spatial, m),
+            compute_one_loop_energy(k4, zero.spatial, m),
+            compute_one_loop_energy(k1 - k4, zero.spatial, m),
+            compute_one_loop_energy(k2 - k4, zero.spatial, m),
+            compute_one_loop_energy(k3 - k4, zero.spatial, m),
+            compute_one_loop_energy(-k1 + k2, zero.spatial, m),
+            compute_one_loop_energy(-k1 + k3, zero.spatial, m),
+        ];
+
+        let energy_cache = virtual_energy_cache.to_vec();
+
+        let energy_cache = dummy_hedge_graph(9)
+            .new_edgevec_from_iter(energy_cache)
+            .unwrap();
+
+        let energy_prefactor = virtual_energy_cache
+            .iter()
+            .map(|e| (F(2.) * e).inv())
+            .reduce(|acc, x| acc * x)
+            .unwrap();
+
+        let mut evaluator = cff.quick_symbolica_evaluator(0..0, 0..9);
+
+        let cff_res: F<f64> =
+            energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+        let target_res = F(1.308_467_742_357_907_9e0_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        // Note that the tolerance needs to be very loose here probably due to the
+        // numerical instability of the naively implemented hyperbolic functions.
+        assert!(
+            relative_error.abs() < F(4.0e-10),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+
+        let k1 = ThreeMomentum::new(F(1.1), F(0.2), F(0.3));
+        let k2 = ThreeMomentum::new(F(0.5), F(1.4), F(0.6));
+        let k3 = ThreeMomentum::new(F(0.9), F(1.8), F(0.7));
+        let k4 = ThreeMomentum::new(F(1.1), F(2.2), F(1.3));
+
+        let virtual_energy_cache = [
+            compute_one_loop_energy(k1, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+            compute_one_loop_energy(k3, zero.spatial, m),
+            compute_one_loop_energy(k4, zero.spatial, m),
+            compute_one_loop_energy(k1 - k4, zero.spatial, m),
+            compute_one_loop_energy(k2 - k4, zero.spatial, m),
+            compute_one_loop_energy(k3 - k4, zero.spatial, m),
+            compute_one_loop_energy(-k1 + k2, zero.spatial, m),
+            compute_one_loop_energy(-k1 + k3, zero.spatial, m),
+        ];
+
+        let energy_cache = virtual_energy_cache.to_vec();
+
+        let energy_cache = dummy_hedge_graph(9)
+            .new_edgevec_from_iter(energy_cache)
+            .unwrap();
+
+        let energy_prefactor = virtual_energy_cache
+            .iter()
+            .map(|e| (F(2.) * e).inv())
+            .reduce(|acc, x| acc * x)
+            .unwrap();
+
+        let cff_res: F<f64> =
+            energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+        let target_res = F(3.799_072_627_985_780_0e-4_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        // Note that the tolerance needs to be very loose here probably due to the
+        // numerical instability of the naively implemented hyperbolic functions.
+        assert!(
+            relative_error.abs() < F(6.0e-10),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+    }
+
     mod failing {
         use super::*;
 

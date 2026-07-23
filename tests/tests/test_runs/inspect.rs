@@ -401,301 +401,219 @@ fn test_mass_approach_threshold_subtraction_dotted() -> Result<()> {
 }
 
 #[test]
-fn thermal_vacuum_inspect() -> Result<()> {
+fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
+    fn assert_inspect(
+        cli: &mut gammaloop_integration_tests::CLIState,
+        process_id: usize,
+        graph_id: usize,
+        point: &[f64],
+        target: Complex<f64>,
+        context: &str,
+    ) -> Result<()> {
+        let (_, inspect) = Inspect {
+            process: Some(ProcessRef::Id(process_id)),
+            graph_id: Some(graph_id),
+            integrand_name: Some("default".to_string()),
+            point: point.to_vec(),
+            momentum_space: true,
+            use_arb_prec: true,
+            ..Default::default()
+        }
+        .run(cli)?;
+
+        assert_complex_approx_eq(inspect, target, context);
+        Ok(())
+    }
+
     let mut cli = get_test_cli(
-        Some("thermal_vacuum_inspect.toml".into()),
-        get_tests_workspace_path().join("thermal_vacuum_inspect"),
+        Some("thermal_vacuum_2l_3l_inspect.toml".into()),
+        get_tests_workspace_path().join("thermal_vacuum_2l_3l_inspect"),
         None,
         true,
     )?;
 
     cli.run_command("set model muB=0.0")?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(0)),
-        integrand_name: Some("default".to_string()),
-        point: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(0.0, -2.888_597_299_939_403e-3);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        Complex::new(0.0, -2.888_597_299_939_403e-3),
         "thermal sunrise inspect f64 benchmark at point 0 at muB=0.0",
-    );
+    )?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(0)),
-        integrand_name: Some("default".to_string()),
-        point: vec![1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(0.0, -2.906_724_274_545_281e-4);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
+        Complex::new(0.0, -2.906_724_274_545_281e-4),
         "thermal sunrise inspect f64 benchmark at point 1 at muB=0.0",
-    );
+    )?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(1)),
-        integrand_name: Some("default".to_string()),
-        point: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(-1.750_719_959_696_990e-5, 0.0);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        1,
+        0,
+        &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        Complex::new(-1.750_719_959_696_990e-5, 0.0),
         "thermal mercedes inspect f64 benchmark at point 0 at muB=0.0",
-    );
+    )?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(1)),
-        integrand_name: Some("default".to_string()),
-        point: vec![1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(-6.126_647_366_322_035e-7, 0.0);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        1,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
+        Complex::new(-6.126_647_366_322_035e-7, 0.0),
         "thermal mercedes inspect f64 benchmark at point 1 at muB=0.0",
-    );
+    )?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(2)),
-        integrand_name: Some("default".to_string()),
-        point: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(2.403_408_249_730_896e-5, 0.0);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        2,
+        0,
+        &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        Complex::new(2.403_408_249_730_896e-5, 0.0),
         "thermal tennis ball inspect f64 benchmark at point 0 at muB=0.0",
-    );
+    )?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(2)),
-        integrand_name: Some("default".to_string()),
-        point: vec![1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(5.482_474_260_313_583e-7, 0.0);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        2,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
+        Complex::new(5.482_474_260_313_583e-7, 0.0),
         "thermal tennis ball inspect f64 benchmark at point 1 at muB=0.0",
-    );
+    )?;
 
     cli.run_command("set model muB=3.0")?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(0)),
-        integrand_name: Some("default".to_string()),
-        point: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(0.0, -2.337_015_373_956_359e-3);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        Complex::new(0.0, -2.337_015_373_956_359e-3),
         "thermal sunrise inspect f64 benchmark at point 0 at muB=3.0",
-    );
+    )?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(0)),
-        integrand_name: Some("default".to_string()),
-        point: vec![1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(0.0, -2.573_385_490_044_703e-4);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
+        Complex::new(0.0, -2.573_385_490_044_703e-4),
         "thermal sunrise inspect f64 benchmark at point 1 at muB=3.0",
-    );
+    )?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(1)),
-        integrand_name: Some("default".to_string()),
-        point: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(-6.558_647_319_025_115e-6, 0.0);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        1,
+        0,
+        &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        Complex::new(-6.558_647_319_025_115e-6, 0.0),
         "thermal mercedes inspect f64 benchmark at point 0 at muB=3.0",
-    );
+    )?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(1)),
-        integrand_name: Some("default".to_string()),
-        point: vec![1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(-3.520_118_714_871_738e-7, 0.0);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        1,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
+        Complex::new(-3.520_118_714_871_738e-7, 0.0),
         "thermal mercedes inspect f64 benchmark at point 1 at muB=3.0",
-    );
+    )?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(2)),
-        integrand_name: Some("default".to_string()),
-        point: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(9.425_414_745_613_589e-6, 0.0);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        2,
+        0,
+        &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        Complex::new(9.425_414_745_613_589e-6, 0.0),
         "thermal tennis ball inspect f64 benchmark at point 0 at muB=3.0",
-    );
+    )?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(2)),
-        integrand_name: Some("default".to_string()),
-        point: vec![1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(3.494_310_883_292_893e-7, 0.0);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        2,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
+        Complex::new(3.494_310_883_292_893e-7, 0.0),
         "thermal tennis ball inspect f64 benchmark at point 1 at muB=3.0",
-    );
+    )?;
 
     Ok(())
 }
 
 #[test]
-fn cold_dense_vacuum_inspect() -> Result<()> {
+fn cold_dense_vacuum_2l_3l_inspect() -> Result<()> {
+    fn assert_inspect(
+        cli: &mut gammaloop_integration_tests::CLIState,
+        process_id: usize,
+        graph_id: usize,
+        point: &[f64],
+        target: Complex<f64>,
+        context: &str,
+    ) -> Result<()> {
+        let (_, inspect) = Inspect {
+            process: Some(ProcessRef::Id(process_id)),
+            graph_id: Some(graph_id),
+            integrand_name: Some("default".to_string()),
+            point: point.to_vec(),
+            momentum_space: true,
+            use_arb_prec: true,
+            ..Default::default()
+        }
+        .run(cli)?;
+
+        assert_complex_approx_eq(inspect, target, context);
+        Ok(())
+    }
+
     let mut cli = get_test_cli(
-        Some("cold_dense_vacuum_inspect.toml".into()),
-        get_tests_workspace_path().join("cold_dense_vacuum_inspect"),
+        Some("cold_dense_vacuum_2l_3l_inspect.toml".into()),
+        get_tests_workspace_path().join("cold_dense_vacuum_2l_3l_inspect"),
         None,
         true,
     )?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(0)),
-        integrand_name: Some("default".to_string()),
-        point: vec![1.1, 0.2, 0.3, 0.4, 0.5, 0.6],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(0.0, -4.310_928_789_772_213e-4);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        Complex::new(0.0, -4.310_928_789_772_213e-4),
         "cold dense sunrise inspect f64 benchmark at point 0 at muB=3.0",
-    );
+    )?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(0)),
-        integrand_name: Some("default".to_string()),
-        point: vec![1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(0.0, -1.850_837_097_150_558e-4);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
+        Complex::new(0.0, -1.850_837_097_150_558e-4),
         "cold dense sunrise inspect f64 benchmark at point 1 at muB=3.0",
-    );
+    )?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(1)),
-        integrand_name: Some("default".to_string()),
-        point: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(9.891_479_783_716_468e-6, 0.0);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        1,
+        0,
+        &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        Complex::new(9.891_479_783_716_468e-6, 0.0),
         "cold dense mercedes inspect f64 benchmark at point 0 at muB=3.0",
-    );
+    )?;
 
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(1)),
-        integrand_name: Some("default".to_string()),
-        point: vec![1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
-    let target = Complex::new(-2.452_375_990_392_057e-7, 0.0);
-    assert_complex_approx_eq(
-        inspect,
-        target,
+    assert_inspect(
+        &mut cli,
+        1,
+        0,
+        &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
+        Complex::new(-2.452_375_990_392_057e-7, 0.0),
         "cold dense mercedes inspect f64 benchmark at point 1 at muB=3.0",
-    );
+    )?;
 
     Ok(())
 }
@@ -968,6 +886,117 @@ mod slow {
 
         let target = Complex::new(2.3159767780905335e-1, -1.8547720156633686e-4);
         assert_eq!(inspect, target);
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_vacuum_4l_inspect() -> Result<()> {
+        fn assert_inspect(
+            cli: &mut gammaloop_integration_tests::CLIState,
+            process_id: usize,
+            graph_id: usize,
+            point: &[f64],
+            target: Complex<f64>,
+            context: &str,
+        ) -> Result<()> {
+            let (_, inspect) = Inspect {
+                process: Some(ProcessRef::Id(process_id)),
+                graph_id: Some(graph_id),
+                integrand_name: Some("default".to_string()),
+                point: point.to_vec(),
+                momentum_space: true,
+                use_arb_prec: true,
+                ..Default::default()
+            }
+            .run(cli)?;
+
+            assert_complex_approx_eq(inspect, target, context);
+            Ok(())
+        }
+
+        let mut cli = get_test_cli(
+            Some("thermal_vacuum_4l_inspect.toml".into()),
+            get_tests_workspace_path().join("thermal_vacuum_4l_inspect"),
+            None,
+            true,
+        )?;
+
+        cli.run_command("set model muB=0.0")?;
+
+        assert_inspect(
+            &mut cli,
+            0,
+            0,
+            &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
+            Complex::new(0.0, -2.838_254_343_652_266e-8),
+            "thermal bugblatter 1 inspect f64 benchmark at point 0 at muB=0.0",
+        )?;
+
+        assert_inspect(
+            &mut cli,
+            0,
+            0,
+            &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
+            Complex::new(0.0, -1.179_354_762_459_854e-9),
+            "thermal bugblatter 1 inspect f64 benchmark at point 1 at muB=0.0",
+        )?;
+
+        assert_inspect(
+            &mut cli,
+            0,
+            1,
+            &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
+            Complex::new(0.0, 2.085_535_988_771_055e-10),
+            "thermal bugblatter 2 inspect f64 benchmark at point 0 at muB=0.0",
+        )?;
+
+        assert_inspect(
+            &mut cli,
+            0,
+            1,
+            &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
+            Complex::new(0.0, 1.124_548_090_968_172e-11),
+            "thermal bugblatter 2 inspect f64 benchmark at point 1 at muB=0.0",
+        )?;
+
+        cli.run_command("set model muB=3.0")?;
+
+        assert_inspect(
+            &mut cli,
+            0,
+            0,
+            &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
+            Complex::new(0.0, -3.470_645_264_375_660e-10),
+            "thermal bugblatter 1 inspect f64 benchmark at point 0 at muB=3.0",
+        )?;
+
+        assert_inspect(
+            &mut cli,
+            0,
+            0,
+            &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
+            Complex::new(0.0, -5.666_712_273_246_035e-10),
+            "thermal bugblatter 1 inspect f64 benchmark at point 1 at muB=3.0",
+        )?;
+
+        assert_inspect(
+            &mut cli,
+            0,
+            1,
+            &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
+            Complex::new(0.0, 3.469_482_008_367_540e-10),
+            "thermal bugblatter 2 inspect f64 benchmark at point 0 at muB=3.0",
+        )?;
+
+        assert_inspect(
+            &mut cli,
+            0,
+            1,
+            &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
+            Complex::new(0.0, 1.637_733_030_600_185e-11),
+            "thermal bugblatter 2 inspect f64 benchmark at point 1 at muB=3.0",
+        )?;
+
         Ok(())
     }
 }
