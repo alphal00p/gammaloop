@@ -1,0 +1,14 @@
+[package]
+name = "oneloop"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "One-loop IBP reduction of Feynman integrals to the scalar master integrals"
+
+[dependencies]
+symbolica = { workspace = true }
+thiserror = { workspace = true }
+
+# Test-only
+[dev-dependencies]
+gammalooprs = { workspace = true }
