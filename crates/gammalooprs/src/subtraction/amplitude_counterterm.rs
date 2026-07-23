@@ -943,49 +943,52 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             "amplitude threshold prefactors"
         );
 
-        let coincidence_tolerance = F::from_f64(1.0e-8) * e_cm;
-        for (candidate_esurface_id, candidate_esurface) in
-            ct_builder.esurface_collection.iter_enumerated()
-        {
-            let value = candidate_esurface.compute_from_momenta(
-                &ct_builder.graph.loop_momentum_basis,
-                &ct_builder.real_mass_vector,
-                self.rstar_sample.loop_moms(),
-                self.rstar_sample.external_moms(),
-            );
-            if value.abs() < coincidence_tolerance {
-                let candidate_raised_esurface_id = ct_builder
-                    .raised_data
-                    .raised_groups
-                    .iter_enumerated()
-                    .find_map(|(raised_esurface_id, raised_group)| {
-                        raised_group
-                            .esurface_ids
-                            .contains(&candidate_esurface_id)
-                            .then_some(raised_esurface_id.0)
-                    });
-                let candidate_atom = candidate_esurface.to_atom(&[]).to_string();
-                crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #esurface;
-                    stage = "amplitude_threshold_rstar_coincident_esurface",
-                    graph = %ct_builder.graph.name,
-                    selected_esurface_id = esurface_id.0,
-                    selected_raised_esurface_id = esurface_ct_builder.raised_esurface_id.0,
-                    candidate_esurface_id = candidate_esurface_id.0,
-                    candidate_raised_esurface_id = ?candidate_raised_esurface_id,
-                    selected = candidate_esurface_id == esurface_id,
-                    value = %format!("{:+16e}", value),
-                    tolerance = %format!("{:+16e}", coincidence_tolerance),
-                    file.atom = %candidate_atom,
-                    "threshold rstar coincident esurface graph={} selected={} raised={} candidate={} candidate_raised={:?} value={} tol={} atom={}",
-                    ct_builder.graph.name,
-                    esurface_id.0,
-                    esurface_ct_builder.raised_esurface_id.0,
-                    candidate_esurface_id.0,
-                    candidate_raised_esurface_id,
-                    format!("{:+16e}", value),
-                    format!("{:+16e}", coincidence_tolerance),
-                    candidate_atom
+        let debug_diagnostics_enabled = tracing::event_enabled!(tracing::Level::DEBUG);
+        if debug_diagnostics_enabled {
+            let coincidence_tolerance = F::from_f64(1.0e-8) * e_cm;
+            for (candidate_esurface_id, candidate_esurface) in
+                ct_builder.esurface_collection.iter_enumerated()
+            {
+                let value = candidate_esurface.compute_from_momenta(
+                    &ct_builder.graph.loop_momentum_basis,
+                    &ct_builder.real_mass_vector,
+                    self.rstar_sample.loop_moms(),
+                    self.rstar_sample.external_moms(),
                 );
+                if value.abs() < coincidence_tolerance {
+                    let candidate_raised_esurface_id = ct_builder
+                        .raised_data
+                        .raised_groups
+                        .iter_enumerated()
+                        .find_map(|(raised_esurface_id, raised_group)| {
+                            raised_group
+                                .esurface_ids
+                                .contains(&candidate_esurface_id)
+                                .then_some(raised_esurface_id.0)
+                        });
+                    let candidate_atom = candidate_esurface.to_atom(&[]).to_string();
+                    crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #esurface;
+                        stage = "amplitude_threshold_rstar_coincident_esurface",
+                        graph = %ct_builder.graph.name,
+                        selected_esurface_id = esurface_id.0,
+                        selected_raised_esurface_id = esurface_ct_builder.raised_esurface_id.0,
+                        candidate_esurface_id = candidate_esurface_id.0,
+                        candidate_raised_esurface_id = ?candidate_raised_esurface_id,
+                        selected = candidate_esurface_id == esurface_id,
+                        value = %format!("{:+16e}", value),
+                        tolerance = %format!("{:+16e}", coincidence_tolerance),
+                        file.atom = %candidate_atom,
+                        "threshold rstar coincident esurface graph={} selected={} raised={} candidate={} candidate_raised={:?} value={} tol={} atom={}",
+                        ct_builder.graph.name,
+                        esurface_id.0,
+                        esurface_ct_builder.raised_esurface_id.0,
+                        candidate_esurface_id.0,
+                        candidate_raised_esurface_id,
+                        format!("{:+16e}", value),
+                        format!("{:+16e}", coincidence_tolerance),
+                        candidate_atom
+                    );
+                }
             }
         }
 
