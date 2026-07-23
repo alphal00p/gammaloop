@@ -34,6 +34,12 @@ test-group = "memory-intensive"
 # Mark benchmark-style tests as very slow
 filter = "test(bench) or test(benchmark)"
 
+[[profile.default.overrides]]
+# This production GL20 event snapshot intentionally generates the fully grouped NLO graph before
+# selecting it, and its Symbolica evaluator construction exceeds the generic one-minute timeout.
+filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/)"
+slow-timeout = { period = "5m", terminate-after = 2 }
+
 [profile.default.junit]
 # Default JUnit output location
 path = "target/nextest/default/junit.xml"
@@ -90,6 +96,11 @@ filter = "test(integration) or test(heavy) or test(memory) or test(large)"
 [[profile.ci.overrides]]
 # Benchmark tests get even more time in CI
 filter = "test(bench) or test(benchmark)"
+
+[[profile.ci.overrides]]
+# Keep the production GL20 event snapshot under the same explicit bound in CI.
+filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/)"
+slow-timeout = { period = "5m", terminate-after = 2 }
 
 [profile.partition]
 slow-timeout = { period = "120s", terminate-after = 2 }

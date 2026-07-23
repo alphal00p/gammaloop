@@ -32,9 +32,9 @@ use crate::momentum::{SignOrZero, ThreeMomentum};
 use crate::processes::CrossSectionCut;
 use crate::utils::hyperdual_utils::new_constant;
 use crate::utils::{
-    ESURFACE_SHIFT_THRESHOLD, F, FloatLike, GS, compute_loop_part, compute_loop_part_subspace,
-    compute_shift_part, compute_shift_part_subspace, compute_t_part_of_shift_part, cut_energy,
-    external_energy_atom_from_index, ose_atom_from_index,
+    DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F, FloatLike, GS,
+    compute_loop_part, compute_loop_part_subspace, compute_shift_part, compute_shift_part_subspace,
+    compute_t_part_of_shift_part, cut_energy, external_energy_atom_from_index, ose_atom_from_index,
 };
 use crate::uv::uv_graph::UVE;
 use color_eyre::Result;
@@ -73,7 +73,23 @@ pub(crate) enum EsurfaceExistence<T: FloatLike> {
     },
 }
 
+/// Pointwise existence classification exposed without the internal diagnostic margin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EsurfaceExistenceStatus {
+    NonExisting,
+    Pinched,
+    Existing,
+}
+
 impl<T: FloatLike> EsurfaceExistence<T> {
+    fn status(&self) -> EsurfaceExistenceStatus {
+        match self {
+            Self::NonExisting { .. } => EsurfaceExistenceStatus::NonExisting,
+            Self::Pinched { .. } => EsurfaceExistenceStatus::Pinched,
+            Self::Existing { .. } => EsurfaceExistenceStatus::Existing,
+        }
+    }
+
     pub(crate) fn is_existing(&self) -> bool {
         matches!(self, Self::Existing { .. })
     }
@@ -133,23 +149,68 @@ impl Esurface {
         })
     }
 
-    pub(crate) fn contains_all_with_minus_sign(&self, edges: &[EdgeIndex]) -> bool {
-        edges.iter().all(|edge| {
+    pub(crate) fn external_shift_is_strictly_negative_for_positive_energies(
+        &self,
+        incoming_edges: &[EdgeIndex],
+        outgoing_edges: &[EdgeIndex],
+    ) -> bool {
+        if incoming_edges.is_empty()
+            || outgoing_edges.is_empty()
+            || incoming_edges
+                .iter()
+                .any(|edge| outgoing_edges.contains(edge))
+            || self
+                .external_shift
+                .iter()
+                .any(|(edge, _)| !incoming_edges.contains(edge) && !outgoing_edges.contains(edge))
+        {
+            return false;
+        }
+
+        let coefficient = |edge: &EdgeIndex| {
             self.external_shift
                 .iter()
-                .any(|(index, sign)| *index == *edge && *sign == -1)
-        })
+                .filter(|(shift_edge, _)| shift_edge == edge)
+                .map(|(_, coefficient)| i128::from(*coefficient))
+                .sum::<i128>()
+        };
+
+        // Energy conservation makes external-energy coefficient vectors `c` and
+        // `c + lambda * sigma` equivalent, where sigma is +1 for incoming and -1
+        // for outgoing momenta. The shift is strictly negative for all positive
+        // external energies if one representative is component-wise non-positive
+        // and not identically zero.
+        let lambda_lower_bound = outgoing_edges
+            .iter()
+            .map(&coefficient)
+            .max()
+            .expect("outgoing external edges were checked to be non-empty");
+        let lambda_upper_bound = incoming_edges
+            .iter()
+            .map(|edge| -coefficient(edge))
+            .min()
+            .expect("incoming external edges were checked to be non-empty");
+
+        if lambda_lower_bound > lambda_upper_bound {
+            return false;
+        }
+
+        let lambda = lambda_lower_bound;
+        let adjusted_coefficients = incoming_edges
+            .iter()
+            .map(|edge| coefficient(edge) + lambda)
+            .chain(outgoing_edges.iter().map(|edge| coefficient(edge) - lambda));
+        let mut has_strictly_negative_coefficient = false;
+        for adjusted_coefficient in adjusted_coefficients {
+            if adjusted_coefficient > 0 {
+                return false;
+            }
+            has_strictly_negative_coefficient |= adjusted_coefficient < 0;
+        }
+
+        has_strictly_negative_coefficient
     }
 
-    pub(crate) fn contains_only_with_minus_sign(&self, edges: &[EdgeIndex]) -> bool {
-        self.external_shift.iter().all(|(index, sign)| {
-            if edges.contains(index) {
-                *sign == -1
-            } else {
-                false
-            }
-        })
-    }
     pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
         self.to_atom_impl(cut_edges, external_energy_atom_from_index)
     }
@@ -304,7 +365,16 @@ impl Esurface {
         // statuses are exclusive and only `Existing` surfaces are subtraction targets.
         // Keep the decision in the original, dimensionful scale. Besides avoiding an
         // unnecessary division, this preserves the previous existence boundary exactly.
-        let invariant_tolerance = normalized_margin_tolerance * e_cm * e_cm;
+        // Deserialization rejects invalid configured tolerances. Keep this defensive fallback for
+        // settings mutated programmatically (for example through a language binding), so an
+        // invalid sign can never invert the existence test.
+        let normalized_margin_tolerance =
+            if normalized_margin_tolerance.is_nan() || normalized_margin_tolerance.is_infinite() {
+                F::from_f64(DEFAULT_ESURFACE_EXISTENCE_THRESHOLD)
+            } else {
+                normalized_margin_tolerance.abs()
+            };
+        let invariant_tolerance = &normalized_margin_tolerance * e_cm * e_cm;
         let normalized_margin = &invariant_margin / (e_cm * e_cm);
         let shift_tolerance = F::from_f64(ESURFACE_SHIFT_THRESHOLD) * e_cm;
 
@@ -488,6 +558,26 @@ impl Esurface {
             e_cm,
             normalized_margin_tolerance,
         )
+    }
+
+    /// Classify a full-space surface while keeping normalized margins and rejection reasons
+    /// internal to the subtraction implementation.
+    pub fn existence_status<T: FloatLike>(
+        &self,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        lmb: &LoopMomentumBasis,
+        real_mass_vector: &EdgeVec<F<T>>,
+        e_cm: &F<T>,
+        normalized_margin_tolerance: &F<T>,
+    ) -> EsurfaceExistenceStatus {
+        self.classify_existence(
+            external_moms,
+            lmb,
+            real_mass_vector,
+            e_cm,
+            normalized_margin_tolerance,
+        )
+        .status()
     }
 
     /// Only compute the shift part, useful for center finding.
@@ -1111,28 +1201,31 @@ impl Graph {
 
         let mut raised_groups = TiVec::<RaisedEsurfaceId, RaisedEsurfaceGroup>::new();
 
-        for (cut_id, normalized_cut_esurface) in normalized_cut_esurfaces.iter_enumerated() {
-            let raised_cut_id =
-                raised_groups
-                    .iter_enumerated()
-                    .find_map(|(raised_cut_id, cuts)| {
-                        if cuts.esurface_ids.iter().all(|cut_in_raised_group_id| {
-                            normalized_cut_esurfaces[*cut_in_raised_group_id].energies
+        for (esurface_id, normalized_cut_esurface) in normalized_cut_esurfaces.iter_enumerated() {
+            let raised_esurface_group_id = raised_groups.iter_enumerated().find_map(
+                |(raised_esurface_group_id, esurface_group)| {
+                    if esurface_group
+                        .esurface_ids
+                        .iter()
+                        .all(|esurface_id_in_group| {
+                            normalized_cut_esurfaces[*esurface_id_in_group].energies
                                 == normalized_cut_esurface.energies
-                                && normalized_cut_esurfaces[*cut_in_raised_group_id].external_shift
+                                && normalized_cut_esurfaces[*esurface_id_in_group].external_shift
                                     == normalized_cut_esurface.external_shift
-                        }) {
-                            Some(raised_cut_id)
-                        } else {
-                            None
-                        }
-                    });
+                        })
+                    {
+                        Some(raised_esurface_group_id)
+                    } else {
+                        None
+                    }
+                },
+            );
 
-            if let Some(found_raised_cut_id) = raised_cut_id {
-                raised_groups[found_raised_cut_id].esurface_ids.push(cut_id);
+            if let Some(found_group_id) = raised_esurface_group_id {
+                raised_groups[found_group_id].esurface_ids.push(esurface_id);
             } else {
                 raised_groups.push(RaisedEsurfaceGroup {
-                    esurface_ids: vec![cut_id],
+                    esurface_ids: vec![esurface_id],
                     max_occurence: 0,
                 });
             }
@@ -1224,6 +1317,85 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn invalid_programmatic_tolerances_cannot_invert_classification() {
+        let e_cm = F(10.0);
+        let shift_part = F(-1.0);
+        let invariant_margin = F(0.0);
+
+        for tolerance in [
+            F(DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
+            F(-DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
+            F(f64::NAN),
+            F(f64::INFINITY),
+        ] {
+            assert!(matches!(
+                Esurface::classify_invariant_margin(
+                    &shift_part,
+                    invariant_margin,
+                    &e_cm,
+                    &tolerance,
+                ),
+                EsurfaceExistence::Pinched { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn positive_external_energy_filter_uses_energy_conservation() {
+        let incoming_edges = (0..4).map(EdgeIndex::from).collect_vec();
+        let outgoing_edges = (4..9).map(EdgeIndex::from).collect_vec();
+        let shift_is_negative = |external_shift: &[(usize, i64)]| {
+            Esurface {
+                energies: vec![],
+                external_shift: external_shift
+                    .iter()
+                    .map(|(edge, coefficient)| (EdgeIndex::from(*edge), *coefficient))
+                    .collect(),
+                vertex_set: VertexSet::dummy(),
+            }
+            .external_shift_is_strictly_negative_for_positive_energies(
+                &incoming_edges,
+                &outgoing_edges,
+            )
+        };
+
+        assert!(
+            shift_is_negative(&[(0, -1), (1, -1)]),
+            "a negative proper subset of incoming energies must be retained"
+        );
+        assert!(
+            shift_is_negative(&[(4, -1)]),
+            "a negative proper subset of outgoing energies must be retained"
+        );
+        assert!(
+            shift_is_negative(&[(0, -1), (1, -1), (2, -1), (3, -1), (4, 1)]),
+            "energy conservation turns minus all incoming plus one outgoing into minus the remaining outgoing energies"
+        );
+        assert!(
+            !shift_is_negative(&[
+                (0, -1),
+                (1, -1),
+                (2, -1),
+                (3, -1),
+                (4, 1),
+                (5, 1),
+                (6, 1),
+                (7, 1),
+                (8, 1),
+            ]),
+            "the energy-conservation identity is zero rather than strictly negative"
+        );
+        assert!(
+            !shift_is_negative(&[(0, -1), (4, 1)]),
+            "a sign-indefinite difference must not be accepted from positivity alone"
+        );
+        assert!(
+            !shift_is_negative(&[(9, -1)]),
+            "a shift outside the external-energy partition must be rejected conservatively"
+        );
     }
 
     #[test]

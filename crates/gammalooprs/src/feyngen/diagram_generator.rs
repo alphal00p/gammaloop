@@ -2760,10 +2760,7 @@ impl ProcessDefinition {
         settings: &GlobalSettings,
     ) -> Result<Vec<Graph>, FeynGenError> {
         let num_threads = Some(settings.n_cores.feyngen);
-        let progress_bar_style = ProgressStyle::with_template(
-            "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} ({percent}%) {msg}",
-        )
-        .unwrap();
+        let progress_bar_style = utils::long_running_progress_style();
         let mut cpl_reps: Vec<Replacement> = vec![];
         for cpl in model.couplings.values() {
             let [lhs, rhs] = cpl.rep_rule();
@@ -4346,7 +4343,10 @@ impl ProcessDefinition {
                     .expand()
                     .is_zero()
                 {
-                    println!("{combined_overall_factor}");
+                    debug!(
+                        combined_overall_factor = %combined_overall_factor,
+                        "Numerator-aware grouping produced an exact cancellation"
+                    );
                     n_cancellations += 1;
                 } else {
                     bare_graph_representative.overall_factor = combined_overall_factor;

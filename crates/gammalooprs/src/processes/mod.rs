@@ -27,7 +27,7 @@ mod generation_progress;
 pub use generation_progress::{
     GenerationProcessKind, GenerationProgressMode, GenerationProgressModeGuard,
     GenerationProgressObserver, GenerationProgressObserverGuard, GenerationProgressPhase,
-    cut_finished, detailed_progress_enabled, detailed_progress_message,
+    begin_phase, cut_finished, detailed_progress_enabled, detailed_progress_message,
     enter_detailed_progress_span, enter_progress_context,
 };
 mod selection;

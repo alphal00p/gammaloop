@@ -45,8 +45,8 @@ use crate::{
         signature::LoopSignature,
     },
     processes::{
-        EvaluatorBuildTimings, IteratedCtCollection, LUCounterTermData, LeftThresholdId,
-        RaisedCutId, RightThresholdId, build_derivative_structure,
+        CutGroupId, EvaluatorBuildTimings, IteratedCtCollection, LUCounterTermData,
+        LeftThresholdId, RightThresholdId, build_derivative_structure,
     },
     settings::{GlobalSettings, RuntimeSettings, global::FrozenCompilationMode},
     subtraction::{
@@ -61,7 +61,7 @@ use crate::{
             extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape, variable_indices_from_cut_cff_index,
         },
-        newton_solver::{NewtonIterationResult, safeguarded_newton_iteration_and_derivative},
+        newton_solver::{NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity},
     },
 };
 
@@ -692,7 +692,7 @@ impl LUCounterTermEvaluators {
 
     pub fn from_atoms(
         counterterm_data: &LUCounterTermData,
-        max_raised_cut_occurrence: usize,
+        max_cut_order: usize,
         threshold_helpers: LUThresholdHelperEvaluators,
         param_builder: &ParamBuilder,
         settings: &GlobalSettings,
@@ -775,7 +775,7 @@ impl LUCounterTermEvaluators {
         timings += iterated_timings.get();
 
         let symbolica_started = std::time::Instant::now();
-        let pass_two_evaluator = (1..=max_raised_cut_occurrence)
+        let pass_two_evaluator = (1..=max_cut_order)
             .map(|order| {
                 build_derivative_structure(order as u8, -1, &settings.generation.evaluator)
             })
@@ -798,14 +798,14 @@ impl LUCounterTermEvaluators {
     pub(crate) fn compile(
         &mut self,
         path: impl AsRef<Path>,
-        cut_id: RaisedCutId,
+        cut_group_id: CutGroupId,
         frozen_mode: &FrozenCompilationMode,
     ) -> color_eyre::Result<()> {
         for (threshold_id, evaluators) in self.left_thresholds_evaluator.iter_mut_enumerated() {
             for (index, evaluator) in evaluators.iter_mut() {
                 let name = format!(
-                    "cut_{}_left_threshold_{}_index_{}",
-                    cut_id.0, threshold_id.0, index
+                    "cut_group_{}_left_threshold_{}_index_{}",
+                    cut_group_id.0, threshold_id.0, index
                 );
                 evaluator.compile(&name, path.as_ref(), frozen_mode)?;
             }
@@ -814,8 +814,8 @@ impl LUCounterTermEvaluators {
         for (threshold_id, evaluators) in self.right_thresholds_evaluator.iter_mut_enumerated() {
             for (index, evaluator) in evaluators.iter_mut() {
                 let name = format!(
-                    "cut_{}_right_threshold_{}_index_{}",
-                    cut_id.0, threshold_id.0, index
+                    "cut_group_{}_right_threshold_{}_index_{}",
+                    cut_group_id.0, threshold_id.0, index
                 );
                 evaluator.compile(&name, path.as_ref(), frozen_mode)?;
             }
@@ -824,8 +824,8 @@ impl LUCounterTermEvaluators {
         for (iterated_index, evaluators) in self.iterated_evaluator.iter_mut().enumerate() {
             for (index, evaluator) in evaluators.iter_mut() {
                 let name = format!(
-                    "cut_{}_iterated_{}_index_{}",
-                    cut_id.0, iterated_index, index
+                    "cut_group_{}_iterated_{}_index_{}",
+                    cut_group_id.0, iterated_index, index
                 );
                 evaluator.compile(&name, path.as_ref(), frozen_mode)?;
             }
@@ -836,7 +836,7 @@ impl LUCounterTermEvaluators {
             .iter_mut()
             .enumerate()
         {
-            let name = format!("cut_{}_pass_two_{}", cut_id.0, order);
+            let name = format!("cut_group_{}_pass_two_{}", cut_group_id.0, order);
             pass_to_evaluator.compile_external(
                 path.as_ref().join(&name).with_extension("cpp"),
                 &name,
@@ -885,14 +885,14 @@ type CutThresholds = (
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub(crate) struct LUCounterTerm {
-    pub evaluators: TiVec<RaisedCutId, LUCounterTermEvaluators>,
-    pub thresholds: TiVec<RaisedCutId, CutThresholds>,
-    pub subspaces: TiVec<RaisedCutId, (SubspaceData, SubspaceData)>,
-    pub active_cuts: TiVec<RaisedCutId, bool>,
-    pub active_left_thresholds: TiVec<RaisedCutId, TiVec<LeftThresholdId, bool>>,
-    pub active_right_thresholds: TiVec<RaisedCutId, TiVec<RightThresholdId, bool>>,
-    pub active_iterated_thresholds: TiVec<RaisedCutId, IteratedCtCollection<bool>>,
-    pub rstar_dependence_calculator: TiVec<RaisedCutId, RstarTDependenceEvaluator>,
+    pub evaluators: TiVec<CutGroupId, LUCounterTermEvaluators>,
+    pub thresholds: TiVec<CutGroupId, CutThresholds>,
+    pub subspaces: TiVec<CutGroupId, (SubspaceData, SubspaceData)>,
+    pub active_cut_groups: TiVec<CutGroupId, bool>,
+    pub active_left_thresholds: TiVec<CutGroupId, TiVec<LeftThresholdId, bool>>,
+    pub active_right_thresholds: TiVec<CutGroupId, TiVec<RightThresholdId, bool>>,
+    pub active_iterated_thresholds: TiVec<CutGroupId, IteratedCtCollection<bool>>,
+    pub rstar_dependence_calculator: TiVec<CutGroupId, RstarTDependenceEvaluator>,
 }
 
 pub struct LUCTKinematicPoint<T: FloatLike> {
@@ -985,8 +985,22 @@ impl<T: FloatLike> LUCTKinematicPoint<T> {
 }
 
 impl LUCounterTerm {
-    pub(crate) fn cut_is_active(&self, cut_id: RaisedCutId) -> bool {
-        self.active_cuts[cut_id]
+    fn radial_root_identity(
+        graph_name: &str,
+        cut_group_id: CutGroupId,
+        side: &str,
+        overlap_group: usize,
+        esurface_id: EsurfaceID,
+        probe_rotation: &Rotation,
+    ) -> RadialRootIdentity {
+        RadialRootIdentity::new(format!(
+            "LU graph '{graph_name}' cut group {} {side} overlap group {overlap_group} E-surface {} probe rotation {}",
+            cut_group_id.0, esurface_id.0, probe_rotation.method,
+        ))
+    }
+
+    pub(crate) fn cut_group_is_active(&self, cut_group_id: CutGroupId) -> bool {
+        self.active_cut_groups[cut_group_id]
     }
 
     pub(crate) fn compile(
@@ -994,8 +1008,8 @@ impl LUCounterTerm {
         path: impl AsRef<Path>,
         frozen_mode: &FrozenCompilationMode,
     ) -> color_eyre::Result<()> {
-        for (cut_id, evaluators) in self.evaluators.iter_mut_enumerated() {
-            evaluators.compile(path.as_ref(), cut_id, frozen_mode)?;
+        for (cut_group_id, evaluators) in self.evaluators.iter_mut_enumerated() {
+            evaluators.compile(path.as_ref(), cut_group_id, frozen_mode)?;
         }
         Ok(())
     }
@@ -1010,63 +1024,63 @@ impl LUCounterTerm {
         Ok(())
     }
 
-    fn ensure_active_cut(&self, cut_id: RaisedCutId) -> Result<()> {
-        if self.cut_is_active(cut_id) {
+    fn ensure_active_cut_group(&self, cut_group_id: CutGroupId) -> Result<()> {
+        if self.cut_group_is_active(cut_group_id) {
             return Ok(());
         }
 
         Err(eyre!(
-            "Raised cut {} was reached at runtime even though generation marked it inactive for the selected orientation subset",
-            cut_id.0
+            "Cut group {} was reached at runtime even though generation marked it inactive for the selected orientation subset",
+            cut_group_id.0
         ))
     }
 
     fn ensure_active_left_threshold(
         &self,
-        cut_id: RaisedCutId,
+        cut_group_id: CutGroupId,
         threshold_id: LeftThresholdId,
     ) -> Result<()> {
-        if self.active_left_thresholds[cut_id][threshold_id] {
+        if self.active_left_thresholds[cut_group_id][threshold_id] {
             return Ok(());
         }
 
         Err(eyre!(
-            "Left threshold evaluator {} for raised cut {} was reached at runtime even though generation marked it inactive for the selected orientation subset",
+            "Left threshold evaluator {} for cut group {} was reached at runtime even though generation marked it inactive for the selected orientation subset",
             threshold_id.0,
-            cut_id.0
+            cut_group_id.0
         ))
     }
 
     fn ensure_active_right_threshold(
         &self,
-        cut_id: RaisedCutId,
+        cut_group_id: CutGroupId,
         threshold_id: RightThresholdId,
     ) -> Result<()> {
-        if self.active_right_thresholds[cut_id][threshold_id] {
+        if self.active_right_thresholds[cut_group_id][threshold_id] {
             return Ok(());
         }
 
         Err(eyre!(
-            "Right threshold evaluator {} for raised cut {} was reached at runtime even though generation marked it inactive for the selected orientation subset",
+            "Right threshold evaluator {} for cut group {} was reached at runtime even though generation marked it inactive for the selected orientation subset",
             threshold_id.0,
-            cut_id.0
+            cut_group_id.0
         ))
     }
 
     fn ensure_active_iterated_threshold(
         &self,
-        cut_id: RaisedCutId,
+        cut_group_id: CutGroupId,
         iterated_index: (LeftThresholdId, RightThresholdId),
     ) -> Result<()> {
-        if self.active_iterated_thresholds[cut_id][iterated_index] {
+        if self.active_iterated_thresholds[cut_group_id][iterated_index] {
             return Ok(());
         }
 
         Err(eyre!(
-            "Iterated threshold evaluator ({}, {}) for raised cut {} was reached at runtime even though generation marked it inactive for the selected orientation subset",
+            "Iterated threshold evaluator ({}, {}) for cut group {} was reached at runtime even though generation marked it inactive for the selected orientation subset",
             iterated_index.0.0,
             iterated_index.1.0,
-            cut_id.0
+            cut_group_id.0
         ))
     }
 
@@ -1074,7 +1088,7 @@ impl LUCounterTerm {
     pub(crate) fn evaluate<T: FloatLike>(
         &mut self,
         kinematic_point: &LUCTKinematicPoint<T>,
-        cut_id: RaisedCutId,
+        cut_group_id: CutGroupId,
         reversed_edges: &[EdgeIndex],
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         graph: &Graph,
@@ -1086,9 +1100,9 @@ impl LUCounterTerm {
         evaluation_meta_data: &mut EvaluationMetaData,
         record_primary_timing: bool,
     ) -> Result<Complex<F<T>>> {
-        self.ensure_active_cut(cut_id)?;
+        self.ensure_active_cut_group(cut_group_id)?;
 
-        let (left_thresholds_typed, right_thresholds_typed) = &self.thresholds[cut_id];
+        let (left_thresholds_typed, right_thresholds_typed) = &self.thresholds[cut_group_id];
 
         let left_thresholds = TiVec::from_ref(&left_thresholds_typed.raw);
         let right_thresholds = TiVec::from_ref(&right_thresholds_typed.raw);
@@ -1099,7 +1113,7 @@ impl LUCounterTerm {
             ));
         }
 
-        let (left_subspace, right_subspace) = &self.subspaces[cut_id];
+        let (left_subspace, right_subspace) = &self.subspaces[cut_group_id];
         let (sample_left_transformed, sample_right_transformed) = (
             kinematic_point
                 .lmb_transform(&graph.loop_momentum_basis, left_subspace.get_lmb(all_lmbs)),
@@ -1134,7 +1148,7 @@ impl LUCounterTerm {
         let esurface_existence_threshold =
             F::from_f64(settings.subtraction.esurface_existence_threshold);
 
-        let left_existing_esurfaces = self.thresholds[cut_id]
+        let left_existing_esurfaces = self.thresholds[cut_group_id]
             .0
             .iter_enumerated()
             .filter_map(|(left_id, esurface)| {
@@ -1166,7 +1180,7 @@ impl LUCounterTerm {
             })
             .collect::<TiVec<ExistingEsurfaceId, _>>();
 
-        let right_existing_esurfaces = self.thresholds[cut_id]
+        let right_existing_esurfaces = self.thresholds[cut_group_id]
             .1
             .iter_enumerated()
             .filter_map(|(right_id, esurface)| {
@@ -1241,9 +1255,9 @@ impl LUCounterTerm {
             Ok(left_overlap) => left_overlap,
             Err(error) => {
                 evaluation_meta_data.record_threshold_counterterm_error(format!(
-                    "LU graph '{}' raised cut {} left subspace failed overlap-center construction in probe rotation {}: {}",
+                    "LU graph '{}' cut group {} left subspace failed overlap-center construction in probe rotation {}: {}",
                     graph.name,
-                    cut_id.0,
+                    cut_group_id.0,
                     probe_rotation.method,
                     error,
                 ));
@@ -1261,9 +1275,9 @@ impl LUCounterTerm {
             Ok(right_overlap) => right_overlap,
             Err(error) => {
                 evaluation_meta_data.record_threshold_counterterm_error(format!(
-                    "LU graph '{}' raised cut {} right subspace failed overlap-center construction in probe rotation {}: {}",
+                    "LU graph '{}' cut group {} right subspace failed overlap-center construction in probe rotation {}: {}",
                     graph.name,
-                    cut_id.0,
+                    cut_group_id.0,
                     probe_rotation.method,
                     error,
                 ));
@@ -1299,14 +1313,26 @@ impl LUCounterTerm {
                 Vec::with_capacity(overlap_builder.overlap_group.existing_esurfaces.len());
             for &existing_esurface_id in &overlap_builder.overlap_group.existing_esurfaces {
                 let esurface_id = left_overlap.existing_esurfaces[existing_esurface_id];
+                let radial_root_identity = Self::radial_root_identity(
+                    &graph.name,
+                    cut_group_id,
+                    "left",
+                    overlap_group_index,
+                    esurface_id,
+                    probe_rotation,
+                );
                 let Some(solution) = overlap_builder
                     .new_esurface_builder(existing_esurface_id)
-                    .solve_rstar(&mut self.rstar_dependence_calculator[cut_id])
+                    .solve_rstar(
+                        &mut self.rstar_dependence_calculator[cut_group_id],
+                        &radial_root_identity,
+                        &mut evaluation_meta_data.radial_root_diagnostics,
+                    )
                 else {
                     evaluation_meta_data.record_threshold_counterterm_error(format!(
-                        "LU graph '{}' raised cut {} left overlap group {} E-surface {} failed center or radial-root validation in probe rotation {}",
+                        "LU graph '{}' cut group {} left overlap group {} E-surface {} failed center or radial-root validation in probe rotation {}",
                         graph.name,
-                        cut_id.0,
+                        cut_group_id.0,
                         overlap_group_index,
                         esurface_id.0,
                         probe_rotation.method,
@@ -1342,14 +1368,26 @@ impl LUCounterTerm {
                 Vec::with_capacity(overlap_builder.overlap_group.existing_esurfaces.len());
             for &existing_esurface_id in &overlap_builder.overlap_group.existing_esurfaces {
                 let esurface_id = right_overlap.existing_esurfaces[existing_esurface_id];
+                let radial_root_identity = Self::radial_root_identity(
+                    &graph.name,
+                    cut_group_id,
+                    "right",
+                    overlap_group_index,
+                    esurface_id,
+                    probe_rotation,
+                );
                 let Some(solution) = overlap_builder
                     .new_esurface_builder(existing_esurface_id)
-                    .solve_rstar(&mut self.rstar_dependence_calculator[cut_id])
+                    .solve_rstar(
+                        &mut self.rstar_dependence_calculator[cut_group_id],
+                        &radial_root_identity,
+                        &mut evaluation_meta_data.radial_root_diagnostics,
+                    )
                 else {
                     evaluation_meta_data.record_threshold_counterterm_error(format!(
-                        "LU graph '{}' raised cut {} right overlap group {} E-surface {} failed center or radial-root validation in probe rotation {}",
+                        "LU graph '{}' cut group {} right overlap group {} E-surface {} failed center or radial-root validation in probe rotation {}",
                         graph.name,
-                        cut_id.0,
+                        cut_group_id.0,
                         overlap_group_index,
                         esurface_id.0,
                         probe_rotation.method,
@@ -1372,10 +1410,10 @@ impl LUCounterTerm {
                     let representative_sample = solution.rstar_sample_for_order(order);
                     let left_threshold_id =
                         LeftThresholdId::from(representative_sample.get_esurface_id().0);
-                    self.ensure_active_left_threshold(cut_id, left_threshold_id)?;
+                    self.ensure_active_left_threshold(cut_group_id, left_threshold_id)?;
 
-                    let matching_cut_indices = self.evaluators[cut_id].left_thresholds_evaluator
-                        [left_threshold_id]
+                    let matching_cut_indices = self.evaluators[cut_group_id]
+                        .left_thresholds_evaluator[left_threshold_id]
                         .keys()
                         .filter(|cut_cff_index| {
                             cut_cff_index.lu_cut_order == Some(order + 1)
@@ -1397,8 +1435,8 @@ impl LUCounterTerm {
                         let left_threshold_params: ThresholdParams<T> =
                             sample.extract_threshold_parameters(true);
                         debug!(
-                            "LU left evaluator input: cut_id={}, left_threshold_id={}, cut_cff_index={:?}, lu_order={}, r={}, rstar={}",
-                            cut_id.0,
+                            "LU left evaluator input: cut_group_id={}, left_threshold_id={}, cut_cff_index={:?}, lu_order={}, r={}, rstar={}",
+                            cut_group_id.0,
                             left_threshold_id.0,
                             cut_cff_index,
                             order + 1,
@@ -1419,8 +1457,8 @@ impl LUCounterTerm {
                             Some(&lu_cut_params),
                         );
 
-                        let result_of_this_ct = self.evaluators[cut_id].left_thresholds_evaluator
-                            [left_threshold_id]
+                        let result_of_this_ct = self.evaluators[cut_group_id]
+                            .left_thresholds_evaluator[left_threshold_id]
                             .get_mut(&cut_cff_index)
                             .unwrap()
                             .evaluate(
@@ -1440,8 +1478,9 @@ impl LUCounterTerm {
                         );
 
                         let helper_completed_result = evaluate_threshold_helper_single(
-                            self.evaluators[cut_id].threshold_helpers.left_thresholds
-                                [left_threshold_id]
+                            self.evaluators[cut_group_id]
+                                .threshold_helpers
+                                .left_thresholds[left_threshold_id]
                                 .get_mut(&cut_cff_index)
                                 .unwrap(),
                             &cut_cff_index,
@@ -1471,10 +1510,10 @@ impl LUCounterTerm {
                     let representative_sample = solution.rstar_sample_for_order(order);
                     let right_threshold_id =
                         RightThresholdId::from(representative_sample.get_esurface_id().0);
-                    self.ensure_active_right_threshold(cut_id, right_threshold_id)?;
+                    self.ensure_active_right_threshold(cut_group_id, right_threshold_id)?;
 
-                    let matching_cut_indices = self.evaluators[cut_id].right_thresholds_evaluator
-                        [right_threshold_id]
+                    let matching_cut_indices = self.evaluators[cut_group_id]
+                        .right_thresholds_evaluator[right_threshold_id]
                         .keys()
                         .filter(|cut_cff_index| {
                             cut_cff_index.lu_cut_order == Some(order + 1)
@@ -1495,8 +1534,8 @@ impl LUCounterTerm {
                         let right_threshold_params: ThresholdParams<T> =
                             sample.extract_threshold_parameters(true);
                         debug!(
-                            "LU right evaluator input: cut_id={}, right_threshold_id={}, cut_cff_index={:?}, lu_order={}, r={}, rstar={}",
-                            cut_id.0,
+                            "LU right evaluator input: cut_group_id={}, right_threshold_id={}, cut_cff_index={:?}, lu_order={}, r={}, rstar={}",
+                            cut_group_id.0,
                             right_threshold_id.0,
                             cut_cff_index,
                             order + 1,
@@ -1517,8 +1556,8 @@ impl LUCounterTerm {
                             Some(&lu_cut_params),
                         );
 
-                        let result_of_this_ct = self.evaluators[cut_id].right_thresholds_evaluator
-                            [right_threshold_id]
+                        let result_of_this_ct = self.evaluators[cut_group_id]
+                            .right_thresholds_evaluator[right_threshold_id]
                             .get_mut(&cut_cff_index)
                             .unwrap()
                             .evaluate(
@@ -1538,8 +1577,9 @@ impl LUCounterTerm {
                         );
 
                         let helper_completed_result = evaluate_threshold_helper_single(
-                            self.evaluators[cut_id].threshold_helpers.right_thresholds
-                                [right_threshold_id]
+                            self.evaluators[cut_group_id]
+                                .threshold_helpers
+                                .right_thresholds[right_threshold_id]
                                 .get_mut(&cut_cff_index)
                                 .unwrap(),
                             &cut_cff_index,
@@ -1579,10 +1619,10 @@ impl LUCounterTerm {
                                     right_sample_representative.get_esurface_id().0,
                                 ),
                             );
-                            self.ensure_active_iterated_threshold(cut_id, iterated_index)?;
+                            self.ensure_active_iterated_threshold(cut_group_id, iterated_index)?;
 
-                            let matching_cut_indices = self.evaluators[cut_id].iterated_evaluator
-                                [iterated_index]
+                            let matching_cut_indices = self.evaluators[cut_group_id]
+                                .iterated_evaluator[iterated_index]
                                 .keys()
                                 .filter(|cut_cff_index| {
                                     cut_cff_index.lu_cut_order == Some(order + 1)
@@ -1609,8 +1649,8 @@ impl LUCounterTerm {
                                 let right_threshold_params: ThresholdParams<T> =
                                     sample_right.extract_threshold_parameters(false);
                                 debug!(
-                                    "LU iterated evaluator input: cut_id={}, left_threshold_id={}, right_threshold_id={}, cut_cff_index={:?}, lu_order={}, left_r={}, left_rstar={}, right_r={}, right_rstar={}",
-                                    cut_id.0,
+                                    "LU iterated evaluator input: cut_group_id={}, left_threshold_id={}, right_threshold_id={}, cut_cff_index={:?}, lu_order={}, left_r={}, left_rstar={}, right_r={}, right_rstar={}",
+                                    cut_group_id.0,
                                     iterated_index.0.0,
                                     iterated_index.1.0,
                                     cut_cff_index,
@@ -1642,8 +1682,8 @@ impl LUCounterTerm {
                                     Some(&lu_cut_params),
                                 );
 
-                                let result_of_this_ct = self.evaluators[cut_id].iterated_evaluator
-                                    [iterated_index]
+                                let result_of_this_ct = self.evaluators[cut_group_id]
+                                    .iterated_evaluator[iterated_index]
                                     .get_mut(&cut_cff_index)
                                     .unwrap()
                                     .evaluate(
@@ -1658,7 +1698,7 @@ impl LUCounterTerm {
                                     .unwrap();
 
                                 let helper_completed_result = evaluate_threshold_helper_iterated(
-                                    self.evaluators[cut_id].threshold_helpers.iterated
+                                    self.evaluators[cut_group_id].threshold_helpers.iterated
                                         [iterated_index]
                                         .get_mut(&cut_cff_index)
                                         .unwrap(),
@@ -1709,15 +1749,15 @@ impl LUCounterTerm {
             }
 
             debug!(
-                "LU pass-two evaluator input: cut_id={}, lu_order={}, param_count={}",
-                cut_id.0,
+                "LU pass-two evaluator input: cut_group_id={}, lu_order={}, param_count={}",
+                cut_group_id.0,
                 order + 1,
                 params_for_pass_two.len()
             );
             for (idx, value) in params_for_pass_two.iter().enumerate() {
                 debug!(
-                    "LU pass-two evaluator param: cut_id={}, lu_order={}, index={}, value={}",
-                    cut_id.0,
+                    "LU pass-two evaluator param: cut_group_id={}, lu_order={}, index={}, value={}",
+                    cut_group_id.0,
                     order + 1,
                     idx,
                     value
@@ -1725,7 +1765,7 @@ impl LUCounterTerm {
             }
 
             let pass_two_result = evaluate_evaluator_single(
-                &mut self.evaluators[cut_id].residue_from_e_surface_evaluators[order],
+                &mut self.evaluators[cut_group_id].residue_from_e_surface_evaluators[order],
                 &params_for_pass_two,
                 evaluation_meta_data,
                 record_primary_timing,
@@ -1850,6 +1890,8 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
     fn solve_rstar(
         self,
         rstar_t_dependence_evaluator: &mut RstarTDependenceEvaluator,
+        radial_root_identity: &RadialRootIdentity,
+        radial_root_diagnostics: &mut RadialRootDiagnostics,
     ) -> Option<RstarSolution<'a, T>> {
         let subspace = self.overlap_builder.counterterm_builder.subspace;
         let graph = self.overlap_builder.counterterm_builder.graph;
@@ -1979,10 +2021,18 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
 
         debug!("initial radius guess: {:?}", radius_guess);
 
-        // A few ULPs of residual are expected when Newton stagnates at the
-        // representable value nearest the root.
-        let tolerance = raw_radius_guess.from_i64(8);
-        let solution = match safeguarded_newton_iteration_and_derivative(
+        // Some residual is expected when Newton stagnates at the representable value nearest the
+        // root. Direct convergence uses the active precision; the shared diagnostics may also
+        // certify a residual-limited higher-precision result against the preceding precision.
+        let tolerance = F::from_f64(
+            self.overlap_builder
+                .counterterm_builder
+                .settings
+                .subtraction
+                .radial_root_residual_tolerance,
+        );
+        let solution = match radial_root_diagnostics.solve(
+            radial_root_identity,
             &zero,
             &radius_guess,
             function,
@@ -2878,7 +2928,7 @@ fn merge_and_inverse_transform<T: FloatLike>(
 mod tests {
     use super::{LUCounterTerm, extract_zero_threshold_coefficient_t_dual};
     use crate::cff::CutCFFIndex;
-    use crate::processes::RaisedCutId;
+    use crate::processes::CutGroupId;
     use crate::utils::{
         F,
         hyperdual_utils::{new_from_values, shape_from_cut_cff_index},
@@ -2887,19 +2937,21 @@ mod tests {
     use typed_index_collections::{TiVec, ti_vec};
 
     #[test]
-    fn inactive_cut_guard_reports_runtime_access() {
+    fn inactive_cut_group_guard_reports_runtime_access() {
         let counterterm = LUCounterTerm {
             evaluators: TiVec::new(),
             thresholds: TiVec::new(),
             subspaces: TiVec::new(),
             rstar_dependence_calculator: TiVec::new(),
-            active_cuts: ti_vec![false],
+            active_cut_groups: ti_vec![false],
             active_left_thresholds: ti_vec![TiVec::new()],
             active_right_thresholds: ti_vec![TiVec::new()],
             active_iterated_thresholds: TiVec::new(),
         };
 
-        let error = counterterm.ensure_active_cut(RaisedCutId(0)).unwrap_err();
+        let error = counterterm
+            .ensure_active_cut_group(CutGroupId(0))
+            .unwrap_err();
         assert!(error.to_string().contains("generation marked it inactive"));
     }
 

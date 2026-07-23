@@ -1,6 +1,6 @@
 [package]
 name = "gammalooprs"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2024"
 
 description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."

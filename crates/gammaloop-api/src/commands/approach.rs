@@ -19,7 +19,7 @@ use gammalooprs::{
     observables::events::AdditionalWeightKey,
     utils::F,
 };
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::ProgressBar;
 use rayon::{prelude::*, ThreadPoolBuilder};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -967,12 +967,7 @@ fn approach_progress_bar(len: u64) -> Arc<ProgressBar> {
     } else {
         ProgressBar::hidden()
     };
-    bar.set_style(
-        ProgressStyle::with_template(
-            "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} ({percent}%) {msg}",
-        )
-        .expect("approach progress bar template should be valid"),
-    );
+    bar.set_style(gammalooprs::utils::long_running_progress_style());
     Arc::new(bar)
 }
 

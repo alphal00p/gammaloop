@@ -104,7 +104,7 @@ impl CrossSectionGraphTerm {
         let mut limits: HashSet<IrLimit> = HashSet::new();
         let loop_count = self.graph.loop_momentum_basis.loop_edges.len();
 
-        for cut_group in self.raised_data.raised_cut_groups.iter() {
+        for cut_group in self.cut_group_data.cut_groups.iter() {
             let mut limits_of_cut: HashSet<IrLimit> = HashSet::new();
 
             let representative_cut_esurface = &self.cut_esurface[*cut_group.cuts.first().unwrap()];
@@ -873,6 +873,7 @@ impl AmplitudeIntegrand {
     ) -> Result<IrLimitTestReport> {
         // override the sampling to be in momentum space
         self.settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            graph_names: Vec::new(),
             sample_orientations: false,
             sampling_type: DiscreteGraphSamplingType::Default(ParameterizationSettings {
                 mode: ParameterizationMode::MomentumSpace,
@@ -1182,6 +1183,7 @@ impl CrossSectionIntegrand {
     ) -> Result<IrLimitTestReport> {
         // override the sampling to be in momentum space
         self.settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            graph_names: Vec::new(),
             sample_orientations: false,
             sampling_type: DiscreteGraphSamplingType::Default(ParameterizationSettings {
                 mode: ParameterizationMode::MomentumSpace,

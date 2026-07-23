@@ -445,6 +445,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
                 total_time: start_evaluate_sample.elapsed(),
             }],
             threshold_counterterm_error: None,
+            radial_root_diagnostics: Default::default(),
         };
 
         Ok(EvaluationResult {
@@ -606,6 +607,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
                 total_time: start_evaluate_sample.elapsed(),
             }],
             threshold_counterterm_error: None,
+            radial_root_diagnostics: Default::default(),
         };
 
         Ok(EvaluationResult {

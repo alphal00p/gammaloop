@@ -224,6 +224,61 @@ mod tests {
         let runtime: RuntimeSettings =
             toml::from_str("[subtraction]\nesurface_existence_threshold = 4.0e-9\n").unwrap();
         assert_eq!(runtime.subtraction.esurface_existence_threshold, 4.0e-9,);
+
+        let zero_generation: GenerationSettings =
+            toml::from_str("[threshold_subtraction]\nesurface_existence_threshold = 0.0\n")
+                .unwrap();
+        assert_eq!(
+            zero_generation
+                .threshold_subtraction
+                .esurface_existence_threshold,
+            0.0,
+        );
+
+        for invalid in ["-1.0e-7", "nan", "inf", "-inf"] {
+            let generation = toml::from_str::<GenerationSettings>(&format!(
+                "[threshold_subtraction]\nesurface_existence_threshold = {invalid}\n"
+            ));
+            assert!(
+                generation.is_err(),
+                "generation-time E-surface tolerance {invalid} must be rejected"
+            );
+
+            let runtime = toml::from_str::<RuntimeSettings>(&format!(
+                "[subtraction]\nesurface_existence_threshold = {invalid}\n"
+            ));
+            assert!(
+                runtime.is_err(),
+                "runtime E-surface tolerance {invalid} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn radial_root_residual_tolerance_defaults_and_overrides() {
+        assert_eq!(
+            SubtractionSettings::default().radial_root_residual_tolerance,
+            64.0,
+        );
+        assert!(
+            !toml::to_string(&RuntimeSettings::default())
+                .unwrap()
+                .contains("radial_root_residual_tolerance")
+        );
+
+        let runtime: RuntimeSettings =
+            toml::from_str("[subtraction]\nradial_root_residual_tolerance = 128.0\n").unwrap();
+        assert_eq!(runtime.subtraction.radial_root_residual_tolerance, 128.0);
+
+        for invalid in ["-1.0", "nan", "inf", "-inf"] {
+            let runtime = toml::from_str::<RuntimeSettings>(&format!(
+                "[subtraction]\nradial_root_residual_tolerance = {invalid}\n"
+            ));
+            assert!(
+                runtime.is_err(),
+                "radial-root residual tolerance {invalid} must be rejected"
+            );
+        }
     }
 
     #[test]
@@ -595,6 +650,7 @@ mod tests {
     #[test]
     fn sampling_settings_serializes_to_parser_shape() {
         let sampling_settings = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            graph_names: Vec::new(),
             sample_orientations: true,
             sampling_type: DiscreteGraphSamplingType::DiscreteMultiChanneling(
                 crate::settings::runtime::MultiChannelingSettings::default(),
@@ -613,6 +669,61 @@ mod tests {
         assert!(toml.contains("power = 1.0"));
         assert!(!toml.contains("type = \"discrete_graph_sampling\""));
         assert!(!toml.contains("subtype = \"discrete_multi_channeling\""));
+    }
+
+    #[test]
+    fn sampling_settings_graph_names_round_trip() {
+        let sampling_settings = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            graph_names: vec!["GL22".to_string(), "GL30".to_string()],
+            sample_orientations: false,
+            sampling_type: DiscreteGraphSamplingType::Default(Default::default()),
+        });
+
+        let toml = toml::to_string_pretty(&sampling_settings).unwrap();
+        assert!(toml.contains("graphs = \"monte_carlo\""));
+        assert!(toml.contains("graph_names = ["));
+        assert!(toml.contains("\"GL22\""));
+        assert!(toml.contains("\"GL30\""));
+        let reparsed: SamplingSettings = toml::from_str(&toml).unwrap();
+        assert_eq!(reparsed, sampling_settings);
+        assert_eq!(reparsed.selected_graph_names(), ["GL22", "GL30"]);
+    }
+
+    #[test]
+    fn sampling_settings_default_has_no_graph_name_filter() {
+        assert!(
+            SamplingSettings::default()
+                .selected_graph_names()
+                .is_empty()
+        );
+
+        let parsed: SamplingSettings = toml::from_str("graphs = \"monte_carlo\"").unwrap();
+        assert!(parsed.selected_graph_names().is_empty());
+        assert!(
+            !toml::to_string_pretty(&parsed)
+                .unwrap()
+                .contains("graph_names")
+        );
+    }
+
+    #[test]
+    fn sampling_settings_rejects_graph_names_with_summed_graphs() {
+        let err =
+            toml::from_str::<SamplingSettings>("graphs = \"summed\"\ngraph_names = [\"GL22\"]")
+                .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("graph_names requires graphs = 'monte_carlo'")
+        );
+    }
+
+    #[test]
+    fn sampling_settings_rejects_duplicate_graph_names() {
+        let err = toml::from_str::<SamplingSettings>(
+            "graphs = \"monte_carlo\"\ngraph_names = [\"GL22\", \"GL22\"]",
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("duplicate graph name 'GL22'"));
     }
 
     #[test]
@@ -778,6 +889,7 @@ power = 2.0
         assert_eq!(
             settings,
             SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                graph_names: Vec::new(),
                 sample_orientations: false,
                 sampling_type: DiscreteGraphSamplingType::MultiChanneling(
                     crate::settings::runtime::MultiChannelingSettings {
@@ -815,6 +927,7 @@ power = 4.0
         assert_eq!(
             settings,
             SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                graph_names: Vec::new(),
                 sample_orientations: false,
                 sampling_type: DiscreteGraphSamplingType::MultiChanneling(
                     crate::settings::runtime::MultiChannelingSettings {
@@ -867,6 +980,7 @@ b = 1.0
         assert_eq!(
             settings,
             SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                graph_names: Vec::new(),
                 sample_orientations: false,
                 sampling_type: DiscreteGraphSamplingType::MultiChanneling(
                     crate::settings::runtime::MultiChannelingSettings {
@@ -908,6 +1022,7 @@ b = 1.0
     fn how_does_tropical_look() {
         SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
         let sampling_settings = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            graph_names: Vec::new(),
             sample_orientations: false,
             sampling_type: DiscreteGraphSamplingType::TropicalSampling(
                 GammaloopTropicalSamplingSettings {

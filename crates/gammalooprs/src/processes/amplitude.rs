@@ -62,10 +62,9 @@ use eyre::{Context, eyre};
 use itertools::Itertools;
 use linnet::{
     half_edge::{
-        involution::{EdgeVec, HedgePair},
+        involution::{EdgeVec, Flow, HedgePair},
         subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetOps},
     },
-    num_traits::SignOrZero,
     parser::DotGraph,
 };
 use symbolica::{atom::Var, prelude::*};
@@ -401,6 +400,13 @@ impl Amplitude {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
+                    let graph_name = amplitude_graph.graph.name.clone();
+                    generation_progress::graph_started(
+                        GenerationProcessKind::Amplitude,
+                        &integrand_name,
+                        &graph_name,
+                        None,
+                    );
                     let _guard = parent.as_ref().map(|span| span.enter());
                     let stats =
                         amplitude_graph.preprocess(model, settings, locked_runtime_settings);
@@ -412,10 +418,17 @@ impl Amplitude {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
+                    generation_progress::graph_finished(
+                        GenerationProcessKind::Amplitude,
+                        &integrand_name,
+                        &graph_name,
+                        &stats,
+                        None,
+                    );
 
                     Ok(NamedGraphGenerationReport {
                         integrand_name: integrand_name.clone(),
-                        graph_name: amplitude_graph.graph.name.clone(),
+                        graph_name,
                         stats,
                     })
                 })
@@ -1351,20 +1364,18 @@ impl AmplitudeGraph {
         let mut cuts = vec![];
 
         let external_filter: SuBitGraph = self.graph.external_filter();
-        let external_signature = self.graph.get_external_signature();
-
         let mut incoming_externals = vec![];
         let mut outgoing_externals = vec![];
 
-        for ((_, edge_id, _), external_sign) in self
-            .graph
-            .iter_edges_of(&external_filter)
-            .zip(external_signature.iter())
-        {
-            match external_sign {
-                SignOrZero::Plus => incoming_externals.push(edge_id),
-                SignOrZero::Minus => outgoing_externals.push(edge_id),
-                _ => {}
+        for (edge, edge_id, _) in self.graph.iter_edges_of(&external_filter) {
+            match edge {
+                HedgePair::Unpaired {
+                    flow: Flow::Sink, ..
+                } => incoming_externals.push(edge_id),
+                HedgePair::Unpaired {
+                    flow: Flow::Source, ..
+                } => outgoing_externals.push(edge_id),
+                _ => unreachable!("the external filter must contain only unpaired edges"),
             }
         }
 
@@ -1376,7 +1387,9 @@ impl AmplitudeGraph {
                 continue;
             }
 
-            if settings.threshold_subtraction.check_esurface_at_generation {
+            let is_known_existing_at_generation =
+                settings.threshold_subtraction.check_esurface_at_generation;
+            if is_known_existing_at_generation {
                 let masses: EdgeVec<F<f64>> = self.graph.get_real_mass_vector(model);
                 let lmb = &self.graph.loop_momentum_basis;
                 if !locked_runtime_settings.existence_check(
@@ -1393,13 +1406,13 @@ impl AmplitudeGraph {
             if settings
                 .threshold_subtraction
                 .assume_positive_external_energies
+                && !is_known_existing_at_generation
+                && !esurface.external_shift_is_strictly_negative_for_positive_energies(
+                    &incoming_externals,
+                    &outgoing_externals,
+                )
             {
-                if esurface.contains_all_with_minus_sign(&incoming_externals)
-                    || esurface.contains_only_with_minus_sign(&outgoing_externals)
-                {
-                } else {
-                    continue;
-                }
+                continue;
             }
 
             let mut cut_union: SuBitGraph = self.graph.empty_subgraph();

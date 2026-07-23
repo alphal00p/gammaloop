@@ -967,6 +967,10 @@
                     "type": "string"
                   }
                 },
+                "hide_non_existing_thresholds": {
+                  "description": "Hide generated threshold CTs that cannot exist for the active model and kinematics",
+                  "type": "boolean"
+                },
                 "integrand_name": {
                   "description": "Integrand name inside the selected process",
                   "type": [
@@ -988,7 +992,8 @@
               },
               "required": [
                 "graphs",
-                "categories"
+                "categories",
+                "hide_non_existing_thresholds"
               ]
             }
           },
@@ -3900,6 +3905,12 @@
         "coordinate_system": {
           "$ref": "#/$defs/CoordinateSystem"
         },
+        "graph_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "graphs": {
           "$ref": "#/$defs/SumMode"
         },
@@ -5026,7 +5037,8 @@
         "esurface_existence_threshold": {
           "description": "Dimensionless tolerance used to compare the energy-squared E-surface invariant margin\nagainst `esurface_existence_threshold * E_cm^2` at runtime.",
           "type": "number",
-          "format": "double"
+          "format": "double",
+          "minimum": 0.0
         },
         "integrated_ct_settings": {
           "$ref": "#/$defs/IntegratedCounterTermSettings"
@@ -5036,6 +5048,12 @@
         },
         "overlap_settings": {
           "$ref": "#/$defs/OverlapSettings"
+        },
+        "radial_root_residual_tolerance": {
+          "description": "Multiplier of `epsilon(T) * E_cm` used as the direct residual limit for\nthreshold-counterterm radial roots at numerical precision `T`. A residual-limited\nhigher-precision root may instead be accepted against the corresponding lower-precision\nlimit after satisfying the cross-precision consistency checks.",
+          "type": "number",
+          "format": "double",
+          "minimum": 0.0
         }
       },
       "additionalProperties": false
@@ -5074,7 +5092,8 @@
         "esurface_existence_threshold": {
           "description": "Dimensionless tolerance used to compare the energy-squared E-surface invariant margin\nagainst `esurface_existence_threshold * E_cm^2` during generation-time checks.",
           "type": "number",
-          "format": "double"
+          "format": "double",
+          "minimum": 0.0
         },
         "skip_thresholds_that_are_cuts": {
           "type": "boolean"
