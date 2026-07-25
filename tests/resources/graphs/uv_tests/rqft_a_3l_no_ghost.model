@@ -1,0 +1,10 @@
+* Propagators
+  [d,dbar,-; pdg=('1','-1')]
+  [gluon,gluon,+; pdg=('21')]
+  [photon,photon,+,external; pdg=('22')]
+* Vertices
+  [dbar,gluon,d; QCD_QED='100']
+  [dbar,photon,d; QCD_QED='001']
+  [gluon,gluon,gluon; QCD_QED='100']
+  [gluon,gluon,gluon,gluon; QCD_QED='200']
+* End

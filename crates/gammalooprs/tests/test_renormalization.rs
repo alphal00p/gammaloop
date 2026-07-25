@@ -72,7 +72,9 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .replace(color_idx!(2, cof!(3)))
         .with(parse!("nf") / Atom::num(2))
         .replace(parse!("UFO::aS"))
-        .with(parse!("gs").pow(2) / (Atom::var(Symbol::PI) * 4)))
+        .with(parse!("gs").pow(2) / (Atom::var(Symbol::PI) * 4))
+        .replace(parse!("UFO::aEW"))
+        .with(parse!("ge").pow(2) / (Atom::var(Symbol::PI) * 4)))
     .expand_num()
     .collect_factors()
     .collect_num()
@@ -558,7 +560,7 @@ fn finit_part_ghlo() {
 mod failing {
     use super::*;
 
-    fn ghost_3loop_settings() -> UVgenerationSettings {
+    fn rqft_3loop_settings() -> UVgenerationSettings {
         UVgenerationSettings {
             softct: false,
             orchestrator: UVOrchestrator::HedgePoset,
@@ -592,6 +594,67 @@ mod failing {
     }
 
     #[test]
+    fn finite_part_photon_3loop_no_ghost() {
+        test_initialise().unwrap();
+
+        let model = load_generic_model("sm");
+        let g: Vec<Graph> = Graph::from_path(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/resources/graphs/uv_tests/rqft_a_3l_no_ghost.dot"
+            ),
+            &model,
+        )
+        .unwrap();
+
+        let mut amp = Amplitude::from_graph_list("photon_3loop_no_ghost", g).unwrap();
+        assert_eq!(amp.graphs.len(), 27);
+        for (index, graph) in amp.graphs.iter().enumerate() {
+            assert_eq!(graph.graph.name, format!("d{}", index + 1));
+        }
+
+        // d22 and d25 are orientation-reversed representatives of the same
+        // ghost-free photon self-energy topology and match term by term. Let
+        // H = ge^2*gs^4*ca*cf*nf, x = ep^-1, C = cl2*sqrt(3), and p2 = p1.p1.
+        // In RQFT forest order:
+        // F0=[0]: mUV^2*(-38/9-16/9*x^2+28/3*x)
+        //         +p2*(-230/2187-2/27*x^2+160/729*x)
+        //         +p2*C*(1408/6561-704/2187*x)
+        // F1=[1→2]: mUV^2*(14/9-28/9*x)
+        //            +p2*(28/81+14/27*x^2-77/81*x)
+        // F2=[3→4]: mUV^2*(44/27+16/9*x^2-112/27*x)
+        //            +p2*(212/2187-106/729*x)
+        //            +p2*C*(-1408/6561+704/2187*x)
+        // F3=[5→6]: mUV^2*(76/27+16/9*x^2-176/27*x)
+        // F4=[3→7→2]: mUV^2*(-8/9+16/9*x)
+        //               +p2*(-16/81-8/27*x^2+44/81*x)
+        // F5=[3,5→8]: mUV^2*(-8/9-16/9*x^2+8/3*x)
+        // F5 is the disconnected (DoD 2, DoD 0) union followed by its DoD-2
+        // parent. It is purely auxiliary but required to cancel every mUV^2
+        // term; F0 and F2 cancel C. Thus sum(Fi)/H/p2 is
+        // 34/243 + 4/27*ep^-2 - 1/3*ep^-1.
+        let rqft = parse!(
+            "dot(P(0,spenso::mink(4)),P(0,spenso::mink(4)))*ge^2*gs^4
+             *spenso::cas(2,spenso::coad(8))*spenso::cas(2,spenso::cof(3))*nf
+             *(34/243+4/27*ε^(-2)-1/3*ε^(-1))"
+        );
+        let settings = rqft_3loop_settings();
+
+        for index in [21, 24] {
+            let graph = &mut amp.graphs[index];
+            let difference =
+                (align_to_rqft(&graph.renormalization_part(&settings).unwrap(), &model) - &rqft)
+                    .expand();
+            assert!(
+                difference.is_zero(),
+                "{} differs from its RQFT reference:\n{}",
+                graph.graph.name,
+                difference.to_bare_ordered_string()
+            );
+        }
+    }
+
+    #[test]
     fn finite_part_ghost_3loop() {
         test_initialise().unwrap();
 
@@ -611,7 +674,7 @@ mod failing {
             assert_eq!(graph.graph.name, format!("d{}", index + 1));
         }
 
-        let settings = ghost_3loop_settings();
+        let settings = rqft_3loop_settings();
 
         let a = amp.graphs[0].renormalization_part(&settings).unwrap();
         // `Fi` denotes textual summand i of RQFT's `Fill forest(0)`. These values
