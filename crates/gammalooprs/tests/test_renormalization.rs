@@ -12,8 +12,9 @@ use gammalooprs::{
     },
 };
 use idenso::{
-    Cookable, IndexTooling,
+    Cookable, IndexTooling, cof,
     color::{CS, ColorSimplifier},
+    color_idx,
     dirac::GammaSimplifier,
     shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
@@ -67,6 +68,9 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .with(Atom::num((1, 2)))
         .replace(CS.nc)
         .with(CS.ca)
+        // RQFT writes the fundamental Dynkin index as T_F = n_f / 2.
+        .replace(color_idx!(2, cof!(3)))
+        .with(parse!("nf") / Atom::num(2))
         .replace(parse!("UFO::aS"))
         .with(parse!("gs").pow(2) / (Atom::var(Symbol::PI) * 4)))
     .expand_num()
@@ -478,7 +482,7 @@ fn finite_part_ghost_2loop() {
     // Sum / H = +1/4*ep^-2 - 5/24*ep^-1; native GammaLoop / RQFT = -1
     // after preserving the antisymmetric color orientation.
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/2+5𝑖/12*ε)*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*idx(2,cof(3))*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/4+5𝑖/24*ε)*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*nf*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[3], a, &new_settings);
     insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
