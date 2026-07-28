@@ -1,6 +1,662 @@
 let
   system = "x86_64-linux";
-  workspaceGraph = builtins.fromJSON (builtins.readFile ./nix/ci-workspace-graph.json);
+  # Nix CI fetches this file without cloning the repository, so keep this
+  # generated graph synchronized with nix/ci-workspace-graph.json.
+  workspaceGraph = builtins.fromJSON ''
+    {
+      "normal_dependencies": {
+        "clinnet": [],
+        "gammaloop-api": [
+          "gammaloop-tracing-filter",
+          "gammaloop-workspace-hack",
+          "gammalooprs",
+          "idenso",
+          "linnet",
+          "spenso",
+          "symbolica-utils"
+        ],
+        "gammaloop-integration-tests": [
+          "gammaloop-api",
+          "gammaloop-workspace-hack",
+          "gammalooprs",
+          "spenso",
+          "symbolica-utils",
+          "vakint"
+        ],
+        "gammaloop-tracing-filter": [
+          "gammaloop-tracing-filter-macros",
+          "gammaloop-workspace-hack",
+          "spenso"
+        ],
+        "gammaloop-tracing-filter-macros": [],
+        "gammaloop-workspace-hack": [],
+        "gammalooprs": [
+          "gammaloop-tracing-filter",
+          "gammaloop-workspace-hack",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "symbolica-utils",
+          "vakint"
+        ],
+        "idenso": [
+          "linnet",
+          "spenso",
+          "spenso-macros",
+          "symbolica-utils"
+        ],
+        "linnest": [
+          "linnet"
+        ],
+        "linnet": [
+          "gammaloop-workspace-hack",
+          "symbolica-utils"
+        ],
+        "linnet-py": [
+          "linnet"
+        ],
+        "spenso": [
+          "gammaloop-workspace-hack",
+          "linnet",
+          "spenso-macros",
+          "symbolica-utils"
+        ],
+        "spenso-hep-lib": [
+          "gammaloop-workspace-hack",
+          "idenso",
+          "spenso",
+          "spenso-macros"
+        ],
+        "spenso-macros": [],
+        "spynso3": [
+          "idenso",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros"
+        ],
+        "symbolica-utils": [],
+        "vakint": []
+      },
+      "normal_dependency_features": {
+        "clinnet": {},
+        "gammaloop-api": {
+          "gammaloop-tracing-filter": [
+            "clap"
+          ],
+          "gammaloop-workspace-hack": [],
+          "gammalooprs": [],
+          "idenso": [],
+          "linnet": [
+            "bincode",
+            "serde",
+            "symbolica"
+          ],
+          "spenso": [
+            "shadowing"
+          ],
+          "symbolica-utils": []
+        },
+        "gammaloop-integration-tests": {
+          "gammaloop-api": [],
+          "gammaloop-workspace-hack": [],
+          "gammalooprs": [],
+          "spenso": [
+            "shadowing"
+          ],
+          "symbolica-utils": [],
+          "vakint": []
+        },
+        "gammaloop-tracing-filter": {
+          "gammaloop-tracing-filter-macros": [],
+          "gammaloop-workspace-hack": [],
+          "spenso": [
+            "shadowing"
+          ]
+        },
+        "gammaloop-tracing-filter-macros": {},
+        "gammaloop-workspace-hack": {},
+        "gammalooprs": {
+          "gammaloop-tracing-filter": [
+            "symbolica"
+          ],
+          "gammaloop-workspace-hack": [],
+          "idenso": [
+            "bincode"
+          ],
+          "linnet": [
+            "bincode",
+            "serde",
+            "symbolica"
+          ],
+          "spenso": [
+            "shadowing"
+          ],
+          "spenso-hep-lib": [],
+          "symbolica-utils": [],
+          "vakint": []
+        },
+        "idenso": {
+          "linnet": [],
+          "spenso": [
+            "shadowing"
+          ],
+          "spenso-macros": [],
+          "symbolica-utils": []
+        },
+        "linnest": {
+          "linnet": [
+            "drawing",
+            "serde"
+          ]
+        },
+        "linnet": {
+          "gammaloop-workspace-hack": [],
+          "symbolica-utils": []
+        },
+        "linnet-py": {
+          "linnet": []
+        },
+        "spenso": {
+          "gammaloop-workspace-hack": [],
+          "linnet": [
+            "bincode",
+            "serde"
+          ],
+          "spenso-macros": [],
+          "symbolica-utils": []
+        },
+        "spenso-hep-lib": {
+          "gammaloop-workspace-hack": [],
+          "idenso": [
+            "reference-cases"
+          ],
+          "spenso": [
+            "shadowing"
+          ],
+          "spenso-macros": []
+        },
+        "spenso-macros": {},
+        "spynso3": {
+          "idenso": [],
+          "spenso": [
+            "python",
+            "shadowing"
+          ],
+          "spenso-hep-lib": [],
+          "spenso-macros": []
+        },
+        "symbolica-utils": {},
+        "vakint": {}
+      },
+      "package_dirs": {
+        "clinnet": "crates/clinnet",
+        "gammaloop-api": "crates/gammaloop-api",
+        "gammaloop-integration-tests": "tests",
+        "gammaloop-tracing-filter": "crates/gammaloop-tracing-filter",
+        "gammaloop-tracing-filter-macros": "crates/gammaloop-tracing-filter-macros",
+        "gammaloop-workspace-hack": "crates/gammaloop-workspace-hack",
+        "gammalooprs": "crates/gammalooprs",
+        "idenso": "crates/idenso",
+        "linnest": "crates/linnest",
+        "linnet": "crates/linnet",
+        "linnet-py": "crates/linnet-py",
+        "spenso": "crates/spenso",
+        "spenso-hep-lib": "crates/spenso-hep-lib",
+        "spenso-macros": "crates/spenso-macros",
+        "spynso3": "crates/spynso3",
+        "symbolica-utils": "crates/symbolica-utils",
+        "vakint": "crates/vakint"
+      },
+      "packages": [
+        "clinnet",
+        "gammaloop-api",
+        "gammaloop-integration-tests",
+        "gammaloop-tracing-filter",
+        "gammaloop-tracing-filter-macros",
+        "gammaloop-workspace-hack",
+        "gammalooprs",
+        "idenso",
+        "linnest",
+        "linnet",
+        "linnet-py",
+        "spenso",
+        "spenso-hep-lib",
+        "spenso-macros",
+        "spynso3",
+        "symbolica-utils",
+        "vakint"
+      ],
+      "resolved_normal_dependencies": {
+        "clinnet": [],
+        "gammaloop-api": [
+          "gammaloop-tracing-filter",
+          "gammaloop-tracing-filter-macros",
+          "gammaloop-workspace-hack",
+          "gammalooprs",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros",
+          "symbolica-utils",
+          "vakint"
+        ],
+        "gammaloop-integration-tests": [
+          "gammaloop-api",
+          "gammaloop-tracing-filter",
+          "gammaloop-tracing-filter-macros",
+          "gammaloop-workspace-hack",
+          "gammalooprs",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros",
+          "symbolica-utils",
+          "vakint"
+        ],
+        "gammaloop-tracing-filter": [
+          "gammaloop-tracing-filter-macros",
+          "gammaloop-workspace-hack",
+          "linnet",
+          "spenso",
+          "spenso-macros",
+          "symbolica-utils"
+        ],
+        "gammaloop-tracing-filter-macros": [],
+        "gammaloop-workspace-hack": [],
+        "gammalooprs": [
+          "gammaloop-tracing-filter",
+          "gammaloop-tracing-filter-macros",
+          "gammaloop-workspace-hack",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros",
+          "symbolica-utils",
+          "vakint"
+        ],
+        "idenso": [
+          "gammaloop-workspace-hack",
+          "linnet",
+          "spenso",
+          "spenso-macros",
+          "symbolica-utils"
+        ],
+        "linnest": [
+          "gammaloop-workspace-hack",
+          "linnet"
+        ],
+        "linnet": [
+          "gammaloop-workspace-hack",
+          "symbolica-utils"
+        ],
+        "linnet-py": [
+          "gammaloop-workspace-hack",
+          "linnet"
+        ],
+        "spenso": [
+          "gammaloop-workspace-hack",
+          "linnet",
+          "spenso-macros",
+          "symbolica-utils"
+        ],
+        "spenso-hep-lib": [
+          "gammaloop-workspace-hack",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-macros",
+          "symbolica-utils"
+        ],
+        "spenso-macros": [],
+        "spynso3": [
+          "gammaloop-workspace-hack",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros",
+          "symbolica-utils"
+        ],
+        "symbolica-utils": [],
+        "vakint": []
+      },
+      "resolved_test_dependencies": {
+        "clinnet": [],
+        "gammaloop-api": [
+          "gammaloop-tracing-filter",
+          "gammaloop-tracing-filter-macros",
+          "gammaloop-workspace-hack",
+          "gammalooprs",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros",
+          "symbolica-utils",
+          "vakint"
+        ],
+        "gammaloop-integration-tests": [
+          "gammaloop-api",
+          "gammaloop-tracing-filter",
+          "gammaloop-tracing-filter-macros",
+          "gammaloop-workspace-hack",
+          "gammalooprs",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros",
+          "symbolica-utils",
+          "vakint"
+        ],
+        "gammaloop-tracing-filter": [
+          "gammaloop-tracing-filter-macros",
+          "gammaloop-workspace-hack",
+          "linnet",
+          "spenso",
+          "spenso-macros",
+          "symbolica-utils"
+        ],
+        "gammaloop-tracing-filter-macros": [],
+        "gammaloop-workspace-hack": [],
+        "gammalooprs": [
+          "gammaloop-tracing-filter",
+          "gammaloop-tracing-filter-macros",
+          "gammaloop-workspace-hack",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros",
+          "symbolica-utils",
+          "vakint"
+        ],
+        "idenso": [
+          "gammaloop-workspace-hack",
+          "linnet",
+          "spenso",
+          "spenso-macros",
+          "symbolica-utils"
+        ],
+        "linnest": [
+          "gammaloop-workspace-hack",
+          "linnet"
+        ],
+        "linnet": [
+          "gammaloop-workspace-hack",
+          "linnest",
+          "symbolica-utils"
+        ],
+        "linnet-py": [
+          "gammaloop-workspace-hack",
+          "linnet"
+        ],
+        "spenso": [
+          "gammaloop-workspace-hack",
+          "linnet",
+          "spenso-macros",
+          "symbolica-utils"
+        ],
+        "spenso-hep-lib": [
+          "gammaloop-workspace-hack",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-macros",
+          "symbolica-utils"
+        ],
+        "spenso-macros": [
+          "gammaloop-workspace-hack",
+          "linnet",
+          "spenso",
+          "symbolica-utils"
+        ],
+        "spynso3": [
+          "gammaloop-workspace-hack",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros",
+          "symbolica-utils"
+        ],
+        "symbolica-utils": [],
+        "vakint": []
+      },
+      "symbolica_normal_packages": [
+        "gammaloop-api",
+        "gammaloop-integration-tests",
+        "gammaloop-tracing-filter",
+        "gammaloop-workspace-hack",
+        "gammalooprs",
+        "idenso",
+        "linnest",
+        "linnet",
+        "linnet-py",
+        "spenso",
+        "spenso-hep-lib",
+        "spenso-macros",
+        "spynso3",
+        "symbolica-utils",
+        "vakint"
+      ],
+      "symbolica_test_packages": [
+        "gammaloop-api",
+        "gammaloop-integration-tests",
+        "gammaloop-tracing-filter",
+        "gammaloop-workspace-hack",
+        "gammalooprs",
+        "idenso",
+        "linnest",
+        "linnet",
+        "linnet-py",
+        "spenso",
+        "spenso-hep-lib",
+        "spenso-macros",
+        "spynso3",
+        "symbolica-utils",
+        "vakint"
+      ],
+      "test_dependencies": {
+        "clinnet": [],
+        "gammaloop-api": [
+          "gammaloop-tracing-filter",
+          "gammaloop-workspace-hack",
+          "gammalooprs",
+          "idenso",
+          "linnet",
+          "spenso",
+          "symbolica-utils"
+        ],
+        "gammaloop-integration-tests": [
+          "gammaloop-api",
+          "gammaloop-workspace-hack",
+          "gammalooprs",
+          "spenso",
+          "symbolica-utils",
+          "vakint"
+        ],
+        "gammaloop-tracing-filter": [
+          "gammaloop-tracing-filter-macros",
+          "gammaloop-workspace-hack",
+          "spenso"
+        ],
+        "gammaloop-tracing-filter-macros": [],
+        "gammaloop-workspace-hack": [],
+        "gammalooprs": [
+          "gammaloop-tracing-filter",
+          "gammaloop-workspace-hack",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "symbolica-utils",
+          "vakint"
+        ],
+        "idenso": [
+          "linnet",
+          "spenso",
+          "spenso-macros",
+          "symbolica-utils"
+        ],
+        "linnest": [
+          "linnet"
+        ],
+        "linnet": [
+          "gammaloop-workspace-hack",
+          "linnest",
+          "symbolica-utils"
+        ],
+        "linnet-py": [
+          "linnet"
+        ],
+        "spenso": [
+          "gammaloop-workspace-hack",
+          "linnet",
+          "spenso-macros",
+          "symbolica-utils"
+        ],
+        "spenso-hep-lib": [
+          "gammaloop-workspace-hack",
+          "idenso",
+          "spenso",
+          "spenso-macros"
+        ],
+        "spenso-macros": [
+          "linnet",
+          "spenso"
+        ],
+        "spynso3": [
+          "idenso",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros"
+        ],
+        "symbolica-utils": [],
+        "vakint": []
+      },
+      "test_dependency_features": {
+        "clinnet": {},
+        "gammaloop-api": {
+          "gammaloop-tracing-filter": [
+            "clap"
+          ],
+          "gammaloop-workspace-hack": [],
+          "gammalooprs": [],
+          "idenso": [],
+          "linnet": [
+            "bincode",
+            "serde",
+            "symbolica"
+          ],
+          "spenso": [
+            "shadowing"
+          ],
+          "symbolica-utils": []
+        },
+        "gammaloop-integration-tests": {
+          "gammaloop-api": [],
+          "gammaloop-workspace-hack": [],
+          "gammalooprs": [],
+          "spenso": [
+            "shadowing"
+          ],
+          "symbolica-utils": [],
+          "vakint": []
+        },
+        "gammaloop-tracing-filter": {
+          "gammaloop-tracing-filter-macros": [],
+          "gammaloop-workspace-hack": [],
+          "spenso": [
+            "shadowing"
+          ]
+        },
+        "gammaloop-tracing-filter-macros": {},
+        "gammaloop-workspace-hack": {},
+        "gammalooprs": {
+          "gammaloop-tracing-filter": [
+            "symbolica"
+          ],
+          "gammaloop-workspace-hack": [],
+          "idenso": [
+            "bincode"
+          ],
+          "linnet": [
+            "bincode",
+            "serde",
+            "symbolica"
+          ],
+          "spenso": [
+            "shadowing"
+          ],
+          "spenso-hep-lib": [],
+          "symbolica-utils": [],
+          "vakint": []
+        },
+        "idenso": {
+          "linnet": [],
+          "spenso": [
+            "shadowing"
+          ],
+          "spenso-macros": [],
+          "symbolica-utils": []
+        },
+        "linnest": {
+          "linnet": [
+            "drawing",
+            "serde"
+          ]
+        },
+        "linnet": {
+          "gammaloop-workspace-hack": [],
+          "linnest": [],
+          "symbolica-utils": []
+        },
+        "linnet-py": {
+          "linnet": []
+        },
+        "spenso": {
+          "gammaloop-workspace-hack": [],
+          "linnet": [
+            "bincode",
+            "serde"
+          ],
+          "spenso-macros": [],
+          "symbolica-utils": []
+        },
+        "spenso-hep-lib": {
+          "gammaloop-workspace-hack": [],
+          "idenso": [
+            "reference-cases"
+          ],
+          "spenso": [
+            "shadowing"
+          ],
+          "spenso-macros": []
+        },
+        "spenso-macros": {
+          "linnet": [],
+          "spenso": []
+        },
+        "spynso3": {
+          "idenso": [],
+          "spenso": [
+            "python",
+            "shadowing"
+          ],
+          "spenso-hep-lib": [],
+          "spenso-macros": []
+        },
+        "symbolica-utils": {},
+        "vakint": {}
+      },
+      "workspace_root": "."
+    }
+  '';
   unique = values:
     builtins.attrNames (builtins.listToAttrs (map (value: {
         name = value;
