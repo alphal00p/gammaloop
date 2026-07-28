@@ -3,7 +3,7 @@ use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
     color::ColorSimplifier,
-    dirac::GammaSimplifier,
+    dirac::{GammaSimplifier, GammaSimplifySettings},
     representations::Bispinor,
     shorthands::{
         UndoShorthands,
@@ -140,6 +140,7 @@ impl Rooted for IntegratedCts {
 
 fn simplify(integrand: &Atom) -> Result<Atom> {
     let collected = integrand
+        .collect_rep(Minkowski {}.into())
         .simplify_metrics()
         .collect_rep((Bispinor {}).into())
         .collect_gamma_chains();
@@ -167,7 +168,10 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
         "After gamma collection"
     );
 
-    let simplified = collected.simplify_gamma();
+    let simplified = collected
+        .simplify_gamma_with(GammaSimplifySettings::canonical())
+        .collect_rep(Minkowski {}.into())
+        .expand_num();
     debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #start, #gamma;
         log.expr = simplified,
         "After gamma simplification"
