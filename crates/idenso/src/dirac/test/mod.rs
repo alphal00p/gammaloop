@@ -7,11 +7,14 @@ use spenso::q;
 use spenso::shadowing::{TensorCollectExt, symbolica_utils::SpensoPrintSettings};
 use spenso::structure::IndexlessNamedStructure;
 use spenso::structure::PermutedStructure;
-use spenso::{chain, s, slot, trace};
+use spenso::{chain, g, s, slot, trace};
 use symbolica_utils::AtomPrintExt;
 
 use crate::representations::Bispinor;
-use crate::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
+use crate::shorthands::{
+    metric::MetricSimplifier,
+    schoonschip::{Schoonschip, SchoonschipSettings},
+};
 use crate::{gamma, gamma0, gamma5, u, v};
 
 static GG: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> = LazyLock::new(|| {
@@ -501,6 +504,39 @@ fn gl_06() {
     )
 
     // println!("{}", expr.cook_indices().simplify_gamma().simplify_gamma());
+}
+
+#[test]
+fn gammaloop_uv_factored_vertex_chain_reduces_in_d_dimensions() {
+    let r = test_initialize();
+    let mu = slot!(r.mink_d, mu);
+    let nu = slot!(r.mink_d, nu);
+    let rho = slot!(r.mink_d, rho);
+    let p = p!(&r.mink_d);
+
+    // Minimal form of the open {15yi} numerator that remained factored before
+    // integration: (-4 g_{mu nu} q_rho + 4 g_{mu rho} q_nu + 4 g_{nu rho} q_mu)
+    // gamma^nu slash(p) gamma^mu.
+    let expr = (Atom::num(-4) * g!(mu, nu) * q!(rho)
+        + Atom::num(4) * g!(mu, rho) * q!(nu)
+        + Atom::num(4) * g!(nu, rho) * q!(mu))
+        * chain!(
+            slot!(r.bis_d, i),
+            slot!(r.bis_d, j),
+            gamma!(nu),
+            gamma!(p.clone()),
+            gamma!(mu),
+        );
+
+    let simplified = expr
+        .collect_rep(Minkowski {}.into())
+        .schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions())
+        .simplify_gamma_with(GammaSimplifySettings::canonical())
+        .collect_rep(Minkowski {}.into())
+        .expand_num();
+
+    // 4 (d - 4) q_rho slash(p) + 8 p_rho slash(q) + 8 (p.q) gamma_rho.
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-16*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))+4*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*d)*q(mink(d,rho))+8*chain(bis(d,i),bis(d,j),gamma(in,out,mink(d,rho)))*g(p(mink(d)),q(mink(d)))+8*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*p(mink(d,rho))");
 }
 
 #[test]
