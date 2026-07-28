@@ -2468,15 +2468,23 @@
           {
             runnerAttr = "nix-ci-check-gammaloop-doctest";
             checkAttr = "gammaloop-doctest";
+            runtimeInputs = [cargoArtifacts];
           }
           {
             runnerAttr = "nix-ci-check-gammaloop-nextest";
             checkAttr = "gammaloop-nextest";
+            runtimeInputs = [
+              nextestBinarySetAggregate
+              gammaloop-python-module
+            ];
           }
         ]
         ++ map (target: {
           runnerAttr = "nix-ci-check-gammaloop-nextest-${target.name}";
           checkAttr = "gammaloop-nextest-${target.name}";
+          runtimeInputs =
+            [(nextestBinarySetForTarget target)]
+            ++ lib.optionals (nextestUsesPythonModule target) [gammaloop-python-module];
         })
         checkedNextestPackageGroups;
 
@@ -2484,7 +2492,9 @@
           name = target.runnerAttr;
           value = pkgs.writeShellApplication {
             name = target.runnerAttr;
-            runtimeInputs = [pkgs.nix];
+            # Retain the pure test inputs even when NixCI skips this runner as
+            # cached, so the in-repo test does not rebuild them.
+            runtimeInputs = [pkgs.nix] ++ target.runtimeInputs;
             text = ''
               set -euo pipefail
               exec nix \
