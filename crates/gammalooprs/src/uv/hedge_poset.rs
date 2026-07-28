@@ -29,6 +29,7 @@ use tracing::debug;
 use vakint::Vakint;
 
 use crate::{
+    debug_tags,
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet, parse::string_utils::ToOrderedSimple},
     utils::{GS, W_},
     uv::{
@@ -1172,6 +1173,24 @@ impl Forests {
             debug!(order, nidx=%nidx, key=%self.graph[nidx], "Computing hedge-poset 4D term");
             let operation = self.graph[nidx].clone();
             let (local_4d, integrated) = self.compute_4d_for_node(nidx, graph, vakint, settings)?;
+            let cover = operation
+                .covers()
+                .unwrap_or_else(|| self.graph.empty_subgraph())
+                .string_label();
+            let source = self.source_spinney(nidx).filter().string_label();
+            debug_tags!(#generation, #uv, #integrated, #graph, #term, #inspect;
+                stage = "hedge_poset_4d_node_done",
+                order,
+                node_index = %nidx,
+                forest_term = %operation,
+                cover = %cover,
+                source = %source,
+                is_union = self.graph.is_disjoint_union(nidx),
+                log.local_4d = local_4d.atom(),
+                log.integrated_pole = integrated.physical_pole_atom(),
+                log.integrated_finite = integrated.physical_finite_counterterm_atom(),
+                "Computed hedge-poset 4D node"
+            );
             let computed = self.compute_store.entry(operation).or_default();
             computed.local_4d = Some(local_4d);
             computed.integrated = Some(integrated);
