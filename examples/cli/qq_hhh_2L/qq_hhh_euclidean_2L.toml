@@ -1,0 +1,208 @@
+# Euclidean-top-mass steering card for the symmetrized, exact-xi subtracted
+# d d~ -> H H H two-loop amplitude imported from qq_hhh_2L.dot.
+#
+# Usual run sequence:
+#
+#   ./target/dev-optim/gammaloop --clean-state examples/cli/qq_hhh_2L/qq_hhh_euclidean_2L.toml quit
+#   ./target/dev-optim/gammaloop -o -s ./examples/cli/qq_hhh_2L/state_euclidean run generate_diagrams generate_integrands integrate
+#
+# The process has nine external momenta:
+#   Q(0) Q(1) Q(2) Q(3) -> Q(4) Q(5) Q(6) Q(7) Q(8)
+# where Q(0), Q(1) are d, d~, Q(6), Q(7), Q(8) are the Higgses, and
+# Q(2)=Q(4)=xi and Q(3)=Q(5)=xi are auxiliary exact-xi helper pairs.
+# This Euclidean setup uses MT=750 and xi = 0.5*(p1+p2) = (500,0,0,0).
+#
+# Keep `assume_positive_external_energies=false` for this exact-xi topology:
+# helper-leg threshold surfaces are required by the threshold-counterterm
+# existence checks.
+commands = []
+
+[cli_settings]
+[cli_settings.state]
+folder = "./examples/cli/qq_hhh_2L/state_euclidean"
+name = "qq_hhh_euclidean_2L"
+
+# These defaults are visible during `generate existing`, before process-specific
+# `set process ...` commands can be run. Keep them aligned with the runtime
+# block below; the generated threshold CT set is specialized to this MT/xi setup.
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = true
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+disable_flux_factor = false
+integral_unit = "none"
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+helicities = [1, -1, 0, 0, 0, 0, 0, 0, 0]
+momenta = [
+    [5.0000000000000000e+02, 0.0, 0.0, 5.0000000000000000e+02],
+    [5.0000000000000000e+02, 0.0, 0.0, -5.0000000000000000e+02],
+    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
+    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
+    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
+    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
+    [4.3855556622469447e+02, 1.5533220018353779e+02, 3.4801603965135871e+02, -1.7737736157184119e+02],
+    [3.5636963749219223e+02, -1.6802389008511000e+01, -3.1872911024360047e+02, 9.7487191636880979e+01],
+    "dependent",
+]
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+
+[default_runtime_settings.subtraction.local_ct_settings.uv_localisation]
+sliver_width = 100.0
+gaussian_width = 1.0
+
+[default_runtime_settings.subtraction.integrated_ct_settings.range]
+type = "infinite"
+
+[default_runtime_settings.subtraction.integrated_ct_settings.range.h_function_settings]
+sigma = 1.0
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.integrator]
+n_start = 1500000
+n_increase = 0
+n_max = 10000000000
+integrated_phase = "imag"
+target_relative_accuracy = 1.0e-2
+seed = 762500
+
+[[command_blocks]]
+name = "generation_settings"
+commands = [
+    "set global kv global.generation.override_lmb_heuristics=true",
+    "set global kv global.generation.evaluator.store_atom=false",
+    "set global kv global.generation.evaluator.compile=false",
+    "set global kv global.generation.evaluator.summed=false",
+    "set global kv global.generation.evaluator.summed_function_map=true",
+    "set global kv global.generation.uv.subtract_uv=false",
+    "set global kv global.generation.uv.generate_integrated=false",
+    "set global kv global.generation.threshold_subtraction.enable_thresholds=true",
+    "set global kv global.generation.threshold_subtraction.check_esurface_at_generation=true",
+    "set global kv global.generation.threshold_subtraction.assume_positive_external_energies=false",
+]
+
+[[command_blocks]]
+name = "load"
+commands = [
+    "run generation_settings",
+    "import model sm-default.json",
+    "set model MT=750.0",
+    "set model MH=125.0",
+    "set model WT=0.0",
+    "set model WH=0.0",
+    "set model ymt=750.0",
+    "remove processes -p qq_hhh_2L",
+    "import graphs ./examples/cli/qq_hhh_2L/qq_hhh_2L.dot -p qq_hhh_2L -i subtracted",
+]
+
+[[command_blocks]]
+name = "generate_diagrams"
+commands = [
+    "run load",
+]
+
+[[command_blocks]]
+name = "generate_integrands"
+commands = [
+    "run generation_settings",
+    "generate existing -p qq_hhh_2L -i subtracted",
+]
+
+[[command_blocks]]
+name = "runtime"
+commands = [
+    "set process -p qq_hhh_2L -i subtracted defaults",
+    "set model MT=750.0",
+    "set model ymt=750.0",
+    "set process -p qq_hhh_2L -i subtracted kv subtraction.disable_threshold_subtraction=false",
+    """set process -p qq_hhh_2L -i subtracted string '
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+helicities = [1, -1, 0, 0, 0, 0, 0, 0, 0]
+momenta = [
+    [5.0000000000000000e+02, 0.0, 0.0, 5.0000000000000000e+02],
+    [5.0000000000000000e+02, 0.0, 0.0, -5.0000000000000000e+02],
+    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
+    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
+    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
+    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
+    [4.3855556622469447e+02, 1.5533220018353779e+02, 3.4801603965135871e+02, -1.7737736157184119e+02],
+    [3.5636963749219223e+02, -1.6802389008511000e+01, -3.1872911024360047e+02, 9.7487191636880979e+01],
+    "dependent"
+]
+'""",
+    """set process -p qq_hhh_2L -i subtracted string '
+[general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = true
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+disable_flux_factor = false
+integral_unit = "none"
+'""",
+    """set process -p qq_hhh_2L -i subtracted string '
+[subtraction.local_ct_settings.uv_localisation]
+sliver_width = 100.0
+gaussian_width = 1.0
+
+[subtraction.integrated_ct_settings.range]
+type = "infinite"
+
+[subtraction.integrated_ct_settings.range.h_function_settings]
+sigma = 1.0
+'""",
+]
+
+[[command_blocks]]
+name = "sampling"
+commands = [
+    """set process -p qq_hhh_2L -i subtracted string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+'""",
+]
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+    "run runtime",
+    "run sampling",
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1500000 integrator.n_increase=0 integrator.n_max=10000000000 integrator.seed=1337 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 25 --batch-size 1024
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/euclidean_mt750_t0p5_sliver100_hsigma1_sfm
+        --renderer ratatui
+        --show-phase both
+        --target -2.9e-3 -1.23e-3
+        --show-max-weight-info
+        --show-max-weight-info-for-discrete-bins
+        --show-top-discrete-grid
+        --show-discrete-contributions-sum
+        --write-results-for-each-iteration
+        --restart
+    """,
+]

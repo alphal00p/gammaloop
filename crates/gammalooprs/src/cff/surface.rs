@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use symbolica::{atom::Atom, parse};
 use typed_index_collections::TiVec;
 
+use crate::graph::LoopMomentumBasis;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 
 /// A esurface that is equal to 1, useful for represnting a single vertex
@@ -51,6 +53,15 @@ impl HybridSurfaceRef<'_> {
         match self {
             HybridSurfaceRef::Esurface(surface) => surface.to_atom(cut_edges),
             HybridSurfaceRef::Hsurface(surface) => surface.to_atom(cut_edges),
+            HybridSurfaceRef::Unit(_) => Atom::num(1),
+            HybridSurfaceRef::Infinite(_) => parse!("η_inf"),
+        }
+    }
+
+    pub(crate) fn to_atom_in_lmb(&self, cut_edges: &[EdgeIndex], lmb: &LoopMomentumBasis) -> Atom {
+        match self {
+            HybridSurfaceRef::Esurface(surface) => surface.to_atom_in_lmb(cut_edges, lmb),
+            HybridSurfaceRef::Hsurface(surface) => surface.to_atom_in_lmb(cut_edges, lmb),
             HybridSurfaceRef::Unit(_) => Atom::num(1),
             HybridSurfaceRef::Infinite(_) => parse!("η_inf"),
         }

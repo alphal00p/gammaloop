@@ -1,0 +1,578 @@
+commands = []
+
+[cli_settings]
+override_state = true
+
+[cli_settings.state]
+name = "a_a_4L"
+folder = "./examples/cli/a_a/4L/gammaloop_state"
+
+[cli_settings.global]
+display_directive = "info"
+logfile_directive = "info"
+
+[cli_settings.global.log_style]
+include_fields = true
+full_line_source = true
+log_format = "Full"
+short_timestamp = true
+
+[cli_settings.global.generation]
+override_lmb_heuristics = false
+
+[cli_settings.global.generation.uv]
+softct = false
+generate_integrated = true
+subtract_uv = true
+only_integrated = false
+pole_part = false
+add_sigma = false
+keep_sigma = false
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = false
+summed = false
+summed_function_map = true
+horner_iterations = 5
+cpe_iterations = 50
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = false
+
+[cli_settings.global.generation.compile]
+compilation_mode = "assembly"
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 1
+integrate = 10
+
+[[command_blocks]]
+name = "generate_diagrams"
+commands = [
+  "import model sm-default.json",
+  "set global kv global.n_cores.feyngen=10",
+  "remove processes -p ff_pi",
+  "remove processes -p ff_pi_0",
+  """generate amp a > a | a b g ghg QCD==6 QED==2 [{4}]
+        --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+        --number-of-samples-for-numerator-comparisons 1
+        --fully-numerical-substitution-when-comparing-numerators=true
+        --compare-canonized-numerator=false
+        --global-prefactor-projector '(1/(3*(gammalooprs::Q(0,spenso::mink(4,1))*gammalooprs::Q(0,spenso::mink(4,1)))))*(spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(1))) - gammalooprs::Q(0,spenso::mink(4,gammalooprs::hedge(0)))*gammalooprs::Q(0,spenso::mink(4,gammalooprs::hedge(1)))/(gammalooprs::Q(0,spenso::mink(4,1))*gammalooprs::Q(0,spenso::mink(4,1))))'
+        --global-prefactor-num "1"
+        -p ff_pi -i 4L --only-diagrams""",
+  """generate amp a > a | a b g ghg QCD==6 QED==2 [{4}]
+        --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+        --number-of-samples-for-numerator-comparisons 1
+        --fully-numerical-substitution-when-comparing-numerators=true
+        --compare-canonized-numerator=false
+        --global-prefactor-projector '(-1/(4*gammalooprs::Q(0,spenso::cind(0))^4))*(gammalooprs::Q(0,spenso::mink(4,gammalooprs::hedge(0))) - 2*gammalooprs::Q3(0,spenso::mink(4,gammalooprs::hedge(0))))*(gammalooprs::Q(0,spenso::mink(4,gammalooprs::hedge(1))) - 2*gammalooprs::Q3(0,spenso::mink(4,gammalooprs::hedge(1))))'
+        --global-prefactor-num "1"
+        -p ff_pi_0 -i 4L --only-diagrams""",
+  "save dot ./examples/cli/a_a/4L/graphs",
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "generate_integrands"
+commands = [
+  "generate existing -p ff_pi -i 4L",
+  "generate existing -p ff_pi_0 -i 4L",
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "integrate_ff_pi"
+commands = [
+  "run set_model_parameters",
+  "run set_kinematics",
+#  "run set_kinematics_onshell",
+#  "run set_physical_kinematics",
+  """set process -p ff_pi string '
+    [integrator]
+    n_increase = 0
+    n_start = 100000
+    n_max = 1000000000
+    seed = 1337
+    integrated_phase = "real"
+    target_relative_accuracy = 1.0e-2
+
+    [stability]
+    check_on_norm = false
+    escalate_if_exact_zero = false
+    loop_momenta_norm_escalation_factor = -1.0
+    rotation_axis = [
+      { type = "z" },
+      { type = "x" },
+      { type = "y" },
+    ]
+
+    [[stability.levels]]
+    precision = "Double"
+    required_precision_for_re = 1.0e-7
+    required_precision_for_im = 1.0e-7
+    escalate_for_large_weight_threshold = 0.5
+
+    [[stability.levels]]
+    precision = "Quad"
+    required_precision_for_re = 1.0e-7
+    required_precision_for_im = 1.0e-7
+    escalate_for_large_weight_threshold = -1.0
+
+    [[stability.levels]]
+    precision = "Arb"
+    required_precision_for_re = 1.0e-7
+    required_precision_for_im = 1.0e-7
+    escalate_for_large_weight_threshold = -1.0
+
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = true
+    lmb_channels = "summed"
+    lmb_channel_weight = "inverse_jacobian"
+    coordinate_system = "spherical"
+    mapping = "linear"
+    b = 1.0
+    '""",
+  """integrate -p ff_pi -i 4L
+             --n-cores 10
+             --workspace-path ./examples/cli/a_a/4L/workspaces/ff_pi
+             --renderer ratatui
+             --batch-size 1000
+             --show-phase both
+             --show-max-weight-info
+             --show-top-discrete-grid
+             --show-discrete-contributions-sum
+             --write-results-for-each-iteration
+             --restart
+    """,
+]
+
+[[command_blocks]]
+name = "integrate_ff_pi_0"
+commands = [
+  "run set_model_parameters",
+#  "run set_kinematics",
+  "run set_kinematics_onshell",
+#  "run set_kinematics_onshell_B",
+#  ff_pi_0 requires lightlike kinematics with non-zero Q(0,spenso::cind(0)); keep the other B points for ff_pi.
+#  "run set_physical_kinematics",
+#  "run set_physical_kinematics_B",
+#  "run set_kinematics_euclidean_B",
+  """set process -p ff_pi_0 string '
+    [integrator]
+    n_increase = 0
+    n_start = 100000
+    n_max = 1000000000
+    seed = 1337
+    integrated_phase = "real"
+    target_relative_accuracy = 1.0e-2
+
+    [stability]
+    check_on_norm = false
+    escalate_if_exact_zero = false
+    loop_momenta_norm_escalation_factor = -1.0
+    rotation_axis = [
+      { type = "z" },
+      { type = "x" },
+      { type = "y" },
+    ]
+
+    [[stability.levels]]
+    precision = "Double"
+    required_precision_for_re = 1.0e-7
+    required_precision_for_im = 1.0e-7
+    escalate_for_large_weight_threshold = 0.5
+
+    [[stability.levels]]
+    precision = "Quad"
+    required_precision_for_re = 1.0e-7
+    required_precision_for_im = 1.0e-7
+    escalate_for_large_weight_threshold = -1.0
+
+    [[stability.levels]]
+    precision = "Arb"
+    required_precision_for_re = 1.0e-7
+    required_precision_for_im = 1.0e-7
+    escalate_for_large_weight_threshold = -1.0
+
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = true
+    lmb_channels = "summed"
+    lmb_channel_weight = "inverse_jacobian"
+    coordinate_system = "spherical"
+    mapping = "linear"
+    b = 1.0
+    '""",
+  """integrate -p ff_pi_0 -i 4L
+             --n-cores 10
+             --workspace-path ./examples/cli/a_a/4L/workspaces/ff_pi_0
+             --renderer ratatui
+             --batch-size 1000
+             --show-phase both
+             --show-max-weight-info
+             --show-top-discrete-grid
+             --show-discrete-contributions-sum
+             --write-results-for-each-iteration
+             --restart
+    """,
+]
+
+[[command_blocks]]
+name = "integrate_all"
+commands = [
+  "run set_model_parameters",
+  "run set_kinematics",
+  """set process -p ff_pi string '
+    [integrator]
+    n_increase = 0
+    n_start = 100000
+    n_max = 1000000000
+    seed = 1337
+    integrated_phase = "real"
+    target_relative_accuracy = 1.0e-2
+
+    [stability]
+    check_on_norm = false
+    escalate_if_exact_zero = false
+    loop_momenta_norm_escalation_factor = -1.0
+    rotation_axis = [
+      { type = "z" },
+      { type = "x" },
+      { type = "y" },
+    ]
+
+    [[stability.levels]]
+    precision = "Double"
+    required_precision_for_re = 1.0e-7
+    required_precision_for_im = 1.0e-7
+    escalate_for_large_weight_threshold = 0.5
+
+    [[stability.levels]]
+    precision = "Quad"
+    required_precision_for_re = 1.0e-7
+    required_precision_for_im = 1.0e-7
+    escalate_for_large_weight_threshold = -1.0
+
+    [[stability.levels]]
+    precision = "Arb"
+    required_precision_for_re = 1.0e-7
+    required_precision_for_im = 1.0e-7
+    escalate_for_large_weight_threshold = -1.0
+
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = true
+    lmb_channels = "summed"
+    lmb_channel_weight = "inverse_jacobian"
+    coordinate_system = "spherical"
+    mapping = "linear"
+    b = 1.0
+    '""",
+  """integrate -p ff_pi -i 4L
+             --n-cores 10
+             --workspace-path ./examples/cli/a_a/4L/workspaces/all
+             --renderer ratatui
+             --batch-size 1000
+             --show-phase both
+             --show-max-weight-info
+             --show-top-discrete-grid
+             --show-discrete-contributions-sum
+             --write-results-for-each-iteration
+             --restart
+    """,
+]
+
+[[command_blocks]]
+name = "integrate_diagnostics_ff_pi"
+commands = [
+  "run set_model_parameters",
+  "run set_kinematics",
+#  "run set_kinematics_onshell",
+#  "run set_physical_kinematics",
+  "remove processes -p ff_pi -i 4L_m_uv_x2",
+  "remove processes -p ff_pi -i 4L_m_uv_x4",
+  "remove processes -p ff_pi -i 4L_m_uv_div2",
+  "remove processes -p ff_pi -i 4L_m_uv_div4",
+  "remove processes -p ff_pi -i 4L_mu_r_x2",
+  "remove processes -p ff_pi -i 4L_mu_r_x4",
+  "remove processes -p ff_pi -i 4L_mu_r_div2",
+  "remove processes -p ff_pi -i 4L_mu_r_div4",
+  "duplicate integrand -p ff_pi -i 4L --output_process_name ff_pi --output_integrand_name 4L_m_uv_x2",
+  "set process -p ff_pi -i 4L_m_uv_x2 kv general.m_uv=2.0",
+  "duplicate integrand -p ff_pi -i 4L --output_process_name ff_pi --output_integrand_name 4L_m_uv_x4",
+  "set process -p ff_pi -i 4L_m_uv_x4 kv general.m_uv=4.0",
+  "duplicate integrand -p ff_pi -i 4L --output_process_name ff_pi --output_integrand_name 4L_m_uv_div2",
+  "set process -p ff_pi -i 4L_m_uv_div2 kv general.m_uv=0.5",
+  "duplicate integrand -p ff_pi -i 4L --output_process_name ff_pi --output_integrand_name 4L_m_uv_div4",
+  "set process -p ff_pi -i 4L_m_uv_div4 kv general.m_uv=0.25",
+  "duplicate integrand -p ff_pi -i 4L --output_process_name ff_pi --output_integrand_name 4L_mu_r_x2",
+  "set process -p ff_pi -i 4L_mu_r_x2 kv general.mu_r=182.376",
+  "duplicate integrand -p ff_pi -i 4L --output_process_name ff_pi --output_integrand_name 4L_mu_r_x4",
+  "set process -p ff_pi -i 4L_mu_r_x4 kv general.mu_r=364.752",
+  "duplicate integrand -p ff_pi -i 4L --output_process_name ff_pi --output_integrand_name 4L_mu_r_div2",
+  "set process -p ff_pi -i 4L_mu_r_div2 kv general.mu_r=45.594",
+  "duplicate integrand -p ff_pi -i 4L --output_process_name ff_pi --output_integrand_name 4L_mu_r_div4",
+  "set process -p ff_pi -i 4L_mu_r_div4 kv general.mu_r=22.797",
+  """set process -p ff_pi string '
+    [integrator]
+    n_increase = 0
+    n_start = 100000
+    n_max = 1000000000
+    seed = 1337
+    integrated_phase = "real"
+    target_relative_accuracy = 1.0e-2
+
+    [stability]
+    check_on_norm = true
+    escalate_if_exact_zero = true
+    loop_momenta_norm_escalation_factor = 100.0
+    rotation_axis = [
+      { type = "x" },
+    ]
+
+    [[stability.levels]]
+    precision = "Double"
+    required_precision_for_re = 1.0e-5
+    required_precision_for_im = 1.0e-5
+    escalate_for_large_weight_threshold = 0.99
+
+    [[stability.levels]]
+    precision = "Quad"
+    required_precision_for_re = 1.0e-5
+    required_precision_for_im = 1.0e-5
+    escalate_for_large_weight_threshold = -1.0
+
+    [[stability.levels]]
+    precision = "Arb"
+    required_precision_for_re = 1.0e-7
+    required_precision_for_im = 1.0e-7
+    escalate_for_large_weight_threshold = -1.0
+
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = true
+    lmb_channels = "summed"
+    lmb_channel_weight = "inverse_jacobian"
+    coordinate_system = "spherical"
+    mapping = "linear"
+    b = 1.0
+    '""",
+#    -p ff_pi -i 4L_mu_r_x2
+#    -p ff_pi -i 4L_mu_r_x4
+#    -p ff_pi -i 4L_mu_r_div2
+#    -p ff_pi -i 4L_mu_r_div4
+# --uncorrelated
+  """integrate -p ff_pi -i 4L
+             -p ff_pi -i 4L_m_uv_x2
+             -p ff_pi -i 4L_m_uv_x4
+             -p ff_pi -i 4L_m_uv_div2
+             -p ff_pi -i 4L_m_uv_div4
+             --n-cores 10
+             --workspace-path ./examples/cli/a_a/4L/workspaces/diagnostics_ff_pi
+             --renderer ratatui
+             --batch-size 1000
+             --show-phase both
+             --show-max-weight-info
+             --show-top-discrete-grid
+             --show-discrete-contributions-sum
+             --write-results-for-each-iteration
+             --restart
+    """,
+]
+
+[[command_blocks]]
+name = "set_model_parameters"
+commands = [
+  "set model MB=4.7",
+  "set model ymb=4.7",
+  "set model WT=0.0",
+  "set model aS=0.118",
+  "set model aEWM1=137.036",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+]
+
+[[command_blocks]]
+name = "set_kinematics"
+commands = [
+  """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+      [ 0.0, 0.0, 0.0, 1.0 ],
+      "dependent"
+    ]
+    helicities = [ +1, +1 ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_physical_kinematics"
+commands = [
+  """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+      [ 1.0, 0.0, 0.0, 0.0 ],
+      "dependent"
+    ]
+    helicities = [ +1, +1 ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_physical_kinematics_B"
+commands = [
+  """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+      [ 10.0, 0.0, 0.0, 0.0 ],
+      "dependent"
+    ]
+    helicities = [ +1, +1 ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_onshell"
+commands = [
+  """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+      [ 1.0, 0.0, 0.0, 1.0 ],
+      "dependent"
+    ]
+    helicities = [ +1, +1 ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_onshell_B"
+commands = [
+  """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+      [ 5.0, 4.0, 3.0, 0.0 ],
+      "dependent"
+    ]
+    helicities = [ +1, +1 ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_euclidean_B"
+commands = [
+  """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+      [ 0.0, 0.0, 0.0, 10.0 ],
+      "dependent"
+    ]
+    helicities = [ +1, +1 ]
+    '""",
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 1.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [0.0, 0.0, 0.0, 1.0],
+  "dependent",
+]
+helicities = [+1, +1]
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "none"
+mu_r = 91.188
+m_uv = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.integrator]
+n_start = 100000
+n_increase = 0
+n_max = 1000000000
+integrated_phase = "real"
+target_relative_accuracy = 1.0e-2
+seed = 1337
+
+[default_runtime_settings.stability]
+check_on_norm = false
+escalate_if_exact_zero = false
+loop_momenta_norm_escalation_factor = -1.0
+
+[[default_runtime_settings.stability.rotation_axis]]
+type = "z"
+
+[[default_runtime_settings.stability.rotation_axis]]
+type = "x"
+
+[[default_runtime_settings.stability.rotation_axis]]
+type = "y"
+
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 1.0e-7
+required_precision_for_im = 1.0e-7
+escalate_for_large_weight_threshold = 0.5
+
+[[default_runtime_settings.stability.levels]]
+precision = "Quad"
+required_precision_for_re = 1.0e-7
+required_precision_for_im = 1.0e-7
+escalate_for_large_weight_threshold = -1.0
+
+[[default_runtime_settings.stability.levels]]
+precision = "Arb"
+required_precision_for_re = 1.0e-7
+required_precision_for_im = 1.0e-7
+escalate_for_large_weight_threshold = -1.0

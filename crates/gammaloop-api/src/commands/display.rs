@@ -31,7 +31,9 @@ use crate::{
         summarize_observable, summarize_quantity, summarize_selector, NamedProcessSettingKind,
     },
     completion::CompletionArgExt,
-    integrand_info::{IntegrandGraphGroupInfo, IntegrandInfo, IntegrandKind},
+    integrand_info::{
+        IntegrandCutThresholdInfo, IntegrandGraphGroupInfo, IntegrandInfo, IntegrandKind,
+    },
     session::display_command,
     settings_tree::{serialize_settings_with_defaults, value_at_path},
     state::{CommandsBlock, IntegrandGenerationSummary, ProcessRef, RunHistory, State},
@@ -109,6 +111,13 @@ pub enum Display {
             completion_selected_integrand_category()
         )]
         categories: Vec<IntegrandDisplayCategory>,
+        /// Hide generated threshold CTs that cannot exist for the active model and kinematics
+        #[arg(
+            long = "hide-non-existing-thresholds",
+            default_value_t = false,
+            requires = "integrand_name"
+        )]
+        hide_non_existing_thresholds: bool,
     },
     Quantities {
         #[command(flatten)]
@@ -177,6 +186,7 @@ impl Display {
                 integrand_name,
                 graphs,
                 categories,
+                hide_non_existing_thresholds,
             } => {
                 let process_id = process
                     .as_ref()
@@ -190,6 +200,7 @@ impl Display {
                         integrand_name,
                         graphs,
                         categories,
+                        *hide_non_existing_thresholds,
                     )?;
                 } else {
                     render_integrands_table(state, &global_settings.state.folder, process_id)?;
@@ -375,19 +386,35 @@ fn render_edge_ids(edge_ids: &[usize]) -> String {
     render_edge_ids_with_highlight(edge_ids, false)
 }
 
-fn render_threshold_esurface_ids(esurface_ids: &[usize]) -> String {
-    if esurface_ids.is_empty() {
+fn render_threshold_counterterms(
+    thresholds: &[IntegrandCutThresholdInfo],
+    hide_non_existing_thresholds: bool,
+) -> String {
+    let visible = thresholds
+        .iter()
+        .filter(|threshold| !hide_non_existing_thresholds || threshold.status.is_currently_viable())
+        .collect_vec();
+    if visible.is_empty() {
         return "none".dimmed().to_string();
     }
     format!(
         "[{}]",
-        esurface_ids
+        visible
             .iter()
-            .map(|esurface_id| esurface_id.to_string())
+            .map(|threshold| {
+                let id = if threshold.status.can_become_pinched() {
+                    format!("{}*", threshold.esurface_id)
+                } else {
+                    threshold.esurface_id.to_string()
+                };
+                if threshold.status.is_currently_viable() {
+                    id.cyan().to_string()
+                } else {
+                    id.dimmed().to_string()
+                }
+            })
             .join(",")
     )
-    .cyan()
-    .to_string()
 }
 
 fn render_threshold_esurface(edge_ids: &[usize]) -> String {
@@ -528,6 +555,7 @@ fn render_integrand_detail(
     integrand_name: &str,
     requested_graphs: &[String],
     requested_categories: &[IntegrandDisplayCategory],
+    hide_non_existing_thresholds: bool,
 ) -> Result<()> {
     let detail = state.get_integrand_info(
         Some(&ProcessRef::Id(process_id)),
@@ -543,12 +571,14 @@ fn render_integrand_detail(
         generation_summary,
         requested_graphs,
         requested_categories,
+        hide_non_existing_thresholds,
     )
 }
 
 fn category_rows(
     group: &IntegrandGraphGroupInfo,
     category: IntegrandDisplayCategory,
+    hide_non_existing_thresholds: bool,
 ) -> Vec<CategoryRow> {
     match category {
         IntegrandDisplayCategory::Generation => Vec::new(),
@@ -586,8 +616,14 @@ fn category_rows(
             .iter()
             .map(|cut| CategoryRow {
                 primary_id: render_category_id(cut.cut_id, false),
-                secondary_id: render_threshold_esurface_ids(&cut.left_threshold_esurface_ids),
-                tertiary_id: render_threshold_esurface_ids(&cut.right_threshold_esurface_ids),
+                secondary_id: render_threshold_counterterms(
+                    &cut.left_thresholds,
+                    hide_non_existing_thresholds,
+                ),
+                tertiary_id: render_threshold_counterterms(
+                    &cut.right_thresholds,
+                    hide_non_existing_thresholds,
+                ),
                 value: render_cut(&cut.edge_ids, cut.raising_power),
             })
             .collect(),
@@ -617,6 +653,7 @@ fn render_integrand_thresholds_table(
         "Graph".bold().blue().to_string(),
         "Esurface".bold().blue().to_string(),
         "edges".bold().blue().to_string(),
+        "Active in cuts".bold().blue().to_string(),
     ]);
 
     let mut inserted_blocks = 0usize;
@@ -638,6 +675,7 @@ fn render_integrand_thresholds_table(
                 .to_string(),
             String::new(),
             String::new(),
+            String::new(),
         ]);
         next_row += 1;
         separator_rows.push(next_row);
@@ -648,6 +686,23 @@ fn render_integrand_thresholds_table(
                 String::new(),
                 format!("#{}", threshold.esurface_id).yellow().to_string(),
                 render_threshold_esurface(&threshold.edge_ids),
+                if threshold.active_cuts.is_empty() {
+                    "none".dimmed().to_string()
+                } else {
+                    threshold
+                        .active_cuts
+                        .iter()
+                        .map(|cut| {
+                            if cut.can_become_pinched {
+                                format!("#{}*", cut.cut_id)
+                            } else {
+                                format!("#{}", cut.cut_id)
+                            }
+                        })
+                        .join(",")
+                        .cyan()
+                        .to_string()
+                },
             ]);
             next_row += 1;
         }
@@ -686,6 +741,7 @@ fn render_integrand_thresholds_table(
 fn render_integrand_category_table(
     groups: &[&IntegrandGraphGroupInfo],
     category: IntegrandDisplayCategory,
+    hide_non_existing_thresholds: bool,
 ) -> Result<Option<String>> {
     let mut builder = Builder::new();
     match category {
@@ -723,7 +779,7 @@ fn render_integrand_category_table(
     let mut next_row = 1usize;
 
     for group in groups {
-        let rows = category_rows(group, category);
+        let rows = category_rows(group, category, hide_non_existing_thresholds);
         if rows.is_empty() {
             continue;
         }
@@ -848,6 +904,7 @@ fn render_integrand_detail_from_info(
     generation_summary: Option<&IntegrandGenerationSummary>,
     requested_graphs: &[String],
     requested_categories: &[IntegrandDisplayCategory],
+    hide_non_existing_thresholds: bool,
 ) -> Result<()> {
     info!(
         "{}",
@@ -933,7 +990,9 @@ fn render_integrand_detail_from_info(
             continue;
         }
 
-        if let Some(table) = render_integrand_category_table(&groups, category)? {
+        if let Some(table) =
+            render_integrand_category_table(&groups, category, hide_non_existing_thresholds)?
+        {
             info!(
                 "
 {}
@@ -1670,6 +1729,10 @@ mod test {
 
     use crate::{
         commands::Commands,
+        integrand_info::{
+            IntegrandActiveThresholdCutInfo, IntegrandCutThresholdInfo, IntegrandGraphGroupInfo,
+            IntegrandGraphInfo, IntegrandThresholdEsurfaceInfo, IntegrandThresholdStatus,
+        },
         state::{CommandHistory, CommandsBlock, ProcessRef, RunHistory},
         CLISettings, Repl,
     };
@@ -1677,9 +1740,69 @@ mod test {
 
     use super::{
         command_block_contents, format_bytes, render_command_blocks_table,
+        render_integrand_thresholds_table, render_threshold_counterterms,
         serialize_settings_with_defaults, value_at_path, Display, DisplaySettingsTarget,
         IntegrandDisplayCategory,
     };
+
+    #[test]
+    fn threshold_rendering_dims_or_hides_non_existing_associations() {
+        let thresholds = vec![
+            IntegrandCutThresholdInfo {
+                esurface_id: 71,
+                status: IntegrandThresholdStatus::CanBecomePinched,
+                cut_boundary_edge_ids: vec![1, 2],
+                threshold_boundary_edge_ids: vec![3, 4],
+                invariant_bound_is_applicable: true,
+            },
+            IntegrandCutThresholdInfo {
+                esurface_id: 83,
+                status: IntegrandThresholdStatus::ProvenNonExisting,
+                cut_boundary_edge_ids: vec![1, 2],
+                threshold_boundary_edge_ids: vec![5],
+                invariant_bound_is_applicable: true,
+            },
+        ];
+
+        let shown = render_threshold_counterterms(&thresholds, false);
+        assert!(shown.contains("71*"));
+        assert!(shown.contains("83"));
+
+        let hidden = render_threshold_counterterms(&thresholds, true);
+        assert!(hidden.contains("71*"));
+        assert!(!hidden.contains("83"));
+    }
+
+    #[test]
+    fn threshold_inventory_lists_active_cut_and_pinch_marker() {
+        let group = IntegrandGraphGroupInfo {
+            group_id: 0,
+            graphs: vec![IntegrandGraphInfo {
+                graph_id: 0,
+                name: "generic".to_string(),
+                is_master: true,
+            }],
+            orientation_edge_ids: Vec::new(),
+            orientations: Vec::new(),
+            loop_momentum_bases: Vec::new(),
+            threshold_esurface_ids: vec![5],
+            threshold_esurfaces: vec![IntegrandThresholdEsurfaceInfo {
+                esurface_id: 5,
+                edge_ids: vec![1, 2],
+                active_cuts: vec![IntegrandActiveThresholdCutInfo {
+                    cut_id: 7,
+                    can_become_pinched: true,
+                }],
+            }],
+            cuts: Vec::new(),
+        };
+
+        let rendered = render_integrand_thresholds_table(&[&group])
+            .unwrap()
+            .unwrap();
+        assert!(rendered.contains("Active in cuts"));
+        assert!(rendered.contains("#7*"));
+    }
 
     #[test]
     fn parse_display_settings_process_with_path() {
@@ -1927,11 +2050,13 @@ mod test {
                 integrand_name,
                 graphs,
                 categories,
+                hide_non_existing_thresholds,
             }) => {
                 assert_eq!(process, None);
                 assert_eq!(integrand_name, None);
                 assert!(graphs.is_empty());
                 assert!(categories.is_empty());
+                assert!(!hide_non_existing_thresholds);
             }
             other => panic!("Expected display integrand command, got {other:?}"),
         }
@@ -1956,6 +2081,7 @@ mod test {
                 integrand_name,
                 graphs,
                 categories,
+                hide_non_existing_thresholds,
             }) => {
                 assert_eq!(
                     process,
@@ -1964,6 +2090,7 @@ mod test {
                 assert_eq!(integrand_name.as_deref(), Some("LO"));
                 assert!(graphs.is_empty());
                 assert!(categories.is_empty());
+                assert!(!hide_non_existing_thresholds);
             }
             other => panic!("Expected display integrand command, got {other:?}"),
         }
@@ -1986,6 +2113,7 @@ mod test {
             "generation",
             "orientation",
             "cuts",
+            "--hide-non-existing-thresholds",
         ])
         .unwrap();
 
@@ -1995,11 +2123,13 @@ mod test {
                 integrand_name,
                 graphs,
                 categories,
+                hide_non_existing_thresholds,
             }) => {
                 assert_eq!(
                     process,
                     Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
                 );
+                assert!(hide_non_existing_thresholds);
                 assert_eq!(integrand_name.as_deref(), Some("LO"));
                 assert_eq!(graphs, vec!["GL0".to_string(), "GL2".to_string()]);
                 assert_eq!(

@@ -9,13 +9,13 @@ use std::sync::{Arc, Mutex};
 
 use crate::DependentMomentaConstructor;
 use crate::cff::expression::{GraphOrientation, OrientationData};
-use crate::graph::Graph;
 use crate::graph::parse::string_utils::ToOrderedSimple;
+use crate::graph::{Graph, LmbIndex};
 use crate::integrands::evaluation::EvaluationResult;
 use crate::model::Model;
 use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{ExternalIndex, LoopIndex};
-use crate::processes::{Amplitude, AmplitudeGraph};
+use crate::processes::{Amplitude, AmplitudeGraph, CrossSection};
 use crate::settings::RuntimeSettings;
 use crate::utils::F;
 use crate::uv::UltravioletGraph;
@@ -63,6 +63,7 @@ pub struct ProfileSettings {
     pub use_f128: bool,
     pub analyse_analytically: bool,
     pub orientation_mode: OrientationProfileMode,
+    pub fixed_uv_ray: Option<UVProfileFixedRay>,
 }
 
 impl Default for ProfileSettings {
@@ -75,7 +76,120 @@ impl Default for ProfileSettings {
             analyse_analytically: false,
             use_f128: false,
             orientation_mode: OrientationProfileMode::Summed,
+            fixed_uv_ray: None,
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UVProfileFixedRay {
+    directions: Vec<[f64; 3]>,
+    norms: Vec<f64>,
+}
+
+impl UVProfileFixedRay {
+    pub fn from_flat_components(directions: &[f64], norms: &[f64]) -> Result<Self> {
+        if directions.is_empty() {
+            return Err(eyre!(
+                "Fixed UV ray directions cannot be empty when the option is used."
+            ));
+        }
+        if !directions.len().is_multiple_of(3) {
+            return Err(eyre!(
+                "Fixed UV ray directions must contain a multiple of 3 components, got {}.",
+                directions.len()
+            ));
+        }
+        if norms.is_empty() {
+            return Err(eyre!(
+                "Fixed UV ray norms cannot be empty when directions are supplied."
+            ));
+        }
+
+        let directions = directions
+            .chunks_exact(3)
+            .map(|direction| {
+                let norm = (direction[0] * direction[0]
+                    + direction[1] * direction[1]
+                    + direction[2] * direction[2])
+                    .sqrt();
+                if norm == 0.0 {
+                    return Err(eyre!(
+                        "Fixed UV ray directions cannot contain a zero vector."
+                    ));
+                }
+                Ok([
+                    direction[0] / norm,
+                    direction[1] / norm,
+                    direction[2] / norm,
+                ])
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        if norms.iter().any(|norm| !norm.is_finite() || *norm <= 0.0) {
+            return Err(eyre!(
+                "Fixed UV ray norms must be finite and strictly positive."
+            ));
+        }
+
+        Ok(Self {
+            directions,
+            norms: norms.to_vec(),
+        })
+    }
+
+    fn sample(&self, loop_count: usize) -> Result<LoopMomentumSample> {
+        if self.directions.len() != 1 && self.directions.len() != loop_count {
+            return Err(eyre!(
+                "Fixed UV ray directions contain {} ray(s), but this LMB has {} loop variable(s). Use either one direction or one direction per loop variable.",
+                self.directions.len(),
+                loop_count
+            ));
+        }
+        if self.norms.len() != 1 && self.norms.len() != loop_count {
+            return Err(eyre!(
+                "Fixed UV ray norms contain {} value(s), but this LMB has {} loop variable(s). Use either one norm or one norm per loop variable.",
+                self.norms.len(),
+                loop_count
+            ));
+        }
+
+        (0..loop_count)
+            .map(|i| {
+                let direction = self.directions[if self.directions.len() == 1 { 0 } else { i }];
+                let norm = self.norms[if self.norms.len() == 1 { 0 } else { i }];
+                Ok(ThreeMomentum {
+                    px: F(norm * direction[0]),
+                    py: F(norm * direction[1]),
+                    pz: F(norm * direction[2]),
+                })
+            })
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UVProfileFixedRay;
+
+    #[test]
+    fn fixed_uv_ray_repeats_single_direction_and_norm() {
+        let ray = UVProfileFixedRay::from_flat_components(&[0.0, 0.0, 2.0], &[3.0]).unwrap();
+        let sample = ray.sample(2).unwrap();
+
+        assert_eq!(sample.len(), 2);
+        for momentum in &sample {
+            assert_eq!(momentum.px.0, 0.0);
+            assert_eq!(momentum.py.0, 0.0);
+            assert_eq!(momentum.pz.0, 3.0);
+        }
+    }
+
+    #[test]
+    fn fixed_uv_ray_rejects_invalid_input_shapes() {
+        assert!(UVProfileFixedRay::from_flat_components(&[1.0, 0.0], &[1.0]).is_err());
+        assert!(UVProfileFixedRay::from_flat_components(&[0.0, 0.0, 0.0], &[1.0]).is_err());
+        assert!(UVProfileFixedRay::from_flat_components(&[1.0, 0.0, 0.0], &[0.0]).is_err());
     }
 }
 
@@ -191,14 +305,103 @@ impl UVProfileable for Amplitude {
             .expect("integrand mutex poisoned");
         self.integrand = Some(integrand);
 
-        Ok(UVProfile { per_graph, scales })
+        Ok(UVProfile {
+            per_graph,
+            scales,
+            allow_vanishing_missing_fits: false,
+        })
         // results.push((inspect_res, analytic_res));
+    }
+}
+
+impl UVProfileable for CrossSection {
+    #[instrument(skip_all)]
+    fn profile(&mut self, model: &Model, profile_settings: &ProfileSettings) -> Result<UVProfile> {
+        let scales = logspace(
+            profile_settings.min_scale_exponent,
+            profile_settings.max_scale_exponent,
+            profile_settings.n_points,
+            10.0,
+        );
+
+        let integrand = self
+            .integrand
+            .as_ref()
+            .ok_or(eyre!("Integrand Not built yet"))?;
+        let settings = integrand.get_settings().clone();
+        let graph_inputs = match integrand {
+            ProcessIntegrand::CrossSection(cross_section) => cross_section
+                .data
+                .graph_terms
+                .iter()
+                .map(|graph_term| (graph_term.graph.clone(), graph_term.lmbs.clone()))
+                .collect::<Vec<_>>(),
+            ProcessIntegrand::Amplitude(_) => {
+                unreachable!("cross-section UV profiling expects cross-section integrands")
+            }
+        };
+        let externals: ExternalMomenta = settings
+            .kinematics
+            .externals
+            .get_dependent_externals(DependentMomentaConstructor::CrossSection)
+            .unwrap()
+            .into_iter()
+            .map(|a| a.spatial)
+            .collect();
+
+        let base_seed = profile_settings.seed;
+        let integrand = Arc::new(Mutex::new(self.integrand.take().unwrap()));
+
+        let profile_span = info_span!("Profiling graphs", indicatif.pb_show = true);
+        profile_span.pb_set_style(&ProgressStyle::with_template(
+            "{wide_bar} {pos}/{len} {msg}",
+        )?);
+        profile_span.pb_set_length(graph_inputs.len() as u64);
+        profile_span.pb_set_message("Profiling graphs");
+        profile_span.pb_set_finish_message("all graphs profiled");
+        let _profile_span_enter = profile_span.enter();
+
+        let runner = UVProfileRunner {
+            integrand: &integrand,
+            scales: &scales,
+            externals: &externals,
+            model,
+            settings: &settings,
+            profile_settings,
+            base_seed,
+        };
+
+        let per_graph = graph_inputs
+            .par_iter()
+            .enumerate()
+            .map(|(i, (graph, lmbs))| {
+                let res = runner.sample_cross_section_graph(i, graph, lmbs)?;
+                profile_span.pb_inc(1);
+                Ok(res)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        drop(_profile_span_enter);
+        drop(profile_span);
+
+        let integrand = Arc::try_unwrap(integrand)
+            .map_err(|_| color_eyre::eyre::eyre!("integrand still shared"))?
+            .into_inner()
+            .expect("integrand mutex poisoned");
+        self.integrand = Some(integrand);
+
+        Ok(UVProfile {
+            per_graph,
+            scales,
+            allow_vanishing_missing_fits: true,
+        })
     }
 }
 
 pub struct UVProfile {
     pub per_graph: Vec<UVSamplingResult>,
     pub scales: Vec<f64>,
+    pub allow_vanishing_missing_fits: bool,
 }
 
 impl UVProfile {
@@ -290,6 +493,7 @@ impl UVProfile {
         UVProfileAnalysis {
             scales: self.scales.clone(),
             graphs,
+            allow_vanishing_missing_fits: self.allow_vanishing_missing_fits,
         }
     }
 
@@ -318,6 +522,8 @@ impl UVProfile {
 pub struct UVProfileAnalysis {
     pub scales: Vec<f64>,
     pub graphs: Vec<UVProfileGraphAnalysis>,
+    #[serde(skip_serializing)]
+    pub allow_vanishing_missing_fits: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -701,35 +907,34 @@ impl UVProfileAnalysis {
             for lmb in &graph.lmbs {
                 for subset in &lmb.subsets {
                     let per_orientation_reason_count = subset
-                        .per_orientation_inspect_entries
+                        .analysis
+                        .per_orientation_inspect
                         .as_ref()
                         .map(|entries| {
                             entries
                                 .iter()
-                                .filter(|entry| match &entry.analysis {
-                                    None => true,
-                                    Some(analysis) => {
-                                        analysis.result.slope > max_dod
-                                            || analysis.result.slope.is_nan()
-                                    }
+                                .filter(|entry| {
+                                    inspect_failure_reason(
+                                        entry.analysis.as_ref(),
+                                        entry.inspect_fit_status,
+                                        max_dod,
+                                        self.allow_vanishing_missing_fits,
+                                    )
+                                    .is_some()
                                 })
                                 .count()
                         })
                         .unwrap_or(0);
-                    let all_orientations_pass = subset.per_orientation_inspect_entries.is_some()
+                    let all_orientations_pass = subset.analysis.per_orientation_inspect.is_some()
                         && per_orientation_reason_count == 0;
 
                     total += 1;
-                    let reason = match &subset.analysis.inspect_level {
-                        None => Some("missing_fit"),
-                        Some(analysis)
-                            if analysis.result.slope > max_dod
-                                || analysis.result.slope.is_nan() =>
-                        {
-                            Some("dod_exceeds_threshold")
-                        }
-                        _ => None,
-                    };
+                    let reason = inspect_failure_reason(
+                        subset.analysis.inspect_level.as_ref(),
+                        subset.analysis.inspect_fit_status,
+                        max_dod,
+                        self.allow_vanishing_missing_fits,
+                    );
 
                     if let Some(reason) = reason.filter(|_| !all_orientations_pass) {
                         failures.push(UVProfileFailure {
@@ -742,18 +947,14 @@ impl UVProfileAnalysis {
                         });
                     }
 
-                    for entry in subset.per_orientation_inspect_entries.iter().flatten() {
+                    for entry in subset.analysis.per_orientation_inspect.iter().flatten() {
                         total += 1;
-                        let reason = match &entry.analysis {
-                            None => Some("missing_fit"),
-                            Some(analysis)
-                                if analysis.result.slope > max_dod
-                                    || analysis.result.slope.is_nan() =>
-                            {
-                                Some("dod_exceeds_threshold")
-                            }
-                            _ => None,
-                        };
+                        let reason = inspect_failure_reason(
+                            entry.analysis.as_ref(),
+                            entry.inspect_fit_status,
+                            max_dod,
+                            self.allow_vanishing_missing_fits,
+                        );
 
                         if let Some(reason) = reason {
                             failures.push(UVProfileFailure {
@@ -776,6 +977,22 @@ impl UVProfileAnalysis {
             failed: failures.len(),
             failures,
         }
+    }
+}
+
+fn inspect_failure_reason(
+    analysis: Option<&InspectAnalysis>,
+    fit_status: InspectFitStatus,
+    max_dod: f64,
+    allow_vanishing_missing_fits: bool,
+) -> Option<&'static str> {
+    match analysis {
+        None if allow_vanishing_missing_fits && fit_status.missing_fit_is_vanishing() => None,
+        None => Some("missing_fit"),
+        Some(analysis) if analysis.result.slope > max_dod || analysis.result.slope.is_nan() => {
+            Some("dod_exceeds_threshold")
+        }
+        _ => None,
     }
 }
 
@@ -899,6 +1116,72 @@ impl<'a> UVProfileRunner<'a> {
 
         Ok(UVSamplingResult { per_lmb })
     }
+
+    fn sample_cross_section_graph(
+        &self,
+        graph_id: usize,
+        graph: &Graph,
+        lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> Result<UVSamplingResult> {
+        if self.profile_settings.analyse_analytically {
+            return Err(eyre!(
+                "Analytic UV profiling is not implemented for cross sections"
+            ));
+        }
+
+        let orientation_labels = if self
+            .profile_settings
+            .orientation_mode
+            .profiles_per_orientation()
+        {
+            let integrand = self.integrand.lock().expect("integrand mutex poisoned");
+            match &*integrand {
+                ProcessIntegrand::CrossSection(cross_section) => {
+                    Some(orientation_labels_for_graph(cross_section, graph_id)?)
+                }
+                ProcessIntegrand::Amplitude(_) => {
+                    unreachable!("cross-section UV profiling expects cross sections")
+                }
+            }
+        } else {
+            None
+        };
+        let lmb_refs: Vec<_> = lmbs.iter().enumerate().collect();
+
+        let lmb_span = info_span!(
+            "Profiling loop momentum bases",
+            indicatif.pb_show = true,
+            graph_id = graph_id
+        );
+        lmb_span.pb_set_style(
+            &ProgressStyle::with_template("{wide_bar} {pos}/{len} {msg}")
+                .expect("invalid progress bar template"),
+        );
+        lmb_span.pb_set_length(lmb_refs.len() as u64);
+        lmb_span.pb_set_message("Profiling loop momentum bases");
+        lmb_span.pb_set_finish_message("all loop momentum bases profiled");
+        let _lmb_span_enter = lmb_span.enter();
+
+        let per_lmb = lmb_refs
+            .par_iter()
+            .map(|(lmb_index, lmb)| {
+                let res = self.sample_lmb(
+                    graph_id,
+                    graph,
+                    *lmb_index,
+                    lmb,
+                    orientation_labels.as_deref(),
+                )?;
+                lmb_span.pb_inc(1);
+                Ok(res)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        drop(_lmb_span_enter);
+        drop(lmb_span);
+
+        Ok(UVSamplingResult { per_lmb })
+    }
 }
 
 pub struct LMBResult {
@@ -915,22 +1198,26 @@ impl<'a> UVProfileRunner<'a> {
         lmb: &LoopMomentumBasis,
         orientation_labels: Option<&[String]>,
     ) -> Result<LMBResult> {
-        let mut rng = MonteCarloRng::new(lmb_seed(self.base_seed, graph_id, lmb_index), 0);
-        let sample: LoopMomentumSample = lmb
-            .loop_edges
-            .iter()
-            .map(|_| ThreeMomentum {
-                px: F(
-                    rng.random_range(-self.settings.kinematics.e_cm..self.settings.kinematics.e_cm)
-                ),
-                py: F(
-                    rng.random_range(-self.settings.kinematics.e_cm..self.settings.kinematics.e_cm)
-                ),
-                pz: F(
-                    rng.random_range(-self.settings.kinematics.e_cm..self.settings.kinematics.e_cm)
-                ),
-            })
-            .collect();
+        let sample: LoopMomentumSample =
+            if let Some(fixed_uv_ray) = &self.profile_settings.fixed_uv_ray {
+                fixed_uv_ray.sample(lmb.loop_edges.len())?
+            } else {
+                let mut rng = MonteCarloRng::new(lmb_seed(self.base_seed, graph_id, lmb_index), 0);
+                lmb.loop_edges
+                    .iter()
+                    .map(|_| ThreeMomentum {
+                        px: F(rng.random_range(
+                            -self.settings.kinematics.e_cm..self.settings.kinematics.e_cm,
+                        )),
+                        py: F(rng.random_range(
+                            -self.settings.kinematics.e_cm..self.settings.kinematics.e_cm,
+                        )),
+                        pz: F(rng.random_range(
+                            -self.settings.kinematics.e_cm..self.settings.kinematics.e_cm,
+                        )),
+                    })
+                    .collect()
+            };
 
         let mut loops = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);
         loops.next();
@@ -1059,7 +1346,7 @@ impl<'a> UVProfileRunner<'a> {
             );
         }
 
-        let initial_dod = input.graph.dod(&subgraph);
+        let initial_dod = input.graph.compute_dod(&subgraph);
         let inspect = if let Some(orientation_labels) = input.orientation_labels {
             let per_orientation = orientation_labels
                 .iter()
@@ -1195,6 +1482,7 @@ impl SubSetResult {
     pub fn analyse(&self, scales: &[f64]) -> Analysis {
         Analysis {
             inspect_level: self.analyse_inspect(scales),
+            inspect_fit_status: InspectFitStatus::from_results(&self.inspect.summed),
             per_orientation_inspect: (!self.inspect.per_orientation.is_empty()).then(|| {
                 self.inspect
                     .per_orientation
@@ -1206,6 +1494,7 @@ impl SubSetResult {
                             scales,
                             orientation.used_arb_prec_retry,
                         ),
+                        inspect_fit_status: InspectFitStatus::from_results(&orientation.inspect),
                     })
                     .collect()
             }),
@@ -1232,7 +1521,7 @@ impl SubSetResult {
         //                     "In the limit of {:?} going to infinity for orientation \n{}:",
         //                     ls.included_iter()
         //                         .map(|l| lmb.loop_edges[l].to_string())
-        //                         .collect::<Vec<_>>(),
+        //                         .collecqt::<Vec<_>>(),
         //                     o.data
         //                 );
         //                 if l.is_empty() {
@@ -1423,10 +1712,37 @@ impl InspectResult {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+struct InspectFitStatus {
+    finite_samples: usize,
+    positive_finite_samples: usize,
+}
+
+impl InspectFitStatus {
+    fn from_results(inspect: &[InspectResult]) -> Self {
+        inspect.iter().fold(Self::default(), |mut status, result| {
+            let norm = result.magnitude();
+            if norm.is_finite() {
+                status.finite_samples += 1;
+                if norm > 0.0 {
+                    status.positive_finite_samples += 1;
+                }
+            }
+            status
+        })
+    }
+
+    fn missing_fit_is_vanishing(self) -> bool {
+        self.finite_samples > self.positive_finite_samples && self.positive_finite_samples < 2
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Analysis {
     ///Is None if the fit hasn't worked
     inspect_level: Option<InspectAnalysis>,
+    #[serde(skip_serializing)]
+    inspect_fit_status: InspectFitStatus,
     #[serde(skip_serializing)]
     per_orientation_inspect: Option<Vec<OrientationInspectAnalysis>>,
     ///Is None if the analytic analysis is disabled
@@ -1452,6 +1768,7 @@ impl Analysis {
 struct OrientationInspectAnalysis {
     orientation_label: String,
     analysis: Option<InspectAnalysis>,
+    inspect_fit_status: InspectFitStatus,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -2,7 +2,7 @@ use crate::{
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
         CutCFFIndex,
-        esurface::Esurface,
+        esurface::{Esurface, EsurfaceID},
         expression::{GraphOrientation, OrientationID},
         surface::HybridSurfaceID,
     },
@@ -13,7 +13,7 @@ use crate::{
         HasIntegrand,
         evaluation::{EvaluationResult, GraphEvaluationResult},
         process::{
-            ChannelIndex, GraphTermEvaluationContext, ParamBuilder,
+            ChannelIndex, GraphTermEvaluationContext, LmbChannelWeightingSettings, ParamBuilder,
             evaluators::{ActiveF64Backend, EvaluatorStack, evaluate_evaluator_single},
             param_builder::LUParams,
             prepare_buffered_event,
@@ -26,11 +26,13 @@ use crate::{
     },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
     processes::{
-        CrossSectionCut, CrossSectionGraph, CutId, GraphGenerationStats, IteratedCtCollection,
-        RaisedCutData, RaisedCutId,
+        self, CrossSectionCut, CrossSectionGraph, CutId, CutThresholdCountertermAssociations,
+        GraphGenerationStats, IteratedCtCollection, RaisedCutData, RaisedCutId,
     },
     settings::{
-        GlobalSettings, RuntimeSettings, global::FrozenCompilationMode, runtime::IntegralUnit,
+        GlobalSettings, RuntimeSettings,
+        global::FrozenCompilationMode,
+        runtime::{IntegralUnit, ParameterizationSettings},
     },
     subtraction::{
         generate_rstar_t_dependence_evaluator,
@@ -373,7 +375,7 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
             EventProcessingRuntime::from_settings_with_model_and_process_info(
                 &self.settings,
                 model,
-                &histogram_process_info_for_integrand(self),
+                &histogram_process_info_for_integrand(self)?,
             )?,
         );
         Ok(())
@@ -454,6 +456,8 @@ pub struct CrossSectionGraphTerm {
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cuts: TiVec<CutId, CrossSectionCut>,
+    pub threshold_candidate_esurface_ids: Vec<EsurfaceID>,
+    pub cut_threshold_associations: TiVec<CutId, CutThresholdCountertermAssociations>,
     pub reversed_edges: TiVec<RaisedCutId, Vec<EdgeIndex>>,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
@@ -466,36 +470,13 @@ pub struct CrossSectionGraphTerm {
     pub raised_data: RaisedCutData,
 }
 
+struct CutEventGenerationContext<'a> {
+    settings: &'a RuntimeSettings,
+    model: &'a Model,
+    channel_id: Option<ChannelIndex>,
+}
+
 impl CrossSectionGraphTerm {
-    pub fn threshold_esurface_ids_for_raised_cut(
-        &self,
-        raised_cut_id: RaisedCutId,
-    ) -> (Vec<usize>, Vec<usize>) {
-        if self.counterterm.thresholds.is_empty() {
-            return (vec![], vec![]);
-        }
-
-        let (left_thresholds, right_thresholds) = &self.counterterm.thresholds[raised_cut_id];
-        let resolve_ids = |thresholds: &[Esurface]| {
-            thresholds
-                .iter()
-                .map(|threshold| {
-                    self.graph
-                        .surface_cache
-                        .esurface_cache
-                        .iter()
-                        .position(|candidate| candidate == threshold)
-                        .expect("threshold esurface should resolve in graph")
-                })
-                .collect::<Vec<_>>()
-        };
-
-        (
-            resolve_ids(left_thresholds.raw.as_slice()),
-            resolve_ids(right_thresholds.raw.as_slice()),
-        )
-    }
-
     pub fn from_cross_section_graph(
         graph: &CrossSectionGraph,
         settings: &GlobalSettings,
@@ -645,7 +626,8 @@ impl CrossSectionGraphTerm {
         }
 
         let mut integrand = TiVec::new();
-        for integrand_for_cut in &masked_cut_parametric_integrand {
+        for (raised_cut_id, integrand_for_cut) in masked_cut_parametric_integrand.iter_enumerated()
+        {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
@@ -677,6 +659,13 @@ impl CrossSectionGraphTerm {
                 cut_integrands.insert(*cut_cff_index, evaluator_stack);
             }
             integrand.push(cut_integrands);
+            processes::cut_finished(
+                "",
+                &graph.graph.name,
+                graph.derived_data.raised_data.raised_cut_groups[raised_cut_id]
+                    .cuts
+                    .len(),
+            );
         }
 
         let mut ct_evaluators = TiVec::new();
@@ -911,6 +900,11 @@ impl CrossSectionGraphTerm {
                 graph: graph.graph.clone(),
                 cut_esurface: graph.cut_esurface.clone(),
                 cuts: graph.cuts.clone(),
+                threshold_candidate_esurface_ids: graph
+                    .derived_data
+                    .threshold_candidate_esurface_ids
+                    .clone(),
+                cut_threshold_associations: graph.derived_data.cut_threshold_associations.clone(),
                 multi_channeling_setup: LmbMultiChannelingSetup {
                     channels: TiVec::new(),
                     graph: graph.graph.clone(), // will be overwritten later,
@@ -983,7 +977,7 @@ impl CrossSectionGraphTerm {
         mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
     ) -> Result<()> {
         for raised_cut_integrands in self.integrand.iter_mut() {
-            for (_cut_cff_index, evaluator_stack) in raised_cut_integrands.iter_mut() {
+            for evaluator_stack in raised_cut_integrands.values_mut() {
                 evaluator_stack.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
@@ -999,12 +993,11 @@ impl CrossSectionGraphTerm {
 
     fn generate_event_for_cut<T: FloatLike>(
         &self,
-        model: &Model,
+        event_context: CutEventGenerationContext<'_>,
         t_scaling_solution: &NewtonIterationResult<T>,
         momentum_sample: &MomentumSample<T>,
         cut_id: CutId,
         cut: &CrossSectionCut,
-        channel_id: Option<ChannelIndex>,
     ) -> Result<GenericEvent<T>> {
         let rescaled_momenta =
             momentum_sample.rescaled_loop_momenta(&t_scaling_solution.solution, Subspace::None);
@@ -1012,9 +1005,22 @@ impl CrossSectionGraphTerm {
         let mut new_event = GenericEvent::<T>::default();
         new_event.cut_info.cut_id = cut_id.0;
         new_event.cut_info.orientation_id = momentum_sample.sample.orientation;
-        new_event.cut_info.lmb_channel_id = channel_id.map(usize::from);
-        new_event.cut_info.lmb_channel_edge_ids =
-            channel_id.map(|channel_id| self.multi_channeling_setup.channel_edge_ids(channel_id));
+        new_event.cut_info.lmb_channel_id = event_context.channel_id.map(usize::from);
+        new_event.cut_info.lmb_channel_edge_ids = event_context
+            .channel_id
+            .map(|channel_id| {
+                let parameterization_settings = event_context
+                    .settings
+                    .sampling
+                    .get_parameterization_settings()
+                    .expect("LMB channel event metadata requires a parameterization.");
+                self.multi_channeling_setup.effective_channel_edge_ids(
+                    channel_id,
+                    &self.multi_channeling_setup.graph.name,
+                    &parameterization_settings,
+                )
+            })
+            .transpose()?;
         // Set initial momenta and PDGs for the event
         new_event
             .kinematic_configuration
@@ -1082,24 +1088,26 @@ impl CrossSectionGraphTerm {
                 Flow::Source => edge_pdg,
                 Flow::Sink => {
                     edge_spatial_momentum = -edge_spatial_momentum;
-                    model
+                    event_context
+                        .model
                         .get_particle_from_pdg(edge_pdg)
-                        .get_anti_particle(model)
+                        .get_anti_particle(event_context.model)
                         .pdg_code
                 }
             };
 
-            let mass_value = if let Some(mass) = d.data.mass.value(model, &self.param_builder) {
-                if !mass.im.is_zero() {
-                    return Err(eyre!(
-                        "Cut particles should have real-valued masses ({})",
-                        edge_pdg
-                    ));
-                }
-                Some(mass.re)
-            } else {
-                None
-            };
+            let mass_value =
+                if let Some(mass) = d.data.mass.value(event_context.model, &self.param_builder) {
+                    if !mass.im.is_zero() {
+                        return Err(eyre!(
+                            "Cut particles should have real-valued masses ({})",
+                            edge_pdg
+                        ));
+                    }
+                    Some(mass.re)
+                } else {
+                    None
+                };
 
             let cut_four_momentum = edge_spatial_momentum.into_on_shell_four_momentum(mass_value);
 
@@ -1121,8 +1129,21 @@ impl GraphTerm for CrossSectionGraphTerm {
         &mut self.param_builder
     }
 
-    fn get_num_channels(&self) -> usize {
-        self.multi_channeling_setup.channels.len()
+    fn get_num_channels(&self, parameterization_settings: &ParameterizationSettings) -> usize {
+        self.multi_channeling_setup.effective_channel_count(
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )
+    }
+
+    fn selected_lmb_basis_id(
+        &self,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<LmbIndex> {
+        self.multi_channeling_setup.selected_lmb_basis_id(
+            &self.multi_channeling_setup.graph.name,
+            parameterization_settings,
+        )
     }
 
     fn orientation_label(&self, orientation_id: usize) -> Option<String> {
@@ -1134,10 +1155,18 @@ impl GraphTerm for CrossSectionGraphTerm {
             .map(format_orientation_label)
     }
 
-    fn lmb_channel_label(&self, channel_id: ChannelIndex) -> Option<String> {
-        Some(format_lmb_channel_label(
-            &self.multi_channeling_setup.channel_edge_ids(channel_id),
-        ))
+    fn lmb_channel_label(
+        &self,
+        channel_id: ChannelIndex,
+        parameterization_settings: &ParameterizationSettings,
+    ) -> Result<Option<String>> {
+        Ok(Some(format_lmb_channel_label(
+            &self.multi_channeling_setup.effective_channel_edge_ids(
+                channel_id,
+                &self.multi_channeling_setup.graph.name,
+                parameterization_settings,
+            )?,
+        )))
     }
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
@@ -1223,6 +1252,11 @@ impl GraphTerm for CrossSectionGraphTerm {
             .m_uv_value(Complex::new_re(F(settings.general.m_uv)));
         self.graph
             .param_builder
+            .renormalization_localization_scale_value(Complex::new_re(F(settings
+                .general
+                .renormalization_localization_scale)));
+        self.graph
+            .param_builder
             .mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq())));
         self.graph.param_builder.update_model_values(model);
 
@@ -1256,17 +1290,34 @@ impl GraphTerm for CrossSectionGraphTerm {
         let mut differential_result = GraphEvaluationResult::zero(momentum_sample.zero());
         let mut accepted_event_group = GenericEventGroup::default();
 
-        let momentum_sample = if let Some((channel_id, _alpha)) = &context.channel_id {
-            MomentumSample {
-                sample: self.multi_channeling_setup.reinterpret_loop_momenta_impl(
+        let momentum_sample =
+            if let Some((channel_id, _alpha, _channel_weight)) = &context.channel_id {
+                let parameterization_settings = context
+                    .settings
+                    .sampling
+                    .get_parameterization_settings()
+                    .expect("LMB multichanneling requires a parameterization.");
+                let lmb_index = self.multi_channeling_setup.effective_channel_lmb_id(
                     *channel_id,
-                    &momentum_sample.sample,
-                    momentum_sample.sample.loop_mom_cache_id,
-                ),
-            }
-        } else {
-            momentum_sample.clone()
-        };
+                    &self.multi_channeling_setup.graph.name,
+                    &parameterization_settings,
+                )?;
+                self.multi_channeling_setup
+                    .reinterpret_loop_momenta_for_lmb(
+                        lmb_index,
+                        momentum_sample,
+                        momentum_sample.sample.loop_mom_cache_id,
+                    )
+            } else if let Some(lmb_basis_id) = context.lmb_basis_id {
+                self.multi_channeling_setup
+                    .reinterpret_loop_momenta_for_lmb(
+                        lmb_basis_id,
+                        momentum_sample,
+                        momentum_sample.sample.loop_mom_cache_id,
+                    )
+            } else {
+                momentum_sample.clone()
+            };
 
         crate::debug_tags!(#integration, #sample, #inspect;
             "loop moms: {}",
@@ -1335,15 +1386,18 @@ impl GraphTerm for CrossSectionGraphTerm {
                 context.event_processing_runtime.as_deref_mut(),
                 || {
                     let mut generated = self.generate_event_for_cut::<T>(
-                        context.model,
+                        CutEventGenerationContext {
+                            settings: context.settings,
+                            model: context.model,
+                            channel_id: context
+                                .channel_id
+                                .as_ref()
+                                .map(|(channel_id, _, _)| *channel_id),
+                        },
                         &solution,
                         &momentum_sample,
                         self.raised_data.raised_cut_groups[raised_cut].cuts[0],
                         &self.cuts[self.raised_data.raised_cut_groups[raised_cut].cuts[0]],
-                        context
-                            .channel_id
-                            .as_ref()
-                            .map(|(channel_id, _)| *channel_id),
                     )?;
                     generated.inverse_rotate(context.rotation);
                     Ok(generated)
@@ -1366,6 +1420,43 @@ impl GraphTerm for CrossSectionGraphTerm {
             let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
             let mut threshold_counterterm_weights = Vec::with_capacity(max_occurance);
             let mut kinematic_point = LUCTKinematicPoint::new(momentum_sample.clone());
+            // LMB channel weights partition the fully subtracted LU-cut integrand. Apply the
+            // sampling partition after the raised-residue derivatives: it is not part of the
+            // differentiated physical integrand. This is distinct from the overlap-group
+            // multi-channeling internal to threshold subtraction.
+            let lmb_channel_prefactor = Complex::new_re(
+                if let Some((channel_index, alpha, channel_weight)) = &context.channel_id {
+                    let parameterization_settings = context
+                        .settings
+                        .sampling
+                        .get_parameterization_settings()
+                        .expect("LMB multichanneling requires a parameterization.");
+                    let weighting_settings = LmbChannelWeightingSettings {
+                        graph_name: &self.multi_channeling_setup.graph.name,
+                        model: context.model,
+                        alpha,
+                        channel_weight: *channel_weight,
+                        parameterization_settings: &parameterization_settings,
+                        e_cm: context.settings.kinematics.e_cm,
+                    };
+                    let selected_lmb = self.multi_channeling_setup.effective_channel_lmb_id(
+                        *channel_index,
+                        &self.multi_channeling_setup.graph.name,
+                        &parameterization_settings,
+                    )?;
+                    let cut_momentum_sample =
+                        momentum_sample.rescaled_loop_momenta(&solution.solution, Subspace::None);
+
+                    self.multi_channeling_setup.compute_prefactor_impl(
+                        *channel_index,
+                        selected_lmb,
+                        &cut_momentum_sample,
+                        weighting_settings,
+                    )?
+                } else {
+                    momentum_sample.one()
+                },
+            );
             for num_esurfaces in 1..=max_occurance {
                 let dual_shape = if num_esurfaces > 1 {
                     Some(HyperDual::<F<T>>::new(
@@ -1466,23 +1557,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                         .push(esurface_derivatives.clone());
                 }
 
-                let prefactor = Complex::new_re(
-                    if let Some((_channel_index, _alpha)) = &context.channel_id {
-                        if matches!(lu_params.tstar, DualOrNot::Dual(_)) {
-                            panic!("multi channeling with duals not supported yet");
-                        }
-
-                        self.multi_channeling_setup.compute_prefactor_impl(
-                            *_channel_index,
-                            &rescaled_momenta,
-                            context.model,
-                            _alpha,
-                        )
-                    } else {
-                        F::from_f64(1.0)
-                    },
-                );
-
                 let params = T::get_parameters(
                     &mut self.param_builder,
                     (
@@ -1557,7 +1631,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 debug!("pass_two_result: {:+16e}", pass_two_result);
                 //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
-                let bare_contribution = pass_two_result * prefactor;
+                let bare_contribution = pass_two_result * lmb_channel_prefactor.clone();
                 bare_cut_total += bare_contribution.clone();
                 cut_results[raised_cut].push(bare_contribution);
             }
@@ -1578,7 +1652,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     orientations,
                     context.evaluation_metadata,
                     context.record_primary_timing,
-                )?
+                )? * lmb_channel_prefactor.clone()
             };
 
             threshold_counterterm_weights.push(ct_result.clone());

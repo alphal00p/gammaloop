@@ -4,9 +4,27 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+chrono = { workspace = true }
+clap = { workspace = true, features = ["derive"], optional = true }
+colored = { workspace = true }
+gammaloop-tracing-filter-macros = { workspace = true }
+itertools = { workspace = true }
+pyo3 = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+spenso = { workspace = true, features = ["shadowing"], optional = true }
+symbolica = { workspace = true, optional = true }
+tabled = { workspace = true, features = ["ansi"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter", "registry", "std"] }
+gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }
 
-[dev-dependencies]
-tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "registry", "std"] }
+[dependencies.tracing-subscriber]
+workspace = true
+features = ["env-filter", "fmt", "registry", "std"]
+
+[features]
+default = []
+clap = ["dep:clap"]
+python_api = ["dep:pyo3"]
+symbolica = ["dep:spenso", "dep:symbolica"]

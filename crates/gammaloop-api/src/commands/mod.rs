@@ -13,6 +13,8 @@ use crate::{
     CLISettings,
 };
 use symbolica::atom::Atom;
+pub mod approach;
+pub use approach::Approach;
 pub mod commands_block;
 pub use commands_block::StartCommandsBlock;
 pub mod display;
@@ -31,6 +33,8 @@ pub mod remove;
 pub use remove::Remove;
 pub mod save;
 pub use save::Save;
+pub mod select;
+pub use select::Select;
 pub mod set;
 pub mod shell;
 pub use set::Set;
@@ -108,11 +112,16 @@ pub enum Commands {
 
     Generate(Generate),
 
+    Select(Select),
+
     /// Quit gammaloop
     Quit(SaveState),
     /// Inspect a single phase‑space point / momentum configuration
     // #[clap(subcommand)]
     Inspect(Inspect),
+
+    /// Approach a phase-space point along one or more axes
+    Approach(Approach),
 
     Evaluate(Evaluate),
 
@@ -187,6 +196,9 @@ impl Commands {
             Commands::Inspect(inspect) => {
                 let _ = inspect.run(state)?;
             }
+            Commands::Approach(approach) => {
+                let _ = approach.run(state, global_cli_settings)?;
+            }
             Commands::Bench {
                 samples,
                 process,
@@ -225,6 +237,9 @@ impl Commands {
                     &global_cli_settings.global,
                     default_runtime_settings,
                 )?
+            }
+            Commands::Select(s) => {
+                s.run(state, global_cli_settings)?;
             }
             Commands::Integrate(g) => {
                 return Ok(CommandExecution::continue_with(CommandOutput::Integrate(
@@ -285,10 +300,127 @@ mod tests {
     use super::Commands;
     use crate::{
         commands::generate::{Generate, GenerateCmd, ProcessArgs},
-        state::{RunHistory, State},
+        state::{ProcessRef, RunHistory, State},
         CLISettings,
     };
     use gammalooprs::settings::RuntimeSettings;
+
+    #[test]
+    fn select_command_parses_graph_names() {
+        let command: Commands =
+            "select -p #0 -i default --with-graph-names GL04 GL05 --without-graph-names GL06"
+                .parse()
+                .unwrap();
+        match command {
+            Commands::Select(select) => {
+                assert_eq!(select.process, Some(ProcessRef::Id(0)));
+                assert_eq!(select.integrand_name.as_deref(), Some("default"));
+                assert_eq!(
+                    select.with_graph_names,
+                    vec!["GL04".to_string(), "GL05".to_string()]
+                );
+                assert_eq!(select.without_graph_names, vec!["GL06".to_string()]);
+            }
+            other => panic!("expected select command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn select_command_parses_filter_options() {
+        let command: Commands = "select -p #0 -i default --amplitude-graphs --with-raised-propagator-signatures '[2]' --without-massive-raised-propagator-signatures '[]' --with-cycle-signatures '[(3,21)]' --without-cycle-signatures '[(ghost)]' --with-vertices '[V_6,V_9]' --without-vertices '[V_36]' --with-particles '[t,b]' '[g]' --without-particles '(e+,e-)'"
+            .parse()
+            .unwrap();
+        match command {
+            Commands::Select(select) => {
+                assert!(select.amplitude_graphs);
+                assert_eq!(
+                    select.with_raised_propagator_signatures,
+                    vec!["[2]".to_string()]
+                );
+                assert_eq!(
+                    select.without_massive_raised_propagator_signatures,
+                    vec!["[]".to_string()]
+                );
+                assert_eq!(select.with_cycle_signatures, vec!["[(3,21)]".to_string()]);
+                assert_eq!(
+                    select.without_cycle_signatures,
+                    vec!["[(ghost)]".to_string()]
+                );
+                assert_eq!(select.with_vertices, vec!["[V_6,V_9]".to_string()]);
+                assert_eq!(select.without_vertices, vec!["[V_36]".to_string()]);
+                assert_eq!(
+                    select.with_particles,
+                    vec!["[t,b]".to_string(), "[g]".to_string()]
+                );
+                assert_eq!(select.without_particles, vec!["(e+,e-)".to_string()]);
+            }
+            other => panic!("expected select command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn select_command_parses_output_targets() {
+        let command: Commands = "select -p #0 -i default --with-graph-names GL04 --output_process selected_proc --output_integrand selected_itg --clear-existing-processes"
+            .parse()
+            .unwrap();
+        match command {
+            Commands::Select(select) => {
+                assert_eq!(select.process, Some(ProcessRef::Id(0)));
+                assert_eq!(select.integrand_name.as_deref(), Some("default"));
+                assert_eq!(select.output_process.as_deref(), Some("selected_proc"));
+                assert_eq!(select.output_integrand.as_deref(), Some("selected_itg"));
+                assert!(select.clear_existing_processes);
+            }
+            other => panic!("expected select command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn approach_command_parses_axes_spacing_and_output() {
+        let command: Commands = "approach -p #0 -i default -x 0.5 0.25 --approach-axis 1.0,0.0 --approach-axis 0.0,1.0 --n-points 3 --logarithmic --min-abs-t 1e-4 --n-cores 2 --output-results approach.json"
+            .parse()
+            .unwrap();
+        match command {
+            Commands::Approach(approach) => {
+                assert_eq!(approach.process, Some(ProcessRef::Id(0)));
+                assert_eq!(approach.integrand_name.as_deref(), Some("default"));
+                assert_eq!(approach.point, vec![0.5, 0.25]);
+                assert_eq!(
+                    approach.approach_axes,
+                    vec!["1.0,0.0".to_string(), "0.0,1.0".to_string()]
+                );
+                assert_eq!(approach.n_points, 3);
+                assert!(approach.logarithmic);
+                assert!(!approach.linear);
+                assert_eq!(approach.min_abs_t, 1.0e-4);
+                assert_eq!(approach.n_cores, Some(2));
+                assert_eq!(
+                    approach.output_results.as_deref(),
+                    Some("approach.json".as_ref())
+                );
+            }
+            other => panic!("expected approach command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn approach_command_parses_momentum_space_selectors() {
+        let command: Commands = "approach -p #0 -i default -x 1.0,-7.0e-2,0.0,1.0 --approach-axis=-1.0e-3,0.0,0.0,1.0 --n-points 1 --linear --n-cores 1 --momentum-space --graph-id 2 --orientation-id 1"
+            .parse()
+            .unwrap();
+        match command {
+            Commands::Approach(approach) => {
+                assert_eq!(approach.point, vec![1.0, -7.0e-2, 0.0, 1.0]);
+                assert_eq!(approach.approach_axes, vec!["-1.0e-3,0.0,0.0,1.0"]);
+                assert!(approach.momentum_space);
+                assert!(approach.linear);
+                assert_eq!(approach.graph_id, Some(2));
+                assert_eq!(approach.orientation_id, Some(1));
+                assert_eq!(approach.n_cores, Some(1));
+            }
+            other => panic!("expected approach command, got {other:?}"),
+        }
+    }
 
     #[test]
     fn generate_rejects_compilation_into_active_state_in_read_only_mode() {

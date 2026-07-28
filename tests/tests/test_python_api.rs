@@ -88,7 +88,7 @@ def run_commands(api, commands):
     for command in commands:
         api.run(command)
 
-def summarize_result(result):
+def summarize_sample_result(result):
     return {{
         "formatted": str(result),
         "event_groups_len": len(result.event_groups),
@@ -98,10 +98,6 @@ def summarize_result(result):
             if result.event_groups and result.event_groups[0].events
             else 0
         ),
-        "observable_keys": sorted(result.observables.keys()),
-        "histogram_bin_counts": {{
-            name: len(hist.bins) for name, hist in result.observables.items()
-        }},
         "generated_event_count": result.generated_event_count,
         "accepted_event_count": result.accepted_event_count,
         "event_processing_time_seconds": result.event_processing_time_seconds,
@@ -118,10 +114,20 @@ def summarize_result(result):
         ],
     }}
 
+def summarize_result(result):
+    summary = summarize_sample_result(result)
+    summary.update({{
+        "observable_keys": sorted(result.observables.keys()),
+        "histogram_bin_counts": {{
+            name: len(hist.bins) for name, hist in result.observables.items()
+        }},
+    }})
+    return summary
+
 def summarize_batch_result(result):
     return {{
         "formatted": str(result),
-        "samples": [summarize_result(sample) for sample in result.samples],
+        "samples": [summarize_sample_result(sample) for sample in result.samples],
         "observable_keys": sorted(result.observables.keys()),
         "histogram_bin_counts": {{
             name: len(hist.bins) for name, hist in result.observables.items()
@@ -405,8 +411,7 @@ payload = {
         payload["history_commands"],
         serde_json::json!([
             "set global kv global.display_directive=warn",
-            "set global kv global.logfile_directive=error",
-            "set default-runtime kv general.mu_r=3.0",
+            "run demo -c 'set default-runtime kv general.mu_r=3.0'",
         ])
     );
     assert_eq!(payload["global_display_directive"].as_str(), Some("warn"));

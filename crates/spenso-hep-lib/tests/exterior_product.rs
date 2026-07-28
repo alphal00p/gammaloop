@@ -28,7 +28,7 @@ fn exterior_prod_simple() {
       node	 [shape=circle,height=0.1,label=""];
       overlap = "scale";
       layout = "neato";
-
+      tree = 1H
       0	 [label = "∏"];
       1	 [label= "L:g()"];
       2	 [label= "L:g()"];

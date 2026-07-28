@@ -4,7 +4,7 @@ use crate::{
         builder::HedgeGraphBuilder,
         involution::{Flow, Hedge},
         nodestore::NodeStorageOps,
-        subgraph::{ModifySubSet, SuBitGraph},
+        subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
         HedgeGraph, NodeIndex,
     },
     parser::{DotGraph, DotVertexData},
@@ -222,6 +222,61 @@ fn extract_normal() {
 
     println!("{}", extracted.base_dot());
     println!("{}", aligned.base_dot());
+}
+
+#[test]
+fn identify_nodes_of_subgraph_marks_same_self_edges() {
+    let aligned: DotGraph = dot!(
+    digraph {
+      ext4 [flow=sink];
+      0 -> 1;
+      2-> ext4;
+      0 -> 2;
+      0 -> 3[dir=none];
+      1 -> 2;
+      1 -> 1;
+      1 -> 3;
+      2 -> 3;
+    })
+    .unwrap();
+
+    let nodes = [NodeIndex(1), NodeIndex(2)];
+    let mut subgraph: SuBitGraph = aligned.empty_subgraph();
+    for node in nodes {
+        for hedge in aligned.iter_crown(node) {
+            subgraph.add(hedge);
+        }
+    }
+
+    let mut old = aligned.clone();
+    let (_, old_self_edges): (_, SuBitGraph) =
+        old.identify_nodes_without_self_edges(&nodes, DotVertexData::empty());
+
+    let mut new = aligned.clone();
+    let (_, new_self_edges) = new
+        .identify_nodes_of_subgraph_without_self_edges::<_, SuBitGraph>(
+            &subgraph,
+            DotVertexData::empty(),
+        )
+        .unwrap();
+    assert_eq!(
+        old_self_edges.included_iter().collect::<Vec<_>>(),
+        new_self_edges.included_iter().collect::<Vec<_>>()
+    );
+
+    let mut marked = aligned;
+    let mut marked_self_edges: SuBitGraph = marked.empty_subgraph();
+    marked
+        .identify_nodes_of_subgraph_marking_self_edges(
+            &subgraph,
+            DotVertexData::empty(),
+            &mut marked_self_edges,
+        )
+        .unwrap();
+    assert_eq!(
+        old_self_edges.included_iter().collect::<Vec<_>>(),
+        marked_self_edges.included_iter().collect::<Vec<_>>()
+    );
 }
 
 #[test]

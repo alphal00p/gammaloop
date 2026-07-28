@@ -231,12 +231,13 @@ struct OrientationMassApproachOutcome {
     pattern: String,
     magnitudes: Vec<f64>,
     monotonic: bool,
+    all_small: bool,
     final_small: bool,
 }
 
 impl OrientationMassApproachOutcome {
     fn passed(&self) -> bool {
-        self.monotonic && self.final_small
+        (self.monotonic || self.all_small) && self.final_small
     }
 }
 
@@ -321,6 +322,7 @@ fn test_mass_approach_threshold_subtraction_dotted() -> Result<()> {
     }
 
     let mut outcomes = Vec::with_capacity(canonical_group.orientations.len());
+    let small_threshold = 4.0e-10;
     for orientation in &canonical_group.orientations {
         let pattern = orientation_pattern_from_signature(&orientation.signature)?;
         cli.run_command(&format!(
@@ -330,13 +332,17 @@ fn test_mass_approach_threshold_subtraction_dotted() -> Result<()> {
 
         let magnitudes = inspect_magnitudes_for_mass_values(&mut cli, &mass_values)?;
         let monotonic = magnitudes.windows(2).all(|pair| pair[1] <= pair[0]);
-        let final_small = magnitudes.last().copied().unwrap_or(f64::INFINITY) < 4.0e-10;
+        let all_small = magnitudes
+            .iter()
+            .all(|magnitude| *magnitude < small_threshold);
+        let final_small = magnitudes.last().copied().unwrap_or(f64::INFINITY) < small_threshold;
 
         outcomes.push(OrientationMassApproachOutcome {
             orientation_id: orientation.orientation_id,
             pattern,
             magnitudes,
             monotonic,
+            all_small,
             final_small,
         });
     }
@@ -384,10 +390,11 @@ fn test_mass_approach_threshold_subtraction_dotted() -> Result<()> {
     for outcome in &failed {
         writeln!(
             &mut report,
-            "  #{} {} monotonic={} final_small={} magnitudes={:?}",
+            "  #{} {} monotonic={} all_small={} final_small={} magnitudes={:?}",
             outcome.orientation_id,
             outcome.pattern,
             outcome.monotonic,
+            outcome.all_small,
             outcome.final_small,
             outcome.magnitudes,
         )

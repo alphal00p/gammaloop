@@ -25,15 +25,15 @@ use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 use crate::{GammaLoopContext, define_index};
 
 use crate::integrands::process::GenericEvaluator;
-use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
 };
+use crate::momentum::{SignOrZero, ThreeMomentum};
 use crate::processes::CrossSectionCut;
 use crate::utils::hyperdual_utils::new_constant;
 use crate::utils::{
-    F, FloatLike, GS, compute_loop_part, compute_loop_part_subspace, compute_shift_part,
-    compute_shift_part_subspace, compute_t_part_of_shift_part, cut_energy,
+    ESURFACE_SHIFT_THRESHOLD, F, FloatLike, GS, compute_loop_part, compute_loop_part_subspace,
+    compute_shift_part, compute_shift_part_subspace, compute_t_part_of_shift_part, cut_energy,
     external_energy_atom_from_index, ose_atom_from_index,
 };
 use crate::uv::uv_graph::UVE;
@@ -51,6 +51,65 @@ pub struct Esurface {
     //pub subspace_graph: InternalSubGraph,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NonExistingEsurfaceReason {
+    NoExternalShift,
+    ShiftNotNegative,
+    NoRadialDependence,
+    NoRealZero,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum EsurfaceExistence<T: FloatLike> {
+    NonExisting {
+        normalized_margin: Option<F<T>>,
+        reason: NonExistingEsurfaceReason,
+    },
+    Pinched {
+        normalized_margin: F<T>,
+    },
+    Existing {
+        normalized_margin: F<T>,
+    },
+}
+
+impl<T: FloatLike> EsurfaceExistence<T> {
+    pub(crate) fn is_existing(&self) -> bool {
+        matches!(self, Self::Existing { .. })
+    }
+
+    pub(crate) fn normalized_margin(&self) -> Option<&F<T>> {
+        match self {
+            Self::NonExisting {
+                normalized_margin, ..
+            } => normalized_margin.as_ref(),
+            Self::Pinched { normalized_margin } | Self::Existing { normalized_margin } => {
+                Some(normalized_margin)
+            }
+        }
+    }
+
+    pub(crate) fn label(&self) -> &'static str {
+        match self {
+            Self::NonExisting { .. } => "non_existing",
+            Self::Pinched { .. } => "pinched",
+            Self::Existing { .. } => "existing",
+        }
+    }
+
+    pub(crate) fn non_existing_reason(&self) -> Option<NonExistingEsurfaceReason> {
+        match self {
+            Self::NonExisting { reason, .. } => Some(*reason),
+            Self::Pinched { .. } | Self::Existing { .. } => None,
+        }
+    }
+}
+
+pub(crate) fn esurface_value_is_strictly_inside<T: FloatLike>(value: &F<T>, e_cm: &F<T>) -> bool {
+    let interior_tolerance = value.epsilon() * value.from_i64(8) * e_cm;
+    !value.is_nan() && !value.is_infinite() && value < &(-interior_tolerance)
+}
+
 impl PartialEq for Esurface {
     fn eq(&self, other: &Self) -> bool {
         self.energies == other.energies && self.external_shift == other.external_shift
@@ -60,6 +119,20 @@ impl PartialEq for Esurface {
 impl Eq for Esurface {}
 
 impl Esurface {
+    pub(crate) fn has_radial_dependence_in_subspace(
+        &self,
+        subspace: &SubspaceData,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        graph: &Graph,
+    ) -> bool {
+        let lmb = subspace.get_lmb(all_lmbs);
+        subspace.contains(&self.energies, graph).any(|index| {
+            subspace
+                .project_loop_signature(&lmb.edge_signatures[index].internal)
+                .any(|sign| sign.is_sign())
+        })
+    }
+
     pub(crate) fn contains_all_with_minus_sign(&self, edges: &[EdgeIndex]) -> bool {
         edges.iter().all(|edge| {
             self.external_shift
@@ -78,6 +151,30 @@ impl Esurface {
         })
     }
     pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
+        self.to_atom_impl(cut_edges, external_energy_atom_from_index)
+    }
+
+    pub(crate) fn to_atom_in_lmb(&self, cut_edges: &[EdgeIndex], lmb: &LoopMomentumBasis) -> Atom {
+        self.to_atom_impl(cut_edges, |edge| {
+            lmb.edge_signatures[edge].external.iter_enumerated().fold(
+                Atom::Zero,
+                |sum, (external_index, sign)| {
+                    let atom = external_energy_atom_from_index(lmb.ext_edges[external_index]);
+                    match sign {
+                        SignOrZero::Zero => sum,
+                        SignOrZero::Plus => sum + atom,
+                        SignOrZero::Minus => sum - atom,
+                    }
+                },
+            )
+        })
+    }
+
+    fn to_atom_impl(
+        &self,
+        cut_edges: &[EdgeIndex],
+        external_shift_atom: impl Fn(EdgeIndex) -> Atom,
+    ) -> Atom {
         let symbolic_energies = self
             .energies
             .iter()
@@ -94,7 +191,7 @@ impl Esurface {
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                external_energy_atom_from_index(*i) * &Atom::num(*sign) + &sum
+                external_shift_atom(*i) * &Atom::num(*sign) + &sum
             });
 
         let builder_atom = Atom::new();
@@ -192,10 +289,53 @@ impl Esurface {
         energy_sum + shift_part
     }
 
+    fn classify_invariant_margin<T: FloatLike>(
+        shift_part: &F<T>,
+        invariant_margin: F<T>,
+        e_cm: &F<T>,
+        normalized_margin_tolerance: &F<T>,
+    ) -> EsurfaceExistence<T> {
+        // /!\ In alphaLoop this boundary needed special care so that `mul_unit` could not
+        // create a discontinuous non-pinched-to-pinched transition for a massless 2->2
+        // E-surface sandwich. Such a surface is `Existing` at non-collinear kinematics, where
+        // its invariant margin is positive, and `Pinched` only at the collinear null boundary.
+        // Here the normalized tolerance band around that boundary is classified as `Pinched`,
+        // so perturbations within the band cannot toggle threshold subtraction. GammaLoop's
+        // statuses are exclusive and only `Existing` surfaces are subtraction targets.
+        // Keep the decision in the original, dimensionful scale. Besides avoiding an
+        // unnecessary division, this preserves the previous existence boundary exactly.
+        let invariant_tolerance = normalized_margin_tolerance * e_cm * e_cm;
+        let normalized_margin = &invariant_margin / (e_cm * e_cm);
+        let shift_tolerance = F::from_f64(ESURFACE_SHIFT_THRESHOLD) * e_cm;
+
+        if invariant_margin.abs() <= invariant_tolerance && shift_part <= &shift_tolerance {
+            return EsurfaceExistence::Pinched { normalized_margin };
+        }
+
+        if shift_part >= &(-shift_tolerance) {
+            return EsurfaceExistence::NonExisting {
+                normalized_margin: Some(normalized_margin),
+                reason: NonExistingEsurfaceReason::ShiftNotNegative,
+            };
+        }
+
+        if invariant_margin > invariant_tolerance {
+            EsurfaceExistence::Existing { normalized_margin }
+        } else if invariant_margin >= -invariant_tolerance {
+            EsurfaceExistence::Pinched { normalized_margin }
+        } else {
+            EsurfaceExistence::NonExisting {
+                normalized_margin: Some(normalized_margin),
+                reason: NonExistingEsurfaceReason::NoRealZero,
+            }
+        }
+    }
+
     #[inline]
     #[allow(clippy::too_many_arguments)]
-    /// TODO: upgrade to a status type
-    pub(crate) fn exists_subspace<T: FloatLike>(
+    /// Classify a surface in an active loop-momentum subspace. Pinched and
+    /// non-existing surfaces remain distinct and are never subtraction targets.
+    pub(crate) fn classify_existence_subspace<T: FloatLike>(
         &self,
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
@@ -205,11 +345,15 @@ impl Esurface {
         real_mass_vector: &EdgeVec<F<T>>,
         reversed_edges: &[EdgeIndex],
         e_cm: &F<T>,
-    ) -> bool {
+        normalized_margin_tolerance: &F<T>,
+    ) -> EsurfaceExistence<T> {
         //todo!("refactor for subspaces");
         if self.external_shift.is_empty() {
             debug!("esurface has no external shift, cannot exist");
-            return false;
+            return EsurfaceExistence::NonExisting {
+                normalized_margin: None,
+                reason: NonExistingEsurfaceReason::NoExternalShift,
+            };
         }
 
         let shift_part = self.compute_shift_part_from_momenta_in_subspace(
@@ -221,112 +365,129 @@ impl Esurface {
             real_mass_vector,
         );
 
-        if shift_part < -F::from_ff64(SHIFT_THRESHOLD) * e_cm {
-            let lmb = subspace.get_lmb(all_lmbs);
+        let subspace_energy_indices = subspace.contains(&self.energies, graph).collect_vec();
 
-            let mass_sum: F<T> = subspace
-                .contains(&self.energies, graph)
-                .map(|index| &real_mass_vector[index])
-                .fold(F::from_f64(0.0), |acc, x| acc + x);
-
-            let zero_vector = ThreeMomentum::new(e_cm.zero(), e_cm.zero(), e_cm.zero());
-
-            let graph_vector = self
-                .external_shift
-                .iter()
-                .map(|(index, sign)| {
-                    let external_signature = &lmb.edge_signatures[*index].external;
-                    compute_shift_part(external_signature, external_moms).spatial
-                        * F::from_f64(*sign as f64)
-                })
-                .reduce(|acc, x| acc + x)
-                .unwrap_or_else(|| zero_vector.clone());
-
-            let other_part = subspace
-                .does_not_contain(&self.energies, graph)
-                .map(|index| {
-                    let signature = &lmb.edge_signatures[index];
-                    let sign = if reversed_edges.contains(&index) {
-                        -F::from_f64(1.0)
-                    } else {
-                        F::from_f64(1.0)
-                    };
-
-                    signature.compute_momentum(
-                        loop_moms,
-                        &external_moms
-                            .iter()
-                            .map(|mom| mom.spatial.clone())
-                            .collect::<TiVec<ExternalIndex, _>>(),
-                    ) * sign
-                })
-                .reduce(|acc, x| acc + x)
-                .unwrap_or_else(|| zero_vector.clone());
-
-            let shift_vector_sq = (&graph_vector + &other_part).norm_squared();
-
-            if &shift_part * &shift_part - &shift_vector_sq - &mass_sum * &mass_sum
-                > F::from_ff64(EXISTENCE_THRESHOLD) * e_cm * e_cm
-            {
-                true
-            } else {
-                debug!(
-                    "spatial part too large: shift_part^2: {}, shift_vector_sq: {}, mass_sum^2: {}",
-                    &shift_part * &shift_part,
-                    shift_vector_sq,
-                    &mass_sum * &mass_sum
-                );
-                false
-            }
-        } else {
-            debug!("shift part not negative enough: {}", shift_part);
-            false
+        if !self.has_radial_dependence_in_subspace(subspace, all_lmbs, graph) {
+            debug!(
+                "esurface has no radial energy in this subspace, cannot bound a threshold region"
+            );
+            return EsurfaceExistence::NonExisting {
+                normalized_margin: None,
+                reason: NonExistingEsurfaceReason::NoRadialDependence,
+            };
         }
+
+        let lmb = subspace.get_lmb(all_lmbs);
+        let mass_sum: F<T> = subspace_energy_indices
+            .iter()
+            .map(|&index| &real_mass_vector[index])
+            .fold(F::from_f64(0.0), |acc, x| acc + x);
+
+        let zero_vector = ThreeMomentum::new(e_cm.zero(), e_cm.zero(), e_cm.zero());
+
+        let graph_vector = self
+            .external_shift
+            .iter()
+            .map(|(index, sign)| {
+                let external_signature = &lmb.edge_signatures[*index].external;
+                compute_shift_part(external_signature, external_moms).spatial
+                    * F::from_f64(*sign as f64)
+            })
+            .reduce(|acc, x| acc + x)
+            .unwrap_or_else(|| zero_vector.clone());
+
+        let other_part = subspace
+            .does_not_contain(&self.energies, graph)
+            .map(|index| {
+                let signature = &lmb.edge_signatures[index];
+                let sign = if reversed_edges.contains(&index) {
+                    -F::from_f64(1.0)
+                } else {
+                    F::from_f64(1.0)
+                };
+
+                signature.compute_momentum(
+                    loop_moms,
+                    &external_moms
+                        .iter()
+                        .map(|mom| mom.spatial.clone())
+                        .collect::<TiVec<ExternalIndex, _>>(),
+                ) * sign
+            })
+            .reduce(|acc, x| acc + x)
+            .unwrap_or_else(|| zero_vector.clone());
+
+        let shift_vector_sq = (&graph_vector + &other_part).norm_squared();
+        let invariant_margin = &shift_part * &shift_part - &shift_vector_sq - &mass_sum * &mass_sum;
+        let classification = Self::classify_invariant_margin(
+            &shift_part,
+            invariant_margin,
+            e_cm,
+            normalized_margin_tolerance,
+        );
+
+        if !classification.is_existing() {
+            debug!(
+                "subspace esurface classified as {}: shift_part^2: {}, shift_vector_sq: {}, mass_sum^2: {}, normalized_margin: {:?}",
+                classification.label(),
+                &shift_part * &shift_part,
+                shift_vector_sq,
+                &mass_sum * &mass_sum,
+                classification.normalized_margin(),
+            );
+        }
+
+        classification
     }
 
     #[inline]
-    /// TODO: upgrade to a status type
-    pub(crate) fn exists<T: FloatLike>(
+    /// Classify a full-space surface. Pinched and non-existing surfaces remain
+    /// distinct and are never subtraction targets.
+    pub(crate) fn classify_existence<T: FloatLike>(
         &self,
         external_moms: &ExternalFourMomenta<F<T>>,
         lmb: &LoopMomentumBasis,
         real_mass_vector: &EdgeVec<F<T>>,
         e_cm: &F<T>,
-    ) -> bool {
+        normalized_margin_tolerance: &F<T>,
+    ) -> EsurfaceExistence<T> {
         //todo!("refactor for subspaces");
         if self.external_shift.is_empty() {
-            return false;
+            return EsurfaceExistence::NonExisting {
+                normalized_margin: None,
+                reason: NonExistingEsurfaceReason::NoExternalShift,
+            };
         }
 
         let shift_part = self.compute_shift_part_from_momenta(external_moms, lmb);
+        let mass_sum: F<T> = self
+            .energies
+            .iter()
+            .map(|index| &real_mass_vector[*index])
+            .fold(F::from_f64(0.0), |acc, x| acc + x);
 
-        if shift_part < -F::from_ff64(SHIFT_THRESHOLD) * e_cm {
-            let mass_sum: F<T> = self
-                .energies
-                .iter()
-                .map(|index| &real_mass_vector[*index])
-                .fold(F::from_f64(0.0), |acc, x| acc + x);
+        let zero_vector = ThreeMomentum::new(e_cm.zero(), e_cm.zero(), e_cm.zero());
 
-            let zero_vector = ThreeMomentum::new(e_cm.zero(), e_cm.zero(), e_cm.zero());
+        let shift_vector = self
+            .external_shift
+            .iter()
+            .map(|(index, sign)| {
+                let external_signature = &lmb.edge_signatures[*index].external;
+                compute_shift_part(external_signature, external_moms).spatial
+                    * F::from_f64(*sign as f64)
+            })
+            .reduce(|acc, x| acc + x)
+            .unwrap_or_else(|| zero_vector.clone());
 
-            let shift_vector = self
-                .external_shift
-                .iter()
-                .map(|(index, sign)| {
-                    let external_signature = &lmb.edge_signatures[*index].external;
-                    compute_shift_part(external_signature, external_moms).spatial
-                        * F::from_f64(*sign as f64)
-                })
-                .reduce(|acc, x| acc + x)
-                .unwrap_or_else(|| zero_vector.clone());
+        let shift_vector_sq = shift_vector.norm_squared();
+        let invariant_margin = &shift_part * &shift_part - shift_vector_sq - &mass_sum * &mass_sum;
 
-            let shift_vector_sq = shift_vector.norm_squared();
-
-            &shift_part * &shift_part - shift_vector_sq - &mass_sum * &mass_sum
-                > F::from_ff64(EXISTENCE_THRESHOLD) * e_cm * e_cm
-        } else {
-            false
-        }
+        Self::classify_invariant_margin(
+            &shift_part,
+            invariant_margin,
+            e_cm,
+            normalized_margin_tolerance,
+        )
     }
 
     /// Only compute the shift part, useful for center finding.
@@ -877,9 +1038,6 @@ impl Display for ExistingEsurfaceId {
     }
 }
 
-const SHIFT_THRESHOLD: F<f64> = F(1.0e-13);
-const EXISTENCE_THRESHOLD: F<f64> = F(1.0e-7);
-
 pub type ExternalShift = Vec<(EdgeIndex, i64)>;
 
 /// add two external shifts, eliminates zero signs and sorts
@@ -1016,17 +1174,166 @@ mod tests {
     use linnet::half_edge::builder::HedgeGraphBuilder;
     use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
     use linnet::half_edge::nodestore::NodeStorageVec;
+    use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
 
     use crate::cff::cff_graph::VertexSet;
+    use crate::graph::LoopMomentumBasis;
+    use crate::momentum::{
+        FourMomentum, SignOrZero,
+        sample::{ExternalFourMomenta, ExternalIndex},
+        signature::LoopExtSignature,
+    };
     use crate::processes::CrossSectionCut;
     use crate::{
         cff::{esurface::Esurface, generation::ShiftRewrite},
-        utils::{F, test_utils::dummy_hedge_graph},
+        utils::{
+            DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F,
+            external_energy_atom_from_index, test_utils::dummy_hedge_graph,
+        },
     };
 
-    use super::add_external_shifts;
+    use super::{EsurfaceExistence, add_external_shifts};
+
+    #[test]
+    fn classification_preserves_the_previous_existing_predicate() {
+        let e_cm = F(10.0);
+        let shift_tolerance = F(ESURFACE_SHIFT_THRESHOLD) * e_cm;
+        let normalized_margin_tolerance = F(DEFAULT_ESURFACE_EXISTENCE_THRESHOLD);
+        let invariant_tolerance = normalized_margin_tolerance * e_cm * e_cm;
+
+        for shift_factor in [-2, -1, 0, 1, 2] {
+            let shift_part = shift_tolerance * shift_tolerance.from_i64(shift_factor);
+            for margin_factor in [-2, -1, 0, 1, 2] {
+                let invariant_margin =
+                    invariant_tolerance * invariant_tolerance.from_i64(margin_factor);
+                let was_existing =
+                    shift_part < -&shift_tolerance && invariant_margin > invariant_tolerance;
+                let classification = Esurface::classify_invariant_margin(
+                    &shift_part,
+                    invariant_margin,
+                    &e_cm,
+                    &normalized_margin_tolerance,
+                );
+
+                assert_eq!(
+                    classification.is_existing(),
+                    was_existing,
+                    "existence changed for shift factor {shift_factor} and margin factor {margin_factor}",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn massless_two_to_two_surface_is_existing_away_from_collinear_pinch() {
+        let dummy_graph = dummy_hedge_graph(4);
+        let lmb = LoopMomentumBasis {
+            tree: SuBitGraph::empty(0),
+            loop_edges: vec![EdgeIndex::from(2)].into(),
+            ext_edges: vec![].into(),
+            edge_signatures: dummy_graph
+                .new_edgevec_from_iter(vec![
+                    LoopExtSignature::from((vec![0], vec![1, 0])),
+                    LoopExtSignature::from((vec![0], vec![0, 1])),
+                    LoopExtSignature::from((vec![1], vec![0, 0])),
+                    LoopExtSignature::from((vec![-1], vec![-1, -1])),
+                ])
+                .unwrap(),
+        };
+        let esurface = Esurface {
+            energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
+            external_shift: vec![(EdgeIndex::from(0), -1), (EdgeIndex::from(1), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let masses = dummy_graph.new_edgevec_from_iter(vec![F(0.0); 4]).unwrap();
+        // Either side of the 2->2 sandwich determines the same total four-momentum by
+        // momentum conservation, so the incoming pair is sufficient for this classification.
+        let classify_pair = |second_spatial_momentum: (f64, f64), threshold: f64| {
+            let external_momenta = ExternalFourMomenta::from_iter([
+                FourMomentum::from_args(F(5.0), F(5.0), F(0.0), F(0.0)),
+                FourMomentum::from_args(
+                    F(5.0),
+                    F(second_spatial_momentum.0),
+                    F(second_spatial_momentum.1),
+                    F(0.0),
+                ),
+            ]);
+            esurface.classify_existence(&external_momenta, &lmb, &masses, &F(10.0), &F(threshold))
+        };
+
+        assert!(matches!(
+            classify_pair((0.0, 5.0), DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
+            EsurfaceExistence::Existing { .. }
+        ));
+        assert!(matches!(
+            classify_pair((5.0, 0.0), DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
+            EsurfaceExistence::Pinched { .. }
+        ));
+        assert!(matches!(
+            classify_pair((0.0, 5.0), 1.0),
+            EsurfaceExistence::Pinched { .. }
+        ));
+    }
+
+    #[test]
+    fn classifies_existing_pinched_and_non_existing_surfaces() {
+        let dummy_graph = dummy_hedge_graph(5);
+        let lmb = LoopMomentumBasis {
+            tree: SuBitGraph::empty(0),
+            loop_edges: vec![EdgeIndex::from(2), EdgeIndex::from(3)].into(),
+            ext_edges: vec![].into(),
+            edge_signatures: dummy_graph
+                .new_edgevec_from_iter(vec![
+                    LoopExtSignature::from((vec![0, 0], vec![1])),
+                    LoopExtSignature::from((vec![0, 0], vec![-1])),
+                    LoopExtSignature::from((vec![1, 0], vec![0])),
+                    LoopExtSignature::from((vec![0, 1], vec![0])),
+                    LoopExtSignature::from((vec![1, 1], vec![-1])),
+                ])
+                .unwrap(),
+        };
+        let esurface = Esurface {
+            energies: vec![EdgeIndex::from(2), EdgeIndex::from(3), EdgeIndex::from(4)],
+            external_shift: vec![(EdgeIndex::from(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let masses = dummy_graph.new_edgevec_from_iter(vec![F(0.0); 5]).unwrap();
+
+        let classification = |energy| {
+            let external_momenta = ExternalFourMomenta::from_iter([FourMomentum::from_args(
+                F(energy),
+                F(-10.0),
+                F(0.0),
+                F(0.0),
+            )]);
+            esurface.classify_existence(
+                &external_momenta,
+                &lmb,
+                &masses,
+                &F(10.0),
+                &F(DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
+            )
+        };
+
+        assert!(matches!(
+            classification(11.0),
+            EsurfaceExistence::Existing { .. }
+        ));
+        assert!(matches!(
+            classification(10.0),
+            EsurfaceExistence::Pinched { .. }
+        ));
+        assert!(matches!(
+            classification(10.0 + 1.0e-8),
+            EsurfaceExistence::Pinched { .. }
+        ));
+        assert!(matches!(
+            classification(9.0),
+            EsurfaceExistence::NonExisting { .. }
+        ));
+    }
 
     #[test]
     fn test_esurface() {
@@ -1073,6 +1380,85 @@ mod tests {
             vertex_set: VertexSet::dummy(),
             //subspace_graph: dummy_graph.full_graph(),
         };
+    }
+
+    #[test]
+    fn to_atom_in_lmb_uses_canonical_external_edges_not_carrier_edges() {
+        let dummy_graph = dummy_hedge_graph(9);
+        let mut edge_signatures = dummy_graph
+            .new_edgevec_from_iter(
+                (0..9).map(|_| LoopExtSignature::from((Vec::<isize>::new(), vec![0, 0]))),
+            )
+            .unwrap();
+        edge_signatures[EdgeIndex::from(8)] =
+            LoopExtSignature::from((Vec::<isize>::new(), vec![0, 1]));
+        let lmb = LoopMomentumBasis {
+            tree: SuBitGraph::empty(0),
+            loop_edges: vec![].into(),
+            ext_edges: vec![EdgeIndex::from(2), EdgeIndex::from(6)].into(),
+            edge_signatures,
+        };
+        let esurface = Esurface {
+            energies: vec![],
+            external_shift: vec![(EdgeIndex::from(8), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+
+        let atom = esurface.to_atom_in_lmb(&[], &lmb).expand();
+        let expected =
+            (Atom::num(-1) * external_energy_atom_from_index(EdgeIndex::from(6))).expand();
+
+        assert_eq!(atom.to_canonical_string(), expected.to_canonical_string());
+    }
+
+    #[test]
+    fn shift_part_uses_expanded_global_external_slots() {
+        let dummy_graph = dummy_hedge_graph(7);
+        let mut edge_signatures = dummy_graph
+            .new_edgevec_from_iter(
+                (0..7).map(|_| LoopExtSignature::from((Vec::<isize>::new(), vec![0]))),
+            )
+            .unwrap();
+        edge_signatures[EdgeIndex::from(6)] =
+            LoopExtSignature::from((Vec::<isize>::new(), vec![1]));
+        let mut lmb = LoopMomentumBasis {
+            tree: SuBitGraph::empty(0),
+            loop_edges: vec![].into(),
+            ext_edges: vec![EdgeIndex::from(6)].into(),
+            edge_signatures,
+        };
+        lmb.canonicalize_external_order(&(0..7).map(EdgeIndex::from).collect::<Vec<EdgeIndex>>());
+
+        assert_eq!(lmb.ext_edges.len(), 7);
+        assert_eq!(
+            lmb.edge_signatures[EdgeIndex::from(6)].external[ExternalIndex(2)],
+            SignOrZero::Zero
+        );
+        assert_eq!(
+            lmb.edge_signatures[EdgeIndex::from(6)].external[ExternalIndex(6)],
+            SignOrZero::Plus
+        );
+
+        let external_moms: ExternalFourMomenta<F<f64>> = vec![
+            FourMomentum::from([F(10.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(20.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(2000.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(30.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(40.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(50.0), F(0.0), F(0.0), F(0.0)]),
+            FourMomentum::from([F(438.555), F(0.0), F(0.0), F(0.0)]),
+        ]
+        .into();
+        let esurface = Esurface {
+            energies: vec![],
+            external_shift: vec![(EdgeIndex::from(6), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+
+        assert_eq!(
+            esurface.compute_shift_part_from_momenta(&external_moms, &lmb),
+            F(-438.555)
+        );
     }
 
     #[test]

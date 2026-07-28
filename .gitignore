@@ -47,6 +47,10 @@ examples/cli/epem_a_ttxh/NNLO
 examples/**/*state*/
 examples/**/OLD_*
 examples/**/gammaloop_state/
+examples/cli/a_a/**
+!examples/cli/a_a/
+!examples/cli/a_a/*/
+!examples/cli/a_a/*/a_a.toml
 integration-tests/workspace/
 crates/integration-tests/workspace/
 tests/artifacts/
@@ -109,6 +113,9 @@ TEST_OUTPUT*/
 ignore/
 .ignore/
 /~/
+# The repository root is commonly used for an ad-hoc CLI run card. Canonical run cards live in
+# examples, tests, or generated state folders and are unaffected by this root-only rule.
+/run.toml
 
 src/test_resources/gammaloop_models/*.dat
 crates/gammalooprs/src/test_resources/gammaloop_models/*.dat
@@ -271,3 +278,4 @@ log.glog/
 !.jj/repo/config.toml
 output.svg
 crates/gammaloop-api/test_path.toml
+.codex

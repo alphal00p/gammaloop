@@ -1,3 +1,4 @@
+use linnet::half_edge::subgraph::subset::SubSet;
 use log::trace;
 use std::collections::HashMap;
 // use num::Zero;
@@ -12,7 +13,7 @@ use crate::{
         ResetableIterator,
     },
     structure::{
-        HasStructure, StructureContract, TensorStructure, concrete_index::ExpandedIndex,
+        HasStructure, SlotIndex, StructureContract, TensorStructure, concrete_index::ExpandedIndex,
         slot::IsAbstractSlot,
     },
     tensors::data::{DataIterator, DenseTensor, SparseTensor},
@@ -36,8 +37,8 @@ where
         &self,
         other: &DenseTensor<T, I>,
         final_structure: I,
-        i: usize,
-        j: usize,
+        i: SlotIndex,
+        j: SlotIndex,
     ) -> Result<Self::LCM, ContractionError> {
         // trace!("single contract dense dense");
         let zero = self.data[0].try_upgrade().unwrap().into_owned().ref_zero();
@@ -48,7 +49,7 @@ where
         let mut self_class_iter = self.fiber_class(i.into()).iter();
         let mut other_class_iter = other.fiber_class(j.into()).iter();
 
-        let fiber_representation = self.reps()[i];
+        let fiber_representation = self.reps()[i.0];
 
         // Since the resulting structure is a clean concatenation of self\i and other\j we can just iterate in each class and add +1 to the resulting index
         for mut fiber_a in self_class_iter.by_ref() {
@@ -89,8 +90,8 @@ where
         &self,
         other: &SparseTensor<T, I>,
         final_structure: I,
-        i: usize,
-        j: usize,
+        i: SlotIndex,
+        j: SlotIndex,
     ) -> Result<Self::LCM, ContractionError> {
         // trace!("single contract dense sparse");
         let zero = self.data[0].try_upgrade().unwrap().into_owned().ref_zero();
@@ -101,7 +102,7 @@ where
         let mut self_class_iter = self.fiber_class(i.into()).iter();
         let mut other_class_iter = other.fiber_class(j.into()).iter();
 
-        let fiber_representation = self.reps()[i];
+        let fiber_representation = self.reps()[i.0];
 
         for mut fiber_a in self_class_iter.by_ref() {
             for mut fiber_b in other_class_iter.by_ref() {
@@ -146,8 +147,8 @@ where
         &self,
         other: &DenseTensor<T, I>,
         final_structure: I,
-        i: usize,
-        j: usize,
+        i: SlotIndex,
+        j: SlotIndex,
     ) -> Result<Self::LCM, ContractionError> {
         // trace!("single contract sparse dense");
         let zero = if let Some((_, s)) = self.flat_iter().next() {
@@ -165,7 +166,7 @@ where
         let mut self_iter = self.fiber_class(i.into()).iter();
         let mut other_iter = other.fiber_class(j.into()).iter();
 
-        let fiber_representation = self.reps()[i];
+        let fiber_representation = self.reps()[i.0];
 
         for mut fiber_a in self_iter.by_ref() {
             for mut fiber_b in other_iter.by_ref() {
@@ -209,8 +210,8 @@ where
         &self,
         other: &SparseTensor<T, I>,
         final_structure: I,
-        i: usize,
-        j: usize,
+        i: SlotIndex,
+        j: SlotIndex,
     ) -> Result<Self::LCM, ContractionError> {
         trace!("single contract sparse sparse");
 
@@ -222,7 +223,7 @@ where
             let self_iter = self.fiber_class(i.into()).iter();
             let mut other_iter = other.fiber_class(j.into()).iter();
 
-            let metric = self.external_structure()[i].rep().negative()?;
+            let metric = self.external_structure()[i.0].rep().negative()?;
 
             for mut fiber_a in self_iter {
                 for mut fiber_b in other_iter.by_ref() {
@@ -298,9 +299,9 @@ where
         &self,
         other: &DenseTensor<T, I>,
         resulting_structure: <Self::LCM as crate::structure::HasStructure>::Structure,
-        resulting_partition: bitvec::prelude::BitVec,
-        i: usize,
-        j: usize,
+        resulting_partition: SubSet<SlotIndex>,
+        i: SlotIndex,
+        j: SlotIndex,
     ) -> Result<Self::LCM, ContractionError> {
         let zero = self.data[0].try_upgrade().unwrap().into_owned().ref_zero();
         let mut result_data = vec![zero.clone(); resulting_structure.size()?];
@@ -312,7 +313,7 @@ where
         let mut iter_self = self.fiber(FiberData::from(i)).iter(); //The summed over index comes from the actual self structure (and is a single index)
         let mut iter_other = other.fiber(FiberData::from(j)).iter(); // same for other
 
-        let fiber_representation = self.reps()[i];
+        let fiber_representation = self.reps()[i.0];
 
         //We first iterate over the free indices (self_fiber_class)
         for fiber_class_a_id in self_fiber_class_iter.by_ref() {
@@ -328,11 +329,11 @@ where
                     .expanded_index(result_index)?
                     .into_iter()
                     .enumerate()
-                    .partition(|(i, _)| resulting_partition[*i]);
+                    .partition(|(i, _)| resulting_partition[SlotIndex(*i)]);
 
-                expa.indices.insert(i, 0);
+                expa.indices.insert(i.0, 0);
 
-                expb.indices.insert(j, 0);
+                expb.indices.insert(j.0, 0);
 
                 // And now we flatten
                 let shift_a = self.structure().flat_index(&expa).unwrap();
@@ -379,9 +380,9 @@ where
         &self,
         other: &SparseTensor<T, I>,
         resulting_structure: <Self::LCM as crate::structure::HasStructure>::Structure,
-        resulting_partition: bitvec::prelude::BitVec,
-        i: usize,
-        j: usize,
+        resulting_partition: SubSet<SlotIndex>,
+        i: SlotIndex,
+        j: SlotIndex,
     ) -> Result<Self::LCM, ContractionError> {
         let zero = self.data[0].try_upgrade().unwrap().into_owned().ref_zero();
         let mut result_data = vec![zero.clone(); resulting_structure.size()?];
@@ -393,7 +394,7 @@ where
         let mut iter_self = self.fiber(FiberData::from(i)).iter(); //The summed over index comes from the actual self structure (and is a single index)
         let mut iter_other = other.fiber(FiberData::from(j)).iter(); // same for other
 
-        let fiber_representation = self.reps()[i];
+        let fiber_representation = self.reps()[i.0];
 
         //We first iterate over the free indices (self_fiber_class)
         for fiber_class_a_id in self_fiber_class_iter.by_ref() {
@@ -409,11 +410,11 @@ where
                     .expanded_index(result_index)?
                     .into_iter()
                     .enumerate()
-                    .partition(|(i, _)| resulting_partition[*i]);
+                    .partition(|(i, _)| resulting_partition[SlotIndex(*i)]);
 
-                expa.indices.insert(i, 0);
+                expa.indices.insert(i.0, 0);
 
-                expb.indices.insert(j, 0);
+                expb.indices.insert(j.0, 0);
 
                 // And now we flatten
                 let shift_a = self.structure().flat_index(&expa).unwrap();
@@ -462,9 +463,9 @@ where
         &self,
         other: &DenseTensor<T, I>,
         resulting_structure: <Self::LCM as crate::structure::HasStructure>::Structure,
-        resulting_partition: bitvec::prelude::BitVec,
-        i: usize,
-        j: usize,
+        resulting_partition: SubSet<SlotIndex>,
+        i: SlotIndex,
+        j: SlotIndex,
     ) -> Result<Self::LCM, ContractionError> {
         let zero = if let Some((_, s)) = self.flat_iter().next() {
             s.try_upgrade().unwrap().as_ref().ref_zero()
@@ -483,7 +484,7 @@ where
         let mut iter_self = self.fiber(FiberData::from(i)).iter(); //The summed over index comes from the actual self structure (and is a single index)
         let mut iter_other = other.fiber(FiberData::from(j)).iter(); // same for other
 
-        let fiber_representation = self.reps()[i];
+        let fiber_representation = self.reps()[i.0];
 
         //We first iterate over the free indices (self_fiber_class)
         for fiber_class_a_id in self_fiber_class_iter.by_ref() {
@@ -499,11 +500,11 @@ where
                     .expanded_index(result_index)?
                     .into_iter()
                     .enumerate()
-                    .partition(|(i, _)| resulting_partition[*i]);
+                    .partition(|(i, _)| resulting_partition[SlotIndex(*i)]);
 
-                expa.indices.insert(i, 0);
+                expa.indices.insert(i.0, 0);
 
-                expb.indices.insert(j, 0);
+                expb.indices.insert(j.0, 0);
 
                 // And now we flatten
                 let shift_a = self.structure().flat_index(&expa).unwrap();
@@ -551,9 +552,9 @@ where
         &self,
         other: &SparseTensor<T, I>,
         resulting_structure: <Self::LCM as crate::structure::HasStructure>::Structure,
-        resulting_partition: bitvec::prelude::BitVec,
-        i: usize,
-        j: usize,
+        resulting_partition: SubSet<SlotIndex>,
+        i: SlotIndex,
+        j: SlotIndex,
     ) -> Result<Self::LCM, ContractionError> {
         let mut result_data = HashMap::default();
         let zero = self.zero.try_upgrade().unwrap().as_ref().ref_zero();
@@ -565,7 +566,7 @@ where
             let mut iter_self = self.fiber(FiberData::from(i)).iter(); //The summed over index comes from the actual self structure (and is a single index)
             let mut iter_other = other.fiber(FiberData::from(j)).iter(); // same for other
 
-            let fiber_representation = self.reps()[i];
+            let fiber_representation = self.reps()[i.0];
             //We first iterate over the free indices (self_fiber_class)
             for fiber_class_a_id in self_fiber_class_iter.by_ref() {
                 for fiber_class_b_id in other_fiber_class_iter.by_ref() {
@@ -580,11 +581,11 @@ where
                         .expanded_index(result_index)?
                         .into_iter()
                         .enumerate()
-                        .partition(|(i, _)| resulting_partition[*i]);
+                        .partition(|(i, _)| resulting_partition[SlotIndex(*i)]);
 
-                    expa.indices.insert(i, 0);
+                    expa.indices.insert(i.0, 0);
 
-                    expb.indices.insert(j, 0);
+                    expb.indices.insert(j.0, 0);
 
                     // And now we flatten
                     let shift_a = self.structure().flat_index(&expa).unwrap();

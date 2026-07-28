@@ -1,7 +1,3 @@
-use crate::structure::StructureError;
-use crate::structure::dimension::Dimension;
-use crate::structure::representation::Representation;
-use crate::structure::slot::IsAbstractSlot;
 use crate::{
     algebra::{
         algebraic_traits::RefZero,
@@ -10,13 +6,18 @@ use crate::{
     iterators::IteratableTensor,
     structure::{
         CastStructure, HasName, HasStructure, IndexLess, OrderedStructure, PermutedStructure,
-        ScalarStructure, ScalarTensor, TensorStructure, TracksCount,
+        ScalarStructure, ScalarTensor, SlotIndex, TensorStructure, TracksCount,
         concrete_index::{ConcreteIndex, ExpandedIndex, FlatIndex},
         permuted::PermuteTensor,
         representation::RepName,
         slot::{AbsInd, Slot},
     },
 };
+
+use crate::structure::StructureError;
+use crate::structure::dimension::Dimension;
+use crate::structure::representation::Representation;
+use crate::structure::slot::IsAbstractSlot;
 use delegate::delegate;
 
 #[cfg(feature = "shadowing")]
@@ -147,10 +148,10 @@ where
             fn external_indices_iter(&self)-> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
             fn external_dims_iter(&self)-> impl Iterator<Item = Dimension>;
             fn external_structure_iter(&self)-> impl Iterator<Item = Self::Slot>;
-            fn get_slot(&self, i: usize)-> Option<Self::Slot>;
-            fn get_rep(&self, i: usize)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_dim(&self, i: usize)-> Option<Dimension>;
-            fn get_aind(&self, i: usize)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+            fn get_slot(&self, i: impl Into<SlotIndex>)-> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<SlotIndex>)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_dim(&self, i: impl Into<SlotIndex>)-> Option<Dimension>;
+            fn get_aind(&self, i: impl Into<SlotIndex>)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
             fn order(&self)-> usize;
         }
     }
@@ -189,12 +190,12 @@ where
 }
 
 #[cfg(feature = "shadowing")]
-impl<T: Clone, S: TensorStructure, R> ShadowMapping<R> for DenseTensor<T, S>
+impl<T: Clone, S: TensorStructure> ShadowMapping for DenseTensor<T, S>
 where
     S: HasName + Clone,
     S::Name: IntoSymbol,
     S::Args: IntoArgs,
-    R: From<T>,
+    symbolica::atom::Atom: From<T>,
     <<Self::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
     // fn shadow_with_map<'a, U>(
@@ -223,14 +224,16 @@ where
 
     fn append_map<U>(
         &self,
-        fn_map: &mut symbolica::evaluate::FunctionMap<R>,
+        fn_map: &mut symbolica::evaluate::FunctionMap,
         index_to_atom: impl Fn(&Self::Structure, FlatIndex) -> U,
     ) where
         U: TensorCoefficient,
     {
         for (i, d) in self.flat_iter() {
             let labeled_coef = index_to_atom(self.structure(), i).to_atom().unwrap();
-            fn_map.add_constant(labeled_coef.clone(), d.clone().into());
+            fn_map
+                .add_aliases([(labeled_coef.clone(), symbolica::atom::Atom::from(d.clone()))])
+                .unwrap();
         }
     }
 }

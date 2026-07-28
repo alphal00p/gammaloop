@@ -314,7 +314,7 @@ where
         self.0.len()
     }
 
-    pub(crate) fn iter(&'_ self) -> std::slice::Iter<'_, SignOrZero> {
+    pub fn iter(&'_ self) -> std::slice::Iter<'_, SignOrZero> {
         self.0.iter()
     }
 

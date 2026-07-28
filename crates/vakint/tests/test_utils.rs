@@ -169,7 +169,7 @@ pub fn compare_output(output: Result<AtomView, &VakintError>, expected_output: A
                 AtomPrinter::new_with_options(
                     r,
                     PrintOptions {
-                        hide_namespace: Some("tests"),
+                        hide_namespace: Some("tests".into()),
                         ..PrintOptions::file()
                     }
                 )

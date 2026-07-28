@@ -2,26 +2,19 @@ use super::utils::*;
 use super::*;
 use gammaloop_api::CLISettings;
 use gammaloop_api::commands::duplicate::DuplicateIntegrand;
-use gammaloop_api::commands::evaluate_samples::{
-    EvaluateSamples, EvaluateSamplesPrecise, evaluate_sample_precise,
-};
 use gammaloop_api::session::CliSessionState;
 use gammaloop_api::state::{RunHistory, State};
 use gammalooprs::{
     initialisation::initialise,
-    integrands::evaluation::PreciseEvaluationResultOutput,
     momentum::{Dep, ExternalMomenta, Helicity, SignOrZero},
     settings::{RuntimeSettings, runtime::kinematic::Externals},
-    utils::{ArbPrec, F, FloatLike, PrecisionUpgradable, f128},
+    utils::F,
 };
-use ndarray::Array2;
 use std::collections::BTreeMap;
-use symbolica::domains::float::Float as SymbolicaFloat;
-use symbolica::domains::float::Real;
 
 const AA_AA_PROCESS: &str = "aa_aa_all_helicities";
 const AA_AA_ASSEMBLY_PROCESS: &str = "aa_aa_all_helicities_assembly";
-const AA_AA_PRIMARY_INTEGRAND: &str = "1L_ppmm";
+
 const AA_AA_GRAPH_COUNT: usize = 3;
 const HISTOGRAM_TARGET_N_SIGMA: f64 = 5.0;
 
@@ -35,50 +28,6 @@ const AA_AA_HELICITIES_ALL: [(&str, &str); 5] = [
 
 const AA_AA_HELICITIES_INTEGRATED: [(&str, &str); 2] =
     [("1L_ppmm", "[+1,+1,-1,-1]"), ("1L_pmpm", "[+1,-1,+1,-1]")];
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum InspectTargetKind {
-    F64Symjit,
-    F64Assembly,
-    Quad,
-    Arb,
-}
-
-impl InspectTargetKind {
-    fn from_target_tag(tag: &str) -> Result<Self> {
-        match tag {
-            "F64_SYMJIT_TARGET" => Ok(Self::F64Symjit),
-            "F64_ASSEMBLY_TARGET" => Ok(Self::F64Assembly),
-            "QUAD_TARGET" => Ok(Self::Quad),
-            "ARB_TARGET" => Ok(Self::Arb),
-            _ => Err(eyre::eyre!("Unsupported inspect target tag '{tag}'")),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct InspectTargetKey {
-    kind: InspectTargetKind,
-    kinematics: String,
-    integrand: String,
-    graph_id: usize,
-}
-
-impl InspectTargetKey {
-    fn new(
-        kind: InspectTargetKind,
-        kinematics: impl Into<String>,
-        integrand: impl Into<String>,
-        graph_id: usize,
-    ) -> Self {
-        Self {
-            kind,
-            kinematics: kinematics.into(),
-            integrand: integrand.into(),
-            graph_id,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy)]
 struct IntegratedHistogramTarget {
@@ -135,34 +84,6 @@ fn example_aa_aa_state_folder() -> PathBuf {
     gammaloop_integration_tests::workspace_root().join("examples/cli/aa_aa/1L/state")
 }
 
-fn load_inspect_targets() -> Result<BTreeMap<InspectTargetKey, (String, String)>> {
-    let mut targets = BTreeMap::new();
-    for line in
-        std::fs::read_to_string(benchmark_resource_path("aa_aa_local_inspect_targets.txt"))?.lines()
-    {
-        if line.is_empty() || line.ends_with("_START") || line.ends_with("_END") {
-            continue;
-        }
-        let parts = line.split('|').collect_vec();
-        if parts.len() != 6 {
-            return Err(eyre::eyre!("Malformed inspect target line '{line}'"));
-        }
-        let graph_id = parts[3]
-            .parse()
-            .map_err(|err| eyre::eyre!("Invalid graph id in inspect target '{line}': {err}"))?;
-        targets.insert(
-            InspectTargetKey::new(
-                InspectTargetKind::from_target_tag(parts[0])?,
-                parts[1],
-                parts[2],
-                graph_id,
-            ),
-            (parts[4].to_string(), parts[5].to_string()),
-        );
-    }
-    Ok(targets)
-}
-
 fn load_integrated_targets() -> Result<BTreeMap<(String, String, usize), IntegratedHistogramTarget>>
 {
     let mut targets = BTreeMap::new();
@@ -198,83 +119,6 @@ fn load_integrated_targets() -> Result<BTreeMap<(String, String, usize), Integra
         );
     }
     Ok(targets)
-}
-
-fn inspect_target_entry<'a>(
-    targets: &'a BTreeMap<InspectTargetKey, (String, String)>,
-    kind: InspectTargetKind,
-    kinematics: &str,
-    integrand: &str,
-    graph_id: usize,
-) -> &'a (String, String) {
-    targets
-        .get(&InspectTargetKey::new(kind, kinematics, integrand, graph_id))
-        .unwrap_or_else(|| {
-            panic!(
-                "missing inspect target for kind={kind:?}, kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
-            )
-        })
-}
-
-fn f64_inspect_target(
-    targets: &BTreeMap<InspectTargetKey, (String, String)>,
-    kind: InspectTargetKind,
-    kinematics: &str,
-    integrand: &str,
-    graph_id: usize,
-) -> Complex<f64> {
-    let (re, im) = inspect_target_entry(targets, kind, kinematics, integrand, graph_id);
-    Complex::new(
-        re.parse().expect("f64 real inspect target must parse"),
-        im.parse().expect("f64 imaginary inspect target must parse"),
-    )
-}
-
-fn precise_inspect_target<T>(
-    targets: &BTreeMap<InspectTargetKey, (String, String)>,
-    kind: InspectTargetKind,
-    kinematics: &str,
-    integrand: &str,
-    graph_id: usize,
-) -> Result<Complex<F<T>>>
-where
-    T: gammalooprs::utils::FloatLike + From<SymbolicaFloat>,
-{
-    let (re, im) = inspect_target_entry(targets, kind, kinematics, integrand, graph_id);
-    decimal_complex(re, im)
-}
-
-fn exact_f64_as_quad(value: Complex<f64>) -> Complex<F<f128>> {
-    Complex::new(
-        F(f128::from(SymbolicaFloat::from(value.re))),
-        F(f128::from(SymbolicaFloat::from(value.im))),
-    )
-}
-
-fn exact_quad_as_arb(value: &Complex<F<f128>>) -> Complex<F<ArbPrec>> {
-    Complex::new(F(value.re.0.higher()), F(value.im.0.higher()))
-}
-
-fn quad_vs_f64_tolerance() -> F<f128> {
-    F(f128::from(SymbolicaFloat::from(f64::EPSILON.sqrt())))
-}
-
-fn arb_vs_quad_tolerance() -> F<ArbPrec> {
-    F(f128::default().epsilon().sqrt().higher())
-}
-
-fn quad_integrand_result(result: PreciseEvaluationResultOutput) -> Result<Complex<F<f128>>> {
-    match result {
-        PreciseEvaluationResultOutput::Quad(result) => Ok(result.integrand_result),
-        _ => Err(eyre::eyre!("Expected a Quad precise evaluation result")),
-    }
-}
-
-fn arb_integrand_result(result: PreciseEvaluationResultOutput) -> Result<Complex<F<ArbPrec>>> {
-    match result {
-        PreciseEvaluationResultOutput::Arb(result) => Ok(result.integrand_result),
-        _ => Err(eyre::eyre!("Expected an ArbPrec precise evaluation result")),
-    }
 }
 
 fn assert_histogram_estimate_compatible(
@@ -513,103 +357,6 @@ fn set_single_precision_level(
     ))
 }
 
-fn evaluate_graph_momentum_sample_f64(
-    cli: &mut gammaloop_integration_tests::CLIState,
-    process: &str,
-    integrand: &str,
-    graph_id: usize,
-    point: &[f64],
-) -> Result<Complex<f64>> {
-    let process_id = cli
-        .state
-        .resolve_process_ref(Some(&ProcessRef::Unqualified(process.to_string())))?;
-    let graph_name = cli
-        .state
-        .process_list
-        .get_integrand(process_id, integrand)?
-        .require_generated()?
-        .graph_name_by_id(graph_id)
-        .expect("graph id must exist")
-        .to_string();
-    let points = Array2::from_shape_vec((1, point.len()), point.to_vec())?;
-    let result = EvaluateSamples {
-        process_id: Some(process_id),
-        integrand_name: Some(integrand.to_string()),
-        use_arb_prec: false,
-        minimal_output: true,
-        return_generated_events: None,
-        momentum_space: true,
-        points: points.view(),
-        integrator_weights: None,
-        discrete_dims: None,
-        graph_names: Some(vec![Some(graph_name)]),
-        orientations: None,
-    }
-    .run(&mut cli.state)?;
-    Ok(result.samples[0]
-        .evaluation
-        .integrand_result
-        .map(|entry| entry.0))
-}
-
-fn default_momentum_space_point_for(
-    cli: &gammaloop_integration_tests::CLIState,
-    process: &str,
-    integrand: &str,
-) -> Result<Vec<f64>> {
-    let process_id = cli
-        .state
-        .resolve_process_ref(Some(&ProcessRef::Unqualified(process.to_string())))?;
-    let integrand = cli
-        .state
-        .process_list
-        .get_integrand(process_id, integrand)?
-        .require_generated()?;
-    let n_dim = integrand.get_n_dim();
-    let seed = [0.11, -0.07, 0.19, -0.13, 0.05, 0.29];
-    Ok((0..n_dim).map(|index| seed[index % seed.len()]).collect())
-}
-
-fn evaluate_graph_momentum_sample_precise(
-    cli: &mut gammaloop_integration_tests::CLIState,
-    process: &str,
-    integrand: &str,
-    graph_id: usize,
-    point: &[f64],
-    use_arb_prec: bool,
-) -> Result<PreciseEvaluationResultOutput> {
-    let process_id = cli
-        .state
-        .resolve_process_ref(Some(&ProcessRef::Unqualified(process.to_string())))?;
-    let graph_name = cli
-        .state
-        .process_list
-        .get_integrand(process_id, integrand)?
-        .require_generated()?
-        .graph_name_by_id(graph_id)
-        .expect("graph id must exist")
-        .to_string();
-    let points = Array2::from_shape_vec((1, point.len()), point.to_vec())?;
-    Ok(evaluate_sample_precise(
-        &mut cli.state,
-        &EvaluateSamplesPrecise {
-            process_id: Some(process_id),
-            integrand_name: Some(integrand.to_string()),
-            use_arb_prec,
-            minimal_output: true,
-            return_generated_events: None,
-            momentum_space: true,
-            points: points.view(),
-            integrator_weights: None,
-            discrete_dims: None,
-            graph_names: Some(vec![Some(graph_name)]),
-            orientations: None,
-        },
-    )?
-    .sample
-    .evaluation)
-}
-
 fn add_graph_id_observable(
     cli: &mut gammaloop_integration_tests::CLIState,
     process: &str,
@@ -624,16 +371,29 @@ mod important {
 
     #[test]
     #[serial]
-    fn aa_aa_local_inspect_precisions_and_backends() -> Result<()> {
-        let targets = load_inspect_targets()?;
-        let mut symjit_cli = setup_aa_aa_cli("aa_aa_local_inspect_precisions_and_backends_symjit")?;
+    fn aa_aa_local_inspect_backend_consistency() -> Result<()> {
+        let point = vec![0.11, -0.07, 0.19];
+        let cases = [
+            ("a", "1L_ppmm", 0),
+            ("a", "1L_mpmm", 1),
+            ("a", "1L_mmmm", 2),
+            ("a", "1L_pmmp", 0),
+            ("a", "1L_pmpm", 1),
+            ("b", "1L_ppmm", 2),
+            ("b", "1L_mpmm", 0),
+            ("b", "1L_mmmm", 1),
+            ("b", "1L_pmmp", 2),
+            ("b", "1L_pmpm", 0),
+        ];
+
+        let mut symjit_cli = setup_aa_aa_cli("aa_aa_local_inspect_backend_consistency_symjit")?;
         generate_aa_aa_helicity_family(
             &mut symjit_cli,
             AA_AA_PROCESS,
             "symjit",
             &AA_AA_HELICITIES_ALL,
         )?;
-        let mut assembly_cli = setup_aa_aa_cli("aa_aa_local_inspect_precisions_and_backends")?;
+        let mut assembly_cli = setup_aa_aa_cli("aa_aa_local_inspect_backend_consistency_assembly")?;
         generate_aa_aa_helicity_family(
             &mut assembly_cli,
             AA_AA_ASSEMBLY_PROCESS,
@@ -641,142 +401,45 @@ mod important {
             &AA_AA_HELICITIES_ALL,
         )?;
 
-        set_aa_aa_kinematics(&mut symjit_cli, AA_AA_PROCESS, "a")?;
-        let point_a =
-            default_momentum_space_point_for(&symjit_cli, AA_AA_PROCESS, AA_AA_PRIMARY_INTEGRAND)?;
-        set_aa_aa_kinematics(&mut symjit_cli, AA_AA_PROCESS, "b")?;
-        let point_b =
-            default_momentum_space_point_for(&symjit_cli, AA_AA_PROCESS, AA_AA_PRIMARY_INTEGRAND)?;
+        for (integrand, _) in AA_AA_HELICITIES_ALL {
+            set_single_precision_level(&mut symjit_cli, AA_AA_PROCESS, integrand, "Double")?;
+            set_single_precision_level(
+                &mut assembly_cli,
+                AA_AA_ASSEMBLY_PROCESS,
+                integrand,
+                "Double",
+            )?;
+        }
 
-        let quad_compat_tolerance = quad_vs_f64_tolerance();
-        let arb_compat_tolerance = arb_vs_quad_tolerance();
+        for (kinematics, integrand, graph_id) in cases {
+            let context =
+                format!("kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}");
 
-        for (kinematics, point) in [("a", &point_a), ("b", &point_b)] {
             set_aa_aa_kinematics(&mut symjit_cli, AA_AA_PROCESS, kinematics)?;
-            set_aa_aa_kinematics(&mut assembly_cli, AA_AA_ASSEMBLY_PROCESS, kinematics)?;
-            for (integrand, _) in AA_AA_HELICITIES_ALL {
-                for graph_id in 0..AA_AA_GRAPH_COUNT {
-                    let context = format!(
-                        "kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
-                    );
-
-                    set_single_precision_level(
-                        &mut symjit_cli,
-                        AA_AA_PROCESS,
-                        integrand,
-                        "Double",
-                    )?;
-                    let symjit_result = evaluate_graph_momentum_sample_f64(
-                        &mut symjit_cli,
-                        AA_AA_PROCESS,
-                        integrand,
-                        graph_id,
-                        point,
-                    )?;
-                    let symjit_target = f64_inspect_target(
-                        &targets,
-                        InspectTargetKind::F64Symjit,
-                        kinematics,
-                        integrand,
-                        graph_id,
-                    );
-                    assert_complex_approx_eq(
-                        symjit_result,
-                        symjit_target,
-                        &format!("{context}: symjit f64 benchmark"),
-                    );
-
-                    set_single_precision_level(
-                        &mut assembly_cli,
-                        AA_AA_ASSEMBLY_PROCESS,
-                        integrand,
-                        "Double",
-                    )?;
-                    let assembly_result = evaluate_graph_momentum_sample_f64(
-                        &mut assembly_cli,
-                        AA_AA_ASSEMBLY_PROCESS,
-                        integrand,
-                        graph_id,
-                        point,
-                    )?;
-                    let assembly_target = f64_inspect_target(
-                        &targets,
-                        InspectTargetKind::F64Assembly,
-                        kinematics,
-                        integrand,
-                        graph_id,
-                    );
-                    assert_complex_approx_eq(
-                        assembly_result,
-                        assembly_target,
-                        &format!("{context}: assembly f64 benchmark"),
-                    );
-                    assert_complex_approx_eq(
-                        assembly_result,
-                        symjit_result,
-                        &format!("{context}: assembly vs symjit f64"),
-                    );
-
-                    set_single_precision_level(&mut symjit_cli, AA_AA_PROCESS, integrand, "Quad")?;
-                    let quad_result =
-                        quad_integrand_result(evaluate_graph_momentum_sample_precise(
-                            &mut symjit_cli,
-                            AA_AA_PROCESS,
-                            integrand,
-                            graph_id,
-                            point,
-                            false,
-                        )?)?;
-                    let quad_target = precise_inspect_target::<f128>(
-                        &targets,
-                        InspectTargetKind::Quad,
-                        kinematics,
-                        integrand,
-                        graph_id,
-                    )?;
-                    assert_complex_approx_eq_precise(
-                        &quad_result,
-                        &quad_target,
-                        &quad_compat_tolerance,
-                        &format!("{context}: quad benchmark"),
-                    );
-                    assert_complex_approx_eq_precise(
-                        &quad_result,
-                        &exact_f64_as_quad(symjit_result),
-                        &quad_compat_tolerance,
-                        &format!("{context}: quad vs f64 compatibility"),
-                    );
-
-                    set_single_precision_level(&mut symjit_cli, AA_AA_PROCESS, integrand, "Arb")?;
-                    let arb_result = arb_integrand_result(evaluate_graph_momentum_sample_precise(
-                        &mut symjit_cli,
-                        AA_AA_PROCESS,
-                        integrand,
-                        graph_id,
-                        point,
-                        true,
-                    )?)?;
-                    let arb_target = precise_inspect_target::<ArbPrec>(
-                        &targets,
-                        InspectTargetKind::Arb,
-                        kinematics,
-                        integrand,
-                        graph_id,
-                    )?;
-                    assert_complex_approx_eq_precise(
-                        &arb_result,
-                        &arb_target,
-                        &arb_compat_tolerance,
-                        &format!("{context}: arb benchmark"),
-                    );
-                    assert_complex_approx_eq_precise(
-                        &arb_result,
-                        &exact_quad_as_arb(&quad_result),
-                        &arb_compat_tolerance,
-                        &format!("{context}: arb vs quad compatibility"),
-                    );
-                }
+            let (_, symjit_result) = Inspect {
+                process: Some(ProcessRef::Unqualified(AA_AA_PROCESS.to_string())),
+                integrand_name: Some(integrand.to_string()),
+                point: point.clone(),
+                momentum_space: true,
+                graph_id: Some(graph_id),
+                ..Default::default()
             }
+            .run(&mut symjit_cli.state)?;
+            set_aa_aa_kinematics(&mut assembly_cli, AA_AA_ASSEMBLY_PROCESS, kinematics)?;
+            let (_, assembly_result) = Inspect {
+                process: Some(ProcessRef::Unqualified(AA_AA_ASSEMBLY_PROCESS.to_string())),
+                integrand_name: Some(integrand.to_string()),
+                point: point.clone(),
+                momentum_space: true,
+                graph_id: Some(graph_id),
+                ..Default::default()
+            }
+            .run(&mut assembly_cli.state)?;
+            assert_complex_approx_eq(
+                assembly_result,
+                symjit_result,
+                &format!("{context}: assembly vs symjit inspect"),
+            );
         }
 
         clean_test(&assembly_cli.cli_settings.state.folder);

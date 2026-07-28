@@ -40,11 +40,6 @@ commands = [
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states true
       -p epem_a_ddx -i LO""",
-  "set global kv global.generation.uv.generate_integrated=false",
-  """generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==0 QED^2==4 [{{1}} QCD=0]
-          --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
-          --symmetrize-left-right-states true
-          -p epem_a_ddx_no_integrated_UV -i LO""",
 ]
 
 [[command_blocks]]

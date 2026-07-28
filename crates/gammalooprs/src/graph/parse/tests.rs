@@ -1,3 +1,4 @@
+use idenso::tensor::SymbolicTensor;
 use insta::assert_snapshot;
 use linnet::half_edge::{
     NodeIndex,
@@ -7,12 +8,11 @@ use spenso::{
     network::{
         Network,
         library::DummyLibrary,
-        parsing::{ParseSettings, ShadowedStructure},
+        parsing::{ParseSettings, ShadowedStructure, StructureFromAtom},
         store::NetworkStore,
     },
     shadowing::symbolica_utils::AtomCoreExt,
-    structure::{HasName, PermutedStructure},
-    tensors::symbolic::SymbolicTensor,
+    structure::HasName,
 };
 use symbolica::atom::{Atom, FunctionBuilder, Symbol};
 use tracing::info;
@@ -29,6 +29,7 @@ use crate::{
     momentum::sample::LoopIndex,
     numerator::{Numerator, UnInit, aind::Aind},
     processes::DotExportSettings,
+    uv::uv_graph::UVE,
 };
 
 #[test]
@@ -188,9 +189,7 @@ fn parse() {
             ToString::to_string,
             |_| None,
             |a| {
-                if let Ok(a) =
-                    PermutedStructure::<ShadowedStructure<Aind>>::try_from(a.expression.as_view())
-                {
+                if let Ok(a) = ShadowedStructure::<Aind>::parse(a.expression.as_view()) {
                     a.structure
                         .name()
                         .map(|s| {
@@ -804,6 +803,37 @@ fn parse_triangle_lmb() {
 
     let lmb = g.loop_momentum_basis.loop_edges;
     assert_eq!(lmb[LoopIndex::from(0)], EdgeIndex::from(5));
+}
+
+#[test]
+fn edge_mass_attribute_drives_evaluated_edge_mass() {
+    test_initialise().unwrap();
+
+    let g: Graph = dot!(
+        digraph mass_override_triangle {
+            ext [style=invis]
+        ext -> v4:0 [pdg=1000, id=0 ];
+        v5:1 -> ext [pdg=1000, id=1 ];
+        v6:2 -> ext [pdg=1000, id=2 ];
+        v4 -> v5 [pdg=1000, id=3, lmb_id=0, mass=7];
+        v5 -> v6 [pdg=1000, id=4];
+        v6 -> v4 [pdg=1000, id=5];
+    }
+    ,"scalars"
+        )
+    .unwrap();
+
+    assert_eq!(
+        g.underlying[EdgeIndex::from(3)].mass_atom().to_string(),
+        "7"
+    );
+
+    let model = crate::utils::load_generic_model("scalars");
+    let evaluated_mass = g.underlying[EdgeIndex::from(3)]
+        .mass_value::<f64>(&model, &g.param_builder)
+        .unwrap();
+    assert_eq!(evaluated_mass.re.0, 7.0);
+    assert_eq!(evaluated_mass.im.0, 0.0);
 }
 
 mod failing {
@@ -1475,9 +1505,7 @@ mod failing {
                 ToString::to_string,
                 |_| None,
                 |a| {
-                    if let Ok(a) = PermutedStructure::<ShadowedStructure<Aind>>::try_from(
-                        a.expression.as_view(),
-                    ) {
+                    if let Ok(a) = ShadowedStructure::<Aind>::parse(a.expression.as_view()) {
                         a.structure
                             .name()
                             .map(|s| {
@@ -1598,9 +1626,7 @@ mod failing {
                 ToString::to_string,
                 |_| None,
                 |a| {
-                    if let Ok(a) = PermutedStructure::<ShadowedStructure<Aind>>::try_from(
-                        a.expression.as_view(),
-                    ) {
+                    if let Ok(a) = ShadowedStructure::<Aind>::parse(a.expression.as_view()) {
                         a.structure
                             .name()
                             .map(|s| {

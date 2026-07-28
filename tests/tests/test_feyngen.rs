@@ -1,14 +1,17 @@
-use color_eyre::Result;
+use color_eyre::{Result, eyre::eyre};
 use std::fs;
 
 use gammaloop_api::state::SyncSettings;
 use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
 use gammalooprs::feyngen::diagram_generator::evaluate_sign_origin;
 use gammalooprs::processes::{
-    ProcessCollection, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
+    CycleSignature, GraphGroupSelectionSpec, GraphSelectionSignatureInventory, ProcessCollection,
+    RaisedCutSignatureInventory, RaisedPropagatorScope, RaisedPropagatorSignature,
+    SelectionPolarity, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
+    VertexSignature,
 };
 
-use gammaloop_integration_tests::{get_test_cli, get_tests_workspace_path};
+use gammaloop_integration_tests::{CLIState, get_test_cli, get_tests_workspace_path, run_commands};
 use serial_test::serial;
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -16,8 +19,19 @@ use symbolica::{
 };
 use tracing::debug;
 
-use gammaloop_integration_tests::CLIState;
 use insta::assert_snapshot;
+
+const TTH_PROCESS_NAME: &str = "epem_a_tth";
+const TTH_INTEGRAND_NAME: &str = "LO";
+const TTH_LO_ONLY_DIAGRAMS_COMMAND: &str = "generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==0 QED^2==6 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p epem_a_tth -i LO --only-diagrams";
+const DDX_AMPLITUDE_PROCESS_NAME: &str = "epem_ddx_select";
+const DDX_AMPLITUDE_INTEGRAND_NAME: &str = "LO";
+const DDX_AMPLITUDE_ONLY_DIAGRAMS_COMMAND: &str = "generate xs e+ e- > d d~ QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping -p epem_ddx_select -i LO --only-diagrams";
+const DDX_AMPLITUDE_SELECTION_OPTIONS: &str =
+    "--amplitude-graphs --with-vertices '[V_71]' --without-vertices '[V_79]'";
+const DDXG_RAISED_CUT_PROCESS_NAME: &str = "epem_ddxg_raised_cuts";
+const DDXG_RAISED_CUT_INTEGRAND_NAME: &str = "LO";
+const DDXG_RAISED_CUT_ONLY_DIAGRAMS_COMMAND: &str = "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping group_identical_graphs_up_to_sign -p epem_ddxg_raised_cuts -i LO --only-diagrams";
 
 fn count_graphs_in_processes(cli: &CLIState) -> (usize, Atom) {
     assert_eq!(cli.state.process_list.processes.len(), 1);
@@ -43,6 +57,518 @@ fn count_graphs_in_processes(cli: &CLIState) -> (usize, Atom) {
     }
     // overall_factor_sum = evaluate_overall_factor(overall_factor_sum.as_view());
     (n_graphs, overall_factor_sum)
+}
+
+fn setup_tth_select_cli(test_name: &str) -> Result<CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model sm-default.json",
+            "set global kv global.n_cores.feyngen=1 global.n_cores.generate=1 global.n_cores.compile=1 global.n_cores.integrate=1",
+            "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true",
+            r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[500.0,0.0,0.0,500.0],[500.0,0.0,0.0,-500.0]],"helicities":["summed_averaged","summed_averaged"]}}'"#,
+            "set default-runtime kv general.evaluator_method=\"SummedFunctionMap\" general.enable_cache=false general.generate_events=false general.integral_unit=\"picobarn\" subtraction.disable_threshold_subtraction=true integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.seed=1337",
+            TTH_LO_ONLY_DIAGRAMS_COMMAND,
+        ],
+    )?;
+    Ok(cli)
+}
+
+fn setup_ddx_amplitude_select_cli(test_name: &str) -> Result<CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model sm-default.json",
+            "set global kv global.n_cores.feyngen=1 global.n_cores.generate=1 global.n_cores.compile=1 global.n_cores.integrate=1",
+            "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true",
+            r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[500.0,0.0,0.0,500.0],[500.0,0.0,0.0,-500.0]],"helicities":["summed_averaged","summed_averaged"]}}'"#,
+            "set default-runtime kv general.evaluator_method=\"SummedFunctionMap\" general.enable_cache=false general.generate_events=false general.integral_unit=\"picobarn\" subtraction.disable_threshold_subtraction=true integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.seed=1337",
+            DDX_AMPLITUDE_ONLY_DIAGRAMS_COMMAND,
+        ],
+    )?;
+    Ok(cli)
+}
+
+fn setup_ddxg_raised_cut_select_cli(test_name: &str) -> Result<CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model sm-default.json",
+            "set global kv global.n_cores.feyngen=1 global.n_cores.generate=1 global.n_cores.compile=1 global.n_cores.integrate=1",
+            "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true",
+            r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[500.0,0.0,0.0,500.0],[500.0,0.0,0.0,-500.0]],"helicities":["summed_averaged","summed_averaged"]}}'"#,
+            "set default-runtime kv general.evaluator_method=\"SummedFunctionMap\" general.enable_cache=false general.generate_events=false general.integral_unit=\"picobarn\" subtraction.disable_threshold_subtraction=true integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.seed=1337",
+            DDXG_RAISED_CUT_ONLY_DIAGRAMS_COMMAND,
+        ],
+    )?;
+    Ok(cli)
+}
+
+fn tth_cross_section(cli: &CLIState) -> &gammalooprs::processes::CrossSection {
+    assert_eq!(cli.state.process_list.processes.len(), 1);
+    tth_cross_section_for(cli, TTH_PROCESS_NAME, TTH_INTEGRAND_NAME)
+}
+
+fn tth_cross_section_for<'a>(
+    cli: &'a CLIState,
+    process_name: &str,
+    integrand_name: &str,
+) -> &'a gammalooprs::processes::CrossSection {
+    let process = cli
+        .state
+        .process_list
+        .processes
+        .iter()
+        .find(|process| process.definition.folder_name == process_name)
+        .unwrap_or_else(|| panic!("process '{process_name}' should exist"));
+    match &process.collection {
+        ProcessCollection::CrossSections(cross_sections) => cross_sections
+            .get(integrand_name)
+            .expect("ttH LO cross section should exist"),
+        ProcessCollection::Amplitudes(_) => panic!("ttH LO should be a cross-section process"),
+    }
+}
+
+fn tth_master_graph_names(cli: &CLIState) -> Vec<String> {
+    master_graph_names_for(cli, TTH_PROCESS_NAME, TTH_INTEGRAND_NAME)
+}
+
+fn ddx_amplitude_master_graph_names(cli: &CLIState) -> Vec<String> {
+    master_graph_names_for(
+        cli,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+    )
+}
+
+fn master_graph_names_for(cli: &CLIState, process_name: &str, integrand_name: &str) -> Vec<String> {
+    let cross_section = tth_cross_section_for(cli, process_name, integrand_name);
+    cross_section
+        .graph_group_structure
+        .iter()
+        .map(|group| {
+            let master_graph_id = group
+                .into_iter()
+                .next()
+                .expect("graph group should contain a master graph");
+            cross_section.supergraphs[master_graph_id]
+                .graph
+                .name
+                .clone()
+        })
+        .collect()
+}
+
+fn assert_tth_diagram_count(cli: &CLIState, expected: usize) {
+    assert_tth_diagram_count_for(cli, TTH_PROCESS_NAME, TTH_INTEGRAND_NAME, expected);
+}
+
+fn assert_tth_diagram_count_for(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+    expected: usize,
+) {
+    let cross_section = tth_cross_section_for(cli, process_name, integrand_name);
+    assert_eq!(cross_section.supergraphs.len(), expected);
+    assert_eq!(cross_section.graph_group_structure.len(), expected);
+}
+
+fn assert_tth_generated_graph_count(cli: &CLIState, expected: usize) -> Result<()> {
+    assert_tth_generated_graph_count_for(cli, TTH_PROCESS_NAME, TTH_INTEGRAND_NAME, expected)
+}
+
+fn assert_tth_generated_graph_count_for(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+    expected: usize,
+) -> Result<()> {
+    let process_id = cli
+        .state
+        .process_list
+        .processes
+        .iter()
+        .position(|process| process.definition.folder_name == process_name)
+        .unwrap_or_else(|| panic!("process '{process_name}' should exist"));
+    let integrand = cli
+        .state
+        .process_list
+        .get_integrand(process_id, integrand_name)?
+        .require_generated()?;
+    assert_eq!(integrand.graph_count(), expected);
+    Ok(())
+}
+
+fn select_single_tth_graph(cli: &mut CLIState) -> Result<String> {
+    let master_graph_names = tth_master_graph_names(cli);
+    assert_eq!(
+        master_graph_names.len(),
+        2,
+        "ttH LO feyngen setup should produce exactly two graph groups before selection"
+    );
+    let selection = unique_tth_master_selection(cli)?;
+    cli.run_command(&format!(
+        "select -p {TTH_PROCESS_NAME} -i {TTH_INTEGRAND_NAME} {}",
+        selection.cli_options
+    ))?;
+    assert_tth_diagram_count(cli, 1);
+    assert_eq!(
+        tth_master_graph_names(cli),
+        vec![selection.master_graph.clone()]
+    );
+    Ok(selection.master_graph)
+}
+
+fn select_single_graph_by_raised_cuts(
+    cli: &mut CLIState,
+    process_name: &str,
+    integrand_name: &str,
+    expected_graph_groups: usize,
+    use_amplitude_graphs_flag: bool,
+) -> Result<String> {
+    let master_graph_names = master_graph_names_for(cli, process_name, integrand_name);
+    assert_eq!(
+        master_graph_names.len(),
+        expected_graph_groups,
+        "raised-cut feyngen setup should produce the expected number of graph groups before selection"
+    );
+    let selection = unique_raised_cut_selection(cli, process_name, integrand_name)?.ok_or_else(|| {
+        eyre!(
+            "feyngen setup for process '{}' integrand '{}' should provide a raised-cut signature selecting one graph group",
+            process_name,
+            integrand_name
+        )
+    })?;
+    let amplitude_graphs = if use_amplitude_graphs_flag {
+        "--amplitude-graphs "
+    } else {
+        ""
+    };
+    cli.run_command(&format!(
+        "select -p {process_name} -i {integrand_name} {amplitude_graphs}{}",
+        selection.cli_options
+    ))?;
+    assert_tth_diagram_count_for(cli, process_name, integrand_name, 1);
+    assert_eq!(
+        master_graph_names_for(cli, process_name, integrand_name),
+        vec![selection.master_graph.clone()]
+    );
+    Ok(selection.master_graph)
+}
+
+fn select_single_ddx_amplitude_graph(cli: &mut CLIState) -> Result<String> {
+    let master_graph_names = ddx_amplitude_master_graph_names(cli);
+    assert_eq!(
+        master_graph_names.len(),
+        4,
+        "e+e- -> d d~ feyngen setup should produce exactly four graph groups before selection"
+    );
+    cli.run_command(&format!(
+        "select -p {DDX_AMPLITUDE_PROCESS_NAME} -i {DDX_AMPLITUDE_INTEGRAND_NAME} {DDX_AMPLITUDE_SELECTION_OPTIONS}"
+    ))?;
+    assert_tth_diagram_count_for(
+        cli,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+        1,
+    );
+    Ok(ddx_amplitude_master_graph_names(cli)
+        .into_iter()
+        .next()
+        .expect("selection should retain one master graph"))
+}
+
+struct TthSelection {
+    master_graph: String,
+    cli_options: String,
+}
+
+fn unique_tth_master_selection(cli: &CLIState) -> Result<TthSelection> {
+    for (signature, spec) in tth_master_vertex_signature_specs(cli)? {
+        if let Some(master_graph) = selected_tth_master_for_spec(cli, &spec)? {
+            return Ok(TthSelection {
+                master_graph,
+                cli_options: format!("--with-vertices '{signature}'"),
+            });
+        }
+    }
+
+    let inventory = tth_signature_inventory(cli);
+    for (option, scope, signatures) in [
+        (
+            "--with-raised-propagator-signatures",
+            RaisedPropagatorScope::All,
+            inventory.raised_all,
+        ),
+        (
+            "--with-massive-raised-propagator-signatures",
+            RaisedPropagatorScope::Massive,
+            inventory.raised_massive,
+        ),
+        (
+            "--with-massless-raised-propagator-signatures",
+            RaisedPropagatorScope::Massless,
+            inventory.raised_massless,
+        ),
+    ] {
+        for signature in signatures {
+            let parsed_signature: RaisedPropagatorSignature = signature.parse()?;
+            let spec = GraphGroupSelectionSpec::new().with_raised_propagator_signatures(
+                SelectionPolarity::With,
+                scope,
+                vec![parsed_signature],
+            );
+            if let Some(master_graph) = selected_tth_master_for_spec(cli, &spec)? {
+                return Ok(TthSelection {
+                    master_graph,
+                    cli_options: format!("{option} '{signature}'"),
+                });
+            }
+        }
+    }
+
+    for (option, polarity) in [
+        ("--with-cycle-signatures", SelectionPolarity::With),
+        ("--without-cycle-signatures", SelectionPolarity::Without),
+    ] {
+        let inventory = tth_signature_inventory(cli);
+        for signature in inventory.cycles {
+            let parsed_signature = CycleSignature::parse(&signature, &cli.state.model)?;
+            let spec = GraphGroupSelectionSpec::new()
+                .with_cycle_signatures(polarity, vec![parsed_signature]);
+            if let Some(master_graph) = selected_tth_master_for_spec(cli, &spec)? {
+                return Ok(TthSelection {
+                    master_graph,
+                    cli_options: format!("{option} '{signature}'"),
+                });
+            }
+        }
+    }
+
+    let fallback = tth_master_graph_names(cli)
+        .into_iter()
+        .next()
+        .expect("ttH setup should have at least one master graph");
+    Ok(TthSelection {
+        master_graph: fallback.clone(),
+        cli_options: format!("--with-graph-names {fallback}"),
+    })
+}
+
+fn unique_raised_cut_selection(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+) -> Result<Option<TthSelection>> {
+    let inventory = raised_cut_signature_inventory_for(cli, process_name, integrand_name);
+    for (option, polarity, scope, signatures) in [
+        (
+            "--without-raised-cuts-signatures",
+            SelectionPolarity::Without,
+            RaisedPropagatorScope::All,
+            inventory.all.clone(),
+        ),
+        (
+            "--with-raised-cuts-signatures",
+            SelectionPolarity::With,
+            RaisedPropagatorScope::All,
+            inventory.all,
+        ),
+        (
+            "--without-massive-raised-cuts-signatures",
+            SelectionPolarity::Without,
+            RaisedPropagatorScope::Massive,
+            inventory.massive.clone(),
+        ),
+        (
+            "--with-massive-raised-cuts-signatures",
+            SelectionPolarity::With,
+            RaisedPropagatorScope::Massive,
+            inventory.massive,
+        ),
+        (
+            "--without-massless-raised-cuts-signatures",
+            SelectionPolarity::Without,
+            RaisedPropagatorScope::Massless,
+            inventory.massless.clone(),
+        ),
+        (
+            "--with-massless-raised-cuts-signatures",
+            SelectionPolarity::With,
+            RaisedPropagatorScope::Massless,
+            inventory.massless,
+        ),
+    ] {
+        for signature in signatures {
+            let parsed_signature: RaisedPropagatorSignature = signature.parse()?;
+            let spec = GraphGroupSelectionSpec::new().with_raised_cut_signatures(
+                polarity,
+                scope,
+                vec![parsed_signature],
+            );
+            if let Some(master_graph) =
+                selected_master_for_spec(cli, process_name, integrand_name, &spec)?
+            {
+                return Ok(Some(TthSelection {
+                    master_graph,
+                    cli_options: format!("{option} '{signature}'"),
+                }));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn tth_master_vertex_signature_specs(
+    cli: &CLIState,
+) -> Result<Vec<(String, GraphGroupSelectionSpec)>> {
+    let cross_section = tth_cross_section(cli);
+    cross_section
+        .graph_group_structure
+        .iter()
+        .map(|group| {
+            let master_graph_id = group
+                .into_iter()
+                .next()
+                .expect("graph group should contain a master graph");
+            let master_graph = &cross_section.supergraphs[master_graph_id].graph;
+            let mut vertex_rule_names = master_graph
+                .underlying
+                .iter_nodes()
+                .filter_map(|(_, _, vertex)| {
+                    vertex
+                        .vertex_rule
+                        .as_ref()
+                        .map(|vertex_rule| vertex_rule.name.to_string())
+                })
+                .collect::<Vec<_>>();
+            vertex_rule_names.sort();
+            let signature = format!("[{}]", vertex_rule_names.join(","));
+            let spec = GraphGroupSelectionSpec::new().with_vertex_signatures(
+                SelectionPolarity::With,
+                vec![VertexSignature::parse(&signature)?],
+            );
+            Ok((signature, spec))
+        })
+        .collect()
+}
+
+fn tth_signature_inventory(cli: &CLIState) -> GraphSelectionSignatureInventory {
+    let cross_section = tth_cross_section(cli);
+    GraphSelectionSignatureInventory::from_master_graphs(
+        cross_section.graph_group_structure.iter().map(|group| {
+            let master_graph_id = group
+                .into_iter()
+                .next()
+                .expect("graph group should contain a master graph");
+            &cross_section.supergraphs[master_graph_id].graph
+        }),
+    )
+}
+
+fn raised_cut_signature_inventory_for(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+) -> RaisedCutSignatureInventory {
+    let cross_section = tth_cross_section_for(cli, process_name, integrand_name);
+    let process = cli
+        .state
+        .process_list
+        .processes
+        .iter()
+        .find(|process| process.definition.folder_name == process_name)
+        .unwrap_or_else(|| panic!("process '{process_name}' should exist"));
+    cross_section
+        .raised_cut_signature_inventory(
+            &cli.state.model,
+            &process.definition,
+            &cli.cli_settings.global.generation,
+        )
+        .unwrap_or_else(|_| RaisedCutSignatureInventory::empty())
+}
+
+fn selected_tth_master_for_spec(
+    cli: &CLIState,
+    spec: &GraphGroupSelectionSpec,
+) -> Result<Option<String>> {
+    selected_master_for_spec(cli, TTH_PROCESS_NAME, TTH_INTEGRAND_NAME, spec)
+}
+
+fn selected_master_for_spec(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+    spec: &GraphGroupSelectionSpec,
+) -> Result<Option<String>> {
+    let cross_section = tth_cross_section_for(cli, process_name, integrand_name);
+    let process = cli
+        .state
+        .process_list
+        .processes
+        .iter()
+        .find(|process| process.definition.folder_name == process_name)
+        .unwrap_or_else(|| panic!("process '{process_name}' should exist"));
+    let plan = match cross_section.plan_graph_group_selection_with_context(
+        spec,
+        &cli.state.model,
+        &process.definition,
+        &cli.cli_settings.global.generation,
+    ) {
+        Ok(plan) => plan,
+        Err(_) => return Ok(None),
+    };
+    let [group_id] = plan.retained_group_ids() else {
+        return Ok(None);
+    };
+    let master_graph_id = cross_section.graph_group_structure[*group_id]
+        .into_iter()
+        .next()
+        .expect("graph group should contain a master graph");
+    Ok(Some(
+        cross_section.supergraphs[master_graph_id]
+            .graph
+            .name
+            .clone(),
+    ))
+}
+
+fn integrate_tth_low_stat(cli: &mut CLIState, workspace_name: &str) -> Result<()> {
+    integrate_tth_low_stat_for(cli, workspace_name, TTH_PROCESS_NAME, TTH_INTEGRAND_NAME)
+}
+
+fn integrate_tth_low_stat_for(
+    cli: &mut CLIState,
+    workspace_name: &str,
+    process_name: &str,
+    integrand_name: &str,
+) -> Result<()> {
+    let workspace_path = get_tests_workspace_path()
+        .join(workspace_name)
+        .join("integration_workspace");
+    cli.run_command(&format!(
+        "integrate -p {process_name} -i {integrand_name} --n-cores 1 --workspace-path {} --renderer tabled --batch-size 12 --no-stream-iterations --no-stream-updates --restart",
+        workspace_path.display()
+    ))
 }
 
 fn split_before_flags(s: &str) -> (&str, &str) {
@@ -86,18 +612,14 @@ fn feyngen_str(
         "{} | {} = {}",
         n_graphs,
         evaluate_sign_origin(overall_factor_sum.as_view()).to_canonically_ordered_string(
-            CanonicalOrderingSettings {
-                include_namespace: false,
-                include_attributes: false,
-                ..Default::default()
-            }
+            CanonicalOrderingSettings::new()
+                .include_namespace(false)
+                .include_attributes(false),
         ),
         evaluate_overall_factor(overall_factor_sum.as_view()).to_canonically_ordered_string(
-            CanonicalOrderingSettings {
-                include_namespace: false,
-                include_attributes: false,
-                ..Default::default()
-            }
+            CanonicalOrderingSettings::new()
+                .include_namespace(false)
+                .include_attributes(false),
         )
     ))
 }
@@ -163,6 +685,357 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
     Ok(())
 }
 
+#[test]
+#[serial]
+fn select_tth_graph_before_generation_generates_and_integrates() -> Result<()> {
+    let test_name = "select_tth_graph_before_generation_generates_and_integrates";
+    let mut cli = setup_tth_select_cli(test_name)?;
+
+    assert_tth_diagram_count(&cli, 2);
+    let selected_master = select_single_tth_graph(&mut cli)?;
+
+    cli.run_command(&format!(
+        "generate existing -p {TTH_PROCESS_NAME} -i {TTH_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count(&cli, 1)?;
+    assert_eq!(tth_master_graph_names(&cli), vec![selected_master]);
+
+    integrate_tth_low_stat(&mut cli, test_name)?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_tth_graph_after_generation_discards_and_regenerates() -> Result<()> {
+    let test_name = "select_tth_graph_after_generation_discards_and_regenerates";
+    let mut cli = setup_tth_select_cli(test_name)?;
+
+    assert_tth_diagram_count(&cli, 2);
+    cli.run_command(&format!(
+        "generate existing -p {TTH_PROCESS_NAME} -i {TTH_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count(&cli, 2)?;
+    cli.save_state()?;
+
+    let generated_artifact_path = cli
+        .cli_settings
+        .state
+        .folder
+        .join("processes")
+        .join("cross_sections")
+        .join(TTH_PROCESS_NAME)
+        .join(TTH_INTEGRAND_NAME)
+        .join("integrand");
+    assert!(generated_artifact_path.exists());
+
+    let selected_master = select_single_tth_graph(&mut cli)?;
+    assert!(
+        !generated_artifact_path.exists(),
+        "select should remove generated integrand artifacts before regeneration"
+    );
+
+    cli.run_command(&format!(
+        "generate existing -p {TTH_PROCESS_NAME} -i {TTH_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count(&cli, 1)?;
+    assert_eq!(tth_master_graph_names(&cli), vec![selected_master]);
+
+    integrate_tth_low_stat(&mut cli, test_name)?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_ddxg_graph_by_raised_cuts_before_generation_generates_and_integrates() -> Result<()> {
+    let test_name = "select_ddxg_graph_by_raised_cuts_before_generation_generates_and_integrates";
+    let mut cli = setup_ddxg_raised_cut_select_cli(test_name)?;
+
+    assert_tth_diagram_count_for(
+        &cli,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+        2,
+    );
+    let selected_master = select_single_graph_by_raised_cuts(
+        &mut cli,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+        2,
+        false,
+    )?;
+
+    cli.run_command(&format!(
+        "generate existing -p {DDXG_RAISED_CUT_PROCESS_NAME} -i {DDXG_RAISED_CUT_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count_for(
+        &cli,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+        1,
+    )?;
+    assert_eq!(
+        master_graph_names_for(
+            &cli,
+            DDXG_RAISED_CUT_PROCESS_NAME,
+            DDXG_RAISED_CUT_INTEGRAND_NAME
+        ),
+        vec![selected_master]
+    );
+
+    integrate_tth_low_stat_for(
+        &mut cli,
+        test_name,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+    )?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_ddxg_graph_by_raised_cuts_after_generation_discards_and_regenerates() -> Result<()> {
+    let test_name = "select_ddxg_graph_by_raised_cuts_after_generation_discards_and_regenerates";
+    let mut cli = setup_ddxg_raised_cut_select_cli(test_name)?;
+
+    assert_tth_diagram_count_for(
+        &cli,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+        2,
+    );
+    cli.run_command(&format!(
+        "generate existing -p {DDXG_RAISED_CUT_PROCESS_NAME} -i {DDXG_RAISED_CUT_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count_for(
+        &cli,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+        2,
+    )?;
+    cli.save_state()?;
+
+    let generated_artifact_path = cli
+        .cli_settings
+        .state
+        .folder
+        .join("processes")
+        .join("cross_sections")
+        .join(DDXG_RAISED_CUT_PROCESS_NAME)
+        .join(DDXG_RAISED_CUT_INTEGRAND_NAME)
+        .join("integrand");
+    assert!(generated_artifact_path.exists());
+
+    let selected_master = select_single_graph_by_raised_cuts(
+        &mut cli,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+        2,
+        true,
+    )?;
+    assert!(
+        !generated_artifact_path.exists(),
+        "select should remove generated integrand artifacts before regeneration"
+    );
+
+    cli.run_command(&format!(
+        "generate existing -p {DDXG_RAISED_CUT_PROCESS_NAME} -i {DDXG_RAISED_CUT_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count_for(
+        &cli,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+        1,
+    )?;
+    assert_eq!(
+        master_graph_names_for(
+            &cli,
+            DDXG_RAISED_CUT_PROCESS_NAME,
+            DDXG_RAISED_CUT_INTEGRAND_NAME
+        ),
+        vec![selected_master]
+    );
+
+    integrate_tth_low_stat_for(
+        &mut cli,
+        test_name,
+        DDXG_RAISED_CUT_PROCESS_NAME,
+        DDXG_RAISED_CUT_INTEGRAND_NAME,
+    )?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_ddx_amplitude_graph_before_generation_generates_and_integrates() -> Result<()> {
+    let test_name = "select_ddx_amplitude_graph_before_generation_generates_and_integrates";
+    let mut cli = setup_ddx_amplitude_select_cli(test_name)?;
+
+    assert_tth_diagram_count_for(
+        &cli,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+        4,
+    );
+    let selected_master = select_single_ddx_amplitude_graph(&mut cli)?;
+
+    cli.run_command(&format!(
+        "generate existing -p {DDX_AMPLITUDE_PROCESS_NAME} -i {DDX_AMPLITUDE_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count_for(
+        &cli,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+        1,
+    )?;
+    assert_eq!(
+        ddx_amplitude_master_graph_names(&cli),
+        vec![selected_master]
+    );
+
+    integrate_tth_low_stat_for(
+        &mut cli,
+        test_name,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+    )?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_ddx_amplitude_graph_after_generation_discards_and_regenerates() -> Result<()> {
+    let test_name = "select_ddx_amplitude_graph_after_generation_discards_and_regenerates";
+    let mut cli = setup_ddx_amplitude_select_cli(test_name)?;
+
+    assert_tth_diagram_count_for(
+        &cli,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+        4,
+    );
+    cli.run_command(&format!(
+        "generate existing -p {DDX_AMPLITUDE_PROCESS_NAME} -i {DDX_AMPLITUDE_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count_for(
+        &cli,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+        4,
+    )?;
+    cli.save_state()?;
+
+    let generated_artifact_path = cli
+        .cli_settings
+        .state
+        .folder
+        .join("processes")
+        .join("cross_sections")
+        .join(DDX_AMPLITUDE_PROCESS_NAME)
+        .join(DDX_AMPLITUDE_INTEGRAND_NAME)
+        .join("integrand");
+    assert!(generated_artifact_path.exists());
+
+    let selected_master = select_single_ddx_amplitude_graph(&mut cli)?;
+    assert!(
+        !generated_artifact_path.exists(),
+        "select should remove generated integrand artifacts before regeneration"
+    );
+
+    cli.run_command(&format!(
+        "generate existing -p {DDX_AMPLITUDE_PROCESS_NAME} -i {DDX_AMPLITUDE_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count_for(
+        &cli,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+        1,
+    )?;
+    assert_eq!(
+        ddx_amplitude_master_graph_names(&cli),
+        vec![selected_master]
+    );
+
+    integrate_tth_low_stat_for(
+        &mut cli,
+        test_name,
+        DDX_AMPLITUDE_PROCESS_NAME,
+        DDX_AMPLITUDE_INTEGRAND_NAME,
+    )?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_tth_graph_copy_before_generation_generates_and_integrates() -> Result<()> {
+    let test_name = "select_tth_graph_copy_before_generation_generates_and_integrates";
+    let mut cli = setup_tth_select_cli(test_name)?;
+    let output_process = "epem_a_tth_selected";
+    let output_integrand = "LO_selected";
+
+    assert_tth_diagram_count(&cli, 2);
+    let selection = unique_tth_master_selection(&cli)?;
+    cli.run_command(&format!(
+        "select -p {TTH_PROCESS_NAME} -i {TTH_INTEGRAND_NAME} {} --output_process {output_process} --output_integrand {output_integrand}",
+        selection.cli_options
+    ))?;
+
+    assert_tth_diagram_count(&cli, 2);
+    assert_tth_diagram_count_for(&cli, output_process, output_integrand, 1);
+    assert_eq!(
+        tth_cross_section_for(&cli, output_process, output_integrand).supergraphs[0]
+            .graph
+            .name,
+        selection.master_graph
+    );
+
+    cli.run_command(&format!(
+        "generate existing -p {output_process} -i {output_integrand}"
+    ))?;
+    assert_tth_generated_graph_count_for(&cli, output_process, output_integrand, 1)?;
+
+    integrate_tth_low_stat_for(&mut cli, test_name, output_process, output_integrand)?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn select_tth_graph_copy_after_generation_preserves_source_and_integrates_target() -> Result<()> {
+    let test_name = "select_tth_graph_copy_after_generation_preserves_source_and_integrates_target";
+    let mut cli = setup_tth_select_cli(test_name)?;
+    let output_integrand = "LO_selected";
+
+    assert_tth_diagram_count(&cli, 2);
+    cli.run_command(&format!(
+        "generate existing -p {TTH_PROCESS_NAME} -i {TTH_INTEGRAND_NAME}"
+    ))?;
+    assert_tth_generated_graph_count(&cli, 2)?;
+
+    let selection = unique_tth_master_selection(&cli)?;
+    cli.run_command(&format!(
+        "select -p {TTH_PROCESS_NAME} -i {TTH_INTEGRAND_NAME} {} --output_integrand {output_integrand}",
+        selection.cli_options
+    ))?;
+
+    assert_tth_diagram_count(&cli, 2);
+    assert_tth_generated_graph_count(&cli, 2)?;
+    assert_tth_diagram_count_for(&cli, TTH_PROCESS_NAME, output_integrand, 1);
+    assert_eq!(
+        tth_cross_section_for(&cli, TTH_PROCESS_NAME, output_integrand).supergraphs[0]
+            .graph
+            .name,
+        selection.master_graph
+    );
+
+    cli.run_command(&format!(
+        "generate existing -p {TTH_PROCESS_NAME} -i {output_integrand}"
+    ))?;
+    assert_tth_generated_graph_count_for(&cli, TTH_PROCESS_NAME, output_integrand, 1)?;
+    assert_tth_generated_graph_count(&cli, 2)?;
+
+    integrate_tth_low_stat_for(&mut cli, test_name, TTH_PROCESS_NAME, output_integrand)?;
+    Ok(())
+}
+
 //#[test]
 // fn simple_epem_ddx_generation() -> Result<()> {
 //     let mut cli = get_test_cli(
@@ -187,7 +1060,7 @@ fn cp_fix_from_symbolica()->Result<()>{
     // Choose the model to consider
     cli.run_command("import model sm-default.json")?;
 
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,-9*G^2*Nc^(-1)*TR*ee^(-2)+9*G^2*Nc*TR*ee^(-2),-1)+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,-9*G^2*Nc^(-1)*TR*ee^(-2)+9*G^2*Nc*TR*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-12*G^2*ee^(-2)+-18*G^2*Nc*TR*ee^(-2)+18*G^2*Nc^(-1)*TR*ee^(-2)");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-12*G^2*ee^(-2)+-9*G^2*Nc*ee^(-2)+9*G^2*Nc^(-1)*ee^(-2)");//good
     Ok(())
 }
 
@@ -384,30 +1257,6 @@ mod failing {
 
     #[test]
     #[rustfmt::skip]
-    #[ignore = "slow"]
-    fn test_generate_sm_h_n_j() -> Result<()> {
-        let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-        cli.run_command("import model sm.json")?;
-
-        // Full particle contents
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g | h g b t ghg [{1}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"2 | -4 = -4");//good
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g | h g b t ghg [{2}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"30 | -34+Group(1,1,-2)+Group(13,1,-2)+Group(14,1,-2)+Group(15,1,-2)+Group(16,1,-2)+Group(2,1,-2)+Group(21,1,-2)+Group(22,1,-2)+Group(25,1,-2)+Group(26,1,-2)+Group(27,1,-2)+Group(28,1,-2)+Group(3,1,-2)+Group(33,1,-2)+Group(34,1,-2)+Group(35,1,-2)+Group(36,1,-2)+Group(4,1,-2)+Group(5,1,-2)+Group(6,1,-2) = -74");//good
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g | h g b t ghg [{1}] --symmetrize-left-right-states true --numerator-grouping only_detect_zeroes",false)?,@"2 | -4 = -4");//good
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g | h g b t ghg [{2}] --symmetrize-left-right-states true --numerator-grouping only_detect_zeroes",false)?,@"40 | -74 = -74");//good
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g g | h g b t ghg [{1}] --symmetrize-left-right-states true --numerator-grouping only_detect_zeroes",false)?,@"6 | -24 = -24");//good
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g g | h g b t ghg [{2}] --symmetrize-left-right-states true --numerator-grouping only_detect_zeroes",false)?,@"188 | -618 = -618");//good
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g g | h g b t ghg [{1}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"4 | -12+Group(1,1,-3)+Group(2,1,-3)+Group(4,1,-3)+Group(5,1,-3) = -24");//good
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g g | h g b t ghg [{2}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"144 | -480+Group(10,1,6)+Group(100,1,-3/2)+Group(101,1,-3/2)+Group(102,1,6)+Group(103,1,6)+Group(104,1,6)+Group(105,1,6)+Group(106,1,-6)+Group(107,1,-6)+Group(108,1,-3)+Group(109,1,-3)+Group(11,1,6)+Group(110,1,-3)+Group(111,1,-3)+Group(112,1,-3/2)+Group(113,1,-3/2)+Group(114,1,3)+Group(115,1,3)+Group(120,1,3)+Group(121,1,3)+Group(122,1,-3)+Group(123,1,-3)+Group(127,1,-3)+Group(128,1,-3)+Group(129,1,-3)+Group(130,1,-3)+Group(136,1,6)+Group(137,1,6)+Group(162,1,-3)+Group(163,1,-3)+Group(170,1,-3)+Group(171,1,-3)+Group(172,1,-3)+Group(173,1,-3)+Group(174,1,-3)+Group(175,1,-3)+Group(176,1,-3)+Group(177,1,-3)+Group(178,1,-3)+Group(179,1,-3)+Group(180,1,-3)+Group(181,1,-3)+Group(189,1,-3/2)+Group(190,1,-3/2)+Group(191,1,-3)+Group(192,1,-3)+Group(33,1,-3)+Group(34,1,-3)+Group(36,1,-3)+Group(37,1,-3)+Group(38,1,-3)+Group(39,1,-3)+Group(4,1,3)+Group(47,1,-3)+Group(48,1,-3)+Group(5,1,3)+Group(52,1,-3)+Group(53,1,-3)+Group(54,1,-6)+Group(55,1,-6)+Group(56,1,-3)+Group(57,1,-3)+Group(58,1,-3)+Group(59,1,-3)+Group(6,1,3)+Group(60,1,-3/2)+Group(61,1,-3/2)+Group(63,1,-3/2)+Group(64,1,-3/2)+Group(65,1,-3)+Group(66,1,-3)+Group(7,1,3)+Group(71,1,-3)+Group(72,1,-3)+Group(73,1,-3)+Group(74,1,-3)+Group(84,1,-3)+Group(85,1,-3)+Group(88,1,-3)+Group(89,1,-3)+Group(90,1,-3)+Group(91,1,-3)+Group(94,1,-3)+Group(95,1,-3)+Group(96,1,-3)+Group(97,1,-3)+Group(98,1,-3/2)+Group(99,1,-3/2) = -618");// less grouping, but same sum 132 vs 144 ?
-
-        // Cross-section at 3-loops
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "h > g g | h g b t ghg [{{3}}] --symmetrize-left-right-states true --numerator-grouping only_detect_zeroes",false)?,@"8 | 8 = 8");//good
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "h > g g | h g b t ghg [{{3}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"3 | Group(0,1,1)+Group(1,1,1)+Group(2,1,1)+Group(3,1,1)+Group(4,1,1)+Group(5,1,1)+Group(6,1,1)+Group(7,1,1) = 8");//good
-
-        Ok(())
-    }
-
-    #[test]
-    #[rustfmt::skip]
     fn test_slow_generate_sm_h_n_j() -> Result<()> {
         let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
         cli.run_command("import model sm.json")?;
@@ -560,104 +1409,10 @@ mod failing {
 
         Ok(())
     }
-
-    #[test]
-    #[rustfmt::skip]
-    #[ignore = "slow"]
-    fn test_slow_generate_amplitude_1l_sm_jets() -> Result<()> {
-        let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-        cli.run_command("import model sm.json")?;
-
-        // Targets confirmed by MadGraph
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ d d~ g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"5424 | 0");
-
-        Ok(())
-    }
-
-    #[test]
-    #[rustfmt::skip]
-    #[ignore = "veryslow"]
-    fn test_very_slow_generate_amplitude_1l_sm_jets() -> Result<()> {
-        let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-        cli.run_command("import model sm.json")?;
-
-        // Targets confirmed by MadGraph
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "g g > g g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"14875 | 1375");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"32074 | 0");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"16037 | -18993/2");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ d d~ g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"16272 | 0");
-
-        Ok(())
-    }
-
-    #[test]
-    #[rustfmt::skip]
-    #[ignore = "veryslow"]
-    fn test_slow_generate_amplitude_1l_sm_jets_with_grouping() -> Result<()> {
-        let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-        cli.run_command("import model sm.json")?;
-
-        // Targets confirmed by MadGraph
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"2090 | 0");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"1045 | -698");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ d d~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"380 | 0");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ d d~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"1140 | 0");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "g g > g g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"11850 | 1375");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"29210 | 0");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"14605 | -18993/2");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ d d~ g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"15030 | 0");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ d d~ g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"5010 | 0");
-
-        Ok(())
-    }
 }
 
 mod slow {
     use super::*;
-
-    #[test]
-    #[rustfmt::skip]
-    #[ignore = "slow"]
-    fn test_slow_generate_sm_a_ddx() -> Result<()> {
-        let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-        cli.run_command("import model sm.json")?;
-
-        // Full particle contents
-        // Adding --symmetrize_left_right_states below would error in Python; keep as-is here.
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{3}}] --numerator-grouping only_detect_zeroes",false)?,@"1321 | -1103/2 = -1103/2");//good
-
-        // Only 1-flavour pure QCD corrections
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{5}}] --symmetrize-left-right-states true --numerator-grouping only_detect_zeroes",false)?,@"6303 | -51683/24 = -51683/24");//good
-
-        Ok(())
-    }
-
-    #[test]
-    #[rustfmt::skip]
-    #[ignore = "slow"]
-    fn test_slow_generate_sm_full_a_ddx() -> Result<()> {
-        let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-        cli.run_command("import model sm-full.json")?;
-
-        // Full particle contents
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ QED^2==4 [{{3}}] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"291 | -274+Group(324,1,-1)+Group(325,1,-1)+Group(328,1,-1)+Group(329,1,-1)+Group(330,1,-1)+Group(331,1,-1)+Group(336,1,-1)+Group(337,1,-1)+Group(338,1,-1)+Group(339,1,-1)+Group(340,1,-1)+Group(341,1,-1)+Group(346,1,-1)+Group(351,1,-1)+Group(352,1,-1)+Group(353,1,-1)+Group(354,1,-1)+Group(355,1,-1)+Group(356,1,-1)+Group(357,1,-1)+Group(358,1,-1)+Group(359,1,-1)+Group(360,1,-1)+Group(365,1,-1)+Group(366,1,-1)+Group(367,1,-1)+Group(368,1,-1)+Group(369,1,-1)+Group(370,1,-1)+Group(371,1,-1)+Group(38,1,-1)+Group(39,1,-1)+Group(40,1,-1)+Group(41,1,-1)+Group(44,1,-1)+Group(45,1,-1)+Group(46,1,-1)+Group(47,1,-1)+Group(500,1,-1)+Group(501,1,-1)+Group(502,1,-1)+Group(503,1,-1)+Group(504,1,-1)+Group(505,1,-1)+Group(506,1,-1)+Group(507,1,-1) = -320");//a lot less TODO: check that main has lorentz zeros present and here removed 291 vs 339
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{3}}] --numerator-grouping no_grouping",false)?,@"8549 | -9111/2 = -9111/2");//good
-
-        Ok(())
-    }
-
-    #[test]
-    #[rustfmt::skip]
-    #[ignore = "slow"]
-    fn test_slow_generate_sm_h_n_j_cross_section() -> Result<()> {
-        let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-        cli.run_command("import model sm.json")?;
-
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "h > g g g | h g b t ghg [{{4}}] --symmetrize-left-right-states true --numerator-grouping only_detect_zeroes",false)?,@"72 | 88 = 88");//good
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "h > g g g | h g b t ghg [{{4}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"26 | 4+Group(10,1,1)+Group(11,1,1)+Group(12,1,1/2)+Group(13,1,1/2)+Group(14,1,1/2)+Group(15,1,1/2)+Group(16,1,2)+Group(17,1,2)+Group(18,1,2)+Group(19,1,2)+Group(2,1,1)+Group(20,1,1)+Group(21,1,1)+Group(22,1,1)+Group(23,1,1)+Group(24,1,1)+Group(25,1,1)+Group(26,1,1)+Group(27,1,1)+Group(28,1,2)+Group(29,1,2)+Group(3,1,1)+Group(30,1,2)+Group(31,1,2)+Group(32,1,1)+Group(33,1,1)+Group(34,1,1)+Group(35,1,1)+Group(36,1,1)+Group(37,1,1)+Group(38,1,1)+Group(39,1,1)+Group(4,1,1)+Group(40,1,2)+Group(41,1,2)+Group(42,1,2)+Group(43,1,2)+Group(44,1,1)+Group(45,1,1)+Group(46,1,1)+Group(47,1,1)+Group(48,1,2)+Group(49,1,2)+Group(5,1,1)+Group(50,1,2)+Group(51,1,2)+Group(54,1,1)+Group(55,1,1)+Group(56,1,1)+Group(57,1,1)+Group(58,1,1)+Group(59,1,1)+Group(6,1,1)+Group(60,1,1/2)+Group(61,1,1/2)+Group(62,1,1/2)+Group(63,1,1/2)+Group(64,1,1)+Group(65,1,1)+Group(66,1,1)+Group(67,1,1)+Group(68,1,2)+Group(69,1,2)+Group(7,1,1)+Group(70,1,2)+Group(71,1,2)+Group(8,1,1)+Group(9,1,1) = 88");//good
-
-        Ok(())
-    }
 
     #[test]
     #[rustfmt::skip]
@@ -740,33 +1495,6 @@ mod slow {
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 1 --number-of-factorized-loop-subtopologies 1 1",true)?,@"22 | 1/4+Group(0,1,-1/4)+Group(1,1,-1/4)+Group(14,1,-1/2)+Group(16,1,-1/2)+Group(2,1,-1/3)+Group(25,1,-1/4)+Group(26,1,-1/3)+Group(27,1,-1/4)+Group(28,1,1/4)+Group(29,1,-1/2)+Group(3,1,1/4)+Group(4,1,-1/2)+Group(5,1,1/2)+Group(6,1,1/2)+Group(9,1,1/2) = -17/12");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"200 | -199/48 = -199/48");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"130 | -71/48+Group(0,1,-1/8)+Group(1,1,-1/2)+Group(10,1,-1/2)+Group(106,1,-1/2)+Group(107,1,-1)+Group(108,1,-1/2)+Group(109,1,-1/2)+Group(11,1,-1/4)+Group(110,1,-1)+Group(111,1,1/2)+Group(118,1,1)+Group(119,1,-1/2)+Group(120,1,-1/2)+Group(121,1,-1)+Group(122,1,-1)+Group(123,1,-1/2)+Group(124,1,1/2)+Group(125,1,-1/3)+Group(126,1,-1/3)+Group(13,1,-1/4)+Group(131,1,-1/3)+Group(132,1,-1/3)+Group(134,1,-1)+Group(136,1,-1)+Group(14,1,-1)+Group(144,1,-1/2)+Group(146,1,-1/2)+Group(15,1,1/4)+Group(16,1,1/4)+Group(17,1,-1)+Group(174,1,1)+Group(175,1,1/2)+Group(176,1,1)+Group(177,1,-1/8)+Group(178,1,-1/2)+Group(179,1,-1/4)+Group(18,1,-1/6)+Group(180,1,-1/4)+Group(181,1,-1/8)+Group(182,1,-1/12)+Group(183,1,-1/3)+Group(184,1,-1/2)+Group(185,1,-1/2)+Group(186,1,-1/2)+Group(187,1,-1/2)+Group(188,1,-1/4)+Group(19,1,1)+Group(190,1,-1/4)+Group(191,1,-1)+Group(192,1,1/4)+Group(193,1,1/4)+Group(194,1,-1)+Group(195,1,-1/6)+Group(196,1,1)+Group(197,1,-1/2)+Group(198,1,-1)+Group(199,1,1/6)+Group(2,1,-1/4)+Group(20,1,-1/2)+Group(200,7/2,1/6)+Group(201,1,1/2)+Group(202,1,1)+Group(203,1,-1/3)+Group(204,1,-1/2)+Group(205,1,-1/6)+Group(21,1,-1/2)+Group(22,1,1/6)+Group(23,7/2,1/6)+Group(24,1,-1)+Group(25,1,1/2)+Group(26,1,1)+Group(27,1,-1/3)+Group(28,1,-1/2)+Group(29,1,-1/6)+Group(3,1,-1/4)+Group(30,1,1/2)+Group(31,1,1/2)+Group(32,1,1)+Group(33,1,-1/2)+Group(34,7/2,1/3)+Group(35,1,1/3)+Group(36,1,1/2)+Group(37,1,1)+Group(38,1,1/2)+Group(39,1,1)+Group(4,1,-1/8)+Group(40,1,1/2)+Group(41,1,1/2)+Group(42,1,1)+Group(43,1,-1/2)+Group(44,1,1)+Group(46,1,1)+Group(5,1,-1/12)+Group(58,1,-1)+Group(59,1,1/2)+Group(6,1,-1/3)+Group(60,1,1/2)+Group(61,1,1)+Group(62,1,1)+Group(63,1,1/2)+Group(64,1,-1/2)+Group(65,1,1/3)+Group(66,2/7,1/3)+Group(67,1,1)+Group(68,1,-1/3)+Group(69,1,-1/3)+Group(7,1,-1/2)+Group(74,1,1/3)+Group(75,2/7,1/3)+Group(76,1,1)+Group(77,1,1)+Group(8,1,-1/2)+Group(80,1,1)+Group(82,1,1/2)+Group(85,1,1/2)+Group(89,1,-1/2)+Group(9,1,-1/2)+Group(92,1,-1/2)+Group(98,1,1/6)+Group(99,7/2,1/6) = -853/336");
-
-        Ok(())
-    }
-
-    #[test]
-    #[rustfmt::skip]
-    #[ignore = "slow"]
-    fn test_slow_vacuum_amplitude_generation() -> Result<()> {
-        let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-        cli.run_command("import model sm.json")?;
-
-        // CURRENTLY BUGGED BECAUSE OF SYMBOLICA INCORRECT SYMMETRY FACTORS. POSSIBLY OTHER SCENARIOS BUGGED TOO.
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{5}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"2560 | -5785/384");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{5}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"1440 | 233015/51072");
-
-        Ok(())
-    }
-
-    #[test]
-    #[rustfmt::skip]
-    #[ignore = "slow"]
-    fn test_slow_generate_a_qqh() -> Result<()> {
-        let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-        cli.run_command("import model sm.json")?;
-        // cli.run_command(&format!("set global kv global.n_cores.feyngen=8"))?;
-
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "a > b b~ h | b h a ghg g QED==4 [{5} QCD=3] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"2763 | -38712/7");
 
         Ok(())
     }

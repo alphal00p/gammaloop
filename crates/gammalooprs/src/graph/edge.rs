@@ -15,12 +15,7 @@ use spenso::{
     algebra::complex::Complex,
     structure::{IndexLess, ScalarStructure, representation::LibraryRep},
 };
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
-    domains::float::{Complex as SymComplex, Float},
-    evaluate::{ExpressionEvaluator, OptimizationSettings},
-    parse,
-};
+use symbolica::{domains::float::Complex as SymComplex, prelude::*};
 
 use crate::{
     feyngen::diagram_generator::EdgeColor,
@@ -239,7 +234,10 @@ impl EdgeMass {
             .collect();
 
         let a = atom
-            .evaluator(&paramb.fn_map, &params, OptimizationSettings::default())
+            .evaluator(&params)
+            .function_map(paramb.fn_map.clone())
+            .optimization_settings(OptimizationSettings::default())
+            .build()
             .map_err(|a| eyre!(a))?;
 
         Ok(EdgeMass::Evaluator(Arc::new(Mutex::new(a.map_coeff(

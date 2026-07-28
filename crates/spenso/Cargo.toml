@@ -4,8 +4,6 @@ version = "0.6.0"
 edition = "2024"
 description = "A tensor (n-dim array) network, iterating, and contraction (using automatic abstract index matching) library."
 documentation = "https://docs.rs/spenso/latest/spenso/"
-# readme = "README.md"
-repository = "https://github.com/alphal00p/spenso"
 license = "MIT OR Apache-2.0"
 keywords = ["contraction", "tensors"]
 
@@ -14,6 +12,11 @@ all-features = true
 
 [lib]
 path = "src/spenso.rs"
+
+[[example]]
+name = "symbolica_lazy_deadlock_mwe"
+path = "examples/symbolica_lazy_deadlock_mwe.rs"
+required-features = ["shadowing"]
 
 # [[test]]
 # name = "three_loop"
@@ -46,7 +49,7 @@ features = "0.10.0"
 gat-lending-iterator = "0.1.5"
 indexmap = { workspace = true, features = ["serde"] }
 linnet = { workspace = true, features = ["bincode", "serde"] }
-# itertools = "0.14.0"
+
 log = "0.4.22"
 num = { version = "0.4.3", features = ["serde"] }
 once_cell = "1.20.2"
@@ -60,12 +63,10 @@ spenso-macros = { workspace = true }
 # serde_toml = "0.0.1"
 # slotmap = { version = "1.0.7", features = ["serde"] }
 # smartstring = { version = "1.0.1", features = ["serde"] }
-symbolica = { workspace = true, default-features = false, features = [
-  "bincode",
-  "serde",
-], optional = true }
+
 tabled = "0.20.0"
 thiserror = { workspace = true }
+tracing = { workspace = true }
 # approx-derive = "0.2.6"
 
 pyo3 = { workspace = true, optional = true }
@@ -74,10 +75,17 @@ colored = { workspace = true }
 itertools = "0.14.0"
 nu-ansi-term = { workspace = true }
 pyo3-stub-gen = { workspace = true, optional = true }
+gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }
+
+[dependencies.symbolica]
+workspace = true
+default-features = false
+features = ["bincode", "serde"]
+optional = true
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-insta = { workspace = true, features = ["json", "ron", "toml", "yaml"] }
+insta = { version = "1.38.0", features = ["json", "ron", "toml", "yaml"] }
 ron = "0.8"
 
 [features]

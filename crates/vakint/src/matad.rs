@@ -695,7 +695,6 @@ impl Vakint {
                 vk_symbol!("ep"),
                 Atom::Zero.as_view(),
                 Rational::from(expansion_depth),
-                true,
             ) {
                 Ok(a) => a,
                 Err(e) => return Err(VakintError::SymbolicaError(e.to_string())),

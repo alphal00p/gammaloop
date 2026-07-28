@@ -25,10 +25,13 @@ use crate::{
     },
     processes::DotExportSettings,
     utils::symbolica_ext::{DOD, LogPrint},
-    uv::UltravioletGraph,
+    uv::{UltravioletGraph, uv_graph::UVE},
 };
 use ahash::{AHashMap, AHashSet};
-use idenso::color::ColorSimplifier;
+use idenso::{
+    color::{ColorSimplifier, ColorSimplifySettings},
+    tensor::SymbolicNetParse,
+};
 
 use color_eyre::{Report, Result, Section};
 
@@ -50,10 +53,7 @@ use linnet::{
 };
 use spenso::{
     contraction::Contract,
-    network::{
-        library::TensorLibraryData,
-        parsing::{NetworkParse, ParseSettings},
-    },
+    network::parsing::ParseSettings,
     structure::{HasStructure, OrderedStructure, representation::Euclidean, slot::IsAbstractSlot},
     tensors::{data::StorageTensor, parametric::ParamTensor},
 };
@@ -692,6 +692,18 @@ impl Graph {
         g.write_fmt(writer)
     }
 
+    pub(crate) fn from_parsed_with_validation(graph: ParseGraph, model: &Model) -> Result<Self> {
+        let res = Self::from_parsed(graph, model)?;
+        res.validate_full_numerator_tensor_network()
+            .with_context(|| {
+                format!(
+                    "Failed to validate full numerator tensor network for graph {}",
+                    res.name
+                )
+            })?;
+        Ok(res)
+    }
+
     #[instrument(skip_all, fields(graph= %graph.debug_dot(),name = %graph.global_data.name.as_str()))]
     pub(crate) fn from_parsed(graph: ParseGraph, model: &Model) -> Result<Self> {
         let (initial_data, mut graph) = Self::extract_initial_data(&graph, model)?;
@@ -775,6 +787,10 @@ impl Graph {
             param_builder,
         };
 
+        let external_momentum_edge_order = g.external_momentum_edge_order();
+        g.loop_momentum_basis
+            .canonicalize_external_order(&external_momentum_edge_order);
+
         let updated_param_builder_with_lmb = ParamBuilder::new(
             &g,
             model,
@@ -790,14 +806,6 @@ impl Graph {
 
         g.param_builder = updated_param_builder_with_lmb;
 
-        g.validate_full_numerator_tensor_network()
-            .with_context(|| {
-                format!(
-                    "Failed to validate full numerator tensor network for graph {}",
-                    g.name
-                )
-            })?;
-
         debug!("{}", g.debug_dot());
 
         Ok(g)
@@ -811,7 +819,9 @@ impl Graph {
             * &self.global_prefactor.num
             * &self.global_prefactor.projector
             * &self.overall_factor;
-        let color_simplified = full_num.as_view().simplify_color();
+        let color_simplified = full_num
+            .as_view()
+            .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants());
         if !full_num.is_zero() && color_simplified.is_zero() {
             warn!(
                 "Full numerator for graph '{}' becomes zero after color algebra. The graph/projector color structure likely annihilates the amplitude.",
@@ -1092,6 +1102,7 @@ impl Graph {
                     ));
                     }
 
+                let mass = EdgeMass::from_atom(e.mass_atom(), model, param_builder)?;
 
                 let num = match e.num {
                     Some(num) => Autogen::explicit(num),
@@ -1117,7 +1128,7 @@ impl Graph {
 
                 Ok(EdgeData::new(
                     Edge {
-                        mass: EdgeMass::from_atom(e.particle.mass_atom(), model, param_builder)?,
+                        mass,
                         is_dummy: e.is_dummy,
                         name: Autogen::from_option_or_generate(e.name, || eid.to_string()),
                         particle: e.particle,

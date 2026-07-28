@@ -1,8 +1,4 @@
-use symbolica::{
-    atom::{Atom, AtomCore},
-    printer::CanonicalOrderingSettings,
-    try_parse,
-};
+use symbolica::prelude::*;
 
 use color_eyre::Result;
 use eyre::eyre;
@@ -26,11 +22,12 @@ where
     A: AtomCore,
 {
     fn to_ordered_simple(&self) -> String {
-        self.to_canonically_ordered_string(CanonicalOrderingSettings {
-            include_namespace: false,
-            include_attributes: false,
-            hide_namespace: None,
-        })
+        self.to_canonically_ordered_string(
+            CanonicalOrderingSettings::new()
+                .include_namespace(false)
+                .include_attributes(false)
+                .hide_namespace(None),
+        )
     }
 }
 impl<A> ToQuoted for A
@@ -40,11 +37,12 @@ where
     fn to_quoted(&self) -> String {
         // let mut opts = PrintOptions::file();
         // opts.hide_namespace = Some("gammalooprs");
-        self.to_canonically_ordered_string(CanonicalOrderingSettings {
-            include_namespace: true,
-            include_attributes: false,
-            hide_namespace: Some("gammalooprs"),
-        })
+        self.to_canonically_ordered_string(
+            CanonicalOrderingSettings::new()
+                .include_namespace(true)
+                .include_attributes(false)
+                .hide_namespace(Some("gammalooprs")),
+        )
         .to_string()
         //.printer(opts))
     }

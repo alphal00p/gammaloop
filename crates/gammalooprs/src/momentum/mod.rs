@@ -41,20 +41,14 @@ use spenso::{
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, Symbol},
-    coefficient::Coefficient,
     domains::{
         dual::HyperDual,
-        float::{Complex as SymComplex, FloatLike as SymFloatLike, Real, RealLike, SingleFloat},
-        integer::IntegerRing,
-        rational::{Rational, RationalField},
+        float::{Complex as SymComplex, FloatLike as SymFloatLike},
+        rational::RationalField,
     },
-    evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
-    poly::{Exponent, polynomial::MultivariatePolynomial},
+    prelude::*,
 };
 use thiserror::Error;
-
-use symbolica::{parse, symbol};
 
 use crate::{
     GammaLoopContext,
@@ -2896,11 +2890,11 @@ impl Rotation {
                     &shadow_t.try_into_parametric().unwrap().tensor.data(),
                 )
                 .unwrap()
-                .linearize(&OptimizationSettings {
-                    cpe_iterations: Some(1),
-                    verbose: false,
-                    ..OptimizationSettings::default()
-                });
+                .linearize(
+                    &OptimizationSettings::new()
+                        .cpe_iterations(Some(1))
+                        .verbose(false),
+                );
 
         let i = GR.bis.new_slot(4, 1);
 
@@ -2928,13 +2922,11 @@ impl Rotation {
         params.push(Atom::i());
 
         let spinor_eval: EvalTensor<ExpressionEvaluator<SymComplex<Rational>>, OrderedStructure> =
-            res.to_evaluation_tree(&fn_map, &params)
-                .unwrap()
-                .linearize(&OptimizationSettings {
-                    cpe_iterations: Some(1),
-                    verbose: false,
-                    ..OptimizationSettings::default()
-                });
+            res.to_evaluation_tree(&fn_map, &params).unwrap().linearize(
+                &OptimizationSettings::new()
+                    .cpe_iterations(Some(1))
+                    .verbose(false),
+            );
 
         Self {
             method,
@@ -3312,7 +3304,7 @@ impl<T: FloatLike> Rotatable for FourMomentum<F<T>> {
     }
 }
 
-impl<T: FloatLike> Rotatable for Polarization<Complex<F<T>>> {
+impl<T: FloatLike + EvaluationDomain> Rotatable for Polarization<Complex<F<T>>> {
     fn rotate(&self, rotation: &Rotation) -> Self {
         let rotated = match self.pol_type {
             PolType::Epsilon | PolType::EpsilonBar => rotation

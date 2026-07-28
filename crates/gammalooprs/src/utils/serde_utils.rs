@@ -314,12 +314,16 @@ pub fn is_default_pysecdec_relative_precision(val: &f64) -> bool {
     show_defaults_helper(*val == 1.0e-7_f64)
 }
 
+pub fn is_default_esurface_existence_threshold(val: &f64) -> bool {
+    show_defaults_helper(*val == super::DEFAULT_ESURFACE_EXISTENCE_THRESHOLD)
+}
+
 pub fn is_default_vakint_normalization(val: &String) -> bool {
     show_defaults_helper(val == "MSbar")
 }
 
-pub fn is_one_string(val: &String) -> bool {
-    show_defaults_helper(val == "1")
+pub fn is_minus_one_string(val: &String) -> bool {
+    show_defaults_helper(val == "-1")
 }
 
 pub fn is_float<const D: i64>(val: &f64) -> bool {

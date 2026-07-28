@@ -25,23 +25,10 @@ use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Indeterminate},
-    domains::{
-        float::{
-            Complex, DoubleFloat, Float as ArbFloat, FloatLike as SymbolicaFloatLike, Real,
-            RealLike, SingleFloat,
-        },
-        integer::IntegerRing,
-        rational::{Fraction, Rational},
-    },
-    evaluate::{
-        CompileOptions, CompiledComplexEvaluator, ExportSettings, ExpressionEvaluator, FunctionMap,
-        InlineASM, JITCompiledEvaluator, OptimizationSettings,
-    },
-    id::{MatchSettings, Replacement},
-    parse_lit,
-    state::{State, StateMap},
-    symbol, try_parse,
+    domains::rational::Fraction,
+    evaluate::JITCompiledEvaluator,
+    prelude::*,
+    state::StateMap,
 };
 
 const STANDALONE_EVALUATORS_VERSION: u32 = 4;
@@ -291,11 +278,10 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
                     .export_cpp::<Complex<f64>>(
                         &source_path,
                         &function_name,
-                        ExportSettings {
-                            include_header: true,
-                            inline_asm: backend.inline_asm(),
-                            custom_header: None,
-                        },
+                        ExportSettings::new()
+                            .include_header(true)
+                            .inline_asm(backend.inline_asm())
+                            .custom_header(None),
                     )
                     .map_err(|error| eyre!(error))?
                     .compile(&library_path, CompileOptions::default())
@@ -305,7 +291,9 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
                 Ok(Self::Compiled(compiled))
             }
             StandaloneBackend::Symjit => Ok(Self::Symjit(
-                evaluator.jit_compile().map_err(|error| eyre!(error))?,
+                evaluator
+                    .jit_compile(JITCompilationSettings::default())
+                    .map_err(|error| eyre!(error))?,
             )),
         }
     }
@@ -441,15 +429,15 @@ fn apply_fn_map_entries(
 ) -> Result<(Vec<Replacement>, FunctionMap)> {
     let mut fn_map = FunctionMap::new();
     let mut replacements: Vec<Replacement> = vec![];
-    fn_map.add_constant(
-        parse_lit!(gammalooprs::x),
-        Complex::<Rational>::try_from(Atom::Zero.as_view()).unwrap(),
-    );
+    fn_map.add_aliases([(parse_lit!(gammalooprs::x), Atom::Zero)])
+        .map_err(|error| eyre!(error))?;
 
     for (lhs, rhs, tags, args) in parsed_entries {
         if let AtomView::Var(_) = lhs.as_view() {
             if let Ok(constant) = Complex::<Rational>::try_from(rhs.as_view()) {
-                fn_map.add_constant(lhs.clone(), constant);
+                fn_map
+                    .add_aliases([(lhs.clone(), Atom::num(constant))])
+                    .map_err(|error| eyre!(error))?;
             } else {
                 replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
             }
@@ -463,20 +451,12 @@ fn apply_fn_map_entries(
                             atom.to_pattern(),
                             Atom::var(symbol!(format!("x{index}_"))),
                         )
-                        .with_settings(MatchSettings {
-                            allow_new_wildcards_on_rhs: true,
-                            ..Default::default()
-                        }),
+                        .allow_new_wildcards_on_rhs(true),
                     );
                 }
 
                 fn_map
-                    .add_function(
-                        function.get_symbol(),
-                        function.get_symbol().get_name().into(),
-                        args,
-                        rhs.clone(),
-                    )
+                    .add_function(function.get_symbol(), args, rhs.clone())
                     .map_err(|error| eyre!(error))?;
 
                 replacements.push(Replacement::new(
@@ -485,13 +465,7 @@ fn apply_fn_map_entries(
                 ));
             } else {
                 fn_map
-                    .add_tagged_function(
-                        function.get_symbol(),
-                        tags,
-                        function.get_symbol().get_name().into(),
-                        args,
-                        rhs.clone(),
-                    )
+                    .add_tagged_function(function.get_symbol(), tags, args, rhs.clone())
                     .map_err(|error| eyre!(error))?;
             }
         } else {
@@ -509,12 +483,11 @@ fn build_evaluator<T: StandaloneNumber, A: ImportWithMap>(
     state_map: &StateMap,
     iterate: bool,
 ) -> Result<(ExpressionEvaluator<Complex<T>>, usize)> {
-    let optimization_settings = OptimizationSettings {
-        horner_iterations: 10,
-        n_cores: 1,
-        abort_check: None,
-        ..Default::default()
-    };
+    let optimization_settings = OptimizationSettings::new()
+        .horner_iterations(10)
+        .cores(1)
+        .abort_check(None);
+    let cpe_iterations = None;
     let exprs = payload
         .exprs
         .iter()
@@ -533,7 +506,10 @@ fn build_evaluator<T: StandaloneNumber, A: ImportWithMap>(
         for expr in &exprs {
             let eval = expr
                 .replace_multiple(&replacements)
-                .evaluator(&fn_map, params, optimization_settings.clone())
+                .evaluator(params)
+                .function_map(fn_map.clone())
+                .optimization_settings(optimization_settings.clone())
+                .build()
                 .map_err(|error| {
                     eyre!(
                         "{error} while building iterative evaluator for {}",
@@ -543,7 +519,7 @@ fn build_evaluator<T: StandaloneNumber, A: ImportWithMap>(
 
             tree = Some(if let Some(mut merged) = tree {
                 merged
-                    .merge(eval, optimization_settings.cpe_iterations)
+                    .merge(eval, cpe_iterations)
                     .map_err(|error| eyre!(error))?;
                 merged
             } else {
@@ -569,13 +545,11 @@ fn build_evaluator<T: StandaloneNumber, A: ImportWithMap>(
             .map(|expr| expr.replace_multiple(&replacements))
             .collect::<Vec<_>>();
 
-        Atom::evaluator_multiple(
-            &replaced_exprs,
-            &fn_map,
-            params,
-            optimization_settings.clone(),
-        )
-        .map(|eval| {
+        Atom::evaluator_multiple(&replaced_exprs, params)
+            .function_map(fn_map)
+            .optimization_settings(optimization_settings)
+            .build()
+            .map(|eval| {
             (
                 eval.map_coeff(&|value| {
                     Complex::new(

@@ -44,17 +44,16 @@ use spenso::{
 };
 use structure::{ConvertibleToStructure, SpensoIndices};
 use symbolica::{
-    api::python::SymbolicaCommunityModule,
-    atom::Atom,
-    domains::{float::Complex as SymComplex, rational::Rational},
-    evaluate::{CompileOptions, ExportSettings, FunctionMap, InlineASM, OptimizationSettings},
-    poly::PolyVariable,
+    api::python::SymbolicaCommunityModule, domains::float::Complex as SymComplex, prelude::*,
 };
 
 use symbolica::api::python::PythonExpression;
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{PyStubType, TypeInfo, define_stub_info_gatherer, derive::*};
+
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::derive::{gen_stub_pyclass_enum, gen_stub_pyfunction};
 
 pub mod library;
 pub mod library_tensor;
@@ -69,6 +68,43 @@ trait ModuleInit: PyClass {
 
 pub struct SpensoModule;
 
+/// Policy for Rayon operations that manipulate Symbolica expressions.
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
+#[pyclass(from_py_object, eq, eq_int, module = "symbolica.community.spenso")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SymbolicParallelism {
+    /// Resolve the setting from the Symbolica license when configured.
+    Auto,
+    /// Keep symbolic operations on the calling thread.
+    Serial,
+    /// Allow symbolic operations to use Rayon workers.
+    Parallel,
+}
+
+impl From<SymbolicParallelism> for spenso::symbolic_parallelism::SymbolicParallelism {
+    fn from(value: SymbolicParallelism) -> Self {
+        match value {
+            SymbolicParallelism::Auto => Self::Auto,
+            SymbolicParallelism::Serial => Self::Serial,
+            SymbolicParallelism::Parallel => Self::Parallel,
+        }
+    }
+}
+
+/// Configure whether Spenso may use Rayon for Symbolica operations.
+///
+/// `Auto` checks the Symbolica license once during this call. Tensor operations
+/// subsequently use the cached result without querying the license again.
+#[cfg_attr(
+    feature = "python_stubgen",
+    gen_stub_pyfunction(module = "symbolica.community.spenso")
+)]
+#[pyfunction]
+fn set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> bool {
+    spenso::symbolic_parallelism::set_symbolica_rayon_enabled(policy.into());
+    spenso::symbolic_parallelism::symbolica_rayon_enabled()
+}
+
 impl SymbolicaCommunityModule for SpensoModule {
     fn get_name() -> String {
         "spenso".to_string()
@@ -80,6 +116,9 @@ impl SymbolicaCommunityModule for SpensoModule {
 
     fn initialize(_py: Python) -> PyResult<()> {
         idenso::representations::initialize();
+        spenso::symbolic_parallelism::set_symbolica_rayon_enabled(
+            spenso::symbolic_parallelism::SymbolicParallelism::Auto,
+        );
         Ok(())
     }
 }
@@ -91,6 +130,8 @@ pub(crate) fn initialize_spenso(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // m.add_function(?)?;
     SpensoNet::init(m)?;
     ExecutionMode::init(m)?;
+    m.add_class::<SymbolicParallelism>()?;
+    m.add_function(wrap_pyfunction!(set_symbolica_rayon_enabled, m)?)?;
     Spensor::init(m)?;
     LibrarySpensor::init(m)?;
     SpensoIndices::init(m)?;
@@ -534,8 +575,12 @@ impl Spensor {
         let mut fn_map = FunctionMap::new();
 
         for (k, v) in &constants {
-            if let Ok(r) = v.expr.clone().try_into() {
-                fn_map.add_constant(k.expr.clone(), r);
+            if let Ok(r) = SymComplex::<Rational>::try_from(v.expr.clone()) {
+                fn_map
+                    .add_aliases([(k.expr.clone(), Atom::num(r))])
+                    .map_err(|e| {
+                        exceptions::PyValueError::new_err(format!("Could not add constant: {}", e))
+                    })?;
             } else {
                 Err(exceptions::PyValueError::new_err(
                     "Constants must be rationals. If this is not possible, pass the value as a parameter",
@@ -543,7 +588,7 @@ impl Spensor {
             }
         }
 
-        for ((symbol, rename, args), body) in &funs {
+        for ((symbol, _rename, args), body) in &funs {
             let symbol = symbol
                 .get_id()
                 .ok_or(exceptions::PyValueError::new_err(format!(
@@ -561,18 +606,16 @@ impl Spensor {
                 .collect::<Result<_, _>>()?;
 
             fn_map
-                .add_function(symbol, rename.clone(), args, body.expr.clone())
+                .add_function(symbol, args, body.expr.clone())
                 .map_err(|e| {
                     exceptions::PyValueError::new_err(format!("Could not add function: {}", e))
                 })?;
         }
 
-        let settings = OptimizationSettings {
-            horner_iterations: iterations,
-            n_cores,
-            verbose,
-            ..OptimizationSettings::default()
-        };
+        let settings = OptimizationSettings::new()
+            .horner_iterations(iterations)
+            .cores(n_cores)
+            .verbose(verbose);
 
         let params: Vec<_> = params.iter().map(|x| x.expr.clone()).collect();
 
@@ -783,13 +826,10 @@ impl SpensoExpressionEvaluator {
         // cuda_block_size: usize,
         // py: Python<'_>,
     ) -> PyResult<SpensoCompiledExpressionEvaluator> {
-        let mut options = CompileOptions {
-            optimization_level: optimization_level as usize,
-            ..Default::default()
-        };
+        let mut options = CompileOptions::new().optimization_level(optimization_level as usize);
 
         if let Some(compiler_path) = compiler_path {
-            options.compiler = compiler_path.to_string();
+            options = options.compiler(compiler_path.to_string());
         }
         let inline_asm = match inline_asm.to_lowercase().as_str() {
             "default" => InlineASM::default(),
@@ -809,12 +849,10 @@ impl SpensoExpressionEvaluator {
                 .export_cpp::<Complex<f64>>(
                     filename,
                     function_name,
-                    ExportSettings {
-                        include_header: true,
-                        inline_asm,
-                        custom_header,
-                        // ..Default::default()
-                    },
+                    ExportSettings::new()
+                        .include_header(true)
+                        .inline_asm(inline_asm)
+                        .custom_header(custom_header),
                 )
                 .map_err(|e| exceptions::PyValueError::new_err(format!("Export error: {}", e)))?
                 .compile(library_name, options)

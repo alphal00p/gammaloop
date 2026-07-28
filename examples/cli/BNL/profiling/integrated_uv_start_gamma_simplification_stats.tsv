@@ -1,0 +1,2 @@
+timestamp	stage	gamma_simplification_ms	changed	before_bytes	after_bytes	before_gamma_count	after_gamma_count	before_chain_count	after_chain_count	before_log_print_bytes	after_log_print_bytes
+2026-05-26T11:55:24.644+02:00	integrated_uv_start_after_simplify_gamma	106	true	3877	5069	16	18	0	8	657	939

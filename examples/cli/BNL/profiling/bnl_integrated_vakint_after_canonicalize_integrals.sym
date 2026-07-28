@@ -1,0 +1,2 @@
+vakint::topo(vakint::prop(1,vakint::edge(1,1),vakint::k(1),gammalooprs::mUVI^2,4))
+vakint::topo(vakint::prop(1,vakint::edge(1,1),vakint::k(1),gammalooprs::mUVI^2,3))

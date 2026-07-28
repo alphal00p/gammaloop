@@ -285,7 +285,7 @@ commands = [
 				 --show-top-discrete-grid
 				 --show-discrete-contributions-sum
                  --restart
-    """,
+	    """,
 ]
 
 [default_runtime_settings.sampling]

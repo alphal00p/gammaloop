@@ -41,7 +41,7 @@ softct = false
 inner_products = true
 add_sigma = true
 keep_sigma = false
-generate_only_integrated_uv_with_n_loops = 1
+add_integrated_uv_with_n_loops = 1
 subtract_uv = true
 
 [cli_settings.global.generation.tropical_subgraph_table]
@@ -72,14 +72,6 @@ commands = [
       --global-prefactor-num "1𝑖"
       --select-graphs GL0
       """,
-  "set global kv global.generation.uv.generate_integrated=false",
-  """generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{2}} QCD=1]
-          --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
-          --symmetrize-left-right-states true
-          -p epem_a_ddx_no_integrated_UV -i NLO
-          --global-prefactor-num "1𝑖"
-          --select-graphs GL0
-          """,
   "save standalone --json",
 ]
 

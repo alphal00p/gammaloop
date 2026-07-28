@@ -3,16 +3,17 @@
 //! This module contains implementations of fiber types that represent fixed and free
 //! tensor dimensions, enabling efficient iteration through tensor elements.
 
-use bitvec::vec::BitVec;
 use std::{
     fmt::{Debug, Display},
     ops::Index,
 };
 
 use crate::structure::{
-    TensorStructure, concrete_index::FlatIndex, dimension::Dimension,
+    SlotIndex, TensorStructure, concrete_index::FlatIndex, dimension::Dimension,
     representation::Representation, slot::IsAbstractSlot,
 };
+
+use linnet::half_edge::subgraph::subset::SubSet;
 
 use super::indices::{AbstractFiberIndex, FiberClassIndex, FiberData, FiberIndex};
 use super::traits::AbstractFiber;
@@ -33,7 +34,7 @@ impl BareFiber {
         match data {
             FiberData::Flat(i) => Self::from_flat(i, structure),
             FiberData::BoolFilter(b) => Self::from_filter(b),
-            FiberData::BitVec(b) => Self::from_bitvec(b),
+            FiberData::Subset(b) => Self::from_bitvec(b),
             FiberData::Single(i) => {
                 let mut out = Self::zeros(structure);
                 out.free(i);
@@ -63,12 +64,12 @@ impl BareFiber {
     }
 
     /// Returns a bitvector where true represents free indices
-    pub fn bitvec(&self) -> BitVec {
+    pub fn bitvec(&self) -> SubSet<SlotIndex> {
         self.indices.iter().map(|x| x.is_free()).collect()
     }
 
     /// Returns a bitvector where true represents fixed indices
-    pub fn bitvecinv(&self) -> BitVec {
+    pub fn bitvecinv(&self) -> SubSet<SlotIndex> {
         self.indices.iter().map(|x| x.is_fixed()).collect()
     }
 
@@ -113,12 +114,12 @@ impl BareFiber {
     /// # Arguments
     ///
     /// * `filter` - A slice of booleans where true indicates a free index
-    pub fn from_bitvec(filter: &BitVec) -> BareFiber {
+    pub fn from_bitvec(filter: &SubSet<SlotIndex>) -> BareFiber {
         let mut f = BareFiber {
             indices: filter
                 .iter()
                 .map(|i| {
-                    if *i {
+                    if i {
                         FiberIndex::Free
                     } else {
                         FiberIndex::Fixed(0)
@@ -259,7 +260,7 @@ where
         }
     }
 
-    fn bitvec(&self) -> BitVec {
+    fn bitvec(&self) -> SubSet<SlotIndex> {
         self.bare_fiber.bitvec()
     }
 }
@@ -333,12 +334,12 @@ where
     }
 
     /// Returns a bitvector where true represents free indices
-    pub fn bitvec(&self) -> BitVec {
+    pub fn bitvec(&self) -> SubSet<SlotIndex> {
         self.bare_fiber.bitvec()
     }
 
     /// Returns a bitvector where true represents fixed indices
-    pub fn bitvecinv(&self) -> BitVec {
+    pub fn bitvecinv(&self) -> SubSet<SlotIndex> {
         self.bare_fiber.bitvecinv()
     }
 
@@ -440,7 +441,7 @@ where
         }
     }
 
-    fn bitvec(&self) -> BitVec {
+    fn bitvec(&self) -> SubSet<SlotIndex> {
         self.bare_fiber.bitvec()
     }
 }
@@ -463,12 +464,12 @@ where
     }
 
     /// Returns a bitvector where true represents free indices
-    pub fn bitvec(&self) -> BitVec {
+    pub fn bitvec(&self) -> SubSet<SlotIndex> {
         self.bare_fiber.bitvec()
     }
 
     /// Returns a bitvector where true represents fixed indices
-    pub fn bitvecinv(&self) -> BitVec {
+    pub fn bitvecinv(&self) -> SubSet<SlotIndex> {
         self.bare_fiber.bitvecinv()
     }
 
@@ -591,7 +592,7 @@ impl<I: TensorStructure> AbstractFiber<FiberClassIndex> for FiberClass<'_, I> {
         }
     }
 
-    fn bitvec(&self) -> BitVec {
+    fn bitvec(&self) -> SubSet<SlotIndex> {
         !self.bare_fiber.bitvec()
     }
 }
@@ -693,7 +694,7 @@ impl<I: TensorStructure> AbstractFiber<FiberClassIndex> for FiberClassMut<'_, I>
         }
     }
 
-    fn bitvec(&self) -> BitVec {
+    fn bitvec(&self) -> SubSet<SlotIndex> {
         !self.bare_fiber.bitvec()
     }
 }

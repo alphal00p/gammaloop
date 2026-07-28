@@ -199,7 +199,7 @@ pub fn simplify_real(input: AtomView) -> Atom {
         None,
     );
     // Collect in EulerGamma to explicitly realise the MSbar cancellation
-    res = res.collect::<i8>(vakint_parse!("EulerGamma").unwrap(), None, None);
+    res = res.collect::<i8>(vakint_parse!("EulerGamma").unwrap());
     res
 }
 

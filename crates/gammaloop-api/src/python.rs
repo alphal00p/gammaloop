@@ -1,3 +1,4 @@
+use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
     cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
     feyngen::diagram_generator::evaluate_overall_factor,
@@ -11,8 +12,9 @@ use gammalooprs::{
     },
     processes::{DotExportSettings, ProcessCollection},
     settings::{global::OrientationPattern, RuntimeSettings},
-    utils::tracing::{LogFormat, LogLevel},
+    utils::tracing::LogLevel,
 };
+use idenso::shorthands::{metric::to_dots_impl, schoonschip::Schoonschip};
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::{ModifySubSet, SuBitGraph},
@@ -26,13 +28,14 @@ use crate::{
         Evaluate,
     },
     integrand_info::{
-        IntegrandCutInfo, IntegrandGraphGroupInfo, IntegrandGraphInfo, IntegrandInfo,
-        IntegrandLoopMomentumBasisInfo, IntegrandOrientationInfo, IntegrandThresholdEsurfaceInfo,
+        IntegrandActiveThresholdCutInfo, IntegrandCutInfo, IntegrandCutThresholdInfo,
+        IntegrandGraphGroupInfo, IntegrandGraphInfo, IntegrandInfo, IntegrandLoopMomentumBasisInfo,
+        IntegrandOrientationInfo, IntegrandThresholdEsurfaceInfo,
     },
     render_smart_toml,
     session::{display_command, CliSession, CliSessionState},
     settings_tree::{json_type_name, serialize_settings_with_defaults, value_at_path},
-    state::{ProcessRef, RunHistory, State},
+    state::{ProcessListExt, ProcessRef, RunHistory, State},
     CLISettings, LoadedState, StateLoadOption,
 };
 use ahash::{HashMap, HashMapExt};
@@ -54,7 +57,7 @@ use gammalooprs::feyngen::{
 use itertools::{self, Itertools};
 use std::{path::PathBuf, str::FromStr};
 
-use symbolica::{atom::AtomCore, parse};
+use symbolica::{atom::AtomCore, parse, printer::PrintOptions};
 // const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
@@ -82,6 +85,23 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
     Ok(parse!(atom_str).to_canonical_string())
 }
 
+#[pyfunction]
+#[pyo3(name = "to_dots")]
+pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
+    let dotted = to_dots_impl(
+        parse!(atom_str, default_namespace = "python")
+            .to_dots()
+            .as_view(),
+    );
+    Ok(format!(
+        "{}",
+        dotted.as_view().printer(PrintOptions {
+            hide_namespace: Some(std::borrow::Cow::Borrowed("python")),
+            ..PrintOptions::file()
+        })
+    ))
+}
+
 #[pymodule(name = "_gammaloop")]
 fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     gammalooprs::initialisation::initialise().expect("initialization failed");
@@ -102,6 +122,8 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyIntegrandOrientationInfo>()?;
     m.add_class::<PyIntegrandLoopMomentumBasisInfo>()?;
     m.add_class::<PyIntegrandCutInfo>()?;
+    m.add_class::<PyIntegrandCutThresholdInfo>()?;
+    m.add_class::<PyIntegrandActiveThresholdCutInfo>()?;
     m.add_class::<PyIntegrandThresholdEsurfaceInfo>()?;
     m.add_class::<PyAdditionalWeight>()?;
     m.add_class::<PyHistogramAccumulator>()?;
@@ -135,6 +157,7 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     */
     // m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
+    m.add_wrapped(wrap_pyfunction!(atom_to_dots))?;
     m.add_wrapped(wrap_pyfunction!(evaluate_graph_overall_factor))?;
     Ok(())
 }
@@ -491,8 +514,25 @@ pub struct PyIntegrandCutInfo {
     pub cut_id: usize,
     pub edge_ids: Vec<usize>,
     pub raising_power: usize,
-    pub left_threshold_esurface_ids: Vec<usize>,
-    pub right_threshold_esurface_ids: Vec<usize>,
+    pub left_thresholds: Vec<PyIntegrandCutThresholdInfo>,
+    pub right_thresholds: Vec<PyIntegrandCutThresholdInfo>,
+}
+
+#[pyclass(from_py_object, name = "IntegrandCutThreshold", get_all)]
+#[derive(Clone)]
+pub struct PyIntegrandCutThresholdInfo {
+    pub esurface_id: usize,
+    pub status: String,
+    pub cut_boundary_edge_ids: Vec<usize>,
+    pub threshold_boundary_edge_ids: Vec<usize>,
+    pub invariant_bound_is_applicable: bool,
+}
+
+#[pyclass(from_py_object, name = "IntegrandActiveThresholdCut", get_all)]
+#[derive(Clone)]
+pub struct PyIntegrandActiveThresholdCutInfo {
+    pub cut_id: usize,
+    pub can_become_pinched: bool,
 }
 
 #[pyclass(from_py_object, name = "IntegrandThresholdEsurface", get_all)]
@@ -500,6 +540,7 @@ pub struct PyIntegrandCutInfo {
 pub struct PyIntegrandThresholdEsurfaceInfo {
     pub esurface_id: usize,
     pub edge_ids: Vec<usize>,
+    pub active_cuts: Vec<PyIntegrandActiveThresholdCutInfo>,
 }
 
 #[pyclass(from_py_object, name = "IntegrandGraphGroup", get_all)]
@@ -1178,6 +1219,10 @@ fn additional_weight_key_to_string(key: AdditionalWeightKey) -> String {
         AdditionalWeightKey::ThresholdCounterterm { subset_index } => {
             format!("threshold_counterterm:{subset_index}")
         }
+        AdditionalWeightKey::AmplitudeThresholdCounterterm {
+            esurface_id,
+            overlap_group,
+        } => format!("threshold_counterterm:{esurface_id}:{overlap_group}"),
     }
 }
 
@@ -1261,9 +1306,23 @@ fn event_from_py_event(event: &PyEvent) -> Event {
                 "original" => AdditionalWeightKey::Original,
                 "full_multiplicative_factor" => AdditionalWeightKey::FullMultiplicativeFactor,
                 _ => match weight.key.strip_prefix("threshold_counterterm:") {
-                    Some(subset_index) => AdditionalWeightKey::ThresholdCounterterm {
-                        subset_index: subset_index.parse().unwrap_or_default(),
-                    },
+                    Some(indices) => {
+                        let mut indices = indices.split(':');
+                        let first = indices
+                            .next()
+                            .unwrap_or_default()
+                            .parse()
+                            .unwrap_or_default();
+                        match indices.next() {
+                            Some(second) => AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                                esurface_id: first,
+                                overlap_group: second.parse().unwrap_or_default(),
+                            },
+                            None => AdditionalWeightKey::ThresholdCounterterm {
+                                subset_index: first,
+                            },
+                        }
+                    }
                     None => AdditionalWeightKey::Original,
                 },
             };
@@ -1618,8 +1677,37 @@ fn py_integrand_cut_info_from_info(cut: IntegrandCutInfo) -> PyIntegrandCutInfo 
         cut_id: cut.cut_id,
         edge_ids: cut.edge_ids,
         raising_power: cut.raising_power,
-        left_threshold_esurface_ids: cut.left_threshold_esurface_ids,
-        right_threshold_esurface_ids: cut.right_threshold_esurface_ids,
+        left_thresholds: cut
+            .left_thresholds
+            .into_iter()
+            .map(py_integrand_cut_threshold_info_from_info)
+            .collect(),
+        right_thresholds: cut
+            .right_thresholds
+            .into_iter()
+            .map(py_integrand_cut_threshold_info_from_info)
+            .collect(),
+    }
+}
+
+fn py_integrand_cut_threshold_info_from_info(
+    threshold: IntegrandCutThresholdInfo,
+) -> PyIntegrandCutThresholdInfo {
+    PyIntegrandCutThresholdInfo {
+        esurface_id: threshold.esurface_id,
+        status: threshold.status.as_str().to_string(),
+        cut_boundary_edge_ids: threshold.cut_boundary_edge_ids,
+        threshold_boundary_edge_ids: threshold.threshold_boundary_edge_ids,
+        invariant_bound_is_applicable: threshold.invariant_bound_is_applicable,
+    }
+}
+
+fn py_integrand_active_threshold_cut_info_from_info(
+    cut: IntegrandActiveThresholdCutInfo,
+) -> PyIntegrandActiveThresholdCutInfo {
+    PyIntegrandActiveThresholdCutInfo {
+        cut_id: cut.cut_id,
+        can_become_pinched: cut.can_become_pinched,
     }
 }
 
@@ -1629,6 +1717,11 @@ fn py_integrand_threshold_esurface_info_from_info(
     PyIntegrandThresholdEsurfaceInfo {
         esurface_id: threshold.esurface_id,
         edge_ids: threshold.edge_ids,
+        active_cuts: threshold
+            .active_cuts
+            .into_iter()
+            .map(py_integrand_active_threshold_cut_info_from_info)
+            .collect(),
     }
 }
 
@@ -2679,17 +2772,17 @@ impl GammaLoopAPI {
         )
     }
 
-    #[pyo3(name="get_dot_files", signature = (process_id=None, integrand_name=None,settings=DotExportSettings::default()))]
+    #[pyo3(name="get_dot_files", signature = (process=None, integrand_name=None, settings=DotExportSettings::default()))]
     pub(crate) fn get_dot_files(
         &mut self,
-        process_id: Option<usize>,
+        process: Option<ProcessRef>,
         integrand_name: Option<String>,
         settings: DotExportSettings,
     ) -> PyResult<String> {
         let (pid, name) = self
             .gammaloop_state
             .process_list
-            .find_integrand(process_id, integrand_name.as_ref())
+            .find_integrand_ref(process.as_ref(), integrand_name.as_ref())
             .map_err(|e| {
                 exceptions::PyException::new_err(format!("Could not find integrand: {}", e))
             })?;

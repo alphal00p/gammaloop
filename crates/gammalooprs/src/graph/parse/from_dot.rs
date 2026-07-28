@@ -44,7 +44,7 @@ impl IntoGraph<Graph> for String {
     fn into_graph(self, model: &Model) -> Result<Graph> {
         let graph: DotGraph<NodeStorageVec<DotVertexData>> = DotGraph::from_string(self).unwrap();
 
-        Graph::from_parsed(ParseGraph::from_parsed(graph, model)?, model)
+        Graph::from_parsed_with_validation(ParseGraph::from_parsed(graph, model)?, model)
     }
 }
 
@@ -66,7 +66,7 @@ impl IntoGraph<Graph> for &str {
     fn into_graph(self, model: &Model) -> Result<Graph> {
         let graph: DotGraph<NodeStorageVec<DotVertexData>> = DotGraph::from_string(self).unwrap();
 
-        Graph::from_parsed(ParseGraph::from_parsed(graph, model)?, model)
+        Graph::from_parsed_with_validation(ParseGraph::from_parsed(graph, model)?, model)
     }
 }
 

@@ -1,3 +1,4 @@
+use ahash::HashMap;
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use linnet::half_edge::involution::EdgeIndex;
@@ -24,7 +25,7 @@ use symbolica::{
     id::{ReplaceWith, Replacement},
     parse,
     poly::polynomial::PolynomialRing,
-    printer::{PrintMode, PrintOptions},
+    printer::{PrintMode, PrintOptions, PrintState, PrintUserData},
     symbol,
 };
 
@@ -41,7 +42,7 @@ pub static COMPLEXRATPOLYFIELD: LazyLock<
     FractionField<PolynomialRing<AlgebraicExtension<FractionField<IntegerRing>>, u16>>,
 > = LazyLock::new(|| FractionField::new(PolynomialRing::<_, u16>::new(Q_I.clone())));
 
-pub static LOGPRINTOPTS: PrintOptions = PrintOptions {
+pub static LOGPRINTOPTS: LazyLock<PrintOptions> = LazyLock::new(|| PrintOptions {
     hide_all_namespaces: true,
     color_namespace: false,
     color_builtin_symbols: false,
@@ -59,10 +60,10 @@ pub static LOGPRINTOPTS: PrintOptions = PrintOptions {
     precision: None,
     pretty_matrix: false,
     max_terms: None,
-    custom_print_mode: None,
-    hide_namespace: Some("gammalooprs"),
+    custom_print_mode: Default::default(),
+    hide_namespace: Some(std::borrow::Cow::Borrowed("gammalooprs")),
     ..PrintOptions::new()
-};
+});
 
 pub trait IsNeg {
     fn is_negative(&self) -> bool;
@@ -205,9 +206,13 @@ let a = args.pos().map(v => $#v$).join($, $);
                     }
                     .as_view(),
                     &PrintOptions {
-                        custom_print_mode: Some(("typst", 2)),
+                        custom_print_mode: HashMap::from_iter([(
+                            "typst".to_string(),
+                            PrintUserData::Integer(2),
+                        )]),
                         ..Default::default()
                     },
+                    &PrintState::new(),
                 )
             {
                 writeln!(fmt, "{}", s).unwrap();
@@ -774,9 +779,7 @@ impl DOD for AtomView<'_> {
     }
 
     fn trailing_exponent(&self) -> i32 {
-        let series = self
-            .series(GS.rescale, Atom::Zero, 1.into(), false)
-            .unwrap();
+        let series = self.series(GS.rescale, Atom::Zero, 1).unwrap();
         // println!("{}", series);
 
         let dod = series.get_trailing_exponent();

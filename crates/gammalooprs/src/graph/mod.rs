@@ -1,15 +1,19 @@
-use std::ops::Index;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::Index,
+};
 
 use ahash::AHashSet;
 use bincode_trait_derive::{Decode, Encode};
+use gammaloop_tracing_filter::LogMessage;
 use itertools::Itertools;
 use linnet::{
     half_edge::{
         HedgeGraph,
         involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
         subgraph::{
-            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubSetLike, SubSetOps,
-            subset::SubSet,
+            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike,
+            SubSetOps, subset::SubSet,
         },
     },
     parser::DotGraph,
@@ -26,13 +30,13 @@ use crate::{
     cff::generation::SurfaceCache,
     define_index,
     feyngen::diagram_generator::evaluate_overall_factor,
-    graph::edge::EdgeMass,
-    integrands::process::{LmbMultiChannelingSetup, ParamBuilder},
+    integrands::process::{ChannelIndex, LmbMultiChannelingSetup, ParamBuilder},
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::GlobalPrefactor,
     processes::DotExportSettings,
     settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
     utils::{F, Length, ose_atom_from_index, symbolica_ext::LogPrint},
+    uv::uv_graph::UVE,
 };
 
 pub(crate) mod attribute_warnings;
@@ -64,6 +68,12 @@ pub struct Graph {
     pub polarizations: Vec<(PolDef, Atom)>,
 }
 
+impl LogMessage for Graph {
+    fn log_display(&self) -> String {
+        self.name.to_string()
+    }
+}
+
 // impl Deref for Graph {
 //     type Target = HedgeGraph<Edge, Vertex>;
 // }
@@ -71,6 +81,20 @@ pub struct Graph {
 pub mod feynman_graph;
 pub use feynman_graph::FeynmanGraph;
 pub mod ext;
+
+#[derive(Clone, Copy)]
+pub(crate) enum LmbChannelFallback {
+    CurrentGraphBasis,
+    FirstBasis,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ThresholdPinchStatus {
+    Always,
+    CanBecome,
+    NotProven,
+}
+
 impl Graph {
     pub fn debug_dot(&self) -> String {
         DotGraph::from(self).debug_dot()
@@ -94,6 +118,40 @@ impl Graph {
         &self.global_prefactor.num
             * &self.global_prefactor.projector
             * evaluate_overall_factor(self.overall_factor.as_view())
+    }
+
+    pub(crate) fn external_momentum_edge_order(&self) -> Vec<EdgeIndex> {
+        if self.initial_state_cut.nedges(&self.underlying) == 0 {
+            let external_filter: SuBitGraph = self.external_filter();
+            external_filter
+                .included_iter()
+                .sorted()
+                .map(|hedge| self.underlying[&hedge])
+                .collect_vec()
+        } else {
+            self.initial_state_cut
+                .iter_left_hedges()
+                .sorted()
+                .map(|hedge| self.underlying[&hedge])
+                .collect_vec()
+        }
+    }
+
+    pub(crate) fn canonicalize_lmb_external_order(&self, lmb: &mut LoopMomentumBasis) {
+        lmb.canonicalize_external_order(&self.external_momentum_edge_order());
+    }
+
+    pub(crate) fn dummy_stripped_external_flows_of<S: SubGraphLike>(&self, subgraph: &S) -> S::Base
+    where
+        S::Base: ModifySubSet<HedgePair> + ModifySubSet<Hedge>,
+    {
+        let mut externals = self.underlying.full_crown(subgraph);
+        for (pair, _, edge) in self.underlying.iter_edges() {
+            if edge.data.is_dummy {
+                externals.sub(pair);
+            }
+        }
+        externals
     }
 
     pub(crate) fn random_externals(&self, seed: u64) -> Externals {
@@ -150,90 +208,11 @@ impl Graph {
         lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         override_lmb_heuristics: bool,
     ) -> LmbMultiChannelingSetup {
-        let mut channels: Vec<LmbIndex> = Vec::new();
-
-        if override_lmb_heuristics {
-            channels.extend(lmbs.iter_enumerated().map(|(lmb_index, _)| lmb_index));
-
-            return LmbMultiChannelingSetup {
-                channels: channels.into_iter().sorted().collect(),
-                graph: self.clone(),
-                all_bases: lmbs.clone(),
-            };
-        }
-
-        // Filter out channels that are non-singular, or have the same singularities as another channel already included
-        for (lmb_index, lmb) in lmbs.iter_enumerated() {
-            let massless_edges = lmb
-                .loop_edges
-                .iter()
-                .filter(|&edge_id| self.underlying[*edge_id].particle.is_massless())
-                .collect_vec();
-
-            if massless_edges.is_empty() {
-                continue;
-            }
-
-            if channels.iter().any(|channel| {
-                let basis_of_included_channel = &lmbs[*channel].loop_edges;
-                massless_edges
-                    .iter()
-                    .all(|edge_id| basis_of_included_channel.contains(edge_id))
-            }) {
-                continue;
-            }
-
-            // only for 1 to n for now, assuming center of mass
-            //if channels.iter().any(|channel| {
-            //    let massless_edges_of_included_channel = lmbs[*channel]
-            //        .loop_edges
-            //        .iter()
-            //        .filter(|&edge_id| self.underlying[*edge_id].particle.is_massless())
-            //        .collect_vec();
-
-            //    let loop_signatures_of_massless_edges_of_included_channel =
-            //        massless_edges_of_included_channel
-            //            .iter()
-            //            .map(|edge_index| {
-            //                self.loop_momentum_basis.edge_signatures[**edge_index]
-            //                    .internal
-            //                    .first_abs()
-            //            })
-            //            .collect::<HashSet<_>>();
-
-            //    let loop_signatures_of_massless_edges_of_potential_channel = massless_edges
-            //        .iter()
-            //        .map(|edge_index| {
-            //            self.loop_momentum_basis.edge_signatures[**edge_index]
-            //                .internal
-            //                .first_abs()
-            //        })
-            //        .collect::<HashSet<_>>();
-
-            //    loop_signatures_of_massless_edges_of_included_channel
-            //        == loop_signatures_of_massless_edges_of_potential_channel
-            //}) {
-            //    continue;
-            //}
-
-            channels.push(lmb_index);
-        }
-
-        let channels: TiVec<_, _> = if !channels.is_empty() {
-            channels.into_iter().sorted().collect()
-        } else {
-            let current_lmb_index = lmbs
-                .iter_enumerated()
-                .find(|(_lmb_index, lmb)| lmb.loop_edges == self.loop_momentum_basis.loop_edges)
-                .map(|(lmb_index, _)| lmb_index);
-
-            if let Some(current_lmb_index) = current_lmb_index {
-                vec![current_lmb_index].into()
-            } else {
-                warn!("lmb not in the list of all lmb, please check if lmbs are sorted!");
-                vec![].into()
-            }
-        };
+        let channels = self.select_amplitude_lmb_channel_indices(
+            lmbs,
+            override_lmb_heuristics,
+            LmbChannelFallback::CurrentGraphBasis,
+        );
 
         debug!(
             "number of lmbs: {}, number of channels: {}",
@@ -245,6 +224,178 @@ impl Graph {
             channels,
             graph: self.clone(),
             all_bases: lmbs.clone(),
+        }
+    }
+
+    pub(crate) fn select_amplitude_lmb_channel_indices(
+        &self,
+        lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        override_lmb_heuristics: bool,
+        fallback: LmbChannelFallback,
+    ) -> TiVec<ChannelIndex, LmbIndex> {
+        if override_lmb_heuristics {
+            return lmbs
+                .iter_enumerated()
+                .map(|(lmb_index, _)| lmb_index)
+                .collect();
+        }
+
+        let Some((_, first_lmb)) = lmbs.iter_enumerated().next() else {
+            return TiVec::new();
+        };
+        let num_loops = first_lmb.loop_edges.len();
+        if num_loops == 0 {
+            return self.fallback_lmb_channel_indices(lmbs, fallback);
+        }
+
+        let mut universe = BTreeMap::<Vec<EdgeIndex>, usize>::new();
+        let mut candidate_covers = Vec::<(LmbIndex, BTreeSet<usize>)>::new();
+        for (lmb_index, lmb) in lmbs.iter_enumerated() {
+            let mut cover = BTreeSet::<usize>::new();
+            let massless_loop_edges = lmb
+                .loop_edges
+                .iter()
+                .copied()
+                .filter(|edge_id| self.underlying[*edge_id].particle.is_massless())
+                .collect_vec();
+
+            for mut combination in massless_loop_edges.into_iter().combinations(num_loops) {
+                combination.sort();
+                let next_universe_id = universe.len();
+                let universe_id = *universe.entry(combination).or_insert(next_universe_id);
+                cover.insert(universe_id);
+            }
+
+            if !cover.is_empty() {
+                candidate_covers.push((lmb_index, cover));
+            }
+        }
+
+        if universe.is_empty() {
+            return self.fallback_lmb_channel_indices(lmbs, fallback);
+        }
+
+        let channels = Self::minimum_lmb_set_cover(universe.len(), &candidate_covers);
+        if channels.is_empty() {
+            self.fallback_lmb_channel_indices(lmbs, fallback)
+        } else {
+            channels.into_iter().sorted().collect()
+        }
+    }
+
+    fn fallback_lmb_channel_indices(
+        &self,
+        lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        fallback: LmbChannelFallback,
+    ) -> TiVec<ChannelIndex, LmbIndex> {
+        let fallback_index = match fallback {
+            LmbChannelFallback::CurrentGraphBasis => lmbs
+                .iter_enumerated()
+                .find(|(_, lmb)| lmb.loop_edges == self.loop_momentum_basis.loop_edges)
+                .map(|(lmb_index, _)| lmb_index)
+                .or_else(|| {
+                    warn!(
+                        "lmb not in the list of all lmb, falling back to the first generated basis"
+                    );
+                    lmbs.iter_enumerated()
+                        .next()
+                        .map(|(lmb_index, _)| lmb_index)
+                }),
+            LmbChannelFallback::FirstBasis => lmbs
+                .iter_enumerated()
+                .next()
+                .map(|(lmb_index, _)| lmb_index),
+        };
+
+        fallback_index.into_iter().collect()
+    }
+
+    fn minimum_lmb_set_cover(
+        universe_len: usize,
+        candidate_covers: &[(LmbIndex, BTreeSet<usize>)],
+    ) -> Vec<LmbIndex> {
+        let mut candidates_by_element = vec![Vec::<usize>::new(); universe_len];
+        for (candidate_pos, (_, cover)) in candidate_covers.iter().enumerate() {
+            for element in cover {
+                candidates_by_element[*element].push(candidate_pos);
+            }
+        }
+
+        let remaining = (0..universe_len).collect::<BTreeSet<_>>();
+        let mut chosen = Vec::<usize>::new();
+        let mut best = None;
+        Self::search_minimum_lmb_set_cover(
+            remaining,
+            &mut chosen,
+            &mut best,
+            candidate_covers,
+            &candidates_by_element,
+        );
+        best.unwrap_or_default()
+    }
+
+    fn search_minimum_lmb_set_cover(
+        remaining: BTreeSet<usize>,
+        chosen: &mut Vec<usize>,
+        best: &mut Option<Vec<LmbIndex>>,
+        candidate_covers: &[(LmbIndex, BTreeSet<usize>)],
+        candidates_by_element: &[Vec<usize>],
+    ) {
+        if remaining.is_empty() {
+            let mut candidate = chosen
+                .iter()
+                .map(|candidate_pos| candidate_covers[*candidate_pos].0)
+                .collect_vec();
+            candidate.sort();
+            let better = best.as_ref().is_none_or(|current_best| {
+                candidate.len() < current_best.len()
+                    || (candidate.len() == current_best.len() && candidate < *current_best)
+            });
+            if better {
+                *best = Some(candidate);
+            }
+            return;
+        }
+
+        if let Some(current_best) = best.as_ref()
+            && chosen.len() >= current_best.len()
+        {
+            return;
+        }
+
+        let Some(element) = remaining
+            .iter()
+            .copied()
+            .min_by_key(|element| candidates_by_element[*element].len())
+        else {
+            return;
+        };
+        if candidates_by_element[element].is_empty() {
+            return;
+        }
+
+        for candidate_pos in &candidates_by_element[element] {
+            if chosen.contains(candidate_pos) {
+                continue;
+            }
+            let cover = &candidate_covers[*candidate_pos].1;
+            if cover.is_disjoint(&remaining) {
+                continue;
+            }
+
+            let mut next_remaining = remaining.clone();
+            for covered_element in cover {
+                next_remaining.remove(covered_element);
+            }
+            chosen.push(*candidate_pos);
+            Self::search_minimum_lmb_set_cover(
+                next_remaining,
+                chosen,
+                best,
+                candidate_covers,
+                candidates_by_element,
+            );
+            chosen.pop();
         }
     }
 
@@ -416,59 +567,42 @@ impl Graph {
     }
 
     pub fn get_edges_in_initial_state_cut(&self) -> Vec<EdgeIndex> {
-        self.underlying
-            .iter_edges_of(&self.initial_state_cut)
-            .map(|(_, edge_index, _)| edge_index)
+        self.initial_state_cut
+            .iter_left_hedges()
+            .map(|hedge| self.underlying[&hedge])
             .collect_vec()
     }
-    pub(crate) fn is_always_pinch(
+    pub(crate) fn classify_threshold_pinch(
         &self,
-        sandwich: &SuBitGraph,
-        cut_a: &OrientedCut,
-        cut_b: &OrientedCut,
-    ) -> bool {
-        let cut_a_all_edges = cut_a.left.union(&cut_a.right);
-        let cut_b_all_edges = cut_b.left.union(&cut_b.right);
+        cut_boundary_edges: &[EdgeIndex],
+        threshold_boundary_edges: &[EdgeIndex],
+    ) -> ThresholdPinchStatus {
+        // The caller has already intersected both cut boundaries with the connected sandwich.
+        // These edge sets therefore carry the same graph-relative information that the former
+        // `is_always_pinch` implementation derived from the two cuts and sandwich internally.
+        // Keep every mass representation symbolic here. A non-zero difference is not a
+        // model-independent conclusion; resolved values handle that case during generation.
+        let boundary_mass_sum = |edges: &[EdgeIndex]| {
+            edges
+                .iter()
+                .map(|edge_id| self[*edge_id].mass_atom())
+                .fold(Atom::new(), |sum, mass| sum + mass)
+        };
 
-        let cut_a_sandwich = cut_a_all_edges.intersection(sandwich);
-        let cut_b_sandwich = cut_b_all_edges.intersection(sandwich);
+        let mass_sums_are_identical = (boundary_mass_sum(cut_boundary_edges)
+            - boundary_mass_sum(threshold_boundary_edges))
+        .expand()
+        .is_zero();
 
-        let n_edges_cut_a_sandwich = cut_a_sandwich.n_included();
-        let n_edges_cut_b_sandwich = cut_b_sandwich.n_included();
-
-        if n_edges_cut_a_sandwich > 1 && n_edges_cut_b_sandwich > 1 {
-            return false;
+        if !mass_sums_are_identical {
+            return ThresholdPinchStatus::NotProven;
         }
 
-        let mut cut_a_mass_sum = Atom::new();
-        for (_, _, edge_data) in self.iter_edges_of(&cut_a_sandwich) {
-            match edge_data.data.mass {
-                EdgeMass::Zero => {}
-                EdgeMass::ModelVar(m) => {
-                    cut_a_mass_sum += m;
-                }
-                _ => {
-                    // If there is a non-zero, non-model-var mass, we can't make any statements about pinches without runtime information, so we return false
-                    return false;
-                }
-            }
+        if cut_boundary_edges.len() > 1 && threshold_boundary_edges.len() > 1 {
+            ThresholdPinchStatus::CanBecome
+        } else {
+            ThresholdPinchStatus::Always
         }
-
-        let mut cut_b_mass_sum = Atom::new();
-        for (_, _, edge_data) in self.iter_edges_of(&cut_b_sandwich) {
-            match edge_data.data.mass {
-                EdgeMass::Zero => {}
-                EdgeMass::ModelVar(m) => {
-                    cut_b_mass_sum += m;
-                }
-                _ => {
-                    // If there is a non-zero, non-model-var mass, we can't make any statements about pinches without runtime information, so we return false
-                    return false;
-                }
-            }
-        }
-
-        (cut_a_mass_sum - cut_b_mass_sum).expand().is_zero()
     }
 }
 
@@ -571,4 +705,157 @@ pub fn get_cff_inverse_energy_product_impl<E, V, H, S: SubSetLike>(
             })
             .reduce(|acc, x| acc * x)
             .unwrap_or_else(|| Atom::num(1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        dot, graph::parse::from_dot::IntoGraph, initialisation::test_initialise,
+        momentum::signature::LoopExtSignature,
+    };
+    use std::sync::OnceLock;
+
+    fn test_lmb(graph: &Graph, loop_edges: &[usize]) -> LoopMomentumBasis {
+        LoopMomentumBasis {
+            tree: graph.underlying.empty_subgraph(),
+            loop_edges: loop_edges.iter().copied().map(EdgeIndex::from).collect(),
+            ext_edges: Vec::new().into(),
+            edge_signatures: graph.underlying.new_edgevec(|_, _, _| {
+                LoopExtSignature::from((Vec::<isize>::new(), Vec::<isize>::new()))
+            }),
+        }
+    }
+
+    fn selector_test_graph() -> Graph {
+        static GRAPH: OnceLock<Graph> = OnceLock::new();
+        GRAPH
+            .get_or_init(|| {
+                test_initialise().unwrap();
+                dot!(
+                    digraph lmb_selector {
+                        edge [num=1 mass=0]
+                        node [num=1]
+                        A -> B [id=0]
+                        A -> B [id=1]
+                        A -> B [id=2]
+                        A -> B [id=3]
+                        A -> B [id=4 mass=1]
+                    }
+                )
+                .unwrap()
+            })
+            .clone()
+    }
+
+    #[test]
+    fn exact_lmb_set_cover_prefers_smallest_deterministic_solution() {
+        let candidates = [
+            (LmbIndex::from(0), BTreeSet::from([0])),
+            (LmbIndex::from(1), BTreeSet::from([1])),
+            (LmbIndex::from(2), BTreeSet::from([0, 1])),
+            (LmbIndex::from(3), BTreeSet::from([0, 1])),
+        ];
+
+        assert_eq!(
+            Graph::minimum_lmb_set_cover(2, &candidates),
+            vec![LmbIndex::from(2)]
+        );
+    }
+
+    #[test]
+    fn amplitude_lmb_selector_covers_massless_combinations_and_skips_duplicates() {
+        let mut graph = selector_test_graph();
+        graph.loop_momentum_basis = test_lmb(&graph, &[0, 1]);
+        let lmbs: TiVec<LmbIndex, LoopMomentumBasis> = vec![
+            test_lmb(&graph, &[0, 1]),
+            test_lmb(&graph, &[2, 3]),
+            test_lmb(&graph, &[0, 2]),
+            test_lmb(&graph, &[0, 1]),
+            test_lmb(&graph, &[0, 4]),
+        ]
+        .into();
+
+        let selected = graph.select_amplitude_lmb_channel_indices(
+            &lmbs,
+            false,
+            LmbChannelFallback::CurrentGraphBasis,
+        );
+
+        assert_eq!(
+            selected.into_iter().collect_vec(),
+            vec![LmbIndex::from(0), LmbIndex::from(1), LmbIndex::from(2)]
+        );
+    }
+
+    #[test]
+    fn amplitude_lmb_selector_override_keeps_all_bases() {
+        let graph = selector_test_graph();
+        let lmbs: TiVec<LmbIndex, LoopMomentumBasis> = vec![
+            test_lmb(&graph, &[0, 1]),
+            test_lmb(&graph, &[2, 3]),
+            test_lmb(&graph, &[0, 4]),
+        ]
+        .into();
+
+        let selected = graph.select_amplitude_lmb_channel_indices(
+            &lmbs,
+            true,
+            LmbChannelFallback::CurrentGraphBasis,
+        );
+
+        assert_eq!(
+            selected.into_iter().collect_vec(),
+            vec![LmbIndex::from(0), LmbIndex::from(1), LmbIndex::from(2)]
+        );
+    }
+
+    #[test]
+    fn amplitude_lmb_selector_falls_back_when_no_massless_combination_exists() {
+        let mut graph = selector_test_graph();
+        graph.loop_momentum_basis = test_lmb(&graph, &[0, 4]);
+        let lmbs: TiVec<LmbIndex, LoopMomentumBasis> =
+            vec![test_lmb(&graph, &[1, 4]), test_lmb(&graph, &[0, 4])].into();
+
+        let selected_current = graph.select_amplitude_lmb_channel_indices(
+            &lmbs,
+            false,
+            LmbChannelFallback::CurrentGraphBasis,
+        );
+        let selected_first = graph.select_amplitude_lmb_channel_indices(
+            &lmbs,
+            false,
+            LmbChannelFallback::FirstBasis,
+        );
+
+        assert_eq!(
+            selected_current.into_iter().collect_vec(),
+            vec![LmbIndex::from(1)]
+        );
+        assert_eq!(
+            selected_first.into_iter().collect_vec(),
+            vec![LmbIndex::from(0)]
+        );
+    }
+
+    #[test]
+    fn threshold_pinch_classification_distinguishes_fixed_and_multiparticle_boundaries() {
+        let graph = selector_test_graph();
+
+        assert_eq!(
+            graph.classify_threshold_pinch(&[EdgeIndex::from(0)], &[EdgeIndex::from(1)],),
+            ThresholdPinchStatus::Always,
+        );
+        assert_eq!(
+            graph.classify_threshold_pinch(
+                &[EdgeIndex::from(0), EdgeIndex::from(1)],
+                &[EdgeIndex::from(2), EdgeIndex::from(3)],
+            ),
+            ThresholdPinchStatus::CanBecome,
+        );
+        assert_eq!(
+            graph.classify_threshold_pinch(&[EdgeIndex::from(0)], &[EdgeIndex::from(4)],),
+            ThresholdPinchStatus::NotProven,
+        );
+    }
 }

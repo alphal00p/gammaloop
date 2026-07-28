@@ -3,7 +3,6 @@ use std::sync::atomic::AtomicUsize;
 use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::half_edge::subgraph::{ModifySubSet, SubGraphLike, SubSetLike, SubSetOps};
 use linnet::half_edge::{NodeIndex, involution::HedgePair};
-use spenso::network::library::TensorLibraryData;
 use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use symbolica::atom::Atom;
 use tracing::debug;

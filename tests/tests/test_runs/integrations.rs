@@ -43,15 +43,15 @@ fn scalar_bubble() -> Result<()> {
         .unwrap_uv();
     assert_eq!(res.pass_fail(-0.9).failed, 0);
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-2.03838e-02)), 1));
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(2.03838e-02)), 2));
 
     cli.run_command("set model mass_scalar_1=2.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-1.16050e-02)), 1));
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(1.16050e-02)), 2));
 
     cli.run_command("set model mass_scalar_1=3.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-6.46968e-03)), 1));
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(6.46968e-03)), 2));
     let renorm_command = Renormalize::default();
 
     let res = renorm_command.run(&mut cli.state, &cli.cli_settings)?;
@@ -156,15 +156,21 @@ mod failing {
             .unwrap_uv();
         assert_eq!(res.pass_fail(-0.9).failed, 0);
         let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-        assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-2.03838e-02)), 1));
+        assert!(
+            integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(2.03838e-02)), 2)
+        );
 
         cli.run_command("set model mass_scalar_1=2.0")?;
         let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-        assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-1.16050e-02)), 1));
+        assert!(
+            integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(1.16050e-02)), 2)
+        );
 
         cli.run_command("set model mass_scalar_1=3.0")?;
         let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-        assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-6.46968e-03)), 1));
+        assert!(
+            integral_no_cache.is_compatible_with_target(Complex::new(F(0.0), F(6.46968e-03)), 2)
+        );
         let renorm_command = Renormalize::default();
 
         let res = renorm_command.run(&mut cli.state, &cli.cli_settings)?;

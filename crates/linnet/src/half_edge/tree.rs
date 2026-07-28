@@ -207,9 +207,9 @@ impl<P: ForestNodeStore<NodeData = ()>> SimpleTraversalTree<P> {
         covers
     }
 
-    // fn root_hedge(&self, node: NodeIndex) -> Hedge {
-    //     self.forest[&RootId(node.0)].into()
-    // }
+    pub fn root_hedge(&self, node: NodeIndex) -> Hedge {
+        self.forest[&RootId::from(node)].into()
+    }
 
     pub fn node_data(&self, node: NodeIndex) -> &TTRoot {
         &self.forest[RootId(node.0)]

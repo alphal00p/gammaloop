@@ -217,6 +217,44 @@ impl<R, N: ForestNodeStoreAncestors> Forest<R, N> {
     }
 }
 
+impl<R, N: ForestNodeStore> Forest<R, N> {
+    pub fn root_node_for_root(&self, root_id: RootId) -> TreeNodeId {
+        self.roots[root_id.0].root_id
+    }
+
+    pub fn root_node_for_node(&self, node_id: NodeIndex) -> TreeNodeId {
+        self.root_node_for_root(node_id.into())
+    }
+
+    pub fn root_hedge_for_node(&self, node_id: NodeIndex) -> Hedge {
+        self.root_node_for_node(node_id).into()
+    }
+}
+
+impl<R, N> Forest<R, N>
+where
+    N: ForestNodeStore
+        + Default
+        + Into<ParentPointerStore<N::NodeData>>
+        + From<ParentPointerStore<N::NodeData>>,
+{
+    pub fn reroot_many(&mut self, new_roots: impl IntoIterator<Item = TreeNodeId>) -> usize {
+        let mut nodes: ParentPointerStore<N::NodeData> = std::mem::take(&mut self.nodes).into();
+        let mut changed = 0;
+
+        for new_root in new_roots {
+            let root_id = nodes.change_root(new_root);
+            if self.roots[root_id.0].root_id != new_root {
+                self.roots[root_id.0].root_id = new_root;
+                changed += 1;
+            }
+        }
+
+        self.nodes = nodes.into();
+        changed
+    }
+}
+
 pub struct NodeIdIter {
     pub(crate) range: Range<usize>,
     pub(crate) current: TreeNodeId,

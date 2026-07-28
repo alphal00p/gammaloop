@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Display,
+};
 
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
@@ -18,9 +21,10 @@ use crate::{
     observables::ObservableFileFormat,
     settings::runtime::kinematic::{Externals, improvement::generate_default_momenta},
     utils::{
-        ApproxEq, F, FloatLike, format_uncertainty,
+        ApproxEq, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, F, FloatLike, format_uncertainty,
         serde_utils::{
-            _default_rotation_axis, _default_stability_levels, IsDefault, is_default_rotation_axis,
+            _default_rotation_axis, _default_stability_levels, IsDefault,
+            is_default_esurface_existence_threshold, is_default_rotation_axis,
             is_default_stability_levels, is_false, is_float, is_true, is_u64, is_usize,
             show_defaults_helper,
         },
@@ -45,7 +49,7 @@ pub struct RuntimeModelSettings {
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
 )]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct SubtractionSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -54,8 +58,24 @@ pub struct SubtractionSettings {
     pub integrated_ct_settings: IntegratedCounterTermSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub overlap_settings: OverlapSettings,
+    /// Dimensionless tolerance used to compare the energy-squared E-surface invariant margin
+    /// against `esurface_existence_threshold * E_cm^2` at runtime.
+    #[serde(skip_serializing_if = "is_default_esurface_existence_threshold")]
+    pub esurface_existence_threshold: f64,
     #[serde(skip_serializing_if = "is_false")]
     pub disable_threshold_subtraction: bool,
+}
+
+impl Default for SubtractionSettings {
+    fn default() -> Self {
+        Self {
+            local_ct_settings: LocalCounterTermSettings::default(),
+            integrated_ct_settings: IntegratedCounterTermSettings::default(),
+            overlap_settings: OverlapSettings::default(),
+            esurface_existence_threshold: DEFAULT_ESURFACE_EXISTENCE_THRESHOLD,
+            disable_threshold_subtraction: false,
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -119,21 +139,25 @@ impl<'a> LockedRuntimeSettings<'a> {
         masses: &EdgeVec<F<f64>>,
         external_signature: &SignatureLike<ExternalIndex>,
         lmb: &LoopMomentumBasis,
+        esurface_existence_threshold: f64,
     ) -> bool {
         let dependent_momenta_constructor =
             DependentMomentaConstructor::Amplitude(external_signature);
 
-        esurface.exists(
-            &self
-                .0
-                .kinematics
-                .externals
-                .get_dependent_externals(dependent_momenta_constructor)
-                .unwrap(),
-            lmb,
-            masses,
-            &F(self.0.kinematics.e_cm),
-        )
+        esurface
+            .classify_existence(
+                &self
+                    .0
+                    .kinematics
+                    .externals
+                    .get_dependent_externals(dependent_momenta_constructor)
+                    .unwrap(),
+                lmb,
+                masses,
+                &F(self.0.kinematics.e_cm),
+                &F(esurface_existence_threshold),
+            )
+            .is_existing()
     }
 }
 
@@ -196,6 +220,8 @@ pub struct GeneralSettings {
     #[serde(skip_serializing_if = "is_float::<1000>")]
     pub m_uv: f64,
     #[serde(skip_serializing_if = "is_float::<1000>")]
+    pub renormalization_localization_scale: f64,
+    #[serde(skip_serializing_if = "is_float::<1000>")]
     pub mu_r: f64,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub additional_param_values: Vec<f64>,
@@ -219,7 +245,9 @@ impl Default for GeneralSettings {
             debug_cache: false,
             orientation_pat: OrientationPattern::default(),
             m_uv: 1000.0,
+            renormalization_localization_scale: 1000.0,
             mu_r: 1000.0,
+
             additional_param_values: vec![],
             integral_unit: IntegralUnit::Auto,
             disable_flux_factor: false,
@@ -373,14 +401,20 @@ pub struct ParameterizationSettings {
     pub mapping: ParameterizationMapping,
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub b: f64,
+    #[serde(skip_serializing_if = "is_float::<1>")]
+    pub power: f64,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub lmb_basis_ids: BTreeMap<String, Vec<usize>>,
 }
 
 impl Default for ParameterizationSettings {
     fn default() -> Self {
         Self {
             b: 1.0,
+            power: 1.0,
             mode: ParameterizationMode::default(),
             mapping: ParameterizationMapping::default(),
+            lmb_basis_ids: BTreeMap::new(),
         }
     }
 }
@@ -811,8 +845,8 @@ impl StabilityLevelSetting {
     pub fn default_double() -> Self {
         Self {
             precision: Precision::Double,
-            required_precision_for_re: 1e-10,
-            required_precision_for_im: 1e-10,
+            required_precision_for_re: 1e-5,
+            required_precision_for_im: 1e-5,
             escalate_for_large_weight_threshold: 0.9,
         }
     }
@@ -927,6 +961,12 @@ pub enum ParameterizationMode {
     HyperSphericalFlat,
     #[serde(rename = "momentum_space")]
     MomentumSpace,
+    #[serde(rename = "relative_spherical")]
+    RelativeSpherical,
+    #[serde(rename = "spherical_common_radial")]
+    SphericalCommonRadial,
+    #[serde(rename = "spherical_product_common_radial")]
+    SphericalProductCommonRadial,
 }
 
 #[cfg_attr(
@@ -949,6 +989,13 @@ impl Display for ParameterizationMode {
         match self {
             ParameterizationMode::Cartesian => write!(f, "cartesian"),
             ParameterizationMode::Spherical => write!(f, "spherical"),
+            ParameterizationMode::RelativeSpherical => write!(f, "relative spherical"),
+            ParameterizationMode::SphericalCommonRadial => {
+                write!(f, "common-radial spherical")
+            }
+            ParameterizationMode::SphericalProductCommonRadial => {
+                write!(f, "product/common-radial spherical")
+            }
             ParameterizationMode::HyperSpherical => write!(f, "hyperspherical"),
             ParameterizationMode::HyperSphericalFlat => write!(f, "flat hyperspherical"),
             ParameterizationMode::MomentumSpace => write!(f, "momentum space"),
@@ -962,6 +1009,8 @@ impl Display for ParameterizationMode {
 pub enum ParameterizationMapping {
     #[serde(rename = "log")]
     Log,
+    #[serde(rename = "power")]
+    Power,
     #[serde(rename = "linear")]
     #[default]
     Linear,
@@ -993,12 +1042,20 @@ pub struct SamplingSettingsParser {
     pub lmb_multichanneling: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub lmb_channels: SumMode,
+    #[serde(skip_serializing_if = "is_float::<3>")]
+    pub alpha: f64,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub lmb_channel_weight: LmbChannelWeight,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub coordinate_system: CoordinateSystem,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub mapping: ParameterizationMapping,
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub b: f64,
+    #[serde(skip_serializing_if = "is_float::<1>")]
+    pub power: f64,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub lmb_basis_ids: BTreeMap<String, Vec<usize>>,
 }
 
 impl Default for SamplingSettingsParser {
@@ -1008,11 +1065,30 @@ impl Default for SamplingSettingsParser {
             orientations: SumMode::Summed,
             lmb_multichanneling: false,
             lmb_channels: SumMode::Summed,
+            alpha: 3.0,
+            lmb_channel_weight: LmbChannelWeight::default(),
             coordinate_system: CoordinateSystem::Spherical,
             mapping: ParameterizationMapping::Linear,
             b: 1.0,
+            power: 1.0,
+            lmb_basis_ids: BTreeMap::new(),
         }
     }
+}
+
+#[derive(
+    Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema,
+)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+pub enum LmbChannelWeight {
+    #[serde(rename = "ose")]
+    #[default]
+    Ose,
+    #[serde(rename = "inverse_jacobian")]
+    InverseJacobian,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
@@ -1047,12 +1123,39 @@ pub enum CoordinateSystem {
     MomentumSpace,
     #[serde(rename = "tropical")]
     MomTrop,
+    #[serde(rename = "relative_spherical")]
+    RelativeSpherical,
+    #[serde(rename = "spherical_common_radial")]
+    SphericalCommonRadial,
+    #[serde(rename = "spherical_product_common_radial")]
+    SphericalProductCommonRadial,
 }
 
 impl Default for SamplingSettings {
     fn default() -> Self {
         Self::Default(ParameterizationSettings::default())
     }
+}
+
+fn validate_lmb_basis_ids(lmb_basis_ids: &BTreeMap<String, Vec<usize>>) -> Result<(), String> {
+    for (graph_name, basis_ids) in lmb_basis_ids {
+        if basis_ids.is_empty() {
+            return Err(format!(
+                "Invalid sampling settings: lmb_basis_ids entry for graph '{graph_name}' cannot be empty."
+            ));
+        }
+
+        let mut seen = BTreeSet::new();
+        for basis_id in basis_ids {
+            if !seen.insert(*basis_id) {
+                return Err(format!(
+                    "Invalid sampling settings: lmb_basis_ids entry for graph '{graph_name}' contains duplicate basis id {basis_id}."
+                ));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 impl SamplingSettings {
@@ -1063,20 +1166,28 @@ impl SamplingSettings {
                 orientations: SumMode::Summed,
                 lmb_multichanneling: false,
                 lmb_channels: SumMode::Summed,
+                alpha: 3.0,
+                lmb_channel_weight: LmbChannelWeight::default(),
                 coordinate_system: CoordinateSystem::from_mode(settings.mode.clone()),
                 mapping: settings.mapping.clone(),
                 b: settings.b,
+                power: settings.power,
+                lmb_basis_ids: settings.lmb_basis_ids.clone(),
             },
             SamplingSettings::MultiChanneling(settings) => SamplingSettingsParser {
                 graphs: SumMode::Summed,
                 orientations: SumMode::Summed,
                 lmb_multichanneling: true,
                 lmb_channels: SumMode::Summed,
+                alpha: settings.alpha,
+                lmb_channel_weight: settings.channel_weight,
                 coordinate_system: CoordinateSystem::from_mode(
                     settings.parameterization_settings.mode.clone(),
                 ),
                 mapping: settings.parameterization_settings.mapping.clone(),
                 b: settings.parameterization_settings.b,
+                power: settings.parameterization_settings.power,
+                lmb_basis_ids: settings.parameterization_settings.lmb_basis_ids.clone(),
             },
             SamplingSettings::DiscreteGraphs(settings) => {
                 let orientations = if settings.sample_orientations {
@@ -1092,11 +1203,15 @@ impl SamplingSettings {
                             orientations,
                             lmb_multichanneling: false,
                             lmb_channels: SumMode::Summed,
+                            alpha: 3.0,
+                            lmb_channel_weight: LmbChannelWeight::default(),
                             coordinate_system: CoordinateSystem::from_mode(
                                 parameterization_settings.mode.clone(),
                             ),
                             mapping: parameterization_settings.mapping.clone(),
                             b: parameterization_settings.b,
+                            power: parameterization_settings.power,
+                            lmb_basis_ids: parameterization_settings.lmb_basis_ids.clone(),
                         }
                     }
                     DiscreteGraphSamplingType::MultiChanneling(multichanneling_settings) => {
@@ -1105,6 +1220,8 @@ impl SamplingSettings {
                             orientations,
                             lmb_multichanneling: true,
                             lmb_channels: SumMode::Summed,
+                            alpha: multichanneling_settings.alpha,
+                            lmb_channel_weight: multichanneling_settings.channel_weight,
                             coordinate_system: CoordinateSystem::from_mode(
                                 multichanneling_settings
                                     .parameterization_settings
@@ -1116,6 +1233,11 @@ impl SamplingSettings {
                                 .mapping
                                 .clone(),
                             b: multichanneling_settings.parameterization_settings.b,
+                            power: multichanneling_settings.parameterization_settings.power,
+                            lmb_basis_ids: multichanneling_settings
+                                .parameterization_settings
+                                .lmb_basis_ids
+                                .clone(),
                         }
                     }
                     DiscreteGraphSamplingType::DiscreteMultiChanneling(
@@ -1125,6 +1247,8 @@ impl SamplingSettings {
                         orientations,
                         lmb_multichanneling: true,
                         lmb_channels: SumMode::MonteCarlo,
+                        alpha: multichanneling_settings.alpha,
+                        lmb_channel_weight: multichanneling_settings.channel_weight,
                         coordinate_system: CoordinateSystem::from_mode(
                             multichanneling_settings
                                 .parameterization_settings
@@ -1136,15 +1260,24 @@ impl SamplingSettings {
                             .mapping
                             .clone(),
                         b: multichanneling_settings.parameterization_settings.b,
+                        power: multichanneling_settings.parameterization_settings.power,
+                        lmb_basis_ids: multichanneling_settings
+                            .parameterization_settings
+                            .lmb_basis_ids
+                            .clone(),
                     },
                     DiscreteGraphSamplingType::TropicalSampling(_) => SamplingSettingsParser {
                         graphs: SumMode::MonteCarlo,
                         orientations,
                         lmb_multichanneling: false,
                         lmb_channels: SumMode::Summed,
+                        alpha: 3.0,
+                        lmb_channel_weight: LmbChannelWeight::default(),
                         coordinate_system: CoordinateSystem::MomTrop,
                         mapping: ParameterizationMapping::default(),
                         b: 1.0,
+                        power: 1.0,
+                        lmb_basis_ids: BTreeMap::new(),
                     },
                 }
             }
@@ -1157,10 +1290,16 @@ impl SamplingSettings {
             orientations,
             lmb_multichanneling,
             lmb_channels,
+            alpha,
+            lmb_channel_weight,
             coordinate_system,
             mapping,
             b,
+            power,
+            lmb_basis_ids,
         } = parser;
+
+        validate_lmb_basis_ids(&lmb_basis_ids)?;
 
         let sample_orientations = match (graphs.clone(), orientations) {
             (SumMode::Summed, SumMode::Summed) => false,
@@ -1174,6 +1313,12 @@ impl SamplingSettings {
         };
 
         if matches!(coordinate_system, CoordinateSystem::MomTrop) {
+            if !lmb_basis_ids.is_empty() {
+                return Err(
+                    "Invalid sampling settings: coordinate_system = 'tropical' is incompatible with lmb_basis_ids."
+                        .to_string(),
+                );
+            }
             if !matches!(graphs, SumMode::MonteCarlo) {
                 return Err(
                     "Invalid sampling settings: coordinate_system = 'tropical' requires graphs = 'monte_carlo'."
@@ -1199,7 +1344,50 @@ impl SamplingSettings {
         }
 
         let mode = coordinate_system.into_mode();
-        let parameterization_settings = ParameterizationSettings { mode, mapping, b };
+        if matches!(mode, ParameterizationMode::SphericalProductCommonRadial)
+            && (!lmb_multichanneling || lmb_channel_weight != LmbChannelWeight::InverseJacobian)
+        {
+            return Err(
+                "Invalid sampling settings: coordinate_system = 'spherical_product_common_radial' requires lmb_multichanneling = true and lmb_channel_weight = 'inverse_jacobian'."
+                    .to_string(),
+            );
+        }
+        if lmb_channel_weight == LmbChannelWeight::InverseJacobian
+            && matches!(mode, ParameterizationMode::HyperSphericalFlat)
+        {
+            return Err(
+                "Invalid sampling settings: lmb_channel_weight = 'inverse_jacobian' is incompatible with coordinate_system = 'hyperspherical_flat' because the inverse map is not available."
+                    .to_string(),
+            );
+        }
+        if matches!(mapping, ParameterizationMapping::Power) {
+            if !matches!(
+                mode,
+                ParameterizationMode::Spherical
+                    | ParameterizationMode::RelativeSpherical
+                    | ParameterizationMode::SphericalCommonRadial
+                    | ParameterizationMode::SphericalProductCommonRadial
+                    | ParameterizationMode::HyperSpherical
+                    | ParameterizationMode::HyperSphericalFlat
+            ) {
+                return Err(
+                    "Invalid sampling settings: mapping = 'power' requires a spherical coordinate system."
+                        .to_string(),
+                );
+            }
+            if !power.is_finite() || power < 1.0 {
+                return Err(
+                    "Invalid sampling settings: mapping = 'power' requires power >= 1.".to_string(),
+                );
+            }
+        }
+        let parameterization_settings = ParameterizationSettings {
+            mode,
+            mapping,
+            b,
+            power,
+            lmb_basis_ids,
+        };
 
         match graphs {
             SumMode::Summed => {
@@ -1219,8 +1407,9 @@ impl SamplingSettings {
 
                 if lmb_multichanneling {
                     Ok(SamplingSettings::MultiChanneling(MultiChannelingSettings {
+                        alpha,
+                        channel_weight: lmb_channel_weight,
                         parameterization_settings,
-                        ..MultiChannelingSettings::default()
                     }))
                 } else {
                     Ok(SamplingSettings::Default(parameterization_settings))
@@ -1229,8 +1418,9 @@ impl SamplingSettings {
             SumMode::MonteCarlo => {
                 let sampling_type = if lmb_multichanneling {
                     let settings = MultiChannelingSettings {
+                        alpha,
+                        channel_weight: lmb_channel_weight,
                         parameterization_settings,
-                        ..MultiChannelingSettings::default()
                     };
 
                     match lmb_channels {
@@ -1288,6 +1478,11 @@ impl CoordinateSystem {
         match mode {
             ParameterizationMode::Cartesian => Self::Cartesian,
             ParameterizationMode::Spherical => Self::Spherical,
+            ParameterizationMode::RelativeSpherical => Self::RelativeSpherical,
+            ParameterizationMode::SphericalCommonRadial => Self::SphericalCommonRadial,
+            ParameterizationMode::SphericalProductCommonRadial => {
+                Self::SphericalProductCommonRadial
+            }
             ParameterizationMode::HyperSpherical => Self::HyperSpherical,
             ParameterizationMode::HyperSphericalFlat => Self::HyperSphericalFlat,
             ParameterizationMode::MomentumSpace => Self::MomentumSpace,
@@ -1298,6 +1493,11 @@ impl CoordinateSystem {
         match self {
             CoordinateSystem::Cartesian => ParameterizationMode::Cartesian,
             CoordinateSystem::Spherical => ParameterizationMode::Spherical,
+            CoordinateSystem::RelativeSpherical => ParameterizationMode::RelativeSpherical,
+            CoordinateSystem::SphericalCommonRadial => ParameterizationMode::SphericalCommonRadial,
+            CoordinateSystem::SphericalProductCommonRadial => {
+                ParameterizationMode::SphericalProductCommonRadial
+            }
             CoordinateSystem::HyperSpherical => ParameterizationMode::HyperSpherical,
             CoordinateSystem::HyperSphericalFlat => ParameterizationMode::HyperSphericalFlat,
             CoordinateSystem::MomentumSpace => ParameterizationMode::MomentumSpace,
@@ -1309,7 +1509,7 @@ impl CoordinateSystem {
 }
 
 impl SamplingSettings {
-    pub(crate) fn get_parameterization_settings(&self) -> Option<ParameterizationSettings> {
+    pub fn get_parameterization_settings(&self) -> Option<ParameterizationSettings> {
         match self {
             SamplingSettings::Default(settings) => Some(settings.clone()),
             SamplingSettings::MultiChanneling(settings) => {
@@ -1411,6 +1611,8 @@ pub struct MultiChannelingSettings {
     #[serde(skip_serializing_if = "is_float::<3>")]
     pub alpha: f64,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub channel_weight: LmbChannelWeight,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub parameterization_settings: ParameterizationSettings,
 }
 
@@ -1418,6 +1620,7 @@ impl Default for MultiChannelingSettings {
     fn default() -> Self {
         Self {
             alpha: 3.0,
+            channel_weight: LmbChannelWeight::default(),
             parameterization_settings: ParameterizationSettings::default(),
         }
     }

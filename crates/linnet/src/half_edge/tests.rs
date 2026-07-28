@@ -762,8 +762,6 @@ fn join() {
         *c.iter_edges_of(&c.full_filter()).next().unwrap().2.data
     );
 }
-use std::time::Instant;
-
 use dot_parser::ast::CompassPt;
 use insta::assert_snapshot;
 use nodestore::NodeStorageVec;
@@ -1578,43 +1576,4 @@ fn extract_nodes() {
     // a.dot_serialize_fmt(&mut out, (), &|a| a.clone(), &|a| a.clone(), &|a| a.clone())
     //     .unwrap();
     println!("{}", a.base_dot());
-}
-
-mod failing {
-    use super::*;
-
-    #[test]
-    #[ignore]
-    fn alt_vs_pair() {
-        for s in 0..100 {
-            let rand_graph = HedgeGraph::<(), (), (), NodeStorageVec<()>>::random(10, 14, s);
-
-            let before = Instant::now();
-            let all_spinneys = rand_graph.all_spinneys();
-            let after = before.elapsed();
-            let before = Instant::now();
-            let all_spinneys_alt = rand_graph.all_spinneys_alt();
-            let after_alt = before.elapsed();
-            println!("{s} {after:?} {after_alt:?}");
-
-            assert_eq!(
-                all_spinneys.len(),
-                all_spinneys_alt.len(),
-                "{}",
-                rand_graph.base_dot()
-            );
-        }
-        // let rand_graph = NestingGraph::<(), ()>::random(6, 9, 8);
-
-        // println!("{}", rand_graph.base_dot());
-
-        // println!("loops {}", rand_graph.cycle_basis().len());
-
-        // let all_spinneys_other = rand_graph.all_spinneys();
-
-        // // println!("all spinneys read tarjan {}", all_spinneys.len());
-
-        // println!("all spinneys {}", all_spinneys_other.len());
-        // println!("all spinneys alt{}", rand_graph.all_spinneys_alt().len());
-    }
 }

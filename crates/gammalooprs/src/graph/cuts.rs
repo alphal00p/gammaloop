@@ -1,4 +1,5 @@
 use bincode_trait_derive::{Decode, Encode};
+use gammaloop_tracing_filter::LogMessage;
 use itertools::Itertools;
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 
@@ -8,6 +9,13 @@ use crate::cff::{CutCFFIndex, esurface::RaisedEsurfaceGroup};
 pub struct CutSet {
     pub residue_selector: ResidueSelector,
     pub union: SuBitGraph,
+    pub canonicalize_external_shifts: bool,
+}
+
+impl LogMessage for CutSet {
+    fn log_display(&self) -> String {
+        format!("CutSet: union={}", self.union.string_label())
+    }
 }
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Hash, Eq, PartialOrd, Ord)]
@@ -74,6 +82,7 @@ impl CutSet {
                 right_th_cut: None,
             },
             union: SuBitGraph::empty(size),
+            canonicalize_external_shifts: false,
         }
     }
 }

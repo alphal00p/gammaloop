@@ -601,6 +601,29 @@ impl HedgePair {
             }
         }
     }
+
+    pub(crate) fn shifted(self, shift: Hedge) -> HedgePair {
+        match self {
+            HedgePair::Unpaired { hedge, flow } => HedgePair::Unpaired {
+                hedge: hedge + shift,
+                flow,
+            },
+            HedgePair::Paired { source, sink } => HedgePair::Paired {
+                source: source + shift,
+                sink: sink + shift,
+            },
+            HedgePair::Split {
+                source,
+                sink,
+                split,
+            } => HedgePair::Split {
+                source: source + shift,
+                sink: sink + shift,
+                split,
+            },
+        }
+    }
+
     pub fn any_hedge(&self) -> Hedge {
         match self {
             HedgePair::Unpaired { hedge, .. } => *hedge,

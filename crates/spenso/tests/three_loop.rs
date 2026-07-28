@@ -113,7 +113,7 @@
 //     // let mut truth_net = network.clone();
 
 //     // let function_map = HashMap::new();
-//     // truth_net.evaluate_complex(|i| i.into(), &const_map, &function_map);
+//     // truth_net.evaluate_complex(&const_map);
 //     // truth_net.contract().unwrap();
 //     // let truth = truth_net
 //     //     .result()
@@ -203,7 +203,7 @@
 //     // network.contract().unwrap();
 
 //     // let mut precontracted = network.clone();
-//     // precontracted.evaluate_complex(|i| i.into(), &const_map, &function_map);
+//     // precontracted.evaluate_complex(&const_map);
 //     // assert!(truth.relative_eq(
 //     //     &precontracted
 //     //         .result()

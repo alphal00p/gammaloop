@@ -16,6 +16,7 @@ const GRAPH_SPEC: AttributeSpec = AttributeSpec {
         "is_group_master",
         "num",
         "overall_factor",
+        "pole_part",
         "params",
         "projector",
     ],

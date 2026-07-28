@@ -2,16 +2,16 @@
 
 use aind::Aind;
 use idenso::color::ColorSimplifier;
-use idenso::gamma::GammaSimplifier;
+use idenso::dirac::GammaSimplifier;
 use idenso::representations::Bispinor;
 use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;
 use tracing::warn;
 
-use spenso::network::library::{DummyLibrary, TensorLibraryData};
+use spenso::network::library::DummyLibrary;
 use spenso::network::parsing::{ParseSettings, ShadowedStructure};
 use spenso::network::store::NetworkStore;
-use spenso::network::{ContractScalars, Sequential, SingleSmallestDegree, SmallestDegree, Steps};
+use spenso::network::{ContractScalars, MinResultRank, Sequential, SingleSmallestDegree, Steps};
 use spenso::shadowing::symbolica_utils::SerializableSymbol;
 
 use spenso::tensors::data::DataTensor;
@@ -67,22 +67,16 @@ use spenso::{
     },
 };
 
-use symbolica::domains::rational::Rational;
-use symbolica::poly::PolyVariable;
-use symbolica::printer::PrintOptions;
 use symbolica::state::Workspace;
 
 use crate::numerator::ufo::UFO;
-use symbolica::atom::{AtomCore, AtomOrView, AtomView, Symbol};
-use symbolica::evaluate::{CompileOptions, InlineASM};
-use symbolica::{
-    atom::{Atom, FunctionBuilder},
-    function, parse, symbol,
-};
+use symbolica::prelude::*;
 
 pub mod symbolica_ext;
 
-use symbolica::{evaluate::FunctionMap, id::Replacement};
+#[cfg(test)]
+mod spensotests;
+
 pub mod aind;
 pub mod ufo;
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
@@ -222,22 +216,20 @@ impl<S: NumeratorState> Numerator<S> {
     }
 
     fn add_consts_to_fn_map(fn_map: &mut FunctionMap) {
-        fn_map.add_constant(
-            parse!("Nc"),
-            symbolica::domains::float::Complex::from(Rational::from(3)),
-        );
+        fn_map
+            .add_aliases([(parse!("Nc"), Atom::num(Rational::from(3)))])
+            .unwrap();
 
-        fn_map.add_constant(
-            parse!("TR"),
-            symbolica::domains::float::Complex::from(Rational::from((1, 2))),
-        );
+        fn_map
+            .add_aliases([(parse!("TR"), Atom::num(Rational::from((1, 2))))])
+            .unwrap();
 
-        fn_map.add_constant(
-            parse!("pi"),
-            symbolica::domains::float::Complex::from(
-                Rational::try_from(std::f64::consts::PI).unwrap(),
-            ),
-        );
+        fn_map
+            .add_aliases([(
+                parse!("pi"),
+                Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
+            )])
+            .unwrap();
     }
 }
 
@@ -389,7 +381,7 @@ impl GlobalPrefactor {
                     pol_type: PolType::Epsilon,
                     eid: EdgeIndex(e as usize),
                 },
-                pat.replace_wildcards(&m),
+                pat.replace_wildcards(&m).unwrap(),
             ));
         }
 
@@ -407,7 +399,7 @@ impl GlobalPrefactor {
                     pol_type: PolType::EpsilonBar,
                     eid: EdgeIndex(e as usize),
                 },
-                pat.replace_wildcards(&m),
+                pat.replace_wildcards(&m).unwrap(),
             ));
         }
 
@@ -425,7 +417,7 @@ impl GlobalPrefactor {
                     pol_type: PolType::U,
                     eid: EdgeIndex(e as usize),
                 },
-                pat.replace_wildcards(&m),
+                pat.replace_wildcards(&m).unwrap(),
             ));
         }
 
@@ -443,7 +435,7 @@ impl GlobalPrefactor {
                     pol_type: PolType::V,
                     eid: EdgeIndex(e as usize),
                 },
-                pat.replace_wildcards(&m),
+                pat.replace_wildcards(&m).unwrap(),
             ));
         }
 
@@ -461,7 +453,7 @@ impl GlobalPrefactor {
                     pol_type: PolType::UBar,
                     eid: EdgeIndex(e as usize),
                 },
-                pat.replace_wildcards(&m),
+                pat.replace_wildcards(&m).unwrap(),
             ));
         }
 
@@ -479,7 +471,7 @@ impl GlobalPrefactor {
                     pol_type: PolType::VBar,
                     eid: EdgeIndex(e as usize),
                 },
-                pat.replace_wildcards(&m),
+                pat.replace_wildcards(&m).unwrap(),
             ));
         }
 
@@ -844,7 +836,12 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
 
         let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
 
-        let expr = self.state.expr.canonize_tensors(sorted)?.canonical_form;
+        let expr = self
+            .state
+            .expr
+            .canonize_tensors(sorted)
+            .map_err(|e| e.to_string())?
+            .canonical_form;
 
         Ok(Self {
             state: SymbolicExpression {
@@ -941,10 +938,16 @@ impl Numerator<AppliedFeynmanRule> {
 impl Numerator<ColorSimplified> {
     pub(crate) fn gamma_simplify(self) -> Numerator<GammaSimplified> {
         debug!("Gamma simplifying color symplified numerator");
+        let expr = self.state.expr.simplify_gamma();
+        crate::debug_tags!(#generation, #inspect, #dump;
+            stage = "numerator_after_simplify_gamma",
+            log.after_gamma = expr,
+            "Numerator after gamma simplification"
+        );
 
         Numerator {
             state: GammaSimplified {
-                expr: self.state.expr.simplify_gamma(),
+                expr,
                 state: Default::default(),
             },
         }
@@ -1038,7 +1041,7 @@ impl PolySplit {
                     }
 
                     if pow > 0 {
-                        num_h.to_num((pow as i64).into());
+                        num_h.to_num(pow as i64);
                         pow_h.to_pow(var_h.as_view(), num_h.as_view());
                         mul_h *= pow_h.as_view();
                     } else {
@@ -1164,7 +1167,6 @@ impl Numerator<PolyContracted> {
                 .add_tagged_function::<Symbol>(
                     GS.coeff,
                     vec![Atom::num(v as i64)],
-                    format!("coef{v}"),
                     vec![],
                     k.clone(),
                 )
@@ -1195,7 +1197,7 @@ impl PolyContracted {}
 
 impl GammaSimplified {
     pub(crate) fn parse(self) -> Network {
-        let lib = DummyLibrary::<(), _>::new();
+        let lib = DummyLibrary::<MixedTensor<F<f64>, ShadowedStructure<Aind>>, _>::new();
         let net = StandardTensorNet::try_from_view(
             self.get_single_atom().unwrap().as_view(),
             &lib,
@@ -1333,7 +1335,7 @@ pub type StandardTensorNet = spenso::network::Network<
 
 impl Network {
     pub(crate) fn parse_impl(expr: AtomView) -> Self {
-        let lib = DummyLibrary::<(), _>::new();
+        let lib = DummyLibrary::<MixedTensor<F<f64>, ShadowedStructure<Aind>>, _>::new();
         let net = StandardTensorNet::try_from_view(expr, &lib, &ParseSettings::default()).unwrap();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
@@ -1354,7 +1356,7 @@ impl Network {
                 match settings.mode {
                     ExecutionMode::All => self
                         .net
-                        .execute::<Steps<1>, SmallestDegree, _, _, _>(lib.deref(), fnlib)?,
+                        .execute::<Steps<1>, MinResultRank, _, _, _>(lib.deref(), fnlib)?,
                     ExecutionMode::Scalar => self
                         .net
                         .execute::<Steps<1>, ContractScalars, _, _, _>(lib.deref(), fnlib)?,
@@ -1370,7 +1372,7 @@ impl Network {
             match settings.mode {
                 ExecutionMode::All => {
                     self.net
-                        .execute::<Sequential, SmallestDegree, _, _, _>(lib.deref(), fnlib)?;
+                        .execute::<Sequential, MinResultRank, _, _, _>(lib.deref(), fnlib)?;
                 }
                 ExecutionMode::Scalar => {
                     self.net

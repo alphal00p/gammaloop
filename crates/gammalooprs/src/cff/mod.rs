@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, fmt::Display};
 use bincode_trait_derive::{Decode, Encode};
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
-    subgraph::{SubSetLike, SubSetOps},
+    subgraph::{SubGraphLike, SubSetLike, SubSetOps},
 };
 use symbolica::atom::{Atom, AtomCore};
 
@@ -11,6 +11,7 @@ use crate::{
     cff::expression::GraphOrientation,
     graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
     settings::global::OrientationPattern,
+    utils::GS,
 };
 use color_eyre::Result;
 
@@ -94,7 +95,7 @@ impl CutCFF {
 }
 
 impl Graph {
-    pub fn cff<S: SubSetLike>(
+    pub fn cff<S: SubGraphLike + SubSetLike>(
         &mut self,
         contract_subgraph: &S,
         cutset: &CutSet,
@@ -177,9 +178,30 @@ impl Graph {
             .subtract(&self.initial_state_cut.left)
             .subtract(&self.initial_state_cut.right);
 
+        // The CFF carries the measure normalization for the loop variables that remain after
+        // contracting a UV subgraph. Fully contracted integrated CTs therefore get no extra CFF
+        // measure factor, while ordinary root terms get the full graph-loop factor.
+        let cff_loop_number = self
+            .get_loop_number()
+            .saturating_sub(self.cyclotomatic_number(contract_subgraph));
+        let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
+        let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
+        crate::debug_tags!(#cff, #trace;
+            stage = "graph_cff_normalization",
+            graph = %self.name,
+            cff_loop_number = cff_loop_number,
+            log.cff_normalization = cff_normalization,
+            "Graph CFF normalization"
+        );
+
         let mut terms = BTreeMap::new();
 
-        let replacement_rules = self.surface_cache.get_all_replacements(&[]);
+        let replacement_rules = if cutset.canonicalize_external_shifts {
+            self.surface_cache
+                .get_all_replacements_in_lmb(&[], &self.loop_momentum_basis)
+        } else {
+            self.surface_cache.get_all_replacements(&[])
+        };
 
         for (cut_cff_index, expr) in residues.into_iter() {
             let mut cff_term = CFFTerm {
@@ -197,7 +219,15 @@ impl Graph {
                 );
 
                 ose_expr *= inverse_energies;
+                ose_expr *= cff_normalization.clone();
 
+                crate::debug_tags!(#cff, #trace;
+                    stage = "graph_cff_term_expr",
+                    graph = %self.name,
+                    cut_index = ?cut_cff_index,
+                    log.expr = ose_expr,
+                    "Graph CFF term expression"
+                );
                 // println!("ose expr :{}", ose_expr);
                 cff_term.expression.push(ose_expr);
                 cff_term

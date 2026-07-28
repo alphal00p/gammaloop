@@ -1,0 +1,11 @@
+digraph se1l {
+    projector = "(1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(4)),spenso::coad(8,gammalooprs::hedge(5)))*spenso::g(spenso::mink(4,gammalooprs::hedge(5)),spenso::mink(4,gammalooprs::hedge(4)))";
+
+    ext [style=invis];
+
+    ext -> 0 [dir=none id=0 particle="g"];
+    1 -> ext [dir=none id=1 particle="g"];
+
+    0 -> 1 [id=2 particle="t" lmb_id=0];
+    1 -> 0 [id=3 particle="t"];
+}

@@ -5,7 +5,8 @@ use std::{
 
 use ahash::AHashMap;
 use eyre::eyre;
-use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
+use gammaloop_tracing_filter::LogMessage;
+use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NoData, NodeIndex,
@@ -16,7 +17,6 @@ use linnet::half_edge::{
     nodestore::{NodeStorageOps, NodeStorageVec},
     subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
 };
-use spenso::network::library::TensorLibraryData;
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
     function, symbol,
@@ -348,6 +348,17 @@ impl AsRef<TraceKey<SuBitGraph, EdgeIndex>> for OperationNode {
     }
 }
 
+impl LogMessage for ForestNode<'_> {
+    fn log_display(&self) -> String {
+        format!(
+            "subgraph={}, topo_order={}, dod={}",
+            self.spinney.filter().string_label(),
+            self.topo_order,
+            self.spinney.dod
+        )
+    }
+}
+
 impl ForestNodeLike for ForestNode<'_> {
     fn dod(&self) -> i32 {
         self.spinney.dod
@@ -474,7 +485,14 @@ impl OperationNode {
                 let (current, given) = wood.current_given_pair(op.data, order);
                 order += 1;
                 compute_store.record_kernel_hit();
-                mul *= -integrated_orchestrator.kernel(&uvctx, &current, &given, &acc)?;
+                let raw_integrated =
+                    integrated_orchestrator.kernel(&uvctx, &current, &given, &acc)?;
+                let integrated = if given.subgraph().is_empty() {
+                    raw_integrated
+                } else {
+                    -raw_integrated
+                };
+                mul *= integrated;
             }
 
             acc = mul
@@ -493,7 +511,7 @@ impl OperationNode {
         settings: &UVgenerationSettings,
     ) -> Result<BTreeMap<CutCFFIndex, Atom>> {
         let mut acc = None;
-        let _local = Local3DApproximation {};
+        let _local = Local3DApproximation::full();
         let _uvctx = UVCtx { graph, settings };
 
         let mut order = 0;
@@ -660,7 +678,6 @@ impl Forests {
                 vakint,
                 settings,
             )?;
-
             self.compute_store
                 .entry(self.graph[*nidx].clone())
                 .or_default()
@@ -784,7 +801,6 @@ impl Forests {
                 key=%key,
                expr = % atom.expand_num().log_print(None),"Term before simplification"
             );
-
             let atom = (atom
                 * &graph.global_prefactor.projector
                 * &graph.global_prefactor.num
@@ -800,10 +816,23 @@ impl Forests {
             sum += atom;
         }
 
+        let n_loops = graph.n_loops(&graph.full_filter());
+        let pole_stripped = sum
+            .series(GS.dim_epsilon, Atom::Zero, n_loops as i64 + 1)
+            .unwrap();
+
+        sum = Atom::Zero;
+
+        for (power, p) in pole_stripped.terms() {
+            if power < 0 {
+                sum += p * Atom::var(GS.dim_epsilon).pow(power);
+            }
+        }
+
         Ok(RenormalizationPart::new(
             sum.replace_multiple(&replacements)
-                .replace(GS.m_uv_int)
-                .with(GS.m_uv),
+                .replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum),
             self.compute_store.kernel_hits,
             self.graph.n_nodes(),
         ))
@@ -889,7 +918,7 @@ mod tests {
         let spinneys: Vec<_> = dumbell
             .spinneys(&dumbell.full_filter())
             .into_iter()
-            .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+            .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
             .collect();
         let f = Wood::new(
             CutStructure::empty(&dumbell),
@@ -940,7 +969,7 @@ mod tests {
         let spinneys: Vec<_> = dumbell
             .spinneys(&dumbell.full_filter())
             .into_iter()
-            .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+            .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
             .collect();
         let f = Wood::new(
             CutStructure::empty(&dumbell),
@@ -998,7 +1027,7 @@ mod tests {
                 let spinneys: Vec<_> = g
                     .spinneys(&g.full_filter())
                     .into_iter()
-                    .map(|a| Spinney::new(a, &g, &g.loop_momentum_basis))
+                    .filter_map(|a| Spinney::new(a, &g, &g.loop_momentum_basis))
                     .collect();
                 let f = Wood::new(
                     CutStructure::empty(&g),
@@ -1366,7 +1395,7 @@ mod tests {
             let spinneys: Vec<_> = dumbell
                 .spinneys(&dumbell.full_filter())
                 .into_iter()
-                .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+                .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
                 .collect();
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
@@ -1418,7 +1447,7 @@ mod tests {
             let spinneys: Vec<_> = dumbell
                 .spinneys(&dumbell.full_filter())
                 .into_iter()
-                .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+                .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
                 .collect();
             let f = Wood::new(
                 CutStructure::empty(&dumbell),

@@ -1,6 +1,5 @@
 use eyre::Context;
 use linnet::parser::GlobalData;
-use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
 
 use crate::{feyngen::diagram_generator::evaluate_overall_factor, graph::GroupId};

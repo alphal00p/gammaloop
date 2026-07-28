@@ -1,10 +1,11 @@
 use std::hash::{Hash, Hasher};
 
+use gammaloop_tracing_filter::LogMessage;
 use linnet::half_edge::{
     HedgeGraph,
     subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike},
 };
-use tracing::{debug, error};
+use tracing::debug;
 
 use crate::{
     graph::{LMBext, LoopMomentumBasis, cuts::CutSet},
@@ -19,6 +20,18 @@ pub struct Spinney {
     pub lmb: LoopMomentumBasis,
     pub renormalization_scheme: ApproximationType,
     max_comp_loop_count: usize,
+}
+
+impl LogMessage for Spinney {
+    fn log_display(&self) -> String {
+        format!(
+            "Spinney {{ dod: {}, components: {}, max_comp_loop_count: {},subgraph: {} }}",
+            self.dod,
+            self.components.len(),
+            self.max_comp_loop_count,
+            self.subgraph.string_label(),
+        )
+    }
 }
 
 impl Spinney {
@@ -41,7 +54,7 @@ impl Spinney {
         subgraph: InternalSubGraph,
         g: &G,
         lmb: &LoopMomentumBasis,
-    ) -> Self {
+    ) -> Option<Self> {
         Self::with_scheme(subgraph, g, lmb, ApproximationType::MUV)
     }
 
@@ -50,24 +63,21 @@ impl Spinney {
         g: &G,
         lmb: &LoopMomentumBasis,
         renormalization_scheme: ApproximationType,
-    ) -> Self {
+    ) -> Option<Self> {
         let components = g.as_ref().connected_components(&subgraph);
         let max_comp_loop_count = components
             .iter()
             .map(|component| g.as_ref().cyclotomatic_number(component))
             .max()
             .unwrap_or(0);
-        let lmb = g.compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb);
+        let lmb = g
+            .try_compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb)
+            .ok()?;
 
-        let dod = g.dod(&subgraph);
+        let dod = g.compute_dod(&subgraph);
 
-        if dod != g.local_dod(&subgraph) {
-            error!(
-                "dod mismatch: global={} local={} of graph:\n{}",
-                dod,
-                g.local_dod(&subgraph),
-                g.dod(&subgraph),
-            );
+        if dod < 0 {
+            return None;
         }
 
         debug!(
@@ -79,14 +89,14 @@ impl Spinney {
             renormalization_scheme
         );
 
-        Self {
+        Some(Self {
             components,
             dod,
             lmb,
             subgraph,
             renormalization_scheme,
             max_comp_loop_count,
-        }
+        })
     }
 
     pub fn filter(&self) -> &SuBitGraph {
