@@ -40,7 +40,7 @@ use crate::{
             final_integrand::{FinalIntegrandBuilder, FinalIntegrands},
             integrated::{Integrated, IntegratedCts},
             local_3d::{Local3DApproximation, Local3DCts, Localizer},
-            local_4d::{self, Full4DCts, Local4dCts},
+            local_4d::{self, Full4dCts, Local4dCts},
         },
         export::UVForestNodeExpression,
         forest::ParametricIntegrands,
@@ -634,15 +634,15 @@ impl Forests {
         &self.wood.graph[self.graph.source_node(node)]
     }
 
-    fn recursion_input_4d(&self, node: NodeIndex) -> Result<Full4DCts> {
+    fn recursion_input_4d(&self, node: NodeIndex) -> Result<Full4dCts> {
         let operation = &self.graph[node];
         let computed = self.compute_store.require(operation)?;
         if self.graph.is_disjoint_union(node) {
-            return Ok(Full4DCts::from_factorized_local(
+            return Ok(Full4dCts::from_factorized_local(
                 computed.local_4d(operation)?,
             ));
         }
-        Full4DCts::recursion_input(
+        Full4dCts::recursion_input(
             computed.local_4d(operation)?,
             computed.integrated(operation)?,
             self.source_spinney(node).renormalization_scheme,
@@ -1319,55 +1319,6 @@ impl Forests {
 
         Ok(terms)
     }
-
-    // pub fn compute(
-    //     &mut self,
-    //     graph: &mut Graph,
-    //     wood: &Wood,
-    //     settings: &UVgenerationSettings,
-    // ) -> Result<()> {
-    //     let local_orchestrator = Local3DApproximation {};
-    //     for (cut_compatible_forest_subset, c) in &self.cuts {
-    //         let mut integrands = Some(Local3DApproximation::root(graph, c)?);
-
-    //         let uvctx = UVCtx { graph, settings };
-    //         for (order, nidx) in self
-    //             .graph
-    //             .topo_sort_kahn_of(cut_compatible_forest_subset)
-    //             .unwrap()
-    //             .iter()
-    //             .enumerate()
-    //         {
-    //             for h in self.iter_parents(*nidx, order, wood) {
-    //                 let (computed, current, given, parent_key, is_union) = h?;
-
-    //                 let Integrands::Multiple(a) = &computed.local_3d else {
-    //                     return Err(eyre!("{} integrated_4d not computed yet", parent_key));
-    //                 };
-
-    //                 if is_union {
-    //                     // integrand *= a;
-    //                 } else {
-    //                     integrands = Some(
-    //                         a.iter()
-    //                             .map(|a| local_orchestrator.kernel(&uvctx, &current, &given, a))
-    //                             .collect::<Result<_>>()?,
-    //                     );
-    //                 }
-    //             }
-
-    //             self.compute_store
-    //                 .entry(self.graph[*nidx].clone())
-    //                 .or_default()
-    //                 .local_3d = Integrands::Multiple(
-    //                 integrands
-    //                     .take()
-    //                     .ok_or(eyre!("Taken integrand not filled in"))?,
-    //             );
-    //         }
-    //     }
-    //     Ok(())
-    // }
 
     pub(crate) fn renormalization_part_of_ends(
         &self,

@@ -841,6 +841,7 @@ fn run_integrated_uv_case(case: &IntegratedUvCase<'_>) -> IntegratedUvCaseResult
     };
 
     let case_result = (|| -> Result<()> {
+        cli.cli_settings.global.generation.uv.orchestrator = UVOrchestrator::Compare;
         cli.run_command("run generate")?;
         set_original_integrated_uv_scales(&mut cli, case)?;
         add_integrated_uv_scale_variants(&mut cli, case)?;

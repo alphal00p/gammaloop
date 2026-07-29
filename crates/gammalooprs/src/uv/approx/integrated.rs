@@ -55,7 +55,7 @@ use crate::{
 /// Connected values store their canonical expansion. Factorized values encode
 /// componentwise pole and signed nonnegative-power products under the same accessors.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct IntegratedCts {
+pub(crate) struct IntegratedCts {
     expansion: Series<AtomField>,
     scale_power: i64,
 }
@@ -190,13 +190,13 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
     Ok(dotted)
 }
 
-pub struct Integrated<'a> {
+pub(crate) struct Integrated<'a> {
     pub vakint: &'a Vakint,
     pub vakint_settings: &'a vakint::VakintSettings,
 }
 
 impl Integrated<'_> {
-    pub fn new<'a>(
+    pub(crate) fn new<'a>(
         vakint: &'a Vakint,
         vakint_settings: &'a vakint::VakintSettings,
     ) -> Integrated<'a> {
@@ -206,7 +206,7 @@ impl Integrated<'_> {
         }
     }
 
-    pub fn run<S: super::ForestNodeLike, M: super::ForestNodeLike>(
+    pub(crate) fn run<S: super::ForestNodeLike, M: super::ForestNodeLike>(
         &self,
         integrand: &Local4dCts,
         ctx: &UVCtx<'_>,

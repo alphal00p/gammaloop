@@ -7,7 +7,7 @@ use crate::CLISettings;
 use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
-use gammalooprs::uv::{settings::FinalIntegrandDimension, ApproximationType};
+use gammalooprs::uv::ApproximationType;
 use idenso::color::{ColorSimplifier, CS};
 use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
 use schemars::JsonSchema;
@@ -64,7 +64,6 @@ impl Renormalize {
 
         let mut settings = global_cli_settings.global.generation.uv.clone();
 
-        settings.final_integrand = FinalIntegrandDimension::FourD;
         settings.generate_integrated = true;
         let prescription = &mut settings.renormalization_prescription;
         for scheme in [

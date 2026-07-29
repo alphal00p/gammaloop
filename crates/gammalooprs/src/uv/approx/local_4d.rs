@@ -30,11 +30,11 @@ use crate::{
     },
 };
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Local4dCts(Atom);
+pub(crate) struct Local4dCts(Atom);
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Full4DCts(Atom);
+pub(crate) struct Full4dCts(Atom);
 
-impl Full4DCts {
+impl Full4dCts {
     pub(crate) fn atom(&self) -> &Atom {
         &self.0
     }
@@ -74,7 +74,7 @@ impl Local4dCts {
         &self.0
     }
 
-    pub(crate) fn from_full_product(factors: impl IntoIterator<Item = Full4DCts>) -> Self {
+    pub(crate) fn from_full_product(factors: impl IntoIterator<Item = Full4dCts>) -> Self {
         Self(
             factors
                 .into_iter()
@@ -185,7 +185,7 @@ impl Graph {
         given = %given.log_display(),
     )]
 fn grow<S: super::ForestNodeLike>(
-    integrand: &Full4DCts,
+    integrand: &Full4dCts,
     ctx: &UVCtx<'_>,
     current: &S,
     given: &S,
@@ -309,7 +309,7 @@ fn t<S: super::ForestNodeLike>(
 }
 
 pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
-    integrand: &Full4DCts,
+    integrand: &Full4dCts,
     ctx: &UVCtx<'_>,
     current: &S,
     given: &S,

@@ -373,7 +373,7 @@ fn dot_statement_value(value: &str) -> String {
     escaped_dot_string(value)
 }
 
-fn sanitize_file_component(value: &str) -> String {
+pub(crate) fn sanitize_file_component(value: &str) -> String {
     let mut sanitized = String::new();
     for c in value.chars() {
         let next = if c.is_ascii_alphanumeric() || c == '-' {
@@ -409,7 +409,7 @@ fn residue_suffix(index: CutCFFIndex) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::UVForestNodeTerm;
+    use super::{UVForestNodeTerm, sanitize_file_component};
     use crate::cff::CutCFFIndex;
 
     #[test]
@@ -442,5 +442,13 @@ mod tests {
         };
 
         assert_eq!(term.file_name(), "node_000_key_term_000_all_none.dot");
+    }
+
+    #[test]
+    fn file_components_cannot_escape_the_export_directory() {
+        assert_eq!(sanitize_file_component("../result"), "result");
+        assert_eq!(sanitize_file_component("/tmp/result"), "tmp_result");
+        assert_eq!(sanitize_file_component("a/b"), "a_b");
+        assert_eq!(sanitize_file_component(""), "key");
     }
 }

@@ -25,7 +25,7 @@ use symbolica::{
     function,
 };
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct FinalIntegrands(Integrands);
+pub(crate) struct FinalIntegrands(Integrands);
 
 impl FinalIntegrands {
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&CutCFFIndex, &Atom)> {

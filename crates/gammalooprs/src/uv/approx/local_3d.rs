@@ -33,7 +33,7 @@ pub(crate) struct FrozenActiveCt {
 }
 
 impl FrozenActiveCt {
-    pub fn combine(self) -> Result<Integrands> {
+    pub(crate) fn combine(self) -> Result<Integrands> {
         self.active.zip_mul(&self.frozen_integrands)
     }
 }
@@ -45,7 +45,7 @@ pub(crate) struct Localizer<'a> {
 }
 
 impl<'a> Localizer<'a> {
-    pub fn cff(self, graph: &mut Graph, to_contract: &SuBitGraph) -> Result<CutCFF> {
+    pub(crate) fn cff(self, graph: &mut Graph, to_contract: &SuBitGraph) -> Result<CutCFF> {
         graph.cff(
             &to_contract
                 .union(&graph.tree_edges)
@@ -55,7 +55,7 @@ impl<'a> Localizer<'a> {
         )
     }
 
-    pub fn new(cutset: &'a CutSet, orientation: OrientationProjection<'a>) -> Self {
+    pub(crate) fn new(cutset: &'a CutSet, orientation: OrientationProjection<'a>) -> Self {
         Self {
             cutset,
             orientation,
@@ -122,7 +122,7 @@ impl<'a> Localizer<'a> {
 
         Ok(localized)
     }
-    pub fn localize<S: ForestNodeLike>(
+    pub(crate) fn localize<S: ForestNodeLike>(
         &self,
         expr: &Atom,
         graph: &mut Graph,
@@ -201,7 +201,7 @@ impl<'a> Localizer<'a> {
     }
 }
 
-pub struct Local3DApproximation<'a> {
+pub(crate) struct Local3DApproximation<'a> {
     localizer: Localizer<'a>,
     graph: &'a mut Graph,
     settings: &'a UVgenerationSettings,
@@ -378,7 +378,7 @@ impl<'a> Local3DApproximation<'a> {
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Local3DCts {
+pub(crate) struct Local3DCts {
     integrands: Integrands,
     // A disconnected join can leave a different set of loop variables active
     // in each local/integrated cross term.
@@ -411,7 +411,7 @@ impl Neg for Local3DCts {
 }
 
 impl Local3DCts {
-    pub fn zip_add(&self, other: &Integrands) -> Result<Self> {
+    pub(crate) fn zip_add(&self, other: &Integrands) -> Result<Self> {
         if self.active_sectors.is_some() {
             return Err(eyre!(
                 "an unlabelled local term cannot be added to active UV sectors"
@@ -447,7 +447,7 @@ impl Local3DCts {
         })
     }
 
-    pub fn map<F: FnMut(&Atom) -> Result<Atom>>(&self, mut f: F) -> Result<Self> {
+    pub(crate) fn map<F: FnMut(&Atom) -> Result<Atom>>(&self, mut f: F) -> Result<Self> {
         if let Some(active_sectors) = &self.active_sectors {
             let active_sectors = active_sectors
                 .iter()

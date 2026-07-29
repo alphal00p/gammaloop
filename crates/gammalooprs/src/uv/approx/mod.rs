@@ -10,7 +10,7 @@ use crate::{
             final_integrand::{FinalIntegrandBuilder, FinalIntegrands},
             integrated::{Integrated, IntegratedCts},
             local_3d::{Local3DApproximation, Local3DCts, Localizer},
-            local_4d::{Full4DCts, Local4dCts},
+            local_4d::{Full4dCts, Local4dCts},
         },
         marker::UvMarker,
         settings::FinalIntegrandDimension,
@@ -30,16 +30,13 @@ use symbolica::{
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 
-use vakint::Vakint;
-// use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 use super::IntegrandExpr;
+use vakint::Vakint;
 
 pub mod final_integrand;
-// pub mod full;
 pub mod integrated;
 pub mod local_3d;
 pub mod local_4d;
-pub mod step;
 
 pub trait Rooted {
     fn root() -> Self;
@@ -155,20 +152,20 @@ pub struct Approximation {
 }
 
 impl Approximation {
-    pub fn integrated(&self, graph: &Graph) -> Result<&IntegratedCts> {
+    pub(crate) fn integrated(&self, graph: &Graph) -> Result<&IntegratedCts> {
         self.integrated
             .as_ref()
-            .ok_or(eyre!("No integrated CT for {}", self.simple_display(graph)))
+            .ok_or_else(|| eyre!("No integrated CT for {}", self.simple_display(graph)))
     }
 
-    pub fn local(&self, graph: &Graph) -> Result<&Local4dCts> {
+    pub(crate) fn local(&self, graph: &Graph) -> Result<&Local4dCts> {
         self.local
             .as_ref()
-            .ok_or(eyre!("No local CT for {}", self.simple_display(graph)))
+            .ok_or_else(|| eyre!("No local CT for {}", self.simple_display(graph)))
     }
 
-    pub(crate) fn recursion_input_4d(&self, graph: &Graph) -> Result<Full4DCts> {
-        Full4DCts::recursion_input(
+    pub(crate) fn recursion_input_4d(&self, graph: &Graph) -> Result<Full4dCts> {
+        Full4dCts::recursion_input(
             self.local(graph)?,
             self.integrated(graph)?,
             self.renormalization_scheme(),
@@ -176,17 +173,16 @@ impl Approximation {
         )
     }
 
-    pub fn local_3d(&self, graph: &Graph) -> Result<&Local3DCts> {
+    pub(crate) fn local_3d(&self, graph: &Graph) -> Result<&Local3DCts> {
         self.local_3d
             .as_ref()
-            .ok_or(eyre!("No local 3D CT for {}", self.simple_display(graph)))
+            .ok_or_else(|| eyre!("No local 3D CT for {}", self.simple_display(graph)))
     }
 
-    pub fn final_integrand(&self, graph: &Graph) -> Result<&FinalIntegrands> {
-        self.final_integrand.as_ref().ok_or(eyre!(
-            "No final integrand for {}",
-            self.simple_display(graph)
-        ))
+    pub(crate) fn final_integrand(&self, graph: &Graph) -> Result<&FinalIntegrands> {
+        self.final_integrand
+            .as_ref()
+            .ok_or_else(|| eyre!("No final integrand for {}", self.simple_display(graph)))
     }
 
     pub fn simple_display(&self, graph: &Graph) -> String {

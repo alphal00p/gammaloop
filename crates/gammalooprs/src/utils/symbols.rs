@@ -726,19 +726,19 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         }
     ),
     uv_approx: symbol!(
-        "gammalooprs::uv::Approx",
+        "Approx",
         print = |a, opt, _state| spenso_print_uv_unary!(a, opt, "K[", "]")
     ),
     uv_integrate: symbol!(
-        "gammalooprs::uv::Integrate",
+        "Integrate",
         print = |a, opt, _state| spenso_print_uv_unary!(a, opt, "⟨", "⟩")
     ),
     uv_series: symbol!(
-        "gammalooprs::uv::Series",
+        "Series",
         print = |a, opt, _state| spenso_print_uv_unary!(a, opt, "Σ(", ")")
     ),
     uv_truncate: symbol!(
-        "gammalooprs::uv::Truncate",
+        "Truncate",
         print = |a, opt, _state| spenso_print_uv_unary!(a, opt, "Tr(", ")")
     ),
     ct_marker: symbol!(

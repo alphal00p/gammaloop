@@ -31,7 +31,7 @@ use crate::{
     integrands::process::ProcessIntegrand,
     numerator::GlobalPrefactor,
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
-    uv::export::UVForestExportSettings,
+    uv::export::{UVForestExportSettings, sanitize_file_component},
 };
 use eyre::{Context, eyre};
 
@@ -881,13 +881,14 @@ impl Process {
         for &graph_id in graph_ids {
             let export =
                 integrand.export_uv_forest_graph(graph_id, generation_settings, settings)?;
-            let forest_path = integrand_path.join(format!("{}.forest.dot", export.graph_name));
+            let graph_name = sanitize_file_component(&export.graph_name);
+            let forest_path = integrand_path.join(format!("{graph_name}.forest.dot"));
             let mut forest_file = create_overwriting_file(&forest_path, "UV forest")?;
             forest_file.write_all(export.forest_dot.as_bytes())?;
 
             for term in export.node_terms {
                 let node_dir = integrand_path
-                    .join(format!("{}_nodes", export.graph_name))
+                    .join(format!("{graph_name}_nodes"))
                     .join(format!("forest_{:03}", term.forest_index));
                 fs::create_dir_all(&node_dir).with_context(|| {
                     format!(

@@ -1,6 +1,7 @@
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use idenso::{
+    IndexTooling,
     color::ColorSimplifier,
     shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
@@ -9,6 +10,7 @@ use vakint::Vakint;
 
 use crate::{
     graph::{Graph, cuts::CutSet, feynman_graph::FeynmanGraph},
+    numerator::aind::Aind,
     uv::{
         Integrands, RenormalizationPart, UVOrchestrator, UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, OrientationProjection, local_3d::Localizer},
@@ -218,8 +220,7 @@ impl IntegrandMapComparison<'_> {
     fn compare(&self) -> Result<()> {
         self.legacy
             .checked_zip(self.hedge, |key, legacy_expr, hedge_expr| {
-                if ComparableExpr::new(legacy_expr).normalized()
-                    != ComparableExpr::new(hedge_expr).normalized()
+                if !ComparableExpr::new(legacy_expr).equivalent_to(&ComparableExpr::new(hedge_expr))
                 {
                     return Err(eyre!(
                         "UV orchestrator compare mismatch at cut {} residue {:?}",
@@ -247,8 +248,8 @@ struct RenormalizationComparison<'a> {
 
 impl RenormalizationComparison<'_> {
     fn compare(&self) -> Result<()> {
-        if ComparableExpr::new(&self.legacy.expression).normalized()
-            != ComparableExpr::new(&self.hedge.expression).normalized()
+        if !ComparableExpr::new(&self.legacy.expression)
+            .equivalent_to(&ComparableExpr::new(&self.hedge.expression))
         {
             return Err(eyre!(
                 "UV orchestrator compare mismatch in integrated renormalization part"
@@ -267,6 +268,16 @@ impl<'a> ComparableExpr<'a> {
         Self { atom }
     }
 
+    fn equivalent_to(&self, other: &Self) -> bool {
+        let left = self.normalized();
+        let right = other.normalized();
+
+        // Backend-local topology labels may differ on contracted indices.
+        left.collect_factors() == right.collect_factors()
+            || left.canonize(Aind::Dummy).collect_factors()
+                == right.canonize(Aind::Dummy).collect_factors()
+    }
+
     fn normalized(&self) -> Atom {
         self.atom
             .replace(crate::utils::GS.dim)
@@ -275,6 +286,38 @@ impl<'a> ComparableExpr<'a> {
             .to_dots()
             .simplify_color()
             .expand_num()
-            .collect_factors()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use idenso::{bis, gamma};
+    use spenso::{chain, mink, p};
+    use symbolica::symbol;
+
+    #[test]
+    fn compare_canonicalizes_contracted_uv_indices() {
+        crate::initialisation::test_initialise().unwrap();
+        let expression = |topology| {
+            let contracted = mink!(4, Atom::from(Aind::UVTerm(topology, 2)));
+            let fixed = mink!(4, Atom::from(Aind::Edge(2, 1)));
+            let start = bis!(4, Atom::from(Aind::Hedge(0, 0)));
+            let end = bis!(4, Atom::from(Aind::Hedge(1, 0)));
+            let common = Atom::var(symbol!("compare_common_factor"));
+            let term = |index: Atom| {
+                common.clone()
+                    * chain!(start.clone(), end.clone(), gamma!(index.clone()))
+                    * p!(index)
+            };
+            term(contracted) + term(fixed)
+        };
+        let legacy = expression(1);
+        let hedge = expression(0);
+        let legacy = ComparableExpr::new(&legacy);
+        let hedge = ComparableExpr::new(&hedge);
+
+        assert_ne!(legacy.normalized(), hedge.normalized());
+        assert!(legacy.equivalent_to(&hedge));
     }
 }
