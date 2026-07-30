@@ -1338,13 +1338,32 @@ impl Forests {
             }
 
             let forest_node = key.forest_node(graph, key.key.op_count());
-            let computed = self.compute_store.require(key)?;
-            let integrated = computed.integrated(key)?;
-            let physical = match self.source_spinney(node).renormalization_scheme {
-                ApproximationType::MUV => integrated.physical_finite_counterterm_atom(),
-                ApproximationType::PolePart => integrated.physical_pole_atom(),
-                scheme => return Err(eyre!("No terminal counterterm projection for {scheme}")),
+            // A disconnected terminal can combine components with different schemes. Select
+            // each component's projection before multiplying; the aggregate integrated value
+            // only represents the homogeneous all-finite and all-pole projections.
+            let components = if self.graph.is_disjoint_union(node) {
+                self.disconnected_component_nodes(node)?
+            } else {
+                vec![node]
             };
+            let physical = components.into_iter().try_fold(
+                Atom::one(),
+                |product, component| -> Result<Atom> {
+                    let component_key = &self.graph[component];
+                    let integrated = self
+                        .compute_store
+                        .require(component_key)?
+                        .integrated(component_key)?;
+                    let projection = match self.source_spinney(component).renormalization_scheme {
+                        ApproximationType::MUV => integrated.physical_finite_counterterm_atom(),
+                        ApproximationType::PolePart => integrated.physical_pole_atom(),
+                        scheme => {
+                            return Err(eyre!("No terminal counterterm projection for {scheme}"));
+                        }
+                    };
+                    Ok(product * projection)
+                },
+            )?;
             let atom = marker.prefix(&graph.full_filter(), forest_node.subgraph(), &physical);
             debug!(
                 key=%key,
@@ -1431,7 +1450,7 @@ mod tests {
         graph::{Graph, parse::IntoGraph},
         initialisation::test_initialise,
         processes::DotExportSettings,
-        uv::{UltravioletGraph, Wood as OldWood},
+        uv::{UltravioletGraph, Wood as OldWood, settings::RenormalizationPrescriptionSettings},
     };
 
     use super::*;
@@ -1772,6 +1791,102 @@ mod tests {
                     && !term.contains_symbol(frontier_store_marker)),
             "a union must replay every component path from its typed root"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn heterogeneous_terminal_projects_components_before_multiplying() -> Result<()> {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(
+            digraph G {
+                num = "1";
+                projector = "1";
+                overall_factor = "1";
+                edge [particle = "scalar_1"];
+                node [num = "1"];
+                v1 -> v2;
+                v1 -> v1;
+                v2 -> v3;
+                v2 -> v3;
+            },
+            "scalars"
+        )?;
+        let settings = UVgenerationSettings {
+            softct: false,
+            renormalization_prescription: RenormalizationPrescriptionSettings {
+                log_divergent: ApproximationType::MUV,
+                massive_power_divergent: ApproximationType::PolePart,
+                massless_power_divergent: ApproximationType::PolePart,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings).unfold();
+        forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
+
+        let terminals = forests
+            .graph
+            .iter_nodes()
+            .filter_map(|(node, mut crown, _)| {
+                (!crown.any(|hedge| forests.graph.flow(hedge).is_source())).then_some(node)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(terminals.len(), 1);
+        let terminal = terminals[0];
+        assert!(forests.graph.is_disjoint_union(terminal));
+
+        let components = forests.disconnected_component_nodes(terminal)?;
+        assert_eq!(components.len(), 2);
+        let schemes = components
+            .iter()
+            .map(|component| forests.source_spinney(*component).renormalization_scheme)
+            .collect::<Vec<_>>();
+        assert!(schemes.contains(&ApproximationType::MUV));
+        assert!(schemes.contains(&ApproximationType::PolePart));
+
+        let expected =
+            components
+                .iter()
+                .try_fold(Atom::one(), |product, &component| -> Result<Atom> {
+                    let component_key = &forests.graph[component];
+                    let integrated = forests
+                        .compute_store
+                        .require(component_key)?
+                        .integrated(component_key)?;
+                    let projection = match forests.source_spinney(component).renormalization_scheme
+                    {
+                        ApproximationType::MUV => integrated.physical_finite_counterterm_atom(),
+                        ApproximationType::PolePart => integrated.physical_pole_atom(),
+                        scheme => panic!("unexpected component scheme {scheme}"),
+                    };
+                    Ok(product * projection)
+                })?;
+        let terminal_key = &forests.graph[terminal];
+        let aggregate = forests
+            .compute_store
+            .require(terminal_key)?
+            .integrated(terminal_key)?;
+        assert_ne!(
+            expected.expand(),
+            aggregate.physical_finite_counterterm_atom().expand()
+        );
+        assert_ne!(expected.expand(), aggregate.physical_pole_atom().expand());
+
+        let wild = Atom::var(W_.x___);
+        let replacements =
+            graph.integrand_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[wild]);
+        let expected = expected
+            .simplify_color()
+            .expand_num()
+            .to_dots()
+            .replace_multiple(&replacements)
+            .replace(GS.m_uv_expansion)
+            .with(GS.m_uv_vacuum);
+        let actual = forests
+            .renormalization_part_of_ends(&graph, &settings)?
+            .expression;
+        assert_eq!(actual.expand(), expected.expand());
+
         Ok(())
     }
 

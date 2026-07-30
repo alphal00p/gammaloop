@@ -85,10 +85,11 @@ Integrated counterterms are scalars and factorize over connected components.
 The stored disconnected value provides the product of component pole
 projections and the product of component finite-counterterm projections.
 
-This aggregate is sufficient when every component uses the same terminal
-prescription. A mixed per-component prescription must instead project each
-component at the point of terminal use before multiplying; a single projection
-of the aggregate cannot represent such a mixed product.
+The aggregate is sufficient when every component uses the same terminal
+prescription. At terminal use, the hedge-poset backend nevertheless returns to
+the component nodes, selects each component's own pole or finite projection,
+and only then multiplies them. This also handles mixed prescriptions without
+storing scheme-specific variants of the aggregate.
 
 ### Three-dimensional local terms
 
