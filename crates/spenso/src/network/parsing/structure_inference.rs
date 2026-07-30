@@ -273,8 +273,10 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// Infer an `OrderedStructure` from a generic function's direct structural arguments.
     ///
     /// A direct slot argument contributes one exposed slot. An `aind(...)`
-    /// bundle is flattened into its slots. Other arguments are treated as
-    /// metadata for the eventual named leaf and do not erase slots already seen.
+    /// bundle is flattened into its slots. On tensor-tagged heads, a structural
+    /// `sym(...)`, `antisym(...)`, or `cyclic(...)` group is flattened as well.
+    /// Other arguments are treated as metadata for the eventual named leaf and
+    /// do not erase slots already seen.
     fn from_function_atom(fun: FunView<'_>) -> Result<Self, StructureError> {
         if fun.get_symbol() == AIND_SYMBOLS.aind {
             let mut slots = Vec::new();
@@ -297,12 +299,65 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
                     {
                         let internal = Self::from_function_atom(fun)?;
                         slots.extend(internal.structure);
+                    } else if fun.get_symbol().has_tag(&SPENSO_TAG.tensor)
+                        && let Some(group_slots) = Self::structural_group_slots(arg)
+                    {
+                        slots.extend(group_slots?);
                     }
                 }
             }
         }
 
         Ok(OrderedStructure::new(slots).structure)
+    }
+
+    /// Return the direct slots of a recognized partial-symmetry group.
+    ///
+    /// Projector uses remain opaque: a group is structural only when it is
+    /// nonempty and every immediate child is a direct slot. The leading minus
+    /// sign produced when Symbolica normalizes an antisymmetric group is also
+    /// accepted, but other products remain opaque.
+    fn structural_group_slots(
+        value: AtomView<'_>,
+    ) -> Option<Result<Vec<Slot<LibraryRep, Aind>>, StructureError>> {
+        let fun = match value {
+            AtomView::Fun(fun) => fun,
+            AtomView::Mul(product) => {
+                let mut factors = product.iter();
+                let pair = (factors.next()?, factors.next()?);
+                if factors.next().is_some() {
+                    return None;
+                }
+
+                let (coefficient, fun) = match pair {
+                    (coefficient @ AtomView::Num(_), AtomView::Fun(fun))
+                    | (AtomView::Fun(fun), coefficient @ AtomView::Num(_)) => (coefficient, fun),
+                    _ => return None,
+                };
+                if Rational::try_from(coefficient).ok()? != -1
+                    || fun.get_symbol() != *shadowing::ANTISYM
+                {
+                    return None;
+                }
+                fun
+            }
+            _ => return None,
+        };
+        let symbol = fun.get_symbol();
+        if fun.get_nargs() == 0
+            || (symbol != *shadowing::SYM
+                && symbol != *shadowing::ANTISYM
+                && symbol != *shadowing::CYCLIC)
+        {
+            return None;
+        }
+
+        Some(
+            fun.iter()
+                .map(Slot::try_from)
+                .collect::<Result<_, _>>()
+                .map_err(Into::into),
+        )
     }
 
     /// Infer an `OrderedStructure` from expanded shorthand by reading graph dangling slots.
@@ -432,7 +487,8 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
     /// Infer a named structure from an ordinary function leaf.
     ///
     /// Direct slot arguments define the exposed structure. Nested `aind(...)`
-    /// bundles are flattened, while non-structural arguments are retained as
+    /// bundles are flattened. Structural partial-symmetry groups are flattened
+    /// only for tensor-tagged heads, while all other arguments are retained as
     /// metadata on the named leaf.
     fn from_fast_function(value: FunView<'_>) -> Result<PermutedStructure<Self>, StructureError> {
         match value.get_symbol() {
@@ -469,6 +525,16 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
                                     .rep_permutation
                                     .apply_slice_in_place_inv(&mut internal_slots);
                                 slots.extend(internal_slots);
+                                is_structure = None;
+                                continue;
+                            }
+                            if name.has_tag(&SPENSO_TAG.tensor)
+                                && let Some(group_slots) =
+                                    OrderedStructure::<LibraryRep, Aind>::structural_group_slots(
+                                        arg,
+                                    )
+                            {
+                                slots.extend(group_slots?);
                                 is_structure = None;
                                 continue;
                             }
@@ -526,16 +592,22 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
             return args.iter().map(|arg| arg.to_owned()).collect();
         }
 
+        let structural_groups = fun.get_symbol().has_tag(&SPENSO_TAG.tensor);
         args.into_iter()
-            .filter(|arg| !Self::is_direct_structure_arg(*arg))
+            .filter(|arg| !Self::is_direct_structure_arg(*arg, structural_groups))
             .map(|arg| arg.to_owned())
             .collect()
     }
 
     /// Return true for arguments that are represented by the inferred structure.
-    fn is_direct_structure_arg(arg: AtomView<'_>) -> bool {
+    fn is_direct_structure_arg(arg: AtomView<'_>, structural_groups: bool) -> bool {
         Slot::<LibraryRep, Aind>::try_from(arg).is_ok()
             || matches!(arg, AtomView::Fun(fun) if fun.get_symbol() == AIND_SYMBOLS.aind)
+            || (structural_groups
+                && matches!(
+                    OrderedStructure::<LibraryRep, Aind>::structural_group_slots(arg),
+                    Some(Ok(_))
+                ))
     }
 }
 
@@ -543,14 +615,14 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
 mod tests {
     use super::*;
     use crate::{
-        bracket, chain, slot,
+        antisym, bracket, chain, cyclic, slot,
         structure::{
             TensorStructure,
             abstract_index::AbstractIndex,
             representation::{Lorentz, Minkowski, RepName},
             slot::IsAbstractSlot,
         },
-        tensor_symbol, trace, vector,
+        sym, tensor_symbol, trace, vector,
     };
     use symbolica::{
         atom::{Atom, AtomCore, FunctionBuilder, Symbol},
@@ -611,6 +683,138 @@ mod tests {
         .unwrap();
 
         assert_eq!(slots.len(), 1);
+    }
+
+    #[test]
+    fn partial_symmetry_groups_expose_all_direct_slot_children() {
+        let rep = mink4();
+        let parameter = Atom::var(symbol!("structure_inference_parameter"));
+        let c = slot!(rep, c);
+        let d = slot!(rep, d);
+        let antisymmetric_group = antisym!(d, c).expand();
+        assert!(
+            matches!(antisymmetric_group.as_view(), AtomView::Mul(_)),
+            "expected normalized signed group, got {antisymmetric_group}"
+        );
+        let expr = FunctionBuilder::new(tensor_symbol!(structure_inference_grouped))
+            .add_arg(&parameter)
+            .add_arg(sym!(slot!(rep, a), slot!(rep, b)))
+            .add_arg(antisymmetric_group)
+            .add_arg(cyclic!(slot!(rep, e), slot!(rep, f), slot!(rep, g)))
+            .finish();
+
+        let structure = expr
+            .infer_structure::<ShadowedStructure<AbstractIndex>>(StructureInferenceMode::Fast)
+            .unwrap();
+
+        assert_eq!(structure.structure.order(), 7);
+        assert_eq!(structure.structure.additional_args, Some(vec![parameter]));
+    }
+
+    #[test]
+    fn tensor_tagged_heads_reject_partial_symmetry_groups_with_non_slot_children() {
+        let rep = mink4();
+        let invalid_group = sym!(slot!(rep, b), Atom::num(1));
+        let projector_group = antisym!(
+            FunctionBuilder::new(tensor_symbol!(structure_inference_projector_factor))
+                .add_arg(slot!(rep, c).to_atom())
+                .finish()
+        );
+        for group in [invalid_group, projector_group] {
+            let expr = FunctionBuilder::new(tensor_symbol!(structure_inference_invalid_group))
+                .add_arg(slot!(rep, a).to_atom())
+                .add_arg(group)
+                .finish();
+
+            assert!(
+                expr.infer_structure::<ShadowedStructure<AbstractIndex>>(
+                    StructureInferenceMode::Fast
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn untagged_heads_keep_mixed_partial_symmetry_arguments_opaque() {
+        let rep = mink4();
+        let invalid_group = sym!(slot!(rep, b), Atom::num(1));
+        let projector_group = antisym!(
+            FunctionBuilder::new(tensor_symbol!(
+                structure_inference_projector_factor_untagged
+            ))
+            .add_arg(slot!(rep, c).to_atom())
+            .finish()
+        );
+        let expr = FunctionBuilder::new(symbol!("structure_inference_untagged_outer"))
+            .add_arg(slot!(rep, a).to_atom())
+            .add_arg(&invalid_group)
+            .add_arg(&projector_group)
+            .finish();
+
+        let structure = expr
+            .infer_structure::<ShadowedStructure<AbstractIndex>>(StructureInferenceMode::Fast)
+            .unwrap();
+
+        assert_eq!(structure.structure.order(), 1);
+        assert_eq!(
+            structure.structure.additional_args,
+            Some(vec![invalid_group, projector_group])
+        );
+    }
+
+    #[test]
+    fn untagged_heads_keep_valid_partial_symmetry_groups_opaque() {
+        let rep = mink4();
+        let group = sym!(slot!(rep, b), slot!(rep, c));
+        let expr = FunctionBuilder::new(symbol!("structure_inference_untagged_valid_group"))
+            .add_arg(slot!(rep, a).to_atom())
+            .add_arg(&group)
+            .finish();
+
+        assert!(expr.is_tensorial(StrictTensorFilter::ContainsReps));
+        let ordered = expr
+            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
+                StructureInferenceMode::Fast,
+            )
+            .unwrap();
+        let named = expr
+            .infer_structure::<ShadowedStructure<AbstractIndex>>(StructureInferenceMode::Fast)
+            .unwrap();
+
+        assert_eq!(ordered.structure.order(), 1);
+        assert_eq!(named.structure.order(), 1);
+        assert_eq!(named.structure.additional_args, Some(vec![group]));
+    }
+
+    #[test]
+    fn tensor_tagged_heads_keep_other_nested_arguments_opaque() {
+        let rep = mink4();
+        let bracketed_slot = bracket!(slot!(rep, b).to_atom());
+        let lookalike_group = FunctionBuilder::new(symbol!(
+            "structure_inference_lookalike_sym";
+            Symmetric
+        ))
+        .add_arg(slot!(rep, c).to_atom())
+        .add_arg(slot!(rep, d).to_atom())
+        .finish();
+        let arbitrary_product = -sym!(slot!(rep, e), slot!(rep, f));
+        let expr = FunctionBuilder::new(tensor_symbol!(structure_inference_other_nested))
+            .add_arg(slot!(rep, a).to_atom())
+            .add_arg(&bracketed_slot)
+            .add_arg(&lookalike_group)
+            .add_arg(&arbitrary_product)
+            .finish();
+
+        let structure = expr
+            .infer_structure::<ShadowedStructure<AbstractIndex>>(StructureInferenceMode::Fast)
+            .unwrap();
+
+        assert_eq!(structure.structure.order(), 1);
+        assert_eq!(
+            structure.structure.additional_args,
+            Some(vec![bracketed_slot, lookalike_group, arbitrary_product])
+        );
     }
 
     #[test]

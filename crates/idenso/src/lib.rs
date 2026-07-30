@@ -1,7 +1,5 @@
 #![allow(uncommon_codepoints)]
 
-use std::collections::BTreeMap;
-
 use eyre::eyre;
 use linnet::half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike};
 use shorthands::metric::{list_dangling_impl, wrap_dummies_impl, wrap_indices_impl};
@@ -15,16 +13,16 @@ use spenso::{
     },
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
-        HasName, OrderedStructure, TensorStructure, ToSymbolic,
+        OrderedStructure, ToSymbolic,
         representation::{Euclidean, Lorentz, Minkowski, RepName},
-        slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
+        slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
     },
     symbol_set,
     symbolica_init::in_symbolica_initializer,
     tensor_symbol,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomView, Symbol},
     function,
     id::{AliasedAtom, Replacement},
     initialize,
@@ -40,7 +38,7 @@ use crate::{
     rep_symbols::RS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, SpinFundamental},
     shorthands::metric::{MS, MetricSimplifier},
-    tensor::{SymbolicNetExt, SymbolicNetParse, remove_antisymmetric_zero_terms},
+    tensor::{CanonicalizationError, SymbolicNetExt, SymbolicNetParse},
 };
 
 initialize!(|| {
@@ -161,6 +159,12 @@ macro_rules! coad {
 /// This trait provides methods for conjugating expressions, wrapping indices, and identifying
 /// external ("dangling") indices.
 pub trait IndexTooling {
+    /// Canonicalize tensor topology and signed tensor symmetries through a symbolic network.
+    fn try_canonize<Aind: AbsInd + ParseableAind + DummyAind>(
+        &self,
+        new_dummy: impl FnMut(usize) -> Aind,
+    ) -> Result<Atom, CanonicalizationError>;
+    /// Canonicalize tensor indices, panicking when the expression is not supported.
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
         &self,
         new_dummy: impl FnMut(usize) -> Aind,
@@ -217,6 +221,13 @@ pub trait IndexTooling {
 }
 
 impl IndexTooling for Atom {
+    fn try_canonize<Aind: AbsInd + ParseableAind + DummyAind>(
+        &self,
+        new_dummy: impl FnMut(usize) -> Aind,
+    ) -> Result<Atom, CanonicalizationError> {
+        self.as_view().try_canonize(new_dummy)
+    }
+
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
         &self,
         new_dummy: impl FnMut(usize) -> Aind,
@@ -313,77 +324,33 @@ impl IndexTooling for AtomView<'_> {
         })
     }
 
-    fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
+    fn try_canonize<Aind: AbsInd + ParseableAind + DummyAind>(
         &self,
-        mut new_dummy: impl FnMut(usize) -> Aind,
-    ) -> Atom {
-        let filtered = remove_antisymmetric_zero_terms::<Aind>(*self);
-        let mut net = filtered
+        new_dummy: impl FnMut(usize) -> Aind,
+    ) -> Result<Atom, CanonicalizationError> {
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let cooked = cooking
+            .try_cook_indices(*self)
+            .map_err(|error| CanonicalizationError::StructuredIndex(format!("{error:?}")))?;
+        tensor::validate_tensor_symmetry::<Aind>(cooked.as_view())?;
+        let network = cooked
             .as_view()
             .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
-            .unwrap();
-
-        // println!("{}", net.dot_pretty());
-
-        let mut redual_reps = vec![];
-
-        for t in net.store.tensors.iter_mut() {
-            let mut reps = vec![];
-
-            let mut pat = FunctionBuilder::new(t.name().unwrap());
-            let mut rhs = pat.clone();
-            for (i, s) in t.structure.external_structure_iter().enumerate() {
-                if !s.rep_name().is_self_dual() && s.rep_name().is_dual() {
-                    pat = pat.add_arg(
-                        s.rep()
-                            .dual()
-                            .to_symbolic([Atom::var(symbol!(format!("a{i}_",)))]),
-                    );
-
-                    reps.push(Replacement::new(
-                        s.rep().to_symbolic([Atom::var(RS.a_)]).to_pattern(),
-                        s.rep().dual().to_symbolic([Atom::var(RS.a_)]),
-                    ));
-                } else {
-                    pat = pat.add_arg(s.rep().to_symbolic([Atom::var(symbol!(format!("a{i}_",)))]));
-                }
-                rhs = rhs.add_arg(s.rep().to_symbolic([Atom::var(symbol!(format!("a{i}_",)))]));
-            }
-            if !reps.is_empty() {
-                let rep = Replacement::new(pat.finish().to_pattern(), rhs.finish());
-                // println!("{}", rep);
-                redual_reps.push(rep);
-                t.expression = t.expression.replace_multiple(&reps);
-            }
-        }
-
-        let mut dummies = BTreeMap::new();
-        for (p, _, d) in net.graph.graph.iter_edges() {
-            if p.is_paired()
-                && let NetworkEdge::Slot(s) = d.data
-            {
-                let slot = if s.rep_name().is_dual() { s.dual() } else { *s };
-                // println!("{}:{:?}", ind, group);
-                dummies.insert(slot.to_atom(), slot.rep());
-            }
-        }
-
-        let expr = net.simple_execute::<()>();
-        let a = expr.canonize_tensors(dummies).unwrap();
-
-        let mut reps = vec![];
-
-        for (i, (d, r)) in a.dummy_indices.into_iter().enumerate() {
-            reps.push(Replacement::new(
-                d.to_pattern(),
-                r.slot::<Aind, Aind>(new_dummy(i)).to_atom(),
-            ));
-        }
-
-        a.canonical_form
-            .replace_multiple(&reps)
-            .replace_multiple(&redual_reps)
+            .map_err(|error| CanonicalizationError::Network(error.to_string()))?;
+        // For ad-hoc diagnostics, `network.dot_pretty()` replaces the old
+        // per-representation and per-dummy debug prints from the Atom path.
+        let canonical = network.canonize(new_dummy)?;
+        Ok(cooking.uncook(canonical.simple_execute::<()>().as_view()))
     }
+
+    fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
+        &self,
+        new_dummy: impl FnMut(usize) -> Aind,
+    ) -> Atom {
+        self.try_canonize(new_dummy)
+            .expect("tensor-network canonicalization failed")
+    }
+
     fn spenso_conj(&self) -> Atom {
         self.conj()
             .replace(Atom::var(RS.a__).conj())

@@ -22,10 +22,9 @@ use symbolica::{
 use symbolica_utils::PatternReplacement;
 
 use crate::{
-    W_, color_f, color_t,
+    IndexTooling, W_, color_f, color_t,
     representations::{ColorAdjoint, ColorFundamental},
     shorthands::{chain::Chain, metric::MetricSimplifier},
-    tensor::remove_antisymmetric_zero_terms,
 };
 
 use super::{CS, ColorSimplifier, ColorSimplifySettings};
@@ -49,27 +48,23 @@ impl ColorAlgebraSimplifier {
         loop {
             let next = self.apply_once(current.as_view());
             if next == current {
-                // Every antisymmetric color tensor carries adjoint slots, so this
-                // isolates its complete network without expanding other sectors.
-                let mut pruned = false;
-                let canonicalized =
-                    next.collect_rep_with_map(ColorAdjoint {}.into(), |factor, _context, out| {
-                        let AtomView::Fun(collected) = factor else {
+                let canonical =
+                    next.collect_rep_with_map(ColorAdjoint {}.into(), |collect, _context, out| {
+                        let AtomView::Fun(collect) = collect else {
                             return;
                         };
-                        let Some(color) = collected.iter().next() else {
+                        let Some(network) = collect.iter().next() else {
                             return;
                         };
-                        let reduced = remove_antisymmetric_zero_terms::<AbstractIndex>(color);
-                        pruned |= reduced.as_view() != color;
-                        **out = reduced;
+                        **out = network.canonize::<AbstractIndex>(AbstractIndex::Dummy);
                     });
-                if pruned {
-                    current = canonicalized;
+                if canonical != next {
+                    current = canonical;
                     continue;
                 }
+
                 let simplified =
-                    restore_explicit_default_generator_chains(canonicalized).simplify_metrics();
+                    restore_explicit_default_generator_chains(canonical).simplify_metrics();
                 return if self.settings.substitute_cof_dimension_invariants {
                     simplified.to_cof_dimension_invariants()
                 } else {

@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 
 use aind::Aind;
+use idenso::IndexTooling;
 use idenso::color::ColorSimplifier;
 use idenso::dirac::GammaSimplifier;
-use idenso::representations::Bispinor;
 use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;
 use tracing::warn;
@@ -39,13 +39,10 @@ use crate::{
 };
 
 use crate::{GammaLoopContextContainer, disable};
-use ahash::AHashMap;
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
 use eyre::eyre;
 // use gxhash::GxBuildHasher;
-use itertools::Itertools;
-
 use serde::de::DeserializeOwned;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
@@ -56,7 +53,6 @@ use spenso::network::library::symbolic::{ETS, ExplicitKey};
 
 use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
 
-use spenso::structure::representation::{LibraryRep, Minkowski};
 use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure};
 
 use spenso::{
@@ -817,31 +813,11 @@ impl<State: ExpressionState> NumeratorState for SymbolicExpression<State> {
 
 impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
     pub(crate) fn canonize_lorentz(&self) -> Result<Self, String> {
-        let pats: Vec<LibraryRep> = vec![Minkowski {}.into(), Bispinor {}.into()];
-
-        let mut indices_map = AHashMap::new();
-
-        for p in &pats {
-            for a in self.state.expr.pattern_match(
-                &p.to_symbolic([W_.x_, W_.y_]).to_pattern(),
-                None,
-                None,
-            ) {
-                indices_map.insert(
-                    p.to_symbolic([a[&W_.x_].clone(), a[&W_.y_].clone()]),
-                    p.to_symbolic([a[&W_.x_].clone()]),
-                );
-            }
-        }
-
-        let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
-
         let expr = self
             .state
             .expr
-            .canonize_tensors(sorted)
-            .map_err(|e| e.to_string())?
-            .canonical_form;
+            .try_canonize(Aind::Dummy)
+            .map_err(|error| error.to_string())?;
 
         Ok(Self {
             state: SymbolicExpression {

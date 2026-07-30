@@ -5049,7 +5049,12 @@ impl ProcessedNumeratorForComparison {
                 debug!(numerator=%numerator.to_ordered_simple(),diagram_id=%diagram_id,debug_dot=%graph.debug_dot(),"Initial Numerator");
 
                 let canonized_numerator = if group_options.test_canonized_numerator {
-                    let mut canonized_numerator_to_consider = numerator.canonize(Aind::Dummy);
+                    let mut canonized_numerator_to_consider =
+                        numerator.try_canonize(Aind::Dummy).map_err(|source| {
+                            FeynGenError::Eyre(eyre!(source).wrap_err(format!(
+                                "failed to canonize numerator for diagram {diagram_id}"
+                            )))
+                        })?;
                     if group_options.fully_numerical_substitution_when_comparing_numerators {
                         canonized_numerator_to_consider =
                             ProcessDefinition::substitute_color_factors(
@@ -5178,7 +5183,13 @@ impl ProcessedNumeratorForComparison {
                                     .into();
 
                                 // println!("Trying to canonize:{c}");
-                                let canonized_color = c.canonize::<Aind>(Aind::Dummy);
+                                let canonized_color = c
+                                    .try_canonize::<Aind>(Aind::Dummy)
+                                    .map_err(|source| {
+                                        FeynGenError::Eyre(
+                                            eyre!(source).wrap_err(context()),
+                                        )
+                                    })?;
                                 debug!("canonizing \n{c}\n gives\n{canonized_color}");
                                 let a = ProcessDefinition::substitute_color_factors(
                                     (canonized_color * scalar).as_view(),

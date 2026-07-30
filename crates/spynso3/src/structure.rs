@@ -350,6 +350,17 @@ impl SpensoName {
             }
         }
 
+        if self.name.has_tag(&SPENSO_TAG.tensor)
+            && (self.name.is_symmetric()
+                || self.name.is_antisymmetric()
+                || self.name.is_cyclesymmetric())
+            && !add_args.is_empty()
+        {
+            return Err(exceptions::PyValueError::new_err(
+                "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments",
+            ));
+        }
+
         let add_args = if add_args.is_empty() {
             None
         } else {
@@ -634,6 +645,18 @@ impl SpensoIndices {
             }
         }
 
+        if name.as_ref().is_some_and(|name| {
+            name.0.name.has_tag(&SPENSO_TAG.tensor)
+                && (name.0.name.is_symmetric()
+                    || name.0.name.is_antisymmetric()
+                    || name.0.name.is_cyclesymmetric())
+        }) && !args.is_empty()
+        {
+            return Err(exceptions::PyValueError::new_err(
+                "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments",
+            ));
+        }
+
         let args = if args.is_empty() { None } else { Some(args) };
         let mut a: PermutedStructure<ShadowedStructure<AbstractIndex>> =
             PermutedStructure::<OrderedStructure>::from_iter(true_slots).map_structure(Into::into);
@@ -659,8 +682,24 @@ impl SpensoIndices {
     /// >>> structure = TensorIndices(rep('mu'), rep('nu'))
     /// >>> T = TensorName("T")
     /// >>> structure.set_name(T)
-    fn set_name(&mut self, name: ConvertibleToSpensoName) {
+    fn set_name(&mut self, name: ConvertibleToSpensoName) -> PyResult<()> {
+        if name.0.name.has_tag(&SPENSO_TAG.tensor)
+            && (name.0.name.is_symmetric()
+                || name.0.name.is_antisymmetric()
+                || name.0.name.is_cyclesymmetric())
+            && self
+                .structure
+                .structure
+                .additional_args
+                .as_ref()
+                .is_some_and(|args| !args.is_empty())
+        {
+            return Err(exceptions::PyValueError::new_err(
+                "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments",
+            ));
+        }
         self.structure.structure.set_name(name.0.name);
+        Ok(())
     }
 
     /// Get the tensor name of this structure.
@@ -990,6 +1029,18 @@ impl SpensoStructure {
             }
         }
 
+        if name.as_ref().is_some_and(|name| {
+            name.0.name.has_tag(&SPENSO_TAG.tensor)
+                && (name.0.name.is_symmetric()
+                    || name.0.name.is_antisymmetric()
+                    || name.0.name.is_cyclesymmetric())
+        }) && !args.is_empty()
+        {
+            return Err(exceptions::PyValueError::new_err(
+                "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments",
+            ));
+        }
+
         let args = if args.is_empty() { None } else { Some(args) };
 
         let mut a: PermutedStructure<ExplicitKey<AbstractIndex>> =
@@ -1002,8 +1053,24 @@ impl SpensoStructure {
         Ok(SpensoStructure { structure: a })
     }
 
-    fn set_name(&mut self, name: ConvertibleToSpensoName) {
+    fn set_name(&mut self, name: ConvertibleToSpensoName) -> PyResult<()> {
+        if name.0.name.has_tag(&SPENSO_TAG.tensor)
+            && (name.0.name.is_symmetric()
+                || name.0.name.is_antisymmetric()
+                || name.0.name.is_cyclesymmetric())
+            && self
+                .structure
+                .structure
+                .additional_args
+                .as_ref()
+                .is_some_and(|args| !args.is_empty())
+        {
+            return Err(exceptions::PyValueError::new_err(
+                "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments",
+            ));
+        }
         self.structure.structure.set_name(name.0.name);
+        Ok(())
     }
 
     fn get_name(&self) -> Option<SpensoName> {
@@ -1349,6 +1416,16 @@ impl SpensoStructure {
                 let expr = item_bound.extract::<PythonExpression>()?;
                 final_additional_args.push(expr.expr);
             }
+        }
+
+        if self.name().is_some_and(|name| {
+            name.has_tag(&SPENSO_TAG.tensor)
+                && (name.is_symmetric() || name.is_antisymmetric() || name.is_cyclesymmetric())
+        }) && !final_additional_args.is_empty()
+        {
+            return Err(exceptions::PyValueError::new_err(
+                "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments",
+            ));
         }
 
         Ok((final_additional_args, post_separator_args))

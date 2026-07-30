@@ -1,17 +1,16 @@
 use std::collections::HashSet;
 
 use crate::{
+    IndexTooling,
     shorthands::schoonschip::DotNormalizer,
-    tensor::{SymbolicNetParse, SymbolicTensor, remove_antisymmetric_zero_terms},
+    tensor::{SymbolicNetParse, SymbolicTensor},
 };
 
 use super::schoonschip::{Schoonschip, SchoonschipSettings};
 use spenso::{
     network::{
-        Network,
-        library::{DummyLibrary, symbolic::ETS},
+        library::symbolic::ETS,
         parsing::{NetworkParse, ParseSettings, StrictTensorFilter},
-        store::NetworkStore,
         tags::SPENSO_TAG,
     },
     shadowing::TensorCollectExt,
@@ -20,7 +19,7 @@ use spenso::{
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         permuted::Perm,
         representation::{LibraryRep, LibrarySlot, RepName},
-        slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
+        slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
     },
 };
 use symbolica::{
@@ -51,49 +50,7 @@ spenso::symbolica_init_lazy_static! {
 }
 
 pub fn canonize_impl(view: AtomView) -> Atom {
-    let filtered = remove_antisymmetric_zero_terms::<AbstractIndex>(view);
-    let view = filtered.as_view();
-    let lib = DummyLibrary::<SymbolicTensor>::new();
-    let settings =
-        ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
-    let mut net = Network::<NetworkStore<SymbolicTensor, Atom>, _, Symbol>::try_from_view::<
-        SymbolicTensor,
-        _,
-    >(view, &lib, &settings)
-    .unwrap();
-
-    let mut redual_reps = vec![];
-
-    let mut indices = vec![];
-    for t in net.store.tensors.iter_mut() {
-        let mut reps = vec![];
-        let mut pat = FunctionBuilder::new(t.name().unwrap());
-        let mut rhs = pat.clone();
-        for s in t.structure.external_structure_iter() {
-            if !s.rep_name().is_self_dual() && s.rep_name().is_dual() {
-                pat = pat.add_arg(s.rep().dual().to_symbolic([Atom::var(RS.a_)]));
-                let slot = s.dual();
-                indices.push((slot.to_atom(), slot.rep()));
-                reps.push(Replacement::new(
-                    s.rep().to_symbolic([Atom::var(RS.a_)]).to_pattern(),
-                    s.rep().dual().to_symbolic([Atom::var(RS.a_)]),
-                ));
-            } else {
-                pat = pat.add_arg(s.rep().to_symbolic([Atom::var(RS.a_)]));
-                indices.push((s.to_atom(), s.rep()));
-            }
-            rhs = rhs.add_arg(s.rep().to_symbolic([Atom::var(RS.a_)]));
-        }
-        if !reps.is_empty() {
-            redual_reps.push(Replacement::new(pat.finish().to_pattern(), rhs.finish()));
-            t.expression = t.expression.replace_multiple(&reps);
-        }
-    }
-
-    view.canonize_tensors(indices)
-        .unwrap()
-        .canonical_form
-        .replace_multiple(&redual_reps)
+    view.canonize(AbstractIndex::Dummy)
 }
 
 pub fn not_wraped_aind(header: Symbol) -> impl FilterFn + 'static {
