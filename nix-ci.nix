@@ -666,7 +666,7 @@ let
   workspacePackages = workspaceGraph.packages;
   cratePackageDepsAttr = package: "packages.${system}.crate-deps-${package}";
   cratePackageAttr = package: "packages.${system}.crate-${package}";
-  crateTestSupportAttr = representative: "packages.${system}.crate-test-support-${representative}";
+  crateTestDependencyAttr = representative: "packages.${system}.crate-test-dependencies-${representative}";
   crateTestBinaryAttr = package: "packages.${system}.crate-test-binaries-${package}";
   workspaceHackPackage = "gammaloop-workspace-hack";
   # clinnet is binary-only: the flake exposes crate-clinnet, but no
@@ -706,7 +706,7 @@ let
     builtins.head (workspaceTestComponentMembersFor package);
   workspaceTestComponentRepresentatives =
     unique (map workspaceTestComponentRepresentativeFor workspacePackages);
-  workspaceTestSupportComponentRepresentatives =
+  workspaceTestDependencyComponentRepresentatives =
     builtins.filter (representative: representative != workspaceHackPackage) workspaceTestComponentRepresentatives;
   workspaceTestComponentMembers =
     builtins.listToAttrs (map (representative: {
@@ -757,18 +757,26 @@ let
       })
       (workspaceCratePackageCacheArtifactDependencies.${dependent} or []))
     (builtins.attrNames workspaceCratePackageCacheArtifactDependencies));
-  workspaceTestSupportDependencies = builtins.listToAttrs (map (representative: {
-      name = crateTestSupportAttr representative;
+  workspaceTestDependencyArtifactDependencies = builtins.listToAttrs (map (representative: {
+      name = crateTestDependencyAttr representative;
       value =
-        [(workspacePackageGraphAttr workspaceHackPackage)]
-        ++ map crateTestSupportAttr (
+        [
+          "packages.${system}.cargoArtifacts"
+          (workspacePackageGraphAttr workspaceHackPackage)
+        ]
+        ++ map crateTestDependencyAttr (
           builtins.filter (
             dependencyRepresentative: dependencyRepresentative != workspaceHackPackage
           )
           (workspaceTestComponentDependencyRepresentativesFor representative)
         );
     })
-    workspaceTestSupportComponentRepresentatives);
+    workspaceTestDependencyComponentRepresentatives);
+  workspaceTestBinaryArtifactDependencies = builtins.listToAttrs (map (package: {
+      name = crateTestBinaryAttr package;
+      value = [(crateTestDependencyAttr (workspaceTestComponentRepresentativeFor package))];
+    })
+    nonWorkspaceHackPackages);
   nextestPackageGroups = {
     core = [
       "gammaloop-api"
@@ -793,11 +801,13 @@ let
     vakint = ["vakint"];
   };
   nextestArchiveAttr = target: "checks.${system}.gammaloop-nextest-binaries-${target}";
-  nextestPackageTestSupportAttr = package:
-    crateTestSupportAttr (workspaceTestComponentRepresentativeFor package);
+  nextestPackageArtifactAttrFor = target: package:
+    if target == "python-api"
+    then crateTestDependencyAttr (workspaceTestComponentRepresentativeFor package)
+    else crateTestBinaryAttr package;
   nextestArchiveDependenciesFor = target:
     ["packages.${system}.cargoArtifacts"]
-    ++ unique (map nextestPackageTestSupportAttr nextestPackageGroups.${target})
+    ++ unique (map (nextestPackageArtifactAttrFor target) nextestPackageGroups.${target})
     ++ (
       if target == "python-api"
       then ["packages.${system}.gammaloop-python-module"]
@@ -811,7 +821,8 @@ let
     workspaceCratePackageCacheArtifactDependencies
     workspaceCratePackageCacheDependencies
     workspaceCratePackageDependencies
-    workspaceTestSupportDependencies
+    workspaceTestDependencyArtifactDependencies
+    workspaceTestBinaryArtifactDependencies
     {
       "packages.${system}.gammaloop" = [
         gammaloopApiPackageArtifactsAttr
@@ -906,7 +917,7 @@ let
       "packages.${system}.gammaloop-llvm-coverage"
       "packages.${system}.nix-ci-check-gammaloop-nextest"
     ]
-    ++ map crateTestBinaryAttr workspacePackages
+    ++ [(crateTestBinaryAttr workspaceHackPackage)]
     ++ map cratePackageDepsAttr (
       builtins.filter (package: package != workspaceHackPackage) workspacePackagesWithDependencyArtifacts
     )
@@ -940,11 +951,11 @@ in {
   # package/check attrs during `show`, including attrs listed in doNotBuild.
   # The manual graph below uses the Hakari workspace-hack cache artifact as the
   # root for Symbolica-containing cache jobs and orders nextest archive jobs
-  # after the shared test-support artifacts that the archives reuse. The graph
-  # is constructed over the full crate/artifact DAG so the drift and cycle
-  # asserts stay meaningful, then buildableDependencies drops every edge that
-  # references a doNotBuild job, since NixCI rejects edges to jobs it does not
-  # build. Ordinary crate package attrs are not CI roots, so test-binary
+  # after the package-local test-binary artifacts that the archives reuse. The
+  # graph is constructed over the full crate/artifact DAG so the drift and
+  # cycle asserts stay meaningful, then buildableDependencies drops every edge
+  # that references a doNotBuild job, since NixCI rejects edges to jobs it does
+  # not build. Ordinary crate package attrs are not CI roots, so test-binary
   # generation can start before unrelated final package outputs.
   # See https://nix-ci.com/documentation/automatic-dependency-discovery
   # and https://nix-ci.com/documentation/manually-specified-dependencies
