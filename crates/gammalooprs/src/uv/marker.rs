@@ -251,8 +251,55 @@ mod tests {
                 .to_string()
         );
         assert_eq!(
-            marked.printer(settings.typst_symbolica()).to_string(),
-            "Tr(Σ(⟨K[1]⟩))"
+            marked
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            r#"op("Tr")(Σ(⟨K[1]⟩))"#
+        );
+    }
+
+    #[test]
+    fn uv_heads_have_valid_typst_shorthands() {
+        let argument = Atom::one();
+        assert_eq!(
+            function!(GS.uv_truncate, Atom::one())
+                .printer(SpensoPrintSettings::compact().nice_symbolica())
+                .to_string(),
+            "Tr(1)"
+        );
+
+        for (operation, expected) in [
+            (function!(GS.uv_approx, &argument), "K[1]"),
+            (function!(GS.uv_integrate, &argument), "⟨1⟩"),
+            (function!(GS.uv_series, &argument), "Σ(1)"),
+            (function!(GS.uv_truncate, &argument), r#"op("Tr")(1)"#),
+        ] {
+            assert_eq!(
+                operation
+                    .printer(SpensoPrintSettings::typst_options())
+                    .to_string(),
+                expected
+            );
+        }
+
+        let subgraph = function!(
+            GS.uv_subgraph,
+            Atom::var(symbol!("S_47")),
+            Atom::var(symbol!("S_3s"))
+        );
+        assert_eq!(
+            subgraph
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            "S_47⊛3s"
+        );
+
+        let marked = function!(GS.ct_marker, function!(GS.uv_truncate, argument));
+        assert_eq!(
+            marked
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            r#"op("Tr")(1)"#
         );
     }
 }

@@ -30,7 +30,7 @@ use crate::network::tags::SPENSO_TAG;
 use crate::structure::slot::ParseableAind;
 use crate::utils::{to_subscript, to_superscript};
 #[cfg(feature = "shadowing")]
-use symbolica_utils::SerializableSymbol;
+use symbolica_utils::{PrintSettingsExt, SerializableSymbol};
 
 use thiserror::Error;
 
@@ -60,6 +60,8 @@ pub struct AindSymbols {
 mod test {
 
     use symbolica::{atom::AtomCore, function, id::Replacement};
+
+    use crate::shadowing::symbolica_utils::SpensoPrintSettings;
 
     use super::*;
 
@@ -110,6 +112,38 @@ mod test {
         assert_eq!(rep, tgt, "{rep} not equal to {tgt}");
         assert_eq!(rep2, tgt, "{rep2} not equal to {tgt}");
     }
+
+    #[test]
+    fn concrete_indices_close_in_native_typst_mode() {
+        let index = function!(AIND_SYMBOLS.cind, Atom::num(1), Atom::num(2));
+
+        assert_eq!(
+            index
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            "[1,2]"
+        );
+
+        let mut compact = SpensoPrintSettings::compact().nice_symbolica();
+        compact.color_builtin_symbols = false;
+        assert_eq!(index.printer(compact).to_string(), "[1,2[");
+    }
+
+    #[test]
+    fn lower_indices_use_valid_native_typst_attachment() {
+        let index = function!(AIND_SYMBOLS.dind, Atom::num(1));
+
+        assert_eq!(
+            index
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            "attach(nothing,b:1)"
+        );
+
+        let mut compact = SpensoPrintSettings::compact().nice_symbolica();
+        compact.color_builtin_symbols = false;
+        assert_eq!(index.printer(compact).to_string(), "_1");
+    }
 }
 
 #[cfg(feature = "shadowing")]
@@ -148,6 +182,8 @@ pub static AIND_SYMBOLS, AIND_SYMBOLS_INNER: AindSymbols = || AindSymbols {
                         }
                         if opt.color_builtin_symbols {
                             out.push_str(&DarkGray.paint("]").to_string());
+                        } else if opt.typst_mode().is_some() {
+                            out.push(']')
                         } else {
                             out.push('[')
                         };
@@ -251,7 +287,10 @@ let args = arg.pos().map(to-eq).join("")
                         return None;
                     };
 
-                    let mut out = if opt.color_builtin_symbols {
+                    let is_typst = opt.typst_mode().is_some();
+                    let mut out = if is_typst {
+                        "attach(nothing,b:".to_string()
+                    } else if opt.color_builtin_symbols {
                         DarkGray.paint("_").to_string()
                     } else {
                         "_".to_string()
@@ -261,6 +300,9 @@ let args = arg.pos().map(to-eq).join("")
                     }
                     let arg = f.iter().next().unwrap();
                     arg.format(&mut out, opt, PrintState::new()).unwrap();
+                    if is_typst {
+                        out.push(')');
+                    }
                     Some(out)
                 } else {
                     None

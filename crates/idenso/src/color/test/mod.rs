@@ -224,7 +224,7 @@ fn color_invariant_print_special_cases_are_compact() {
         "CF"
     );
 
-    let typst = SpensoPrintSettings::typst().typst_symbolica();
+    let typst = SpensoPrintSettings::typst_options();
     assert_eq!(color_cas!(2, cof_n).printer(typst).to_string(), "C_F");
 }
 

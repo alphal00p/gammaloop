@@ -12,6 +12,7 @@ use idenso::color::{ColorSimplifier, CS};
 use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use std::io::Write as _;
 use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::parse;
@@ -149,7 +150,11 @@ impl Renormalize {
                 let mut path = File::create(dir.join(file_name))?;
                 write!(path, "{}", part.printer(PrintOptions::file()))?;
                 let mut path = File::create(dir.join(typst_name))?;
-                write!(path, "{}", part.printer(PrintOptions::typst()))?;
+                write!(
+                    path,
+                    "$ {} $",
+                    part.printer(SpensoPrintSettings::typst_options())
+                )?;
             }
             renormalization_part.push(part);
         }

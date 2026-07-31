@@ -23,14 +23,17 @@ use linnet::half_edge::{
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
     function,
-    printer::PrintOptions,
 };
 use tracing::debug;
 use vakint::Vakint;
 
 use crate::{
     debug_tags,
-    graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet, parse::string_utils::ToOrderedSimple},
+    graph::{
+        Graph, LMBext, LoopMomentumBasis,
+        cuts::CutSet,
+        parse::string_utils::{ToOrderedSimple, dot_attr_value},
+    },
     utils::{GS, W_},
     uv::{
         ApproximationType, Integrands, RenormalizationPart, Spinney, UVgenerationSettings,
@@ -758,11 +761,9 @@ impl Forests {
 
     fn dot_serialize_node_attrs(&self, node: NodeIndex) -> String {
         let key = &self.graph[node];
-        let mut options = PrintOptions::typst();
-        options.custom_print_mode = SpensoPrintSettings::typst().into();
         let label = self
             .dot_serialize_node_atom(node)
-            .printer(options)
+            .printer(SpensoPrintSettings::typst_options())
             .to_string();
         let cover = key
             .covers()
@@ -771,27 +772,10 @@ impl Forests {
 
         format!(
             "label={} foata={} cover={}",
-            Self::dot_attr_value(&label),
-            Self::dot_attr_value(&key.foata_level_labels()),
-            Self::dot_attr_value(&cover),
+            dot_attr_value(&label),
+            dot_attr_value(&key.foata_level_labels()),
+            dot_attr_value(&cover),
         )
-    }
-
-    fn dot_attr_value(value: &str) -> String {
-        let mut escaped = String::with_capacity(value.len() + 2);
-        escaped.push('"');
-        for c in value.chars() {
-            match c {
-                '\\' => escaped.push_str("\\\\"),
-                '"' => escaped.push_str("\\\""),
-                '\n' => escaped.push_str("\\n"),
-                '\r' => escaped.push_str("\\r"),
-                '\t' => escaped.push_str("\\t"),
-                _ => escaped.push(c),
-            }
-        }
-        escaped.push('"');
-        escaped
     }
 
     pub fn dot_serialize(&self) -> String {
@@ -1564,11 +1548,9 @@ mod tests {
                 if current.subgraph() == &leaf.op.order {
                     continue;
                 }
-                let mut options = PrintOptions::typst();
-                options.custom_print_mode = SpensoPrintSettings::typst().into();
                 join_markers.push(
                     UvMarker::subgraph(current.subgraph(), given.subgraph())
-                        .printer(options)
+                        .printer(SpensoPrintSettings::typst_options())
                         .to_string(),
                 );
             }

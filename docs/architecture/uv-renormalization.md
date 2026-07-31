@@ -114,7 +114,15 @@ UV markers are diagnostic symbolic structure. Approximation, integration,
 series, and truncation are distinct canonical function heads applied to the
 history of current/given subgraphs. Spenso printing supplies the compact
 `K[...]`, angled-bracket, `Σ(...)`, and truncation notation while structured DOT
-uses the same underlying atoms.
+uses the same underlying atoms. Typst presentation combines Symbolica's Typst
+arithmetic mode with those Spenso shorthands; truncation is emitted as
+`op("Tr")(…)`, which is valid Typst math, while compact terminal output remains
+`Tr(…)`.
+
+DOT `full_num` fields contain Typst math fragments because the drawing template
+evaluates them in math mode. Per-graph renormalization `.typ` files wrap the same
+fragment in a display-math document, while the accompanying `.txt` files remain
+the round-trippable Symbolica representation.
 
 Subgraph labels must be created through the subgraph symbol factory so every
 consumer receives the same symbol metadata and print behavior.

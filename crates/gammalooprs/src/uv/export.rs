@@ -1,11 +1,16 @@
 use color_eyre::Result;
 use eyre::{Context, eyre};
 use linnet::half_edge::subgraph::{SubGraphLike, SubSetOps};
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use symbolica::atom::{Atom, AtomCore};
 
 use crate::{
     cff::CutCFFIndex,
-    graph::{FeynmanGraph, Graph, cuts::CutSet, cuts::ResidueSelector, parse::ToQuoted},
+    graph::{
+        FeynmanGraph, Graph,
+        cuts::{CutSet, ResidueSelector},
+        parse::string_utils::dot_statement_value,
+    },
     integrands::process::ProcessIntegrand,
     processes::DotExportSettings,
     settings::global::GenerationSettings,
@@ -332,10 +337,14 @@ fn node_expression_to_dot(
         "forest_residue_index".into(),
         dot_statement_value(&residue_suffix(term.residue_index)),
     );
+    let full_num = term
+        .numerator
+        .printer(SpensoPrintSettings::typst_options())
+        .to_string();
     dot_graph
         .global_data
         .statements
-        .insert("full_num".into(), term.numerator.to_quoted());
+        .insert("full_num".into(), dot_statement_value(&full_num));
 
     let mut dot = Vec::new();
     dot_graph
@@ -354,23 +363,6 @@ fn node_expression_to_dot(
 fn name_dot_graph(dot: String, name: &str) -> String {
     dot.replacen("digraph {", &format!("digraph {name} {{"), 1)
         .replacen("digraph Poset {", &format!("digraph {name} {{"), 1)
-}
-
-fn escaped_dot_string(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-        .replace('\t', "\\t")
-}
-
-pub(crate) fn dot_attr_value(value: &str) -> String {
-    format!("\"{}\"", escaped_dot_string(value))
-}
-
-fn dot_statement_value(value: &str) -> String {
-    escaped_dot_string(value)
 }
 
 pub(crate) fn sanitize_file_component(value: &str) -> String {
@@ -409,8 +401,18 @@ fn residue_suffix(index: CutCFFIndex) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{UVForestNodeTerm, sanitize_file_component};
-    use crate::cff::CutCFFIndex;
+    use symbolica::{atom::Atom, function};
+
+    use super::{
+        UVForestNodeExpression, UVForestNodeTerm, node_expression_to_dot, sanitize_file_component,
+    };
+    use crate::{
+        cff::CutCFFIndex,
+        dot,
+        graph::{Graph, parse::IntoGraph},
+        initialisation::test_initialise,
+        utils::GS,
+    };
 
     #[test]
     fn node_term_file_name_contains_stable_indices_key_and_residue() {
@@ -450,5 +452,35 @@ mod tests {
         assert_eq!(sanitize_file_component("/tmp/result"), "tmp_result");
         assert_eq!(sanitize_file_component("a/b"), "a_b");
         assert_eq!(sanitize_file_component(""), "key");
+    }
+
+    #[test]
+    fn computed_node_full_numerator_is_a_spenso_aware_typst_fragment() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph G {
+            ext [style=invis]
+            node [num=1]
+            ext -> A
+            C -> A
+            A -> D
+            D -> B
+            B -> C
+            C -> D
+            B -> ext
+        })
+        .unwrap();
+        let term = UVForestNodeExpression {
+            forest_index: 0,
+            node_index: 1,
+            node_key: "{1}".to_string(),
+            term_index: 2,
+            residue_index: CutCFFIndex::new_all_none(),
+            numerator: function!(GS.uv_truncate, Atom::num(1)),
+        };
+
+        let exported = node_expression_to_dot(&graph, "uv_typst", term).unwrap();
+
+        assert!(exported.dot.contains(r#"full_num = "op(\"Tr\")(1)";"#));
+        assert!(!exported.dot.contains("gammalooprs::Truncate"));
     }
 }

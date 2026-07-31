@@ -1,28 +1,17 @@
 use crate::{network::tags::SPENSO_TAG, structure::concrete_index::ConcreteIndex};
 use ahash::HashMap;
 use derive_more::Display;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    atom::{
-        AddView, Atom, AtomCore, AtomView, FunctionBuilder, MulView, PowView, Symbol,
-        representation::FunView,
-    },
-    coefficient::CoefficientView,
-    domains::{float::Complex, rational::Rational},
-    evaluate::{FunctionMap, Instruction, OptimizationSettings, Slot},
-    function,
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     id::ReplaceBuilder,
-    printer::{CanonicalOrderingSettings, PrintOptions, PrintState, PrintUserData},
+    printer::{CanonicalOrderingSettings, PrintOptions, PrintUserData},
     symbol,
 };
 
 extern crate derive_more;
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::{Debug, Display, Error},
-};
+use std::fmt::{Debug, Display};
 
 use eyre::Result;
 
@@ -132,17 +121,11 @@ impl SpensoPrintSettings {
         }
     }
 
-    pub fn typst_symbolica(&self) -> PrintOptions {
+    /// Use Symbolica's Typst arithmetic while retaining Spenso's tensor and index notation.
+    pub fn typst_options() -> PrintOptions {
         PrintOptions {
-            custom_print_mode: self.into(),
-            color_builtin_symbols: false,
-            terms_on_new_line: false,
-            color_namespace: false,
-            multiplication_operator: ' ',
-            hide_all_namespaces: true,
-            color_top_level_sum: false,
-            num_exp_as_superscript: true,
-            ..Default::default()
+            custom_print_mode: Self::typst().into(),
+            ..PrintOptions::typst()
         }
     }
 }
@@ -150,81 +133,8 @@ impl SpensoPrintSettings {
 pub trait AtomCoreExt {
     fn to_bare_ordered_string(&self) -> String;
 
-    fn typst(&self) -> String;
-
-    fn typst_fmt<W: std::fmt::Write>(
-        &self,
-        f: &mut W,
-        settings: &TypstSettings,
-    ) -> Result<(), Error>;
-
     fn is_upper(&self) -> bool;
     fn is_lower(&self) -> bool;
-}
-pub struct TypstSettings {
-    pub preamble: String,
-    pub default_dis: String,
-    pub default_sym: String,
-}
-
-impl TypstSettings {
-    pub fn addln_preamble(&mut self, line: &str) {
-        self.preamble.push('\n');
-        self.preamble.push_str(line);
-    }
-
-    pub fn lowering() -> Self {
-        TypstSettings {
-            default_dis: r#"
-let args = ()
-let uppers = ()
-let lowers = ()
-for a in arg.pos(){
-  if type(a)==content{
-    args.push(a)
-  } else if type(a)==dictionary{
-    if a.at("upper",default:false){
-      uppers.push(to-eq(a.content))
-      lowers.push(hide(to-eq(a.content)))
-    }else if a.at("lower",default:false){
-      lowers.push(to-eq(a.content))
-      uppers.push(hide(to-eq(a.content)))
-    } else{
-      args.push(to-eq(a.content))
-    }
-  } else{
-    args.push(to-eq(a))
-  }
-}
-let arg = args.join()
-if uppers.len()!=0{
-  let upper= uppers.join()
-  let lower= lowers.join()
-  if args.len()==0{
-    $attach(op(#name),t:#upper,b:#lower)$
-  }else{
-    $attach(op(#name),t:#upper,b:#lower)(#arg)$
-  }
-}else{
-  $op(#name)(#arg)$
-}
-"#
-            .into(),
-            ..Default::default()
-        }
-    }
-}
-impl Default for TypstSettings {
-    fn default() -> Self {
-        let default_dis = "$ op(#name)(#arg.pos().map(to_eq).join(\", \")) $";
-        let default_sym = "$ #name $";
-
-        TypstSettings {
-            preamble: "let to-eq(a)=if type(a)==dictionary{a.content}else {$#a$}".into(),
-            default_dis: default_dis.into(),
-            default_sym: default_sym.into(),
-        }
-    }
 }
 
 impl<A: AtomCore> AtomCoreExt for A {
@@ -234,244 +144,6 @@ impl<A: AtomCore> AtomCoreExt for A {
                 .include_namespace(false)
                 .include_attributes(false),
         )
-    }
-
-    fn typst_fmt<W: std::fmt::Write>(
-        &self,
-        f: &mut W,
-        settings: &TypstSettings,
-    ) -> Result<(), Error> {
-        let mut params = BTreeMap::new();
-        let fn_map = FunctionMap::new();
-        let mut externals = BTreeSet::new();
-
-        self.visitor(&mut |a| {
-            if let AtomView::Var(a) = a {
-                let atom = a.as_view().to_owned();
-                params.insert(atom.to_canonical_string(), (a.get_symbol(), atom));
-                false
-            } else if let AtomView::Fun(a) = a {
-                if a.get_symbol().get_evaluation_info().is_none() {
-                    let atom = a.as_view().to_owned();
-                    params.insert(atom.to_canonical_string(), (a.get_symbol(), atom));
-                    return false;
-                }
-                externals.insert(a.get_symbol());
-
-                true
-            } else {
-                true
-            }
-        });
-
-        let (symbols, params): (Vec<Symbol>, Vec<Atom>) = params.into_values().unzip();
-        let eval_tree = self
-            .evaluator(&params)
-            .function_map(fn_map)
-            .optimization_settings(OptimizationSettings::new().horner_iterations(10))
-            .build()
-            .unwrap();
-
-        writeln!(f, "#{{")?;
-        writeln!(f, "{}", settings.preamble)?;
-        fn typst_rat(r: &Rational) -> String {
-            if r.is_integer() {
-                r.numerator().to_string()
-            } else {
-                format!(" {}/{}", r.numerator(), r.denominator())
-            }
-        }
-
-        fn typst_slot(s: Slot, consts: &[Complex<Rational>]) -> String {
-            match s {
-                Slot::Const(c) => {
-                    let Complex { re, im } = &consts[c];
-
-                    match (re.is_zero(), im.is_zero()) {
-                        (true, true) => "0".into(),
-                        (true, false) => format!("i {}", typst_rat(im)),
-                        (false, true) => format!(" {}", typst_rat(re)),
-                        _ => format!("({} + i {})", typst_rat(re), typst_rat(im)),
-                    }
-                }
-                Slot::Out(c) => format!("out{c}"),
-                Slot::Param(c) => format!("param{c}"),
-                Slot::Temp(c) => format!("tmp{c}"),
-            }
-        }
-
-        let exported = eval_tree.export_instructions();
-        let instr = exported.instructions;
-        let consts = exported.constants;
-
-        writeln!(
-            f,
-            "let default_dis(name:\"\",namespace:\"\",..arg)={{{}}}",
-            settings.default_dis
-        )?;
-
-        writeln!(
-            f,
-            "let default_sym(name:\"\",namespace:\"\")={{{}}}",
-            settings.default_sym
-        )?;
-
-        for ((i, s), a) in symbols.iter().enumerate().zip(params) {
-            write!(f, "let param{i} = ")?;
-            if let Some(p) = s.get_print_function()
-                && let Some(a) = p(
-                    a.as_view(),
-                    &PrintOptions {
-                        custom_print_mode: HashMap::from_iter([(
-                            "typst".to_string(),
-                            PrintUserData::Integer(1),
-                        )]),
-                        ..Default::default()
-                    },
-                    &PrintState::new(),
-                )
-            {
-                writeln!(f, "{a}")?;
-            } else {
-                let name = s.get_stripped_name();
-                let namespace = s.get_namespace();
-                writeln!(f, "default_sym(namespace:\"{namespace}\",name:\"{name}\")",)?;
-            }
-        }
-
-        for s in &externals {
-            if s.is_builtin() {
-                continue;
-            }
-            let name = s.get_stripped_name();
-            let namespace = s.get_namespace();
-            let atom = function!(*s, symbol!("args"));
-            write!(f, "let {namespace}-{name}")?;
-            if let Some(p) = s.get_print_function()
-                && let Some(a) = p(
-                    atom.as_view(),
-                    &PrintOptions {
-                        custom_print_mode: HashMap::from_iter([(
-                            "typst".to_string(),
-                            PrintUserData::Integer(1),
-                        )]),
-                        ..Default::default()
-                    },
-                    &PrintState::new(),
-                )
-            {
-                writeln!(f, "{a}")?;
-            } else {
-                let name = s.get_stripped_name();
-                let namespace = s.get_namespace();
-                writeln!(
-                    f,
-                    "(..arg) = default_dis(namespace:\"{namespace}\",name:\"{name}\",..arg)"
-                )?;
-            }
-        }
-
-        for i in instr {
-            match i {
-                Instruction::Add(s, args, _is_real) => {
-                    writeln!(
-                        f,
-                        "let {} = $({})$",
-                        typst_slot(s, &consts),
-                        args.into_iter().map(|a| typst_slot(a, &consts)).join(" + ")
-                    )?;
-                }
-                Instruction::Mul(s, args, _is_real) => {
-                    writeln!(
-                        f,
-                        "let {} = $({})$",
-                        typst_slot(s, &consts),
-                        args.into_iter()
-                            .map(|a| typst_slot(a, &consts))
-                            .join(" dot ")
-                    )?;
-                }
-                Instruction::Fun(o, fun, _is_real) => {
-                    let (b, _tags, args) = *fun;
-
-                    if b == Symbol::COS && args.len() == 1 {
-                        writeln!(
-                            f,
-                            "let {} = $ cos({})$",
-                            typst_slot(o, &consts),
-                            typst_slot(args[0], &consts)
-                        )?;
-                    } else if b == Symbol::SIN && args.len() == 1 {
-                        writeln!(
-                            f,
-                            "let {} = $ sin({})$",
-                            typst_slot(o, &consts),
-                            typst_slot(args[0], &consts)
-                        )?;
-                    } else if b == Symbol::SQRT && args.len() == 1 {
-                        writeln!(
-                            f,
-                            "let {} = $ sqrt({})$",
-                            typst_slot(o, &consts),
-                            typst_slot(args[0], &consts)
-                        )?;
-                    } else {
-                        let name = if b.is_builtin() {
-                            format!("op(\"{}\")", b.get_stripped_name())
-                        } else {
-                            format!("{}-{}", b.get_namespace(), b.get_stripped_name())
-                        };
-                        writeln!(
-                            f,
-                            "let {} = {name}({})",
-                            typst_slot(o, &consts),
-                            args.into_iter().map(|a| typst_slot(a, &consts)).join(",")
-                        )?;
-                    }
-                }
-                Instruction::Powf(o, b, e, _is_real) => {
-                    writeln!(
-                        f,
-                        "let {} = ${}^({})$",
-                        typst_slot(o, &consts),
-                        typst_slot(b, &consts),
-                        typst_slot(e, &consts)
-                    )?;
-                }
-                Instruction::Pow(o, b, e, _is_real) => {
-                    writeln!(
-                        f,
-                        "let {} = ${}^({})$",
-                        typst_slot(o, &consts),
-                        typst_slot(b, &consts),
-                        e,
-                    )?;
-                }
-                _ => {
-                    println!("{i:?}")
-                }
-            }
-        }
-        writeln!(f, "out0")?;
-        writeln!(f, "}}")
-    }
-
-    fn typst(&self) -> String {
-        let mut out = String::new();
-        self.as_atom_view()
-            .fmt_output(
-                &mut out,
-                &PrintOptions {
-                    custom_print_mode: HashMap::from_iter([(
-                        "typst".to_string(),
-                        PrintUserData::Integer(2),
-                    )]),
-                    ..Default::default()
-                },
-                PrintState::new(),
-            )
-            .unwrap();
-        out
     }
 
     fn is_upper(&self) -> bool {
@@ -490,300 +162,6 @@ impl<A: AtomCore> AtomCoreExt for A {
         }
     }
 }
-pub struct Typst;
-
-pub trait FormatWithState {
-    fn fmt_output<W: std::fmt::Write>(
-        &self,
-        f: &mut W,
-        opts: &PrintOptions,
-        print_state: PrintState,
-    ) -> Result<bool, Error>;
-}
-
-impl FormatWithState for AtomView<'_> {
-    fn fmt_output<W: std::fmt::Write>(
-        &self,
-        fmt: &mut W,
-        opts: &PrintOptions,
-        print_state: PrintState,
-    ) -> Result<bool, Error> {
-        match self {
-            AtomView::Num(n) => n.as_view().format(fmt, opts, print_state),
-            AtomView::Var(v) => v.as_view().format(fmt, opts, print_state),
-            AtomView::Fun(f) => f.fmt_output(fmt, opts, print_state),
-            AtomView::Pow(p) => p.fmt_output(fmt, opts, print_state),
-            AtomView::Mul(t) => t.fmt_output(fmt, opts, print_state),
-            AtomView::Add(e) => e.fmt_output(fmt, opts, print_state),
-        }
-    }
-}
-
-impl FormatWithState for FunView<'_> {
-    fn fmt_output<W: std::fmt::Write>(
-        &self,
-        f: &mut W,
-        opts: &PrintOptions,
-        print_state: PrintState,
-    ) -> Result<bool, Error> {
-        if print_state.in_sum {
-            f.write_char('+')?;
-        }
-
-        // let id = self.get_symbol();
-
-        // if let Some(custom_print) = &id.fo {
-        //     if let Some(s) = custom_print(self.as_view(), opts) {
-        //         f.write_str(&s)?;
-        //         return Ok(false);
-        //     }
-        // }
-        let mut uppers = vec![];
-        let mut lowers = vec![];
-        // f.write_str("attach(")?;
-        for a in self.iter() {
-            if a.is_upper() {
-                let mut out = String::new();
-                a.fmt_output(&mut out, opts, print_state)?;
-                let out_low = format!("#hide(${}$)", out);
-                uppers.push(out);
-                lowers.push(out_low);
-            }
-
-            if a.is_lower() {
-                let mut out = String::new();
-                a.fmt_output(&mut out, opts, print_state)?;
-                let out_low = format!("#hide(${}$)", out);
-                lowers.push(out);
-                uppers.push(out_low);
-            }
-        }
-
-        if uppers.is_empty() {
-            f.write_str("op(\"")?;
-            self.get_symbol().format(opts, PrintState::new(), f)?;
-            f.write_str("\")")?;
-            let n_args = self.get_nargs();
-
-            if n_args > 0 {
-                f.write_char('(')?;
-            }
-            for (i, a) in self.iter().enumerate() {
-                if i + 1 < n_args {
-                    f.write_char(',')?;
-                }
-                a.fmt_output(f, opts, print_state)?;
-            }
-            if n_args > 0 {
-                f.write_char(')')?;
-            }
-        } else {
-            f.write_str("scripts(attach(")?;
-            f.write_str("op(\"")?;
-
-            self.get_symbol().format(opts, PrintState::new(), f)?;
-            f.write_str("\")")?;
-            f.write_str(", tr: ")?;
-            f.write_str(&uppers.join(" "))?;
-            f.write_str(", br: ")?;
-            f.write_str(&lowers.join(" "))?;
-            f.write_char(')')?;
-            f.write_char(')')?;
-            let n_args = self.get_nargs() - lowers.len();
-
-            if n_args > 0 {
-                f.write_char('(')?;
-            }
-
-            for (i, a) in self
-                .iter()
-                .filter(|a| !(a.is_lower() || a.is_upper()))
-                .enumerate()
-            {
-                if i + 1 < n_args {
-                    f.write_char(',')?;
-                }
-                a.fmt_output(f, opts, print_state)?;
-            }
-            // f.write_char(')');
-            if n_args > 0 {
-                f.write_char(')')?;
-            }
-        }
-        Ok(false)
-    }
-}
-
-impl FormatWithState for MulView<'_> {
-    fn fmt_output<W: std::fmt::Write>(
-        &self,
-        f: &mut W,
-        opts: &PrintOptions,
-        mut print_state: PrintState,
-    ) -> Result<bool, Error> {
-        let add_paren = print_state.in_exp || print_state.in_exp_base;
-        if add_paren {
-            if print_state.in_sum {
-                print_state.in_sum = false;
-                f.write_char('+')?;
-            }
-
-            f.write_char('(')?;
-            print_state.in_exp = false;
-            print_state.in_exp_base = false;
-        }
-
-        print_state.in_product = true;
-
-        // write the coefficient first
-        let mut first = true;
-        let mut skip_num = false;
-        if let Some(AtomView::Num(n)) = self.iter().last() {
-            print_state.suppress_one = true;
-            first = n.as_view().format(f, opts, print_state)?;
-            print_state.suppress_one = false;
-            skip_num = true;
-        } else if print_state.in_sum {
-            f.write_char('+')?;
-        }
-
-        print_state.top_level_add_child = false;
-        print_state.level += 1;
-        print_state.in_sum = false;
-
-        for x in self.iter().take(if skip_num {
-            self.get_nargs() - 1
-        } else {
-            self.get_nargs()
-        }) {
-            if !first {
-                f.write_char(' ')?;
-            }
-            first = false;
-
-            x.fmt_output(f, opts, print_state)?;
-        }
-
-        if add_paren {
-            f.write_char(')')?;
-        }
-        Ok(false)
-    }
-}
-
-impl FormatWithState for PowView<'_> {
-    fn fmt_output<W: std::fmt::Write>(
-        &self,
-        f: &mut W,
-        opts: &PrintOptions,
-        mut print_state: PrintState,
-    ) -> Result<bool, Error> {
-        if print_state.in_sum {
-            f.write_char('+')?;
-        }
-
-        let add_paren = print_state.in_exp_base; // right associative
-        if add_paren {
-            f.write_char('(')?;
-            print_state.in_exp = false;
-            print_state.in_exp_base = false;
-        }
-
-        let b = self.get_base();
-        let e = self.get_exp();
-
-        print_state.top_level_add_child = false;
-        print_state.level += 1;
-        print_state.in_sum = false;
-        print_state.in_product = false;
-        print_state.suppress_one = false;
-
-        if let AtomView::Num(n) = e
-            && n.get_coeff_view() == CoefficientView::Natural(-1, 1, 0, 1)
-        {
-            // TODO: construct the numerator
-            f.write_str("1/(")?;
-            b.fmt_output(f, opts, print_state)?;
-            f.write_char(')')?;
-            return Ok(false);
-        }
-
-        print_state.in_exp_base = true;
-
-        b.fmt_output(f, opts, print_state)?;
-
-        print_state.in_exp_base = false;
-        print_state.in_exp = true;
-
-        f.write_char('^')?;
-
-        f.write_char('(')?;
-        print_state.in_exp = false;
-        e.fmt_output(f, opts, print_state)?;
-        f.write_char(')')?;
-
-        if add_paren {
-            f.write_char(')')?;
-        }
-
-        Ok(false)
-    }
-}
-
-impl FormatWithState for AddView<'_> {
-    fn fmt_output<W: std::fmt::Write>(
-        &self,
-        f: &mut W,
-        opts: &PrintOptions,
-        mut print_state: PrintState,
-    ) -> Result<bool, Error> {
-        let mut first = true;
-        print_state.top_level_add_child = print_state.level == 0;
-        print_state.level += 1;
-        print_state.suppress_one = false;
-
-        let add_paren = print_state.in_product || print_state.in_exp || print_state.in_exp_base;
-        if add_paren {
-            if print_state.in_sum {
-                f.write_char('+')?;
-            }
-
-            print_state.in_sum = false;
-            print_state.in_product = false;
-            print_state.in_exp = false;
-            print_state.in_exp_base = false;
-
-            f.write_char('(')?;
-        }
-
-        let mut count = 0;
-        for x in self.iter() {
-            if !first && print_state.top_level_add_child && opts.terms_on_new_line {
-                f.write_char('\n')?;
-            }
-            first = false;
-
-            x.fmt_output(f, opts, print_state)?;
-            print_state.in_sum = true;
-            count += 1;
-        }
-
-        if opts.max_terms.is_some() && count < self.get_nargs() {
-            if print_state.top_level_add_child && opts.terms_on_new_line {
-                f.write_char('\n')?;
-            }
-
-            f.write_str("+...")?;
-        }
-
-        if add_paren {
-            f.write_char(')')?;
-        }
-        Ok(false)
-    }
-}
-// // fn print_fun_view(view:FunView<'_>)-?
-
 #[derive(
     Debug,
     Copy,
@@ -1033,63 +411,25 @@ impl IntoSymbol for std::string::String {
 }
 
 #[cfg(test)]
-mod test {
-    use crate::{
-        network::tags::SPENSO_TAG,
-        shadowing::symbolica_utils::{AtomCoreExt, TypstSettings},
-    };
+mod tests {
+    use super::SpensoPrintSettings;
+    use symbolica::printer::PrintUserData;
 
-    use symbolica::{parse, printer::PrintUserData, symbol, tag};
     #[test]
-    fn print() {
-        let _lower = symbol!(
-            "lower",
-            tag = SPENSO_TAG.lower,
-            print = |_, opt, _state| {
-                if matches!(
-                    opt.custom_print_mode.get("typst"),
-                    Some(PrintUserData::Integer(1))
-                ) {
-                    let body = r#"{
-let args = arg.pos().map(to-eq).join("")
-(content: args,lower:true)
-}"#;
-                    Some(body.into())
-                } else {
-                    None
-                }
-            }
+    fn typst_options_use_typst_mode() {
+        assert!(SpensoPrintSettings::typst_options().mode.is_typst());
+    }
+
+    #[test]
+    fn typst_options_include_spenso_typst_settings() {
+        let options = SpensoPrintSettings::typst_options();
+        let Some(PrintUserData::Integer(encoded)) = options.custom_print_mode.get("spenso") else {
+            panic!("missing Spenso print settings");
+        };
+
+        assert_eq!(
+            SpensoPrintSettings::from(usize::try_from(*encoded).unwrap()),
+            SpensoPrintSettings::typst()
         );
-
-        let _upper = symbol!(
-            "upper",
-            tags = [SPENSO_TAG.upper.clone(), tag!("Real")],
-            print = |_, opt, _state| {
-                if matches!(
-                    opt.custom_print_mode.get("typst"),
-                    Some(PrintUserData::Integer(1))
-                ) {
-                    let body = r#"{
-let args = arg.pos().map(to-eq).join("")
-(content: args,upper:true)
-}"#;
-                    Some(body.into())
-                } else {
-                    None
-                }
-            } // ; Real
-        );
-
-        let expr = parse!(
-            "a*f(lower(f(lower(upper(x),lower(a)),lower(y,c))))^(sin(x)*cos(x))*g(x,lower(y),upper(x+1),lower(1))/(x+1)/sin(g(y))*smth(3*x)^(-m)"
-        );
-        // .r ith(parse_lit!(pow(_x, _y)));
-
-        let mut out = String::new();
-        expr.typst_fmt(&mut out, &TypstSettings::lowering())
-            .unwrap();
-
-        println!("{}", out);
-        println!("{}", expr.typst())
     }
 }

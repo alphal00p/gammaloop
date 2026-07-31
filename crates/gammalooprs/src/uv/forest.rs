@@ -1,6 +1,6 @@
 use crate::{
     GammaLoopContext, debug_tags,
-    graph::{Graph, LMBext, cuts::CutSet},
+    graph::{Graph, LMBext, cuts::CutSet, parse::string_utils::dot_attr_value},
     utils::{GS, W_},
     uv::{
         ApproximationType, Integrands,
@@ -27,7 +27,7 @@ use vakint::Vakint;
 use super::{
     RenormalizationPart, UVgenerationSettings,
     approx::Approximation,
-    export::{UVForestNodeExpression, dot_attr_value},
+    export::UVForestNodeExpression,
     poset::{DAG, DagNode},
 };
 
