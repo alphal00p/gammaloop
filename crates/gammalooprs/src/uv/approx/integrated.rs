@@ -1076,7 +1076,7 @@ impl VakintMomentumSolution {
             let replacement = &solution[index];
             let variable = &variables[index];
             let replacement = replacement.replace_multiple(&replacements);
-            if &replacement == variable {
+            if replacement == variable {
                 free_variables.push(variable.clone());
             } else {
                 replacements.push(Replacement::new(

@@ -1450,8 +1450,11 @@ impl GenericEvaluator {
             .rational
             .as_ref()
             .ok_or_else(|| eyre!("Cannot build symjit backend without the rational evaluator"))?;
+        // SymJIT 2.21 cannot compact some complex temporary layouts.
         let evaluator = rational
-            .jit_compile::<SymComplex<f64>>(JITCompilationSettings::default())
+            .jit_compile::<SymComplex<f64>>(
+                JITCompilationSettings::default().with_option("compact", "false"),
+            )
             .map_err(|err| eyre!(err))?;
         self.loaded_f64_compiled.invalidate();
         self.symjit_f64.set(SymjitComplexEvaluatorGL(evaluator));

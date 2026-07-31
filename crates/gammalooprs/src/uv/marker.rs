@@ -208,10 +208,10 @@ mod tests {
     fn uv_heads_have_spenso_shorthands() {
         for (symbol, name) in [
             (GS.uv_subgraph, "gammalooprs::uv::subgraph"),
-            (GS.uv_approx, "gammalooprs::uv::Approx"),
-            (GS.uv_integrate, "gammalooprs::uv::Integrate"),
-            (GS.uv_series, "gammalooprs::uv::Series"),
-            (GS.uv_truncate, "gammalooprs::uv::Truncate"),
+            (GS.uv_approx, "gammalooprs::Approx"),
+            (GS.uv_integrate, "gammalooprs::Integrate"),
+            (GS.uv_series, "gammalooprs::Series"),
+            (GS.uv_truncate, "gammalooprs::Truncate"),
         ] {
             assert_eq!(symbol.get_name(), name);
         }

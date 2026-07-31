@@ -81,10 +81,7 @@ fn test_integrate_1l_a() {
         .iter()
     {
         println!("{} -> {}", v, c.to_canonical_string());
-        _ = compare_output(
-            Ok(c.as_view()),
-            targets.get(&v.to_owned()).unwrap().to_owned(),
-        );
+        _ = compare_output(Ok(c.expand().as_view()), targets.get(v).unwrap().expand());
     }
 
     // Now let's re-evaluate but now substituting the masters with their numerical expressions so as to proceed with numerical comparisons.
