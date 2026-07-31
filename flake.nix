@@ -410,12 +410,25 @@
         ];
       };
 
-      workspacePackageTestExtraSourceRoots = {
+      workspacePackageTestCompileTimeExtraSourceRoots = {
         gammalooprs = [
-          "crates/gammalooprs/src/test_resources"
           "tests/resources/graphs/scalar/dod2_bubble.dot"
         ];
+      };
+
+      workspacePackageRuntimeTestExtraSourceRoots = {
+        "gammaloop-api" = [
+          "tests/resources/graphs/scalar_bubble.dot"
+        ];
+        "gammaloop-tracing-filter" = [
+          "tests/resources/run_cards"
+        ];
+        gammalooprs = [
+          "tests/resources/graphs/uv_tests/rqft_a_3l_no_ghost.dot"
+          "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
+        ];
         "gammaloop-integration-tests" = [
+          "assets/plot_approach_result.py"
           "examples/api"
           "examples/cli"
           "tests/resources"
@@ -461,14 +474,20 @@
       workspacePackageExtraSourceRootsForSourcePackages = sourcePackages:
         sortedUnique (lib.concatMap (sourcePackage: workspacePackageProductionExtraSourceRoots.${sourcePackage} or []) sourcePackages);
 
-      workspacePackageTestExtraSourceRootsForSourcePackages = sourcePackages:
-        sortedUnique (lib.concatMap (sourcePackage: workspacePackageTestExtraSourceRoots.${sourcePackage} or []) sourcePackages);
+      workspacePackageTestCompileTimeExtraSourceRootsForSourcePackages = sourcePackages:
+        sortedUnique (lib.concatMap (sourcePackage: workspacePackageTestCompileTimeExtraSourceRoots.${sourcePackage} or []) sourcePackages);
+
+      workspacePackageRuntimeTestExtraSourceRootsForSourcePackages = sourcePackages:
+        sortedUnique (lib.concatMap (sourcePackage: workspacePackageRuntimeTestExtraSourceRoots.${sourcePackage} or []) sourcePackages);
 
       workspacePackageExtraFilesetsForSourcePackages = sourcePackages:
         map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageExtraSourceRootsForSourcePackages sourcePackages);
 
-      workspacePackageTestExtraFilesetsForSourcePackages = sourcePackages:
-        map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageTestExtraSourceRootsForSourcePackages sourcePackages);
+      workspacePackageTestCompileTimeExtraFilesetsForSourcePackages = sourcePackages:
+        map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageTestCompileTimeExtraSourceRootsForSourcePackages sourcePackages);
+
+      workspacePackageRuntimeTestExtraFilesetsForSourcePackages = sourcePackages:
+        map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageRuntimeTestExtraSourceRootsForSourcePackages sourcePackages);
 
       workspacePackageOwnTestSourceRootsForSourcePackages = sourcePackages:
         sortedUnique (lib.concatMap (sourcePackage: workspacePackageOwnTestSourceRoots.${sourcePackage} or []) sourcePackages);
@@ -494,6 +513,7 @@
         sourcePackages,
         packageSourcePackages ? [],
         testSourcePackages ? [],
+        runtimeTestSourcePackages ? [],
         extraFilesets ? [],
       }: let
         productionSourceFilesets = map (sourcePackage: let
@@ -532,10 +552,14 @@
             "examples"
             "tests"
           ]);
-          snapshots = lib.fileset.fileFilter (file: file.hasExt "snap") packageRoot;
         in
-          testRoots ++ [snapshots])
+          map (testRoot: lib.fileset.fileFilter (file: file.hasExt "rs") testRoot) testRoots)
         testSourcePackages;
+        runtimeTestSourceFilesets = map (sourcePackage: let
+          packageRoot = workspaceRoot + "/${workspaceMemberPackageDirs.${sourcePackage}}";
+        in
+          lib.fileset.fileFilter (file: file.hasExt "snap") packageRoot)
+        runtimeTestSourcePackages;
       in
         lib.fileset.toSource {
           root = workspaceRoot;
@@ -545,8 +569,10 @@
             ++ productionSourceFilesets
             ++ lib.concatLists packageSourceFilesets
             ++ lib.concatLists testSourceFilesets
+            ++ runtimeTestSourceFilesets
             ++ (workspacePackageExtraFilesetsForSourcePackages sourcePackages)
-            ++ (workspacePackageTestExtraFilesetsForSourcePackages testSourcePackages)
+            ++ (workspacePackageTestCompileTimeExtraFilesetsForSourcePackages testSourcePackages)
+            ++ (workspacePackageRuntimeTestExtraFilesetsForSourcePackages runtimeTestSourcePackages)
             ++ (workspacePackageOwnTestFilesetsForSourcePackages testSourcePackages)
             ++ extraFilesets
           );
@@ -2512,6 +2538,7 @@
         {
           name = "python-api";
           packages = ["gammaloop-integration-tests"];
+          runtimeTestSourcePackages = [];
           filter = "package(gammaloop-integration-tests) & binary(test_python_api)";
           extraFeatures."gammaloop-integration-tests" = ["python-api-tests"];
         }
@@ -2586,12 +2613,15 @@
           sourcePackages = nextestSourcePackagesFor target;
           packageSourcePackages = target.packages;
           testSourcePackages = target.packages;
-          extraFilesets = [
-            ./.config/nextest.toml
-            ./tests/resources
-            ./examples/api
-            ./examples/cli
-          ];
+          extraFilesets = [./.config/nextest.toml];
+        };
+      nextestRuntimeSrcFor = target:
+        workspacePackageSrcForSourcePackages {
+          sourcePackages = nextestSourcePackagesFor target;
+          packageSourcePackages = target.packages;
+          testSourcePackages = target.packages;
+          runtimeTestSourcePackages = target.runtimeTestSourcePackages or target.packages;
+          extraFilesets = [./.config/nextest.toml];
         };
 
       nextestFeatureArgsFor = target:
@@ -2708,9 +2738,12 @@
           fi
 
           mkdir -p /build/source
-          cp -R ${nextestSrcFor target}/. /build/source/
+          cp -R ${nextestRuntimeSrcFor target}/. /build/source/
           chmod -R u+w /build/source
           cd /build/source
+          # Workspace-root discovery checks these directories even for test
+          # targets that do not consume any files from them.
+          mkdir -p tests/resources examples/cli
           ${workspaceMissingCargoTargetsScript}
         '' + lib.optionalString (nextestUsesPythonModule target) ''
           export PYO3_PYTHON=${nextestPython}/bin/python3

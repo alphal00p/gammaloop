@@ -1193,8 +1193,8 @@ recursively carrying dependency test units:
 third-party dependencies
   -> resolved-feature library support
   -> package-local test binaries
-  -> nextest archive
-  -> nextest run
+  -> fixture-free nextest archive
+  -> nextest run + runtime fixtures
 ```
 
 Each workspace package has two source tiers. The production tier contains the
@@ -1225,6 +1225,13 @@ that package alone, and runs `cargo test --no-run -p <package>`. Nextest archive
 merge these package-local binary artifacts directly. Dependency test sources and
 test binaries therefore never cross a downstream package boundary.
 
+The own-test tier is split again at the archive boundary. Compilation and
+packaging receive Rust test, bench, example, and binary sources plus explicitly
+declared compile-time assets. The run derivation adds package-local fixture
+paths, snapshots, shared CLI examples, and other runtime data. Consequently a
+fixture edit changes the owning run check without rebuilding or repackaging its
+test binaries.
+
 The older test-support and synthetic-consumer measurements above are retained as
 the history that led to this split; their mixed `crate-test-support-*` artifact
 shape is no longer the current implementation.
@@ -1236,9 +1243,10 @@ The ownership boundary was checked with isolated source-tree mutations and
 | --- | --- | --- |
 | `vakint/tests/*` | Vakint test binary and archive | Vakint support; integration support, binary, and archive |
 | `vakint/src/*` | Vakint support and binary; integration support, binary, and archive | Linnet and Clinnet test binaries |
-| Gammalooprs package test | Gammalooprs test binary and core archive | Gammalooprs support; integration support, binary, and archive |
+| Gammalooprs test source or compile-time asset | Gammalooprs test binary and core archive | Gammalooprs support; integration support, binary, and archive |
 | Python-only integration feature | Python API archive | Ordinary integration binary and archive |
 | Integration-test `build.rs` | Integration support and binary | Global third-party artifacts; Vakint support and binary |
+| Integration runtime fixture | Integration run check | Integration test binary and archive; core and Python API run checks |
 
 `nix why-depends --derivation` also confirms that the integration test binary
 reaches Vakint's library-support derivation but does not depend on Vakint's
