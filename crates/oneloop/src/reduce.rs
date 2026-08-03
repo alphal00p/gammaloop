@@ -25,6 +25,93 @@ impl Reduction {
 
 /// Reduce a one-loop integral family to the scalar masters `A0`/`B0`/`C0`/`D0`.
 pub fn reduce(family: &IntegralFamily) -> Reduction {
+    if family.kinematics.invariants.iter().any(|s| s.is_zero()) {
+        return reduce_regularized(family);
+    }
+    reduce_core(family)
+}
+
+/// Substitute `delta -> 0` in every kinematic argument of a master.
+fn master_at_zero(m: &MasterIntegral, delta: &Atom) -> MasterIntegral {
+    let z = |a: &Atom| a.replace(delta.to_pattern()).with(Atom::Zero);
+    match m {
+        MasterIntegral::Tadpole { m_sq } => MasterIntegral::Tadpole { m_sq: z(m_sq) },
+        MasterIntegral::Bubble { p_sq, m1_sq, m2_sq } => MasterIntegral::Bubble {
+            p_sq: z(p_sq),
+            m1_sq: z(m1_sq),
+            m2_sq: z(m2_sq),
+        },
+        MasterIntegral::Triangle {
+            p1_sq,
+            p2_sq,
+            p12_sq,
+            m1_sq,
+            m2_sq,
+            m3_sq,
+        } => MasterIntegral::Triangle {
+            p1_sq: z(p1_sq),
+            p2_sq: z(p2_sq),
+            p12_sq: z(p12_sq),
+            m1_sq: z(m1_sq),
+            m2_sq: z(m2_sq),
+            m3_sq: z(m3_sq),
+        },
+        MasterIntegral::Box {
+            p1_sq,
+            p2_sq,
+            p3_sq,
+            p4_sq,
+            s,
+            t,
+            m1_sq,
+            m2_sq,
+            m3_sq,
+            m4_sq,
+        } => MasterIntegral::Box {
+            p1_sq: z(p1_sq),
+            p2_sq: z(p2_sq),
+            p3_sq: z(p3_sq),
+            p4_sq: z(p4_sq),
+            s: z(s),
+            t: z(t),
+            m1_sq: z(m1_sq),
+            m2_sq: z(m2_sq),
+            m3_sq: z(m3_sq),
+            m4_sq: z(m4_sq),
+        },
+    }
+}
+
+/// Off-shell regularization for on-shell massless legs
+fn reduce_regularized(family: &IntegralFamily) -> Reduction {
+    let delta = Atom::var(symbol!("oneloop::reg_delta"));
+    let mut reg = family.clone();
+    reg.kinematics.invariants = family
+        .kinematics
+        .invariants
+        .iter()
+        .map(|s| {
+            if s.is_zero() {
+                delta.clone()
+            } else {
+                s.clone()
+            }
+        })
+        .collect();
+    let reduced = reduce_core(&reg);
+    let terms = reduced
+        .terms
+        .iter()
+        .map(|(c, m)| {
+            let c0 = c.expand().replace(delta.to_pattern()).with(Atom::Zero);
+            (c0, master_at_zero(m, &delta))
+        })
+        .filter(|(c, _)| *c != Atom::Zero)
+        .collect();
+    Reduction { terms }
+}
+
+fn reduce_core(family: &IntegralFamily) -> Reduction {
     let inv = |i: usize| {
         family
             .kinematics
@@ -2249,6 +2336,43 @@ mod tests {
             }
             other => panic!("expected a triangle master, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn on_shell_massless_triangle_rank2_regularizes() {
+        crate::ensure_symbolica_license();
+        let kq1 = function!(S.dot, Atom::var(S.k), Atom::var(S.q1));
+        let fam = IntegralFamily {
+            propagators: (0..3)
+                .map(|_| Propagator {
+                    momentum: Atom::Zero,
+                    mass_sq: Atom::num(1),
+                })
+                .collect(),
+            isps: vec![],
+            kinematics: Kinematics {
+                invariants: vec![Atom::Zero, Atom::Zero, Atom::num(2) / Atom::num(5)],
+            },
+            targets: vec![Integral {
+                propagator_exponents: vec![1, 1, 1],
+                isp_exponents: vec![],
+            }],
+            numerator: &kq1 * &kq1,
+        };
+        let r = reduce(&fam); // must NOT panic
+        assert_eq!(
+            r.terms.len(),
+            2,
+            "the C0 (coeff ~ delta^2) should drop, leaving 2 bubbles"
+        );
+        assert!(
+            r.terms
+                .iter()
+                .all(|(_, m)| matches!(m, MasterIntegral::Bubble { .. }))
+        );
+        let coeffs: Vec<Atom> = r.terms.iter().map(|(c, _)| c.clone()).collect();
+        assert!(coeffs.contains(&(Atom::num(1) / Atom::num(20))));
+        assert!(coeffs.contains(&(Atom::num(-1) / Atom::num(20))));
     }
 
     #[test]
