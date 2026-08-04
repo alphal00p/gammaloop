@@ -18,6 +18,11 @@ name = "symbolica_lazy_deadlock_mwe"
 path = "examples/symbolica_lazy_deadlock_mwe.rs"
 required-features = ["shadowing"]
 
+[[bench]]
+name = "symbolic_parallelism"
+harness = false
+required-features = ["shadowing"]
+
 # [[test]]
 # name = "three_loop"
 # path = "tests/three_loop.rs"
