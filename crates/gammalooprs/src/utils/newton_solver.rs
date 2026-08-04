@@ -310,7 +310,7 @@ impl RadialRootObservation {
 /// two-scale local-root consistency checks.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct RadialRootDiagnostics {
-    observations: BTreeMap<(RadialRootIdentity, usize), RadialRootObservation>,
+    observations: BTreeMap<(RadialRootIdentity, usize, u32), RadialRootObservation>,
     current_precision_bits: Option<u32>,
     current_occurrences: BTreeMap<RadialRootIdentity, usize>,
 }
@@ -320,7 +320,7 @@ impl RadialRootDiagnostics {
         &mut self,
         identity: &RadialRootIdentity,
         precision_source: &F<T>,
-    ) -> (RadialRootIdentity, usize) {
+    ) -> (RadialRootIdentity, usize, u32) {
         let precision: SymbolicaFloat = precision_source.clone().into();
         let precision_bits = precision.prec();
         if self.current_precision_bits != Some(precision_bits) {
@@ -332,25 +332,27 @@ impl RadialRootDiagnostics {
             .current_occurrences
             .entry(identity.clone())
             .or_default();
-        let key = (identity.clone(), *occurrence);
+        let key = (identity.clone(), *occurrence, precision_bits);
         *occurrence += 1;
         key
     }
 
     fn record_observation(
         &mut self,
-        key: (RadialRootIdentity, usize),
+        key: (RadialRootIdentity, usize, u32),
         observation: RadialRootObservation,
     ) {
         match self.observations.get(&key) {
-            Some(previous)
-                if observation.precision_bits < previous.precision_bits
-                    || (observation.precision_bits == previous.precision_bits
-                        && observation.residual >= previous.residual) => {}
+            Some(previous) if observation.residual >= previous.residual => {}
             _ => {
                 self.observations.insert(key, observation);
             }
         }
+    }
+
+    pub(crate) fn restart_precision_pass(&mut self) {
+        self.current_precision_bits = None;
+        self.current_occurrences.clear();
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -398,12 +400,15 @@ impl RadialRootDiagnostics {
             }
         };
 
-        let previous = self.observations.get(&call_key).cloned();
-        let current_precision: SymbolicaFloat = result.solution.clone().into();
-        let current_precision_bits = current_precision.prec();
+        let previous = self
+            .observations
+            .range(
+                (call_key.0.clone(), call_key.1, 0)..(call_key.0.clone(), call_key.1, call_key.2),
+            )
+            .next_back()
+            .map(|(_, observation)| observation.clone());
         let local_consistency = previous
-            .as_ref()
-            .is_some_and(|previous| current_precision_bits > previous.precision_bits)
+            .is_some()
             .then(|| LocalRootConsistency::check(result, inside_radius, &f_x_and_df_x, e_cm));
         let current = RadialRootObservation::new(
             result,
@@ -412,9 +417,8 @@ impl RadialRootDiagnostics {
             tolerance,
             e_cm,
         );
-        let precision_improvement = self
-            .observations
-            .get(&call_key)
+        let precision_improvement = previous
+            .as_ref()
             .and_then(|previous| current.precision_rescue_improvement(previous));
 
         if let Some(improvement) = precision_improvement {
@@ -460,10 +464,7 @@ impl RadialRootDiagnostics {
             return Ok(result.clone());
         }
 
-        if let Some(previous) = previous
-            .as_ref()
-            .filter(|previous| current.precision_bits > previous.precision_bits)
-        {
+        if let Some(previous) = previous.as_ref() {
             let residual_improvement = previous.comparison_residual() / current.residual.clone();
             debug!(
                 radial_root = %identity,
@@ -1152,23 +1153,101 @@ mod tests {
     fn repeated_root_identities_are_paired_by_precision_local_occurrence() {
         let mut diagnostics = RadialRootDiagnostics::default();
         let identity = RadialRootIdentity::new("two LMB channel rays".to_string());
+        let f64_precision: SymbolicaFloat = F::<f64>::default().into();
+        let f128_precision: SymbolicaFloat = F::<f128>::default().into();
 
         assert_eq!(
             diagnostics.next_call_key(&identity, &F::<f64>::default()),
-            (identity.clone(), 0)
+            (identity.clone(), 0, f64_precision.prec())
         );
         assert_eq!(
             diagnostics.next_call_key(&identity, &F::<f64>::default()),
-            (identity.clone(), 1)
+            (identity.clone(), 1, f64_precision.prec())
         );
         assert_eq!(
             diagnostics.next_call_key(&identity, &F::<f128>::default()),
-            (identity.clone(), 0)
+            (identity.clone(), 0, f128_precision.prec())
         );
         assert_eq!(
             diagnostics.next_call_key(&identity, &F::<f128>::default()),
-            (identity, 1)
+            (identity.clone(), 1, f128_precision.prec())
         );
+        diagnostics.restart_precision_pass();
+        assert_eq!(
+            diagnostics.next_call_key(&identity, &F::<f128>::default()),
+            (identity.clone(), 0, f128_precision.prec())
+        );
+        assert_eq!(
+            diagnostics.next_call_key(&identity, &F::<f128>::default()),
+            (identity, 1, f128_precision.prec())
+        );
+    }
+
+    #[test]
+    fn precision_rescue_replays_at_the_same_precision() {
+        let mut diagnostics = RadialRootDiagnostics::default();
+        let identity = RadialRootIdentity::new("precise result replay".to_string());
+        let large_momentum = 2.0_f64.powi(52);
+
+        assert!(matches!(
+            cancellation_limited_root::<f64>(
+                &mut diagnostics,
+                &identity,
+                large_momentum,
+                1.0 / 3.0,
+            ),
+            Err(SafeguardedNewtonError::DidNotConverge { .. })
+        ));
+        let rescued = cancellation_limited_root::<f128>(
+            &mut diagnostics,
+            &identity,
+            large_momentum,
+            1.0 / 3.0,
+        )
+        .unwrap();
+        diagnostics.restart_precision_pass();
+        let replayed = cancellation_limited_root::<f128>(
+            &mut diagnostics,
+            &identity,
+            large_momentum,
+            1.0 / 3.0,
+        )
+        .unwrap();
+
+        for result in [rescued, replayed] {
+            let active_precision_limit =
+                result.solution.epsilon() * result.solution.from_i64(ROOT_TOLERANCE);
+            assert!(result.error_of_function.abs() > active_precision_limit);
+        }
+    }
+
+    #[test]
+    fn multiple_roots_are_rescued_in_one_higher_precision_pass() {
+        let mut diagnostics = RadialRootDiagnostics::default();
+        let identities = (0..3)
+            .map(|index| RadialRootIdentity::new(format!("difficult root {index}")))
+            .collect::<Vec<_>>();
+
+        for identity in &identities {
+            assert!(matches!(
+                cancellation_limited_root::<f64>(
+                    &mut diagnostics,
+                    identity,
+                    2.0_f64.powi(52),
+                    1.0 / 3.0,
+                ),
+                Err(SafeguardedNewtonError::DidNotConverge { .. })
+            ));
+        }
+        for identity in &identities {
+            cancellation_limited_root::<f128>(
+                &mut diagnostics,
+                identity,
+                2.0_f64.powi(52),
+                1.0 / 3.0,
+            )
+            .unwrap();
+        }
     }
 
     #[test]
@@ -1205,19 +1284,22 @@ mod tests {
     fn precision_rescue_rejects_an_improving_discontinuous_non_root() {
         let mut diagnostics = RadialRootDiagnostics::default();
         let identity = RadialRootIdentity::new("improving discontinuity".to_string());
-        let key = (identity.clone(), 0);
+        let f64_precision: SymbolicaFloat = F::<f64>::default().into();
+        let f128_precision: SymbolicaFloat = F::<f128>::default().into();
+        let lower_key = (identity.clone(), 0, f64_precision.prec());
+        let higher_key = (identity.clone(), 0, f128_precision.prec());
 
         assert!(matches!(
             discontinuous_root::<f64>(&mut diagnostics, &identity, 1.0e-12),
             Err(SafeguardedNewtonError::DidNotConverge { .. })
         ));
-        let lower_precision = diagnostics.observations[&key].clone();
+        let lower_precision = diagnostics.observations[&lower_key].clone();
 
         assert!(matches!(
             discontinuous_root::<f128>(&mut diagnostics, &identity, 1.0e-14),
             Err(SafeguardedNewtonError::DidNotConverge { .. })
         ));
-        let higher_precision = &diagnostics.observations[&key];
+        let higher_precision = &diagnostics.observations[&higher_key];
 
         // Residual improvement, the inherited f64 residual bound, and the Newton-correction
         // bound alone would accept this fabricated candidate even though the function has no

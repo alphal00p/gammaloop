@@ -667,6 +667,7 @@ mod tests {
         assert!(toml.contains("lmb_channel_weight = \"ose\""));
         assert!(toml.contains("coordinate_system = \"spherical\""));
         assert!(toml.contains("power = 1.0"));
+        assert!(toml.contains("graph_names = []"));
         assert!(!toml.contains("type = \"discrete_graph_sampling\""));
         assert!(!toml.contains("subtype = \"discrete_multi_channeling\""));
     }

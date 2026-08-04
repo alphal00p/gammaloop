@@ -372,7 +372,17 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         workspace_manifest_path(&workspace),
         "runtime graph-subset integration manifest",
     )?;
-    assert_eq!(manifest.integrand_fingerprints, [source_fingerprint]);
+    let warmed_source_fingerprint = cli
+        .state
+        .process_list
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?
+        .resume_fingerprint()?;
+    assert_eq!(
+        manifest.integrand_fingerprints.as_slice(),
+        std::slice::from_ref(&warmed_source_fingerprint)
+    );
+    assert_ne!(warmed_source_fingerprint, source_fingerprint);
     let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some(&integrand_name))?;
     let workspace_settings: RuntimeSettings = RuntimeSettings::from_file(
         slot_workspace.join("settings.toml"),
@@ -383,10 +393,19 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         std::slice::from_ref(persisted_master_name)
     );
 
-    let changed_master_name = &expected_master_names[1];
-    cli.run_command(&format!(
-        "set process string '\n[sampling]\ngraphs = \"monte_carlo\"\ngraph_names = [\"{changed_master_name}\"]\n'"
-    ))?;
+    let full_source = cli
+        .state
+        .process_list
+        .get_integrand_mut(process_id, &integrand_name)?;
+    full_source.warm_up(&model)?;
+    assert_eq!(
+        full_source.resume_fingerprint()?,
+        manifest.integrand_fingerprints[0]
+    );
+
+    cli.run_command(
+        "set process string '\n[sampling]\ngraphs = \"monte_carlo\"\ngraph_names = []\n\n[stability]\nrotation_axis = [{ type = \"x\" }]\n'",
+    )?;
     let mut resume = integrate;
     resume.restart = false;
     resume.run(&mut cli.state, &cli.cli_settings)?;
@@ -402,11 +421,76 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
             .selected_graph_names(),
         std::slice::from_ref(persisted_master_name)
     );
+    assert!(
+        resumed_source
+            .get_settings()
+            .stability
+            .rotation_axis
+            .is_empty()
+    );
     assert_eq!(
         resumed_source.resume_fingerprint()?,
         manifest.integrand_fingerprints[0]
     );
 
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn correlated_runtime_graph_subsets_allow_different_graph_names() -> Result<()> {
+    let test_name = "correlated_runtime_graph_subsets_allow_different_graph_names";
+    let mut cli = setup_sm_differential_lu_cli(test_name)?;
+    set_process_incoming_helicities(&mut cli, "epem_ddxg", "default", "[1, -1]")?;
+
+    let (process_id, integrand_name) = cli.state.find_integrand_ref(None, None)?;
+    let master_names = cli
+        .state
+        .process_list
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?
+        .graph_group_master_names()
+        .into_iter()
+        .map(str::to_string)
+        .collect_vec();
+    assert!(
+        master_names.len() >= 2,
+        "correlated graph-subset fixture must contain at least two graph groups"
+    );
+
+    cli.run_command(
+        "duplicate integrand -p epem_ddxg -i default --output_process_name epem_ddxg_copy --output_integrand_name default_copy",
+    )?;
+    for (process, integrand, graph_name) in [
+        ("epem_ddxg", "default", &master_names[0]),
+        ("epem_ddxg_copy", "default_copy", &master_names[1]),
+    ] {
+        cli.run_command(&format!(
+            "set process -p {process} -i {integrand} string '\n[sampling]\ngraphs = \"monte_carlo\"\ngraph_names = [\"{graph_name}\"]\n\n[integrator]\nn_bins = 4\nmin_samples_for_update = 1\nn_start = 8\nn_increase = 8\nn_max = 8\n\n[stability]\nrotation_axis = []\n'"
+        ))?;
+    }
+
+    let workspace = get_tests_workspace_path()
+        .join(test_name)
+        .join("correlated_subset_workspace");
+    let output = Integrate {
+        process: vec![
+            ProcessRef::Unqualified("epem_ddxg".to_string()),
+            ProcessRef::Unqualified("epem_ddxg_copy".to_string()),
+        ],
+        integrand_name: vec!["default".to_string(), "default_copy".to_string()],
+        n_cores: Some(1),
+        workspace_path: Some(workspace),
+        restart: true,
+        batch_size: Some(4),
+        no_stream_updates: true,
+        no_stream_iterations: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    assert_eq!(output.result.slots.len(), 2);
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }

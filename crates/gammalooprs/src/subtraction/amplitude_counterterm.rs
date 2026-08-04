@@ -360,6 +360,7 @@ impl AmplitudeCountertermData {
 
         let mut result = Complex::new_re(momentum_sample.zero());
         let mut local_counterterms = Vec::new();
+        let mut radial_root_failed = false;
 
         for (overlap_group, group) in self.overlap.overlap_groups.iter().enumerate() {
             let overlap_builder = counter_term_builder.new_overlap_builder(group);
@@ -399,11 +400,12 @@ impl AmplitudeCountertermData {
                         raised_esurface_id.0,
                         rotation.method,
                     ));
-                    return Ok(AmplitudeCountertermEvaluation {
-                        total: Complex::new_re(F::from_f64(f64::NAN)),
-                        local_counterterms,
-                    });
+                    radial_root_failed = true;
+                    continue;
                 };
+                if radial_root_failed {
+                    continue;
+                }
                 let single_result = rstar_solution.rstar_samples().evaluate(
                     param_builder,
                     orientation,
@@ -431,6 +433,12 @@ impl AmplitudeCountertermData {
                 });
                 result += single_result;
             }
+        }
+        if radial_root_failed {
+            return Ok(AmplitudeCountertermEvaluation {
+                total: Complex::new_re(F::from_f64(f64::NAN)),
+                local_counterterms,
+            });
         }
         Ok(AmplitudeCountertermEvaluation {
             total: result,

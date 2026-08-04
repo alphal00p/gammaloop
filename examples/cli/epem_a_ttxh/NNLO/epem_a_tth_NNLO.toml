@@ -203,7 +203,7 @@ commands = [
   escalate_for_large_weight_threshold = -1.0
       '""",
 
-  "remove processes -p epem_a_tth -i NNLO_inclusive_m_uv_up",
+  "remove processes -p epem_a_tth -i NNLO_m_uv_up",
   "duplicate integrand -p epem_a_tth -i NNLO --output_process_name epem_a_tth --output_integrand_name NNLO_m_uv_up",
 
   """set process -p epem_a_tth -i NNLO kv
@@ -245,7 +245,7 @@ commands = [
   # --target epem_a_tth@NLO=-1.6168e-06,0.0
   #               --target epem_a_tth@NLO=1.3472e-04,0.0  
   # -p epem_a_tth -i NNLO_m_uv_up
-  """integrate -p epem_a_tth -i NNLO -p epem_a_tth -i NNLO_m_uv_up -p epem_a_tth -i NNLO_m_uv_up --n-cores 3
+  """integrate -p epem_a_tth -i NNLO -p epem_a_tth -i NNLO_m_uv_up --n-cores 3
 				 --renderer ratatui
 				 --batch-size 1000
 				 --show-phase both

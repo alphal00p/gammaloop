@@ -1051,7 +1051,7 @@ pub enum SamplingSettings {
 pub struct SamplingSettingsParser {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub graphs: SumMode,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub graph_names: Vec<String>,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientations: SumMode,
@@ -1744,7 +1744,7 @@ impl Default for DiscreteGraphSamplingType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct DiscreteGraphSamplingSettings {
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub graph_names: Vec<String>,
     #[serde(skip_serializing_if = "is_false")]
     pub sample_orientations: bool,

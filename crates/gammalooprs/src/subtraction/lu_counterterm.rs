@@ -1307,6 +1307,7 @@ impl LUCounterTerm {
             .map(|overlap_group| left_counterterm_builder.new_overlap_builder(overlap_group))
             .collect_vec();
 
+        let mut radial_root_failed = false;
         let mut left_overlap_solutions = Vec::with_capacity(left_overlap_builders.len());
         for (overlap_group_index, overlap_builder) in left_overlap_builders.iter().enumerate() {
             let mut group_solutions =
@@ -1337,7 +1338,8 @@ impl LUCounterTerm {
                         esurface_id.0,
                         probe_rotation.method,
                     ));
-                    return Ok(Complex::new_re(F::from_f64(f64::NAN)));
+                    radial_root_failed = true;
+                    continue;
                 };
                 group_solutions.push(solution);
             }
@@ -1392,11 +1394,16 @@ impl LUCounterTerm {
                         esurface_id.0,
                         probe_rotation.method,
                     ));
-                    return Ok(Complex::new_re(F::from_f64(f64::NAN)));
+                    radial_root_failed = true;
+                    continue;
                 };
                 group_solutions.push(solution);
             }
             right_overlap_solutions.push(group_solutions);
+        }
+
+        if radial_root_failed {
+            return Ok(Complex::new_re(F::from_f64(f64::NAN)));
         }
 
         let zero = kinematic_point.representative_sample().zero();

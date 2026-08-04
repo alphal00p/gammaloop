@@ -3914,6 +3914,11 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
                     )
             })?;
             let mut evaluation_metadata = EvaluationMetaData::new_empty();
+            evaluation_metadata.radial_root_diagnostics =
+                base_metadata.radial_root_diagnostics.clone();
+            evaluation_metadata
+                .radial_root_diagnostics
+                .restart_precision_pass();
             let mut context = StabilityEvaluationContext {
                 model,
                 source: &source,
@@ -3948,6 +3953,11 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
                     )
             })?;
             let mut evaluation_metadata = EvaluationMetaData::new_empty();
+            evaluation_metadata.radial_root_diagnostics =
+                base_metadata.radial_root_diagnostics.clone();
+            evaluation_metadata
+                .radial_root_diagnostics
+                .restart_precision_pass();
             let mut context = StabilityEvaluationContext {
                 model,
                 source: &source,

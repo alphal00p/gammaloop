@@ -43,7 +43,7 @@ use gammalooprs::{
     observables::ObservableSnapshotBundle,
     request_interrupt, request_iteration_abort,
     settings::{
-        runtime::{IntegratedPhase, IntegrationResult},
+        runtime::{IntegratedPhase, IntegrationResult, SamplingSettings},
         RuntimeSettings,
     },
     utils::F,
@@ -1277,19 +1277,6 @@ impl Integrate {
                         "Current effective model parameter metadata is inconsistent with the selected slots"
                     ));
                 }
-                let mismatched_fingerprint_slots = selected_slots
-                    .iter()
-                    .zip(manifest.integrand_fingerprints.iter())
-                    .zip(current_integrand_fingerprints.iter())
-                    .filter(|&((_, saved), current)| saved != current)
-                    .map(|((slot, _), _)| slot.slot_meta.key())
-                    .collect_vec();
-                if !mismatched_fingerprint_slots.is_empty() {
-                    return Err(eyre!(
-                        "Workspace integrand fingerprints do not match the current generated integrands for {}. Resume requires the exact same generated integrands; use --restart or restore the previous generation.",
-                        mismatched_fingerprint_slots.join(", ")
-                    ));
-                }
                 let mismatched_slots = selected_slots
                     .iter()
                     .zip(manifest.effective_model_parameters.iter())
@@ -1301,6 +1288,57 @@ impl Integrate {
                     return Err(eyre!(
                         "Workspace effective model parameters do not match the current state for {}. Resume requires an exact match; use --restart or restore the shared/per-integrand model parameters.",
                         mismatched_slots.join(", ")
+                    ));
+                }
+                let workspace_settings = selected_slots
+                    .iter()
+                    .map(|slot| {
+                        RuntimeSettings::from_file(
+                            slot_settings_path(workspace_path, &slot.slot_meta),
+                            &format!("workspace settings for {}", slot.slot_meta.key()),
+                        )
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let comparison_integrand_fingerprints = izip!(
+                    selected_slots.iter(),
+                    workspace_settings.iter(),
+                    current_integrand_fingerprints.iter(),
+                )
+                .map(|(slot, settings, current_fingerprint)| {
+                    if settings.sampling.selected_graph_names().is_empty() {
+                        return Ok(current_fingerprint.clone());
+                    }
+
+                    // A filtered workspace fingerprints the warmed full source. Recreate that
+                    // state on a clone with the saved non-model settings so a permitted settings
+                    // change cannot mutate the live source or invalidate resume prematurely.
+                    let mut integrand = state
+                        .process_list
+                        .get_integrand(slot.process_id, &slot.slot_meta.integrand_name)?
+                        .require_generated()?
+                        .clone();
+                    let preserved_model_overrides = integrand.get_settings().model.clone();
+                    *integrand.get_mut_settings() = settings.clone();
+                    integrand.get_mut_settings().model = preserved_model_overrides;
+                    let model = state.resolve_model_for_integrand(
+                        slot.process_id,
+                        &slot.slot_meta.integrand_name,
+                    )?;
+                    integrand.warm_up(&model)?;
+                    integrand.resume_fingerprint()
+                })
+                .collect::<Result<Vec<_>>>()?;
+                let mismatched_fingerprint_slots = selected_slots
+                    .iter()
+                    .zip(manifest.integrand_fingerprints.iter())
+                    .zip(comparison_integrand_fingerprints.iter())
+                    .filter(|&((_, saved), current)| saved != current)
+                    .map(|((slot, _), _)| slot.slot_meta.key())
+                    .collect_vec();
+                if !mismatched_fingerprint_slots.is_empty() {
+                    return Err(eyre!(
+                        "Workspace integrand fingerprints do not match the current generated integrands for {}. Resume requires the exact same generated integrands; use --restart or restore the previous generation.",
+                        mismatched_fingerprint_slots.join(", ")
                     ));
                 }
 
@@ -1318,12 +1356,11 @@ impl Integrate {
                     .expect("Could not deserialize state")
                     .0;
 
-                for (slot, target) in selected_slots.iter().zip(targets.iter()) {
-                    let settings_label = format!("workspace settings for {}", slot.slot_meta.key());
-                    let workspace_settings: RuntimeSettings = RuntimeSettings::from_file(
-                        slot_settings_path(workspace_path, &slot.slot_meta),
-                        &settings_label,
-                    )?;
+                for ((slot, target), workspace_settings) in selected_slots
+                    .iter()
+                    .zip(targets.iter())
+                    .zip(workspace_settings)
+                {
                     let gloop_integrand = state
                         .process_list
                         .get_integrand_mut(slot.process_id, &slot.slot_meta.integrand_name)?;
@@ -1411,6 +1448,7 @@ impl Integrate {
                     return Ok(gloop_integrand.clone());
                 }
 
+                gloop_integrand.warm_up(model)?;
                 let full_group_count = gloop_integrand.graph_group_count();
                 let mut integration_view =
                     gloop_integrand.clone_with_selected_graph_groups(&selected_graph_names)?;
@@ -1526,7 +1564,18 @@ impl Integrate {
         let reference_sampling = &reference.get_settings().sampling;
 
         for (slot, integrand) in selected_slots.iter().zip(slot_integrands.iter()).skip(1) {
-            if integrand.get_settings().sampling != *reference_sampling {
+            let sampling = &integrand.get_settings().sampling;
+            let sampling_matches = match (reference_sampling, sampling) {
+                (
+                    SamplingSettings::DiscreteGraphs(reference),
+                    SamplingSettings::DiscreteGraphs(candidate),
+                ) if !reference.graph_names.is_empty() && !candidate.graph_names.is_empty() => {
+                    reference.sample_orientations == candidate.sample_orientations
+                        && reference.sampling_type == candidate.sampling_type
+                }
+                _ => sampling == reference_sampling,
+            };
+            if !sampling_matches {
                 return Err(eyre!(
                     "Integrand '{}' does not share the same sampling settings as the leading integrand '{}'",
                     slot.slot_meta.key(),
@@ -1746,10 +1795,7 @@ impl Integrate {
         )?;
         let mut slot_integrands =
             self.warm_and_clone_integrands(state, &selected_slots, &slot_models)?;
-        // Unfiltered integration preserves the established behavior of warming the full source
-        // integrand, and warm-up mutates encoded runtime fields. Persist its post-warm fingerprint.
-        // A filtered integration does not warm the source, so this remains the fingerprint of the
-        // unchanged full generated artifact rather than that of the reduced integration view.
+        // Persist the post-warm full-source fingerprint for both filtered and unfiltered slots.
         let workspace_integrand_fingerprints =
             self.resolve_integrand_fingerprints(state, &selected_slots)?;
         self.restore_workspace_observables(

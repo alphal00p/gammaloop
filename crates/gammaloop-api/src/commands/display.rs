@@ -118,6 +118,7 @@ pub enum Display {
             default_value_t = false,
             requires = "integrand_name"
         )]
+        #[serde(default)]
         hide_non_existing_thresholds: bool,
     },
     Quantities {
@@ -2152,6 +2153,32 @@ mod test {
             }
             other => panic!("Expected display integrand command, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn structured_display_integrand_defaults_missing_threshold_filter() {
+        let mut value = serde_json::to_value(Display::Integrands {
+            process: None,
+            integrand_name: None,
+            graphs: Vec::new(),
+            categories: Vec::new(),
+            hide_non_existing_thresholds: false,
+        })
+        .unwrap();
+        value
+            .get_mut("Integrands")
+            .and_then(serde_json::Value::as_object_mut)
+            .unwrap()
+            .remove("hide_non_existing_thresholds");
+
+        let display: Display = serde_json::from_value(value).unwrap();
+        assert!(matches!(
+            display,
+            Display::Integrands {
+                hide_non_existing_thresholds: false,
+                ..
+            }
+        ));
     }
 
     #[test]
