@@ -1366,16 +1366,20 @@
         fi
         cp "$extension" "$out/${pythonSitePackages}/gammaloop/_gammaloop.so"
       '';
-      clinnet-cli = craneLib.buildPackage (ciArgs
+      clinnetArgs = ciArgs
         // {
-          cargoArtifacts = cranePackageBuildArtifacts.clinnet;
-          doNotLinkInheritedArtifacts = true;
           pname = "clinnet";
           inherit (clinnetMeta) version;
           src = workspacePackageSrcFor "clinnet";
           cargoExtraArgs = cargoPackageCiArgsFor "clinnet";
           doCheck = false;
           postPatch = workspaceMissingCargoTargetsScript;
+        };
+      clinnetCargoArtifacts = craneLib.buildDepsOnly clinnetArgs;
+      clinnet-cli = craneLib.buildPackage (clinnetArgs
+        // {
+          cargoArtifacts = clinnetCargoArtifacts;
+          doNotLinkInheritedArtifacts = true;
         });
 
       nextestProfile = "ci_gammaloop";
