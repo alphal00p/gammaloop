@@ -31,7 +31,7 @@ commands = [
 
 [default_runtime_settings.sampling]
 graphs = "monte_carlo"
-orientations = "monte_carlo"
+orientations = "summed"
 lmb_multichanneling = false
 lmb_channels = "summed"
 coordinate_system = "spherical"
