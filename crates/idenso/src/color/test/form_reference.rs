@@ -286,6 +286,51 @@ fn six_f_k33_with_structured_indices_simplifies_to_zero() {
 }
 
 #[test]
+fn rqft_ghost_three_loop_d2_six_f_terms_vanish_independently() {
+    test_initialize();
+    // These are the two six-f contractions emitted by the d2 RQFT ghost
+    // three-loop fixture, with their original structured index payloads.
+    let contractions = [
+        parse_lit!(
+            f(coad(8, hedge(1)), coad(8, hedge(10)), coad(8, hedge(7)))
+                * f(coad(8, hedge(1)), coad(8, hedge(3)), coad(8, hedge(8)))
+                * f(
+                    coad(8, hedge(10)),
+                    coad(8, hedge(12)),
+                    coad(8, vertex(4, 1))
+                )
+                * f(coad(8, hedge(12)), coad(8, hedge(3)), coad(8, hedge(5)))
+                * f(coad(8, hedge(14)), coad(8, hedge(5)), coad(8, hedge(7)))
+                * f(coad(8, hedge(14)), coad(8, hedge(8)), coad(8, vertex(4, 1))),
+            default_namespace = "spenso"
+        ),
+        parse_lit!(
+            f(coad(8, hedge(1)), coad(8, hedge(10)), coad(8, hedge(6)))
+                * f(coad(8, hedge(1)), coad(8, hedge(3)), coad(8, hedge(8)))
+                * f(
+                    coad(8, hedge(10)),
+                    coad(8, hedge(12)),
+                    coad(8, vertex(4, 1))
+                )
+                * f(coad(8, hedge(12)), coad(8, hedge(3)), coad(8, hedge(5)))
+                * f(coad(8, hedge(14)), coad(8, hedge(5)), coad(8, hedge(6)))
+                * f(coad(8, hedge(14)), coad(8, hedge(8)), coad(8, vertex(4, 1))),
+            default_namespace = "spenso"
+        ),
+    ];
+
+    // They carried coefficients -3/16 and +3/16 in d2, but their vanishing
+    // does not depend on cancellation between the two summands.
+    for contraction in contractions {
+        assert!(
+            contraction
+                .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+                .is_zero()
+        );
+    }
+}
+
+#[test]
 fn signed_pruning_reenters_color_simplification() {
     test_initialize();
     let r = TestReps::new();
@@ -423,7 +468,7 @@ fn four_generator_trace_terminal() {
         color_t!(slot!(r.coad_na, d)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/6*f(coad(NA,a),coad(NA,c),coad(NA,x))*f(coad(NA,b),coad(NA,d),coad(NA,x))*idx(2,cof(Nc))+1/3*f(coad(NA,a),coad(NA,d),coad(NA,x))*f(coad(NA,b),coad(NA,c),coad(NA,x))*idx(2,cof(Nc))+1𝑖/2*f(coad(NA,a),coad(NA,b),coad(NA,x))*trace(cof(Nc),sym(t(coad(NA,c),in,out),t(coad(NA,d),in,out),t(coad(NA,x),in,out)))+1𝑖/2*f(coad(NA,c),coad(NA,d),coad(NA,x))*trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,x),in,out)))+trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,c),in,out),t(coad(NA,d),in,out)))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/6*f(coad(NA,a),coad(NA,c),coad(NA,d_0))*f(coad(NA,b),coad(NA,d),coad(NA,d_0))*idx(2,cof(Nc))+1/3*f(coad(NA,a),coad(NA,d),coad(NA,d_0))*f(coad(NA,b),coad(NA,c),coad(NA,d_0))*idx(2,cof(Nc))+1𝑖/2*f(coad(NA,a),coad(NA,b),coad(NA,x))*trace(cof(Nc),sym(t(coad(NA,c),in,out),t(coad(NA,d),in,out),t(coad(NA,x),in,out)))+1𝑖/2*f(coad(NA,c),coad(NA,d),coad(NA,x))*trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,x),in,out)))+trace(cof(Nc),sym(t(coad(NA,a),in,out),t(coad(NA,b),in,out),t(coad(NA,c),in,out),t(coad(NA,d),in,out)))");
 }
 
 // FORM's repository includes a valgrind-oriented size-5 port of color.h's

@@ -12,7 +12,7 @@ use gammalooprs::{
     },
 };
 use idenso::{
-    Cookable, IndexTooling, cof,
+    IndexTooling, cof,
     color::{CS, ColorSimplifier},
     color_idx,
     dirac::GammaSimplifier,
@@ -714,13 +714,12 @@ mod failing {
         // sum(Fi)/H = rat(-1/16*ep^-2 + 5/192*ep^-1);
         // native GammaLoop / RQFT = +1.
         // The two remaining six-f terms have an odd signed graph automorphism and
-        // vanish independently during tensor canonicalization.
+        // vanish independently during tensor canonicalization; Idenso's
+        // `rqft_ghost_three_loop_d2_six_f_terms_vanish_independently` regression
+        // contains their exact structured-index contractions.
         let aligned = align_to_rqft(&a, &model)
             .expand()
-            .map_terms_single_core(|term| {
-                term.cook_indices()
-                    .canonize::<AbstractIndex>(AbstractIndex::Dummy)
-            })
+            .map_terms_single_core(|term| term.canonize::<AbstractIndex>(AbstractIndex::Dummy))
             .collect_factors()
             .to_dots();
         insta::assert_snapshot!(

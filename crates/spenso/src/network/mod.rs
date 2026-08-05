@@ -58,6 +58,12 @@ use crate::{
 };
 use eyre::eyre;
 
+mod materialize;
+use materialize::{
+    TensorSumFastPath, TensorSumOrder, materialize_scaled_tensor_owned, materialize_scaled_tensors,
+    materialize_scaled_tensors_owned, materialize_tensor_leaf, materialize_tensor_sum_owned,
+};
+
 #[cfg(feature = "shadowing")]
 use symbolica::atom::{Atom, AtomCore, AtomView};
 #[cfg(feature = "shadowing")]
@@ -1810,6 +1816,10 @@ impl NetworkState {
     }
 
     pub fn pow(self, pow: i8) -> Self {
+        if pow == 0 {
+            return NetworkState::PureScalar;
+        }
+
         match self {
             NetworkState::PureScalar => NetworkState::PureScalar,
             NetworkState::Scalar => NetworkState::Scalar,
@@ -1858,6 +1868,7 @@ impl AddAssign for NetworkState {
         *self = match (*self, rhs) {
             (NetworkState::PureScalar, NetworkState::PureScalar) => NetworkState::PureScalar,
             (NetworkState::PureScalar, NetworkState::Scalar) => NetworkState::Scalar,
+            (NetworkState::Scalar, NetworkState::PureScalar) => NetworkState::Scalar,
             (a, b) => {
                 assert_eq!(a, b, "Cannot add incompatible network states:{a:?} + {b:?}");
                 a
@@ -2037,6 +2048,15 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Default for Networ
     }
 }
 
+impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Network<S, K, FK, Aind> {
+    fn append_rebased(destination: &mut S, mut source: Self) -> NetworkGraph<K, FK, Aind> {
+        source.graph.shift_scalars(destination.n_scalars());
+        source.graph.shift_tensors(destination.n_tensors());
+        destination.extend(source.store);
+        source.graph
+    }
+}
+
 impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> NMul for Network<S, K, FK, Aind> {
     type Output = Self;
     fn n_mul<I: IntoIterator<Item = Self>>(self, iter: I) -> Self::Output {
@@ -2045,14 +2065,10 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> NMul for Network<S
         let mut store = self.store;
         let mut state = self.state;
 
-        let items = iter.into_iter().map(|mut a| {
+        let items = iter.into_iter().map(|a| {
             let _span = profile::span(Timer::NetworkNMulStorePrep);
-            a.graph.shift_scalars(store.n_scalars());
-            a.graph.shift_tensors(store.n_tensors());
-            store.extend(a.store);
-
             state *= a.state;
-            a.graph
+            Self::append_rebased(&mut store, a)
         });
 
         let graph = {
@@ -2075,16 +2091,18 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> NMul for Network<S
 
 impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Mul for Network<S, K, FK, Aind> {
     type Output = Self;
-    fn mul(mut self, mut other: Self) -> Self::Output {
+    fn mul(mut self, other: Self) -> Self::Output {
         let mut store = self.store;
 
-        other.graph.shift_scalars(store.n_scalars());
-        other.graph.shift_tensors(store.n_tensors());
-        store.extend(other.store);
         self.state *= other.state;
+        let other_graph = Self::append_rebased(&mut store, other);
+        let graph = self.graph * other_graph;
+        if self.state.is_tensor() {
+            self.state = graph.state();
+        }
 
         Network {
-            graph: self.graph * other.graph,
+            graph,
             store,
             state: self.state,
         }
@@ -2094,12 +2112,12 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Mul for Network<S,
 impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> MulAssign
     for Network<S, K, FK, Aind>
 {
-    fn mul_assign(&mut self, mut rhs: Self) {
-        rhs.graph.shift_scalars(self.store.n_scalars());
-        rhs.graph.shift_tensors(self.store.n_tensors());
-        self.store.extend(rhs.store);
+    fn mul_assign(&mut self, rhs: Self) {
         self.state *= rhs.state;
-        self.graph *= rhs.graph;
+        self.graph *= Self::append_rebased(&mut self.store, rhs);
+        if self.state.is_tensor() {
+            self.state = self.graph.state();
+        }
     }
 }
 
@@ -2120,33 +2138,19 @@ where
 {
     type Output = Self;
     fn mul(self, other: T) -> Self::Output {
-        let mut store = self.store;
-
-        let mut other = Network::from_tensor(other);
-
-        other.graph.shift_scalars(store.n_scalars());
-        other.graph.shift_tensors(store.n_tensors());
-        store.extend(other.store);
-
-        Network {
-            graph: self.graph * other.graph,
-            store,
-            state: self.state,
-        }
+        self * Network::from_tensor(other)
     }
 }
 
 impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Add for Network<S, K, FK, Aind> {
     type Output = Self;
-    fn add(self, mut other: Self) -> Self::Output {
+    fn add(mut self, other: Self) -> Self::Output {
+        self.state += other.state;
         let mut store = self.store;
-
-        other.graph.shift_scalars(store.n_scalars());
-        other.graph.shift_tensors(store.n_tensors());
-        store.extend(other.store);
+        let other_graph = Self::append_rebased(&mut store, other);
 
         Network {
-            graph: self.graph + other.graph,
+            graph: self.graph + other_graph,
             store,
             state: self.state,
         }
@@ -2156,12 +2160,9 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Add for Network<S,
 impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> AddAssign
     for Network<S, K, FK, Aind>
 {
-    fn add_assign(&mut self, mut rhs: Self) {
-        rhs.graph.shift_scalars(self.store.n_scalars());
-        rhs.graph.shift_tensors(self.store.n_tensors());
-        self.store.extend(rhs.store);
-
-        self.graph += rhs.graph;
+    fn add_assign(&mut self, rhs: Self) {
+        self.state += rhs.state;
+        self.graph += Self::append_rebased(&mut self.store, rhs);
     }
 }
 
@@ -2194,13 +2195,10 @@ where
 {
     type Output = Self;
     fn add(mut self, other: i8) -> Self::Output {
-        let mut other = Network::from_scalar(other);
-        other.graph.shift_tensors(self.store.n_tensors());
-        other.graph.shift_tensors(self.store.n_tensors());
-
-        self.store.extend(other.store);
+        self.state += NetworkState::PureScalar;
+        let other_graph = Self::append_rebased(&mut self.store, Network::from_scalar(other));
         Network {
-            graph: self.graph + other.graph,
+            graph: self.graph + other_graph,
             store: self.store,
             state: self.state,
         }
@@ -2216,14 +2214,10 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> NAdd for Network<S
 
         let mut state = self.state;
 
-        let items = iter.into_iter().map(|mut a| {
+        let items = iter.into_iter().map(|a| {
             let _span = profile::span(Timer::NetworkNAddStorePrep);
-            a.graph.shift_scalars(store.n_scalars());
-            a.graph.shift_tensors(store.n_tensors());
-            store.extend(a.store);
-
             state += a.state;
-            a.graph
+            Self::append_rebased(&mut store, a)
         });
 
         Network {
@@ -2263,12 +2257,9 @@ impl<S: TensorScalarStore, K: Clone + Debug, FK: Clone + Debug, Aind: AbsInd> Su
 impl<S: TensorScalarStore, K: Clone + Debug, FK: Clone + Debug, Aind: AbsInd> SubAssign
     for Network<S, K, FK, Aind>
 {
-    fn sub_assign(&mut self, mut rhs: Self) {
-        rhs.graph.shift_scalars(self.store.n_scalars());
-        rhs.graph.shift_tensors(self.store.n_tensors());
-        self.store.extend(rhs.store);
-
-        self.graph -= rhs.graph
+    fn sub_assign(&mut self, rhs: Self) {
+        self.state += rhs.state;
+        self.graph -= Self::append_rebased(&mut self.store, rhs)
     }
 }
 
@@ -2296,6 +2287,13 @@ where
 
 impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Network<S, K, FK, Aind> {
     pub fn pow(self, pow: i8) -> Self {
+        if pow == 0 {
+            return Self::one();
+        }
+        if pow == 1 {
+            return self;
+        }
+
         Self {
             store: self.store,
             graph: self.graph.pow(pow),
@@ -2411,9 +2409,9 @@ pub enum TensorNetworkError<K: Display, FK: Display> {
     NegativeExponentNonScalar(String),
     #[error("Too many arguments for function:{0}")]
     TooManyArgsFunction(String),
-    #[error("Non self-dual tensor power{0}")]
-    InvalidDotFunction(String),
     #[error("Invalid dot function{0}")]
+    InvalidDotFunction(String),
+    #[error("Non self-dual tensor power{0}")]
     NonSelfDualTensorPower(String),
     #[error("invalid resulting node{0}")]
     InvalidResultNode(NetworkNode<DummyKey, FK>),
@@ -2425,6 +2423,8 @@ pub enum TensorNetworkError<K: Display, FK: Display> {
     CannotContractEdgeBetween(String, String),
     #[error("no nodes in the graph")]
     NoNodes,
+    #[error("empty tensor sum leaf")]
+    EmptyTensorSumLeaf,
     #[error("no scalar present")]
     NoScalar,
     #[error("more than one node in the graph")]
@@ -2445,8 +2445,6 @@ pub enum TensorNetworkError<K: Display, FK: Display> {
     IncompatibleSummand(String),
     #[error("failed to contract")]
     FailedContract(ContractionError),
-    #[error("negative exponent not yet supported")]
-    NegativeExponent,
     #[error("failed to contract: {0}")]
     FailedContractMsg(String),
     #[error(transparent)]
@@ -2572,12 +2570,18 @@ where
                         graph_slots,
                     }))
                 }
+                NetworkLeaf::TensorSum(terms) if terms.is_empty() => {
+                    Err(TensorNetworkError::EmptyTensorSumLeaf)
+                }
                 NetworkLeaf::TensorSum(_) => Err(TensorNetworkError::Other(eyre!(
                     "result is an unmaterialized tensor sum"
                 ))),
                 NetworkLeaf::ScaledTensor(_) => Err(TensorNetworkError::Other(eyre!(
                     "result is an unmaterialized scaled tensor"
                 ))),
+                NetworkLeaf::ScaledTensorSum(terms) if terms.is_empty() => {
+                    Err(TensorNetworkError::EmptyTensorSumLeaf)
+                }
                 NetworkLeaf::ScaledTensorSum(_) => Err(TensorNetworkError::Other(eyre!(
                     "result is an unmaterialized scaled tensor sum"
                 ))),
@@ -2617,51 +2621,36 @@ where
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
-        let scaled_tensor_owned = |term: &ScaledTensorRef| -> Result<T, TensorNetworkError<K, FK>> {
-            let tensor = self.store.get_tensor(term.tensor);
-            match term.scale {
-                Some(scalar) => tensor
-                    .scalar_mul(self.store.get_scalar_ref(scalar))
-                    .ok_or(TensorNetworkError::FailedScalarMul),
-                None => Ok(tensor.clone()),
-            }
-        };
-
-        let scaled_tensors_owned =
-            |terms: &[ScaledTensorRef]| -> Result<T, TensorNetworkError<K, FK>> {
-                let materialized = terms
-                    .iter()
-                    .map(scaled_tensor_owned)
-                    .collect::<Result<Vec<_>, _>>()?;
-                if let Some(result) = {
-                    let refs = materialized.iter().collect::<Vec<_>>();
-                    T::fast_tensor_sum(&refs, None)
-                } {
-                    return Ok(result);
-                }
-                Ok(balanced_ref_sum(materialized, None))
-            };
-
         let (node, nodeid, _) = self.graph.result()?;
         if let NetworkNode::Leaf(leaf) = node {
             match leaf {
                 NetworkLeaf::TensorSum(indices) => {
-                    let terms = indices
-                        .iter()
-                        .copied()
-                        .map(ScaledTensorRef::tensor)
-                        .collect::<Vec<_>>();
-                    return Ok(ExecutionResult::Val(Cow::Owned(scaled_tensors_owned(
-                        &terms,
-                    )?)));
+                    let tensor = materialize_tensor_sum_owned::<K, FK, _>(
+                        indices,
+                        TensorSumOrder::Balanced,
+                        TensorSumFastPath::Enabled,
+                        None,
+                        |index| self.store.get_tensor(index),
+                    )?;
+                    return Ok(ExecutionResult::Val(Cow::Owned(tensor)));
                 }
                 NetworkLeaf::ScaledTensor(term) => {
-                    return Ok(ExecutionResult::Val(Cow::Owned(scaled_tensor_owned(term)?)));
+                    let tensor = materialize_scaled_tensor_owned::<K, FK, _, _>(
+                        term,
+                        |index| self.store.get_tensor(index),
+                        |scalar| self.store.get_scalar_ref(scalar),
+                    )?;
+                    return Ok(ExecutionResult::Val(Cow::Owned(tensor)));
                 }
                 NetworkLeaf::ScaledTensorSum(terms) => {
-                    return Ok(ExecutionResult::Val(Cow::Owned(scaled_tensors_owned(
+                    let tensor = materialize_scaled_tensors_owned::<K, FK, _, _>(
                         terms,
-                    )?)));
+                        TensorSumOrder::Balanced,
+                        None,
+                        |index| self.store.get_tensor(index),
+                        |scalar| self.store.get_scalar_ref(scalar),
+                    )?;
+                    return Ok(ExecutionResult::Val(Cow::Owned(tensor)));
                 }
                 NetworkLeaf::LibraryKey { .. } => {
                     let less = self.graph.get_lib_data(lib, nodeid)?;
@@ -2722,7 +2711,7 @@ where
             |indices: &[usize]| -> Result<ExecutionResult<Cow<'a, S>>, TensorNetworkError<K, FK>> {
                 let mut iter = indices.iter();
                 let Some(first) = iter.next() else {
-                    return Ok(ExecutionResult::Zero);
+                    return Err(TensorNetworkError::EmptyTensorSumLeaf);
                 };
                 let mut accumulator = tensor_scalar(*first)?;
                 for tensor in iter {
@@ -2738,7 +2727,7 @@ where
         > {
             let mut iter = terms.iter();
             let Some(first) = iter.next() else {
-                return Ok(ExecutionResult::Zero);
+                return Err(TensorNetworkError::EmptyTensorSumLeaf);
             };
             let mut accumulator = scaled_tensor_scalar(first)?;
             for term in iter {
@@ -3405,34 +3394,13 @@ where
     terms.pop().expect("balanced sum has at least one term")
 }
 
-fn try_balanced_scalar_sum<K, Aind, Store>(
-    store: &mut Store,
-    targets: &[(NodeIndex, &NetworkLeaf<K, Aind>)],
-    sum_start: Option<std::time::Instant>,
-) -> Option<NetworkLeaf<K, Aind>>
-where
-    Store: NetworkStoreAccess,
-    Store::Scalar: Clone + Ref + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>,
-{
-    let mut terms = Vec::with_capacity(targets.len());
-    for (_, leaf) in targets {
-        let NetworkLeaf::Scalar(index) = leaf else {
-            return None;
-        };
-        terms.push(store.scalar_ref(*index).clone());
-    }
-
-    let result = balanced_ref_sum(terms, sum_start);
-    Some(NetworkLeaf::Scalar(store.push_scalar(result).into()))
-}
-
 fn try_balanced_tensor_sum<K, FK, Aind, Store, LT, L>(
     store: &mut Store,
     graph: &NetworkGraph<K, FK, Aind>,
     targets: &[(NodeIndex, &NetworkLeaf<K, Aind>)],
     lib: &L,
     sum_start: Option<std::time::Instant>,
-) -> Option<NetworkLeaf<K, Aind>>
+) -> Result<NetworkLeaf<K, Aind>, TensorNetworkError<K, FK>>
 where
     Store: NetworkStoreAccess,
     Store::Tensor: HasStructure
@@ -3456,7 +3424,11 @@ where
     let mut terms = Vec::with_capacity(targets.len());
     for (node_id, leaf) in targets {
         match leaf {
-            NetworkLeaf::Scalar(_) => return None,
+            NetworkLeaf::Scalar(_) => {
+                return Err(TensorNetworkError::SumScalarTensor(
+                    "tensor sum received a scalar child".to_string(),
+                ));
+            }
             NetworkLeaf::LocalTensor(index) => {
                 terms.push(ScaledTensorRef::tensor(*index));
             }
@@ -3468,8 +3440,7 @@ where
             NetworkLeaf::ScaledTensor(term) => terms.push(term.clone()),
             NetworkLeaf::ScaledTensorSum(indices) => terms.extend(indices.iter().cloned()),
             NetworkLeaf::LibraryKey { .. } => {
-                let tensor =
-                    Store::Tensor::from(graph.get_lib_data::<_, LT, L>(lib, *node_id).ok()?);
+                let tensor = Store::Tensor::from(graph.get_lib_data::<_, LT, L>(lib, *node_id)?);
                 terms.push(ScaledTensorRef::tensor(store.push_tensor(tensor)));
             }
         }
@@ -3494,10 +3465,102 @@ where
     }
 
     if !keep_lazy {
-        Some(materialize_scaled_tensors(store, &terms, sum_start))
+        let tensor = materialize_scaled_tensors::<K, FK, _, _, _>(
+            store,
+            &terms,
+            TensorSumOrder::Balanced,
+            sum_start,
+        )?;
+        Ok(NetworkLeaf::LocalTensor(tensor))
     } else {
-        Some(scaled_tensor_sum_leaf(&terms))
+        Ok(scaled_tensor_sum_leaf(&terms))
     }
+}
+
+fn sum_target_is_scalar<K, Aind, Store>(store: &Store, leaf: &NetworkLeaf<K, Aind>) -> bool
+where
+    Store: NetworkStoreAccess,
+    Store::Tensor: HasStructure,
+{
+    match leaf {
+        NetworkLeaf::Scalar(_) => true,
+        NetworkLeaf::LocalTensor(tensor) => store.tensor(*tensor).scalar_ref().is_some(),
+        NetworkLeaf::TensorSum(tensors) => {
+            !tensors.is_empty()
+                && tensors
+                    .iter()
+                    .all(|tensor| store.tensor(*tensor).scalar_ref().is_some())
+        }
+        NetworkLeaf::ScaledTensor(term) => store.tensor(term.tensor).scalar_ref().is_some(),
+        NetworkLeaf::ScaledTensorSum(terms) => {
+            !terms.is_empty()
+                && terms
+                    .iter()
+                    .all(|term| store.tensor(term.tensor).scalar_ref().is_some())
+        }
+        // Library leaves carry the exact external interface used to build
+        // their graph node, so rank zero can be classified without loading
+        // the library value a first time solely for shape inspection.
+        NetworkLeaf::LibraryKey { indices, .. } => indices.is_empty(),
+    }
+}
+
+#[allow(clippy::result_large_err)]
+fn materialize_scalar_sum<K, FK, Aind, Store, LT, L>(
+    store: &mut Store,
+    graph: &NetworkGraph<K, FK, Aind>,
+    targets: &[(NodeIndex, &NetworkLeaf<K, Aind>)],
+    lib: &L,
+    sum_start: Option<std::time::Instant>,
+) -> Result<NetworkLeaf<K, Aind>, TensorNetworkError<K, FK>>
+where
+    Store: NetworkStoreAccess,
+    Store::Tensor: HasStructure
+        + Clone
+        + Ref
+        + FastTensorSum
+        + From<LT::WithIndices>
+        + ScalarMul<Store::Scalar, Output = Store::Tensor>
+        + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>,
+    Store::Scalar: Clone
+        + Ref
+        + From<<Store::Tensor as HasStructure>::Scalar>
+        + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>,
+    LT: LibraryTensor + Clone,
+    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
+    K: Display + Debug,
+    FK: Display + Debug,
+    Aind: AbsInd,
+    LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+    <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
+        IsAbstractSlot<Aind = Aind>,
+{
+    let mut scalars = Vec::with_capacity(targets.len());
+    for (node, leaf) in targets {
+        if let NetworkLeaf::Scalar(scalar) = leaf {
+            scalars.push(store.scalar_ref(*scalar).clone());
+            continue;
+        }
+
+        let tensor = materialize_tensor_leaf::<LT, L, K, FK, Aind, _, _, _>(
+            store,
+            graph,
+            *node,
+            leaf,
+            lib,
+            TensorSumOrder::Balanced,
+            sum_start,
+        )?;
+        let scalar = store
+            .tensor(tensor)
+            .clone()
+            .scalar()
+            .ok_or_else(|| TensorNetworkError::NotAllScalars(String::new()))?;
+        scalars.push(Store::Scalar::from(scalar));
+    }
+
+    let scalar = balanced_ref_sum(scalars, sum_start);
+    Ok(NetworkLeaf::Scalar(store.push_scalar(scalar).into()))
 }
 
 fn scaled_tensor_sum_leaf<K, Aind>(terms: &[ScaledTensorRef]) -> NetworkLeaf<K, Aind> {
@@ -3516,67 +3579,6 @@ fn scaled_tensor_sum_leaf<K, Aind>(terms: &[ScaledTensorRef]) -> NetworkLeaf<K, 
     } else {
         NetworkLeaf::ScaledTensorSum(terms.to_vec())
     }
-}
-
-fn materialize_scaled_tensors<K, Aind, Store>(
-    store: &mut Store,
-    terms: &[ScaledTensorRef],
-    sum_start: Option<std::time::Instant>,
-) -> NetworkLeaf<K, Aind>
-where
-    Store: NetworkStoreAccess,
-    Store::Tensor: Clone
-        + Ref
-        + FastTensorSum
-        + ScalarMul<Store::Scalar, Output = Store::Tensor>
-        + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>,
-    Store::Scalar: Clone,
-{
-    if terms.iter().all(|term| term.scale.is_none()) {
-        let indices = terms.iter().map(|term| term.tensor).collect::<Vec<_>>();
-        return materialize_tensor_sum(store, &indices, sum_start);
-    }
-
-    let mut materialized_terms = Vec::with_capacity(terms.len());
-    for term in terms {
-        let tensor = match term.scale {
-            Some(scalar) => store
-                .tensor(term.tensor)
-                .scalar_mul(store.scalar_ref(scalar))
-                .expect("scaled tensor term should support scalar multiplication"),
-            None => store.tensor(term.tensor).clone(),
-        };
-        materialized_terms.push(store.push_tensor(tensor));
-    }
-
-    materialize_tensor_sum(store, &materialized_terms, sum_start)
-}
-
-fn materialize_tensor_sum<K, Aind, Store>(
-    store: &mut Store,
-    indices: &[usize],
-    sum_start: Option<std::time::Instant>,
-) -> NetworkLeaf<K, Aind>
-where
-    Store: NetworkStoreAccess,
-    Store::Tensor: Clone + Ref + FastTensorSum + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>,
-{
-    if let Some(result) = {
-        let terms = indices
-            .iter()
-            .map(|index| store.tensor(*index))
-            .collect::<Vec<_>>();
-        Store::Tensor::fast_tensor_sum(&terms, sum_start)
-    } {
-        return NetworkLeaf::LocalTensor(store.push_tensor(result));
-    }
-
-    let terms = indices
-        .iter()
-        .map(|index| store.tensor(*index).clone())
-        .collect::<Vec<_>>();
-    let result = balanced_ref_sum(terms, sum_start);
-    NetworkLeaf::LocalTensor(store.push_tensor(result))
 }
 
 #[cfg(feature = "shadowing")]
@@ -4140,31 +4142,14 @@ fn remap_parallel_replacement<K, Aind>(
     tensor_offset: usize,
     scalar_offset: usize,
 ) {
-    fn rebase_index(index: &mut usize, base: usize, offset: usize) {
-        if *index >= base {
-            *index = offset + (*index - base);
-        }
-    }
-
     replacement.map_scalar_refs(|scalar| scalar.rebase_from(base_scalars, scalar_offset));
-
-    match replacement {
-        NetworkLeaf::LocalTensor(index) => rebase_index(index, base_tensors, tensor_offset),
-        NetworkLeaf::TensorSum(indices) => {
-            for index in indices {
-                rebase_index(index, base_tensors, tensor_offset);
-            }
+    replacement.map_tensor_refs(|tensor| {
+        if tensor >= base_tensors {
+            tensor_offset + (tensor - base_tensors)
+        } else {
+            tensor
         }
-        NetworkLeaf::ScaledTensor(term) => {
-            rebase_index(&mut term.tensor, base_tensors, tensor_offset);
-        }
-        NetworkLeaf::ScaledTensorSum(terms) => {
-            for term in terms {
-                rebase_index(&mut term.tensor, base_tensors, tensor_offset);
-            }
-        }
-        NetworkLeaf::Scalar(_) | NetworkLeaf::LibraryKey { .. } => {}
-    }
+    });
 }
 
 impl Parallel {
@@ -4407,41 +4392,19 @@ where
         return Ok(false);
     };
 
-    let traced = match &graph.graph[node] {
-        NetworkNode::Leaf(NetworkLeaf::LocalTensor(local)) => {
-            store.tensor(*local).internal_contract()
-        }
-        NetworkNode::Leaf(NetworkLeaf::LibraryKey { .. }) => {
-            Store::Tensor::from(graph.get_lib_data(lib, node)?).internal_contract()
-        }
-        NetworkNode::Leaf(NetworkLeaf::TensorSum(indices)) => {
-            let materialized = materialize_tensor_sum::<K, Aind, Store>(store, indices, None);
-            let NetworkLeaf::LocalTensor(local) = materialized else {
-                unreachable!("materialized tensor sum is a local tensor")
-            };
-            store.tensor(local).internal_contract()
-        }
-        NetworkNode::Leaf(NetworkLeaf::ScaledTensor(term)) => {
-            let materialized = materialize_scaled_tensors::<K, Aind, Store>(
-                store,
-                std::slice::from_ref(term),
-                None,
-            );
-            let NetworkLeaf::LocalTensor(local) = materialized else {
-                unreachable!("materialized tensor term is a local tensor")
-            };
-            store.tensor(local).internal_contract()
-        }
-        NetworkNode::Leaf(NetworkLeaf::ScaledTensorSum(terms)) => {
-            let materialized = materialize_scaled_tensors::<K, Aind, Store>(store, terms, None);
-            let NetworkLeaf::LocalTensor(local) = materialized else {
-                unreachable!("materialized tensor terms are a local tensor")
-            };
-            store.tensor(local).internal_contract()
-        }
-        NetworkNode::Leaf(NetworkLeaf::Scalar(_)) => return Ok(false),
-        NetworkNode::Op(_) => unreachable!("self-loop trace search only selects tensor leaves"),
+    let NetworkNode::Leaf(leaf) = &graph.graph[node] else {
+        unreachable!("self-loop trace search only selects tensor leaves")
     };
+    let local = materialize_tensor_leaf::<LT, L, K, FK, Aind, _, _, _>(
+        store,
+        graph,
+        node,
+        leaf,
+        lib,
+        TensorSumOrder::Balanced,
+        None,
+    )?;
+    let traced = store.tensor(local).internal_contract();
 
     let traced_position = store.push_tensor(traced);
     graph.replace_node_deleting_self_loop_slots(
@@ -4496,41 +4459,19 @@ where
         return Ok(false);
     };
 
-    let traced = match &graph.graph[node] {
-        NetworkNode::Leaf(NetworkLeaf::LocalTensor(local)) => {
-            store.tensor(*local).internal_contract()
-        }
-        NetworkNode::Leaf(NetworkLeaf::LibraryKey { .. }) => {
-            Store::Tensor::from(graph.get_lib_data(lib, node)?).internal_contract()
-        }
-        NetworkNode::Leaf(NetworkLeaf::TensorSum(indices)) => {
-            let materialized = materialize_tensor_sum::<K, Aind, Store>(store, indices, None);
-            let NetworkLeaf::LocalTensor(local) = materialized else {
-                unreachable!("materialized tensor sum is a local tensor")
-            };
-            store.tensor(local).internal_contract()
-        }
-        NetworkNode::Leaf(NetworkLeaf::ScaledTensor(term)) => {
-            let materialized = materialize_scaled_tensors::<K, Aind, Store>(
-                store,
-                std::slice::from_ref(term),
-                None,
-            );
-            let NetworkLeaf::LocalTensor(local) = materialized else {
-                unreachable!("materialized tensor term is a local tensor")
-            };
-            store.tensor(local).internal_contract()
-        }
-        NetworkNode::Leaf(NetworkLeaf::ScaledTensorSum(terms)) => {
-            let materialized = materialize_scaled_tensors::<K, Aind, Store>(store, terms, None);
-            let NetworkLeaf::LocalTensor(local) = materialized else {
-                unreachable!("materialized tensor terms are a local tensor")
-            };
-            store.tensor(local).internal_contract()
-        }
-        NetworkNode::Leaf(NetworkLeaf::Scalar(_)) => return Ok(false),
-        NetworkNode::Op(_) => unreachable!("self-loop trace search only selects tensor leaves"),
+    let NetworkNode::Leaf(leaf) = &graph.graph[node] else {
+        unreachable!("self-loop trace search only selects tensor leaves")
     };
+    let local = materialize_tensor_leaf::<LT, L, K, FK, Aind, _, _, _>(
+        store,
+        graph,
+        node,
+        leaf,
+        lib,
+        TensorSumOrder::Balanced,
+        None,
+    )?;
+    let traced = store.tensor(local).internal_contract();
 
     let traced_position = store.push_tensor(traced);
     graph.replace_node_ignoring_self_loop_slots(
@@ -4655,6 +4596,18 @@ where
         fn_lib: &FL,
     ) -> Result<NetworkLeaf<K, Aind>, TensorNetworkError<K, FK>> {
         let _execute_span = profile::span(Timer::ExecuteOp);
+        if operation
+            .children()
+            .iter()
+            .any(|child| match &graph.graph[*child] {
+                NetworkNode::Leaf(NetworkLeaf::TensorSum(terms)) => terms.is_empty(),
+                NetworkNode::Leaf(NetworkLeaf::ScaledTensorSum(terms)) => terms.is_empty(),
+                _ => false,
+            })
+        {
+            return Err(TensorNetworkError::EmptyTensorSumLeaf);
+        }
+
         let op = operation.op().clone();
         let op_timer = match &op {
             NetworkOp::Neg => {
@@ -4797,7 +4750,11 @@ where
                     );
                 }
 
-                let (nf, first) = &targets[0];
+                if targets.is_empty() {
+                    return Err(TensorNetworkError::Other(eyre!(
+                        "sum operation has no leaf children"
+                    )));
+                }
 
                 #[cfg(feature = "shadowing")]
                 if let Some(new_node) = try_atom_scalar_sum(self, &targets) {
@@ -4811,298 +4768,25 @@ where
                     return Ok(new_node);
                 }
 
-                if let Some(new_node) = try_balanced_scalar_sum(self, &targets, sum_start) {
-                    if let Some(sum_start) = sum_start {
-                        eprintln!(
-                            "spenso_profile execute.sum_done leaves={} elapsed_ms={:.3}",
-                            targets.len(),
-                            sum_start.elapsed().as_secs_f64() * 1000.0,
-                        );
-                    }
-                    return Ok(new_node);
-                }
+                let scalar_shapes = targets
+                    .iter()
+                    .map(|(_, leaf)| sum_target_is_scalar(self, leaf))
+                    .collect::<Vec<_>>();
+                let any_scalar = scalar_shapes.iter().any(|is_scalar| *is_scalar);
+                let all_scalar = scalar_shapes.iter().all(|is_scalar| *is_scalar);
 
-                if let Some(new_node) = try_balanced_tensor_sum::<K, FK, Aind, Self, LT, L>(
-                    self, graph, &targets, lib, sum_start,
-                ) {
-                    if let Some(sum_start) = sum_start {
-                        eprintln!(
-                            "spenso_profile execute.sum_done leaves={} elapsed_ms={:.3}",
-                            targets.len(),
-                            sum_start.elapsed().as_secs_f64() * 1000.0,
-                        );
-                    }
-                    return Ok(new_node);
-                }
-
-                let new_node = match first {
-                    NetworkLeaf::Scalar(s) => {
-                        let mut accumulator = self.scalar_ref(*s).clone();
-
-                        for (offset, (_, t)) in targets[1..].iter().enumerate() {
-                            let add_start = std::time::Instant::now();
-                            match t {
-                                NetworkLeaf::Scalar(s) => {
-                                    accumulator += self.scalar_ref(*s).refer();
-                                }
-                                NetworkLeaf::LocalTensor(t) => {
-                                    if let Some(s) = self.tensor(*t).scalar_ref() {
-                                        accumulator += s;
-                                    } else {
-                                        return Err(TensorNetworkError::NotAllScalars(
-                                            "".to_string(),
-                                        ));
-                                    }
-                                }
-                                NetworkLeaf::TensorSum(indices) => {
-                                    for index in indices {
-                                        if let Some(s) = self.tensor(*index).scalar_ref() {
-                                            accumulator += s;
-                                        } else {
-                                            return Err(TensorNetworkError::NotAllScalars(
-                                                "".to_string(),
-                                            ));
-                                        }
-                                    }
-                                }
-                                NetworkLeaf::ScaledTensor(term) => {
-                                    let materialized = materialize_scaled_tensors::<K, Aind, Self>(
-                                        self,
-                                        std::slice::from_ref(term),
-                                        None,
-                                    );
-                                    let NetworkLeaf::LocalTensor(index) = materialized else {
-                                        unreachable!("materialized tensor term is a local tensor")
-                                    };
-                                    if let Some(s) = self.tensor(index).scalar_ref() {
-                                        accumulator += s;
-                                    } else {
-                                        return Err(TensorNetworkError::NotAllScalars(
-                                            "".to_string(),
-                                        ));
-                                    }
-                                }
-                                NetworkLeaf::ScaledTensorSum(terms) => {
-                                    let materialized = materialize_scaled_tensors::<K, Aind, Self>(
-                                        self, terms, None,
-                                    );
-                                    let NetworkLeaf::LocalTensor(index) = materialized else {
-                                        unreachable!("materialized tensor terms are a local tensor")
-                                    };
-                                    if let Some(s) = self.tensor(index).scalar_ref() {
-                                        accumulator += s;
-                                    } else {
-                                        return Err(TensorNetworkError::NotAllScalars(
-                                            "".to_string(),
-                                        ));
-                                    }
-                                }
-                                NetworkLeaf::LibraryKey { .. } => {
-                                    return Err(TensorNetworkError::ScalarLibSum("".to_string()));
-                                }
-                            }
-                            log_sum_add(sum_start, offset + 2, targets.len(), add_start);
-                        }
-
-                        let pos = self.push_scalar(accumulator);
-                        NetworkLeaf::Scalar(pos.into())
-                    }
-                    NetworkLeaf::LocalTensor(t) => {
-                        let mut accumulator = self.tensor(*t).clone();
-                        if accumulator.is_scalar() {
-                            let mut accumulator =
-                                Store::Scalar::from(accumulator.scalar().unwrap());
-
-                            for (offset, (_, t)) in targets[1..].iter().enumerate() {
-                                let add_start = std::time::Instant::now();
-                                match t {
-                                    NetworkLeaf::Scalar(s) => {
-                                        accumulator += self.scalar_ref(*s).refer();
-                                    }
-                                    NetworkLeaf::LocalTensor(t) => {
-                                        if let Some(s) = self.tensor(*t).scalar_ref() {
-                                            accumulator += s;
-                                        } else {
-                                            return Err(TensorNetworkError::NotAllScalars(
-                                                "".to_string(),
-                                            ));
-                                        }
-                                    }
-                                    NetworkLeaf::TensorSum(indices) => {
-                                        for index in indices {
-                                            if let Some(s) = self.tensor(*index).scalar_ref() {
-                                                accumulator += s;
-                                            } else {
-                                                return Err(TensorNetworkError::NotAllScalars(
-                                                    "".to_string(),
-                                                ));
-                                            }
-                                        }
-                                    }
-                                    NetworkLeaf::ScaledTensor(term) => {
-                                        let materialized =
-                                            materialize_scaled_tensors::<K, Aind, Self>(
-                                                self,
-                                                std::slice::from_ref(term),
-                                                None,
-                                            );
-                                        let NetworkLeaf::LocalTensor(index) = materialized else {
-                                            unreachable!(
-                                                "materialized tensor term is a local tensor"
-                                            )
-                                        };
-                                        if let Some(s) = self.tensor(index).scalar_ref() {
-                                            accumulator += s;
-                                        } else {
-                                            return Err(TensorNetworkError::NotAllScalars(
-                                                "".to_string(),
-                                            ));
-                                        }
-                                    }
-                                    NetworkLeaf::ScaledTensorSum(terms) => {
-                                        let materialized =
-                                            materialize_scaled_tensors::<K, Aind, Self>(
-                                                self, terms, None,
-                                            );
-                                        let NetworkLeaf::LocalTensor(index) = materialized else {
-                                            unreachable!(
-                                                "materialized tensor terms are a local tensor"
-                                            )
-                                        };
-                                        if let Some(s) = self.tensor(index).scalar_ref() {
-                                            accumulator += s;
-                                        } else {
-                                            return Err(TensorNetworkError::NotAllScalars(
-                                                "".to_string(),
-                                            ));
-                                        }
-                                    }
-                                    NetworkLeaf::LibraryKey { .. } => {
-                                        return Err(TensorNetworkError::ScalarLibSum(
-                                            "".to_string(),
-                                        ));
-                                    }
-                                }
-                                log_sum_add(sum_start, offset + 2, targets.len(), add_start);
-                            }
-
-                            let pos = self.push_scalar(accumulator);
-                            NetworkLeaf::Scalar(pos.into())
-                        } else {
-                            for (offset, (nid, t)) in targets[1..].iter().enumerate() {
-                                let add_start = std::time::Instant::now();
-                                match t {
-                                    NetworkLeaf::Scalar(_) => {
-                                        return Err(TensorNetworkError::SumScalarTensor(
-                                            "".to_string(),
-                                        ));
-                                    }
-                                    NetworkLeaf::LocalTensor(t) => {
-                                        accumulator += self.tensor(*t).refer();
-                                    }
-                                    NetworkLeaf::TensorSum(indices) => {
-                                        for index in indices {
-                                            accumulator += self.tensor(*index).refer();
-                                        }
-                                    }
-                                    NetworkLeaf::ScaledTensor(term) => {
-                                        let materialized =
-                                            materialize_scaled_tensors::<K, Aind, Self>(
-                                                self,
-                                                std::slice::from_ref(term),
-                                                None,
-                                            );
-                                        let NetworkLeaf::LocalTensor(index) = materialized else {
-                                            unreachable!(
-                                                "materialized tensor term is a local tensor"
-                                            )
-                                        };
-                                        accumulator += self.tensor(index).refer();
-                                    }
-                                    NetworkLeaf::ScaledTensorSum(terms) => {
-                                        let materialized =
-                                            materialize_scaled_tensors::<K, Aind, Self>(
-                                                self, terms, None,
-                                            );
-                                        let NetworkLeaf::LocalTensor(index) = materialized else {
-                                            unreachable!(
-                                                "materialized tensor terms are a local tensor"
-                                            )
-                                        };
-                                        accumulator += self.tensor(index).refer();
-                                    }
-                                    NetworkLeaf::LibraryKey { .. } => {
-                                        let with_index = graph.get_lib_data(lib, *nid)?;
-
-                                        accumulator += with_index;
-                                    }
-                                }
-                                log_sum_add(sum_start, offset + 2, targets.len(), add_start);
-                            }
-
-                            let pos = self.push_tensor(accumulator);
-
-                            NetworkLeaf::LocalTensor(pos)
-                        }
-                    }
-                    NetworkLeaf::LibraryKey { .. } => {
-                        let inds = graph.get_lib_data(lib, *nf)?;
-                        let mut accumulator = Store::Tensor::from(inds);
-                        for (offset, (nid, t)) in targets[1..].iter().enumerate() {
-                            let add_start = std::time::Instant::now();
-                            match t {
-                                NetworkLeaf::Scalar(_) => {
-                                    return Err(TensorNetworkError::SumScalarTensor(
-                                        "".to_string(),
-                                    ));
-                                }
-                                NetworkLeaf::LocalTensor(t) => {
-                                    accumulator += self.tensor(*t).refer();
-                                }
-                                NetworkLeaf::TensorSum(indices) => {
-                                    for index in indices {
-                                        accumulator += self.tensor(*index).refer();
-                                    }
-                                }
-                                NetworkLeaf::ScaledTensor(term) => {
-                                    let materialized = materialize_scaled_tensors::<K, Aind, Self>(
-                                        self,
-                                        std::slice::from_ref(term),
-                                        None,
-                                    );
-                                    let NetworkLeaf::LocalTensor(index) = materialized else {
-                                        unreachable!("materialized tensor term is a local tensor")
-                                    };
-                                    accumulator += self.tensor(index).refer();
-                                }
-                                NetworkLeaf::ScaledTensorSum(terms) => {
-                                    let materialized = materialize_scaled_tensors::<K, Aind, Self>(
-                                        self, terms, None,
-                                    );
-                                    let NetworkLeaf::LocalTensor(index) = materialized else {
-                                        unreachable!("materialized tensor terms are a local tensor")
-                                    };
-                                    accumulator += self.tensor(index).refer();
-                                }
-                                NetworkLeaf::LibraryKey { .. } => {
-                                    let with = graph.get_lib_data(lib, *nid)?;
-                                    accumulator += with;
-                                }
-                            }
-                            log_sum_add(sum_start, offset + 2, targets.len(), add_start);
-                        }
-
-                        let pos = self.push_tensor(accumulator);
-
-                        NetworkLeaf::LocalTensor(pos)
-                    }
-                    NetworkLeaf::TensorSum(_)
-                    | NetworkLeaf::ScaledTensor(_)
-                    | NetworkLeaf::ScaledTensorSum(_) => {
-                        return Err(TensorNetworkError::SumScalarTensor(
-                            "lazy tensor sum mixed with scalar sum terms".to_string(),
-                        ));
-                    }
+                let new_node = if all_scalar {
+                    materialize_scalar_sum::<K, FK, Aind, Self, LT, L>(
+                        self, graph, &targets, lib, sum_start,
+                    )?
+                } else if any_scalar {
+                    return Err(TensorNetworkError::SumScalarTensor(
+                        "sum mixes scalar and tensor-valued children".to_string(),
+                    ));
+                } else {
+                    try_balanced_tensor_sum::<K, FK, Aind, Self, LT, L>(
+                        self, graph, &targets, lib, sum_start,
+                    )?
                 };
                 if let Some(sum_start) = sum_start {
                     eprintln!(
@@ -5122,62 +4806,21 @@ where
                 }
                 let child_id = operation.children()[0];
                 if let NetworkNode::Leaf(leaf) = &graph.graph[child_id] {
-                    let new_node = match leaf {
-                        NetworkLeaf::Scalar(s) => {
-                            let s = self.scalar_ref(*s).clone();
-                            let s = fn_lib.apply_scalar(&f, s)?;
-                            let pos = self.push_scalar(s);
-
-                            NetworkLeaf::Scalar(pos.into())
-                        }
-                        NetworkLeaf::LibraryKey { .. } => {
-                            let inds = graph.get_lib_data(lib, child_id)?;
-                            let t = fn_lib.apply(&f, Store::Tensor::from(inds))?;
-                            let pos = self.push_tensor(t);
-                            NetworkLeaf::LocalTensor(pos)
-                        }
-                        NetworkLeaf::LocalTensor(t) => {
-                            let t = self.tensor(*t).clone();
-                            let t = fn_lib.apply(&f, t)?;
-                            let pos = self.push_tensor(t);
-                            NetworkLeaf::LocalTensor(pos)
-                        }
-                        NetworkLeaf::TensorSum(indices) => {
-                            let materialized =
-                                materialize_tensor_sum::<K, Aind, Self>(self, indices, None);
-                            let NetworkLeaf::LocalTensor(index) = materialized else {
-                                unreachable!("materialized tensor sum is a local tensor")
-                            };
-                            let t = self.tensor(index).clone();
-                            let t = fn_lib.apply(&f, t)?;
-                            let pos = self.push_tensor(t);
-                            NetworkLeaf::LocalTensor(pos)
-                        }
-                        NetworkLeaf::ScaledTensor(term) => {
-                            let materialized = materialize_scaled_tensors::<K, Aind, Self>(
-                                self,
-                                std::slice::from_ref(term),
-                                None,
-                            );
-                            let NetworkLeaf::LocalTensor(index) = materialized else {
-                                unreachable!("materialized tensor term is a local tensor")
-                            };
-                            let t = self.tensor(index).clone();
-                            let t = fn_lib.apply(&f, t)?;
-                            let pos = self.push_tensor(t);
-                            NetworkLeaf::LocalTensor(pos)
-                        }
-                        NetworkLeaf::ScaledTensorSum(terms) => {
-                            let materialized =
-                                materialize_scaled_tensors::<K, Aind, Self>(self, terms, None);
-                            let NetworkLeaf::LocalTensor(index) = materialized else {
-                                unreachable!("materialized tensor terms are a local tensor")
-                            };
-                            let t = self.tensor(index).clone();
-                            let t = fn_lib.apply(&f, t)?;
-                            let pos = self.push_tensor(t);
-                            NetworkLeaf::LocalTensor(pos)
-                        }
+                    let new_node = if let NetworkLeaf::Scalar(scalar) = leaf {
+                        let scalar = fn_lib.apply_scalar(&f, self.scalar_ref(*scalar).clone())?;
+                        NetworkLeaf::Scalar(self.push_scalar(scalar).into())
+                    } else {
+                        let tensor = materialize_tensor_leaf::<LT, L, K, FK, Aind, _, _, _>(
+                            self,
+                            graph,
+                            child_id,
+                            leaf,
+                            lib,
+                            TensorSumOrder::Balanced,
+                            None,
+                        )?;
+                        let tensor = fn_lib.apply(&f, self.tensor(tensor).clone())?;
+                        NetworkLeaf::LocalTensor(self.push_tensor(tensor))
                     };
                     Ok(new_node)
                 } else {
@@ -5187,324 +4830,65 @@ where
             NetworkOp::Power(pow) => {
                 if operation.children().len() != 1 {
                     return Err(TensorNetworkError::Other(eyre!(
-                        "Cannot have more than one tensor argument to power:{}",
+                        "Power requires exactly one argument:{}",
                         graph.dot()
                     )));
                 }
-                let n = pow.abs();
+                if pow == 0 {
+                    return Err(TensorNetworkError::Other(eyre!(
+                        "Power(0) must be normalized to the empty Product before execution"
+                    )));
+                }
+
                 let child_id = operation.children()[0];
                 if let NetworkNode::Leaf(leaf) = &graph.graph[child_id] {
-                    let new_node = match leaf {
-                        NetworkLeaf::Scalar(si) => {
-                            if n == 0 {
-                                NetworkLeaf::Scalar(*si)
-                            } else {
-                                let mut s = self.scalar_ref(*si).clone();
+                    if pow == 1 {
+                        return Ok(leaf.clone());
+                    }
 
-                                for _ in 1..n {
-                                    s *= self.scalar_ref(*si).refer();
-                                }
-
-                                if pow < 0 {
-                                    s = s.ref_one() / s;
-                                }
-
-                                let pos = self.push_scalar(s);
-
-                                NetworkLeaf::Scalar(pos.into())
-                            }
+                    let magnitude = pow.unsigned_abs();
+                    if let NetworkLeaf::Scalar(scalar) = leaf {
+                        let factor = self.scalar_ref(*scalar).clone();
+                        let mut result = factor.clone();
+                        for _ in 1..magnitude {
+                            result *= factor.refer();
                         }
-                        NetworkLeaf::LibraryKey { key, indices } => {
-                            let inds = graph.get_lib_data(lib, child_id)?;
-                            let mut t = Store::Tensor::from(inds);
-
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::LibraryKey {
-                                    key: key.clone(),
-                                    indices: indices.clone(),
-                                },
-                                _ => {
-                                    let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
-
-                                    if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
-                                            t = square.contract(&t)?;
-                                        }
-
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
+                        if pow < 0 {
+                            result = result.ref_one() / result;
                         }
-                        NetworkLeaf::LocalTensor(ti) => {
-                            let mut t = self.tensor(*ti).clone();
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::LocalTensor(*ti),
-                                _ => {
-                                    let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
+                        return Ok(NetworkLeaf::Scalar(self.push_scalar(result).into()));
+                    }
 
-                                    if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
-                                            t = square.contract(&t)?;
-                                        }
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
-                        }
-                        NetworkLeaf::TensorSum(indices) => {
-                            let materialized =
-                                materialize_tensor_sum::<K, Aind, Self>(self, indices, None);
-                            let NetworkLeaf::LocalTensor(ti) = materialized else {
-                                unreachable!("materialized tensor sum is a local tensor")
-                            };
-                            let mut t = self.tensor(ti).clone();
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::LocalTensor(ti),
-                                _ => {
-                                    let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
+                    let tensor = materialize_tensor_leaf::<LT, L, K, FK, Aind, _, _, _>(
+                        self,
+                        graph,
+                        child_id,
+                        leaf,
+                        lib,
+                        TensorSumOrder::Balanced,
+                        None,
+                    )?;
+                    let factor = self.tensor(tensor).clone();
+                    let mut result = factor.clone();
+                    for _ in 1..magnitude {
+                        result = result.contract(&factor)?;
+                    }
 
-                                    if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
-                                            t = square.contract(&t)?;
-                                        }
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
+                    if result.is_scalar() {
+                        let mut scalar = Store::Scalar::from(result.scalar().ok_or_else(|| {
+                            TensorNetworkError::Other(eyre!(
+                                "scalar tensor Power result did not expose a scalar value"
+                            ))
+                        })?);
+                        if pow < 0 {
+                            scalar = scalar.ref_one() / scalar;
                         }
-                        NetworkLeaf::ScaledTensor(term) => {
-                            let materialized = materialize_scaled_tensors::<K, Aind, Self>(
-                                self,
-                                std::slice::from_ref(term),
-                                None,
-                            );
-                            let NetworkLeaf::LocalTensor(ti) = materialized else {
-                                unreachable!("materialized tensor term is a local tensor")
-                            };
-                            let mut t = self.tensor(ti).clone();
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::LocalTensor(ti),
-                                _ => {
-                                    let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
-
-                                    if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
-                                            t = square.contract(&t)?;
-                                        }
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
-                        }
-                        NetworkLeaf::ScaledTensorSum(terms) => {
-                            let materialized =
-                                materialize_scaled_tensors::<K, Aind, Self>(self, terms, None);
-                            let NetworkLeaf::LocalTensor(ti) = materialized else {
-                                unreachable!("materialized tensor terms are a local tensor")
-                            };
-                            let mut t = self.tensor(ti).clone();
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::LocalTensor(ti),
-                                _ => {
-                                    let squares = n / 2;
-                                    let mut square = t.contract(&t)?;
-
-                                    if n % 2 == 1 {
-                                        if n != 1 {
-                                            for _ in 0..squares {
-                                                square = square.contract(&square)?;
-                                            }
-                                            t = square.contract(&t)?;
-                                        }
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
-                        }
-                    };
-                    Ok(new_node)
+                        Ok(NetworkLeaf::Scalar(self.push_scalar(scalar).into()))
+                    } else if pow < 0 {
+                        Err(TensorNetworkError::NegativeExponentNonScalar(graph.dot()))
+                    } else {
+                        Ok(NetworkLeaf::LocalTensor(self.push_tensor(result)))
+                    }
                 } else {
                     Err(TensorNetworkError::ChildlessNeg)
                 }

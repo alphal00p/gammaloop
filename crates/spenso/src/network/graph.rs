@@ -435,6 +435,24 @@ impl<K, Aind> NetworkLeaf<K, Aind> {
             | NetworkLeaf::LibraryKey { .. } => {}
         }
     }
+
+    pub fn map_tensor_refs(&mut self, mut f: impl FnMut(usize) -> usize) {
+        match self {
+            NetworkLeaf::LocalTensor(tensor) => *tensor = f(*tensor),
+            NetworkLeaf::TensorSum(tensors) => {
+                for tensor in tensors {
+                    *tensor = f(*tensor);
+                }
+            }
+            NetworkLeaf::ScaledTensor(term) => term.tensor = f(term.tensor),
+            NetworkLeaf::ScaledTensorSum(terms) => {
+                for term in terms {
+                    term.tensor = f(term.tensor);
+                }
+            }
+            NetworkLeaf::LibraryKey { .. } | NetworkLeaf::Scalar(_) => {}
+        }
+    }
 }
 
 impl<K: Display, Aind> Display for NetworkLeaf<K, Aind> {
@@ -1372,30 +1390,18 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         });
     }
 
+    pub fn map_tensor_refs(&mut self, mut f: impl FnMut(usize) -> usize) {
+        self.graph.iter_nodes_mut().for_each(|(_, _, d)| {
+            if let NetworkNode::Leaf(leaf) = d {
+                leaf.map_tensor_refs(&mut f);
+            }
+        });
+    }
+
     pub fn shift_tensors(&mut self, shift: usize) {
         let _span = profile::span(Timer::ShiftTensors);
         profile::bump(Counter::ShiftTensors, 1);
-        self.graph.iter_nodes_mut().for_each(|(_, _, d)| {
-            if let NetworkNode::Leaf(leaf) = d {
-                match leaf {
-                    NetworkLeaf::LocalTensor(tensor) => *tensor += shift,
-                    NetworkLeaf::TensorSum(tensors) => {
-                        for tensor in tensors {
-                            *tensor += shift;
-                        }
-                    }
-                    NetworkLeaf::ScaledTensor(term) => {
-                        term.tensor += shift;
-                    }
-                    NetworkLeaf::ScaledTensorSum(terms) => {
-                        for term in terms {
-                            term.tensor += shift;
-                        }
-                    }
-                    NetworkLeaf::LibraryKey { .. } | NetworkLeaf::Scalar(_) => {}
-                }
-            }
-        });
+        self.map_tensor_refs(|tensor| tensor + shift);
     }
 
     pub fn delete<S: SubSetLike<Base = SuBitGraph>>(&mut self, subgraph: &S) {
@@ -1721,6 +1727,10 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn pow_graph(pow: i8, slots: &[LibrarySlot<Aind>]) -> Self {
+        if pow == 0 {
+            return Self::one();
+        }
+
         let (mut graph, head) = Self::head_builder(NetworkNode::Op(NetworkOp::Power(pow)));
         graph.add_external_edge(head, NetworkEdge::Head, true, Flow::Sink);
         if pow % 2 == 0 {
@@ -2223,6 +2233,13 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn pow(self, pow: i8) -> Self {
+        if pow == 0 {
+            return Self::one();
+        }
+        if pow == 1 {
+            return self;
+        }
+
         let dangling = self.dangling_indices();
         let mut pow = NetworkGraph::pow_graph(pow, &dangling);
 

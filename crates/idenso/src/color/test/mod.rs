@@ -590,7 +590,7 @@ fn antisymmetric_chain_commutator_reduces_to_structure_constant() {
         antisym!(color_t!(slot!(r.coad_na, a)), color_t!(slot!(r.coad_na, b))),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,x),in,out))*f(coad(NA,a),coad(NA,b),coad(NA,x))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(NA,d_0),in,out))*f(coad(NA,a),coad(NA,b),coad(NA,d_0))");
 }
 
 #[test]
@@ -727,11 +727,11 @@ fn color_cross_chain_fierz_can_be_disabled() {
     let expr = chain!(
         slot!(r.cof_nc, i),
         slot!(r.cof_nc.dual(), j),
-        color_t!(slot!(r.coad_na, a)),
+        color_t!(slot!(r.coad_na, AbstractIndex::Dummy(0))),
     ) * chain!(
         slot!(r.cof_nc, k),
         slot!(r.cof_nc.dual(), l),
-        color_t!(slot!(r.coad_na, a)),
+        color_t!(slot!(r.coad_na, AbstractIndex::Dummy(0))),
     );
 
     assert_eq!(
@@ -1284,28 +1284,21 @@ fn minus_sign() {
 
     // println!(
     //     "{}",
-    //     (expr1.cook_indices().canonize(AbstractIndex::Dummy)
-    //         / (expr2.cook_indices().canonize(AbstractIndex::Dummy)))
+    //     (expr1.canonize(AbstractIndex::Dummy)
+    //         / expr2.canonize(AbstractIndex::Dummy))
     //     .cancel()
     // );
     println!(
         "{}\n",
-        expr1
-            .simplify_metrics()
-            .cook_indices()
-            .canonize(AbstractIndex::Dummy)
+        expr1.simplify_metrics().canonize(AbstractIndex::Dummy)
     );
     println!(
         "{}\n",
-        expr2
-            .simplify_metrics()
-            .cook_indices()
-            .canonize(AbstractIndex::Dummy)
+        expr2.simplify_metrics().canonize(AbstractIndex::Dummy)
     );
     let residual = (expr1.simplify_color() + expr2.simplify_color())
         .expand()
-        .simplify_metrics()
-        .cook_indices();
+        .simplify_metrics();
 
     println!("{}", residual);
 

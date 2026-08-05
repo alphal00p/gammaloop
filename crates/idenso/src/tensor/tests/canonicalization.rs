@@ -10,11 +10,7 @@ use symbolica::{
     function, symbol,
 };
 
-use crate::{
-    IndexTooling,
-    tensor::{CanonicalizationError, SymbolicNet, SymbolicNetExt},
-    test_support::test_initialize,
-};
+use crate::{IndexTooling, tensor::CanonicalizationError, test_support::test_initialize};
 
 fn canonicalize(expression: &Atom) -> Result<Atom, CanonicalizationError> {
     expression.try_canonize::<AbstractIndex>(AbstractIndex::Dummy)
@@ -90,6 +86,125 @@ fn higher_positive_powers_are_canonical_and_idempotent() {
 }
 
 #[test]
+fn signed_negative_powers_are_canonical_and_idempotent() {
+    let rep = test_initialize().mink4;
+    let a = slot!(rep, signed_negative_power_a);
+    let b = slot!(rep, signed_negative_power_b);
+    let symmetric = tensor_symbol!(signed_negative_power_tensor; Symmetric);
+    for power in [-4, -2] {
+        let expression = function!(symmetric, a.to_atom(), b.to_atom()).pow(power);
+        let once = canonicalize(&expression).unwrap();
+        assert_eq!(canonicalize(&once).unwrap(), once);
+    }
+
+    let reciprocal_zero = canonicalize(&bracket!(odd_cycle()).pow(-1)).unwrap();
+    assert!(!reciprocal_zero.is_zero());
+    assert_eq!(canonicalize(&reciprocal_zero).unwrap(), reciprocal_zero);
+}
+
+#[test]
+fn product_powers_follow_execution_without_losing_sign_or_division_polarity() {
+    let rep = test_initialize().mink4;
+    let index: LibrarySlot<_> = slot!(rep, signed_product_power_index).cast();
+    let left = tensor_symbol!(signed_product_power_left);
+    let right = tensor_symbol!(signed_product_power_right);
+    let base = function!(left, index.to_atom()) * function!(right, index.to_atom());
+
+    for exponent in [2, -2] {
+        let expression = bracket!(base.clone()).pow(exponent);
+        let canonical = canonicalize(&expression).unwrap();
+        assert_eq!(canonicalize(&canonical).unwrap(), canonical);
+    }
+
+    let squared = canonicalize(&bracket!(base.clone()).pow(2)).unwrap();
+    let squared_negative_base = canonicalize(&bracket!(-base.clone()).pow(2)).unwrap();
+    let negative_squared = canonicalize(&(-bracket!(base).pow(2))).unwrap();
+    assert_eq!(squared_negative_base, squared);
+    assert_ne!(negative_squared, squared);
+}
+
+#[test]
+fn signed_execution_matches_symbolica_for_powers_sums_and_opaque_controls() {
+    let rep = test_initialize().mink4;
+    let first: LibrarySlot<_> = slot!(rep, signed_execution_first).cast();
+    let second: LibrarySlot<_> = slot!(rep, signed_execution_second).cast();
+    let left = tensor_symbol!(signed_execution_left);
+    let right = tensor_symbol!(signed_execution_right);
+    let branch = |index: LibrarySlot<AbstractIndex>| {
+        function!(left, index.to_atom()) * function!(right, index.to_atom())
+    };
+    let first_branch = branch(first);
+    let second_branch = branch(second);
+    let canonical_branch = canonicalize(&first_branch).unwrap();
+    assert_eq!(canonicalize(&second_branch).unwrap(), canonical_branch);
+
+    // The bracket is the parser's grouping syntax. Positive powers cover odd and
+    // even sign parity; the negative even power covers reciprocal polarity.
+    // Negative odd powers of open tensor expressions are deliberately rejected.
+    for exponent in [2, 3, -2] {
+        let positive = canonicalize(&bracket!(first_branch.clone()).pow(exponent)).unwrap();
+        let negative = canonicalize(&bracket!(-first_branch.clone()).pow(exponent)).unwrap();
+        let expected = if exponent % 2 == 0 {
+            positive.clone()
+        } else {
+            -positive.clone()
+        };
+        assert_eq!(negative, expected);
+    }
+
+    // Reusing one exact Atom would make Symbolica reduce 2*A + 3*A and A - A
+    // before the canonicalizer is called. Alpha-equivalent dummy spellings keep
+    // those sums intact until canonical reconstruction aligns both A branches.
+    let numeric_sum = Atom::num(2) * first_branch.clone() + Atom::num(3) * second_branch.clone();
+    let symbolica_numeric =
+        Atom::num(2) * canonical_branch.clone() + Atom::num(3) * canonical_branch.clone();
+    assert_ne!(numeric_sum, symbolica_numeric);
+    assert_eq!(canonicalize(&numeric_sum).unwrap(), symbolica_numeric);
+
+    let cancellation = first_branch.clone() - second_branch.clone();
+    assert!(!cancellation.is_zero());
+    assert!(canonicalize(&cancellation).unwrap().is_zero());
+
+    let x = Atom::var(symbol!("signed_execution_x"));
+    let y = Atom::var(symbol!("signed_execution_y"));
+    let symbolic_sum = &x * &first_branch + &y * &second_branch;
+    let symbolica_symbolic = &x * &canonical_branch + &y * &canonical_branch;
+    assert_ne!(symbolic_sum, symbolica_symbolic);
+    assert_eq!(canonicalize(&symbolic_sum).unwrap(), symbolica_symbolic);
+
+    let symbolic_cancellation = &x * &first_branch - &x * &second_branch;
+    assert!(!symbolic_cancellation.is_zero());
+    assert!(canonicalize(&symbolic_cancellation).unwrap().is_zero());
+
+    let opaque_index = slot!(rep, signed_execution_opaque_index);
+    let parameter = Atom::var(symbol!("signed_execution_opaque_parameter"));
+    let nested = function!(
+        symbol!("signed_execution_opaque_nested"),
+        Atom::var(symbol!("signed_execution_opaque_nested_argument"))
+    );
+    let untagged = symbol!("signed_execution_untagged_antisymmetric"; Antisymmetric);
+    let opaque = function!(
+        untagged,
+        parameter.clone(),
+        opaque_index.to_atom(),
+        nested.clone()
+    );
+    let odd_permutation = function!(untagged, opaque_index.to_atom(), parameter, nested);
+    assert_eq!(opaque, -odd_permutation.clone());
+    assert_eq!(canonicalize(&opaque).unwrap(), opaque);
+    assert_eq!(canonicalize(&odd_permutation).unwrap(), odd_permutation);
+}
+
+#[test]
+fn outer_zero_and_zero_denominator_are_normalized_by_execution() {
+    let expression = odd_cycle() * bracket!(structural_odd_cycle()).pow(-1);
+    let canonical = canonicalize(&expression).unwrap();
+
+    assert!(!canonical.is_zero());
+    assert_eq!(canonicalize(&canonical).unwrap(), canonical);
+}
+
+#[test]
 fn contractions_across_sums_ignore_original_dummy_names() {
     let rep = test_initialize().mink4;
     let left = tensor_symbol!(signed_boundary_left);
@@ -139,6 +254,77 @@ fn antisymmetric_boundary_slots_do_not_create_local_stabilizers() {
 
     let canonical = canonicalize(&expression).unwrap();
     assert!(!canonical.is_zero());
+    assert_eq!(canonicalize(&canonical).unwrap(), canonical);
+}
+
+#[test]
+fn signed_branch_exchange_zeroes_the_enclosing_product() {
+    let rep = test_initialize().mink4;
+    let i: LibrarySlot<_> = slot!(rep, signed_exchange_i).cast();
+    let j: LibrarySlot<_> = slot!(rep, signed_exchange_j).cast();
+    let antisymmetric = tensor_symbol!(signed_exchange_antisymmetric; Antisymmetric);
+    let left = tensor_symbol!(signed_exchange_left);
+    let right = tensor_symbol!(signed_exchange_right);
+    let branch = |first, second| function!(left, first) * function!(right, second);
+    let expression = function!(antisymmetric, i.to_atom(), j.to_atom())
+        * (branch(i.to_atom(), j.to_atom()) + branch(j.to_atom(), i.to_atom()));
+
+    assert!(canonicalize(&expression).unwrap().is_zero());
+}
+
+#[test]
+fn visible_scalars_receive_canonical_tensor_signs_through_execution() {
+    let rep = test_initialize().mink4;
+    let i: LibrarySlot<_> = slot!(rep, signed_scalar_sink_i).cast();
+    let j: LibrarySlot<_> = slot!(rep, signed_scalar_sink_j).cast();
+    let antisymmetric = tensor_symbol!(signed_scalar_sink_tensor; Antisymmetric);
+    let ordered = function!(antisymmetric, i.to_atom(), j.to_atom());
+    let reversed = Atom::num(2) * function!(antisymmetric, j.to_atom(), i.to_atom());
+    let expected = Atom::num(-2) * ordered;
+
+    assert_eq!(
+        canonicalize(&reversed).unwrap(),
+        canonicalize(&expected).unwrap()
+    );
+}
+
+#[test]
+fn signed_sum_cancellation_is_owned_by_network_execution() {
+    let rep = test_initialize().mink4;
+    let i: LibrarySlot<_> = slot!(rep, signed_cancellation_i).cast();
+    let j: LibrarySlot<_> = slot!(rep, signed_cancellation_j).cast();
+    let antisymmetric = tensor_symbol!(signed_cancellation_tensor; Antisymmetric);
+    let forward = Atom::num(2) * function!(antisymmetric, i.to_atom(), j.to_atom());
+    let reverse = Atom::num(2) * function!(antisymmetric, j.to_atom(), i.to_atom());
+
+    assert!(canonicalize(&(forward + reverse)).unwrap().is_zero());
+}
+
+#[test]
+fn common_signed_sum_branches_combine_after_leaf_local_sign_reconstruction() {
+    let rep = test_initialize().mink4;
+    let i: LibrarySlot<_> = slot!(rep, AbstractIndex::Dummy(0)).cast();
+    let j: LibrarySlot<_> = slot!(rep, AbstractIndex::Dummy(1)).cast();
+    let k: LibrarySlot<_> = slot!(rep, AbstractIndex::Dummy(2)).cast();
+    let l: LibrarySlot<_> = slot!(rep, AbstractIndex::Dummy(3)).cast();
+    let antisymmetric = tensor_symbol!(signed_common_sum_tensor; Antisymmetric);
+    let left = tensor_symbol!(signed_common_sum_left);
+    let right = tensor_symbol!(signed_common_sum_right);
+    let scalar = Atom::var(symbol!("signed_common_sum_scalar"));
+    let branch = |first: LibrarySlot<_>, second: LibrarySlot<_>| {
+        function!(antisymmetric, first.to_atom(), second.to_atom())
+            * function!(left, second.to_atom())
+            * function!(right, first.to_atom())
+    };
+    let expression = scalar.clone() * (branch(i, j) + branch(k, l));
+    let expected = Atom::num(-2)
+        * scalar
+        * function!(antisymmetric, i.to_atom(), j.to_atom())
+        * function!(left, i.to_atom())
+        * function!(right, j.to_atom());
+
+    let canonical = canonicalize(&expression).unwrap();
+    assert_eq!(canonical, expected);
     assert_eq!(canonicalize(&canonical).unwrap(), canonical);
 }
 
@@ -271,6 +457,73 @@ fn partial_antisymmetric_sign_stays_inside_nonlinear_tensor() {
 }
 
 #[test]
+fn partial_antisymmetric_sign_lifts_through_an_explicitly_linear_tensor() {
+    let rep = test_initialize().mink4;
+    let a = slot!(rep, signed_linear_nested_a);
+    let b = slot!(rep, signed_linear_nested_b);
+    let linear = tensor_symbol!(signed_linear_nested_outer; Linear);
+    let expression = FunctionBuilder::new(linear)
+        .add_arg(antisym!(b, a))
+        .finish();
+    let expected = -FunctionBuilder::new(linear)
+        .add_arg(antisym!(a, b))
+        .finish();
+
+    let canonical = canonicalize(&expression).unwrap();
+    assert_eq!(canonical, expected);
+    assert_eq!(canonicalize(&canonical).unwrap(), canonical);
+}
+
+#[test]
+fn unbracketed_parameter_sum_uses_declared_linear_distribution() {
+    let rep = test_initialize().mink4;
+    let a = slot!(rep, signed_linear_sum_a);
+    let b = slot!(rep, signed_linear_sum_b);
+    let linear = tensor_symbol!(signed_linear_sum_outer; Linear);
+    let p = Atom::var(symbol!("signed_linear_sum_p"));
+    let q = Atom::var(symbol!("signed_linear_sum_q"));
+    let group = antisym!(a, b);
+    let expression = FunctionBuilder::new(linear)
+        .add_arg(&p + &q)
+        .add_arg(group.clone())
+        .finish();
+    let distributed = FunctionBuilder::new(linear)
+        .add_arg(p)
+        .add_arg(group.clone())
+        .finish()
+        + FunctionBuilder::new(linear)
+            .add_arg(q)
+            .add_arg(group)
+            .finish();
+
+    assert_eq!(
+        canonicalize(&expression).unwrap(),
+        canonicalize(&distributed).unwrap()
+    );
+}
+
+#[test]
+fn nested_signed_zero_respects_declared_function_linearity() {
+    let nonlinear = tensor_symbol!(signed_nested_zero_nonlinear);
+    let linear = tensor_symbol!(signed_nested_zero_linear; Linear);
+    let zero_scope = odd_cycle();
+    let nonlinear_expression = function!(nonlinear, zero_scope.clone());
+    let linear_expression = function!(linear, zero_scope);
+    let expected_nonlinear = function!(nonlinear, Atom::Zero);
+
+    let nonlinear_canonical = canonicalize(&nonlinear_expression).unwrap();
+    assert_eq!(
+        nonlinear_canonical,
+        canonicalize(&expected_nonlinear).unwrap()
+    );
+    assert_eq!(
+        canonicalize(&nonlinear_canonical).unwrap(),
+        nonlinear_canonical
+    );
+    assert!(canonicalize(&linear_expression).unwrap().is_zero());
+}
+
+#[test]
 fn bracketed_parameters_remain_opaque() {
     let rep = test_initialize().mink4;
     let a = slot!(rep, signed_bracket_a);
@@ -294,34 +547,6 @@ fn mixed_intrinsic_symmetry_returns_a_typed_error() {
 
     assert!(matches!(
         canonicalize(&expression),
-        Err(CanonicalizationError::InvalidIntrinsicArgument {
-            head,
-            argument: 0,
-            ..
-        }) if head == symmetric
-    ));
-}
-
-#[test]
-fn scalar_network_leaves_use_intrinsic_validation() {
-    let rep = test_initialize().mink4;
-    let slot = slot!(rep, signed_invalid_scalar_slot);
-    let symmetric = tensor_symbol!(signed_invalid_scalar_tensor; Symmetric);
-    let expression = function!(symmetric, Atom::num(1), slot.to_atom());
-    let network = SymbolicNet::<AbstractIndex>::from_scalar(expression);
-
-    assert!(matches!(
-        network.canonize(AbstractIndex::Dummy),
-        Err(CanonicalizationError::InvalidIntrinsicArgument {
-            head,
-            argument: 0,
-            ..
-        }) if head == symmetric
-    ));
-
-    let network = SymbolicNet::<AbstractIndex>::from_scalar(Atom::num(1)).fun(symmetric);
-    assert!(matches!(
-        network.canonize(AbstractIndex::Dummy),
         Err(CanonicalizationError::InvalidIntrinsicArgument {
             head,
             argument: 0,

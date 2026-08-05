@@ -361,15 +361,12 @@ fn gl23() {
 
     println!(
         "{}\n",
-        expr.simplify_metrics()
-            .cook_indices()
-            .canonize(AbstractIndex::Dummy)
+        expr.simplify_metrics().canonize(AbstractIndex::Dummy)
     );
 
     println!(
         "Colored done: {}\n",
         expr.simplify_metrics()
-            .cook_indices()
             .canonize(AbstractIndex::Dummy)
             .simplify_color()
     );
@@ -432,15 +429,12 @@ fn gl24() {
 
     println!(
         "{}\n",
-        expr.simplify_metrics()
-            .cook_indices()
-            .canonize(AbstractIndex::Dummy)
+        expr.simplify_metrics().canonize(AbstractIndex::Dummy)
     );
 
     println!(
         "Colored done: {}\n",
         expr.simplify_metrics()
-            .cook_indices()
             .canonize(AbstractIndex::Dummy)
             .simplify_color()
     );

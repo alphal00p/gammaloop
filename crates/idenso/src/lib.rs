@@ -38,7 +38,7 @@ use crate::{
     rep_symbols::RS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, SpinFundamental},
     shorthands::metric::{MS, MetricSimplifier},
-    tensor::{CanonicalizationError, SymbolicNetExt, SymbolicNetParse},
+    tensor::{CanonicalizationError, SymbolicNetParse},
 };
 
 initialize!(|| {
@@ -332,15 +332,8 @@ impl IndexTooling for AtomView<'_> {
         let cooked = cooking
             .try_cook_indices(*self)
             .map_err(|error| CanonicalizationError::StructuredIndex(format!("{error:?}")))?;
-        tensor::validate_tensor_symmetry::<Aind>(cooked.as_view())?;
-        let network = cooked
-            .as_view()
-            .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
-            .map_err(|error| CanonicalizationError::Network(error.to_string()))?;
-        // For ad-hoc diagnostics, `network.dot_pretty()` replaces the old
-        // per-representation and per-dummy debug prints from the Atom path.
-        let canonical = network.canonize(new_dummy)?;
-        Ok(cooking.uncook(canonical.simple_execute::<()>().as_view()))
+        let canonical = tensor::CanonicalPolicyNet::<Aind>::parse(cooked)?.canonize(new_dummy)?;
+        Ok(cooking.uncook(canonical.into_atom().as_view()))
     }
 
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
@@ -475,7 +468,7 @@ pub mod test {
     use symbolica::{atom::AtomCore, parse_lit, printer::CanonicalOrderingSettings};
     use symbolica_utils::AtomPrintExt;
 
-    use crate::{Cookable, IndexTooling, gamma, test_support::test_initialize, u};
+    use crate::{IndexTooling, gamma, test_support::test_initialize, u};
 
     #[test]
     fn gamma_conj() {
@@ -500,7 +493,7 @@ pub mod test {
                     CanonicalOrderingSettings::new()
                         .include_attributes(false)
                         .include_namespace(false)
-                ),@"(conj(p(1,mink(4,d_0)))*gamma(bis(4,d_1),bis(4,d_2),mink(4,d_0))+g(bis(4,d_1),bis(4,d_2)))*conj(u(2,bis(4,d_3)))*gamma0(bis(4,d_1),bis(4,d_3))*u(1,bis(4,d_2))"
+                ),@"(conj(p(1,mink(4,d_2)))*gamma(bis(4,d_0),bis(4,d_1),mink(4,d_2))+g(bis(4,d_0),bis(4,d_1)))*conj(u(2,bis(4,d_3)))*gamma0(bis(4,d_0),bis(4,d_3))*u(1,bis(4,d_1))"
         );
     }
 
@@ -519,10 +512,8 @@ pub mod test {
             default_namespace = "spenso"
         );
 
-        let can = expr.cook_indices();
-
-        println!("{}", can);
-        let can = can.canonize::<AbstractIndex>(AbstractIndex::Dummy);
+        println!("{}", expr);
+        let can = expr.canonize::<AbstractIndex>(AbstractIndex::Dummy);
 
         assert_snapshot!(
             can.to_bare_ordered_string(),@"-1*f(coad(8,d_0),coad(8,d_1),coad(8,d_2))*t(coad(8,d_0),cof(3,d_3),dind(cof(3,d_4)))*t(coad(8,d_1),cof(3,d_5),dind(cof(3,d_3)))*t(coad(8,d_2),cof(3,d_4),dind(cof(3,d_5)))"

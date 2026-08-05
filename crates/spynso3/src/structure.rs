@@ -466,6 +466,172 @@ impl SpensoName {
     }
 }
 
+#[cfg(test)]
+mod tensor_name_tests {
+    use pyo3::types::PyDict;
+
+    use super::*;
+
+    #[test]
+    fn python_constructor_exposes_linear_attribute() {
+        Python::initialize();
+
+        Python::attach(|py| {
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("is_linear", true).unwrap();
+
+            let tensor_name = py
+                .get_type::<SpensoName>()
+                .call(("__spynso3_test_linear_tensor_name",), Some(&kwargs))
+                .unwrap()
+                .extract::<SpensoName>()
+                .unwrap();
+
+            assert!(tensor_name.name.is_linear());
+        });
+    }
+
+    #[test]
+    fn python_constructor_keeps_linearity_opt_in() {
+        Python::initialize();
+
+        Python::attach(|py| {
+            let tensor_type = py.get_type::<SpensoName>();
+            let default = tensor_type
+                .call1(("__spynso3_test_default_nonlinear_tensor_name",))
+                .unwrap()
+                .extract::<SpensoName>()
+                .unwrap();
+
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("is_linear", false).unwrap();
+            let explicitly_nonlinear = tensor_type
+                .call(
+                    ("__spynso3_test_explicit_nonlinear_tensor_name",),
+                    Some(&kwargs),
+                )
+                .unwrap()
+                .extract::<SpensoName>()
+                .unwrap();
+
+            assert!(!default.name.is_linear());
+            assert!(!explicitly_nonlinear.name.is_linear());
+        });
+    }
+
+    #[test]
+    fn python_constructor_rejects_intrinsic_symmetry_with_non_slot_argument() {
+        Python::initialize();
+
+        Python::attach(|py| {
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("is_symmetric", true).unwrap();
+
+            let tensor_name = py
+                .get_type::<SpensoName>()
+                .call(("__spynso3_test_symmetric_tensor_name",), Some(&kwargs))
+                .unwrap();
+            let error = tensor_name.call1((1,)).unwrap_err();
+
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert_eq!(
+                error.value(py).to_string(),
+                "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments"
+            );
+        });
+    }
+
+    #[test]
+    fn python_structure_ingestion_rejects_intrinsic_symmetry_with_arguments() {
+        Python::initialize();
+
+        Python::attach(|py| {
+            let tensor_type = py.get_type::<SpensoName>();
+            let intrinsic_names = [
+                (
+                    "is_symmetric",
+                    "__spynso3_test_ingestion_symmetric_tensor_name",
+                ),
+                (
+                    "is_antisymmetric",
+                    "__spynso3_test_ingestion_antisymmetric_tensor_name",
+                ),
+                (
+                    "is_cyclesymmetric",
+                    "__spynso3_test_ingestion_cyclesymmetric_tensor_name",
+                ),
+            ]
+            .map(|(attribute, name)| {
+                let kwargs = PyDict::new(py);
+                kwargs.set_item(attribute, true).unwrap();
+                tensor_type.call((name,), Some(&kwargs)).unwrap()
+            });
+            let representation = py
+                .get_type::<SpensoRepresentation>()
+                .call_method1("euc", (3,))
+                .unwrap();
+            let slot = representation.call1(("i",)).unwrap();
+            let argument = Py::new(py, PythonExpression::from(Atom::num(1))).unwrap();
+
+            let indexed_type = py.get_type::<SpensoIndices>();
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("name", &intrinsic_names[0]).unwrap();
+            let indexed_constructor_error = indexed_type
+                .call((&slot, argument.bind(py)), Some(&kwargs))
+                .unwrap_err();
+
+            let indexed = indexed_type.call1((&slot, argument.bind(py))).unwrap();
+            let indexed_set_name_error = indexed
+                .call_method1("set_name", (&intrinsic_names[1],))
+                .unwrap_err();
+
+            let structure_type = py.get_type::<SpensoStructure>();
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("name", &intrinsic_names[1]).unwrap();
+            let structure_constructor_error = structure_type
+                .call((&representation, argument.bind(py)), Some(&kwargs))
+                .unwrap_err();
+
+            let structure = structure_type
+                .call1((&representation, argument.bind(py)))
+                .unwrap();
+            let structure_set_name_error = structure
+                .call_method1("set_name", (&intrinsic_names[2],))
+                .unwrap_err();
+
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("name", &intrinsic_names[2]).unwrap();
+            let structure = structure_type
+                .call((&representation,), Some(&kwargs))
+                .unwrap();
+            let structure_indexing_error = structure
+                .call_method1("symbolic", (argument.bind(py), ";", "i"))
+                .unwrap_err();
+
+            for (route, error) in [
+                ("TensorIndices constructor", indexed_constructor_error),
+                ("TensorIndices.set_name", indexed_set_name_error),
+                ("TensorStructure constructor", structure_constructor_error),
+                ("TensorStructure.set_name", structure_set_name_error),
+                (
+                    "TensorStructure symbolic arguments",
+                    structure_indexing_error,
+                ),
+            ] {
+                assert!(
+                    error.is_instance_of::<PyValueError>(py),
+                    "{route} returned {error}"
+                );
+                assert_eq!(
+                    error.value(py).to_string(),
+                    "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments",
+                    "{route}"
+                );
+            }
+        });
+    }
+}
+
 /// A tensor structure with abstract indices for symbolic tensor operations.
 ///
 /// TensorIndices represents the index structure of tensors with named abstract indices

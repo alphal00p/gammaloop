@@ -19,7 +19,8 @@ normalized Atom
       -> group-aware reconstruction with signed leaf values and exact-scope Neg
       -> ordinary symbolic network execution
       -> canonical Atom and normalized network reparse]
-     skip another Graphica call only when reconstruction certifies stability;
+     skip another Graphica call only when reconstruction certifies stability
+     or mandatory execution returns the exact iteration input;
      otherwise repeat on the complete reparsed network
   -> stable CanonicalPolicyNet
   -> canonical SymbolicNet and Atom output projections
@@ -185,7 +186,10 @@ longer be part of the production path.
   distinction can expose automorphisms absent from the previous graph. A
   visible execution/reparse rewrite may also establish a different required
   network normal form. Skip another whole-network Graphica iteration only when
-  reconstruction produces a complete one-sided stability certificate. That
+  reconstruction produces a complete one-sided stability certificate or the
+  executed normalized Atom is exactly the iteration input. Exact equality after
+  the mandatory execution is itself a complete extensional fixed-point
+  certificate because parsing and projection are deterministic. The one-sided
   certificate proves that canonical transport preserved visible topology,
   semantic colors, scope and Power structure, and the equality partition of
   Symbolica-visible leaves and operation children while changing only
@@ -236,6 +240,13 @@ helper, confirm that the existing parser, expression-tree traversal, and result
 types cannot supply the same invariant; the current codebase search must be
 recorded with the implementation.
 
+Implementation search record (2026-08-05): the existing abstractions were the
+raw `Network`/`NetworkStore`, parser settings and transient parser state, and
+execution result types. None retained the exact normalized source `Atom`
+together with the network parsed from that Atom under one fixed policy. The
+private `CanonicalPolicyNet` pair is therefore the minimum wrapper that makes
+that provenance an invariant.
+
 The wrapper owns one deterministic parse policy: fully recursive
 `ParseSettings::default()` with every Sum term enabled, together with the same
 fixed tensor-symmetry validator used at entry. Preserve every parser-supported
@@ -259,11 +270,16 @@ API.
 
 Wrap `new_dummy` in a request-local memoizing allocator: each numeric position
 calls the caller's `FnMut` at most once, and every fixed-point iteration reuses
-the cached `Aind`. Product factors and materialized Power copies use disjoint
-simultaneous ranges. Mutually exclusive Sum branches reserve the shared
-interface prefix and may reuse the same branch-local suffix, sized to the
-maximum surviving branch. This keeps a stateful factory deterministic across
-the iterations that are actually required.
+the cached `Aind`. Recompute the representation/ordinal-to-position assignment
+from the surviving canonical line order on every iteration while retaining the
+position-indexed callback cache. If an earlier line disappears after zero
+substitution, a surviving line moves into that earlier position instead of
+retaining a stale representation-specific number. Product factors and
+materialized Power copies use disjoint simultaneous ranges. Mutually exclusive
+Sum branches reserve the shared interface prefix and may reuse the same
+branch-local suffix, sized to the maximum surviving branch. This keeps a
+stateful factory deterministic across the iterations that are actually
+required.
 
 `IndexTooling::canonize` remains the Atom-facing facade, but its implementation
 becomes:
@@ -417,7 +433,10 @@ operator boundary, but the branch nodes preserve their additive meaning.
 
 Global visibility means every `NetworkOp` and every recognized structural slot
 is present. Scalar leaves and opaque tensor-layout fields remain atomic only
-after validation proves that they own no network-contracted slot; a lexical
+after validation proves that they own no network-contracted slot. A tagged
+ordered argument or multiargument scalar function that would hide recognized
+tensor topology is rejected with a typed pre-Graphica grammar error unless an
+explicit bracket/projector opacity boundary contains that topology. A lexical
 symbol that merely resembles a dummy remains ordinary opaque data. Their
 visible colors use a stable semantic Atom/symbol key based on qualified names,
 attributes, and recursive payload structure, never raw Symbol interner IDs.
@@ -703,11 +722,12 @@ Symbolica. This check is a verifier under the already selected map, not a
 second graph canonicalizer or an Atom renderer. A merge, split, disappearance,
 value change, or ambiguous class correspondence declines to certify stability;
 failure to certify is not an error and conservatively starts another complete
-iteration after execution/reparse. Association, commutative ordering, declared
+iteration after execution/reparse unless execution returned the exact input
+Atom. Association, commutative ordering, declared
 unsigned symmetry transport, and a bijective dummy rename are harmless when the
 certificate proves that every visible class is otherwise preserved. Reuse the
-request-local dummy allocator and canonical parse policy. A terminal zero or one
-returns immediately.
+request-local dummy allocator and canonical parse policy. Exact executed-Atom
+equality proves a fixed point, while a terminal zero or one returns immediately.
 
 Canonical vertex transport and dummy renaming do not by themselves cause a
 second Graphica call. A generated sign may: direct negation of a leaf or
@@ -973,6 +993,13 @@ the secondary key chooses one concrete sign placement when several decorations
 execute to the same value. Orbit enumeration, generator order, generating-set
 choice, hash iteration, original dummy names, hidden origins, concrete
 `new_dummy` results, and raw Symbol interner IDs must not affect this minimum.
+A sign site inside an already proven-zero group, expression, or Power magnitude
+is unobservable: erase those coordinates before enumeration and require the
+active-site mask to be invariant under every retained site transport. Enumerate
+the resulting observable quotient orbit, not all affine assignments to erased
+coordinates, so independent signs below zero scopes cannot cause exponential
+work. Preserve the full-length decoration with erased coordinates fixed to
+false for stable site addressing during reconstruction.
 A stabilizer-chain or branch-and-bound implementation may avoid explicit orbit
 enumeration only if it is proven to return the same minimum as exhaustive
 ordering.
@@ -1273,8 +1300,9 @@ comparison.
   Symbolica, not the group layer, owns coefficient arithmetic and ordinary
   Sum/Product normalization.
 - Execute and reparse every reconstructed iteration. Skip reprojection only
-  when the complete stability certificate succeeds; otherwise retry the
-  reparsed whole network, with terminal zero/one as the only immediate return.
+  when the complete one-sided stability certificate succeeds or execution
+  returns the exact normalized iteration input; otherwise retry the reparsed
+  whole network, with terminal zero/one as the remaining immediate return.
   Treat immediate equality of exact canonical problem identities as successful
   conditional verification, an older non-consecutive equality as
   `ConvergenceCycle`, and exhaustion of the injectable deterministic iteration
@@ -1307,6 +1335,66 @@ comparison.
   limits before migrating callers.
 - Run the three-loop RQFT signed six-`f` comparison and the disconnected scalar
   spectacles pointwise and Monte Carlo factorization checks.
+
+The production budgets were measured on 2026-08-05 in jj change `rxtulqsp` on
+an Intel Xeon W-2135 (restricted single-core Symbolica, Rust `test` profile).
+The ignored `phase6_canonicalization_budget_report` uses the same exact
+preflight estimator as production, asserts predicted and allocated graph sizes
+agree, times Graphica directly, and then measures the complete driver. Timings
+are diagnostic rather than test thresholds:
+
+| case | vertices | edges | Graphica ms | iterations | driver ms |
+|---|---:|---:|---:|---:|---:|
+| signed K3,3 | 35 | 43 | 6.042 | 1 | 27.855 |
+| three disconnected signed K3,3 components | 101 | 127 | 198.362 | 1 | 538.713 |
+| repeated symmetric Sum branches | 42 | 49 | 2.765 | 2 | 57.269 |
+| `Power(4)` | 23 | 26 | 1.489 | 1 | 20.761 |
+| `Power(-4)` | 23 | 26 | 1.470 | 1 | 50.165 |
+| `Power(24)` | 123 | 146 | 647.347 | 1 | 1,352.517 |
+
+The observed maximum is two whole-graph iterations. The production limit of
+eight leaves fourfold iteration headroom, including future cascading-zero
+fixtures, while still giving a deterministic failure bound. The production
+whole-graph limits are 128 vertices and 160 edges. The disconnected K3,3
+product and `Power(24)` deliberately exercise those limits closely with two
+different high-symmetry families; the exact preflight rejects a larger graph
+before allocating any Graphica nodes. A fast non-ignored guard keeps the corpus
+below all three production limits; the ignored report can be rerun with:
+
+```text
+nix develop -c cargo nextest run -p idenso --profile test_gammaloop \
+  --run-ignored all \
+  -E 'test(/^tensor::canonicalize::projection::tests::phase6_canonicalization_budget_report$/)' \
+  --no-capture
+```
+
+The Power scaling probe was deliberately incremental. `Power(32)` already
+needed 163 vertices, 194 edges, 1,583.129 ms in Graphica, and 3,368.133 ms in
+the complete driver. A minimal symmetric two-port `Power(i8::MIN)` has an exact
+643-vertex/770-edge projection; its direct sufficient-injected-budget Graphica
+run was stopped without completion after 209 seconds. The signed `i8` grammar
+therefore remains supported, but this pathological literal expansion returns
+`GraphSizeLimit` under the production budget. A non-ignored regression proves
+the unsigned magnitude is 128, constructs the exact projection under an
+unbounded test budget, and checks rejection on both budget axes before Graphica
+allocation. The ignored
+`minimum_signed_power_projects_with_a_sufficient_injected_budget` test retains
+the full direct probe for future Graphica improvements. The 128/160 limits are
+thus a measured conservative acceptance envelope, not a claim that graph size
+alone predicts canonical-search time.
+
+The larger downstream checks remain separate from the timing corpus: the K3,3
+checks pass, and Idenso's
+`rqft_ghost_three_loop_d2_six_f_terms_vanish_independently` regression contains
+the exact two structured-index six-`f` contractions extracted from d2 and
+asserts that each vanishes independently. The
+`scalar_spectacles_integrated_uv_factorizes_over_bridge` passes both its
+pointwise and independent Monte Carlo comparisons. The enclosing historical
+three-loop test currently proceeds through d10 before an unrelated d11 RQFT
+snapshot mismatch. On the current debug test runner that ignored three-loop
+case requires `RUST_MIN_STACK=67108864`; the default test-thread stack is
+exhausted before completion, while the enlarged-stack run reaches the same d11
+mismatch in 431 seconds.
 
 ## Test Plan
 
@@ -1387,7 +1475,8 @@ specified as part of the API.
   the visible sign rewrite gives this fixture exactly two Graphica calls before
   stability;
 - execution and normalized reparse run after every reconstruction, while only
-  a complete stability certificate may skip another Graphica call;
+  a complete one-sided stability certificate or exact executed-Atom equality
+  may skip another Graphica call;
 - association, commutative ordering, declared even/unsigned slot transport, and
   a bijective dummy rename preserve every visible equality class and certify
   stability under the selected vertex map;
@@ -1428,6 +1517,12 @@ specified as part of the API.
   distinguishable;
 - dummy names reused independently in Sum branches do not merge line vertices;
 - shared operator-boundary lines remain shared and receive one canonical dummy;
+- a retry that removes an earlier representation group rebuilds the surviving
+  line-to-position assignment while reusing the request-local callback value at
+  that position;
+- affine sign coordinates below proven-zero scopes are quotiented before orbit
+  enumeration, while a mask that is not invariant under site transport is
+  rejected rather than silently changing the group action;
 - a root operator and an otherwise identical nested operator cannot exchange;
 - an automorphism spanning an outer antisymmetric tensor and a Sum branch
   permutation is visible without distributing the Product;
@@ -1601,9 +1696,12 @@ specified as part of the API.
 For small ranks and networks, add a brute-force reference that enumerates
 intrinsic and partial tensor symmetries, identical-factor permutations,
 dummy-line relabelings, and signed Sum actions in addition to declared Function
-semantics. It chooses the minimal scoped representative and detects whether
-both signs reach it. Explicitly limit each generated case to the transformations
-covered by that oracle.
+semantics. Graphica's complete canonical graph fixes the unsigned vertex
+numbering first; the reference exhaustively checks the signed transformation
+closure and chooses the minimal scoped decoration within that fixed unsigned
+class, rather than introducing a competing raw-Atom factor/dummy ordering. It
+detects whether both signs reach one representative. Explicitly limit each
+generated case to the transformations covered by that oracle.
 
 ### Structured-index and failure tests
 
@@ -1686,7 +1784,7 @@ covered by that oracle.
 - equivalent inputs receive the same canonical sign;
 - valid intrinsic symmetry, generic mixed-argument symmetry, and nested partial
   symmetry each retain their distinct head-local semantics;
-- color K3,3 and RQFT six-`f` zeros remain zero;
+- color K3,3 and the two exact RQFT d2 six-`f` contractions remain zero;
 - normal-profile color, metric, Dirac, and feyngen canonicalization tests pass;
 - `scalar_spectacles_integrated_uv_factorizes_over_bridge` validates
   pointwise `bubble_left * bubble_right / (2s)` and the Monte Carlo spectacles
@@ -1711,9 +1809,11 @@ covered by that oracle.
   input changed solely by association, commutative ordering, declared unsigned
   symmetry transport, and bijective dummy renaming while preserving visible
   topology, colors, scopes, Power structure, and all bottom-up Symbolica-visible
-  equality classes. Any sign, zero, payload edit, residual phase, class
-  merge/split, or ambiguity retries the complete reparsed problem; terminal
-  zero/one returns immediately. Consecutive equality of exact canonical problem
+  equality classes, or when mandatory execution returns the exact normalized
+  iteration input and thereby proves an extensional fixed point. Any sign, zero,
+  payload edit, residual phase, class merge/split, or ambiguity otherwise
+  retries the complete reparsed problem; terminal zero/one returns immediately.
+  Consecutive equality of exact canonical problem
   identities is successful conditional verification; an older repetition is a
   typed convergence cycle, and a benchmarked deterministic iteration budget
   bounds distinct states. Hash equality alone proves neither case. Ordinary
@@ -1726,8 +1826,9 @@ covered by that oracle.
   raw `SymbolicNet`, whether manually built or parsed with noncanonical
   settings, has no canonicalization entry point or unchecked conversion into
   that wrapper. A non-`i8`, fractional, or symbolic exponent may be retained as
-  an opaque scalar Atom only when its base has no recognized tensor topology;
-  it cannot hide tensor ports from the unified graph.
+  an opaque scalar Atom only when its base has no recognized tensor topology or
+  an explicit bracket/projector opacity boundary owns the complete payload; it
+  cannot otherwise hide tensor ports from the unified graph.
 - Root and operation roles, unary `NetworkOp::Function`, signed Power-result
   nodes, `PowerMagnitude`/`PowerCopy` nodes, line connectivity, and semantic
   colors are explicit and stable across parser association, dummy names, hidden
@@ -1810,5 +1911,8 @@ covered by that oracle.
   and its exact source Atom form the stable `CanonicalPolicyNet`; existing
   facades expose network or Atom projections. Canonicalization contains no
   bespoke structural renderer or Power evaluator.
-- Unit, integration, RQFT, and disconnected Monte Carlo spectacles validation
-  all pass.
+- Targeted unit and integration checks, the K3,3 checks, Idenso's independent
+  assertions over the two exact d2 signed six-`f` RQFT contractions, and the
+  disconnected Monte Carlo spectacles validation pass. The enclosing
+  historical RQFT test still has the unrelated d11 snapshot mismatch recorded
+  in Phase 6; full downstream validation is not yet complete.

@@ -45,9 +45,9 @@ use symbolica::{
 };
 
 mod canonicalize;
+pub(crate) use canonicalize::CanonicalPolicyNet;
 pub use canonicalize::CanonicalizationError;
-use canonicalize::canonize_network;
-pub(crate) use canonicalize::validate_tensor_symmetry;
+pub(crate) use canonicalize::semantic_atom_digest;
 #[cfg(test)]
 pub mod tests;
 
@@ -561,11 +561,6 @@ pub type SymbolicNet<Aind> =
 // pub type ParamNet<Aind> =
 //     Network<NetworkStore<ParamTensor<SymbolicTensor<Aind>, Atom>, DummyKey, Symbol, Aind>;
 pub trait SymbolicNetExt<Aind: AbsInd + DummyAind + ParseableAind + 'static> {
-    /// Return a freshly rebuilt canonical network with signed symmetries applied.
-    fn canonize(
-        self,
-        new_dummy: impl FnMut(usize) -> Aind,
-    ) -> Result<SymbolicNet<Aind>, CanonicalizationError>;
     fn snapshot_dot(&self) -> String;
     fn simple_execute<CStrat>(self) -> Atom
     where
@@ -575,13 +570,6 @@ pub trait SymbolicNetExt<Aind: AbsInd + DummyAind + ParseableAind + 'static> {
 impl<Aind: AbsInd + DummyAind + ParseableAind + 'static> SymbolicNetExt<Aind>
     for SymbolicNet<Aind>
 {
-    fn canonize(
-        self,
-        new_dummy: impl FnMut(usize) -> Aind,
-    ) -> Result<SymbolicNet<Aind>, CanonicalizationError> {
-        canonize_network(self, new_dummy)
-    }
-
     fn snapshot_dot(&self) -> String {
         self.dot_display_impl(
             |a| a.to_bare_ordered_string(),

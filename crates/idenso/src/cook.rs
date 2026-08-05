@@ -462,19 +462,69 @@ impl CookSettings {
             let Some(dim) = args.next() else {
                 return;
             };
-            let Some(AtomView::Fun(index)) = args.next() else {
+            let Some(index) = args.next() else {
                 return;
             };
 
-            match self.cook_function_symbol(index, filter) {
-                Ok(Some(cooked)) => {
-                    **out = FunctionBuilder::new(rep.get_symbol())
-                        .add_arg(dim)
-                        .add_arg(Atom::var(cooked))
-                        .finish();
+            let mut changed = false;
+            let dim = if self.mode == CookMode::ReversibleEncoding
+                && matches!(
+                    dim,
+                    AtomView::Fun(_) | AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
+                ) {
+                let tags = self.output_tags.explicit_tags();
+                match self.build_symbol(self.reversible_name(dim, tags), Some(dim.to_owned()), tags)
+                {
+                    Ok(cooked) => {
+                        changed = true;
+                        Atom::var(cooked)
+                    }
+                    Err(e) => {
+                        error.set_once(e);
+                        return;
+                    }
                 }
-                Ok(None) => {}
-                Err(e) => error.set_once(e),
+            } else {
+                dim.to_owned()
+            };
+            let index = match index {
+                AtomView::Fun(index) => match self.cook_function_symbol(index, filter) {
+                    Ok(Some(cooked)) => {
+                        changed = true;
+                        Atom::var(cooked)
+                    }
+                    Ok(None) => index.as_view().to_owned(),
+                    Err(e) => {
+                        error.set_once(e);
+                        return;
+                    }
+                },
+                index @ (AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+                    if self.mode == CookMode::ReversibleEncoding =>
+                {
+                    let tags = self.output_tags.explicit_tags();
+                    match self.build_symbol(
+                        self.reversible_name(index, tags),
+                        Some(index.to_owned()),
+                        tags,
+                    ) {
+                        Ok(cooked) => {
+                            changed = true;
+                            Atom::var(cooked)
+                        }
+                        Err(e) => {
+                            error.set_once(e);
+                            return;
+                        }
+                    }
+                }
+                index => index.to_owned(),
+            };
+            if changed {
+                **out = FunctionBuilder::new(rep.get_symbol())
+                    .add_arg(dim)
+                    .add_arg(index)
+                    .finish();
             }
         });
 
@@ -514,9 +564,11 @@ impl CookSettings {
         tags: &[String],
     ) -> Result<Symbol, CookingError> {
         let name = Self::namespaced_name(name);
+        let mut tags = tags.to_vec();
+        tags.sort();
         let mut builder = SymbolBuilder::new(NamespacedSymbol::parse(&name));
         if !tags.is_empty() {
-            builder = builder.with_tags(tags);
+            builder = builder.with_tags(&tags);
         }
         if let Some(source) = source {
             builder = builder.with_user_data(UserData::Atom(source));
@@ -528,14 +580,16 @@ impl CookSettings {
 
     fn reversible_name(&self, source: AtomView<'_>, tags: &[String]) -> String {
         let mut hasher = blake3::Hasher::new();
-        hasher.update(source.get_data());
-        for tag in tags {
+        hasher.update(crate::tensor::semantic_atom_digest(source).as_bytes());
+        let mut tags = tags.to_vec();
+        tags.sort();
+        hasher.update(&(tags.len() as u128).to_le_bytes());
+        for tag in &tags {
+            hasher.update(&(tag.len() as u128).to_le_bytes());
             hasher.update(tag.as_bytes());
-            hasher.update(&[0]);
         }
         let hash = hasher.finalize();
-        let hex = hash.to_hex();
-        format!("idenso::cooked_{}", &hex[..24])
+        format!("idenso::cooked_{}", hash.to_hex())
     }
 
     fn namespaced_name(name: String) -> String {
@@ -737,6 +791,7 @@ mod tests {
     use symbolica::{
         atom::{
             Atom, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder, UserData,
+            representation::FunView,
         },
         parse_lit, symbol,
     };
@@ -748,16 +803,18 @@ mod tests {
     struct CookedIndex;
 
     impl CookedIndex {
-        fn first_index_symbol(expr: &Atom) -> Symbol {
+        fn first_slot(expr: &Atom) -> FunView<'_> {
             let AtomView::Fun(tensor) = expr.as_view() else {
                 panic!("expected tensor function");
             };
-            let Some(slot) = tensor.iter().next() else {
-                panic!("expected tensor argument");
-            };
-            let AtomView::Fun(slot) = slot else {
+            let Some(AtomView::Fun(slot)) = tensor.iter().next() else {
                 panic!("expected representation slot");
             };
+            slot
+        }
+
+        fn first_index_symbol(expr: &Atom) -> Symbol {
+            let slot = Self::first_slot(expr);
             let Some(index) = slot.iter().nth(1) else {
                 panic!("expected representation index");
             };
@@ -765,6 +822,14 @@ mod tests {
                 panic!("expected cooked index symbol");
             };
             index.get_symbol()
+        }
+
+        fn first_dimension_symbol(expr: &Atom) -> Symbol {
+            let slot = Self::first_slot(expr);
+            let Some(AtomView::Var(dimension)) = slot.iter().next() else {
+                panic!("expected cooked dimension symbol");
+            };
+            dimension.get_symbol()
         }
     }
 
@@ -820,6 +885,66 @@ mod tests {
         assert!(symbol.has_tag("idenso::reversible_index"));
         assert_eq!(symbol.get_data(), &UserData::Atom(parse_lit!(f(0))));
         assert_eq!(cooked.uncook_with_settings(&settings), expr);
+    }
+
+    #[test]
+    fn reversible_names_use_stable_semantic_payload_and_tag_order() {
+        let settings = CookSettings::reversible();
+        let left = symbolica::parse!(
+            "outer(x+y,x*y)",
+            default_namespace = "stable_reversible_name"
+        );
+        let right = symbolica::parse!(
+            "outer(y+x,y*x)",
+            default_namespace = "stable_reversible_name"
+        );
+        let forward_tags = vec!["idenso::first".to_owned(), "idenso::second".to_owned()];
+        let reverse_tags = vec!["idenso::second".to_owned(), "idenso::first".to_owned()];
+        let embedded_separator = vec!["idenso::first\0idenso::second".to_owned()];
+        let name = settings.reversible_name(left.as_view(), &forward_tags);
+
+        assert_eq!(
+            name,
+            settings.reversible_name(right.as_view(), &reverse_tags)
+        );
+        assert_eq!(
+            name.strip_prefix("idenso::cooked_").unwrap().len(),
+            blake3::OUT_LEN * 2
+        );
+        assert_ne!(
+            name,
+            settings.reversible_name(left.as_view(), &embedded_separator)
+        );
+    }
+
+    #[test]
+    fn reversible_index_cooking_encodes_compound_dimensions() {
+        test_initialize();
+        let expr = parse_lit!(p(spenso::mink(d ^ 2 - 1, f(0))));
+        let settings = CookSettings::indices().with_mode(super::CookMode::ReversibleEncoding);
+
+        let cooked = expr.cook_indices_with_settings(&settings);
+        let symbol = CookedIndex::first_dimension_symbol(&cooked);
+
+        assert_eq!(symbol.get_data(), &UserData::Atom(parse_lit!(d ^ 2 - 1)));
+        assert_eq!(cooked.uncook_with_settings(&settings), expr);
+    }
+
+    #[test]
+    fn reversible_index_cooking_encodes_compound_index_payloads() {
+        test_initialize();
+        let settings = CookSettings::indices().with_mode(super::CookMode::ReversibleEncoding);
+
+        for payload in [parse_lit!(i + j), parse_lit!(i * j), parse_lit!(i ^ 2)] {
+            let expr = FunctionBuilder::new(symbol!("p"))
+                .add_arg(SPENSO_TAG.rep_::<0, _>([Atom::num(4), payload.clone()]))
+                .finish();
+            let cooked = expr.cook_indices_with_settings(&settings);
+            let symbol = CookedIndex::first_index_symbol(&cooked);
+
+            assert_eq!(symbol.get_data(), &UserData::Atom(payload));
+            assert_eq!(cooked.uncook_with_settings(&settings), expr);
+        }
     }
 
     #[test]

@@ -63,6 +63,14 @@ pub trait AtomStructureExt {
     /// only when they have one tensorial argument. Untagged wrappers around tensor
     /// expressions stay scalar because their head has no tensor semantics.
     fn is_tensorial(&self, filter: StrictTensorFilter) -> bool;
+
+    /// Return true when the parser can expose tensor topology owned by this expression.
+    ///
+    /// Unlike [`Self::is_tensorial`], this follows ordinary unary function wrappers so
+    /// their tensor-valued argument can remain an explicit `NetworkOp::Function`
+    /// operand. A bare slot is only payload outside a tensor-owning head, while
+    /// brackets and non-structural projector uses deliberately stop this walk.
+    fn contains_exposed_tensor_topology(&self, filter: StrictTensorFilter) -> bool;
 }
 
 impl AtomStructureExt for Atom {
@@ -75,6 +83,10 @@ impl AtomStructureExt for Atom {
 
     fn is_tensorial(&self, filter: StrictTensorFilter) -> bool {
         self.as_view().is_tensorial(filter)
+    }
+
+    fn contains_exposed_tensor_topology(&self, filter: StrictTensorFilter) -> bool {
+        self.as_view().contains_exposed_tensor_topology(filter)
     }
 }
 
@@ -93,6 +105,28 @@ impl AtomStructureExt for AtomView<'_> {
             AtomView::Add(add) => add.iter().any(|arg| arg.is_tensorial(filter)),
             AtomView::Mul(mul) => mul.iter().any(|arg| arg.is_tensorial(filter)),
             AtomView::Pow(pow) => pow.get_base_exp().0.is_tensorial(filter),
+            _ => false,
+        }
+    }
+
+    fn contains_exposed_tensor_topology(&self, filter: StrictTensorFilter) -> bool {
+        match *self {
+            AtomView::Fun(fun) => {
+                TensorialSyntax::function_contains_exposed_tensor_topology(fun, filter)
+            }
+            // A representation-valued variable is a direct slot only when a
+            // tensor-owning parent gives it that role.
+            AtomView::Var(_) => false,
+            AtomView::Add(add) => add
+                .iter()
+                .any(|arg| arg.contains_exposed_tensor_topology(filter)),
+            AtomView::Mul(mul) => mul
+                .iter()
+                .any(|arg| arg.contains_exposed_tensor_topology(filter)),
+            AtomView::Pow(pow) => pow
+                .get_base_exp()
+                .0
+                .contains_exposed_tensor_topology(filter),
             _ => false,
         }
     }
@@ -129,6 +163,18 @@ impl TensorialSyntax {
             return matches!(args.as_slice(), [arg] if arg.is_tensorial(filter));
         }
 
+        // A projector is tensor topology only in its structural direct-slot
+        // form. Projectors over chain/trace factors remain ordinary opaque
+        // scalar syntax until their explicit expansion pass.
+        if (symbol == *shadowing::SYM
+            || symbol == *shadowing::ANTISYM
+            || symbol == *shadowing::CYCLIC)
+            && fun.get_nargs() > 0
+            && fun.iter().all(Self::is_direct_slot_syntax)
+        {
+            return true;
+        }
+
         match filter {
             StrictTensorFilter::Tagged => symbol.has_tag(&SPENSO_TAG.tensor),
             StrictTensorFilter::TaggedChecked => {
@@ -141,6 +187,36 @@ impl TensorialSyntax {
         }
     }
 
+    fn function_contains_exposed_tensor_topology(
+        fun: FunView<'_>,
+        filter: StrictTensorFilter,
+    ) -> bool {
+        let symbol = fun.get_symbol();
+
+        if symbol == SPENSO_TAG.pure_scalar
+            || symbol == SPENSO_TAG.scalar
+            || symbol == SPENSO_TAG.bracket
+            || symbol.has_attributes_of(SPENSO_TAG.rep_)
+        {
+            return false;
+        }
+
+        if symbol == *shadowing::SYM
+            || symbol == *shadowing::ANTISYM
+            || symbol == *shadowing::CYCLIC
+        {
+            return fun.get_nargs() > 0 && fun.iter().all(Self::is_direct_slot_syntax);
+        }
+
+        if Self::function_is_tensorial(fun, filter) {
+            return true;
+        }
+
+        let arguments = fun.iter().collect::<Vec<_>>();
+        matches!(arguments.as_slice(), [argument]
+            if argument.contains_exposed_tensor_topology(filter))
+    }
+
     fn contains_representation_syntax(value: AtomView<'_>) -> bool {
         match value {
             AtomView::Fun(fun) => {
@@ -151,6 +227,14 @@ impl TensorialSyntax {
             AtomView::Add(add) => add.iter().any(Self::contains_representation_syntax),
             AtomView::Mul(mul) => mul.iter().any(Self::contains_representation_syntax),
             AtomView::Pow(pow) => Self::contains_representation_syntax(pow.get_base_exp().0),
+            _ => false,
+        }
+    }
+
+    fn is_direct_slot_syntax(value: AtomView<'_>) -> bool {
+        match value {
+            AtomView::Fun(fun) => fun.get_symbol().has_attributes_of(SPENSO_TAG.rep_),
+            AtomView::Var(var) => var.get_symbol().has_attributes_of(SPENSO_TAG.rep_),
             _ => false,
         }
     }
@@ -664,6 +748,26 @@ mod tests {
 
         assert!(scalar_with_tensor_arg.is_tensorial(StrictTensorFilter::ContainsReps));
         assert!(!scalar.is_tensorial(StrictTensorFilter::ContainsReps));
+    }
+
+    #[test]
+    fn exposed_topology_follows_only_supported_unary_wrappers() {
+        let rep = mink4();
+        let index = slot!(rep, exposed_topology_index).to_atom();
+        let tensor = function!(tensor_symbol!(exposed_topology_tensor), index.clone());
+        let wrapper = symbol!("exposed_topology_wrapper");
+        let wrapped = function!(wrapper, tensor.clone());
+        let slot_payload = function!(wrapper, index.clone());
+        let bracketed = function!(wrapper, bracket!(tensor.clone()));
+        let projected = function!(wrapper, sym!(tensor.clone()));
+        let structural_group = sym!(index);
+
+        assert!(tensor.contains_exposed_tensor_topology(StrictTensorFilter::Tagged));
+        assert!(wrapped.contains_exposed_tensor_topology(StrictTensorFilter::Tagged));
+        assert!(!slot_payload.contains_exposed_tensor_topology(StrictTensorFilter::Tagged));
+        assert!(!bracketed.contains_exposed_tensor_topology(StrictTensorFilter::Tagged));
+        assert!(!projected.contains_exposed_tensor_topology(StrictTensorFilter::Tagged));
+        assert!(structural_group.contains_exposed_tensor_topology(StrictTensorFilter::Tagged));
     }
 
     #[test]

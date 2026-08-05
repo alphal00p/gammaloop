@@ -1,5 +1,6 @@
 use spenso::network::parsing::{
-    ParseSettings, SchoonschipExpansionMode, ShadowedStructure, ShorthandParsing, StructureFromAtom,
+    ParseSettings, SchoonschipExpansionMode, ShadowedStructure, ShorthandParsing,
+    StrictTensorFilter, StructureFromAtom,
 };
 use spenso::network::{
     ContractScalars, ExecutionResult, Network, NetworkState, Sequential, SequentialExtract,
@@ -66,6 +67,27 @@ fn no_schoonschip_inside_chain_settings() -> ParseSettings {
         },
         ..Default::default()
     }
+}
+
+#[test]
+fn symbolic_net_parser_honors_the_requested_tensor_filter() {
+    let rep = test_initialize().mink4;
+    let head = symbol!("parse_filter_untagged");
+    let expression = FunctionBuilder::new(head)
+        .add_arg(rep.to_symbolic([Atom::var(symbol!("parse_filter_index"))]))
+        .finish();
+
+    let tagged = expression
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    let contains_reps = expression
+        .parse_to_symbolic_net::<AbstractIndex>(
+            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+        )
+        .unwrap();
+
+    assert!(tagged.store.tensors.is_empty());
+    assert_eq!(contains_reps.store.tensors.len(), 1);
 }
 
 #[test]
@@ -201,15 +223,26 @@ fn parse_ratio() {
       layout = "neato";
 
       0	 [label = "∏"];
-      1	 [label = "S:(f(mul(P(3,mink(4,1))*P(4,mink(4,1)))))^(-1)"];
+      1	 [label = "T:P(1,mink(4,1))"];
       2	 [label = "T:P(2,mink(4,1))"];
-      3	 [label = "T:P(1,mink(4,1))"];
+      3	 [label = "^( -1 )"];
+      4	 [label = "Func(f)"];
+      5	 [label = "Func(mul)"];
+      6	 [label = "∏"];
+      7	 [label = "T:P(3,mink(4,1))"];
+      8	 [label = "T:P(4,mink(4,1))"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
-      3:7:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
-      2:5:s	-> 0:2:s	 [id=2  color="red:blue;0.5"];
+      3:8:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
+      2:6:s	-> 0:2:s	 [id=2  color="red:blue;0.5"];
       1:4:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
-      2:6:s	-> 3:8:s	 [id=4 dir=none  color="red:blue;0.5" label="mink4|1"];
+      1:5:s	-> 2:7:s	 [id=4 dir=none  color="red:blue;0.5" label="mink4|1"];
+      7:18:s	-> 8:20:s	 [id=5 dir=none  color="red:blue;0.5" label="mink4|1"];
+      4:10:s	-> 3:9:s	 [id=6  color="red:blue;0.5"];
+      8:19:s	-> 6:15:s	 [id=7  color="red:blue;0.5"];
+      5:12:s	-> 4:11:s	 [id=8  color="red:blue;0.5"];
+      7:17:s	-> 6:16:s	 [id=9  color="red:blue;0.5"];
+      6:14:s	-> 5:13:s	 [id=10  color="red:blue;0.5"];
     }
     "#);
 

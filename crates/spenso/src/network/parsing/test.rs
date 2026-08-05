@@ -1,8 +1,10 @@
 use super::*;
-use crate::network::NetworkState;
 use crate::network::library::symbolic::ETS;
+use crate::network::{NetworkNode, NetworkOp, NetworkState};
 use crate::structure::representation::{Lorentz, Minkowski, RepName};
-use crate::{chain, mink, p, q, slot, tensor, tensor_symbol, trace, vector};
+use crate::{
+    bracket, chain, mink, p, pure_scalar, q, slot, sym, tensor, tensor_symbol, trace, vector,
+};
 use symbolica::{atom::FunctionBuilder, function, symbol};
 
 fn mink4() -> Representation<Minkowski> {
@@ -61,6 +63,96 @@ fn schoonschip_without_inner_products_settings() -> ParseSettings {
             chain: true,
         },
         ..Default::default()
+    }
+}
+
+#[test]
+fn ordinary_unary_function_keeps_owned_tensor_topology_visible() {
+    let rep = mink4();
+    let wrapper = symbol!("parse_ordinary_tensor_wrapper");
+    let tensor = function!(
+        tensor_symbol!(parse_ordinary_tensor_argument),
+        slot!(rep, parse_ordinary_tensor_index).to_atom()
+    );
+    let expression = function!(wrapper, tensor);
+
+    let parsed = expression
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+
+    assert_eq!(parsed.store.tensors.len(), 1);
+    assert!(parsed.graph.graph.iter_nodes().any(|(_, _, node)| {
+        matches!(node, NetworkNode::Op(NetworkOp::Function(function)) if *function == wrapper)
+    }));
+}
+
+#[test]
+fn unary_function_respects_slot_bracket_and_projector_payload_boundaries() {
+    let rep = mink4();
+    let wrapper = symbol!("parse_ordinary_opaque_wrapper");
+    let slot = slot!(rep, parse_ordinary_opaque_index).to_atom();
+    let tensor = function!(tensor_symbol!(parse_ordinary_opaque_tensor), slot.clone());
+    let expressions = [
+        function!(wrapper, slot),
+        function!(wrapper, bracket!(tensor.clone())),
+        function!(wrapper, sym!(tensor)),
+    ];
+
+    for expression in expressions {
+        let parsed = expression
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert!(parsed.store.tensors.is_empty(), "{expression}");
+        assert!(!parsed.graph.graph.iter_nodes().any(|(_, _, node)| {
+            matches!(node, NetworkNode::Op(NetworkOp::Function(function)) if *function == wrapper)
+        }));
+    }
+}
+
+#[test]
+fn direct_scalar_and_projector_boundaries_remain_opaque() {
+    let rep = mink4();
+    let tensor = function!(
+        tensor_symbol!(parse_direct_opaque_tensor),
+        slot!(rep, parse_direct_opaque_index).to_atom()
+    );
+    let expressions = [
+        pure_scalar!(tensor.clone()),
+        function!(SPENSO_TAG.scalar, tensor.clone()),
+        sym!(tensor),
+    ];
+
+    for expression in expressions {
+        let parsed = expression
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert!(parsed.store.tensors.is_empty(), "{expression}");
+        assert!(
+            !parsed
+                .graph
+                .graph
+                .iter_nodes()
+                .any(|(_, _, node)| matches!(node, NetworkNode::Op(NetworkOp::Function(_))))
+        );
+    }
+}
+
+#[test]
+fn tagged_unary_function_respects_bracket_payload_boundaries() {
+    let rep = mink4();
+    let wrapper = tensor_symbol!(parse_tagged_opaque_wrapper);
+    let slot = slot!(rep, parse_tagged_opaque_index).to_atom();
+    let tensor = function!(tensor_symbol!(parse_tagged_opaque_tensor), slot);
+    let expressions = [function!(wrapper, bracket!(tensor))];
+
+    for expression in expressions {
+        let parsed = expression
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert!(parsed.store.tensors.is_empty(), "{expression}");
+        assert!(!parsed.graph.graph.iter_nodes().any(|(_, _, node)| {
+            matches!(node, NetworkNode::Op(NetworkOp::Function(function)) if *function == wrapper)
+        }));
     }
 }
 

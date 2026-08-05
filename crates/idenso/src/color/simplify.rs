@@ -58,6 +58,11 @@ impl ColorAlgebraSimplifier {
                         };
                         **out = network.canonize::<AbstractIndex>(AbstractIndex::Dummy);
                     });
+                // Canonical network execution can materialize a one-generator
+                // chain as its tensor leaf and factor common tensor structure.
+                // Re-enter the same color normal form used at the top of the
+                // loop before deciding whether algebra changed.
+                let canonical = self.apply_once(canonical.as_view());
                 if canonical != next {
                     current = canonical;
                     continue;

@@ -609,8 +609,31 @@ where
             ));
         }
 
-        if !value.as_view().is_tensorial(settings.strict_tensor_filter) {
+        let root_is_tensorial = value.as_view().is_tensorial(settings.strict_tensor_filter);
+        let ordinary_unary_argument = if !root_is_tensorial
+            && value.get_nargs() == 1
+            && value
+                .as_view()
+                .contains_exposed_tensor_topology(settings.strict_tensor_filter)
+        {
+            value.iter().next()
+        } else {
+            None
+        };
+
+        if !root_is_tensorial && ordinary_unary_argument.is_none() {
             return Self::parse_scalar_function(value);
+        }
+
+        if let Some(inner) = ordinary_unary_argument {
+            return Ok(Self::try_from_view_impl(
+                inner,
+                state,
+                library,
+                function_library,
+                settings,
+            )?
+            .fun(symbol));
         }
 
         if symbol.has_tag(&SPENSO_TAG.broadcast) {
@@ -621,6 +644,35 @@ where
                 function_library,
                 settings,
             );
+        }
+
+        // A one-argument tensor head with no direct structural slot is an
+        // enclosing symbolic function when its argument owns tensor topology.
+        // Keeping the whole call as a scalar-valued leaf would hide the
+        // argument's contractions from network algorithms.
+        let scalar_tensor_argument = if symbol.has_tag(&SPENSO_TAG.tensor)
+            && value.get_nargs() == 1
+            && let Some(inner) = value.iter().next()
+            && inner.contains_exposed_tensor_topology(settings.strict_tensor_filter)
+        {
+            match S::structure_from_atom(value.as_view(), StructureInferenceMode::Fast) {
+                Ok(structure) => structure.structure.is_scalar(),
+                Err(StructureError::EmptyStructure(_)) => true,
+                Err(_) => false,
+            }
+        } else {
+            false
+        };
+        if scalar_tensor_argument {
+            let inner = value.iter().next().unwrap();
+            return Ok(Self::try_from_view_impl(
+                inner,
+                state,
+                library,
+                function_library,
+                settings,
+            )?
+            .fun(symbol));
         }
 
         if let Some(inference) = settings.shorthand_parsing.opaque_inference()
@@ -805,6 +857,12 @@ where
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
         let _span = profile::span(Timer::ParsePow);
+        let (base, exp) = value.get_base_exp();
+        let integer_exponent = i8::try_from(exp).ok();
+        if integer_exponent == Some(0) {
+            return Ok(Self::one());
+        }
+
         if let Some(a) = settings.depth_limit
             && a <= state.depth
         {
@@ -819,11 +877,14 @@ where
         if !settings.depth_is_product_depth {
             state.depth += 1;
         }
-        let (base, exp) = value.get_base_exp();
 
-        if let Ok(n) = i8::try_from(exp) {
+        if let Some(n) = integer_exponent {
             // println!("base:{base}");
             let base = Self::try_from_view_impl(base, state, library, function_library, settings)?;
+
+            if n == 1 {
+                return Ok(base);
+            }
 
             // println!("base state {:?}", base.state);
             if settings.precontract_scalars
