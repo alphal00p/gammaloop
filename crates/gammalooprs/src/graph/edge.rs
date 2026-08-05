@@ -278,6 +278,10 @@ impl UVE for Edge {
     fn particle_pdg_code(&self) -> Option<isize> {
         self.particle().map(|particle| particle.pdg_code)
     }
+
+    fn is_massive(&self) -> bool {
+        self.particle.is_massive()
+    }
 }
 
 impl Edge {
@@ -447,6 +451,10 @@ impl UVE for ParseEdge {
 
     fn particle_pdg_code(&self) -> Option<isize> {
         self.particle.particle().map(|particle| particle.pdg_code)
+    }
+
+    fn is_massive(&self) -> bool {
+        self.particle.is_massive()
     }
 }
 

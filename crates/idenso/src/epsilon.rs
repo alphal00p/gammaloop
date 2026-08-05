@@ -266,7 +266,8 @@ impl EpsilonSimplifierPass {
 #[cfg(test)]
 mod test {
     use insta::assert_snapshot;
-    use spenso::{g, mink, p, shadowing::symbolica_utils::AtomCoreExt};
+    use spenso::{g, mink, p};
+    use symbolica_utils::AtomPrintExt;
 
     use crate::{epsilon as eps, test_support::test_initialize};
 

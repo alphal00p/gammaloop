@@ -1446,12 +1446,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
-name = "fixedbitset"
-version = "0.5.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
-
-[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1555,6 +1549,7 @@ dependencies = [
  "smartstring",
  "spenso",
  "symbolica",
+ "symbolica-utils",
  "sysinfo",
  "tabled",
  "tempfile",
@@ -1589,6 +1584,7 @@ dependencies = [
  "serial_test",
  "spenso",
  "symbolica",
+ "symbolica-utils",
  "tabled",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
@@ -1684,7 +1680,6 @@ dependencies = [
  "toml_parser",
  "toml_writer",
  "tracing",
- "tracing-core",
  "tracing-subscriber",
  "winnow 0.7.15",
  "winnow 1.0.2",
@@ -1693,7 +1688,7 @@ dependencies = [
 
 [[package]]
 name = "gammalooprs"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "ahash",
  "base62",
@@ -1743,6 +1738,7 @@ dependencies = [
  "spenso-hep-lib",
  "statrs",
  "symbolica",
+ "symbolica-utils",
  "tabled",
  "thiserror 2.0.18",
  "toml 0.9.12+spec-1.1.0",
@@ -1835,7 +1831,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "2.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=main#9135b4091505276baa11ef262fe1165f2b95ea33"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#46d69071915eecd9e3ac4e8cb5aa12f12e51549f"
 dependencies = [
  "ahash",
  "dyn-clone",
@@ -2037,6 +2033,7 @@ dependencies = [
  "spenso",
  "spenso-macros",
  "symbolica",
+ "symbolica-utils",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -2419,6 +2416,7 @@ dependencies = [
  "serde_repr",
  "similar-asserts",
  "symbolica",
+ "symbolica-utils",
  "thiserror 2.0.18",
 ]
 
@@ -2824,8 +2822,8 @@ dependencies = [
 
 [[package]]
 name = "numerica"
-version = "2.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=main#9135b4091505276baa11ef262fe1165f2b95ea33"
+version = "2.2.0"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#46d69071915eecd9e3ac4e8cb5aa12f12e51549f"
 dependencies = [
  "ahash",
  "astro-float",
@@ -3032,18 +3030,6 @@ checksum = "89815c69d36021a140146f26659a81d6c2afa33d216d736dd4be5381a7362220"
 dependencies = [
  "pest",
  "sha2",
-]
-
-[[package]]
-name = "petgraph"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8701b58ea97060d5e5b155d383a69952a60943f0e6dfe30b04c287beb0b27455"
-dependencies = [
- "fixedbitset 0.5.7",
- "hashbrown 0.15.5",
- "indexmap",
- "serde",
 ]
 
 [[package]]
@@ -4387,6 +4373,7 @@ dependencies = [
  "serde_json",
  "spenso-macros",
  "symbolica",
+ "symbolica-utils",
  "tabled",
  "thiserror 2.0.18",
  "tracing",
@@ -4547,8 +4534,8 @@ dependencies = [
 
 [[package]]
 name = "symbolica"
-version = "2.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=main#9135b4091505276baa11ef262fe1165f2b95ea33"
+version = "2.2.0"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#46d69071915eecd9e3ac4e8cb5aa12f12e51549f"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -4582,10 +4569,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "symbolica-utils"
+version = "0.1.0"
+dependencies = [
+ "bincode 2.0.1",
+ "bincode-trait-derive",
+ "itertools 0.14.0",
+ "serde",
+ "symbolica",
+]
+
+[[package]]
 name = "symjit"
-version = "2.18.9"
+version = "2.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65d9088e42bcb4d3d3686c3b1a09f04eaea9482361dcc7abf2117b790a714640"
+checksum = "41f54d4663441294b2ebee68fd9504c5483d31f99ee2e007f81ac3cbc246c5c1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4594,7 +4592,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "num-complex",
- "petgraph",
+ "num-traits",
  "rand 0.9.4",
  "rayon",
  "region",
@@ -4743,7 +4741,7 @@ dependencies = [
  "fancy-regex",
  "filedescriptor",
  "finl_unicode",
- "fixedbitset 0.4.2",
+ "fixedbitset",
  "hex",
  "lazy_static",
  "libc",

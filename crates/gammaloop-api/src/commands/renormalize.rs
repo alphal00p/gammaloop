@@ -7,11 +7,12 @@ use crate::CLISettings;
 use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
-use gammalooprs::utils::symbolica_ext::TypstFormat;
+use gammalooprs::uv::ApproximationType;
 use idenso::color::{ColorSimplifier, CS};
 use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use std::io::Write as _;
 use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::parse;
@@ -64,9 +65,22 @@ impl Renormalize {
 
         let mut settings = global_cli_settings.global.generation.uv.clone();
 
-        settings.only_integrated = true;
         settings.generate_integrated = true;
-        settings.pole_part = true;
+        let prescription = &mut settings.renormalization_prescription;
+        for scheme in [
+            &mut prescription.log_divergent,
+            &mut prescription.massive_power_divergent,
+            &mut prescription.massless_power_divergent,
+        ] {
+            if *scheme == ApproximationType::MUV {
+                *scheme = ApproximationType::PolePart;
+            }
+        }
+        for rule in &mut prescription.overrides {
+            if rule.prescription == ApproximationType::MUV {
+                rule.prescription = ApproximationType::PolePart;
+            }
+        }
 
         let mut renormalization_part: Vec<Atom> = Vec::new();
         let output_dir = if let Some(path) = self.result_path.clone() {
@@ -136,7 +150,11 @@ impl Renormalize {
                 let mut path = File::create(dir.join(file_name))?;
                 write!(path, "{}", part.printer(PrintOptions::file()))?;
                 let mut path = File::create(dir.join(typst_name))?;
-                write!(path, "{}", part.typst_string())?;
+                write!(
+                    path,
+                    "$ {} $",
+                    part.printer(SpensoPrintSettings::typst_options())
+                )?;
             }
             renormalization_part.push(part);
         }

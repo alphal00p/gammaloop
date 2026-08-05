@@ -1,5 +1,5 @@
 digraph d1 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 3/8*ep^-2 + 29/32*ep^-1)";
   overall_factor= "+1/6"
 
@@ -19,7 +19,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 3/8*ep^-2 + 29/32*ep^-1)";
   v4 -> v3 [particle= "g"];
 }
 digraph d2 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/16*ep^-2 + 5/192*ep^-1)";
   overall_factor= "+1"
 
@@ -40,7 +40,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/16*ep^-2 + 5/192*ep^-1)";
   v5 -> v4 [particle= "g"];
 }
 digraph d3 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1)";
   overall_factor= "+1/2"
 
@@ -61,7 +61,7 @@ pole_part="p1.p1*gs^6*ca^3*rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1)";
   v5 -> v4 [particle= "g"];
 }
 digraph d4 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)";
   overall_factor= "+1/2"
 
@@ -82,7 +82,7 @@ pole_part="p1.p1*gs^6*ca^3*rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)";
   v5 -> v4 [particle= "g"];
 }
 digraph d5 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 9/64*ep^-2 + 21/128*ep^-1)";
   overall_factor= "+1/2"
 
@@ -103,7 +103,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 9/64*ep^-2 + 21/128*ep^-1)";
   v5 -> v4 [particle= "g"];
 }
 digraph d6 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat(3/64*ep^-3 + 35/128*ep^-2 - ep^-1)";
   overall_factor= "+1/2"
 
@@ -124,7 +124,7 @@ pole_part="p1.p1*gs^6*ca^3*rat(3/64*ep^-3 + 35/128*ep^-2 - ep^-1)";
   v5 -> v4 [particle= "g"];
 }
 digraph d7 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat(3/64*ep^-3 + 35/128*ep^-2 - ep^-1)";
   overall_factor= "+1/2"
 
@@ -145,7 +145,7 @@ pole_part="p1.p1*gs^6*ca^3*rat(3/64*ep^-3 + 35/128*ep^-2 - ep^-1)";
   v5 -> v4 [particle= "g"];
 }
 digraph d8 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat(27/32*ep^-3 - 63/64*ep^-2 - 99/128*ep^-1)";
   overall_factor= "+1/4"
 
@@ -166,7 +166,7 @@ pole_part="p1.p1*gs^6*ca^3*rat(27/32*ep^-3 - 63/64*ep^-2 - 99/128*ep^-1)";
   v5 -> v4 [particle= "g"];
 }
 digraph d9 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="0";
   overall_factor= "+1"
 
@@ -188,7 +188,7 @@ pole_part="0";
   v4 -> v6 [particle= "ghG"];
 }
 digraph d10 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="0";
   overall_factor= "+1"
 
@@ -210,7 +210,7 @@ pole_part="0";
   v6 -> v4 [particle= "g"];
 }
 digraph d11 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat(1/12*ep^-3 - 1/12*ep^-2 - 1/12*ep^-1)";
   overall_factor= "-1"
 
@@ -232,7 +232,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat(1/12*ep^-3 - 1/12*ep^-2 - 1/12*ep^-1)";
   v4 -> v6 [particle= "ghG"];
 }
 digraph d12 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 5/24*ep^-3 + 1/4*ep^-2 + 3/16*ep^-1)";
   overall_factor= "+1/2"
 
@@ -254,7 +254,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 5/24*ep^-3 + 1/4*ep^-2 + 3/16*ep^-1)";
   v4 -> v6 [particle= "ghG"];
 }
 digraph d13 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="0";
   overall_factor= "-1"
 
@@ -276,7 +276,7 @@ pole_part="0";
   v4 -> v6 [particle= "ghG"];
 }
 digraph d14 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 3/64*ep^-3 + 7/64*ep^-2 - 173/1536*ep^-1)";
   overall_factor= "+1"
 
@@ -298,7 +298,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 3/64*ep^-3 + 7/64*ep^-2 - 173/1536*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d15 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/192*ep^-3 - 1/192*ep^-2 + 1/1536*ep^-1)";
   overall_factor= "+1"
 
@@ -320,7 +320,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/192*ep^-3 - 1/192*ep^-2 + 1/1536*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d16 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/64*ep^-3 + 1/384*ep^-2 - 17/1536*ep^-1)";
   overall_factor= "+1"
 
@@ -342,7 +342,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/64*ep^-3 + 1/384*ep^-2 - 17/1536*ep^-1)";
   v6 -> v5 [particle= "ghG"];
 }
 digraph d17 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/64*ep^-3 + 7/384*ep^-2 - 9/512*ep^-1)";
   overall_factor= "+1"
 
@@ -364,7 +364,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/64*ep^-3 + 7/384*ep^-2 - 9/512*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d18 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/128*ep^-3 + 7/768*ep^-2 + 11/128*ep^-1) + p1.p1*gs^6*\n      z3*ca^3*rat( - 1/8*ep^-1)";
   overall_factor= "+1"
 
@@ -386,7 +386,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/128*ep^-3 + 7/768*ep^-2 + 11/128*ep^-1) + p1
   v6 -> v5 [particle= "ghG"];
 }
 digraph d19 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 3/128*ep^-3 + 23/256*ep^-2 - 3/128*ep^-1) + p1.p1*gs^6*\n      z3*ca^3*rat( - 1/8*ep^-1)";
   overall_factor= "+1"
 
@@ -408,7 +408,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 3/128*ep^-3 + 23/256*ep^-2 - 3/128*ep^-1) + p1
   v6 -> v5 [particle= "g"];
 }
 digraph d20 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/128*ep^-3 + 1/768*ep^-2 - 5/128*ep^-1)";
   overall_factor= "+1"
 
@@ -430,7 +430,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/128*ep^-3 + 1/768*ep^-2 - 5/128*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d21 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/384*ep^-3 + 1/256*ep^-2 - 1/192*ep^-1)";
   overall_factor= "+1"
 
@@ -452,7 +452,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/384*ep^-3 + 1/256*ep^-2 - 1/192*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d22 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/128*ep^-3 + 1/768*ep^-2 - 1/128*ep^-1)";
   overall_factor= "+1"
 
@@ -474,7 +474,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/128*ep^-3 + 1/768*ep^-2 - 1/128*ep^-1)";
   v6 -> v5 [particle= "ghG"];
 }
 digraph d23 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/384*ep^-3 + 1/256*ep^-2 - 1/192*ep^-1)";
   overall_factor= "+1"
 
@@ -496,7 +496,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/384*ep^-3 + 1/256*ep^-2 - 1/192*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d24 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat( - 1/48*ep^-3 + 5/96*ep^-2 - 1/16*ep^-1) + p1.p1*gs^6*\n      z3*ca^2*nf*rat(1/4*ep^-1)";
   overall_factor= "-1"
 
@@ -518,7 +518,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat( - 1/48*ep^-3 + 5/96*ep^-2 - 1/16*ep^-1) + p1.
   v6 -> v5 [particle= "d"];
 }
 digraph d25 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat( - 1/48*ep^-3 + 5/96*ep^-2 - 1/16*ep^-1) + p1.p1*gs^6*\n      z3*ca^2*nf*rat(1/4*ep^-1)";
   overall_factor= "-1"
 
@@ -540,7 +540,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat( - 1/48*ep^-3 + 5/96*ep^-2 - 1/16*ep^-1) + p1.
   v5 -> v6 [particle= "d"];
 }
 digraph d26 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 13/128*ep^-3 + 199/768*ep^-2 - 191/768*ep^-1) + p1.p1*\n      gs^6*z3*ca^3*rat( - 3/8*ep^-1)";
   overall_factor= "+1"
 
@@ -562,7 +562,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 13/128*ep^-3 + 199/768*ep^-2 - 191/768*ep^-1) 
   v6 -> v5 [particle= "g"];
 }
 digraph d27 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat(1/192*ep^-3 - 3/128*ep^-2 + 11/384*ep^-1)";
   overall_factor= "-1"
 
@@ -584,7 +584,7 @@ pole_part="p1.p1*gs^6*ca^3*rat(1/192*ep^-3 - 3/128*ep^-2 + 11/384*ep^-1)";
   v6 -> v5 [particle= "ghG"];
 }
 digraph d28 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/384*ep^-3 + 1/768*ep^-2 + 1/256*ep^-1)";
   overall_factor= "-1"
 
@@ -606,7 +606,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/384*ep^-3 + 1/768*ep^-2 + 1/256*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d29 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 3/64*ep^-3 + 9/128*ep^-2 - 5/128*ep^-1)";
   overall_factor= "+1"
 
@@ -628,7 +628,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 3/64*ep^-3 + 9/128*ep^-2 - 5/128*ep^-1)";
   v6 -> v5 [particle= "ghG"];
 }
 digraph d30 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat(1/48*ep^-3 - 1/48*ep^-2 - 1/48*ep^-1)";
   overall_factor= "-1"
 
@@ -650,7 +650,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat(1/48*ep^-3 - 1/48*ep^-2 - 1/48*ep^-1)";
   v5 -> v6 [particle= "d"];
 }
 digraph d31 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 19/384*ep^-3 + 15/256*ep^-2 + 19/384*ep^-1)";
   overall_factor= "+1/2"
 
@@ -672,7 +672,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 19/384*ep^-3 + 15/256*ep^-2 + 19/384*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d32 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/384*ep^-3 + 1/256*ep^-2 - 1/384*ep^-1)";
   overall_factor= "-1"
 
@@ -694,7 +694,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/384*ep^-3 + 1/256*ep^-2 - 1/384*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d33 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/64*ep^-3 + 5/384*ep^-2 - 5/384*ep^-1)";
   overall_factor= "+1"
 
@@ -716,7 +716,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/64*ep^-3 + 5/384*ep^-2 - 5/384*ep^-1)";
   v6 -> v5 [particle= "ghG"];
 }
 digraph d34 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat(1/16*ep^-3 - 5/48*ep^-2 - 1/24*ep^-1)";
   overall_factor= "-1"
 
@@ -738,7 +738,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat(1/16*ep^-3 - 5/48*ep^-2 - 1/24*ep^-1)";
   v5 -> v6 [particle= "d"];
 }
 digraph d35 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 19/128*ep^-3 + 211/768*ep^-2 + 11/384*ep^-1)";
   overall_factor= "+1/2"
 
@@ -760,7 +760,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 19/128*ep^-3 + 211/768*ep^-2 + 11/384*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d36 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/128*ep^-3 + 13/768*ep^-2 - 3/128*ep^-1)";
   overall_factor= "-1"
 
@@ -782,7 +782,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/128*ep^-3 + 13/768*ep^-2 - 3/128*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d37 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 3/64*ep^-3 + 9/128*ep^-2 - 5/128*ep^-1)";
   overall_factor= "+1"
 
@@ -804,7 +804,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 3/64*ep^-3 + 9/128*ep^-2 - 5/128*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d38 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat(1/48*ep^-3 - 1/96*ep^-2 - 5/192*ep^-1)";
   overall_factor= "-1"
 
@@ -826,7 +826,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat(1/48*ep^-3 - 1/96*ep^-2 - 5/192*ep^-1)";
   v5 -> v6 [particle= "d"];
 }
 digraph d39 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 19/384*ep^-3 + 23/768*ep^-2 + 65/768*ep^-1)";
   overall_factor= "+1/2"
 
@@ -848,7 +848,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 19/384*ep^-3 + 23/768*ep^-2 + 65/768*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d40 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/384*ep^-3 + 5/768*ep^-2 - 1/256*ep^-1)";
   overall_factor= "-1"
 
@@ -870,7 +870,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/384*ep^-3 + 5/768*ep^-2 - 1/256*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d41 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/64*ep^-3 + 5/384*ep^-2 - 5/384*ep^-1)";
   overall_factor= "+1"
 
@@ -892,7 +892,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/64*ep^-3 + 5/384*ep^-2 - 5/384*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d42 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat(1/12*ep^-3 - 5/48*ep^-2 - 1/192*ep^-1)";
   overall_factor= "-1"
 
@@ -914,7 +914,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat(1/12*ep^-3 - 5/48*ep^-2 - 1/192*ep^-1)";
   v5 -> v6 [particle= "d"];
 }
 digraph d43 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 79/384*ep^-3 + 81/256*ep^-2 - 31/768*ep^-1)";
   overall_factor= "+1/2"
 
@@ -936,7 +936,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 79/384*ep^-3 + 81/256*ep^-2 - 31/768*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d44 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/384*ep^-3 + 13/768*ep^-2 - 11/768*ep^-1)";
   overall_factor= "-1"
 
@@ -958,7 +958,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/384*ep^-3 + 13/768*ep^-2 - 11/768*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d45 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat(1/48*ep^-3 - 11/96*ep^-2 + 7/96*ep^-1)";
   overall_factor= "-1"
 
@@ -980,7 +980,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat(1/48*ep^-3 - 11/96*ep^-2 + 7/96*ep^-1)";
   v5 -> v6 [particle= "d"];
 }
 digraph d46 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/24*ep^-3 + 59/192*ep^-2 - 1/3*ep^-1)";
   overall_factor= "+1/2"
 
@@ -1002,7 +1002,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/24*ep^-3 + 59/192*ep^-2 - 1/3*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d47 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/96*ep^-3 + 1/48*ep^-2 - 3/64*ep^-1)";
   overall_factor= "-1"
 
@@ -1024,7 +1024,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/96*ep^-3 + 1/48*ep^-2 - 3/64*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d48 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/96*ep^-3 + 1/64*ep^-2 - 1/96*ep^-1)";
   overall_factor= "+1"
 
@@ -1046,7 +1046,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/96*ep^-3 + 1/64*ep^-2 - 1/96*ep^-1)";
   v6 -> v5 [particle= "ghG"];
 }
 digraph d49 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/32*ep^-3 + 13/192*ep^-2 - 13/192*ep^-1) + p1.p1*gs^6*\n      z3*ca^3*rat(1/8*ep^-1)";
   overall_factor= "+1"
 
@@ -1068,7 +1068,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/32*ep^-3 + 13/192*ep^-2 - 13/192*ep^-1) + p1
   v6 -> v5 [particle= "g"];
 }
 digraph d50 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/96*ep^-3 + 1/64*ep^-2 - 1/96*ep^-1)";
   overall_factor= "+1"
 
@@ -1090,7 +1090,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/96*ep^-3 + 1/64*ep^-2 - 1/96*ep^-1)";
   v6 -> v5 [particle= "ghG"];
 }
 digraph d51 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca*cf*nf*rat(1/6*ep^-3 - 29/36*ep^-2 + 55/24*ep^-1) + p1.p1*gs^6*\n      ca^2*nf*rat( - 1/12*ep^-3 + 29/72*ep^-2 - 55/48*ep^-1) + p1.p1*gs^6*z3*\n      ca*cf*nf*rat( - 2*ep^-1) + p1.p1*gs^6*z3*ca^2*nf*rat(ep^-1)";
   overall_factor= "-1"
 
@@ -1112,7 +1112,7 @@ pole_part="p1.p1*gs^6*ca*cf*nf*rat(1/6*ep^-3 - 29/36*ep^-2 + 55/24*ep^-1) + p1.p
   v6 -> v5 [particle= "g"];
 }
 digraph d52 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat( - 1/72*ep^-3 - 13/48*ep^-2 + 143/216*ep^-1)";
   overall_factor= "-1"
 
@@ -1134,7 +1134,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat( - 1/72*ep^-3 - 13/48*ep^-2 + 143/216*ep^-1)";
   v6 -> v5 [particle= "d"];
 }
 digraph d53 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat( - 1/72*ep^-3 - 13/48*ep^-2 + 143/216*ep^-1)";
   overall_factor= "-1"
 
@@ -1156,7 +1156,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat( - 1/72*ep^-3 - 13/48*ep^-2 + 143/216*ep^-1)";
   v6 -> v5 [particle= "d"];
 }
 digraph d54 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 65/96*ep^-3 + 161/288*ep^-2 + 2759/2304*ep^-1) + p1.p1*\n      gs^6*z3*ca^3*rat(1/4*ep^-1)";
   overall_factor= "+1/2"
 
@@ -1178,7 +1178,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 65/96*ep^-3 + 161/288*ep^-2 + 2759/2304*ep^-1)
   v6 -> v5 [particle= "g"];
 }
 digraph d55 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat(5/576*ep^-3 - 11/1152*ep^-2 - 157/6912*ep^-1)";
   overall_factor= "-1"
 
@@ -1200,7 +1200,7 @@ pole_part="p1.p1*gs^6*ca^3*rat(5/576*ep^-3 - 11/1152*ep^-2 - 157/6912*ep^-1)";
   v6 -> v5 [particle= "ghG"];
 }
 digraph d56 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat(5/576*ep^-3 - 11/1152*ep^-2 - 157/6912*ep^-1)";
   overall_factor= "-1"
 
@@ -1222,7 +1222,7 @@ pole_part="p1.p1*gs^6*ca^3*rat(5/576*ep^-3 - 11/1152*ep^-2 - 157/6912*ep^-1)";
   v6 -> v5 [particle= "ghG"];
 }
 digraph d57 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat(5/576*ep^-2 - 91/2304*ep^-1)";
   overall_factor= "-1"
 
@@ -1244,7 +1244,7 @@ pole_part="p1.p1*gs^6*ca^3*rat(5/576*ep^-2 - 91/2304*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d58 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/24*ep^-3 + 1/48*ep^-2 + 5/96*ep^-1)";
   overall_factor= "+1"
 
@@ -1266,7 +1266,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/24*ep^-3 + 1/48*ep^-2 + 5/96*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d59 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca*nf^2*rat( - 1/9*ep^-3 + 5/54*ep^-2 + 35/324*ep^-1)";
   overall_factor= "+1"
 
@@ -1288,7 +1288,7 @@ pole_part="p1.p1*gs^6*ca*nf^2*rat( - 1/9*ep^-3 + 5/54*ep^-2 + 35/324*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d60 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat(19/72*ep^-3 - 29/108*ep^-2 - 343/1296*ep^-1)";
   overall_factor= "-1/2"
 
@@ -1310,7 +1310,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat(19/72*ep^-3 - 29/108*ep^-2 - 343/1296*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d61 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat(1/72*ep^-3 - 1/54*ep^-2 - 19/1296*ep^-1)";
   overall_factor= "+1"
 
@@ -1332,7 +1332,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat(1/72*ep^-3 - 1/54*ep^-2 - 19/1296*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d62 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat(19/72*ep^-3 - 29/108*ep^-2 - 343/1296*ep^-1)";
   overall_factor= "-1/2"
 
@@ -1354,7 +1354,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat(19/72*ep^-3 - 29/108*ep^-2 - 343/1296*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d63 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 179/288*ep^-3 + 1297/1728*ep^-2 + 5767/10368*ep^-1)";
   overall_factor= "+1/4"
 
@@ -1376,7 +1376,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 179/288*ep^-3 + 1297/1728*ep^-2 + 5767/10368*e
   v6 -> v5 [particle= "g"];
 }
 digraph d64 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 11/288*ep^-3 + 91/1728*ep^-2 + 313/10368*ep^-1)";
   overall_factor= "-1/2"
 
@@ -1398,7 +1398,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 11/288*ep^-3 + 91/1728*ep^-2 + 313/10368*ep^-1
   v6 -> v5 [particle= "g"];
 }
 digraph d65 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat(1/72*ep^-3 - 1/54*ep^-2 - 19/1296*ep^-1)";
   overall_factor= "+1"
 
@@ -1420,7 +1420,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat(1/72*ep^-3 - 1/54*ep^-2 - 19/1296*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d66 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 11/288*ep^-3 + 91/1728*ep^-2 + 313/10368*ep^-1)";
   overall_factor= "-1/2"
 
@@ -1442,7 +1442,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 11/288*ep^-3 + 91/1728*ep^-2 + 313/10368*ep^-1
   v6 -> v5 [particle= "g"];
 }
 digraph d67 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat(1/288*ep^-3 + 1/1728*ep^-2 - 65/10368*ep^-1)";
   overall_factor= "+1"
 
@@ -1464,7 +1464,7 @@ pole_part="p1.p1*gs^6*ca^3*rat(1/288*ep^-3 + 1/1728*ep^-2 - 65/10368*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d68 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 1/48*ep^-3 + 1/32*ep^-2 - 1/48*ep^-1)";
   overall_factor= "+1"
 
@@ -1486,7 +1486,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 1/48*ep^-3 + 1/32*ep^-2 - 1/48*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d69 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat(1/24*ep^-3 - 1/16*ep^-2 + 5/48*ep^-1)";
   overall_factor= "-1"
 
@@ -1508,7 +1508,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat(1/24*ep^-3 - 1/16*ep^-2 + 5/48*ep^-1)";
   v5 -> v6 [particle= "d"];
 }
 digraph d70 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 5/48*ep^-3 + 7/32*ep^-2 - 29/96*ep^-1)";
   overall_factor= "+1/2"
 
@@ -1530,7 +1530,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 5/48*ep^-3 + 7/32*ep^-2 - 29/96*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d71 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat(1/48*ep^-2 - 1/48*ep^-1)";
   overall_factor= "-1"
 
@@ -1552,7 +1552,7 @@ pole_part="p1.p1*gs^6*ca^3*rat(1/48*ep^-2 - 1/48*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d72 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca*cf*nf*rat( - 1/12*ep^-3 + 11/72*ep^-2 - 5/24*ep^-1)";
   overall_factor= "-1"
 
@@ -1574,7 +1574,7 @@ pole_part="p1.p1*gs^6*ca*cf*nf*rat( - 1/12*ep^-3 + 11/72*ep^-2 - 5/24*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d73 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca*cf*nf*rat( - 1/12*ep^-3 + 11/72*ep^-2 - 5/24*ep^-1)";
   overall_factor= "-1"
 
@@ -1596,7 +1596,7 @@ pole_part="p1.p1*gs^6*ca*cf*nf*rat( - 1/12*ep^-3 + 11/72*ep^-2 - 5/24*ep^-1)";
   v6 -> v5 [particle= "g"];
 }
 digraph d74 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^2*nf*rat(23/72*ep^-3 - 73/144*ep^-2 + 55/108*ep^-1)";
   overall_factor= "-1"
 
@@ -1618,7 +1618,7 @@ pole_part="p1.p1*gs^6*ca^2*nf*rat(23/72*ep^-3 - 73/144*ep^-2 + 55/108*ep^-1)";
   v5 -> v6 [particle= "d"];
 }
 digraph d75 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 223/288*ep^-3 + 113/64*ep^-2 - 857/432*ep^-1)";
   overall_factor= "+1/2"
 
@@ -1640,7 +1640,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 223/288*ep^-3 + 113/64*ep^-2 - 857/432*ep^-1)"
   v6 -> v5 [particle= "g"];
 }
 digraph d76 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat( - 7/288*ep^-3 + 9/64*ep^-2 - 37/216*ep^-1)";
   overall_factor= "-1"
 
@@ -1662,7 +1662,7 @@ pole_part="p1.p1*gs^6*ca^3*rat( - 7/288*ep^-3 + 9/64*ep^-2 - 37/216*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d77 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat(1/144*ep^-2 - 7/288*ep^-1)";
   overall_factor= "-1"
 
@@ -1684,7 +1684,7 @@ pole_part="p1.p1*gs^6*ca^3*rat(1/144*ep^-2 - 7/288*ep^-1)";
   v5 -> v6 [particle= "ghG"];
 }
 digraph d78 {
- num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+ num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 pole_part="p1.p1*gs^6*ca^3*rat(1/144*ep^-2 - 7/288*ep^-1)";
   overall_factor= "-1"
 

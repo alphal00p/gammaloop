@@ -13,6 +13,7 @@ linnet = { workspace = true }
 spenso = { workspace = true, features = ["shadowing"] }
 spenso-macros = { workspace = true }
 symbolica = { workspace = true }
+symbolica-utils = { workspace = true }
 
 nu-ansi-term = { workspace = true }
 pyo3 = { workspace = true, optional = true }

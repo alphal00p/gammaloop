@@ -1,9 +1,8 @@
 use idenso::{dirac::GammaSimplifier, shorthands::schoonschip::Schoonschip};
 use symbolica::parse_lit;
 
-use crate::{
-    initialisation::test_initialise, numerator::aind::Aind, utils::symbolica_ext::LogPrint,
-};
+use crate::{initialisation::test_initialise, numerator::aind::Aind};
+use spenso::shadowing::symbolica_utils::LogPrint;
 
 #[test]
 fn algebra() {

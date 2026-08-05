@@ -10,7 +10,7 @@
 #   Q(0) Q(1) Q(2) Q(3) -> Q(4) Q(5) Q(6) Q(7) Q(8)
 # where Q(0), Q(1) are d, d~, Q(6), Q(7), Q(8) are the Higgses, and
 # Q(2)=Q(4)=xi and Q(3)=Q(5)=xi are auxiliary exact-xi helper pairs.
-# This Euclidean setup uses MT=750 and xi = 0.5*(p1+p2) = (500,0,0,0).
+# This Euclidean setup uses MT=750 and xi = p1+p2 = (1000,0,0,0).
 #
 # Keep `assume_positive_external_energies=false` for this exact-xi topology:
 # helper-leg threshold surfaces are required by the threshold-counterterm
@@ -34,6 +34,12 @@ store_additional_weights_in_event = false
 disable_flux_factor = false
 integral_unit = "none"
 
+[cli_settings.global.n_cores]
+feyngen = 15
+generate = 12
+compile = 15
+integrate = 15
+
 [default_runtime_settings.kinematics.externals]
 type = "constant"
 
@@ -42,10 +48,10 @@ helicities = [1, -1, 0, 0, 0, 0, 0, 0, 0]
 momenta = [
     [5.0000000000000000e+02, 0.0, 0.0, 5.0000000000000000e+02],
     [5.0000000000000000e+02, 0.0, 0.0, -5.0000000000000000e+02],
-    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
-    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
-    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
-    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
+    [1.0000000000000000e+03, 0.0, 0.0, 0.0],
+    [1.0000000000000000e+03, 0.0, 0.0, 0.0],
+    [1.0000000000000000e+03, 0.0, 0.0, 0.0],
+    [1.0000000000000000e+03, 0.0, 0.0, 0.0],
     [4.3855556622469447e+02, 1.5533220018353779e+02, 3.4801603965135871e+02, -1.7737736157184119e+02],
     [3.5636963749219223e+02, -1.6802389008511000e+01, -3.1872911024360047e+02, 9.7487191636880979e+01],
     "dependent",
@@ -139,10 +145,10 @@ helicities = [1, -1, 0, 0, 0, 0, 0, 0, 0]
 momenta = [
     [5.0000000000000000e+02, 0.0, 0.0, 5.0000000000000000e+02],
     [5.0000000000000000e+02, 0.0, 0.0, -5.0000000000000000e+02],
-    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
-    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
-    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
-    [5.0000000000000000e+02, 0.0, 0.0, 0.0],
+    [1.0000000000000000e+03, 0.0, 0.0, 0.0],
+    [1.0000000000000000e+03, 0.0, 0.0, 0.0],
+    [1.0000000000000000e+03, 0.0, 0.0, 0.0],
+    [1.0000000000000000e+03, 0.0, 0.0, 0.0],
     [4.3855556622469447e+02, 1.5533220018353779e+02, 3.4801603965135871e+02, -1.7737736157184119e+02],
     [3.5636963749219223e+02, -1.6802389008511000e+01, -3.1872911024360047e+02, 9.7487191636880979e+01],
     "dependent"
@@ -192,9 +198,9 @@ name = "integrate"
 commands = [
     "run runtime",
     "run sampling",
-    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=1500000 integrator.n_increase=0 integrator.n_max=10000000000 integrator.seed=1337 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-2",
-    """integrate -p qq_hhh_2L -i subtracted --n-cores 25 --batch-size 1024
-        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/euclidean_mt750_t0p5_sliver100_hsigma1_sfm
+    "set process -p qq_hhh_2L -i subtracted kv integrator.n_start=15000 integrator.n_increase=0 integrator.n_max=10000000000 integrator.seed=1337 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0e-2",
+    """integrate -p qq_hhh_2L -i subtracted --n-cores 1 --batch-size 256
+        --workspace-path ./examples/cli/qq_hhh_2L/workspaces/euclidean_mt750_t1_sliver100_hsigma1_sfm
         --renderer ratatui
         --show-phase both
         --target -2.9e-3 -1.23e-3

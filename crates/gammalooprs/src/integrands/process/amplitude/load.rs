@@ -495,7 +495,8 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
             }
             StandaloneBackend::Symjit => Ok(Self::Symjit(Box::new(
                 evaluator
-                    .jit_compile(JITCompilationSettings::default())
+                    // SymJIT 2.21 cannot compact some complex temporary layouts.
+                    .jit_compile(JITCompilationSettings::default().with_option("compact", "false"))
                     .map_err(|err| eyre!(err))?,
             ))),
         }

@@ -21,7 +21,10 @@ use crate::{
     uv::UltravioletGraph,
 };
 
-use super::{ParseGraph, string_utils::ToQuoted};
+use super::{
+    ParseGraph,
+    string_utils::{ToQuoted, dot_statement_value},
+};
 
 impl Graph {
     pub fn to_dot_graph_with_settings(&self, settings: &DotExportSettings) -> DotGraph {
@@ -58,9 +61,10 @@ impl Graph {
 
             dotgraph.global_data.statements.insert(
                 "full_num".into(),
-                num.printer(SpensoPrintSettings::typst().typst_symbolica())
-                    .to_string()
-                    .replace("\"", "\\\""),
+                dot_statement_value(
+                    &num.printer(SpensoPrintSettings::typst_options())
+                        .to_string(),
+                ),
             );
         }
 
@@ -222,5 +226,41 @@ impl ParseGraph {
         );
 
         DotGraph { global_data, graph }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use symbolica::{atom::Atom, function};
+
+    use super::Graph;
+    use crate::{dot, graph::parse::IntoGraph, processes::DotExportSettings, utils::GS};
+
+    #[test]
+    fn full_numerator_is_a_spenso_aware_typst_fragment() {
+        let graph: Graph = dot!(digraph G {
+            ext [style=invis]
+            node [num=1]
+            ext -> A
+            C -> A
+            A -> D
+            D -> B
+            B -> C
+            C -> D
+            B -> ext
+        })
+        .unwrap();
+        let graph = graph.with_global_numerator_only(
+            "typst_full_num".to_string(),
+            function!(GS.uv_truncate, Atom::num(1)),
+        );
+        let dot = graph.to_dot_graph_with_settings(&DotExportSettings {
+            output_full_numerator: true,
+            ..DotExportSettings::default()
+        });
+        let full_num = &dot.global_data.statements["full_num"];
+
+        assert_eq!(full_num, r#"op(\"Tr\")(1)"#);
+        assert!(!full_num.contains("gammalooprs::Truncate"));
     }
 }

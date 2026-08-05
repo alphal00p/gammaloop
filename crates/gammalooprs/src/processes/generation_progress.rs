@@ -112,7 +112,7 @@ pub enum GenerationProcessKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GenerationProgressPhase {
-    CutDiscovery,
+    GraphPreprocessing,
     GraphGeneration,
     Backend,
 }

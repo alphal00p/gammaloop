@@ -215,7 +215,11 @@
         ..noed,
       ),
       if g.global_statements.at("full_num",default:none)!= none{
-        [$#eval(g.global_statements.full_num.replace("\\\"","\""),mode: "math")$]
+        // Decode the DOT-escaped quoted-string body before evaluating it as Typst math.
+        [$#eval(
+          eval("\"" + g.global_statements.full_num + "\"", mode: "code"),
+          mode: "math",
+        )$]
       }
     ))
   }

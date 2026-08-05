@@ -1,12 +1,10 @@
 use std::{collections::BTreeMap, path::Path, slice};
 
 use bincode_trait_derive::{Decode, Encode};
-use linnet::half_edge::involution::{EdgeVec, Orientation};
-use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
-use symbolica::atom::Atom;
-
 use color_eyre::Result;
 use eyre::eyre;
+use linnet::half_edge::involution::{EdgeVec, Orientation};
+use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
 use tracing::{debug, instrument, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -49,8 +47,9 @@ use crate::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape,
         },
-        newton_solver::{NewtonIterationResult, safeguarded_newton_iteration_and_derivative},
+        newton_solver::{NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity},
     },
+    uv::Integrands,
 };
 use symbolica::domains::dual::HyperDual;
 
@@ -98,17 +97,17 @@ pub struct AmplitudeCountertermData {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermAtom {
-    pub parametric: BTreeMap<CutCFFIndex, Atom>,
+    pub parametric: Integrands,
 }
 
 impl AmplitudeCountertermAtom {
     pub(crate) fn is_generated(&self) -> bool {
-        !self.parametric.is_empty()
+        self.parametric.iter().next().is_some()
     }
 
     pub(crate) fn zero_like(&self) -> Self {
         Self {
-            parametric: self.parametric.keys().map(|k| (*k, Atom::Zero)).collect(),
+            parametric: self.parametric.map(|_| symbolica::atom::Atom::Zero),
         }
     }
 
@@ -144,7 +143,7 @@ impl AmplitudeCountertermAtom {
 
     pub(crate) fn new() -> Self {
         Self {
-            parametric: BTreeMap::new(),
+            parametric: std::iter::empty().collect(),
         }
     }
 }
@@ -178,6 +177,18 @@ pub struct AmplitudeCountertermEvaluation<T: FloatLike> {
 }
 
 impl AmplitudeCountertermData {
+    fn radial_root_identity(
+        graph_name: &str,
+        overlap_group: usize,
+        raised_esurface_id: RaisedEsurfaceId,
+        rotation: &Rotation,
+    ) -> RadialRootIdentity {
+        RadialRootIdentity::new(format!(
+            "amplitude graph '{graph_name}' overlap group {overlap_group} raised E-surface {} probe rotation {}",
+            raised_esurface_id.0, rotation.method,
+        ))
+    }
+
     pub(crate) fn generic_evaluator_count(&self) -> usize {
         let stack_count = self
             .evaluators
@@ -348,6 +359,7 @@ impl AmplitudeCountertermData {
 
         let mut result = Complex::new_re(momentum_sample.zero());
         let mut local_counterterms = Vec::new();
+        let mut radial_root_failed = false;
 
         for (overlap_group, group) in self.overlap.overlap_groups.iter().enumerate() {
             let overlap_builder = counter_term_builder.new_overlap_builder(group);
@@ -370,7 +382,16 @@ impl AmplitudeCountertermData {
 
                 let raised_esurface_id = esurface_builder.raised_esurface_id;
                 self.ensure_active_raised_esurface(raised_esurface_id)?;
-                let Some(rstar_solution) = esurface_builder.solve_rstar() else {
+                let radial_root_identity = Self::radial_root_identity(
+                    &graph.name,
+                    overlap_group,
+                    raised_esurface_id,
+                    rotation,
+                );
+                let Some(rstar_solution) = esurface_builder.solve_rstar(
+                    &radial_root_identity,
+                    &mut evaluation_metadata.radial_root_diagnostics,
+                ) else {
                     evaluation_metadata.record_threshold_counterterm_error(format!(
                         "amplitude graph '{}' overlap group {} raised E-surface {} failed center or radial-root validation in probe rotation {}",
                         graph.name,
@@ -378,11 +399,12 @@ impl AmplitudeCountertermData {
                         raised_esurface_id.0,
                         rotation.method,
                     ));
-                    return Ok(AmplitudeCountertermEvaluation {
-                        total: Complex::new_re(F::from_f64(f64::NAN)),
-                        local_counterterms,
-                    });
+                    radial_root_failed = true;
+                    continue;
                 };
+                if radial_root_failed {
+                    continue;
+                }
                 let single_result = rstar_solution.rstar_samples().evaluate(
                     param_builder,
                     orientation,
@@ -410,6 +432,12 @@ impl AmplitudeCountertermData {
                 });
                 result += single_result;
             }
+        }
+        if radial_root_failed {
+            return Ok(AmplitudeCountertermEvaluation {
+                total: Complex::new_re(F::from_f64(f64::NAN)),
+                local_counterterms,
+            });
         }
         Ok(AmplitudeCountertermEvaluation {
             total: result,
@@ -444,8 +472,9 @@ impl AmplitudeCountertermData {
             existing_esurfaces: self.overlap.existing_esurfaces.clone(),
             overlap_groups_with_kinematics: Vec::new(),
         };
+        let mut radial_root_diagnostics = RadialRootDiagnostics::default();
 
-        for group in self.overlap.overlap_groups.iter() {
+        for (overlap_group, group) in self.overlap.overlap_groups.iter().enumerate() {
             let overlap_builder = counter_term_builder.new_overlap_builder(group);
 
             let mut loop_momenta_at_esurface: TiVec<ExistingEsurfaceId, Option<MomentumSample<T>>> =
@@ -456,8 +485,17 @@ impl AmplitudeCountertermData {
                     .map(|esurface_builder| -> Result<_> {
                         self.ensure_active_raised_esurface(esurface_builder.raised_esurface_id)?;
                         let raised_esurface_id = esurface_builder.raised_esurface_id;
+                        let radial_root_identity = Self::radial_root_identity(
+                            &graph.name,
+                            overlap_group,
+                            raised_esurface_id,
+                            rotation,
+                        );
                         let rstar_sample = esurface_builder
-                            .solve_rstar()
+                            .solve_rstar(
+                                &radial_root_identity,
+                                &mut radial_root_diagnostics,
+                            )
                             .ok_or_else(|| {
                                 eyre!(
                                     "Could not construct threshold-counterterm kinematics for raised E-surface {} in probe rotation {}",
@@ -620,7 +658,11 @@ struct EsurfaceCTBuilder<'a, T: FloatLike> {
 }
 
 impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
-    fn solve_rstar(self) -> Option<RstarSolution<'a, T>> {
+    fn solve_rstar(
+        self,
+        radial_root_identity: &RadialRootIdentity,
+        radial_root_diagnostics: &mut RadialRootDiagnostics,
+    ) -> Option<RstarSolution<'a, T>> {
         let mut all_center_values_valid = true;
         let center_surface_values = self
             .overlap_builder
@@ -751,8 +793,15 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
         if radius_guess.is_nan() || radius_guess.is_infinite() || radius_guess <= zero {
             radius_guess = self.overlap_builder.counterterm_builder.e_cm.clone();
         }
-        let tolerance = raw_radius_guess.from_i64(8);
-        let solution = match safeguarded_newton_iteration_and_derivative(
+        let tolerance = F::from_f64(
+            self.overlap_builder
+                .counterterm_builder
+                .settings
+                .subtraction
+                .radial_root_residual_tolerance,
+        );
+        let solution = match radial_root_diagnostics.solve(
+            radial_root_identity,
             &zero,
             &radius_guess,
             function,
@@ -901,49 +950,52 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             "amplitude threshold prefactors"
         );
 
-        let coincidence_tolerance = F::from_f64(1.0e-8) * e_cm;
-        for (candidate_esurface_id, candidate_esurface) in
-            ct_builder.esurface_collection.iter_enumerated()
-        {
-            let value = candidate_esurface.compute_from_momenta(
-                &ct_builder.graph.loop_momentum_basis,
-                &ct_builder.real_mass_vector,
-                self.rstar_sample.loop_moms(),
-                self.rstar_sample.external_moms(),
-            );
-            if value.abs() < coincidence_tolerance {
-                let candidate_raised_esurface_id = ct_builder
-                    .raised_data
-                    .raised_groups
-                    .iter_enumerated()
-                    .find_map(|(raised_esurface_id, raised_group)| {
-                        raised_group
-                            .esurface_ids
-                            .contains(&candidate_esurface_id)
-                            .then_some(raised_esurface_id.0)
-                    });
-                let candidate_atom = candidate_esurface.to_atom(&[]).to_string();
-                crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #esurface;
-                    stage = "amplitude_threshold_rstar_coincident_esurface",
-                    graph = %ct_builder.graph.name,
-                    selected_esurface_id = esurface_id.0,
-                    selected_raised_esurface_id = esurface_ct_builder.raised_esurface_id.0,
-                    candidate_esurface_id = candidate_esurface_id.0,
-                    candidate_raised_esurface_id = ?candidate_raised_esurface_id,
-                    selected = candidate_esurface_id == esurface_id,
-                    value = %format!("{:+16e}", value),
-                    tolerance = %format!("{:+16e}", coincidence_tolerance),
-                    file.atom = %candidate_atom,
-                    "threshold rstar coincident esurface graph={} selected={} raised={} candidate={} candidate_raised={:?} value={} tol={} atom={}",
-                    ct_builder.graph.name,
-                    esurface_id.0,
-                    esurface_ct_builder.raised_esurface_id.0,
-                    candidate_esurface_id.0,
-                    candidate_raised_esurface_id,
-                    format!("{:+16e}", value),
-                    format!("{:+16e}", coincidence_tolerance),
-                    candidate_atom
+        let debug_diagnostics_enabled = tracing::event_enabled!(tracing::Level::DEBUG);
+        if debug_diagnostics_enabled {
+            let coincidence_tolerance = F::from_f64(1.0e-8) * e_cm;
+            for (candidate_esurface_id, candidate_esurface) in
+                ct_builder.esurface_collection.iter_enumerated()
+            {
+                let value = candidate_esurface.compute_from_momenta(
+                    &ct_builder.graph.loop_momentum_basis,
+                    &ct_builder.real_mass_vector,
+                    self.rstar_sample.loop_moms(),
+                    self.rstar_sample.external_moms(),
                 );
+                if value.abs() < coincidence_tolerance {
+                    let candidate_raised_esurface_id = ct_builder
+                        .raised_data
+                        .raised_groups
+                        .iter_enumerated()
+                        .find_map(|(raised_esurface_id, raised_group)| {
+                            raised_group
+                                .esurface_ids
+                                .contains(&candidate_esurface_id)
+                                .then_some(raised_esurface_id.0)
+                        });
+                    let candidate_atom = candidate_esurface.to_atom(&[]).to_string();
+                    crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #esurface;
+                        stage = "amplitude_threshold_rstar_coincident_esurface",
+                        graph = %ct_builder.graph.name,
+                        selected_esurface_id = esurface_id.0,
+                        selected_raised_esurface_id = esurface_ct_builder.raised_esurface_id.0,
+                        candidate_esurface_id = candidate_esurface_id.0,
+                        candidate_raised_esurface_id = ?candidate_raised_esurface_id,
+                        selected = candidate_esurface_id == esurface_id,
+                        value = %format!("{:+16e}", value),
+                        tolerance = %format!("{:+16e}", coincidence_tolerance),
+                        file.atom = %candidate_atom,
+                        "threshold rstar coincident esurface graph={} selected={} raised={} candidate={} candidate_raised={:?} value={} tol={} atom={}",
+                        ct_builder.graph.name,
+                        esurface_id.0,
+                        esurface_ct_builder.raised_esurface_id.0,
+                        candidate_esurface_id.0,
+                        candidate_raised_esurface_id,
+                        format!("{:+16e}", value),
+                        format!("{:+16e}", coincidence_tolerance),
+                        candidate_atom
+                    );
+                }
             }
         }
 
@@ -1388,12 +1440,11 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use super::{AmplitudeCountertermAtom, AmplitudeCountertermData};
     use crate::{
         cff::{CutCFFIndex, esurface::RaisedEsurfaceId},
         graph::GraphGroupPosition,
+        uv::Integrands,
     };
     use symbolica::{atom::Atom, symbol};
     use typed_index_collections::ti_vec;
@@ -1401,7 +1452,7 @@ mod tests {
     #[test]
     fn empty_amplitude_counterterm_atom_is_not_generated() {
         let atom = AmplitudeCountertermAtom {
-            parametric: BTreeMap::new(),
+            parametric: std::iter::empty().collect(),
         };
 
         assert!(!atom.is_generated());
@@ -1410,7 +1461,10 @@ mod tests {
     #[test]
     fn non_empty_amplitude_counterterm_atom_is_generated() {
         let atom = AmplitudeCountertermAtom {
-            parametric: BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::var(symbol!("x")))]),
+            parametric: Integrands::from_iter([(
+                CutCFFIndex::new_all_none(),
+                Atom::var(symbol!("x")),
+            )]),
         };
 
         assert!(atom.is_generated());
@@ -1419,14 +1473,17 @@ mod tests {
     #[test]
     fn zero_like_amplitude_counterterm_atom_is_zero() {
         let atom = AmplitudeCountertermAtom {
-            parametric: BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::var(symbol!("x")))]),
+            parametric: Integrands::from_iter([(
+                CutCFFIndex::new_all_none(),
+                Atom::var(symbol!("x")),
+            )]),
         };
 
         let zeroed = atom.zero_like();
 
         assert_eq!(
             zeroed.parametric,
-            BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::Zero)])
+            Integrands::from_iter([(CutCFFIndex::new_all_none(), Atom::Zero)])
         );
     }
 

@@ -3,13 +3,15 @@
 use std::{borrow::Borrow, collections::HashMap, fmt::Display};
 
 use crate::{
-    cff::esurface::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup},
+    cff::{
+        esurface::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup},
+        orientations::GraphOrientation,
+    },
     settings::global::OrientationPattern,
     utils::{W_, ose_atom_from_index},
 };
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
-use itertools::{EitherOrBoth, Itertools};
 use linnet::half_edge::{
     GVEdgeAttrs, HedgeGraph,
     involution::{EdgeVec, Orientation, SignOrZero},
@@ -17,7 +19,7 @@ use linnet::half_edge::{
 };
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, Symbol},
     function,
     id::{Pattern, Replacement},
     symbol,
@@ -26,8 +28,6 @@ use tabled::{builder::Builder, settings::Style};
 use typed_index_collections::TiVec;
 
 use super::{generation::SurfaceCache, surface::HybridSurfaceID, tree::Tree};
-
-use crate::utils::GS;
 
 #[derive(
     Debug,
@@ -50,87 +50,6 @@ pub struct OrientationID(pub usize);
 impl GraphOrientation for EdgeVec<Orientation> {
     fn orientation(&self) -> &EdgeVec<Orientation> {
         self
-    }
-}
-
-pub trait GraphOrientation {
-    fn orientation(&self) -> &EdgeVec<Orientation>;
-
-    fn orientation_thetas(&self) -> Atom {
-        let mut thetas = Atom::num(1);
-
-        for (e, h) in self.orientation() {
-            match h {
-                Orientation::Default => {
-                    thetas *= GS.sign_theta(GS.sign(e));
-                }
-                Orientation::Reversed => {
-                    thetas *= GS.sign_theta(-GS.sign(e));
-                }
-                _ => {}
-            }
-        }
-        thetas
-    }
-
-    fn orientation_delta(&self) -> Atom
-    where
-        Self: Sized,
-    {
-        GS.orientation_delta(self)
-    }
-
-    fn select<'a>(&self, atom: impl Into<AtomOrView<'a>>) -> Atom {
-        let theta_reps = vec![
-            Replacement::new(GS.sign_theta(1).to_pattern(), Atom::num(1)),
-            Replacement::new(GS.sign_theta(-1).to_pattern(), Atom::Zero),
-        ];
-
-        let mut reps = Vec::new();
-
-        for (e, h) in self.orientation() {
-            match h {
-                Orientation::Default => {
-                    reps.push(Replacement::new(GS.sign(e).to_pattern(), Atom::num(1)));
-                }
-                Orientation::Reversed => {
-                    reps.push(Replacement::new(GS.sign(e).to_pattern(), Atom::num(-1)));
-                }
-                _ => {}
-            }
-        }
-
-        let orientation = self.orientation();
-        atom.into()
-            .replace_multiple(&reps)
-            .replace_multiple(&theta_reps)
-            .replace_map(|term, _ctx, out| {
-                if let AtomView::Fun(f) = term
-                    && f.get_symbol() == GS.orientation_delta
-                {
-                    if f.iter()
-                        .zip_longest(orientation)
-                        .all(|either| match either {
-                            EitherOrBoth::Both(a, (_, o)) => {
-                                if let Ok(a) = i64::try_from(a) {
-                                    match o {
-                                        Orientation::Default => a >= 0,
-                                        Orientation::Reversed => a <= 0,
-                                        Orientation::Undirected => true,
-                                    }
-                                } else {
-                                    false
-                                }
-                            }
-                            EitherOrBoth::Left(_) | EitherOrBoth::Right(_) => false,
-                        })
-                    {
-                        **out = Atom::num(1);
-                    } else {
-                        **out = Atom::Zero;
-                    }
-                }
-            })
     }
 }
 

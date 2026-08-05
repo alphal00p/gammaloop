@@ -4,24 +4,28 @@ use gammalooprs::{
     initialisation::test_initialise,
     model::Model,
     processes::{Amplitude, AmplitudeGraph},
-    utils::{GS, load_generic_model, symbolica_ext::LogPrint},
+    utils::{GS, load_generic_model},
     uv::{
-        RenormalizationPart, UVgenerationSettings,
+        ApproximationType, RenormalizationPart, RenormalizationPrescriptionSettings,
+        UVOrchestrator, UVgenerationSettings,
         settings::{AlphaLoopSettings, MATADSettings, VakintSettings},
     },
 };
 use idenso::{
+    Cookable, IndexTooling, cof,
     color::{CS, ColorSimplifier},
+    color_idx,
     dirac::GammaSimplifier,
     shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
-use spenso::shadowing::symbolica_utils::AtomCoreExt;
+use spenso::{shadowing::symbolica_utils::LogPrint, structure::abstract_index::AbstractIndex};
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     parse, parse_lit,
 };
+use symbolica_utils::AtomPrintExt;
 
-fn finite_part_uv_settings() -> UVgenerationSettings {
+fn pole_part_uv_settings() -> UVgenerationSettings {
     let undoing_normalization = parse!(
         "(
      𝑖*(𝜋^((4-2*eps)/2))
@@ -32,8 +36,12 @@ fn finite_part_uv_settings() -> UVgenerationSettings {
     );
     UVgenerationSettings {
         softct: false,
-        only_integrated: true,
-        pole_part: true,
+        renormalization_prescription: RenormalizationPrescriptionSettings {
+            log_divergent: ApproximationType::PolePart,
+            massive_power_divergent: ApproximationType::PolePart,
+            massless_power_divergent: ApproximationType::PolePart,
+            ..Default::default()
+        },
         vakint: VakintSettings {
             normalization: undoing_normalization.to_plain_string(),
             ..Default::default()
@@ -41,10 +49,13 @@ fn finite_part_uv_settings() -> UVgenerationSettings {
         ..Default::default()
     }
 }
+// GammaLoop and RQFT use opposite ghost-propagator signs (+i versus -i).
+// Their ghost-gluon momentum and color conventions differ as well, so the net
+// graph sign cannot be inferred from the ghost-edge count or applied globally.
 pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
     (model
         .apply_parameter_replacement_rules(
-            &model.apply_coupling_replacement_rules(&-atom.simplify_color().expand()),
+            &model.apply_coupling_replacement_rules(&atom.simplify_color().expand()),
         )
         .replace(parse_lit!(gammalooprs::dim))
         .with(parse_lit!(4))
@@ -57,8 +68,13 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .with(Atom::num((1, 2)))
         .replace(CS.nc)
         .with(CS.ca)
+        // RQFT writes the fundamental Dynkin index as T_F = n_f / 2.
+        .replace(color_idx!(2, cof!(3)))
+        .with(parse!("nf") / Atom::num(2))
         .replace(parse!("UFO::aS"))
-        .with(parse!("gs").pow(2) / (Atom::var(Symbol::PI) * 4)))
+        .with(parse!("gs").pow(2) / (Atom::var(Symbol::PI) * 4))
+        .replace(parse!("UFO::aEW"))
+        .with(parse!("ge").pow(2) / (Atom::var(Symbol::PI) * 4)))
     .expand_num()
     .collect_factors()
     .collect_num()
@@ -87,7 +103,6 @@ fn scalar_pole_part() {
     let a = amp.graphs[0]
         .renormalization_part(&UVgenerationSettings {
             softct: false,
-            only_integrated: true,
             vakint: VakintSettings {
                 normalization: "MSbar".to_string(),
                 additional_normalization: "1".to_string(),
@@ -107,8 +122,6 @@ fn scalar_pole_part() {
 }
 #[test]
 fn finite_part_quark_lo() {
-    // p1.p1*gs^2*cf*rat(ep^-1)
-    // cf = 4/3
     test_initialise().unwrap();
     let g: Vec<Graph> = dot!(digraph d1 {
           overall_factor= "+1"
@@ -133,15 +146,18 @@ fn finite_part_quark_lo() {
     let model = load_generic_model("sm");
 
     let a = amp.graphs[0]
-        .renormalization_part(&finite_part_uv_settings())
+        .renormalization_part(&pole_part_uv_settings())
         .unwrap();
 
     println!("ren part: {:>}", a.log_print(Some(80)));
+    // RQFT quark_lo_0_in.h forest order, H = p1.p1*gs^2*cf (cf = 4/3):
+    // F0 (direct) / H = +ep^-1.
+    // Sum / H = +ep^-1; native GammaLoop / RQFT = +1. The one-loop Vakint sign
+    // and the two quark-gluon vertex phase differences cancel.
     insta::assert_snapshot!(
         align_to_rqft(&a,&model)
         .to_bare_ordered_string(),@"cas(2,cof(3))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
-    // -1 * target
 }
 
 #[test]
@@ -372,30 +388,23 @@ fn finite_part_ghost_2loop() {
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
 
-    let settings = finite_part_uv_settings();
+    let settings = pole_part_uv_settings();
 
     let new_settings = UVgenerationSettings {
-        use_legacy: false,
-        cached: false,
+        orchestrator: UVOrchestrator::HedgePoset,
         ..settings.clone()
     };
 
     let model = load_generic_model("sm");
 
     #[derive(Debug)]
-    struct KernelStatsSnapshot {
-        cached_kernel_hits: usize,
-        uncached_kernel_hits: usize,
+    struct ForestStatsSnapshot {
         forest_size: usize,
     }
 
-    impl std::fmt::Display for KernelStatsSnapshot {
+    impl std::fmt::Display for ForestStatsSnapshot {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(
-                f,
-                "cached_kernel_hits={}, uncached_kernel_hits={}, forest_size={}",
-                self.cached_kernel_hits, self.uncached_kernel_hits, self.forest_size
-            )
+            write!(f, "forest_size={}", self.forest_size)
         }
     }
 
@@ -403,7 +412,7 @@ fn finite_part_ghost_2loop() {
         amp: &mut AmplitudeGraph,
         a: RenormalizationPart,
         new_settings: &UVgenerationSettings,
-    ) -> KernelStatsSnapshot {
+    ) -> ForestStatsSnapshot {
         let normalize = |atom: &Atom| {
             atom.replace(parse_lit!(gammalooprs::dim))
                 .with(parse_lit!(4))
@@ -414,7 +423,6 @@ fn finite_part_ghost_2loop() {
                 .collect_factors()
         };
         let new_part = amp.renormalization_part(new_settings).unwrap();
-        let uncached_kernel_hits = new_part.stats.kernel_hits;
         assert_eq!(
             normalize(&new_part.expression),
             normalize(&a.expression),
@@ -424,102 +432,89 @@ fn finite_part_ghost_2loop() {
             a.log_print(Some(120))
         );
 
-        let mut cached_settings = new_settings.clone();
-        cached_settings.cached = true;
-
-        let new_cached_part = amp.renormalization_part(&cached_settings).unwrap();
-        let cached_kernel_hits = new_cached_part.stats.kernel_hits;
-        assert_eq!(
-            normalize(&new_cached_part.expression),
-            normalize(&a.expression),
-            "New cached renormalization for graph {} gives:\n{}\n vs old\n{}",
-            amp.graph.name,
-            new_cached_part.log_print(Some(120)),
-            a.log_print(Some(120))
-        );
-
-        let cached_stats = new_cached_part.stats;
-        let forest_size = cached_stats.forest_node_count;
-        assert!(
-            cached_kernel_hits < uncached_kernel_hits,
-            "Cached path for graph {} did not reduce kernel hits: cached={}, uncached={}",
-            amp.graph.name,
-            cached_kernel_hits,
-            uncached_kernel_hits
-        );
-
-        KernelStatsSnapshot {
-            cached_kernel_hits,
-            uncached_kernel_hits,
-            forest_size,
+        ForestStatsSnapshot {
+            forest_size: new_part.stats.forest_node_count,
         }
     }
 
+    // Each F_i below follows the summand order in the corresponding RQFT
+    // `Fill forest(0)` definition.
     let a = amp.graphs[0].renormalization_part(&settings).unwrap();
-    //p1.p1*i_*gs^4*CA^2*rat( - 3/16*ep^-2 + 5/32*ep^-1)
+    // RQFT ghost_nlo_0_in.h, H = p1.p1*i_*gs^4*ca^2:
+    // F0 (140 -> 0) / H = +3/16*ep^-2 + 5/32*ep^-1.
+    // F1 (140 -> DM -> 0) / H = -3/16*ep^-2.
+    // F2 (140 -> 132 -> 0) / H = -3/16*ep^-2.
+    // F3 (not emitted by GammaLoop) / H = 0.
+    // Sum / H = -3/16*ep^-2 + 5/32*ep^-1; native GammaLoop / RQFT = +1.
     insta::assert_snapshot!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3𝑖/16+5𝑖/32*ε)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)");
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[0], a, &new_settings);
-    insta::assert_snapshot!(
-        stats.to_string(),
-        @"cached_kernel_hits=5, uncached_kernel_hits=7, forest_size=6"
-    );
+    insta::assert_snapshot!(stats.to_string(), @"forest_size=6");
 
-    //p1.p1*i_*gs^4*CA^2*rat( - 1/16*ep^-2 + 1/32*ep^-1)
     let a = amp.graphs[1].renormalization_part(&settings).unwrap();
+    // RQFT ghost_nlo_1_in.h, H = p1.p1*i_*gs^4*ca^2:
+    // F0 (140 -> 0) / H = +1/16*ep^-2 + 1/32*ep^-1.
+    // F1 (140 -> oW -> 0) / H = -1/16*ep^-2.
+    // F2 (140 -> 132 -> 0) / H = -1/16*ep^-2.
+    // F3 (140 -> GS -> 0, not emitted by GammaLoop) / H = 0.
+    // Sum / H = -1/16*ep^-2 + 1/32*ep^-1; native GammaLoop / RQFT = -1.
     insta::assert_snapshot!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/32*ε+1𝑖/16)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
-    ); //-1 * target
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[1], a, &new_settings);
-    insta::assert_snapshot!(
-        stats.to_string(),
-        @"cached_kernel_hits=5, uncached_kernel_hits=7, forest_size=6"
     );
+    let stats = assert_new_paths_match_legacy(&mut amp.graphs[1], a, &new_settings);
+    insta::assert_snapshot!(stats.to_string(), @"forest_size=6");
 
-    //p1.p1*i_*gs^4*CA^2*rat( - 1/8*ep^-2 + 1/16*ep^-1)
     let a = amp.graphs[2].renormalization_part(&settings).unwrap();
+    // RQFT ghost_nlo_2_in.h, H = p1.p1*i_*gs^4*ca^2:
+    // F0 (140 -> 0) / H = +1/8*ep^-2 - 1/48*ep^-1.
+    // F1 (not emitted by GammaLoop) / H = 0.
+    // F2 (140 -> FU -> 0) / H = -1/4*ep^-2 + 1/12*ep^-1.
+    // F3 (not emitted by GammaLoop) / H = 0.
+    // Sum / H = -1/8*ep^-2 + 1/16*ep^-1; native GammaLoop / RQFT = -1.
     insta::assert_snapshot!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/16*ε+1𝑖/8)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
-    ); //-1 * target
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[2], a, &new_settings);
-    insta::assert_snapshot!(
-        stats.to_string(),
-        @"cached_kernel_hits=3, uncached_kernel_hits=4, forest_size=4"
     );
+    let stats = assert_new_paths_match_legacy(&mut amp.graphs[2], a, &new_settings);
+    insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
 
-    //p1.p1*i_*gs^4*CA*nf*rat(1/4*ep^-2 - 5/24*ep^-1)
     let a = amp.graphs[3].renormalization_part(&settings).unwrap();
-    // Sign-flipped relative to the main snapshot after schoonschip-aware dot normalization.
+    // RQFT ghost_nlo_3_in.h, H = p1.p1*i_*gs^4*ca*nf:
+    // F0 (140 -> 0) / H = -1/4*ep^-2 - 13/24*ep^-1.
+    // F1 (140 -> zw -> 0) / H = +1/2*ep^-2 + 1/3*ep^-1.
+    // Sum / H = +1/4*ep^-2 - 5/24*ep^-1; native GammaLoop / RQFT = -1
+    // after preserving the antisymmetric color orientation.
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-5𝑖/12*ε+1𝑖/2)*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*idx(2,cof(3))*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/4+5𝑖/24*ε)*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*nf*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[3], a, &new_settings);
-    insta::assert_snapshot!(
-        stats.to_string(),
-        @"cached_kernel_hits=3, uncached_kernel_hits=4, forest_size=4"
-    );
+    insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
 
-    //p1.p1*i_*gs^4*CA^2*rat( - 5/8*ep^-2 + 35/48*ep^-1)
     let a = amp.graphs[4].renormalization_part(&settings).unwrap();
+    // RQFT ghost_nlo_4_in.h, H = p1.p1*i_*gs^4*ca^2:
+    // F0 (140 -> 0) / H = +5/8*ep^-2 - 77/48*ep^-1.
+    // F1 (not emitted by GammaLoop) / H = 0.
+    // F2 (140 -> zw -> 0) / H = -5/4*ep^-2 + 7/3*ep^-1.
+    // F3 (not emitted by GammaLoop) / H = 0.
+    // Sum / H = -5/8*ep^-2 + 35/48*ep^-1; native GammaLoop / RQFT = -1.
+    // RQFT already includes the graph's 1/2 symmetry factor.
     insta::assert_snapshot!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-35𝑖/48*ε+5𝑖/8)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
-    ); //-1/2 * target
-    let stats = assert_new_paths_match_legacy(&mut amp.graphs[4], a, &new_settings);
-    insta::assert_snapshot!(
-        stats.to_string(),
-        @"cached_kernel_hits=3, uncached_kernel_hits=4, forest_size=4"
     );
+    let stats = assert_new_paths_match_legacy(&mut amp.graphs[4], a, &new_settings);
+    insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
 
-    //p1.p1*i_*gs^4*CA^2*rat(1/24*ep^-1)
     let a = amp.graphs[5].renormalization_part(&settings).unwrap();
+    // RQFT ghost_nlo_5_in.h, H = p1.p1*i_*gs^4*ca^2:
+    // F0 (140 -> 0) / H = +5/24*ep^-1.
+    // F1 (not emitted by GammaLoop) / H = 0.
+    // F2 (140 -> zw -> 0) / H = -1/6*ep^-1.
+    // F3 (not emitted by GammaLoop) / H = 0.
+    // Sum / H = +1/24*ep^-1; native GammaLoop / RQFT = -1.
     insta::assert_snapshot!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(cas(2,coad(8)))^2*-1𝑖/24*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[5], a, &new_settings);
-    insta::assert_snapshot!(
-        stats.to_string(),
-        @"cached_kernel_hits=3, uncached_kernel_hits=4, forest_size=4"
-    );
+    insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
 }
 
 #[test]
@@ -548,26 +543,33 @@ fn finit_part_ghlo() {
 
     let model = load_generic_model("sm");
     let a = amp.graphs[0]
-        .renormalization_part(&finite_part_uv_settings())
+        .renormalization_part(&pole_part_uv_settings())
         .unwrap();
 
     println!("ren part: {:>}", a);
-    //p1.p1*gs^2*CA*rat(1/2*ep^-1)
-    // Sign-flipped relative to the main snapshot after schoonschip-aware dot normalization.
+    // RQFT ghost_lo_0_in.h forest order, H = p1.p1*gs^2*ca:
+    // F0 (direct) / H = +1/2*ep^-1.
+    // Sum / H = +1/2*ep^-1; native GammaLoop / RQFT = -1 after preserving
+    // the antisymmetric color orientation.
     insta::assert_snapshot!(
         align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"1/2*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
+        .to_bare_ordered_string(),@"-1/2*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
 }
 
 mod failing {
     use super::*;
 
-    fn ghost_3loop_settings() -> UVgenerationSettings {
+    fn rqft_3loop_settings() -> UVgenerationSettings {
         UVgenerationSettings {
             softct: false,
-            only_integrated: true,
-            pole_part: true,
+            orchestrator: UVOrchestrator::HedgePoset,
+            renormalization_prescription: RenormalizationPrescriptionSettings {
+                log_divergent: ApproximationType::PolePart,
+                massive_power_divergent: ApproximationType::PolePart,
+                massless_power_divergent: ApproximationType::PolePart,
+                ..Default::default()
+            },
             vakint: VakintSettings {
                 normalization: "(
                 𝑖*(𝜋^((4-2*eps)/2))
@@ -592,6 +594,67 @@ mod failing {
     }
 
     #[test]
+    fn finite_part_photon_3loop_no_ghost() {
+        test_initialise().unwrap();
+
+        let model = load_generic_model("sm");
+        let g: Vec<Graph> = Graph::from_path(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/resources/graphs/uv_tests/rqft_a_3l_no_ghost.dot"
+            ),
+            &model,
+        )
+        .unwrap();
+
+        let mut amp = Amplitude::from_graph_list("photon_3loop_no_ghost", g).unwrap();
+        assert_eq!(amp.graphs.len(), 27);
+        for (index, graph) in amp.graphs.iter().enumerate() {
+            assert_eq!(graph.graph.name, format!("d{}", index + 1));
+        }
+
+        // d22 and d25 are orientation-reversed representatives of the same
+        // ghost-free photon self-energy topology and match term by term. Let
+        // H = ge^2*gs^4*ca*cf*nf, x = ep^-1, C = cl2*sqrt(3), and p2 = p1.p1.
+        // In RQFT forest order:
+        // F0=[0]: mUV^2*(-38/9-16/9*x^2+28/3*x)
+        //         +p2*(-230/2187-2/27*x^2+160/729*x)
+        //         +p2*C*(1408/6561-704/2187*x)
+        // F1=[1→2]: mUV^2*(14/9-28/9*x)
+        //            +p2*(28/81+14/27*x^2-77/81*x)
+        // F2=[3→4]: mUV^2*(44/27+16/9*x^2-112/27*x)
+        //            +p2*(212/2187-106/729*x)
+        //            +p2*C*(-1408/6561+704/2187*x)
+        // F3=[5→6]: mUV^2*(76/27+16/9*x^2-176/27*x)
+        // F4=[3→7→2]: mUV^2*(-8/9+16/9*x)
+        //               +p2*(-16/81-8/27*x^2+44/81*x)
+        // F5=[3,5→8]: mUV^2*(-8/9-16/9*x^2+8/3*x)
+        // F5 is the disconnected (DoD 2, DoD 0) union followed by its DoD-2
+        // parent. It is purely auxiliary but required to cancel every mUV^2
+        // term; F0 and F2 cancel C. Thus sum(Fi)/H/p2 is
+        // 34/243 + 4/27*ep^-2 - 1/3*ep^-1.
+        let rqft = parse!(
+            "dot(P(0,spenso::mink(4)),P(0,spenso::mink(4)))*ge^2*gs^4
+             *spenso::cas(2,spenso::coad(8))*spenso::cas(2,spenso::cof(3))*nf
+             *(34/243+4/27*ε^(-2)-1/3*ε^(-1))"
+        );
+        let settings = rqft_3loop_settings();
+
+        for index in [21, 24] {
+            let graph = &mut amp.graphs[index];
+            let difference =
+                (align_to_rqft(&graph.renormalization_part(&settings).unwrap(), &model) - &rqft)
+                    .expand();
+            assert!(
+                difference.is_zero(),
+                "{} differs from its RQFT reference:\n{}",
+                graph.graph.name,
+                difference.to_bare_ordered_string()
+            );
+        }
+    }
+
+    #[test]
     fn finite_part_ghost_3loop() {
         test_initialise().unwrap();
 
@@ -606,479 +669,1746 @@ mod failing {
         .unwrap();
 
         let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
+        assert_eq!(amp.graphs.len(), 78);
+        for (index, graph) in amp.graphs.iter().enumerate() {
+            assert_eq!(graph.graph.name, format!("d{}", index + 1));
+        }
 
-        let settings = ghost_3loop_settings();
+        let settings = rqft_3loop_settings();
 
         let a = amp.graphs[0].renormalization_part(&settings).unwrap();
-        //p1.p1*gs^6*CA^3*rat( - 3/8*ep^-2 + 29/32*ep^-1)
-        insta::assert_snapshot!(amp.graphs[0].graph.name,@"d1");
+        // `Fi` denotes textual summand i of RQFT's `Fill forest(0)`. These values
+        // come from FORM runs with each summand tagged before the forest reduction;
+        // they already include the diagram's overall prefactor.
+        // d1: RQFT `ghost_nnlo_0`.
+        // H = p1.p1*gs^6*ca^3
+        // Forest paths: F0=[0]; F1=[1→2]; F2=[3→4]; F3=[5→6]; F4=[7→8];
+        // F5=[9→10]; F6=[11→12]; F7=[13→14]; F8=[1→10→6];
+        // F9=[1→15→10]; F10=[3→12→6]; F11=[3→15→12];
+        // F12=[7→14→6]; F13=[7→15→14], where each number identifies `uvdiag`.
+        // F0/H = rat(39/16*ep^-2 + 185/32*ep^-1)
+        // F1/H = rat(-3/2*ep^-2 - 5/6*ep^-1)
+        // F2/H = rat(-3/2*ep^-2 - 5/6*ep^-1)
+        // F3/H = rat(-45/16*ep^-2 - 39/8*ep^-1)
+        // F4/H = rat(-3/2*ep^-2 - 5/6*ep^-1)
+        // F8/H = rat(3/2*ep^-2 + 5/6*ep^-1)
+        // F10/H = rat(3/2*ep^-2 + 5/6*ep^-1)
+        // F12/H = rat(3/2*ep^-2 + 5/6*ep^-1)
+        // F5..F7, F9, F11, F13 = 0
+        // sum(Fi)/H = rat(-3/8*ep^-2 + 29/32*ep^-1);
+        // native GammaLoop / RQFT = +1.
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1456*ε^2+-448/3*ε^2*𝜋^2+-896+4160/3*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3/8+29/32*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );
 
-        //p1.p1*gs^6*CA^3*rat( - 1/16*ep^-2 + 5/192*ep^-1)
         let a = amp.graphs[1].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[1].graph.name,@"d2");
+        // d2: RQFT `ghost_nnlo_1`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(1/32*ep^-2 + 5/192*ep^-1)
+        // F3/H = rat(-3/64*ep^-2)
+        // F6/H = rat(-3/64*ep^-2)
+        // F1..F2, F4..F5, F7..F16 = 0
+        // sum(Fi)/H = rat(-1/16*ep^-2 + 5/192*ep^-1);
+        // native GammaLoop / RQFT = +1.
+        // The two remaining six-f terms have an odd signed graph automorphism and
+        // vanish independently during tensor canonicalization.
+        let aligned = align_to_rqft(&a, &model)
+            .expand()
+            .map_terms_single_core(|term| {
+                term.cook_indices()
+                    .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            })
+            .collect_factors()
+            .to_dots();
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"((-32+40/3*ε)*1/64*CA^3+-3/16*f(coad(8,hedge(1)),coad(8,hedge(10)),coad(8,hedge(7)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(8)))*f(coad(8,hedge(10)),coad(8,hedge(12)),coad(8,vertex(4,1)))*f(coad(8,hedge(12)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(14)),coad(8,hedge(5)),coad(8,hedge(7)))*f(coad(8,hedge(14)),coad(8,hedge(8)),coad(8,vertex(4,1)))+3/16*f(coad(8,hedge(1)),coad(8,hedge(10)),coad(8,hedge(6)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(8)))*f(coad(8,hedge(10)),coad(8,hedge(12)),coad(8,vertex(4,1)))*f(coad(8,hedge(12)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(14)),coad(8,hedge(5)),coad(8,hedge(6)))*f(coad(8,hedge(14)),coad(8,hedge(8)),coad(8,vertex(4,1))))*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
+           aligned.to_bare_ordered_string(),@"(-1/16+5/192*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );
 
-        //p1.p1*gs^6*CA^3*rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1)
         let a = amp.graphs[2].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[2].graph.name,@"d3");
+        // d3: RQFT `ghost_nnlo_2`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 27/512*ep^-1)
+        //        + cl2*sqrt3*rat(-3/32*ep^-1)
+        //        + pi^2*rat(9/512*ep^-1)
+        // F2/H = rat(-27/128*ep^-3 + 9/256*ep^-2)
+        //        + pi^2*rat(-9/512*ep^-1)
+        // F6/H = rat(-27/128*ep^-3 + 9/256*ep^-2 + 9/512*ep^-1)
+        //        + cl2*sqrt3*rat(3/32*ep^-1)
+        //        + pi^2*rat(-9/256*ep^-1)
+        // F8/H = rat(27/64*ep^-3 - 9/32*ep^-2)
+        //        + pi^2*rat(9/256*ep^-1)
+        // F1, F3..F5, F7, F9 = 0
+        // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1);
+        // Hedge terminals F0={H2y}, F2={GEe}{H2y}, F6={Fyy}{H2y}, and
+        // F8={Fyy}{GEe}{H2y} match these coefficients before coupling replacement.
+        // Their common i*GC_10^4*GC_12 becomes -gs^6, so native GammaLoop / RQFT
+        // = -1 at the model/RQFT convention boundary, not in the forest recursion.
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-52*ε+24+24*ε^2)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9/128+-9/128*ε^2+39/256*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
-        //p1.p1*gs^6*CA^3*rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)
         let a = amp.graphs[3].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[3].graph.name,@"d4");
+        // d4: SM-UFO counterpart of RQFT `ghost_nnlo_4` (RQFT d5).
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(9/32*ep^-2 + 33/64*ep^-1)
+        //        + cl2*sqrt3*rat(-3/4*ep^-1)
+        // F7/H = rat(-27/64*ep^-2 - 45/128*ep^-1)
+        //        + cl2*sqrt3*rat(3/4*ep^-1)
+        // F1..F6, F8..F13 = 0
+        // sum(Fi)/H = rat(-9/64*ep^-2 + 21/128*ep^-1)
+        // RQFT uses the ghost momentum at a ghost-gluon vertex, whereas the SM UFO
+        // uses minus the antighost momentum. This exchanges the mirror pair d4/d5:
+        // Hedge terminals {H2y}=F0 and {Fyy}{H2y}=F7, while the others are zero.
+        // Their common i*GC_10^4*GC_12 gives native GammaLoop / RQFT = -1.
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-48+56*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-21/128*ε+9/64)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );
 
-        //p1.p1*i_*gs^4*CA^2*rat( - 5/8*ep^-2 + 35/48*ep^-1)
         let a = amp.graphs[4].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
+        // d5: SM-UFO counterpart of RQFT `ghost_nnlo_3` (RQFT d4).
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 99/512*ep^-1)
+        //        + cl2*sqrt3*rat(-3/32*ep^-1)
+        //        + pi^2*rat(9/512*ep^-1)
+        // F5/H = rat(-27/128*ep^-3 + 9/256*ep^-2)
+        //        + pi^2*rat(-9/512*ep^-1)
+        // F7/H = rat(-27/128*ep^-3 + 9/256*ep^-2 + 9/512*ep^-1)
+        //        + cl2*sqrt3*rat(3/32*ep^-1)
+        //        + pi^2*rat(-9/256*ep^-1)
+        // F13/H = rat(27/64*ep^-3 - 9/32*ep^-2)
+        //         + pi^2*rat(9/256*ep^-1)
+        // F1..F4, F6, F8..F12 = 0
+        // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)
+        // Hedge terminals {H2y}=F0, {GqO}{H2y}=F5, {Fyy}{H2y}=F7, and
+        // {Fyy}{GqO}{H2y}=F13. By the mirror mapping, native GammaLoop / RQFT = -1.
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-24+-72*ε^2+52*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
-        ); //-1/2 * target
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-27/128*ε^2+-9/128+39/256*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+        );
 
-        //p1.p1*i_*gs^4*CA^2*rat(1/24*ep^-1)
         let a = amp.graphs[5].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[5].graph.name,@"d6");
+        // d6: RQFT `ghost_nnlo_5`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(3/64*ep^-3 - 451/128*ep^-2 - 2767/256*ep^-1)
+        //        + cl2*sqrt3*rat(31/16*ep^-1)
+        //        + pi^2*rat(3/256*ep^-1)
+        // F2/H = rat(27/16*ep^-2 + 19/16*ep^-1)
+        // F4/H = rat(-9/64*ep^-3 + 411/128*ep^-2 + 515/64*ep^-1)
+        //        + pi^2*rat(-3/256*ep^-1)
+        // F5/H = rat(27/16*ep^-2 + 19/16*ep^-1)
+        // F8/H = rat(-9/64*ep^-3 + 435/128*ep^-2 + 867/256*ep^-1)
+        //        + cl2*sqrt3*rat(-31/16*ep^-1)
+        //        + pi^2*rat(-3/128*ep^-1)
+        // F10/H = rat(-27/16*ep^-2 - 19/16*ep^-1)
+        // F13/H = rat(-27/16*ep^-2 - 19/16*ep^-1)
+        // F14/H = rat(9/32*ep^-3 - 45/16*ep^-2 - 13/8*ep^-1)
+        //         + pi^2*rat(3/128*ep^-1)
+        // F1, F3, F6..F7, F9, F11..F12, F15 = 0
+        // sum(Fi)/H = rat(3/64*ep^-3 + 35/128*ep^-2 - ep^-1)
+        // native GammaLoop / RQFT = +1.
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-10712/3*ε+-5576*ε^2+120*ε^2*𝜋^2+3968/3*cl2*sqrt(3)*ε^2+640)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1*ε^2+3/64+35/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[6].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
+        // d7: RQFT `ghost_nnlo_6`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(3/64*ep^-3 - 451/128*ep^-2 - 2767/256*ep^-1)
+        //        + cl2*sqrt3*rat(31/16*ep^-1)
+        //        + pi^2*rat(3/256*ep^-1)
+        // F2/H = rat(27/16*ep^-2 + 19/16*ep^-1)
+        // F4/H = rat(-9/64*ep^-3 + 411/128*ep^-2 + 515/64*ep^-1)
+        //        + pi^2*rat(-3/256*ep^-1)
+        // F5/H = rat(27/16*ep^-2 + 19/16*ep^-1)
+        // F8/H = rat(-9/64*ep^-3 + 435/128*ep^-2 + 867/256*ep^-1)
+        //        + cl2*sqrt3*rat(-31/16*ep^-1)
+        //        + pi^2*rat(-3/128*ep^-1)
+        // F10/H = rat(-27/16*ep^-2 - 19/16*ep^-1)
+        // F13/H = rat(-27/16*ep^-2 - 19/16*ep^-1)
+        // F14/H = rat(9/32*ep^-3 - 45/16*ep^-2 - 13/8*ep^-1)
+        //         + pi^2*rat(3/128*ep^-1)
+        // F1, F3, F6..F7, F9, F11..F12, F15 = 0
+        // sum(Fi)/H = rat(3/64*ep^-3 + 35/128*ep^-2 - ep^-1)
+        // native GammaLoop / RQFT = +1.
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-10712/3*ε+-5576*ε^2+-80+3968/3*cl2*sqrt(3)*ε^2)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1*ε^2+3/64+35/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[7].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
+        // d8: RQFT `ghost_nnlo_7`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(27/32*ep^-3 + 9/32*ep^-2 - 63/64*ep^-1)
+        //        + cl2*sqrt3*rat(-9/8*ep^-1)
+        //        + pi^2*rat(27/128*ep^-1)
+        // F3/H = rat(-81/32*ep^-3 + 27/16*ep^-2)
+        //        + pi^2*rat(-27/128*ep^-1)
+        // F5/H = rat(-81/64*ep^-3 + 27/128*ep^-2 + 27/256*ep^-1)
+        //        + cl2*sqrt3*rat(9/16*ep^-1)
+        //        + pi^2*rat(-27/128*ep^-1)
+        // F7/H = rat(-81/64*ep^-3 + 27/128*ep^-2 + 27/256*ep^-1)
+        //        + cl2*sqrt3*rat(9/16*ep^-1)
+        //        + pi^2*rat(-27/128*ep^-1)
+        // F10/H = rat(81/32*ep^-3 - 27/16*ep^-2)
+        //         + pi^2*rat(27/128*ep^-1)
+        // F11/H = rat(81/32*ep^-3 - 27/16*ep^-2)
+        //         + pi^2*rat(27/128*ep^-1)
+        // F1..F2, F4, F6, F8..F9, F12..F13 = 0
+        // sum(Fi)/H = rat(27/32*ep^-3 - 63/64*ep^-2 - 99/128*ep^-1)
+        // native GammaLoop / RQFT = +1.
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-288+264*ε^2+336*ε)*1/64*CA^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-63/64*ε+-99/128*ε^2+27/32)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
         );
 
         let a = amp.graphs[8].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
+        // d9: RQFT `ghost_nnlo_8`.
+        // H = p1.p1*gs^6*ca^3
+        // F0..F25 = 0
+        // sum(Fi)/H = 0
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(208*z3*ε+60*ε+64)*-1/64*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge(1)),coad(8,hedge(15)),coad(8,hedge(9)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(11)),coad(8,hedge(17)),coad(8,hedge(5)))*f(coad(8,hedge(13)),coad(8,hedge(3)),coad(8,hedge(7)))*f(coad(8,hedge(15)),coad(8,hedge(17)),coad(8,hedge(7)))*gs^6*ε^(-2)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
         );
 
         let a = amp.graphs[9].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"d5");
+        // d10: RQFT `ghost_nnlo_9`.
+        // H = p1.p1*gs^6*ca^3
+        // F0..F25 = 0
+        // sum(Fi)/H = 0
         insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"((8*ε+8/3)*1/64*f(coad(8,hedge(1)),coad(8,hedge(11)),coad(8,hedge(15)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(13)),coad(8,hedge(5)),coad(8,hedge(7)))*f(coad(8,hedge(15)),coad(8,hedge(17)),coad(8,hedge(7)))+-1/16*f(coad(8,hedge(1)),coad(8,hedge(11)),coad(8,hedge(15)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(4)))*f(coad(8,hedge(11)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(13)),coad(8,hedge(4)),coad(8,hedge(7)))*f(coad(8,hedge(15)),coad(8,hedge(17)),coad(8,hedge(7)))+1/16*f(coad(8,hedge(1)),coad(8,hedge(10)),coad(8,hedge(14)))*f(coad(8,hedge(1)),coad(8,hedge(3)),coad(8,hedge(5)))*f(coad(8,hedge(10)),coad(8,hedge(13)),coad(8,hedge(9)))*f(coad(8,hedge(13)),coad(8,hedge(5)),coad(8,hedge(7)))*f(coad(8,hedge(14)),coad(8,hedge(17)),coad(8,hedge(7))))*dot(P(0,mink(4)),P(0,mink(4)))*f(coad(8,hedge(17)),coad(8,hedge(3)),coad(8,hedge(9)))*gs^6*ε^(-2)"
+           align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
         );
 
         let a = amp.graphs[10].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d11: RQFT `ghost_nnlo_10`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(1/12*ep^-3 + 1/6*ep^-2 + 1/72*ep^-1)
+        //        + cl2*sqrt3*rat(-7/27*ep^-1)
+        //        + pi^2*rat(1/48*ep^-1)
+        // F2/H = rat(-1/8*ep^-3 - 7/48*ep^-2 - 95/864*ep^-1)
+        //        + cl2*sqrt3*rat(37/162*ep^-1)
+        //        + pi^2*rat(-1/48*ep^-1)
+        // F3/H = rat(-1/8*ep^-3 - 5/48*ep^-2 + 35/864*ep^-1)
+        //        + cl2*sqrt3*rat(5/162*ep^-1)
+        //        + pi^2*rat(-1/48*ep^-1)
+        // F6/H = rat(1/4*ep^-3 - 1/36*ep^-1)
+        //        + pi^2*rat(1/48*ep^-1)
+        // F1, F4..F5, F7 = 0
+        // sum(Fi)/H = rat(1/12*ep^-3 - 1/12*ep^-2 - 1/12*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[11].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d12: RQFT `ghost_nnlo_11`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-5/24*ep^-3 + 67/96*ep^-2 + 1049/864*ep^-1)
+        //        + cl2*sqrt3*rat(-151/162*ep^-1)
+        //        + pi^2*rat(-5/96*ep^-1)
+        // F3/H = rat(5/16*ep^-3 - 13/16*ep^-2 - 37/108*ep^-1)
+        //        + cl2*sqrt3*rat(185/324*ep^-1)
+        //        + pi^2*rat(5/96*ep^-1)
+        // F4/H = rat(5/16*ep^-3 - 5/6*ep^-2 - 17/48*ep^-1)
+        //        + cl2*sqrt3*rat(13/36*ep^-1)
+        //        + pi^2*rat(5/96*ep^-1)
+        // F9/H = rat(-5/8*ep^-3 + 115/96*ep^-2 - 95/288*ep^-1)
+        //        + pi^2*rat(-5/96*ep^-1)
+        // F1..F2, F5..F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-5/24*ep^-3 + 1/4*ep^-2 + 3/16*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[12].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d13: RQFT `ghost_nnlo_12`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-7/96*ep^-2 - 113/864*ep^-1)
+        //        + cl2*sqrt3*rat(8/81*ep^-1)
+        // F3/H = rat(5/96*ep^-2 + 23/1728*ep^-1)
+        //        + cl2*sqrt3*rat(-5/162*ep^-1)
+        // F4/H = rat(3/32*ep^-2 + 161/1728*ep^-1)
+        //        + cl2*sqrt3*rat(-11/162*ep^-1)
+        // F9/H = rat(-7/96*ep^-2 + 7/288*ep^-1)
+        // F1..F2, F5..F8, F10..F11 = 0
+        // sum(Fi)/H = 0
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[13].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d14: RQFT `ghost_nnlo_13`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-3/64*ep^-3 - 29/256*ep^-2 - 335/1536*ep^-1)
+        //        + cl2*sqrt3*rat(5/16*ep^-1)
+        //        + pi^2*rat(-3/256*ep^-1)
+        // F1/H = rat(9/256*ep^-3 - 15/512*ep^-2)
+        //        + pi^2*rat(3/1024*ep^-1)
+        // F2/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 27/512*ep^-1)
+        //        + cl2*sqrt3*rat(-5/32*ep^-1)
+        //        + pi^2*rat(3/256*ep^-1)
+        // F4/H = rat(9/256*ep^-3 + 21/512*ep^-2)
+        //        + pi^2*rat(3/1024*ep^-1)
+        // F5/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 27/512*ep^-1)
+        //        + cl2*sqrt3*rat(-5/32*ep^-1)
+        //        + pi^2*rat(3/256*ep^-1)
+        // F9/H = rat(-9/128*ep^-3 + 3/64*ep^-2)
+        //        + pi^2*rat(-3/512*ep^-1)
+        // F10/H = rat(-9/128*ep^-3 + 3/64*ep^-2)
+        //         + pi^2*rat(-3/512*ep^-1)
+        // F11/H = rat(-9/128*ep^-3)
+        //         + pi^2*rat(-3/512*ep^-1)
+        // F3, F6..F8, F12..F14 = 0
+        // sum(Fi)/H = rat(-3/64*ep^-3 + 7/64*ep^-2 - 173/1536*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[14].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d15: RQFT `ghost_nnlo_14`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/192*ep^-3 - 1/768*ep^-2 - 5/1536*ep^-1)
+        //        + cl2*sqrt3*rat(1/144*ep^-1)
+        //        + pi^2*rat(-1/768*ep^-1)
+        // F1/H = rat(1/256*ep^-3 - 3/512*ep^-2)
+        //        + pi^2*rat(1/3072*ep^-1)
+        // F2/H = rat(1/128*ep^-3 + 1/256*ep^-2 + 1/512*ep^-1)
+        //        + cl2*sqrt3*rat(-1/288*ep^-1)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F4/H = rat(1/256*ep^-3 - 3/512*ep^-2)
+        //        + pi^2*rat(1/3072*ep^-1)
+        // F5/H = rat(1/128*ep^-3 + 1/256*ep^-2 + 1/512*ep^-1)
+        //        + cl2*sqrt3*rat(-1/288*ep^-1)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F9/H = rat(-1/128*ep^-3)
+        //        + pi^2*rat(-1/1536*ep^-1)
+        // F10/H = rat(-1/128*ep^-3)
+        //         + pi^2*rat(-1/1536*ep^-1)
+        // F11/H = rat(-1/128*ep^-3)
+        //         + pi^2*rat(-1/1536*ep^-1)
+        // F3, F6..F8, F12..F14 = 0
+        // sum(Fi)/H = rat(-1/192*ep^-3 - 1/192*ep^-2 + 1/1536*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[15].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d16: RQFT `ghost_nnlo_15`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/64*ep^-3 - 13/768*ep^-2 - 53/1536*ep^-1)
+        //        + cl2*sqrt3*rat(1/16*ep^-1)
+        //        + pi^2*rat(-1/256*ep^-1)
+        // F1/H = rat(3/256*ep^-3 - 13/512*ep^-2)
+        //        + pi^2*rat(1/1024*ep^-1)
+        // F2/H = rat(3/128*ep^-3 + 3/256*ep^-2 + 3/512*ep^-1)
+        //        + cl2*sqrt3*rat(-1/96*ep^-1)
+        //        + pi^2*rat(1/256*ep^-1)
+        // F4/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+        //        + pi^2*rat(1/1024*ep^-1)
+        // F5/H = rat(3/128*ep^-3 + 5/256*ep^-2 + 9/512*ep^-1)
+        //        + cl2*sqrt3*rat(-5/96*ep^-1)
+        //        + pi^2*rat(1/256*ep^-1)
+        // F9/H = rat(-3/128*ep^-3 + 1/64*ep^-2)
+        //        + pi^2*rat(-1/512*ep^-1)
+        // F10/H = rat(-3/128*ep^-3)
+        //         + pi^2*rat(-1/512*ep^-1)
+        // F11/H = rat(-3/128*ep^-3)
+        //         + pi^2*rat(-1/512*ep^-1)
+        // F3, F6..F8, F12..F14 = 0
+        // sum(Fi)/H = rat(-1/64*ep^-3 + 1/384*ep^-2 - 17/1536*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[16].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d17: RQFT `ghost_nnlo_16`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/64*ep^-3 - 19/768*ep^-2 - 21/512*ep^-1)
+        //        + cl2*sqrt3*rat(1/16*ep^-1)
+        //        + pi^2*rat(-1/256*ep^-1)
+        // F1/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+        //        + pi^2*rat(1/1024*ep^-1)
+        // F2/H = rat(3/128*ep^-3 + 5/256*ep^-2 + 9/512*ep^-1)
+        //        + cl2*sqrt3*rat(-5/96*ep^-1)
+        //        + pi^2*rat(1/256*ep^-1)
+        // F4/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+        //        + pi^2*rat(1/1024*ep^-1)
+        // F5/H = rat(3/128*ep^-3 + 3/256*ep^-2 + 3/512*ep^-1)
+        //        + cl2*sqrt3*rat(-1/96*ep^-1)
+        //        + pi^2*rat(1/256*ep^-1)
+        // F9/H = rat(-3/128*ep^-3)
+        //        + pi^2*rat(-1/512*ep^-1)
+        // F10/H = rat(-3/128*ep^-3 + 1/64*ep^-2)
+        //         + pi^2*rat(-1/512*ep^-1)
+        // F11/H = rat(-3/128*ep^-3)
+        //         + pi^2*rat(-1/512*ep^-1)
+        // F3, F6..F8, F12..F14 = 0
+        // sum(Fi)/H = rat(-1/64*ep^-3 + 7/384*ep^-2 - 9/512*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[17].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d18: RQFT `ghost_nnlo_17`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/128*ep^-3 - 11/768*ep^-2 + 35/512*ep^-1)
+        //        + cl2*sqrt3*rat(5/96*ep^-1)
+        //        + z3*rat(-1/8*ep^-1)
+        //        + pi^2*rat(-1/512*ep^-1)
+        // F1/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+        //        + pi^2*rat(1/1024*ep^-1)
+        // F5/H = rat(3/256*ep^-3 - 13/512*ep^-2)
+        //        + pi^2*rat(1/1024*ep^-1)
+        // F8/H = rat(3/128*ep^-3 + 5/256*ep^-2 + 9/512*ep^-1)
+        //        + cl2*sqrt3*rat(-5/96*ep^-1)
+        //        + pi^2*rat(1/256*ep^-1)
+        // F11/H = rat(-3/128*ep^-3 + 1/64*ep^-2)
+        //         + pi^2*rat(-1/512*ep^-1)
+        // F17/H = rat(-3/128*ep^-3 + 1/64*ep^-2)
+        //         + pi^2*rat(-1/512*ep^-1)
+        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+        // sum(Fi)/H = rat(-1/128*ep^-3 + 7/768*ep^-2 + 11/128*ep^-1)
+        //             + z3*rat(-1/8*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[18].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d19: RQFT `ghost_nnlo_18`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-3/128*ep^-3 - 19/256*ep^-2 - 39/512*ep^-1)
+        //        + cl2*sqrt3*rat(5/32*ep^-1)
+        //        + z3*rat(-1/8*ep^-1)
+        //        + pi^2*rat(-3/512*ep^-1)
+        // F1/H = rat(9/256*ep^-3 + 21/512*ep^-2)
+        //        + pi^2*rat(3/1024*ep^-1)
+        // F5/H = rat(9/256*ep^-3 - 15/512*ep^-2)
+        //        + pi^2*rat(3/1024*ep^-1)
+        // F8/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 27/512*ep^-1)
+        //        + cl2*sqrt3*rat(-5/32*ep^-1)
+        //        + pi^2*rat(3/256*ep^-1)
+        // F11/H = rat(-9/128*ep^-3 + 3/64*ep^-2)
+        //         + pi^2*rat(-3/512*ep^-1)
+        // F17/H = rat(-9/128*ep^-3 + 3/64*ep^-2)
+        //         + pi^2*rat(-3/512*ep^-1)
+        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+        // sum(Fi)/H = rat(-3/128*ep^-3 + 23/256*ep^-2 - 3/128*ep^-1)
+        //             + z3*rat(-1/8*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[19].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d20: RQFT `ghost_nnlo_19`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/128*ep^-3 - 5/768*ep^-2 - 23/512*ep^-1)
+        //        + cl2*sqrt3*rat(1/96*ep^-1)
+        //        + pi^2*rat(-1/512*ep^-1)
+        // F1/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+        //        + pi^2*rat(1/1024*ep^-1)
+        // F5/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+        //        + pi^2*rat(1/1024*ep^-1)
+        // F8/H = rat(3/128*ep^-3 + 3/256*ep^-2 + 3/512*ep^-1)
+        //        + cl2*sqrt3*rat(-1/96*ep^-1)
+        //        + pi^2*rat(1/256*ep^-1)
+        // F11/H = rat(-3/128*ep^-3)
+        //         + pi^2*rat(-1/512*ep^-1)
+        // F17/H = rat(-3/128*ep^-3)
+        //         + pi^2*rat(-1/512*ep^-1)
+        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+        // sum(Fi)/H = rat(-1/128*ep^-3 + 1/768*ep^-2 - 5/128*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[20].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d21: RQFT `ghost_nnlo_20`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/384*ep^-3 - 1/256*ep^-2 - 11/1536*ep^-1)
+        //        + cl2*sqrt3*rat(1/288*ep^-1)
+        //        + pi^2*rat(-1/1536*ep^-1)
+        // F1/H = rat(1/256*ep^-3 - 3/512*ep^-2)
+        //        + pi^2*rat(1/3072*ep^-1)
+        // F5/H = rat(1/256*ep^-3 + 5/512*ep^-2)
+        //        + pi^2*rat(1/3072*ep^-1)
+        // F8/H = rat(1/128*ep^-3 + 1/256*ep^-2 + 1/512*ep^-1)
+        //        + cl2*sqrt3*rat(-1/288*ep^-1)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F11/H = rat(-1/128*ep^-3)
+        //         + pi^2*rat(-1/1536*ep^-1)
+        // F17/H = rat(-1/128*ep^-3)
+        //         + pi^2*rat(-1/1536*ep^-1)
+        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+        // sum(Fi)/H = rat(-1/384*ep^-3 + 1/256*ep^-2 - 1/192*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[21].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d22: RQFT `ghost_nnlo_21`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/128*ep^-3 - 5/768*ep^-2 - 7/512*ep^-1)
+        //        + cl2*sqrt3*rat(1/96*ep^-1)
+        //        + pi^2*rat(-1/512*ep^-1)
+        // F1/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+        //        + pi^2*rat(1/1024*ep^-1)
+        // F5/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+        //        + pi^2*rat(1/1024*ep^-1)
+        // F8/H = rat(3/128*ep^-3 + 3/256*ep^-2 + 3/512*ep^-1)
+        //        + cl2*sqrt3*rat(-1/96*ep^-1)
+        //        + pi^2*rat(1/256*ep^-1)
+        // F11/H = rat(-3/128*ep^-3)
+        //         + pi^2*rat(-1/512*ep^-1)
+        // F17/H = rat(-3/128*ep^-3)
+        //         + pi^2*rat(-1/512*ep^-1)
+        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+        // sum(Fi)/H = rat(-1/128*ep^-3 + 1/768*ep^-2 - 1/128*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[22].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d23: RQFT `ghost_nnlo_22`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/384*ep^-3 - 1/256*ep^-2 - 11/1536*ep^-1)
+        //        + cl2*sqrt3*rat(1/288*ep^-1)
+        //        + pi^2*rat(-1/1536*ep^-1)
+        // F1/H = rat(1/256*ep^-3 + 5/512*ep^-2)
+        //        + pi^2*rat(1/3072*ep^-1)
+        // F5/H = rat(1/256*ep^-3 - 3/512*ep^-2)
+        //        + pi^2*rat(1/3072*ep^-1)
+        // F8/H = rat(1/128*ep^-3 + 1/256*ep^-2 + 1/512*ep^-1)
+        //        + cl2*sqrt3*rat(-1/288*ep^-1)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F11/H = rat(-1/128*ep^-3)
+        //         + pi^2*rat(-1/1536*ep^-1)
+        // F17/H = rat(-1/128*ep^-3)
+        //         + pi^2*rat(-1/1536*ep^-1)
+        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+        // sum(Fi)/H = rat(-1/384*ep^-3 + 1/256*ep^-2 - 1/192*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[23].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d24: RQFT `ghost_nnlo_23`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(-1/48*ep^-3 - 5/96*ep^-2 - 7/64*ep^-1)
+        //        + cl2*sqrt3*rat(5/36*ep^-1)
+        //        + z3*rat(1/4*ep^-1)
+        //        + pi^2*rat(-1/192*ep^-1)
+        // F1/H = rat(1/32*ep^-3 - 1/64*ep^-2)
+        //        + pi^2*rat(1/384*ep^-1)
+        // F2/H = rat(1/32*ep^-3 - 1/64*ep^-2)
+        //        + pi^2*rat(1/384*ep^-1)
+        // F4/H = rat(1/16*ep^-3 + 5/96*ep^-2 + 3/64*ep^-1)
+        //        + cl2*sqrt3*rat(-5/36*ep^-1)
+        //        + pi^2*rat(1/96*ep^-1)
+        // F5/H = rat(-1/16*ep^-3 + 1/24*ep^-2)
+        //        + pi^2*rat(-1/192*ep^-1)
+        // F6/H = rat(-1/16*ep^-3 + 1/24*ep^-2)
+        //        + pi^2*rat(-1/192*ep^-1)
+        // F3, F7 = 0
+        // sum(Fi)/H = rat(-1/48*ep^-3 + 5/96*ep^-2 - 1/16*ep^-1)
+        //             + z3*rat(1/4*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[24].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d25: RQFT `ghost_nnlo_24`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(-1/48*ep^-3 - 5/96*ep^-2 - 7/64*ep^-1)
+        //        + cl2*sqrt3*rat(5/36*ep^-1)
+        //        + z3*rat(1/4*ep^-1)
+        //        + pi^2*rat(-1/192*ep^-1)
+        // F1/H = rat(1/32*ep^-3 - 1/64*ep^-2)
+        //        + pi^2*rat(1/384*ep^-1)
+        // F2/H = rat(1/32*ep^-3 - 1/64*ep^-2)
+        //        + pi^2*rat(1/384*ep^-1)
+        // F4/H = rat(1/16*ep^-3 + 5/96*ep^-2 + 3/64*ep^-1)
+        //        + cl2*sqrt3*rat(-5/36*ep^-1)
+        //        + pi^2*rat(1/96*ep^-1)
+        // F5/H = rat(-1/16*ep^-3 + 1/24*ep^-2)
+        //        + pi^2*rat(-1/192*ep^-1)
+        // F6/H = rat(-1/16*ep^-3 + 1/24*ep^-2)
+        //        + pi^2*rat(-1/192*ep^-1)
+        // F3, F7 = 0
+        // sum(Fi)/H = rat(-1/48*ep^-3 + 5/96*ep^-2 - 1/16*ep^-1)
+        //             + z3*rat(1/4*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[25].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d26: RQFT `ghost_nnlo_25`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-13/128*ep^-3 - 197/768*ep^-2 - 733/1536*ep^-1)
+        //        + cl2*sqrt3*rat(65/96*ep^-1)
+        //        + z3*rat(-3/8*ep^-1)
+        //        + pi^2*rat(-13/512*ep^-1)
+        // F1/H = rat(39/256*ep^-3 - 37/512*ep^-2)
+        //        + pi^2*rat(13/1024*ep^-1)
+        // F5/H = rat(39/256*ep^-3 - 37/512*ep^-2)
+        //        + pi^2*rat(13/1024*ep^-1)
+        // F8/H = rat(39/128*ep^-3 + 65/256*ep^-2 + 117/512*ep^-1)
+        //        + cl2*sqrt3*rat(-65/96*ep^-1)
+        //        + pi^2*rat(13/256*ep^-1)
+        // F11/H = rat(-39/128*ep^-3 + 13/64*ep^-2)
+        //         + pi^2*rat(-13/512*ep^-1)
+        // F17/H = rat(-39/128*ep^-3 + 13/64*ep^-2)
+        //         + pi^2*rat(-13/512*ep^-1)
+        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+        // sum(Fi)/H = rat(-13/128*ep^-3 + 199/768*ep^-2 - 191/768*ep^-1)
+        //             + z3*rat(-3/8*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[26].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d27: RQFT `ghost_nnlo_26`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(1/192*ep^-3 + 7/384*ep^-2 + 31/768*ep^-1)
+        //        + cl2*sqrt3*rat(-5/144*ep^-1)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F1/H = rat(-1/128*ep^-3 - 1/256*ep^-2)
+        //        + pi^2*rat(-1/1536*ep^-1)
+        // F5/H = rat(-1/128*ep^-3 - 1/256*ep^-2)
+        //        + pi^2*rat(-1/1536*ep^-1)
+        // F8/H = rat(-1/64*ep^-3 - 5/384*ep^-2 - 3/256*ep^-1)
+        //        + cl2*sqrt3*rat(5/144*ep^-1)
+        //        + pi^2*rat(-1/384*ep^-1)
+        // F11/H = rat(1/64*ep^-3 - 1/96*ep^-2)
+        //         + pi^2*rat(1/768*ep^-1)
+        // F17/H = rat(1/64*ep^-3 - 1/96*ep^-2)
+        //         + pi^2*rat(1/768*ep^-1)
+        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+        // sum(Fi)/H = rat(1/192*ep^-3 - 3/128*ep^-2 + 11/384*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[27].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d28: RQFT `ghost_nnlo_27`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/384*ep^-3 - 1/256*ep^-2 - 1/512*ep^-1)
+        //        + cl2*sqrt3*rat(5/288*ep^-1)
+        //        + pi^2*rat(-1/1536*ep^-1)
+        // F1/H = rat(1/256*ep^-3 - 3/512*ep^-2)
+        //        + pi^2*rat(1/3072*ep^-1)
+        // F5/H = rat(1/256*ep^-3 - 3/512*ep^-2)
+        //        + pi^2*rat(1/3072*ep^-1)
+        // F8/H = rat(1/128*ep^-3 + 5/768*ep^-2 + 3/512*ep^-1)
+        //        + cl2*sqrt3*rat(-5/288*ep^-1)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F11/H = rat(-1/128*ep^-3 + 1/192*ep^-2)
+        //         + pi^2*rat(-1/1536*ep^-1)
+        // F17/H = rat(-1/128*ep^-3 + 1/192*ep^-2)
+        //         + pi^2*rat(-1/1536*ep^-1)
+        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+        // sum(Fi)/H = rat(-1/384*ep^-3 + 1/768*ep^-2 + 1/256*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[28].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d29: RQFT `ghost_nnlo_28`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-3/64*ep^-3 - 7/128*ep^-2 - 23/256*ep^-1)
+        //        + cl2*sqrt3*rat(31/144*ep^-1)
+        //        + pi^2*rat(-3/256*ep^-1)
+        // F1/H = rat(3/64*ep^-3 - 5/128*ep^-2)
+        //        + pi^2*rat(1/256*ep^-1)
+        // F2/H = rat(3/64*ep^-3 - 1/128*ep^-2 - 11/768*ep^-1)
+        //        + cl2*sqrt3*rat(1/144*ep^-1)
+        //        + pi^2*rat(1/128*ep^-1)
+        // F4/H = rat(3/32*ep^-3 + 3/64*ep^-2 + 25/384*ep^-1)
+        //        + cl2*sqrt3*rat(-2/9*ep^-1)
+        //        + pi^2*rat(1/64*ep^-1)
+        // F7/H = rat(-3/32*ep^-3 + 3/32*ep^-2)
+        //        + pi^2*rat(-1/128*ep^-1)
+        // F9/H = rat(-3/32*ep^-3 + 1/32*ep^-2)
+        //        + pi^2*rat(-1/128*ep^-1)
+        // F3, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-3/64*ep^-3 + 9/128*ep^-2 - 5/128*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[29].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d30: RQFT `ghost_nnlo_29`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(1/48*ep^-3 + 1/12*ep^-2 + 25/864*ep^-1)
+        //        + cl2*sqrt3*rat(-25/324*ep^-1)
+        //        + pi^2*rat(1/192*ep^-1)
+        // F1/H = rat(-1/24*ep^-2)
+        // F2/H = rat(-1/32*ep^-3 - 13/192*ep^-2 - 23/1152*ep^-1)
+        //        + cl2*sqrt3*rat(7/216*ep^-1)
+        //        + pi^2*rat(-1/192*ep^-1)
+        // F3/H = rat(-1/32*ep^-3 - 5/64*ep^-2 - 103/3456*ep^-1)
+        //        + cl2*sqrt3*rat(29/648*ep^-1)
+        //        + pi^2*rat(-1/192*ep^-1)
+        // F5/H = rat(1/24*ep^-2)
+        // F6/H = rat(1/16*ep^-3 + 1/24*ep^-2)
+        //        + pi^2*rat(1/192*ep^-1)
+        // F4, F7 = 0
+        // sum(Fi)/H = rat(1/48*ep^-3 - 1/48*ep^-2 - 1/48*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[30].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d31: RQFT `ghost_nnlo_30`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-19/384*ep^-3 + 131/768*ep^-2 + 4471/13824*ep^-1)
+        //        + cl2*sqrt3*rat(-287/2592*ep^-1)
+        //        + pi^2*rat(-19/1536*ep^-1)
+        // F1/H = rat(-1/128*ep^-3 - 71/768*ep^-2)
+        //        + pi^2*rat(-1/1536*ep^-1)
+        // F2/H = rat(5/64*ep^-3 - 77/384*ep^-2 - 149/768*ep^-1)
+        //        + cl2*sqrt3*rat(11/144*ep^-1)
+        //        + pi^2*rat(5/384*ep^-1)
+        // F4/H = rat(9/128*ep^-3 - 51/256*ep^-2 - 1105/13824*ep^-1)
+        //        + cl2*sqrt3*rat(89/2592*ep^-1)
+        //        + pi^2*rat(3/256*ep^-1)
+        // F7/H = rat(1/64*ep^-3 + 17/192*ep^-2)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F9/H = rat(-5/32*ep^-3 + 7/24*ep^-2)
+        //        + pi^2*rat(-5/384*ep^-1)
+        // F3, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-19/384*ep^-3 + 15/256*ep^-2 + 19/384*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[31].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d32: RQFT `ghost_nnlo_31`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/384*ep^-3 - 19/768*ep^-2 - 719/13824*ep^-1)
+        //        + cl2*sqrt3*rat(67/2592*ep^-1)
+        //        + pi^2*rat(-1/1536*ep^-1)
+        // F1/H = rat(1/128*ep^-3 + 7/768*ep^-2)
+        //        + pi^2*rat(1/1536*ep^-1)
+        // F2/H = rat(5/192*ep^-2 + 47/1152*ep^-1)
+        //        + cl2*sqrt3*rat(-1/54*ep^-1)
+        // F4/H = rat(1/128*ep^-3 + 5/256*ep^-2 + 119/13824*ep^-1)
+        //        + cl2*sqrt3*rat(-19/2592*ep^-1)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F7/H = rat(-1/64*ep^-3 - 1/192*ep^-2)
+        //        + pi^2*rat(-1/768*ep^-1)
+        // F9/H = rat(-1/48*ep^-2)
+        // F3, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-1/384*ep^-3 + 1/256*ep^-2 - 1/384*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[32].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d33: RQFT `ghost_nnlo_32`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/64*ep^-3 - 1/128*ep^-2 - 131/6912*ep^-1)
+        //        + cl2*sqrt3*rat(25/1296*ep^-1)
+        //        + pi^2*rat(-1/256*ep^-1)
+        // F1/H = rat(1/64*ep^-3 - 1/384*ep^-2)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F2/H = rat(1/64*ep^-3 - 1/384*ep^-2 - 11/2304*ep^-1)
+        //        + cl2*sqrt3*rat(1/432*ep^-1)
+        //        + pi^2*rat(1/384*ep^-1)
+        // F4/H = rat(1/32*ep^-3 + 1/192*ep^-2 + 37/3456*ep^-1)
+        //        + cl2*sqrt3*rat(-7/324*ep^-1)
+        //        + pi^2*rat(1/192*ep^-1)
+        // F7/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+        //        + pi^2*rat(-1/384*ep^-1)
+        // F9/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+        //        + pi^2*rat(-1/384*ep^-1)
+        // F3, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-1/64*ep^-3 + 5/384*ep^-2 - 5/384*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[33].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d34: RQFT `ghost_nnlo_33`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(1/16*ep^-3 + 1/3*ep^-2 + 5/32*ep^-1)
+        //        + cl2*sqrt3*rat(-19/36*ep^-1)
+        //        + pi^2*rat(1/64*ep^-1)
+        // F1/H = rat(-1/8*ep^-2)
+        // F2/H = rat(-3/32*ep^-3 - 13/64*ep^-2 - 23/384*ep^-1)
+        //        + cl2*sqrt3*rat(7/72*ep^-1)
+        //        + pi^2*rat(-1/64*ep^-1)
+        // F3/H = rat(-3/32*ep^-3 - 23/64*ep^-2 - 53/384*ep^-1)
+        //        + cl2*sqrt3*rat(31/72*ep^-1)
+        //        + pi^2*rat(-1/64*ep^-1)
+        // F5/H = rat(1/8*ep^-2)
+        // F6/H = rat(3/16*ep^-3 + 1/8*ep^-2)
+        //        + pi^2*rat(1/64*ep^-1)
+        // F4, F7 = 0
+        // sum(Fi)/H = rat(1/16*ep^-3 - 5/48*ep^-2 - 1/24*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[34].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d35: RQFT `ghost_nnlo_34`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-19/128*ep^-3 + 229/768*ep^-2 + 721/1536*ep^-1)
+        //        + cl2*sqrt3*rat(167/288*ep^-1)
+        //        + pi^2*rat(-19/512*ep^-1)
+        // F1/H = rat(-3/128*ep^-3 - 67/256*ep^-2)
+        //        + pi^2*rat(-1/512*ep^-1)
+        // F2/H = rat(15/64*ep^-3 - 77/128*ep^-2 - 149/256*ep^-1)
+        //        + cl2*sqrt3*rat(11/48*ep^-1)
+        //        + pi^2*rat(5/128*ep^-1)
+        // F4/H = rat(27/128*ep^-3 - 69/256*ep^-2 + 217/1536*ep^-1)
+        //        + cl2*sqrt3*rat(-233/288*ep^-1)
+        //        + pi^2*rat(9/256*ep^-1)
+        // F7/H = rat(3/64*ep^-3 + 15/64*ep^-2)
+        //        + pi^2*rat(1/256*ep^-1)
+        // F9/H = rat(-15/32*ep^-3 + 7/8*ep^-2)
+        //        + pi^2*rat(-5/128*ep^-1)
+        // F3, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-19/128*ep^-3 + 211/768*ep^-2 + 11/384*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[35].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d36: RQFT `ghost_nnlo_35`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/128*ep^-3 - 53/768*ep^-2 - 83/512*ep^-1)
+        //        + cl2*sqrt3*rat(7/96*ep^-1)
+        //        + pi^2*rat(-1/512*ep^-1)
+        // F1/H = rat(3/128*ep^-3 + 3/256*ep^-2)
+        //        + pi^2*rat(1/512*ep^-1)
+        // F2/H = rat(5/64*ep^-2 + 47/384*ep^-1)
+        //        + cl2*sqrt3*rat(-1/18*ep^-1)
+        // F4/H = rat(3/128*ep^-3 + 11/256*ep^-2 + 25/1536*ep^-1)
+        //        + cl2*sqrt3*rat(-5/288*ep^-1)
+        //        + pi^2*rat(1/256*ep^-1)
+        // F7/H = rat(-3/64*ep^-3 + 1/64*ep^-2)
+        //        + pi^2*rat(-1/256*ep^-1)
+        // F9/H = rat(-1/16*ep^-2)
+        // F3, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-1/128*ep^-3 + 13/768*ep^-2 - 3/128*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[36].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d37: RQFT `ghost_nnlo_36`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-3/64*ep^-3 - 7/128*ep^-2 - 23/256*ep^-1)
+        //        + cl2*sqrt3*rat(31/144*ep^-1)
+        //        + pi^2*rat(-3/256*ep^-1)
+        // F1/H = rat(3/64*ep^-3 - 5/128*ep^-2)
+        //        + pi^2*rat(1/256*ep^-1)
+        // F2/H = rat(3/64*ep^-3 - 1/128*ep^-2 - 11/768*ep^-1)
+        //        + cl2*sqrt3*rat(1/144*ep^-1)
+        //        + pi^2*rat(1/128*ep^-1)
+        // F4/H = rat(3/32*ep^-3 + 3/64*ep^-2 + 25/384*ep^-1)
+        //        + cl2*sqrt3*rat(-2/9*ep^-1)
+        //        + pi^2*rat(1/64*ep^-1)
+        // F7/H = rat(-3/32*ep^-3 + 3/32*ep^-2)
+        //        + pi^2*rat(-1/128*ep^-1)
+        // F9/H = rat(-3/32*ep^-3 + 1/32*ep^-2)
+        //        + pi^2*rat(-1/128*ep^-1)
+        // F3, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-3/64*ep^-3 + 9/128*ep^-2 - 5/128*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[37].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d38: RQFT `ghost_nnlo_37`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(1/48*ep^-3 + 1/16*ep^-2 + 7/864*ep^-1)
+        //        + cl2*sqrt3*rat(-7/324*ep^-1)
+        //        + pi^2*rat(1/192*ep^-1)
+        // F1/H = rat(-1/24*ep^-2)
+        // F2/H = rat(-1/32*ep^-3 - 13/192*ep^-2 - 23/1152*ep^-1)
+        //        + cl2*sqrt3*rat(7/216*ep^-1)
+        //        + pi^2*rat(-1/192*ep^-1)
+        // F3/H = rat(-1/32*ep^-3 - 3/64*ep^-2 - 49/3456*ep^-1)
+        //        + cl2*sqrt3*rat(-7/648*ep^-1)
+        //        + pi^2*rat(-1/192*ep^-1)
+        // F5/H = rat(1/24*ep^-2)
+        // F6/H = rat(1/16*ep^-3 + 1/24*ep^-2)
+        //        + pi^2*rat(1/192*ep^-1)
+        // F4, F7 = 0
+        // sum(Fi)/H = rat(1/48*ep^-3 - 1/96*ep^-2 - 5/192*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[38].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d39: RQFT `ghost_nnlo_38`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-19/384*ep^-3 + 175/768*ep^-2 + 5551/13824*ep^-1)
+        //        + cl2*sqrt3*rat(-683/2592*ep^-1)
+        //        + pi^2*rat(-19/1536*ep^-1)
+        // F1/H = rat(-1/128*ep^-3 - 71/768*ep^-2)
+        //        + pi^2*rat(-1/1536*ep^-1)
+        // F2/H = rat(5/64*ep^-3 - 77/384*ep^-2 - 149/768*ep^-1)
+        //        + cl2*sqrt3*rat(11/144*ep^-1)
+        //        + pi^2*rat(5/384*ep^-1)
+        // F4/H = rat(9/128*ep^-3 - 73/256*ep^-2 - 1699/13824*ep^-1)
+        //        + cl2*sqrt3*rat(485/2592*ep^-1)
+        //        + pi^2*rat(3/256*ep^-1)
+        // F7/H = rat(1/64*ep^-3 + 17/192*ep^-2)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F9/H = rat(-5/32*ep^-3 + 7/24*ep^-2)
+        //        + pi^2*rat(-5/384*ep^-1)
+        // F3, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-19/384*ep^-3 + 23/768*ep^-2 + 65/768*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[39].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d40: RQFT `ghost_nnlo_39`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/384*ep^-3 - 23/768*ep^-2 - 791/13824*ep^-1)
+        //        + cl2*sqrt3*rat(103/2592*ep^-1)
+        //        + pi^2*rat(-1/1536*ep^-1)
+        // F1/H = rat(1/128*ep^-3 + 7/768*ep^-2)
+        //        + pi^2*rat(1/1536*ep^-1)
+        // F2/H = rat(5/192*ep^-2 + 47/1152*ep^-1)
+        //        + cl2*sqrt3*rat(-1/54*ep^-1)
+        // F4/H = rat(1/128*ep^-3 + 7/256*ep^-2 + 173/13824*ep^-1)
+        //        + cl2*sqrt3*rat(-55/2592*ep^-1)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F7/H = rat(-1/64*ep^-3 - 1/192*ep^-2)
+        //        + pi^2*rat(-1/768*ep^-1)
+        // F9/H = rat(-1/48*ep^-2)
+        // F3, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-1/384*ep^-3 + 5/768*ep^-2 - 1/256*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[40].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d41: RQFT `ghost_nnlo_40`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/64*ep^-3 - 1/128*ep^-2 - 131/6912*ep^-1)
+        //        + cl2*sqrt3*rat(25/1296*ep^-1)
+        //        + pi^2*rat(-1/256*ep^-1)
+        // F1/H = rat(1/64*ep^-3 - 1/384*ep^-2)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F2/H = rat(1/64*ep^-3 - 1/384*ep^-2 - 11/2304*ep^-1)
+        //        + cl2*sqrt3*rat(1/432*ep^-1)
+        //        + pi^2*rat(1/384*ep^-1)
+        // F4/H = rat(1/32*ep^-3 + 1/192*ep^-2 + 37/3456*ep^-1)
+        //        + cl2*sqrt3*rat(-7/324*ep^-1)
+        //        + pi^2*rat(1/192*ep^-1)
+        // F7/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+        //        + pi^2*rat(-1/384*ep^-1)
+        // F9/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+        //        + pi^2*rat(-1/384*ep^-1)
+        // F3, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-1/64*ep^-3 + 5/384*ep^-2 - 5/384*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[41].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d42: RQFT `ghost_nnlo_41`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(1/12*ep^-3 + 9/32*ep^-2 + 35/192*ep^-1)
+        //        + cl2*sqrt3*rat(-4/9*ep^-1)
+        //        + pi^2*rat(1/48*ep^-1)
+        // F1/H = rat(-1/16*ep^-3 - 5/96*ep^-2)
+        //        + pi^2*rat(-1/192*ep^-1)
+        // F2/H = rat(-3/32*ep^-3 - 13/64*ep^-2 - 23/384*ep^-1)
+        //        + cl2*sqrt3*rat(7/72*ep^-1)
+        //        + pi^2*rat(-1/64*ep^-1)
+        // F3/H = rat(-5/32*ep^-3 - 49/192*ep^-2 - 49/384*ep^-1)
+        //        + cl2*sqrt3*rat(25/72*ep^-1)
+        //        + pi^2*rat(-5/192*ep^-1)
+        // F5/H = rat(1/8*ep^-3)
+        //        + pi^2*rat(1/96*ep^-1)
+        // F6/H = rat(3/16*ep^-3 + 1/8*ep^-2)
+        //        + pi^2*rat(1/64*ep^-1)
+        // F4, F7 = 0
+        // sum(Fi)/H = rat(1/12*ep^-3 - 5/48*ep^-2 - 1/192*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[42].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d43: RQFT `ghost_nnlo_42`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-79/384*ep^-3 + 323/768*ep^-2 + 659/1536*ep^-1)
+        //        + cl2*sqrt3*rat(101/288*ep^-1)
+        //        + pi^2*rat(-79/1536*ep^-1)
+        // F1/H = rat(19/128*ep^-3 - 307/768*ep^-2)
+        //        + pi^2*rat(19/1536*ep^-1)
+        // F2/H = rat(15/64*ep^-3 - 77/128*ep^-2 - 149/256*ep^-1)
+        //        + cl2*sqrt3*rat(11/48*ep^-1)
+        //        + pi^2*rat(5/128*ep^-1)
+        // F4/H = rat(49/128*ep^-3 - 427/768*ep^-2 + 173/1536*ep^-1)
+        //        + cl2*sqrt3*rat(-167/288*ep^-1)
+        //        + pi^2*rat(49/768*ep^-1)
+        // F7/H = rat(-19/64*ep^-3 + 37/64*ep^-2)
+        //        + pi^2*rat(-19/768*ep^-1)
+        // F9/H = rat(-15/32*ep^-3 + 7/8*ep^-2)
+        //        + pi^2*rat(-5/128*ep^-1)
+        // F3, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-79/384*ep^-3 + 81/256*ep^-2 - 31/768*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[43].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d44: RQFT `ghost_nnlo_43`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/384*ep^-3 - 21/256*ep^-2 - 239/1536*ep^-1)
+        //        + cl2*sqrt3*rat(3/32*ep^-1)
+        //        + pi^2*rat(-1/1536*ep^-1)
+        // F1/H = rat(1/128*ep^-3 + 23/768*ep^-2)
+        //        + pi^2*rat(1/1536*ep^-1)
+        // F2/H = rat(5/64*ep^-2 + 47/384*ep^-1)
+        //        + cl2*sqrt3*rat(-1/18*ep^-1)
+        // F4/H = rat(1/128*ep^-3 + 53/768*ep^-2 + 29/1536*ep^-1)
+        //        + cl2*sqrt3*rat(-11/288*ep^-1)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F7/H = rat(-1/64*ep^-3 - 1/64*ep^-2)
+        //        + pi^2*rat(-1/768*ep^-1)
+        // F9/H = rat(-1/16*ep^-2)
+        // F3, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-1/384*ep^-3 + 13/768*ep^-2 - 11/768*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[44].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d45: RQFT `ghost_nnlo_44`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(1/48*ep^-3 + 17/96*ep^-2 + 113/192*ep^-1)
+        //        + cl2*sqrt3*rat(-17/36*ep^-1)
+        //        + pi^2*rat(1/192*ep^-1)
+        // F1/H = rat(-1/16*ep^-3 - 5/96*ep^-2)
+        //        + pi^2*rat(-1/192*ep^-1)
+        // F2/H = rat(-1/8*ep^-2)
+        // F3/H = rat(-1/16*ep^-3 - 23/96*ep^-2 - 33/64*ep^-1)
+        //        + cl2*sqrt3*rat(17/36*ep^-1)
+        //        + pi^2*rat(-1/96*ep^-1)
+        // F5/H = rat(1/8*ep^-3)
+        //        + pi^2*rat(1/96*ep^-1)
+        // F6/H = rat(1/8*ep^-2)
+        // F4, F7 = 0
+        // sum(Fi)/H = rat(1/48*ep^-3 - 11/96*ep^-2 + 7/96*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[45].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d46: RQFT `ghost_nnlo_45`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/24*ep^-3 - 89/192*ep^-2 + 277/384*ep^-1)
+        //        + cl2*sqrt3*rat(43/36*ep^-1)
+        //        + pi^2*rat(-1/96*ep^-1)
+        // F1/H = rat(19/128*ep^-3 - 307/768*ep^-2)
+        //        + pi^2*rat(19/1536*ep^-1)
+        // F3/H = rat(-3/128*ep^-3 - 67/256*ep^-2)
+        //        + pi^2*rat(-1/512*ep^-1)
+        // F4/H = rat(1/8*ep^-3 + 119/192*ep^-2 - 135/128*ep^-1)
+        //        + cl2*sqrt3*rat(-43/36*ep^-1)
+        //        + pi^2*rat(1/48*ep^-1)
+        // F7/H = rat(-19/64*ep^-3 + 37/64*ep^-2)
+        //        + pi^2*rat(-19/768*ep^-1)
+        // F9/H = rat(3/64*ep^-3 + 15/64*ep^-2)
+        //        + pi^2*rat(1/256*ep^-1)
+        // F2, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-1/24*ep^-3 + 59/192*ep^-2 - 1/3*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[46].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d47: RQFT `ghost_nnlo_46`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/96*ep^-3 - 9/64*ep^-1)
+        //        + cl2*sqrt3*rat(-1/72*ep^-1)
+        //        + pi^2*rat(-1/384*ep^-1)
+        // F1/H = rat(1/128*ep^-3 + 23/768*ep^-2)
+        //        + pi^2*rat(1/1536*ep^-1)
+        // F3/H = rat(3/128*ep^-3 + 3/256*ep^-2)
+        //        + pi^2*rat(1/512*ep^-1)
+        // F4/H = rat(1/32*ep^-3 - 1/48*ep^-2 + 3/32*ep^-1)
+        //        + cl2*sqrt3*rat(1/72*ep^-1)
+        //        + pi^2*rat(1/192*ep^-1)
+        // F7/H = rat(-1/64*ep^-3 - 1/64*ep^-2)
+        //        + pi^2*rat(-1/768*ep^-1)
+        // F9/H = rat(-3/64*ep^-3 + 1/64*ep^-2)
+        //        + pi^2*rat(-1/256*ep^-1)
+        // F2, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-1/96*ep^-3 + 1/48*ep^-2 - 3/64*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[47].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d48: RQFT `ghost_nnlo_47`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/96*ep^-3 - 1/64*ep^-2 + 1/384*ep^-1)
+        //        + cl2*sqrt3*rat(1/72*ep^-1)
+        //        + pi^2*rat(-1/384*ep^-1)
+        // F1/H = rat(1/64*ep^-3 - 1/384*ep^-2)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F3/H = rat(1/64*ep^-3 - 1/384*ep^-2)
+        //        + pi^2*rat(1/768*ep^-1)
+        // F4/H = rat(1/32*ep^-3 + 1/64*ep^-2 - 5/384*ep^-1)
+        //        + cl2*sqrt3*rat(-1/72*ep^-1)
+        //        + pi^2*rat(1/192*ep^-1)
+        // F7/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+        //        + pi^2*rat(-1/384*ep^-1)
+        // F9/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+        //        + pi^2*rat(-1/384*ep^-1)
+        // F2, F5..F6, F8, F10..F11 = 0
+        // sum(Fi)/H = rat(-1/96*ep^-3 + 1/64*ep^-2 - 1/96*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[48].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d49: RQFT `ghost_nnlo_48`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/32*ep^-3 - 5/192*ep^-2 - 5/384*ep^-1)
+        //        + cl2*sqrt3*rat(-1/72*ep^-1)
+        //        + z3*rat(1/8*ep^-1)
+        //        + pi^2*rat(-1/128*ep^-1)
+        // F1/H = rat(3/64*ep^-3 - 1/128*ep^-2 - 11/768*ep^-1)
+        //        + cl2*sqrt3*rat(1/144*ep^-1)
+        //        + pi^2*rat(1/128*ep^-1)
+        // F5/H = rat(3/32*ep^-3 + 3/64*ep^-2 - 5/192*ep^-1)
+        //        + pi^2*rat(1/128*ep^-1)
+        // F8/H = rat(3/64*ep^-3 - 1/128*ep^-2 - 11/768*ep^-1)
+        //        + cl2*sqrt3*rat(1/144*ep^-1)
+        //        + pi^2*rat(1/128*ep^-1)
+        // F12/H = rat(-3/32*ep^-3 + 1/32*ep^-2)
+        //         + pi^2*rat(-1/128*ep^-1)
+        // F15/H = rat(-3/32*ep^-3 + 1/32*ep^-2)
+        //         + pi^2*rat(-1/128*ep^-1)
+        // F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
+        // sum(Fi)/H = rat(-1/32*ep^-3 + 13/192*ep^-2 - 13/192*ep^-1)
+        //             + z3*rat(1/8*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[49].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d50: RQFT `ghost_nnlo_49`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/96*ep^-3 - 1/192*ep^-2 + 5/1152*ep^-1)
+        //        + cl2*sqrt3*rat(-1/216*ep^-1)
+        //        + pi^2*rat(-1/384*ep^-1)
+        // F1/H = rat(1/64*ep^-3 - 1/384*ep^-2 - 11/2304*ep^-1)
+        //        + cl2*sqrt3*rat(1/432*ep^-1)
+        //        + pi^2*rat(1/384*ep^-1)
+        // F5/H = rat(1/32*ep^-3 + 1/192*ep^-2 - 1/192*ep^-1)
+        //        + pi^2*rat(1/384*ep^-1)
+        // F8/H = rat(1/64*ep^-3 - 1/384*ep^-2 - 11/2304*ep^-1)
+        //        + cl2*sqrt3*rat(1/432*ep^-1)
+        //        + pi^2*rat(1/384*ep^-1)
+        // F12/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+        //         + pi^2*rat(-1/384*ep^-1)
+        // F15/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+        //         + pi^2*rat(-1/384*ep^-1)
+        // F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
+        // sum(Fi)/H = rat(-1/96*ep^-3 + 1/64*ep^-2 - 1/96*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[50].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d51: RQFT `ghost_nnlo_50`.
+        // H = p1.p1*gs^6*ca*nf
+        // F0/H = cf*rat(1/6*ep^-3 + 29/18*ep^-2 + 59/18*ep^-1)
+        //        + cf*cl2*sqrt3*rat(-14/27*ep^-1)
+        //        + ca*rat(-1/12*ep^-3 - 29/36*ep^-2 - 59/36*ep^-1)
+        //        + ca*cl2*sqrt3*rat(7/27*ep^-1)
+        //        + z3*cf*rat(-2*ep^-1)
+        //        + z3*ca*rat(ep^-1)
+        //        + pi^2*cf*rat(1/24*ep^-1)
+        //        + pi^2*ca*rat(-1/48*ep^-1)
+        // F1/H = cf*rat(-1/4*ep^-3 - 13/24*ep^-2 - 23/144*ep^-1)
+        //        + cf*cl2*sqrt3*rat(7/27*ep^-1)
+        //        + ca*rat(1/8*ep^-3 + 13/48*ep^-2 + 23/288*ep^-1)
+        //        + ca*cl2*sqrt3*rat(-7/54*ep^-1)
+        //        + pi^2*cf*rat(-1/24*ep^-1)
+        //        + pi^2*ca*rat(1/48*ep^-1)
+        // F2/H = cf*rat(-4/3*ep^-2 - 4/9*ep^-1)
+        //        + ca*rat(2/3*ep^-2 + 2/9*ep^-1)
+        // F3/H = cf*rat(-1/2*ep^-3 - 5/3*ep^-2 - 8/9*ep^-1)
+        //        + ca*rat(1/4*ep^-3 + 5/6*ep^-2 + 4/9*ep^-1)
+        //        + pi^2*cf*rat(-1/24*ep^-1)
+        //        + pi^2*ca*rat(1/48*ep^-1)
+        // F4/H = cf*rat(-1/4*ep^-3 - 13/24*ep^-2 - 23/144*ep^-1)
+        //        + cf*cl2*sqrt3*rat(7/27*ep^-1)
+        //        + ca*rat(1/8*ep^-3 + 13/48*ep^-2 + 23/288*ep^-1)
+        //        + ca*cl2*sqrt3*rat(-7/54*ep^-1)
+        //        + pi^2*cf*rat(-1/24*ep^-1)
+        //        + pi^2*ca*rat(1/48*ep^-1)
+        // F6/H = cf*rat(1/2*ep^-3 + 1/6*ep^-2 + 1/9*ep^-1)
+        //        + ca*rat(-1/4*ep^-3 - 1/12*ep^-2 - 1/18*ep^-1)
+        //        + pi^2*cf*rat(1/24*ep^-1)
+        //        + pi^2*ca*rat(-1/48*ep^-1)
+        // F7/H = cf*rat(4/3*ep^-2 + 4/9*ep^-1)
+        //        + ca*rat(-2/3*ep^-2 - 2/9*ep^-1)
+        // F9/H = cf*rat(1/2*ep^-3 + 1/6*ep^-2 + 1/9*ep^-1)
+        //        + ca*rat(-1/4*ep^-3 - 1/12*ep^-2 - 1/18*ep^-1)
+        //        + pi^2*cf*rat(1/24*ep^-1)
+        //        + pi^2*ca*rat(-1/48*ep^-1)
+        // F5, F8 = 0
+        // sum(Fi)/H = cf*rat(1/6*ep^-3 - 29/36*ep^-2 + 55/24*ep^-1)
+        //             + ca*rat(-1/12*ep^-3 + 29/72*ep^-2 - 55/48*ep^-1)
+        //             + z3*cf*rat(-2*ep^-1)
+        //             + z3*ca*rat(ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[51].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d52: RQFT `ghost_nnlo_51`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(-1/72*ep^-3 + 155/144*ep^-2 + 751/288*ep^-1)
+        //        + cl2*sqrt3*rat(-43/54*ep^-1)
+        //        + pi^2*rat(-1/288*ep^-1)
+        // F1/H = rat(5/12*ep^-3 - 77/72*ep^-2 - 149/144*ep^-1)
+        //        + cl2*sqrt3*rat(11/27*ep^-1)
+        //        + pi^2*rat(5/72*ep^-1)
+        // F4/H = rat(1/24*ep^-3 - 151/144*ep^-2 - 95/72*ep^-1)
+        //        + pi^2*rat(1/288*ep^-1)
+        // F5/H = rat(-3/8*ep^-3 - 13/16*ep^-2 - 23/96*ep^-1)
+        //        + cl2*sqrt3*rat(7/18*ep^-1)
+        //        + pi^2*rat(-1/16*ep^-1)
+        // F8/H = rat(-5/6*ep^-3 + 4/3*ep^-2 + 13/27*ep^-1)
+        //        + pi^2*rat(-5/72*ep^-1)
+        // F9/H = rat(3/4*ep^-3 + 1/4*ep^-2 + 1/6*ep^-1)
+        //        + pi^2*rat(1/16*ep^-1)
+        // F2..F3, F6..F7 = 0
+        // sum(Fi)/H = rat(-1/72*ep^-3 - 13/48*ep^-2 + 143/216*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[52].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d53: RQFT `ghost_nnlo_52`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(-1/72*ep^-3 + 155/144*ep^-2 + 751/288*ep^-1)
+        //        + cl2*sqrt3*rat(-43/54*ep^-1)
+        //        + pi^2*rat(-1/288*ep^-1)
+        // F1/H = rat(-3/8*ep^-3 - 13/16*ep^-2 - 23/96*ep^-1)
+        //        + cl2*sqrt3*rat(7/18*ep^-1)
+        //        + pi^2*rat(-1/16*ep^-1)
+        // F2/H = rat(1/24*ep^-3 - 151/144*ep^-2 - 95/72*ep^-1)
+        //        + pi^2*rat(1/288*ep^-1)
+        // F5/H = rat(5/12*ep^-3 - 77/72*ep^-2 - 149/144*ep^-1)
+        //        + cl2*sqrt3*rat(11/27*ep^-1)
+        //        + pi^2*rat(5/72*ep^-1)
+        // F6/H = rat(3/4*ep^-3 + 1/4*ep^-2 + 1/6*ep^-1)
+        //        + pi^2*rat(1/16*ep^-1)
+        // F7/H = rat(-5/6*ep^-3 + 4/3*ep^-2 + 13/27*ep^-1)
+        //        + pi^2*rat(-5/72*ep^-1)
+        // F3..F4, F8..F9 = 0
+        // sum(Fi)/H = rat(-1/72*ep^-3 - 13/48*ep^-2 + 143/216*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[53].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d54: RQFT `ghost_nnlo_53`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-65/96*ep^-3 + 3329/1152*ep^-2 + 23713/2304*ep^-1)
+        //        + cl2*sqrt3*rat(-143/72*ep^-1)
+        //        + z3*rat(1/4*ep^-1)
+        //        + pi^2*rat(-65/384*ep^-1)
+        // F1/H = rat(65/64*ep^-3 - 1001/384*ep^-2 - 1937/768*ep^-1)
+        //        + cl2*sqrt3*rat(143/144*ep^-1)
+        //        + pi^2*rat(65/384*ep^-1)
+        // F3/H = rat(-9/8*ep^-2 - 8/9*ep^-1)
+        // F5/H = rat(65/32*ep^-3 - 463/128*ep^-2 - 3685/576*ep^-1)
+        //        + pi^2*rat(65/384*ep^-1)
+        // F8/H = rat(65/64*ep^-3 - 1001/384*ep^-2 - 1937/768*ep^-1)
+        //        + cl2*sqrt3*rat(143/144*ep^-1)
+        //        + pi^2*rat(65/384*ep^-1)
+        // F12/H = rat(-65/32*ep^-3 + 13/4*ep^-2 + 169/144*ep^-1)
+        //         + pi^2*rat(-65/384*ep^-1)
+        // F13/H = rat(9/8*ep^-2 + 8/9*ep^-1)
+        // F15/H = rat(-65/32*ep^-3 + 13/4*ep^-2 + 169/144*ep^-1)
+        //         + pi^2*rat(-65/384*ep^-1)
+        // F2, F4, F6..F7, F9..F11, F14, F16..F17 = 0
+        // sum(Fi)/H = rat(-65/96*ep^-3 + 161/288*ep^-2 + 2759/2304*ep^-1)
+        //             + z3*rat(1/4*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[54].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d55: RQFT `ghost_nnlo_54`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(5/576*ep^-3 - 13/192*ep^-2 - 319/1152*ep^-1)
+        //        + cl2*sqrt3*rat(35/432*ep^-1)
+        //        + pi^2*rat(5/2304*ep^-1)
+        // F1/H = rat(5/64*ep^-2 + 47/384*ep^-1)
+        //        + cl2*sqrt3*rat(-1/18*ep^-1)
+        // F5/H = rat(-5/192*ep^-3 + 17/288*ep^-2 + 23/144*ep^-1)
+        //        + pi^2*rat(-5/2304*ep^-1)
+        // F8/H = rat(-5/192*ep^-3 + 77/1152*ep^-2 + 149/2304*ep^-1)
+        //        + cl2*sqrt3*rat(-11/432*ep^-1)
+        //        + pi^2*rat(-5/1152*ep^-1)
+        // F12/H = rat(-1/16*ep^-2 - 1/16*ep^-1)
+        // F15/H = rat(5/96*ep^-3 - 1/12*ep^-2 - 13/432*ep^-1)
+        //         + pi^2*rat(5/1152*ep^-1)
+        // F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
+        // sum(Fi)/H = rat(5/576*ep^-3 - 11/1152*ep^-2 - 157/6912*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[55].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d56: RQFT `ghost_nnlo_55`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(5/576*ep^-3 - 13/192*ep^-2 - 319/1152*ep^-1)
+        //        + cl2*sqrt3*rat(35/432*ep^-1)
+        //        + pi^2*rat(5/2304*ep^-1)
+        // F1/H = rat(-5/192*ep^-3 + 77/1152*ep^-2 + 149/2304*ep^-1)
+        //        + cl2*sqrt3*rat(-11/432*ep^-1)
+        //        + pi^2*rat(-5/1152*ep^-1)
+        // F5/H = rat(-5/192*ep^-3 + 17/288*ep^-2 + 23/144*ep^-1)
+        //        + pi^2*rat(-5/2304*ep^-1)
+        // F8/H = rat(5/64*ep^-2 + 47/384*ep^-1)
+        //        + cl2*sqrt3*rat(-1/18*ep^-1)
+        // F12/H = rat(5/96*ep^-3 - 1/12*ep^-2 - 13/432*ep^-1)
+        //         + pi^2*rat(5/1152*ep^-1)
+        // F15/H = rat(-1/16*ep^-2 - 1/16*ep^-1)
+        // F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
+        // sum(Fi)/H = rat(5/576*ep^-3 - 11/1152*ep^-2 - 157/6912*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[56].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d57: RQFT `ghost_nnlo_56`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-59/1152*ep^-2 - 161/768*ep^-1)
+        //        + cl2*sqrt3*rat(1/27*ep^-1)
+        // F1/H = rat(5/192*ep^-2 + 47/1152*ep^-1)
+        //        + cl2*sqrt3*rat(-1/54*ep^-1)
+        // F3/H = rat(1/24*ep^-2 + 1/36*ep^-1)
+        // F5/H = rat(19/384*ep^-2 + 25/192*ep^-1)
+        // F8/H = rat(5/192*ep^-2 + 47/1152*ep^-1)
+        //        + cl2*sqrt3*rat(-1/54*ep^-1)
+        // F12/H = rat(-1/48*ep^-2 - 1/48*ep^-1)
+        // F13/H = rat(-1/24*ep^-2 - 1/36*ep^-1)
+        // F15/H = rat(-1/48*ep^-2 - 1/48*ep^-1)
+        // F2, F4, F6..F7, F9..F11, F14, F16..F17 = 0
+        // sum(Fi)/H = rat(5/576*ep^-2 - 91/2304*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[57].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d58: RQFT `ghost_nnlo_57`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/24*ep^-3 + 1/32*ep^-2 + 29/216*ep^-1)
+        //        + cl2*sqrt3*rat(-13/162*ep^-1)
+        //        + pi^2*rat(-1/96*ep^-1)
+        // F5/H = rat(1/16*ep^-3 - 1/24*ep^-2 - 31/864*ep^-1)
+        //        + cl2*sqrt3*rat(13/324*ep^-1)
+        //        + pi^2*rat(1/96*ep^-1)
+        // F6/H = rat(1/16*ep^-3 - 1/24*ep^-2 - 31/864*ep^-1)
+        //        + cl2*sqrt3*rat(13/324*ep^-1)
+        //        + pi^2*rat(1/96*ep^-1)
+        // F11/H = rat(-1/8*ep^-3 + 7/96*ep^-2 - 1/96*ep^-1)
+        //         + pi^2*rat(-1/96*ep^-1)
+        // F1..F4, F7..F10 = 0
+        // sum(Fi)/H = rat(-1/24*ep^-3 + 1/48*ep^-2 + 5/96*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[58].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d59: RQFT `ghost_nnlo_58`.
+        // H = p1.p1*gs^6*ca*nf^2
+        // F0/H = rat(-1/9*ep^-3 - 55/54*ep^-2 - 161/162*ep^-1)
+        //        + cl2*sqrt3*rat(92/81*ep^-1)
+        //        + pi^2*rat(-1/36*ep^-1)
+        // F1/H = rat(1/6*ep^-3 + 35/36*ep^-2 + 133/216*ep^-1)
+        //        + cl2*sqrt3*rat(-46/81*ep^-1)
+        //        + pi^2*rat(1/36*ep^-1)
+        // F2/H = rat(1/6*ep^-3 + 35/36*ep^-2 + 133/216*ep^-1)
+        //        + cl2*sqrt3*rat(-46/81*ep^-1)
+        //        + pi^2*rat(1/36*ep^-1)
+        // F3/H = rat(-1/3*ep^-3 - 5/6*ep^-2 - 7/54*ep^-1)
+        //        + pi^2*rat(-1/36*ep^-1)
+        // sum(Fi)/H = rat(-1/9*ep^-3 + 5/54*ep^-2 + 35/324*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[59].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d60: RQFT `ghost_nnlo_59`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(19/72*ep^-3 - 569/432*ep^-2 - 2489/648*ep^-1)
+        //        + cl2*sqrt3*rat(203/162*ep^-1)
+        //        + pi^2*rat(19/288*ep^-1)
+        // F3/H = rat(-19/48*ep^-3 + 397/288*ep^-2 + 1429/576*ep^-1)
+        //        + cl2*sqrt3*rat(-37/108*ep^-1)
+        //        + pi^2*rat(-19/288*ep^-1)
+        // F4/H = rat(-19/48*ep^-3 + 439/288*ep^-2 + 3617/1728*ep^-1)
+        //        + cl2*sqrt3*rat(-295/324*ep^-1)
+        //        + pi^2*rat(-19/288*ep^-1)
+        // F7/H = rat(19/24*ep^-3 - 89/48*ep^-2 - 431/432*ep^-1)
+        //        + pi^2*rat(19/288*ep^-1)
+        // F1..F2, F5..F6 = 0
+        // sum(Fi)/H = rat(19/72*ep^-3 - 29/108*ep^-2 - 343/1296*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[60].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d61: RQFT `ghost_nnlo_60`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(1/72*ep^-3 + 97/432*ep^-2 + 179/324*ep^-1)
+        //        + cl2*sqrt3*rat(-13/54*ep^-1)
+        //        + pi^2*rat(1/288*ep^-1)
+        // F3/H = rat(-1/48*ep^-3 - 65/288*ep^-2 - 803/1728*ep^-1)
+        //        + cl2*sqrt3*rat(43/324*ep^-1)
+        //        + pi^2*rat(-1/288*ep^-1)
+        // F4/H = rat(-1/48*ep^-3 - 59/288*ep^-2 - 301/1728*ep^-1)
+        //        + cl2*sqrt3*rat(35/324*ep^-1)
+        //        + pi^2*rat(-1/288*ep^-1)
+        // F7/H = rat(1/24*ep^-3 + 3/16*ep^-2 + 31/432*ep^-1)
+        //        + pi^2*rat(1/288*ep^-1)
+        // F1..F2, F5..F6 = 0
+        // sum(Fi)/H = rat(1/72*ep^-3 - 1/54*ep^-2 - 19/1296*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[61].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d62: RQFT `ghost_nnlo_61`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(19/72*ep^-3 - 569/432*ep^-2 - 2489/648*ep^-1)
+        //        + cl2*sqrt3*rat(203/162*ep^-1)
+        //        + pi^2*rat(19/288*ep^-1)
+        // F3/H = rat(-19/48*ep^-3 + 439/288*ep^-2 + 3617/1728*ep^-1)
+        //        + cl2*sqrt3*rat(-295/324*ep^-1)
+        //        + pi^2*rat(-19/288*ep^-1)
+        // F4/H = rat(-19/48*ep^-3 + 397/288*ep^-2 + 1429/576*ep^-1)
+        //        + cl2*sqrt3*rat(-37/108*ep^-1)
+        //        + pi^2*rat(-19/288*ep^-1)
+        // F7/H = rat(19/24*ep^-3 - 89/48*ep^-2 - 431/432*ep^-1)
+        //        + pi^2*rat(19/288*ep^-1)
+        // F1..F2, F5..F6 = 0
+        // sum(Fi)/H = rat(19/72*ep^-3 - 29/108*ep^-2 - 343/1296*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[62].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d63: RQFT `ghost_nnlo_62`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-179/288*ep^-3 + 5153/3456*ep^-2 - 17635/5184*ep^-1)
+        //        + cl2*sqrt3*rat(-575/216*ep^-1)
+        //        + pi^2*rat(-179/1152*ep^-1)
+        // F5/H = rat(179/192*ep^-3 - 1075/576*ep^-2 + 5399/1152*ep^-1)
+        //        + cl2*sqrt3*rat(575/432*ep^-1)
+        //        + pi^2*rat(179/1152*ep^-1)
+        // F6/H = rat(179/192*ep^-3 - 1075/576*ep^-2 + 5399/1152*ep^-1)
+        //        + cl2*sqrt3*rat(575/432*ep^-1)
+        //        + pi^2*rat(179/1152*ep^-1)
+        // F11/H = rat(-179/96*ep^-3 + 383/128*ep^-2 - 18715/3456*ep^-1)
+        //         + pi^2*rat(-179/1152*ep^-1)
+        // F1..F4, F7..F10 = 0
+        // sum(Fi)/H = rat(-179/288*ep^-3 + 1297/1728*ep^-2 + 5767/10368*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[63].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d64: RQFT `ghost_nnlo_63`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-11/288*ep^-3 + 455/3456*ep^-2 + 2629/2592*ep^-1)
+        //        + cl2*sqrt3*rat(-77/648*ep^-1)
+        //        + pi^2*rat(-11/1152*ep^-1)
+        // F5/H = rat(11/192*ep^-3 - 41/288*ep^-2 - 1277/1728*ep^-1)
+        //        + cl2*sqrt3*rat(121/1296*ep^-1)
+        //        + pi^2*rat(11/1152*ep^-1)
+        // F6/H = rat(11/192*ep^-3 - 25/144*ep^-2 - 359/576*ep^-1)
+        //        + cl2*sqrt3*rat(11/432*ep^-1)
+        //        + pi^2*rat(11/1152*ep^-1)
+        // F11/H = rat(-11/96*ep^-3 + 91/384*ep^-2 + 1307/3456*ep^-1)
+        //         + pi^2*rat(-11/1152*ep^-1)
+        // F1..F4, F7..F10 = 0
+        // sum(Fi)/H = rat(-11/288*ep^-3 + 91/1728*ep^-2 + 313/10368*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[64].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d65: RQFT `ghost_nnlo_64`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(1/72*ep^-3 + 97/432*ep^-2 + 179/324*ep^-1)
+        //        + cl2*sqrt3*rat(-13/54*ep^-1)
+        //        + pi^2*rat(1/288*ep^-1)
+        // F3/H = rat(-1/48*ep^-3 - 59/288*ep^-2 - 301/1728*ep^-1)
+        //        + cl2*sqrt3*rat(35/324*ep^-1)
+        //        + pi^2*rat(-1/288*ep^-1)
+        // F4/H = rat(-1/48*ep^-3 - 65/288*ep^-2 - 803/1728*ep^-1)
+        //        + cl2*sqrt3*rat(43/324*ep^-1)
+        //        + pi^2*rat(-1/288*ep^-1)
+        // F7/H = rat(1/24*ep^-3 + 3/16*ep^-2 + 31/432*ep^-1)
+        //        + pi^2*rat(1/288*ep^-1)
+        // F1..F2, F5..F6 = 0
+        // sum(Fi)/H = rat(1/72*ep^-3 - 1/54*ep^-2 - 19/1296*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[65].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d66: RQFT `ghost_nnlo_65`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-11/288*ep^-3 + 455/3456*ep^-2 + 2629/2592*ep^-1)
+        //        + cl2*sqrt3*rat(-77/648*ep^-1)
+        //        + pi^2*rat(-11/1152*ep^-1)
+        // F5/H = rat(11/192*ep^-3 - 25/144*ep^-2 - 359/576*ep^-1)
+        //        + cl2*sqrt3*rat(11/432*ep^-1)
+        //        + pi^2*rat(11/1152*ep^-1)
+        // F6/H = rat(11/192*ep^-3 - 41/288*ep^-2 - 1277/1728*ep^-1)
+        //        + cl2*sqrt3*rat(121/1296*ep^-1)
+        //        + pi^2*rat(11/1152*ep^-1)
+        // F11/H = rat(-11/96*ep^-3 + 91/384*ep^-2 + 1307/3456*ep^-1)
+        //         + pi^2*rat(-11/1152*ep^-1)
+        // F1..F4, F7..F10 = 0
+        // sum(Fi)/H = rat(-11/288*ep^-3 + 91/1728*ep^-2 + 313/10368*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[66].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d67: RQFT `ghost_nnlo_66`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(1/288*ep^-3 - 175/3456*ep^-2 - 1081/5184*ep^-1)
+        //        + cl2*sqrt3*rat(47/648*ep^-1)
+        //        + pi^2*rat(1/1152*ep^-1)
+        // F5/H = rat(-1/192*ep^-3 + 29/576*ep^-2 + 395/3456*ep^-1)
+        //        + cl2*sqrt3*rat(-47/1296*ep^-1)
+        //        + pi^2*rat(-1/1152*ep^-1)
+        // F6/H = rat(-1/192*ep^-3 + 29/576*ep^-2 + 395/3456*ep^-1)
+        //        + cl2*sqrt3*rat(-47/1296*ep^-1)
+        //        + pi^2*rat(-1/1152*ep^-1)
+        // F11/H = rat(1/96*ep^-3 - 19/384*ep^-2 - 91/3456*ep^-1)
+        //         + pi^2*rat(1/1152*ep^-1)
+        // F1..F4, F7..F10 = 0
+        // sum(Fi)/H = rat(1/288*ep^-3 + 1/1728*ep^-2 - 65/10368*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[67].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d68: RQFT `ghost_nnlo_67`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/48*ep^-3 - 1/96*ep^-2 - 1/1728*ep^-1)
+        //        + cl2*sqrt3*rat(5/324*ep^-1)
+        //        + pi^2*rat(-1/192*ep^-1)
+        // F3/H = rat(1/16*ep^-3 - 1/32*ep^-2 + 1/288*ep^-1)
+        //        + pi^2*rat(1/192*ep^-1)
+        // F5/H = rat(1/16*ep^-3 - 1/96*ep^-2 - 17/1728*ep^-1)
+        //        + cl2*sqrt3*rat(-5/324*ep^-1)
+        //        + pi^2*rat(1/96*ep^-1)
+        // F13/H = rat(-1/8*ep^-3 + 1/12*ep^-2 - 1/72*ep^-1)
+        //         + pi^2*rat(-1/96*ep^-1)
+        // F1..F2, F4, F6..F12, F14..F17 = 0
+        // sum(Fi)/H = rat(-1/48*ep^-3 + 1/32*ep^-2 - 1/48*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[68].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d69: RQFT `ghost_nnlo_68`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(1/24*ep^-3 - 1/48*ep^-2 - 233/864*ep^-1)
+        //        + cl2*sqrt3*rat(67/162*ep^-1)
+        //        + pi^2*rat(1/96*ep^-1)
+        // F1/H = rat(-1/8*ep^-3 - 11/48*ep^-2 + 13/144*ep^-1)
+        //        + pi^2*rat(-1/96*ep^-1)
+        // F3/H = rat(-1/8*ep^-3 + 5/48*ep^-2 + 293/864*ep^-1)
+        //        + cl2*sqrt3*rat(-67/162*ep^-1)
+        //        + pi^2*rat(-1/48*ep^-1)
+        // F5/H = rat(1/4*ep^-3 + 1/12*ep^-2 - 1/18*ep^-1)
+        //        + pi^2*rat(1/48*ep^-1)
+        // F2, F4, F6..F7 = 0
+        // sum(Fi)/H = rat(1/24*ep^-3 - 1/16*ep^-2 + 5/48*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[69].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d70: RQFT `ghost_nnlo_69`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-5/48*ep^-3 + 1/32*ep^-2 - 1369/1728*ep^-1)
+        //        + cl2*sqrt3*rat(257/324*ep^-1)
+        //        + pi^2*rat(-5/192*ep^-1)
+        // F3/H = rat(5/16*ep^-3 - 29/32*ep^-2 + 77/288*ep^-1)
+        //        + pi^2*rat(5/192*ep^-1)
+        // F5/H = rat(5/16*ep^-3 - 9/32*ep^-2 + 1057/1728*ep^-1)
+        //        + cl2*sqrt3*rat(-257/324*ep^-1)
+        //        + pi^2*rat(5/96*ep^-1)
+        // F13/H = rat(-5/8*ep^-3 + 11/8*ep^-2 - 7/18*ep^-1)
+        //         + pi^2*rat(-5/96*ep^-1)
+        // F1..F2, F4, F6..F12, F14..F17 = 0
+        // sum(Fi)/H = rat(-5/48*ep^-3 + 7/32*ep^-2 - 29/96*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[70].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d71: RQFT `ghost_nnlo_70`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-1/48*ep^-2 + 25/864*ep^-1)
+        //        + cl2*sqrt3*rat(-4/81*ep^-1)
+        // F3/H = rat(5/48*ep^-2 - 5/144*ep^-1)
+        // F5/H = rat(1/48*ep^-2 - 37/864*ep^-1)
+        //        + cl2*sqrt3*rat(4/81*ep^-1)
+        // F13/H = rat(-1/12*ep^-2 + 1/36*ep^-1)
+        // F1..F2, F4, F6..F12, F14..F17 = 0
+        // sum(Fi)/H = rat(1/48*ep^-2 - 1/48*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[71].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d72: RQFT `ghost_nnlo_71`.
+        // H = p1.p1*gs^6*ca*cf*nf
+        // F0/H = rat(-1/12*ep^-3 - 61/72*ep^-2 - 431/432*ep^-1)
+        //        + cl2*sqrt3*rat(49/81*ep^-1)
+        //        + pi^2*rat(-1/48*ep^-1)
+        // F1/H = rat(2/3*ep^-2 + 2/9*ep^-1)
+        // F2/H = rat(1/4*ep^-3 + 3/8*ep^-2 + 11/18*ep^-1)
+        //        + pi^2*rat(1/48*ep^-1)
+        // F3/H = rat(1/4*ep^-3 + 7/8*ep^-2 + 53/432*ep^-1)
+        //        + cl2*sqrt3*rat(-49/81*ep^-1)
+        //        + pi^2*rat(1/24*ep^-1)
+        // F5/H = rat(-2/3*ep^-2 - 2/9*ep^-1)
+        // F7/H = rat(-1/2*ep^-3 - 1/4*ep^-2 + 1/18*ep^-1)
+        //        + pi^2*rat(-1/24*ep^-1)
+        // F4, F6 = 0
+        // sum(Fi)/H = rat(-1/12*ep^-3 + 11/72*ep^-2 - 5/24*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[72].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d73: RQFT `ghost_nnlo_72`.
+        // H = p1.p1*gs^6*ca*cf*nf
+        // F0/H = rat(-1/12*ep^-3 - 61/72*ep^-2 - 431/432*ep^-1)
+        //        + cl2*sqrt3*rat(49/81*ep^-1)
+        //        + pi^2*rat(-1/48*ep^-1)
+        // F1/H = rat(2/3*ep^-2 + 2/9*ep^-1)
+        // F2/H = rat(1/4*ep^-3 + 3/8*ep^-2 + 11/18*ep^-1)
+        //        + pi^2*rat(1/48*ep^-1)
+        // F3/H = rat(1/4*ep^-3 + 7/8*ep^-2 + 53/432*ep^-1)
+        //        + cl2*sqrt3*rat(-49/81*ep^-1)
+        //        + pi^2*rat(1/24*ep^-1)
+        // F5/H = rat(-2/3*ep^-2 - 2/9*ep^-1)
+        // F7/H = rat(-1/2*ep^-3 - 1/4*ep^-2 + 1/18*ep^-1)
+        //        + pi^2*rat(-1/24*ep^-1)
+        // F4, F6 = 0
+        // sum(Fi)/H = rat(-1/12*ep^-3 + 11/72*ep^-2 - 5/24*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[73].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d74: RQFT `ghost_nnlo_73`.
+        // H = p1.p1*gs^6*ca^2*nf
+        // F0/H = rat(23/72*ep^-3 + 25/144*ep^-2 - 373/96*ep^-1)
+        //        + cl2*sqrt3*rat(85/54*ep^-1)
+        //        + pi^2*rat(23/288*ep^-1)
+        // F1/H = rat(-23/24*ep^-3 - 253/144*ep^-2 + 47/9*ep^-1)
+        //        + pi^2*rat(-23/288*ep^-1)
+        // F3/H = rat(-23/24*ep^-3 + 23/144*ep^-2 + 221/96*ep^-1)
+        //        + cl2*sqrt3*rat(-85/54*ep^-1)
+        //        + pi^2*rat(-23/144*ep^-1)
+        // F5/H = rat(23/12*ep^-3 + 11/12*ep^-2 - 169/54*ep^-1)
+        //        + pi^2*rat(23/144*ep^-1)
+        // F2, F4, F6..F7 = 0
+        // sum(Fi)/H = rat(23/72*ep^-3 - 73/144*ep^-2 + 55/108*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[74].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d75: RQFT `ghost_nnlo_74`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-223/288*ep^-3 + 5615/576*ep^-2 + 20179/1152*ep^-1)
+        //        + cl2*sqrt3*rat(-401/216*ep^-1)
+        //        + pi^2*rat(-223/1152*ep^-1)
+        // F1/H = rat(-7/2*ep^-2 - 79/36*ep^-1)
+        // F3/H = rat(223/96*ep^-3 - 9799/576*ep^-2 - 1477/288*ep^-1)
+        //        + pi^2*rat(223/1152*ep^-1)
+        // F5/H = rat(223/96*ep^-3 - 8215/576*ep^-2 - 607/128*ep^-1)
+        //        + cl2*sqrt3*rat(401/216*ep^-1)
+        //        + pi^2*rat(223/576*ep^-1)
+        // F8/H = rat(-7/2*ep^-2 - 79/36*ep^-1)
+        // F9/H = rat(7/2*ep^-2 + 79/36*ep^-1)
+        // F13/H = rat(-223/48*ep^-3 + 559/24*ep^-2 - 260/27*ep^-1)
+        //         + pi^2*rat(-223/576*ep^-1)
+        // F14/H = rat(7/2*ep^-2 + 79/36*ep^-1)
+        // F2, F4, F6..F7, F10..F12, F15..F17 = 0
+        // sum(Fi)/H = rat(-223/288*ep^-3 + 113/64*ep^-2 - 857/432*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[75].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d76: RQFT `ghost_nnlo_75`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-7/288*ep^-3 - 145/576*ep^-2 + 283/1152*ep^-1)
+        //        + cl2*sqrt3*rat(-17/216*ep^-1)
+        //        + pi^2*rat(-7/1152*ep^-1)
+        // F3/H = rat(7/96*ep^-3 + 497/576*ep^-2 - 319/288*ep^-1)
+        //        + pi^2*rat(7/1152*ep^-1)
+        // F5/H = rat(7/96*ep^-3 + 209/576*ep^-2 - 101/384*ep^-1)
+        //        + cl2*sqrt3*rat(17/216*ep^-1)
+        //        + pi^2*rat(7/576*ep^-1)
+        // F13/H = rat(-7/48*ep^-3 - 5/6*ep^-2 + 103/108*ep^-1)
+        //         + pi^2*rat(-7/576*ep^-1)
+        // F1..F2, F4, F6..F12, F14..F17 = 0
+        // sum(Fi)/H = rat(-7/288*ep^-3 + 9/64*ep^-2 - 37/216*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[76].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d77: RQFT `ghost_nnlo_76`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-17/144*ep^-2 - 341/864*ep^-1)
+        //        + cl2*sqrt3*rat(8/81*ep^-1)
+        // F3/H = rat(5/48*ep^-2 + 25/96*ep^-1)
+        // F5/H = rat(7/48*ep^-2 + 167/864*ep^-1)
+        //        + cl2*sqrt3*rat(-8/81*ep^-1)
+        // F8/H = rat(1/12*ep^-2 + 1/18*ep^-1)
+        // F13/H = rat(-1/8*ep^-2 - 1/12*ep^-1)
+        // F14/H = rat(-1/12*ep^-2 - 1/18*ep^-1)
+        // F1..F2, F4, F6..F7, F9..F12, F15..F17 = 0
+        // sum(Fi)/H = rat(1/144*ep^-2 - 7/288*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );
 
         let a = amp.graphs[77].renormalization_part(&settings).unwrap();
-        insta::assert_snapshot!(amp.graphs[4].graph.name,@"");
+        // d78: RQFT `ghost_nnlo_77`.
+        // H = p1.p1*gs^6*ca^3
+        // F0/H = rat(-17/144*ep^-2 - 341/864*ep^-1)
+        //        + cl2*sqrt3*rat(8/81*ep^-1)
+        // F3/H = rat(5/48*ep^-2 + 25/96*ep^-1)
+        // F5/H = rat(7/48*ep^-2 + 167/864*ep^-1)
+        //        + cl2*sqrt3*rat(-8/81*ep^-1)
+        // F8/H = rat(1/12*ep^-2 + 1/18*ep^-1)
+        // F13/H = rat(-1/8*ep^-2 - 1/12*ep^-1)
+        // F14/H = rat(-1/12*ep^-2 - 1/18*ep^-1)
+        // F1..F2, F4, F6..F7, F9..F12, F15..F17 = 0
+        // sum(Fi)/H = rat(1/144*ep^-2 - 7/288*ep^-1)
         insta::assert_snapshot!(
            align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
         );

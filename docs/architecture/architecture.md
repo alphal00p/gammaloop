@@ -1,8 +1,10 @@
 # Architecture Docs
 
-The architecture documentation is split into three complementary documents:
+The maintained architecture documentation is split by scope:
 
 - `architecture-current.md`: the current implemented architecture.
+- `uv-renormalization.md`: the current UV orchestrators, sign and projection
+  conventions, and disconnected-composition invariants.
 - `architecture-ideas.md`: proposals and roadmap items that are not yet the
   implemented design.
 - `../../differential_lu.md`: the PR-level implementation note for the

@@ -29,7 +29,7 @@ use symbolica::numerical_integration::Sample;
 use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use toml::Value as TomlValue;
 use tracing::{debug, info, info_span, Span};
-use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use gammalooprs::{
     clear_interrupt_request,
@@ -40,7 +40,7 @@ use gammalooprs::{
     is_interrupt_requested,
     model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
     processes::{
-        merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
+        begin_phase, merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
         GenerationProcessKind, GenerationProgressMode, GenerationProgressModeGuard,
         GenerationProgressObserver, GenerationProgressObserverGuard, GenerationProgressPhase,
         GraphGenerationStats, GraphGroupSelectionMode, GraphGroupSelectionPlan,
@@ -283,16 +283,19 @@ struct AggregateGenerationProgressState {
 }
 
 impl AggregateGenerationProgressReporter {
-    fn new(current_ram_bytes: Arc<AtomicU64>, peak_ram_bytes: Arc<AtomicU64>) -> Arc<Self> {
+    fn new(
+        current_ram_bytes: Arc<AtomicU64>,
+        peak_ram_bytes: Arc<AtomicU64>,
+        eta_warmup_steps: u64,
+    ) -> Arc<Self> {
         let span = info_span!(
             "Integrand generation",
             indicatif.pb_show = true,
             indicatif.pb_msg = "Starting integrand generation"
         );
-        span.pb_set_style(&ProgressStyle::with_template(
-            "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} ({percent}%) {msg}",
-        )
-        .unwrap());
+        span.pb_set_style(
+            &gammalooprs::utils::long_running_progress_style_with_eta_warmup(eta_warmup_steps),
+        );
         span.pb_start();
         span.pb_set_length(0);
         span.pb_set_position(0);
@@ -352,45 +355,69 @@ impl AggregateGenerationProgressReporter {
         }
     }
 
+    fn progress_time_share(duration: Duration, total: Duration) -> String {
+        if total.is_zero() {
+            "--".to_string()
+        } else {
+            Self::progress_percent(duration.as_secs_f64() * 100.0 / total.as_secs_f64())
+        }
+    }
+
+    fn progress_units(state: &AggregateGenerationProgressState) -> (u64, u64) {
+        match (state.phase, state.total_cuts) {
+            (Some(GenerationProgressPhase::GraphGeneration), Some(total_cuts)) => {
+                let total = total_cuts.saturating_add(state.total_graphs) as u64;
+                let completed = state
+                    .done_cuts
+                    .saturating_add(state.done_graphs)
+                    .min(total_cuts.saturating_add(state.total_graphs))
+                    as u64;
+                (completed, total)
+            }
+            _ => (state.done_graphs as u64, state.total_graphs as u64),
+        }
+    }
+
+    fn graph_progress_counts(state: &AggregateGenerationProgressState) -> (usize, usize, usize) {
+        let active = state
+            .active_graphs
+            .len()
+            .min(state.total_graphs.saturating_sub(state.done_graphs));
+        (state.done_graphs, active, state.total_graphs)
+    }
+
     fn refresh(&self, state: &AggregateGenerationProgressState) {
-        self.progress_span.pb_set_length(state.total_graphs as u64);
-        self.progress_span.pb_set_position(state.done_graphs as u64);
+        let (completed_units, total_units) = Self::progress_units(state);
+        self.progress_span.pb_set_length(total_units);
+        self.progress_span.pb_set_position(completed_units);
 
         let current_ram = Self::progress_memory(self.current_ram_bytes.load(Ordering::Relaxed));
         let peak_ram = Self::progress_memory(self.peak_ram_bytes.load(Ordering::Relaxed));
-        let total_time = state.stats.total_time.as_secs_f64();
-        let fraction = |duration: Duration| -> f64 {
-            if total_time > 0.0 {
-                duration.as_secs_f64() * 100.0 / total_time
-            } else {
-                0.0
-            }
-        };
-        let expression_share = fraction(state.stats.expression_build_time());
-        let spenso_share = fraction(state.stats.evaluator_spenso_time);
-        let symbolica_share = fraction(state.stats.evaluator_symbolica_time);
-        let compile_share = fraction(state.stats.evaluator_compile_time);
         let kind = match state.kind {
             Some(GenerationProcessKind::Amplitude) => "AMP",
             Some(GenerationProcessKind::CrossSection) => "XS",
             None => "GEN",
         };
         let phase = match state.phase {
-            Some(GenerationProgressPhase::CutDiscovery) => "cuts",
+            Some(GenerationProgressPhase::GraphPreprocessing) => "prep",
             Some(GenerationProgressPhase::GraphGeneration) => "graphs",
             Some(GenerationProgressPhase::Backend) => "backend",
             None => "gen",
         };
         let last_graph = state.last_graph.as_deref().unwrap_or("-");
-        let cut_context = match (state.phase, state.total_cuts) {
-            (Some(GenerationProgressPhase::CutDiscovery), _) => format!(
+        let cut_context = match (state.phase, state.kind, state.total_cuts) {
+            (
+                Some(GenerationProgressPhase::GraphPreprocessing),
+                Some(GenerationProcessKind::Amplitude),
+                _,
+            ) => None,
+            (Some(GenerationProgressPhase::GraphPreprocessing), _, _) => Some(format!(
                 "{:>4}/{:<4}",
                 state.discovered_valid_cuts, state.discovered_st_cuts
-            ),
-            (_, Some(total_cuts)) => format!("{:>4}/{:<4}", state.done_cuts, total_cuts),
-            _ => format!("{:>4}/{:<4}", "-", "-"),
-        }
-        .green();
+            )),
+            (_, _, Some(total_cuts)) => Some(format!("{:>4}/{:<4}", state.done_cuts, total_cuts)),
+            _ => Some(format!("{:>4}/{:<4}", "-", "-")),
+        };
         let phase = Self::fixed_field(phase, 7).bold().blue();
         let kind = Self::fixed_field(kind, 3).cyan();
         let identifier = if state.process.is_empty() {
@@ -400,35 +427,56 @@ impl AggregateGenerationProgressReporter {
         };
         let identifier = Self::fixed_field(&identifier, 24).yellow();
         let last_graph = Self::fixed_field(last_graph, 8).green();
-        let graph_ratio = format!("{:>3}/{:<3}", state.done_graphs, state.total_graphs).green();
+        let (done_graphs, active_graphs, total_graphs) = Self::graph_progress_counts(state);
+        let graph_ratio = format!(
+            "{} {} / {}",
+            format!("{done_graphs:>3}").green(),
+            format!("({active_graphs:>3})").dimmed(),
+            format!("{total_graphs:<3}").green(),
+        );
         let ram = format!("{current_ram}/{peak_ram}").yellow();
-        let expr = Self::progress_percent(expression_share).magenta();
-        let spenso = Self::progress_percent(spenso_share).cyan();
-        let eval = Self::progress_percent(symbolica_share).green();
-        let compile = Self::progress_percent(compile_share).yellow();
-        self.progress_span.pb_set_message(&format!(
-            "{} {} {} | {} {} | {} {} | {} {} | {} {} | {} {} {} / {} {} / {} {} / {} {}",
-            phase,
-            kind,
-            identifier,
-            "g".bold().blue(),
-            graph_ratio,
-            "last".bold().blue(),
-            last_graph,
-            "cut".bold().blue(),
-            cut_context,
-            "ram".bold().blue(),
-            ram,
-            "time".bold().blue(),
-            "expr".bold().blue(),
-            expr,
-            "spenso".bold().blue(),
-            spenso,
-            "eval".bold().blue(),
-            eval,
-            "compile".bold().blue(),
-            compile,
-        ));
+        let phase_detail = if state.phase == Some(GenerationProgressPhase::GraphPreprocessing) {
+            let steps = match state.kind {
+                Some(GenerationProcessKind::Amplitude) => {
+                    "CFFs + LMBs + integrands + threshold CTs + tropical samplers"
+                }
+                _ => "cuts + CFFs + LMBs + integrands + threshold CTs",
+            };
+            format!("{} {}", "step".bold().blue(), steps.cyan())
+        } else {
+            let total_time = state.stats.total_time;
+            let expression_share =
+                Self::progress_time_share(state.stats.expression_build_time(), total_time);
+            let spenso_share =
+                Self::progress_time_share(state.stats.evaluator_spenso_time, total_time);
+            let symbolica_share =
+                Self::progress_time_share(state.stats.evaluator_symbolica_time, total_time);
+            let compile_share =
+                Self::progress_time_share(state.stats.evaluator_compile_time, total_time);
+            format!(
+                "{} {} {} / {} {} / {} {} / {} {}",
+                "time".bold().blue(),
+                "expr".bold().blue(),
+                expression_share.magenta(),
+                "spenso".bold().blue(),
+                spenso_share.cyan(),
+                "eval".bold().blue(),
+                symbolica_share.green(),
+                "compile".bold().blue(),
+                compile_share.yellow(),
+            )
+        };
+        let mut sections = vec![
+            format!("{} {} {}", phase, kind, identifier),
+            format!("{} {}", "g".bold().blue(), graph_ratio),
+            format!("{} {}", "last".bold().blue(), last_graph),
+        ];
+        if let Some(cut_context) = cut_context {
+            sections.push(format!("{} {}", "cut".bold().blue(), cut_context.green()));
+        }
+        sections.push(format!("{} {}", "ram".bold().blue(), ram));
+        sections.push(phase_detail);
+        self.progress_span.pb_set_message(&sections.join(" | "));
         self.progress_span.pb_tick();
     }
 }
@@ -461,9 +509,7 @@ impl GenerationProgressObserver for AggregateGenerationProgressReporter {
         state.discovered_valid_cuts = 0;
         state.active_graphs.clear();
         state.last_graph = None;
-        if phase == GenerationProgressPhase::GraphGeneration {
-            state.stats = GraphGenerationStats::default();
-        }
+        state.stats = GraphGenerationStats::default();
         self.progress_span.pb_reset_elapsed();
         self.refresh(&state);
     }
@@ -515,7 +561,6 @@ impl GenerationProgressObserver for AggregateGenerationProgressReporter {
             .state
             .lock()
             .expect("aggregate generation progress state mutex is poisoned");
-        state.done_graphs = state.done_graphs.saturating_add(1).min(state.total_graphs);
         state.discovered_st_cuts += st_cut_count;
         state.discovered_valid_cuts += valid_cut_count;
         state.last_graph = Some(graph.to_string());
@@ -2591,6 +2636,14 @@ impl State {
                 match &mut p.collection {
                     ProcessCollection::Amplitudes(a) => {
                         if let Some(a) = a.get_mut(name) {
+                            begin_phase(
+                                GenerationProgressPhase::GraphPreprocessing,
+                                GenerationProcessKind::Amplitude,
+                                &process_name,
+                                &a.name,
+                                a.graphs.len(),
+                                None,
+                            );
                             merge_generated_graph_reports(
                                 &mut reports,
                                 Self::attach_process_id_to_named_reports(
@@ -2709,6 +2762,7 @@ impl State {
             let reporter = AggregateGenerationProgressReporter::new(
                 monitor.current_ram_bytes(),
                 monitor.peak_ram_bytes(),
+                generation_cores as u64,
             );
             Some(GenerationProgressObserverGuard::set(reporter))
         } else {
@@ -2987,8 +3041,8 @@ impl State {
     }
 
     pub fn new(log_dir: impl AsRef<Path>, log_file_name: Option<String>) -> Self {
-        let _ = initialise();
         super::tracing::init_tracing(log_dir.as_ref().join("logs"), log_file_name);
+        let _ = initialise();
 
         Self {
             model: Model::default(),
@@ -3044,6 +3098,10 @@ impl State {
         // let root_folder = root_folder.join("gammaloop_state");
         let manifest = load_state_manifest(&save_path)?;
         run_state_migration_checks(&manifest, &save_path)?;
+        // Install GammaLoop's subscriber before importing Symbolica state. Symbolica warnings
+        // initialize its fallback subscriber on first use, which would otherwise claim the global
+        // tracing dispatch and escape ANSI styling in all subsequent GammaLoop output.
+        let mut loaded_state = State::new(&save_path, trace_logs_filename);
         debug!("Loading state manifest version {}", manifest.version);
 
         let mut model = if let Some(model_path) = &model_path {
@@ -3069,28 +3127,26 @@ impl State {
             InputParamCard::default_from_model(&model)
         };
 
-        let state = symbolica::state::State::import(
+        let symbolica_state = symbolica::state::State::import(
             &mut fs::File::open(save_path.join("symbolica_state.bin"))
                 .context("Trying to open symbolica state binary")?,
             None,
         )?;
 
         let context: GammaLoopContextContainer<'_> = GammaLoopContextContainer {
-            state_map: &state,
+            state_map: &symbolica_state,
             model: &model,
         };
 
         let process_list =
             ProcessList::load(&save_path, context).context("Trying to load processList")?;
 
-        let mut state = State::new(&save_path, trace_logs_filename);
-
-        state.process_list = process_list;
-        state.model = model;
-        state.model_parameters = input_param_card;
-        state.generation_summaries =
-            load_integrand_generation_summaries(&save_path, &state.process_list)?;
-        Ok(state)
+        loaded_state.process_list = process_list;
+        loaded_state.model = model;
+        loaded_state.model_parameters = input_param_card;
+        loaded_state.generation_summaries =
+            load_integrand_generation_summaries(&save_path, &loaded_state.process_list)?;
+        Ok(loaded_state)
     }
 
     pub fn activate_loaded_integrand_backends(
@@ -3299,6 +3355,56 @@ mod tests {
             AggregateGenerationProgressReporter::new_hidden(current_ram_bytes, peak_ram_bytes);
 
         reporter.begin_phase(
+            GenerationProgressPhase::GraphPreprocessing,
+            GenerationProcessKind::CrossSection,
+            "proc",
+            "itg",
+            2,
+            None,
+        );
+        reporter.graph_started(GenerationProcessKind::CrossSection, "itg", "GL01", None);
+        reporter.cuts_discovered("itg", "GL01", 4, 2);
+        {
+            let state = reporter
+                .state
+                .lock()
+                .expect("aggregate generation progress state mutex is poisoned");
+            assert_eq!(state.done_graphs, 0);
+            assert_eq!(state.discovered_st_cuts, 4);
+            assert_eq!(state.discovered_valid_cuts, 2);
+            assert_eq!(
+                AggregateGenerationProgressReporter::progress_units(&state),
+                (0, 2)
+            );
+            assert_eq!(
+                AggregateGenerationProgressReporter::graph_progress_counts(&state),
+                (0, 1, 2)
+            );
+        }
+        reporter.graph_finished(
+            GenerationProcessKind::CrossSection,
+            "itg",
+            "GL01",
+            &GraphGenerationStats {
+                total_time: Duration::from_secs(3),
+                ..GraphGenerationStats::default()
+            },
+            None,
+        );
+        {
+            let state = reporter
+                .state
+                .lock()
+                .expect("aggregate generation progress state mutex is poisoned");
+            assert_eq!(state.done_graphs, 1);
+            assert_eq!(state.stats.total_time, Duration::from_secs(3));
+            assert_eq!(
+                AggregateGenerationProgressReporter::graph_progress_counts(&state),
+                (1, 0, 2)
+            );
+        }
+
+        reporter.begin_phase(
             GenerationProgressPhase::GraphGeneration,
             GenerationProcessKind::CrossSection,
             "proc",
@@ -3308,6 +3414,16 @@ mod tests {
         );
         reporter.graph_started(GenerationProcessKind::CrossSection, "itg", "GL01", Some(1));
         reporter.graph_started(GenerationProcessKind::CrossSection, "itg", "GL02", Some(2));
+        {
+            let state = reporter
+                .state
+                .lock()
+                .expect("aggregate generation progress state mutex is poisoned");
+            assert_eq!(
+                AggregateGenerationProgressReporter::graph_progress_counts(&state),
+                (0, 2, 2)
+            );
+        }
         reporter.graph_finished(
             GenerationProcessKind::CrossSection,
             "itg",
@@ -3351,6 +3467,14 @@ mod tests {
             assert_eq!(state.stats.expression_build_time(), Duration::from_secs(6));
             assert_eq!(state.stats.evaluator_spenso_time, Duration::from_secs(3));
             assert_eq!(state.stats.evaluator_symbolica_time, Duration::from_secs(1));
+            assert_eq!(
+                AggregateGenerationProgressReporter::progress_units(&state),
+                (5, 5)
+            );
+            assert_eq!(
+                AggregateGenerationProgressReporter::graph_progress_counts(&state),
+                (2, 0, 2)
+            );
         }
 
         reporter.backend_started(GenerationProcessKind::CrossSection, "itg", 2);
@@ -3368,6 +3492,65 @@ mod tests {
         assert_eq!(state.done_graphs, 2);
         assert_eq!(state.stats.total_time, Duration::from_secs(12));
         assert_eq!(state.stats.evaluator_compile_time, Duration::from_secs(2));
+    }
+
+    #[test]
+    fn aggregate_generation_progress_tracks_amplitude_preprocessing() {
+        let reporter = AggregateGenerationProgressReporter::new_hidden(
+            Arc::new(AtomicU64::new(0)),
+            Arc::new(AtomicU64::new(0)),
+        );
+
+        reporter.begin_phase(
+            GenerationProgressPhase::GraphPreprocessing,
+            GenerationProcessKind::Amplitude,
+            "proc",
+            "amp",
+            3,
+            None,
+        );
+        reporter.graph_started(GenerationProcessKind::Amplitude, "amp", "GL01", None);
+        reporter.graph_started(GenerationProcessKind::Amplitude, "amp", "GL02", None);
+
+        {
+            let state = reporter
+                .state
+                .lock()
+                .expect("aggregate generation progress state mutex is poisoned");
+            assert_eq!(state.kind, Some(GenerationProcessKind::Amplitude));
+            assert_eq!(state.process, "proc");
+            assert_eq!(state.integrand, "amp");
+            assert_eq!(
+                AggregateGenerationProgressReporter::progress_units(&state),
+                (0, 3)
+            );
+            assert_eq!(
+                AggregateGenerationProgressReporter::graph_progress_counts(&state),
+                (0, 2, 3)
+            );
+        }
+
+        reporter.graph_finished(
+            GenerationProcessKind::Amplitude,
+            "amp",
+            "GL01",
+            &GraphGenerationStats::default(),
+            None,
+        );
+
+        let state = reporter
+            .state
+            .lock()
+            .expect("aggregate generation progress state mutex is poisoned");
+        assert_eq!(
+            AggregateGenerationProgressReporter::progress_units(&state),
+            (1, 3)
+        );
+        assert_eq!(
+            AggregateGenerationProgressReporter::graph_progress_counts(&state),
+            (1, 1, 3)
+        );
+        assert_eq!(state.last_graph.as_deref(), Some("GL01"));
     }
 
     #[test]
@@ -3404,6 +3587,28 @@ mod tests {
         assert_eq!(
             AggregateGenerationProgressReporter::progress_percent(54.0),
             "54%"
+        );
+
+        assert_eq!(
+            AggregateGenerationProgressReporter::progress_time_share(
+                Duration::ZERO,
+                Duration::ZERO,
+            ),
+            "--"
+        );
+        assert_eq!(
+            AggregateGenerationProgressReporter::progress_time_share(
+                Duration::ZERO,
+                Duration::from_secs(4),
+            ),
+            "0%"
+        );
+        assert_eq!(
+            AggregateGenerationProgressReporter::progress_time_share(
+                Duration::from_secs(1),
+                Duration::from_secs(4),
+            ),
+            "25%"
         );
     }
 

@@ -3,15 +3,14 @@ use std::sync::LazyLock;
 use spenso::{
     chain,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
-    shadowing,
-    tensors::parametric::atomcore::PatternReplacement,
-    trace, trace_sym,
+    shadowing, trace, trace_sym,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView},
     function,
     id::Replacement,
 };
+use symbolica_utils::PatternReplacement;
 
 use crate::{W_, shorthands::metric::not_slot};
 
@@ -23,6 +22,7 @@ static METRIC_FUNCTION_CONTRACTIONS: LazyLock<[Replacement; 3]> = LazyLock::new(
     let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
     let function_with_replacement = function!(W_.a_, W_.a___, W_.c_, W_.b___);
 
+    // Ordered antisymmetric matching preserves orientation in these direct slot replacements.
     [
         // g(i,j)*T(...,j,...)->T(...,i,...)
         Replacement::new(
@@ -43,7 +43,7 @@ static METRIC_FUNCTION_CONTRACTIONS: LazyLock<[Replacement; 3]> = LazyLock::new(
             (function!(ETS.metric, W_.c_, &dualizable_dual)
                 * function!(W_.a_, W_.a___, &dualizable, W_.b___))
             .to_pattern(),
-            function_with_replacement.clone(),
+            function_with_replacement,
         ),
     ]
 });

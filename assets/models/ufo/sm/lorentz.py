@@ -27,7 +27,9 @@ FFS2 = Lorentz(name="FFS2", spins=[2, 2, 1], structure="ProjM(1,2) - ProjP(1,2)"
 
 FFS3 = Lorentz(name="FFS3", spins=[2, 2, 1], structure="ProjP(1,2)")
 
-FFS4 = Lorentz(name="FFS4", spins=[2, 2, 1], structure="ProjM(1,2) + ProjP(1,2)")
+# Keep the CP-even scalar bilinear explicit. Writing this as ProjM + ProjP hides
+# the exact gamma5 cancellation from dimension-dependent Dirac algebra.
+FFS4 = Lorentz(name="FFS4", spins=[2, 2, 1], structure="Identity(1,2)")
 
 FFV1 = Lorentz(name="FFV1", spins=[2, 2, 3], structure="Gamma(3,1,2)")
 

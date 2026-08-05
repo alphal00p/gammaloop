@@ -18,13 +18,18 @@ name = "symbolica_lazy_deadlock_mwe"
 path = "examples/symbolica_lazy_deadlock_mwe.rs"
 required-features = ["shadowing"]
 
+[[bench]]
+name = "symbolic_parallelism"
+harness = false
+required-features = ["shadowing"]
+
 # [[test]]
 # name = "three_loop"
 # path = "tests/three_loop.rs"
 # required-features = ["shadowing"]
 
 [dependencies]
-ahash = { version = "0.8.11", features = ["serde"] }
+ahash = { workspace = true, features = ["serde"] }
 append-only-vec = "0.1.6"
 # approxim = "0.6.6"
 # auto_enums = "0.8.6"
@@ -63,7 +68,7 @@ spenso-macros = { workspace = true }
 # serde_toml = "0.0.1"
 # slotmap = { version = "1.0.7", features = ["serde"] }
 # smartstring = { version = "1.0.1", features = ["serde"] }
-
+symbolica-utils = { workspace = true }
 tabled = "0.20.0"
 thiserror = { workspace = true }
 tracing = { workspace = true }

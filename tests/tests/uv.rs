@@ -15,6 +15,7 @@ use gammalooprs::integrands::{HasIntegrand, evaluation::EvaluationMetaData};
 use gammalooprs::observables::events::AdditionalWeightKey;
 use gammalooprs::settings::runtime::{IntegralEstimate, SlotIntegrationResult};
 use gammalooprs::utils::F;
+use gammalooprs::uv::{ApproximationType, UVOrchestrator};
 use ndarray::Array2;
 use serde_json::{Map, Value, json};
 use spenso::algebra::complex::Complex;
@@ -720,6 +721,26 @@ fn integral_estimate_change_sigma(lhs: &IntegralEstimate, rhs: &IntegralEstimate
     }
 }
 
+fn squared_integral_estimate(estimate: &IntegralEstimate) -> IntegralEstimate {
+    let re = estimate.result.re.0;
+    let im = estimate.result.im.0;
+    let err_re = estimate.error.re.0;
+    let err_im = estimate.error.im.0;
+
+    IntegralEstimate {
+        neval: estimate.neval,
+        real_zero: estimate.real_zero,
+        im_zero: estimate.im_zero,
+        result: Complex::new(F(re * re - im * im), F(2.0 * re * im)),
+        error: Complex::new(
+            F((2.0 * re * err_re).hypot(2.0 * im * err_im)),
+            F((2.0 * im * err_re).hypot(2.0 * re * err_im)),
+        ),
+        real_chisq: estimate.real_chisq,
+        im_chisq: estimate.im_chisq,
+    }
+}
+
 fn integrated_uv_profile_passes(
     cli: &mut CLIState,
     process: &str,
@@ -820,6 +841,7 @@ fn run_integrated_uv_case(case: &IntegratedUvCase<'_>) -> IntegratedUvCaseResult
     };
 
     let case_result = (|| -> Result<()> {
+        cli.cli_settings.global.generation.uv.orchestrator = UVOrchestrator::Compare;
         cli.run_command("run generate")?;
         set_original_integrated_uv_scales(&mut cli, case)?;
         add_integrated_uv_scale_variants(&mut cli, case)?;
@@ -1051,6 +1073,163 @@ fn run_single_integrated_uv_case(case: &IntegratedUvCase<'_>) {
 }
 
 #[test]
+fn scalar_spectacles_integrated_uv_factorizes_over_bridge() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("uv/scalar_spectacles_self_energy.toml".into()),
+        get_tests_workspace_path().join("scalar_spectacles_self_energy"),
+        None,
+        true,
+    )?;
+    cli.run_command("run generate")?;
+    let bubble_accuracy_floor =
+        required_stability_accuracy_floor(&mut cli, "bubble", "scalar_bubble")?;
+    let spectacles_accuracy_floor =
+        required_stability_accuracy_floor(&mut cli, "spectacles", "scalar_spectacles")?;
+
+    // The massless B-C propagator contributes i/s and the graph numerator -i/2,
+    // so the spectacles graph is the product of both bubbles divided by 2s.
+    let external_s = 1.0_f64;
+    let bridge_factor = 1.0 / (2.0 * external_s);
+    let bubble_left = evaluate_summed_momentum_sample(
+        &mut cli,
+        "bubble",
+        "scalar_bubble",
+        &[0.11, -0.07, 0.19],
+        bubble_accuracy_floor,
+    )?;
+    let bubble_right = evaluate_summed_momentum_sample(
+        &mut cli,
+        "bubble",
+        "scalar_bubble",
+        &[0.23, 0.31, -0.17],
+        bubble_accuracy_floor,
+    )?;
+    let spectacles_point = evaluate_summed_momentum_sample(
+        &mut cli,
+        "spectacles",
+        "scalar_spectacles",
+        &[0.11, -0.07, 0.19, 0.23, 0.31, -0.17],
+        spectacles_accuracy_floor,
+    )?;
+    let expected_point = Complex::new(
+        bridge_factor
+            * (bubble_left.value.re * bubble_right.value.re
+                - bubble_left.value.im * bubble_right.value.im),
+        bridge_factor
+            * (bubble_left.value.re * bubble_right.value.im
+                + bubble_left.value.im * bubble_right.value.re),
+    );
+    let point_delta = (spectacles_point.value.re - expected_point.re)
+        .hypot(spectacles_point.value.im - expected_point.im);
+    let point_scale = spectacles_point
+        .value
+        .re
+        .hypot(spectacles_point.value.im)
+        .max(expected_point.re.hypot(expected_point.im))
+        .max(f64::MIN_POSITIVE);
+    let point_accuracy = bubble_left
+        .relative_accuracy
+        .max(bubble_right.relative_accuracy)
+        .max(spectacles_point.relative_accuracy)
+        .max(f64::EPSILON);
+    assert!(
+        point_delta / point_scale <= INSPECT_DEPENDENCE_ACCURACY_FACTOR * point_accuracy,
+        "expected pointwise spectacles = bubble_left*bubble_right/(2s); relative delta={:.3e}, accuracy={point_accuracy:.3e}",
+        point_delta / point_scale,
+    );
+
+    cli.run_command("set process kv integrator.integrated_phase=imag")?;
+    set_fast_deterministic_integrator(
+        &mut cli,
+        IntegratedUvIntegratorSettings {
+            target_relative_accuracy: 0.04,
+            n_start: 50_000,
+            n_increase: 0,
+            n_max: 2_000_000,
+            n_cores: 1,
+        },
+    )?;
+    // The bubble-derived target and spectacles estimate need independent errors.
+    cli.run_command("set process kv integrator.seed=7331")?;
+
+    let bubble = Integrate {
+        process: vec![ProcessRef::Unqualified("bubble".to_string())],
+        integrand_name: vec!["scalar_bubble".to_string()],
+        workspace_path: Some(
+            get_tests_workspace_path()
+                .join("scalar_spectacles_self_energy/integration_workspace_bubble"),
+        ),
+        n_cores: Some(1),
+        restart: true,
+        renderer: gammaloop_api::commands::integrate::RendererOption::Tabled,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?
+    .single_slot()
+    .ok_or_else(|| eyre::eyre!("single bubble slot should exist"))?
+    .integral
+    .clone();
+
+    cli.run_command("set process kv integrator.integrated_phase=real")?;
+    set_fast_deterministic_integrator(
+        &mut cli,
+        IntegratedUvIntegratorSettings {
+            target_relative_accuracy: 0.08,
+            n_start: 50_000,
+            n_increase: 0,
+            n_max: 2_000_000,
+            n_cores: 1,
+        },
+    )?;
+    cli.run_command("set process kv integrator.seed=1337")?;
+    let spectacles = Integrate {
+        process: vec![ProcessRef::Unqualified("spectacles".to_string())],
+        integrand_name: vec!["scalar_spectacles".to_string()],
+        workspace_path: Some(
+            get_tests_workspace_path()
+                .join("scalar_spectacles_self_energy/integration_workspace_spectacles"),
+        ),
+        n_cores: Some(1),
+        restart: true,
+        renderer: gammaloop_api::commands::integrate::RendererOption::Tabled,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?
+    .single_slot()
+    .ok_or_else(|| eyre::eyre!("single spectacles slot should exist"))?
+    .integral
+    .clone();
+    let mut expected = squared_integral_estimate(&bubble);
+    expected.result *= F(bridge_factor);
+    expected.error *= F(bridge_factor.abs());
+
+    println!("bubble: {bubble:#}");
+    println!("spectacles: {spectacles:#}");
+    println!("bubble squared over 2s: {expected:#}");
+
+    for (name, estimate) in [
+        ("bubble", &bubble),
+        ("spectacles", &spectacles),
+        ("bubble squared over 2s", &expected),
+    ] {
+        let relative_error = integral_relative_error(estimate);
+        assert!(
+            relative_error < 0.10,
+            "{name} relative error must be below 10%; got {:.2}%",
+            100.0 * relative_error,
+        );
+    }
+    let delta_sigma = integral_estimate_change_sigma(&spectacles, &expected);
+    assert!(
+        delta_sigma <= 1.0,
+        "expected spectacles self-energy = bubble^2/(2s) within 1sigma; delta={delta_sigma}sigma"
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
 fn dod0_bubble_uv() {
     run_single_integrated_uv_case(&IntegratedUvCase {
         run_card: "uv/dod0_bubble",
@@ -1161,6 +1340,27 @@ fn sunrise_scalar_1_uv() {
             integrated: Some(Complex::new(F(-0.000049944992589155517), F(0.0))),
         },
         integrated_ct_relative_error_limit: Some(INTEGRATED_CT_RELATIVE_ERROR_LIMIT),
+        check_mu_r_dependence: true,
+    });
+}
+
+#[test]
+fn dotted_sunrise_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "uv/dotted_sunrise",
+        test_name: "dotted_sunrise",
+        process: "dotted_sunrise",
+        integrand_name: "dotted_sunrise",
+        integrator: SUNRISE_INTEGRATED_UV_INTEGRATOR,
+        original_m_uv: 0.2,
+        shifted_m_uv: 0.5,
+        original_renormalization_localization_scale: 0.2,
+        shifted_renormalization_localization_scale: 1.0,
+        original_mu_r: 0.2,
+        shifted_mu_r: 0.8,
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets::default(),
+        integrated_ct_relative_error_limit: None,
         check_mu_r_dependence: true,
     });
 }
@@ -1515,6 +1715,65 @@ fn assert_json_approx_eq(actual: &Value, expected: &Value, path: &str) {
 
 mod slow {
     use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn sunrise_pole_part_matches_muv_inspect() -> Result<()> {
+        let process = "sunrise_scalar_1";
+        let integrand_name = "scalar_sunrise";
+        let setup = |test_name: &str, scheme| -> Result<CLIState> {
+            let mut cli = get_test_cli(
+                Some("uv/sunrise_scalar_1.toml".into()),
+                get_tests_workspace_path().join(test_name),
+                Some(test_name.to_string()),
+                true,
+            )?;
+            let uv = &mut cli.cli_settings.global.generation.uv;
+            uv.orchestrator = UVOrchestrator::Compare;
+            let prescription = &mut uv.renormalization_prescription;
+            prescription.log_divergent = scheme;
+            prescription.massive_power_divergent = scheme;
+            prescription.massless_power_divergent = scheme;
+            cli.run_command("run generate")?;
+            Ok(cli)
+        };
+        let mut muv = setup("sunrise_muv_inspect", ApproximationType::MUV)?;
+        let point = deterministic_uv_momentum_points(&mut muv, process, integrand_name)?.remove(0);
+        let mut pole_part = setup("sunrise_pole_part_inspect", ApproximationType::PolePart)?;
+
+        let muv_value = evaluate_summed_momentum_sample(
+            &mut muv,
+            process,
+            integrand_name,
+            &point.point,
+            f64::EPSILON,
+        )?
+        .value;
+        let pole_part_value = evaluate_summed_momentum_sample(
+            &mut pole_part,
+            process,
+            integrand_name,
+            &point.point,
+            f64::EPSILON,
+        )?
+        .value;
+
+        clean_test(&muv.cli_settings.state.folder);
+        clean_test(&pole_part.cli_settings.state.folder);
+
+        let delta = (muv_value.re - pole_part_value.re).hypot(muv_value.im - pole_part_value.im);
+        let scale = muv_value
+            .re
+            .hypot(muv_value.im)
+            .max(pole_part_value.re.hypot(pole_part_value.im))
+            .max(f64::MIN_POSITIVE);
+        assert!(
+            delta / scale <= 1.0e-10,
+            "MUV and PolePart inspect values differ: MUV={muv_value:?}, PolePart={pole_part_value:?}, relative delta={}",
+            delta / scale
+        );
+        Ok(())
+    }
 
     macro_rules! aa_aa_2l_uv_rich_inspect_tests {
         ($($name:ident => $graph:literal),+ $(,)?) => {

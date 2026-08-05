@@ -89,6 +89,18 @@ The command model is stateful by design: commands mutate a long-lived `State` th
   - `crates/gammalooprs/src/observables/clustering/*`
   - `crates/gammalooprs/src/integrands/evaluation.rs`
 
+### 3.1 UV renormalization
+
+UV generation supports a legacy DAG-forest backend, a disconnected-capable
+hedge-poset backend, and a comparison mode. Scheme policy remains on each
+Spinney while compute nodes store typed local, integrated, and cut-dependent
+results. Four-dimensional disconnected counterterms factorize over complete
+component counterterms; three-dimensional disconnected terms replay
+component-local operations from their common root so CFF structure is not
+multiplied as though it were scalar. The maintained sign, projection, marker,
+and backend-boundary invariants are documented in
+[`uv-renormalization.md`](uv-renormalization.md).
+
 ## Lifecycle and Data Flow
 
 ### 1. Startup

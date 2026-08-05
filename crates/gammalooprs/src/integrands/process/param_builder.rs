@@ -22,8 +22,8 @@ use spenso::{
     tensors::parametric::AtomViewOrConcrete,
 };
 use symbolica::prelude::{
-    Atom, AtomCore, AtomOrView, FunctionBuilder, FunctionMap, Indeterminate, Rational, Replacement,
-    Symbol, parse_lit, symbol,
+    Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, FunctionMap, Indeterminate, Rational,
+    ReplaceWith, Replacement, Symbol, parse_lit, symbol,
 };
 use tabled::{Table, settings::Style};
 use tracing::debug;
@@ -1167,21 +1167,44 @@ impl<T: FloatLike> ParamBuilder<T> {
         new.add_function(GS.tree_denom_wrapper, vec![arg], Atom::var(arg))
             .unwrap();
 
-        for e in graph.iter_edge_ids() {
-            if lmb.edge_signatures[e]
-                .internal
-                .iter()
-                .any(|sign| sign.is_sign())
-            {
-                new.add_tagged_function::<Symbol>(
-                    GS.ose,
-                    vec![Atom::num(e.0 as i64)],
-                    format!("OSE{e}"),
-                    vec![],
-                    graph.explicit_ose_atom(e),
+        let lmb_ose_replacements = graph
+            .iter_edge_ids()
+            .filter(|edge_id| {
+                lmb.edge_signatures[*edge_id]
+                    .internal
+                    .iter()
+                    .any(|sign| sign.is_sign())
+            })
+            .map(|edge_id| {
+                Replacement::new(
+                    GS.ose(edge_id).to_pattern(),
+                    graph.explicit_ose_atom(edge_id).to_pattern(),
                 )
-                .unwrap();
-            }
+            });
+
+        for replacement in graph
+            .get_ose_replacements()
+            .into_iter()
+            .chain(lmb_ose_replacements)
+            .unique_by(|replacement| replacement.pat.to_atom())
+        {
+            let lhs = replacement.pat.to_atom().unwrap();
+            let rhs = match replacement.rhs {
+                ReplaceWith::Pattern(pattern) => pattern.yield_owned().to_atom().unwrap(),
+                ReplaceWith::Map(_) => unreachable!("OSE replacements should be symbolic"),
+            };
+
+            let AtomView::Fun(function) = lhs.as_view() else {
+                unreachable!("OSE replacements should have function patterns")
+            };
+            new.add_tagged_function::<Symbol>(
+                function.get_symbol(),
+                function.iter().map(|arg| arg.to_owned()).collect(),
+                lhs.to_string(),
+                vec![],
+                rhs,
+            )
+            .unwrap();
         }
 
         for (edge_id, signature) in lmb.edge_signatures.iter() {

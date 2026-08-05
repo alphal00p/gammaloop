@@ -17,7 +17,7 @@ use spenso::network::{MinResultRank, Sequential};
 
 // use spenso::network::Network;
 
-// use spenso::shadowing::symbolica_utils::AtomCoreExt;
+// use symbolica_utils::AtomPrintExt;
 use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
 use spenso::structure::{PermutedStructure, TensorStructure};
 use spenso::tensors::data::DataTensor;
@@ -69,10 +69,10 @@ use crate::momentum::{Pow, Sign, SignOrZero};
 use crate::numerator::ParamParsingNet;
 use crate::numerator::aind::Aind;
 use crate::numerator::graph::ReversibleEdge;
-use crate::numerator::symbolica_ext::AtomCoreExt;
+use crate::numerator::symbolica_ext::NumeratorAtomExt;
 use crate::processes::ProcessDefinition;
 use crate::settings::GlobalSettings;
-use crate::utils::symbolica_ext::{COMPLEXRATPOLYFIELD, LOGPRINTOPTS, PrimeGenerate, Q_I};
+use crate::utils::symbolica_ext::{COMPLEXRATPOLYFIELD, LOGPRINTOPTS, Q_I};
 use crate::utils::{self, GS, PARAM_FUN_LIB, W_};
 use crate::uv::UltravioletGraph;
 use crate::{INTERRUPTED, is_interrupted, set_interrupted};
@@ -81,6 +81,7 @@ use crate::{
     model::Model,
 };
 use eyre::eyre;
+use symbolica_utils::{AtomFloatExt, PrimeGenerate};
 
 type NumeratorSample = (
     Vec<Replacement>,
@@ -2760,10 +2761,7 @@ impl ProcessDefinition {
         settings: &GlobalSettings,
     ) -> Result<Vec<Graph>, FeynGenError> {
         let num_threads = Some(settings.n_cores.feyngen);
-        let progress_bar_style = ProgressStyle::with_template(
-            "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} ({percent}%) {msg}",
-        )
-        .unwrap();
+        let progress_bar_style = utils::long_running_progress_style();
         let mut cpl_reps: Vec<Replacement> = vec![];
         for cpl in model.couplings.values() {
             let [lhs, rhs] = cpl.rep_rule();
@@ -4346,7 +4344,10 @@ impl ProcessDefinition {
                     .expand()
                     .is_zero()
                 {
-                    println!("{combined_overall_factor}");
+                    debug!(
+                        combined_overall_factor = %combined_overall_factor,
+                        "Numerator-aware grouping produced an exact cancellation"
+                    );
                     n_cancellations += 1;
                 } else {
                     bare_graph_representative.overall_factor = combined_overall_factor;

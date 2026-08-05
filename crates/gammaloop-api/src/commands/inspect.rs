@@ -138,6 +138,12 @@ impl Inspect {
             self.validate_x_space_point(state, process_id, &integrand_name)?;
         }
         let graph_name = self.resolve_graph_name(state, process_id, &integrand_name)?;
+        let show_detailed_output = state
+            .process_list
+            .get_integrand_mut(process_id, &integrand_name)?
+            .get_settings()
+            .general
+            .generate_events;
         let points = Array2::from_shape_vec((1, self.point.len()), self.point.clone())?;
         let discrete_dims =
             Array2::from_shape_vec((1, self.discrete_dim.len()), self.discrete_dim.clone())?;
@@ -147,8 +153,8 @@ impl Inspect {
                 process_id: Some(process_id),
                 integrand_name: Some(integrand_name.clone()),
                 use_arb_prec: self.use_arb_prec,
-                minimal_output: false,
-                return_generated_events: Some(true),
+                minimal_output: !show_detailed_output,
+                return_generated_events: None,
                 momentum_space: self.momentum_space,
                 points: points.view(),
                 integrator_weights: None,
@@ -203,7 +209,9 @@ impl Inspect {
                 jacobian
             );
         }
-        info!("\n{}", result);
+        if show_detailed_output {
+            info!("\n{}", result);
+        }
 
         Ok((jacobian, displayed_result.map(|entry| entry.0)))
     }

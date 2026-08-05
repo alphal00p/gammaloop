@@ -48,7 +48,7 @@ name = "generate_diagrams"
 commands = [
   "import model sm-default.json",
   "set global kv global.n_cores.feyngen=10",
-  # "set global kv global.generation.uv.use_legacy=true",
+  # "set global kv global.generation.uv.orchestrator=legacy_dag_forest",
 
   # --select-graphs GL16
   # --loop-momentum-bases GL16=9,10

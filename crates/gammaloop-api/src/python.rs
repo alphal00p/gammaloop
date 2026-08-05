@@ -539,7 +539,9 @@ pub struct PyIntegrandActiveThresholdCutInfo {
 #[derive(Clone)]
 pub struct PyIntegrandThresholdEsurfaceInfo {
     pub esurface_id: usize,
+    pub representative_graph_id: usize,
     pub edge_ids: Vec<usize>,
+    pub classification: Option<String>,
     pub active_cuts: Vec<PyIntegrandActiveThresholdCutInfo>,
 }
 
@@ -1716,7 +1718,11 @@ fn py_integrand_threshold_esurface_info_from_info(
 ) -> PyIntegrandThresholdEsurfaceInfo {
     PyIntegrandThresholdEsurfaceInfo {
         esurface_id: threshold.esurface_id,
+        representative_graph_id: threshold.representative_graph_id,
         edge_ids: threshold.edge_ids,
+        classification: threshold
+            .classification
+            .map(|classification| classification.as_str().to_string()),
         active_cuts: threshold
             .active_cuts
             .into_iter()

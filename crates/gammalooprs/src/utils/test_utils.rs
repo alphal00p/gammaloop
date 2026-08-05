@@ -14,7 +14,7 @@ use symbolica::{atom::AtomCore, parse_lit};
 use crate::{
     momentum::ThreeMomentum,
     settings::runtime::{ParameterizationMapping, ParameterizationMode, ParameterizationSettings},
-    utils::{F, GS, global_inv_parameterize, global_parameterize, symbolica_ext::CallSymbol},
+    utils::{F, GS, global_inv_parameterize, global_parameterize},
 };
 
 pub fn output_dir() -> PathBuf {
@@ -37,8 +37,8 @@ pub(crate) fn dummy_hedge_graph(n_edges: usize) -> HedgeGraph<NoData, NoData, No
 
 #[test]
 fn normalization() {
-    let a = GS.emr_vec_index(EdgeIndex(1), AIND_SYMBOLS.cind.f(&[0]));
-    let b = GS.emr_vec_index(EdgeIndex(1), AIND_SYMBOLS.cind.f(&[1]));
+    let a = GS.emr_vec_index(EdgeIndex(1), AIND_SYMBOLS.cind.call_args([0]));
+    let b = GS.emr_vec_index(EdgeIndex(1), AIND_SYMBOLS.cind.call_args([1]));
 
     assert_snapshot!(a.to_canonical_string(),@"0");
     assert_snapshot!(b.to_canonical_string(),@"gammalooprs::{spenso::rank1,spenso::tensor}::Q(1,spenso::{}::cind(1))");
@@ -49,7 +49,7 @@ fn normalization() {
     assert_snapshot!(c.to_canonical_string(),@"1");
 
     let expr = parse_lit!(f(a + p + r));
-    assert_snapshot!(GS.linearize.f(&[expr]).to_canonical_string(),@"gammalooprs::{}::f(gammalooprs::{}::a)+gammalooprs::{}::f(gammalooprs::{}::p)+gammalooprs::{}::f(gammalooprs::{}::r)");
+    assert_snapshot!(GS.linearize.call_args([expr]).to_canonical_string(),@"gammalooprs::{}::f(gammalooprs::{}::a)+gammalooprs::{}::f(gammalooprs::{}::p)+gammalooprs::{}::f(gammalooprs::{}::r)");
 }
 
 #[test]

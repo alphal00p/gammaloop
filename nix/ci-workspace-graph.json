@@ -7,13 +7,15 @@
       "gammalooprs",
       "idenso",
       "linnet",
-      "spenso"
+      "spenso",
+      "symbolica-utils"
     ],
     "gammaloop-integration-tests": [
       "gammaloop-api",
       "gammaloop-workspace-hack",
       "gammalooprs",
       "spenso",
+      "symbolica-utils",
       "vakint"
     ],
     "gammaloop-tracing-filter": [
@@ -30,18 +32,21 @@
       "linnet",
       "spenso",
       "spenso-hep-lib",
+      "symbolica-utils",
       "vakint"
     ],
     "idenso": [
       "linnet",
       "spenso",
-      "spenso-macros"
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "linnest": [
       "linnet"
     ],
     "linnet": [
-      "gammaloop-workspace-hack"
+      "gammaloop-workspace-hack",
+      "symbolica-utils"
     ],
     "linnet-py": [
       "linnet"
@@ -49,7 +54,8 @@
     "spenso": [
       "gammaloop-workspace-hack",
       "linnet",
-      "spenso-macros"
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "spenso-hep-lib": [
       "gammaloop-workspace-hack",
@@ -64,6 +70,7 @@
       "spenso-hep-lib",
       "spenso-macros"
     ],
+    "symbolica-utils": [],
     "vakint": []
   },
   "normal_dependency_features": {
@@ -82,7 +89,8 @@
       ],
       "spenso": [
         "shadowing"
-      ]
+      ],
+      "symbolica-utils": []
     },
     "gammaloop-integration-tests": {
       "gammaloop-api": [],
@@ -91,6 +99,7 @@
       "spenso": [
         "shadowing"
       ],
+      "symbolica-utils": [],
       "vakint": []
     },
     "gammaloop-tracing-filter": {
@@ -119,6 +128,7 @@
         "shadowing"
       ],
       "spenso-hep-lib": [],
+      "symbolica-utils": [],
       "vakint": []
     },
     "idenso": {
@@ -126,7 +136,8 @@
       "spenso": [
         "shadowing"
       ],
-      "spenso-macros": []
+      "spenso-macros": [],
+      "symbolica-utils": []
     },
     "linnest": {
       "linnet": [
@@ -135,7 +146,8 @@
       ]
     },
     "linnet": {
-      "gammaloop-workspace-hack": []
+      "gammaloop-workspace-hack": [],
+      "symbolica-utils": []
     },
     "linnet-py": {
       "linnet": []
@@ -146,7 +158,8 @@
         "bincode",
         "serde"
       ],
-      "spenso-macros": []
+      "spenso-macros": [],
+      "symbolica-utils": []
     },
     "spenso-hep-lib": {
       "gammaloop-workspace-hack": [],
@@ -168,6 +181,7 @@
       "spenso-hep-lib": [],
       "spenso-macros": []
     },
+    "symbolica-utils": {},
     "vakint": {}
   },
   "package_dirs": {
@@ -186,6 +200,7 @@
     "spenso-hep-lib": "crates/spenso-hep-lib",
     "spenso-macros": "crates/spenso-macros",
     "spynso3": "crates/spynso3",
+    "symbolica-utils": "crates/symbolica-utils",
     "vakint": "crates/vakint"
   },
   "packages": [
@@ -204,6 +219,7 @@
     "spenso-hep-lib",
     "spenso-macros",
     "spynso3",
+    "symbolica-utils",
     "vakint"
   ],
   "resolved_normal_dependencies": {
@@ -218,6 +234,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-utils",
       "vakint"
     ],
     "gammaloop-integration-tests": [
@@ -231,6 +248,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-utils",
       "vakint"
     ],
     "gammaloop-tracing-filter": [
@@ -238,7 +256,8 @@
       "gammaloop-workspace-hack",
       "linnet",
       "spenso",
-      "spenso-macros"
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "gammaloop-tracing-filter-macros": [],
     "gammaloop-workspace-hack": [],
@@ -251,20 +270,23 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-utils",
       "vakint"
     ],
     "idenso": [
       "gammaloop-workspace-hack",
       "linnet",
       "spenso",
-      "spenso-macros"
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "linnest": [
       "gammaloop-workspace-hack",
       "linnet"
     ],
     "linnet": [
-      "gammaloop-workspace-hack"
+      "gammaloop-workspace-hack",
+      "symbolica-utils"
     ],
     "linnet-py": [
       "gammaloop-workspace-hack",
@@ -273,14 +295,16 @@
     "spenso": [
       "gammaloop-workspace-hack",
       "linnet",
-      "spenso-macros"
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "spenso-hep-lib": [
       "gammaloop-workspace-hack",
       "idenso",
       "linnet",
       "spenso",
-      "spenso-macros"
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "spenso-macros": [],
     "spynso3": [
@@ -289,8 +313,10 @@
       "linnet",
       "spenso",
       "spenso-hep-lib",
-      "spenso-macros"
+      "spenso-macros",
+      "symbolica-utils"
     ],
+    "symbolica-utils": [],
     "vakint": []
   },
   "resolved_test_dependencies": {
@@ -305,6 +331,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-utils",
       "vakint"
     ],
     "gammaloop-integration-tests": [
@@ -318,6 +345,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-utils",
       "vakint"
     ],
     "gammaloop-tracing-filter": [
@@ -325,7 +353,8 @@
       "gammaloop-workspace-hack",
       "linnet",
       "spenso",
-      "spenso-macros"
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "gammaloop-tracing-filter-macros": [],
     "gammaloop-workspace-hack": [],
@@ -338,13 +367,15 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-utils",
       "vakint"
     ],
     "idenso": [
       "gammaloop-workspace-hack",
       "linnet",
       "spenso",
-      "spenso-macros"
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "linnest": [
       "gammaloop-workspace-hack",
@@ -352,7 +383,8 @@
     ],
     "linnet": [
       "gammaloop-workspace-hack",
-      "linnest"
+      "linnest",
+      "symbolica-utils"
     ],
     "linnet-py": [
       "gammaloop-workspace-hack",
@@ -361,19 +393,22 @@
     "spenso": [
       "gammaloop-workspace-hack",
       "linnet",
-      "spenso-macros"
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "spenso-hep-lib": [
       "gammaloop-workspace-hack",
       "idenso",
       "linnet",
       "spenso",
-      "spenso-macros"
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "spenso-macros": [
       "gammaloop-workspace-hack",
       "linnet",
-      "spenso"
+      "spenso",
+      "symbolica-utils"
     ],
     "spynso3": [
       "gammaloop-workspace-hack",
@@ -381,8 +416,10 @@
       "linnet",
       "spenso",
       "spenso-hep-lib",
-      "spenso-macros"
+      "spenso-macros",
+      "symbolica-utils"
     ],
+    "symbolica-utils": [],
     "vakint": []
   },
   "symbolica_normal_packages": [
@@ -399,6 +436,7 @@
     "spenso-hep-lib",
     "spenso-macros",
     "spynso3",
+    "symbolica-utils",
     "vakint"
   ],
   "symbolica_test_packages": [
@@ -415,6 +453,7 @@
     "spenso-hep-lib",
     "spenso-macros",
     "spynso3",
+    "symbolica-utils",
     "vakint"
   ],
   "test_dependencies": {
@@ -425,13 +464,15 @@
       "gammalooprs",
       "idenso",
       "linnet",
-      "spenso"
+      "spenso",
+      "symbolica-utils"
     ],
     "gammaloop-integration-tests": [
       "gammaloop-api",
       "gammaloop-workspace-hack",
       "gammalooprs",
       "spenso",
+      "symbolica-utils",
       "vakint"
     ],
     "gammaloop-tracing-filter": [
@@ -448,19 +489,22 @@
       "linnet",
       "spenso",
       "spenso-hep-lib",
+      "symbolica-utils",
       "vakint"
     ],
     "idenso": [
       "linnet",
       "spenso",
-      "spenso-macros"
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "linnest": [
       "linnet"
     ],
     "linnet": [
       "gammaloop-workspace-hack",
-      "linnest"
+      "linnest",
+      "symbolica-utils"
     ],
     "linnet-py": [
       "linnet"
@@ -468,7 +512,8 @@
     "spenso": [
       "gammaloop-workspace-hack",
       "linnet",
-      "spenso-macros"
+      "spenso-macros",
+      "symbolica-utils"
     ],
     "spenso-hep-lib": [
       "gammaloop-workspace-hack",
@@ -486,6 +531,7 @@
       "spenso-hep-lib",
       "spenso-macros"
     ],
+    "symbolica-utils": [],
     "vakint": []
   },
   "test_dependency_features": {
@@ -504,7 +550,8 @@
       ],
       "spenso": [
         "shadowing"
-      ]
+      ],
+      "symbolica-utils": []
     },
     "gammaloop-integration-tests": {
       "gammaloop-api": [],
@@ -513,6 +560,7 @@
       "spenso": [
         "shadowing"
       ],
+      "symbolica-utils": [],
       "vakint": []
     },
     "gammaloop-tracing-filter": {
@@ -541,6 +589,7 @@
         "shadowing"
       ],
       "spenso-hep-lib": [],
+      "symbolica-utils": [],
       "vakint": []
     },
     "idenso": {
@@ -548,7 +597,8 @@
       "spenso": [
         "shadowing"
       ],
-      "spenso-macros": []
+      "spenso-macros": [],
+      "symbolica-utils": []
     },
     "linnest": {
       "linnet": [
@@ -558,7 +608,8 @@
     },
     "linnet": {
       "gammaloop-workspace-hack": [],
-      "linnest": []
+      "linnest": [],
+      "symbolica-utils": []
     },
     "linnet-py": {
       "linnet": []
@@ -569,7 +620,8 @@
         "bincode",
         "serde"
       ],
-      "spenso-macros": []
+      "spenso-macros": [],
+      "symbolica-utils": []
     },
     "spenso-hep-lib": {
       "gammaloop-workspace-hack": [],
@@ -594,6 +646,7 @@
       "spenso-hep-lib": [],
       "spenso-macros": []
     },
+    "symbolica-utils": {},
     "vakint": {}
   },
   "workspace_root": "."

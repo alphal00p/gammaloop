@@ -14,12 +14,17 @@ use spenso::{
     },
     utils::{to_subscript, to_superscript},
 };
-use symbolica::prelude::*;
-use symbolica::printer::{PrintState, PrintUserData};
+use symbolica::{
+    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
+    domains::rational::Rational,
+    function, get_symbol,
+    id::Replacement,
+    printer::{PrintState, PrintUserData},
+    symbol,
+};
+use symbolica_utils::{PrintSettingsExt, TypstMode};
 
-use crate::{cff::expression::GraphOrientation, graph::LoopMomentumBasis, numerator::aind::Aind};
-
-use super::symbolica_ext::CallSymbol;
+use crate::{cff::orientations::GraphOrientation, graph::LoopMomentumBasis, numerator::aind::Aind};
 
 pub struct WildCards {
     pub edgeid_: Symbol,
@@ -133,6 +138,9 @@ pub struct GammaloopSymbols {
     pub hfunction_lu_cut: Symbol,
     pub hfunction_left_th: Symbol,
     pub hfunction_right_th: Symbol,
+    pub eta: Symbol,
+    pub eta_left: Symbol,
+    pub eta_right: Symbol,
     pub deta_lu_cut: Symbol,
     pub deta_left_th: Symbol,
     pub deta_right_th: Symbol,
@@ -148,6 +156,8 @@ pub struct GammaloopSymbols {
     pub epsilon: Symbol,
     pub epsilonbar: Symbol,
     pub rescale: Symbol,
+    /// Bookkeeping scale for integrated vacuum masses and consumed loop measures.
+    pub integrated_loop_scale: Symbol,
     pub rescale_mass: Symbol,
     pub rescale_star: Symbol,
     pub pi: Symbol,
@@ -186,11 +196,16 @@ pub struct GammaloopSymbols {
 
     pub localizing_integrand: Symbol,
 
-    pub uv_local: Symbol,
-    pub uv_integrated: Symbol,
+    pub uv_subgraph: Symbol,
+    pub uv_approx: Symbol,
+    pub uv_integrate: Symbol,
+    pub uv_series: Symbol,
+    pub uv_truncate: Symbol,
+    /// Marker for the ct term in the UV integrand
+    pub ct_marker: Symbol,
 
     pub nc2_1: Symbol,
-    pub top: Symbol,
+    pub expr: Symbol,
     pub num: Symbol,
     ///denominator wrapper, den(<edge_id>,<momentum>,<mass>,<full_expr>) (no power and should not be multiplied in but divided!)
     pub den: Symbol,
@@ -212,26 +227,26 @@ impl GammaloopSymbols {
     ) -> Atom {
         arg.into()
             .replace(self.sign_theta(W_.a_))
-            .with(Symbol::IF.f(Atom::var(W_.a_) + 1))
-            .replace(Symbol::IF.f(W_.a_) * Symbol::IF.f(W_.b_))
+            .with(Symbol::IF.call(Atom::var(W_.a_) + 1))
+            .replace(Symbol::IF.call(W_.a_) * Symbol::IF.call(W_.b_))
             .repeat()
-            .with(Symbol::IF.f(W_.a_ * W_.b_))
-            .replace(Symbol::IF.f(W_.a_) * W_.b___)
-            .with(Symbol::IF.f([Atom::var(W_.a_), Atom::var(W_.b___), Atom::Zero]))
-            .replace(Symbol::IF.f([Atom::var(W_.a_), Atom::Zero]))
-            .with(Symbol::IF.f([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
-            .replace(Symbol::IF.f([Atom::var(W_.a_)]))
-            .with(Symbol::IF.f([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
-            .replace(Symbol::IF.f([W_.a_, W_.b_, W_.c_]))
+            .with(Symbol::IF.call(W_.a_ * W_.b_))
+            .replace(Symbol::IF.call(W_.a_) * W_.b___)
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::var(W_.b___), Atom::Zero]))
+            .replace(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero]))
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
+            .replace(Symbol::IF.call_args([Atom::var(W_.a_)]))
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
+            .replace(Symbol::IF.call_args([W_.a_, W_.b_, W_.c_]))
             .with({
                 if with_override {
-                    Symbol::IF.f([
+                    Symbol::IF.call_args([
                         Atom::var(self.override_if),
                         Atom::var(W_.b_),
-                        Symbol::IF.f([W_.a_, W_.b_, W_.c_]),
+                        Symbol::IF.call_args([W_.a_, W_.b_, W_.c_]),
                     ])
                 } else {
-                    Symbol::IF.f([W_.a_, W_.b_, W_.c_])
+                    Symbol::IF.call_args([W_.a_, W_.b_, W_.c_])
                 }
             })
     }
@@ -243,7 +258,7 @@ impl GammaloopSymbols {
         mass: impl Into<AtomOrView<'a>>,
         full_expr: impl Into<AtomOrView<'a>>,
     ) -> Atom {
-        self.den.f(&[
+        self.den.call_args([
             eid.into().as_view(),
             mom.into().as_view(),
             mass.into().as_view(),
@@ -363,7 +378,10 @@ pub static W_: LazyLock<WildCards> = LazyLock::new(|| WildCards {
 });
 
 macro_rules! spenso_print_scripted_indexed {
-    ($a:ident, $opt:ident, $symbol:expr) => {{
+    ($a:ident, $opt:ident, $symbol:expr) => {
+        spenso_print_scripted_indexed!($a, $opt, $symbol, $symbol)
+    };
+    ($a:ident, $opt:ident, $symbol:expr, $typst_symbol:expr) => {{
         match $opt.custom_print_mode.get("spenso") {
             Some(PrintUserData::Integer(i)) => {
                 let SpensoPrintSettings {
@@ -384,9 +402,19 @@ macro_rules! spenso_print_scripted_indexed {
                     return None;
                 };
 
-                let mut out = $symbol.to_string();
-                out.push_str(&to_subscript(i as isize));
-                if $opt.color_builtin_symbols {
+                let is_typst = $opt.typst_mode().is_some();
+                let mut out = if is_typst {
+                    $typst_symbol.to_string()
+                } else {
+                    $symbol.to_string()
+                };
+                if is_typst {
+                    out.push('_');
+                    out.push_str(&i.to_string());
+                } else {
+                    out.push_str(&to_subscript(i as isize));
+                }
+                if $opt.color_builtin_symbols && !is_typst {
                     out = nu_ansi_term::Color::Magenta.paint(out).to_string();
                 }
 
@@ -428,7 +456,10 @@ macro_rules! spenso_print_scripted_indexed {
 }
 
 macro_rules! spenso_print_simple_indexed {
-    ($a:ident, $opt:ident, $symbol:expr) => {{
+    ($a:ident, $opt:ident, $symbol:expr) => {
+        spenso_print_simple_indexed!($a, $opt, $symbol, $symbol)
+    };
+    ($a:ident, $opt:ident, $symbol:expr, $typst_symbol:expr) => {{
         match $opt.custom_print_mode.get("spenso") {
             Some(PrintUserData::Integer(_)) => {
                 let AtomView::Fun(f) = $a else {
@@ -443,7 +474,13 @@ macro_rules! spenso_print_simple_indexed {
                     return None;
                 };
 
-                out.push_str(&to_subscript(i as isize));
+                if $opt.typst_mode().is_some() {
+                    out = $typst_symbol.to_string();
+                    out.push('_');
+                    out.push_str(&i.to_string());
+                } else {
+                    out.push_str(&to_subscript(i as isize));
+                }
                 let mut first = true;
                 for arg in args {
                     if first {
@@ -457,6 +494,31 @@ macro_rules! spenso_print_simple_indexed {
                 if !first {
                     out.push(')');
                 }
+                Some(out)
+            }
+            _ => None,
+        }
+    }};
+}
+
+macro_rules! spenso_print_uv_unary {
+    ($a:ident, $opt:ident, $prefix:expr, $suffix:expr) => {{
+        match $opt.custom_print_mode.get("spenso") {
+            Some(PrintUserData::Integer(_)) => {
+                let AtomView::Fun(f) = $a else {
+                    return None;
+                };
+                if f.get_nargs() != 1 {
+                    return None;
+                }
+
+                let mut out = $prefix.to_string();
+                f.iter()
+                    .next()
+                    .unwrap()
+                    .format(&mut out, $opt, PrintState::new())
+                    .unwrap();
+                out.push_str($suffix);
                 Some(out)
             }
             _ => None,
@@ -644,12 +706,87 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         tags = [SPENSO_TAG.index.clone()]
     ),
     override_if: symbol!("override_if"),
-    uv_local: symbol!("uv_local"),
-    uv_integrated: symbol!("uv_integrated"),
+    uv_subgraph: symbol!(
+        "gammalooprs::uv::subgraph",
+        print = |a, opt, _state| {
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(_)) => {
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+                    if f.get_nargs() != 2 {
+                        return None;
+                    }
+
+                    let mut args = f.iter();
+                    let current = args.next().unwrap();
+                    let mut out = String::new();
+                    if let AtomView::Var(current) = current
+                        && current.get_symbol().get_stripped_name().starts_with("S_")
+                    {
+                        out.push_str(current.get_symbol().get_stripped_name());
+                    } else {
+                        out.push_str("S_");
+                        current
+                            .format(&mut out, opt, PrintState::new())
+                            .unwrap();
+                    }
+                    out.push('⊛');
+                    let given = args.next().unwrap();
+                    if let AtomView::Var(given) = given
+                        && let Some(label) =
+                            given.get_symbol().get_stripped_name().strip_prefix("S_")
+                    {
+                        out.push_str(label);
+                    } else {
+                        given.format(&mut out, opt, PrintState::new()).unwrap();
+                    }
+                    Some(out)
+                }
+                _ => None,
+            }
+        }
+    ),
+    uv_approx: symbol!(
+        "Approx",
+        print = |a, opt, _state| spenso_print_uv_unary!(a, opt, "K[", "]")
+    ),
+    uv_integrate: symbol!(
+        "Integrate",
+        print = |a, opt, _state| spenso_print_uv_unary!(a, opt, "⟨", "⟩")
+    ),
+    uv_series: symbol!(
+        "Series",
+        print = |a, opt, _state| spenso_print_uv_unary!(a, opt, "Σ(", ")")
+    ),
+    uv_truncate: symbol!(
+        "Truncate",
+        print = |a, opt, _state| {
+            let prefix = if opt.typst_mode().is_some() {
+                r#"op("Tr")("#
+            } else {
+                "Tr("
+            };
+            spenso_print_uv_unary!(a, opt, prefix, ")")
+        }
+    ),
+    ct_marker: symbol!(
+        "CT",
+        print = |a, opt, _state| {
+            spenso_print_uv_unary!(a, opt, "", "").map(|out| {
+                if opt.color_builtin_symbols {
+                    nu_ansi_term::Color::Magenta.paint(out).to_string()
+                } else {
+                    out
+                }
+            })
+        }
+    ),
     is_function: symbol!("is_function"),
     is_symbol: symbol!("is_symbol"),
     nc2_1: symbol!("NC2_1"),
     rescale: symbol!("t";Scalar,Real,Positive),
+    integrated_loop_scale: symbol!("uvIntegratedLoopScale";Scalar,Real,Positive),
     rescale_mass: symbol!("t_m";Scalar,Real,Positive),
     _linear: symbol!("_linear";Linear),
     linearize: symbol!(
@@ -676,9 +813,9 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                 }
                 let expr = GS
                     ._linear
-                    .f(args.as_slice())
-                    .replace(GS._linear.f(&[W_.a___]))
-                    .with(arg.get_symbol().f(&[W_.a___]));
+                    .call_args(args.as_slice())
+                    .replace(GS._linear.call_args([W_.a___]))
+                    .with(arg.get_symbol().call_args([W_.a___]));
                 println!(":{}->{}", f, expr);
                 **out = expr;
             }
@@ -696,6 +833,9 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     hfunction_lu_cut: symbol!("h_lu_cut"),
     hfunction_left_th: symbol!("h_left_th"),
     hfunction_right_th: symbol!("h_right_th"),
+    eta: symbol!("η"),
+    eta_left: symbol!("η_left"),
+    eta_right: symbol!("η_right"),
     deta_lu_cut: symbol!("∇η_lu_cut"),
     deta_left_th: symbol!("∇η_left_th"),
     deta_right_th: symbol!("∇η_right_th"),
@@ -713,13 +853,8 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                 return None;
             };
             match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(i)) => {
-                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(*i as usize);
-                    if SpensoPrintSettings::from(*i as usize).is_typst() {
-                        Some("m_\"UVexp\"".to_string())
-                    } else {
-                        None
-                    }
+                Some(PrintUserData::Integer(_)) if opt.typst_mode().is_some() => {
+                    Some("m_\"UVexp\"".to_string())
                 }
                 _ => None,
             }
@@ -732,13 +867,8 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                 return None;
             };
             match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(i)) => {
-                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(*i as usize);
-                    if SpensoPrintSettings::from(*i as usize).is_typst() {
-                        Some("m_\"UV\"".to_string())
-                    } else {
-                        None
-                    }
+                Some(PrintUserData::Integer(_)) if opt.typst_mode().is_some() => {
+                    Some("m_\"UV\"".to_string())
                 }
                 _ => None,
             }
@@ -751,20 +881,23 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                 return None;
             };
             match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(i)) => {
-                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(*i as usize);
-                    if SpensoPrintSettings::from(*i as usize).is_typst() {
-                        Some("mu_r^2".to_string())
-                    } else {
-                        None
-                    }
+                Some(PrintUserData::Integer(_)) if opt.typst_mode().is_some() => {
+                    Some("mu_r^2".to_string())
                 }
                 _ => None,
             }
         }
     ),
     delta_vec: ETS.delta,
-    top: symbol!("Top"),
+    expr: symbol!(
+        "expr",
+        print = |_, opt, _state| {
+            Some(match opt.typst_mode()? {
+                TypstMode::Math | TypstMode::Markup => "#expr".to_string(),
+                TypstMode::Code => "expr".to_string(),
+            })
+        }
+    ),
     num: symbol!("num"),
     den: symbol!(
         "denom",
@@ -778,12 +911,16 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     ),
     ubar: symbol!(
         "ubar",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "u̅") },
+        print = |a, opt, _state| {
+            spenso_print_scripted_indexed!(a, opt, "u̅", "overline(u)")
+        },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     vbar: symbol!(
         "vbar",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "v̅") },
+        print = |a, opt, _state| {
+            spenso_print_scripted_indexed!(a, opt, "v̅", "overline(v)")
+        },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     dot: symbol!("dot"),
@@ -820,17 +957,21 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                     if i == 0 {
                         **out = Atom::Zero;
                     } else {
-                        **out = get_symbol!("Q").unwrap().f(&[eid, cind.as_view()])
+                        **out = get_symbol!("Q").unwrap().call_args([eid, cind.as_view()])
                     }
                 }
             }
         },
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "q⃗") },
+        print = |a, opt, _state| {
+            spenso_print_scripted_indexed!(a, opt, "q⃗", "arrow(q)")
+        },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     ose: symbol!(
         "OSE"; Scalar;
-        print = |a, opt, _state| { spenso_print_simple_indexed!(a, opt, "Eᵒˢ") },
+        print = |a, opt, _state| {
+            spenso_print_simple_indexed!(a, opt, "Eᵒˢ", r#"E^("os")"#)
+        },
             der = |_, arg, out| {
                 if arg == 1 {
                     **out = Atom::num(1);
@@ -860,7 +1001,9 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     color_wrap: symbol!("color"),
     epsilonbar: symbol!(
         "ϵbar",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "ϵ̅") },
+        print = |a, opt, _state| {
+            spenso_print_scripted_indexed!(a, opt, "ϵ̅", "overline(epsilon.alt)")
+        },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
     coeff: symbol!("coef"),
@@ -894,7 +1037,7 @@ impl GammaloopSymbols {
     }
 
     pub fn wrap_tree_denoms<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
-        self.tree_denom_wrapper.f(&[arg.into().as_view()])
+        self.tree_denom_wrapper.call_args([arg.into().as_view()])
     }
 
     pub fn do_dot_product_in_sqrt<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
@@ -969,7 +1112,7 @@ impl GammaloopSymbols {
         //         if exp.denominator() == Integer::from(2) {
         //             **out = self
         //                 .broadcasting_sqrt
-        //                 .f(&[a])
+        //                 .call_args([a])
         //                 .pow(Atom::num(exp.numerator()));
         //         }
         //     }
@@ -988,7 +1131,7 @@ impl GammaloopSymbols {
                 if exp.denominator() == 2 {
                     **out = self
                         .broadcasting_sqrt
-                        .f(&[a])
+                        .call_args([a])
                         .pow(Atom::num(exp.numerator()));
                 }
             }
@@ -1038,11 +1181,12 @@ impl GammaloopSymbols {
     }
 
     pub(crate) fn cind(&self, e: usize) -> Atom {
-        AIND_SYMBOLS.cind.f([e as i64])
+        AIND_SYMBOLS.cind.call_args([e as i64])
     }
 
     pub(crate) fn energy_delta<'a>(&self, index: impl Into<AtomOrView<'a>>) -> Atom {
-        self.delta_vec.f(&[self.cind(0), index.into().into_owned()])
+        self.delta_vec
+            .call_args([self.cind(0), index.into().into_owned()])
     }
 
     pub(crate) fn ose_full(
@@ -1101,7 +1245,7 @@ impl GammaloopSymbols {
 
     pub(crate) fn add_parametric_sign(&self, e: EdgeIndex) -> Replacement {
         Replacement::new(
-            self.emr_mom(e, AIND_SYMBOLS.cind.f(&[Atom::Zero]))
+            self.emr_mom(e, AIND_SYMBOLS.cind.call_args([Atom::Zero]))
                 .to_pattern(),
             sign_atom(e) * self.ose(e),
         )
@@ -1121,8 +1265,7 @@ pub(crate) fn sign_atom(eid: EdgeIndex) -> Atom {
 #[cfg(test)]
 mod tests {
     use insta::assert_snapshot;
-
-    use crate::utils::symbolica_ext::LogPrint;
+    use spenso::shadowing::symbolica_utils::LogPrint;
 
     use super::*;
 
@@ -1131,5 +1274,81 @@ mod tests {
         let p = GS.emr_mom(EdgeIndex(1), Atom::Zero);
 
         assert_snapshot!(p.log_print(None),@"[35mq₁[0m(0)")
+    }
+
+    #[test]
+    fn typst_uses_structural_accents_and_scripts() {
+        let expressions = [
+            (
+                GS.ubar.call_args([Atom::num(1), Atom::num(11)]),
+                "overline(u)_1^(11)",
+            ),
+            (
+                GS.vbar.call_args([Atom::num(2), Atom::num(12)]),
+                "overline(v)_2^(12)",
+            ),
+            (
+                GS.ose.call_args([Atom::num(3), Atom::num(13)]),
+                r#"E^("os")_3(13)"#,
+            ),
+            (
+                GS.emr_vec.call_args([Atom::num(4), Atom::num(14)]),
+                "arrow(q)_4^(14)",
+            ),
+            (
+                GS.epsilonbar.call_args([Atom::num(5), Atom::num(15)]),
+                "overline(epsilon.alt)_5^(15)",
+            ),
+            (
+                GS.emr_mom.call_args([Atom::num(6), Atom::num(16)]),
+                "q_6^(16)",
+            ),
+        ];
+
+        for (expression, expected) in expressions {
+            assert_eq!(
+                expression
+                    .printer(SpensoPrintSettings::typst_options())
+                    .to_string(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn typst_syntax_requires_real_typst_mode() {
+        let mut symbolica = SpensoPrintSettings::typst().nice_symbolica();
+        symbolica.color_builtin_symbols = false;
+
+        assert_eq!(
+            GS.ubar
+                .call_args([Atom::num(1), Atom::num(11)])
+                .printer(symbolica.clone())
+                .to_string(),
+            "u̅₁^(11)"
+        );
+        assert_eq!(
+            Atom::var(GS.m_uv_vacuum).printer(symbolica).to_string(),
+            "mUV"
+        );
+
+        assert_eq!(
+            Atom::var(GS.m_uv_expansion)
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            r#"m_"UVexp""#
+        );
+        assert_eq!(
+            Atom::var(GS.m_uv_vacuum)
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            r#"m_"UV""#
+        );
+        assert_eq!(
+            Atom::var(GS.mu_r_sq)
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            "mu_r^2"
+        );
     }
 }
