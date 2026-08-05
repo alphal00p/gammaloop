@@ -1,0 +1,123 @@
+name: Nix
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Impure Nix evaluation embeds this value in derivations cached by Hestia, so
+# keep it public instead of exposing secrets.SYMBOLICA_LICENSE to pull requests.
+env:
+  CARGO_TERM_COLOR: always
+  HESTIA_DRAIN_TIMEOUT: 7200
+  RUST_BACKTRACE: "1"
+  SYMBOLICA_LICENSE: GAMMALOOP_USER
+
+jobs:
+  # Hestia's matrix transfers drv closures, not dependency outputs. Build the
+  # shared roots here so the matrix drain publishes them before consumers run.
+  prepare:
+    name: Prepare shared artifacts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      any-jobs: ${{ steps.matrix.outputs.any-jobs }}
+      manifest-version: ${{ steps.matrix.outputs.manifest-version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: NixOS/nix-installer-action@main
+      - uses: Mic92/hestia@v3
+        with:
+          version: v3.0.0
+          drain-timeout: ${{ env.HESTIA_DRAIN_TIMEOUT }}
+          upstream-cache-filter: true
+      - name: Build shared artifacts
+        run: |
+          nix build \
+            --impure \
+            --keep-going \
+            --no-link \
+            --print-build-logs \
+            .#packages.x86_64-linux.cargoArtifacts \
+            .#packages.x86_64-linux.gammaloopApiPackageArtifacts \
+            .#packages.x86_64-linux.gammaloop-python-module \
+            .#checks.x86_64-linux.gammaloop-nextest-binaries
+      # The composite matrix action drains for only five minutes and treats a
+      # timeout as non-fatal. These Cargo trees can take much longer to upload,
+      # so keep the producer barrier intact with the CLI's longer timeout.
+      - id: matrix
+        name: Create Hestia matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$HESTIA_BIN" matrix \
+            --flake ".#hydraJobs.x86_64-linux" \
+            --socket "$HESTIA_SOCKET" \
+            --nix-eval-jobs "nix run nixpkgs#nix-eval-jobs -- --impure" \
+            --attr-prefix "hydraJobs.x86_64-linux" \
+            --drain-timeout "$HESTIA_DRAIN_TIMEOUT"
+      - name: Confirm producer manifest
+        if: steps.matrix.outputs.any-jobs == 'true'
+        env:
+          MANIFEST_VERSION: ${{ steps.matrix.outputs.manifest-version }}
+        run: test "$MANIFEST_VERSION" -gt 0
+
+  build:
+    name: ${{ matrix.name }} (${{ matrix.system }})
+    needs: prepare
+    if: needs.prepare.outputs.any-jobs == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: NixOS/nix-installer-action@main
+      - uses: Mic92/hestia@v3
+        with:
+          version: v3.0.0
+          drain-timeout: ${{ env.HESTIA_DRAIN_TIMEOUT }}
+          upstream-cache-filter: true
+          wait-manifest-version: ${{ needs.prepare.outputs.manifest-version }}
+      - name: Prefetch derivation closures
+        shell: bash
+        run: |
+          set -o pipefail
+          hashes=$(printf '%s\n' ${{ matrix.installables }} |
+            awk -F/ '{printf "%s%s", (NR > 1 ? "," : ""), substr($NF, 1, 32)}')
+          curl -fsS "http://$HESTIA_LISTEN/closure/$hashes" | nix-store --import
+      - name: Build checks
+        run: nix build --keep-going --no-link --print-build-logs ${{ matrix.installables }}
+
+  flake-checks:
+    name: Flake checks
+    needs: [prepare, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm matrix result
+        env:
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          ANY_JOBS: ${{ needs.prepare.outputs.any-jobs }}
+        run: |
+          test "$PREPARE_RESULT" = success
+          if [ "$ANY_JOBS" = true ]; then
+            test "$BUILD_RESULT" = success
+          else
+            test "$ANY_JOBS" = false
+            test "$BUILD_RESULT" = skipped
+          fi

@@ -1,0 +1,38 @@
+name: Hestia cache GC
+
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Plan cache cleanup without changing stored data
+        type: boolean
+        default: false
+
+concurrency:
+  group: hestia-gc
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  gc:
+    name: Garbage collect
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: NixOS/nix-installer-action@main
+      - uses: Mic92/hestia@v3
+        with:
+          version: v3.0.0
+      - name: Run garbage collection
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          "$HESTIA_BIN" gc \
+            ${{ inputs.dry-run && '--dry-run' || '' }}

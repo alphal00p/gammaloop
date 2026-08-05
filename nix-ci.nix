@@ -668,6 +668,10 @@ let
   cratePackageAttr = package: "packages.${system}.crate-${package}";
   crateTestDependencyAttr = representative: "packages.${system}.crate-test-dependencies-${representative}";
   crateTestBinaryAttr = package: "packages.${system}.crate-test-binaries-${package}";
+  nextestContextualTestDependencyAttr = target: package:
+    "packages.${system}.crate-test-dependencies-${target}-${package}";
+  nextestContextualTestBinaryAttr = target: package:
+    "packages.${system}.crate-test-binaries-${target}-${package}";
   workspaceHackPackage = "gammaloop-workspace-hack";
   # clinnet is binary-only: the flake exposes crate-clinnet, but no
   # crate-deps-clinnet artifact.
@@ -742,14 +746,19 @@ let
     builtins.filter (entry: entry.value != []) (map (package: {
         name = cratePackageDepsAttr package;
         value =
-          map cratePackageDepsAttr (workspaceDependencyNamesFor package)
+          (
+            if package == workspaceHackPackage
+            then []
+            else ["packages.${system}.cargoArtifacts"]
+          )
+          ++ map cratePackageDepsAttr (workspaceDependencyNamesFor package)
           ++ (
             if package != workspaceHackPackage && (workspaceDependencyNamesFor package) == [] && builtins.elem package workspaceGraph.symbolica_normal_packages
             then [workspaceHackCacheAttr]
             else []
           );
       })
-      workspacePackages)
+      workspacePackagesWithDependencyArtifacts)
   );
   workspaceCratePackageCacheArtifactDependencyEdges = builtins.concatLists (map (dependent:
       map (dependency: {
@@ -762,7 +771,7 @@ let
       value =
         [
           "packages.${system}.cargoArtifacts"
-          (workspacePackageGraphAttr workspaceHackPackage)
+          workspaceHackCacheAttr
         ]
         ++ map crateTestDependencyAttr (
           builtins.filter (
@@ -797,13 +806,14 @@ let
       "spenso"
       "spenso-hep-lib"
       "spenso-macros"
+      "symbolica-utils"
     ];
     vakint = ["vakint"];
   };
   nextestArchiveAttr = target: "checks.${system}.gammaloop-nextest-binaries-${target}";
   nextestPackageArtifactAttrFor = target: package:
     if target == "python-api"
-    then crateTestDependencyAttr (workspaceTestComponentRepresentativeFor package)
+    then nextestContextualTestBinaryAttr target package
     else crateTestBinaryAttr package;
   nextestArchiveDependenciesFor = target:
     ["packages.${system}.cargoArtifacts"]
@@ -834,6 +844,13 @@ let
         workspaceCratePackageDependencies.${cratePackageAttr "gammaloop-api"} or [];
       ${gammaloopApiPackageArtifactsAttr} = [(cratePackageAttr "gammaloop-api")];
       "packages.${system}.cargoArtifacts" = [workspaceHackCacheAttr];
+      ${nextestContextualTestDependencyAttr "python-api" "gammaloop-integration-tests"} =
+        workspaceTestDependencyArtifactDependencies.${crateTestDependencyAttr (workspaceTestComponentRepresentativeFor "gammaloop-integration-tests")}
+        ++ ["packages.${system}.gammaloop-python-module"];
+      ${nextestContextualTestBinaryAttr "python-api" "gammaloop-integration-tests"} = [
+        (nextestContextualTestDependencyAttr "python-api" "gammaloop-integration-tests")
+        "packages.${system}.gammaloop-python-module"
+      ];
       "checks.${system}.gammaloop-check" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoArtifacts"];
@@ -901,6 +918,7 @@ let
       dependencies;
   doNotBuild = unique (
     [
+      "checks.${system}.gammaloop"
       "checks.${system}.gammaloop-doctest"
       "checks.${system}.gammaloop-nextest"
       "checks.${system}.gammaloop-nextest-binaries"
@@ -917,50 +935,86 @@ let
       "packages.${system}.gammaloop-llvm-coverage"
       "packages.${system}.nix-ci-check-gammaloop-nextest"
     ]
-    ++ [(crateTestBinaryAttr workspaceHackPackage)]
+    ++ [
+      (crateTestDependencyAttr "spynso3")
+      (crateTestBinaryAttr workspaceHackPackage)
+      (crateTestBinaryAttr "spynso3")
+      (workspacePackageGraphAttr workspaceHackPackage)
+    ]
     ++ map cratePackageDepsAttr (
-      builtins.filter (package: package != workspaceHackPackage) workspacePackagesWithDependencyArtifacts
+      builtins.filter (
+        package: package != workspaceHackPackage && package != "gammalooprs"
+      )
+      workspacePackagesWithDependencyArtifacts
     )
     ++ map cratePackageAttr nonWorkspaceHackPackages
   );
   # NixCI only schedules jobs it actually builds, so a dependency edge that
   # references a doNotBuild job is rejected as pointing at a non-existent job.
   # The manual graph above is constructed over the full crate/artifact DAG
-  # (which keeps the drift and cycle asserts meaningful); here we drop every
-  # edge touching a doNotBuild job so only ordering between built jobs remains.
+  # (which keeps the drift and cycle asserts meaningful); here hidden paths are
+  # contracted to their nearest built dependency so their ordering is retained.
   doNotBuildSet = builtins.listToAttrs (map (job: {
       name = job;
       value = true;
     })
     doNotBuild);
   isBuiltJob = job: !(doNotBuildSet ? ${job});
+  builtDependencyFrontierFor = deps: dependent:
+    unique (map (entry: entry.key) (builtins.filter (
+        entry: isBuiltJob entry.key
+      ) (builtins.genericClosure {
+        startSet = map (dependency: {key = dependency;}) (deps.${dependent} or []);
+        operator = entry:
+          if isBuiltJob entry.key
+          then []
+          else map (dependency: {key = dependency;}) (deps.${entry.key} or []);
+      })));
   buildableDependencies = deps:
     builtins.listToAttrs (
       builtins.filter (entry: entry.value != []) (map (dependent: {
           name = dependent;
-          value = builtins.filter isBuiltJob deps.${dependent};
+          value = builtDependencyFrontierFor deps dependent;
         })
         (builtins.filter isBuiltJob (builtins.attrNames deps)))
     );
+  projectedDependencies = buildableDependencies validatedDependencies;
+  projectedDependencyClosureFor = dependent:
+    map (entry: entry.key) (builtins.genericClosure {
+      startSet = map (dependency: {key = dependency;}) (projectedDependencies.${dependent} or []);
+      operator = entry:
+        map (dependency: {key = dependency;}) (projectedDependencies.${entry.key} or []);
+    });
+  projectedDependencyCycles = builtins.filter (
+    attr: builtins.elem attr (projectedDependencyClosureFor attr)
+  ) (builtins.attrNames projectedDependencies);
+  validatedProjectedDependencies =
+    assert projectedDependencyCycles == []
+    || builtins.throw "projected NixCI dependency graph contains cycles through: ${builtins.concatStringsSep ", " projectedDependencyCycles}";
+      projectedDependencies;
 in {
   systems = [system];
   inherit doNotBuild;
   fail-fast = false;
+  fail-on-dangling-dependencies = true;
   # Keep dependency discovery manual. With generated Rust outputs,
   # automatic discovery asks NixCI to compute derivation paths for many
   # package/check attrs during `show`, including attrs listed in doNotBuild.
   # The manual graph below uses the Hakari workspace-hack cache artifact as the
   # root for Symbolica-containing cache jobs and orders nextest archive jobs
   # after the package-local test-binary artifacts that the archives reuse. The
+  # exported artifact attrs are revision-scoped symlink barriers around stable
+  # Cargo artifacts, so a memoized top-level result cannot release consumers
+  # without one worker realizing and publishing the underlying closure. The
   # graph is constructed over the full crate/artifact DAG so the drift and
-  # cycle asserts stay meaningful, then buildableDependencies drops every edge
-  # that references a doNotBuild job, since NixCI rejects edges to jobs it does
-  # not build. Ordinary crate package attrs are not CI roots, so test-binary
+  # cycle asserts stay meaningful, then hidden paths are contracted to their
+  # nearest built producer because NixCI rejects edges to jobs it does not
+  # build. Ordinary crate package attrs are not CI roots, so test-binary
   # generation can start before unrelated final package outputs.
   # See https://nix-ci.com/documentation/automatic-dependency-discovery
   # and https://nix-ci.com/documentation/manually-specified-dependencies
   dependency-discovery.enable = false;
-  dependencies = buildableDependencies validatedDependencies;
+  dependencies = validatedProjectedDependencies;
   test = {
     gammaloop-doctest = {
       package = "packages.${system}.nix-ci-check-gammaloop-doctest";
