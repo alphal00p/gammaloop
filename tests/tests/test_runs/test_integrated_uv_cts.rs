@@ -4,7 +4,7 @@ use super::utils::{
 use super::*;
 use gammaloop_api::commands::evaluate_samples::{EvaluateSamplesPrecise, evaluate_sample_precise};
 use gammalooprs::{
-    integrands::evaluation::PreciseEvaluationResultOutput,
+    integrands::{evaluation::PreciseEvaluationResultOutput, process::evaluators::EvaluatorMethod},
     utils::{ArbPrec, FloatLike, PrecisionUpgradable, f128},
 };
 use ndarray::Array2;
@@ -114,6 +114,44 @@ fn setup_scalar_bubble_uv_cli(test_name: &str) -> Result<gammaloop_integration_t
     ))?;
 
     Ok(cli)
+}
+
+#[test]
+#[serial]
+fn orientation_monte_carlo_rejects_non_parametric_evaluators() -> Result<()> {
+    let cli =
+        setup_scalar_bubble_uv_cli("orientation_monte_carlo_rejects_non_parametric_evaluators")?;
+    let (process_id, integrand_name) = cli.state.find_integrand_ref(
+        Some(&ProcessRef::Unqualified("bubble".to_string())),
+        Some(&"scalar_bubble_below_thres".to_string()),
+    )?;
+    let source = cli
+        .state
+        .process_list
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?
+        .clone();
+
+    for evaluator_method in [
+        EvaluatorMethod::Iterative,
+        EvaluatorMethod::SummedFunctionMap,
+        EvaluatorMethod::Summed,
+    ] {
+        let mut integrand = source.clone();
+        integrand.get_mut_settings().general.evaluator_method = evaluator_method.clone();
+        let error = integrand
+            .warm_up(&cli.state.model)
+            .expect_err("orientation Monte Carlo must reject non-parametric evaluators");
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "Monte Carlo sampling over orientations requires general.evaluator_method=SingleParametric; got {evaluator_method:?}."
+            )
+        );
+    }
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
 }
 
 fn inspect_bubble_process(

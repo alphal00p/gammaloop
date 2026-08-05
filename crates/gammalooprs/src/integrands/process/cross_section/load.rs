@@ -32,7 +32,7 @@ type RationalExpressionTree = (
     ExpressionEvaluator<Complex<Fraction<IntegerRing>>>,
 );
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 7;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 8;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
@@ -99,7 +99,6 @@ pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
     pub(crate) summed: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) representative_input: Vec<Complex<f64>>,
     pub(crate) start: usize,
-    pub(crate) override_pos: usize,
     pub(crate) mult_offset: usize,
 }
 

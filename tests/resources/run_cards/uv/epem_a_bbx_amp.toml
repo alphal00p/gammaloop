@@ -50,7 +50,7 @@ momenta = [
 helicities = [+1, -1, +1, -1]
 
 [default_runtime_settings.general]
-evaluator_method = "SummedFunctionMap"
+evaluator_method = "SingleParametric"
 enable_cache = false
 debug_cache = false
 generate_events = false

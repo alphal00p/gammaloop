@@ -91,6 +91,7 @@ integral_unit = "picobarn"
 mu_r = 91.188
 m_uv = 91.188
 
+# Runtime orientation filtering requires evaluator_method = "SingleParametric".
 #[default_runtime_settings.general.orientation_pat]
 #pat = "(+,+,-,-,-,-,+,0,+,0,-,+)"
 

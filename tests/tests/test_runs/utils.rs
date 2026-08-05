@@ -224,7 +224,7 @@ pub(super) fn setup_gg_hhh_threshold_amplitude_cli(
             "set global kv global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.check_esurface_at_generation=true",
             r#"set default-runtime string '
 [general]
-evaluator_method = "SummedFunctionMap"
+evaluator_method = "SingleParametric"
 enable_cache = false
 debug_cache = false
 generate_events = true

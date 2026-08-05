@@ -91,7 +91,6 @@ fn export_evaluator_stack<T: ExportAtomTo>(
             .transpose()?,
         representative_input: Vec::new(),
         start: 0,
-        override_pos: 0,
         mult_offset: 0,
     })
 }

@@ -1704,10 +1704,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                         context.settings,
                         context.evaluation_metadata,
                         context.record_primary_timing,
-                    )
-                    .expect("evaluation failed")
+                    )?
                     .pop()
-                    .unwrap();
+                    .ok_or_else(|| eyre!("Evaluator returned no cut result"))?;
 
                 debug!("pass 1 result {}", result);
 

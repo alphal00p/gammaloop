@@ -7,7 +7,7 @@
 //! rand = "0.9"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03", default-features = false, features = ["bincode", "native_code_generation", "serde"] }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03", default-features = false, features = ["bincode", "gmp", "native_code_generation", "serde"] }
 //! [patch.crates-io]
 //! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03" }
 //! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03" }
@@ -33,7 +33,7 @@ use symbolica::{
 
 use crate::processes::StandaloneNumericTarget;
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 4;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 5;
 pub const STANDALONE_MODE_RUST: u8 = 0;
 
 #[derive(
@@ -163,7 +163,6 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
             let original_integrand = LoadedStandaloneEvaluatorStack {
                 parametric: (exprs, all_reps, single, result),
                 orientation_start: graph.original_integrand.start,
-                override_pos: graph.original_integrand.override_pos,
                 mult_offset: graph.original_integrand.mult_offset,
                 representative_input: graph
                     .original_integrand
@@ -226,7 +225,6 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                                         .iter()
                                         .map(StandaloneComplexInput::to_f64)
                                         .collect::<Result<Vec<_>>>()?,
-                                    override_pos: ct.override_pos,
                                     parametric,
                                     iterative,
                                     summed,
@@ -293,7 +291,6 @@ pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
     pub(crate) summed: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) representative_input: Vec<StandaloneComplexInput>,
     pub(crate) start: usize,
-    pub(crate) override_pos: usize,
     pub(crate) mult_offset: usize,
 }
 
@@ -732,29 +729,11 @@ pub struct LoadedStandaloneGraphTerm {
 pub struct LoadedStandaloneEvaluatorStack {
     pub(crate) representative_input: Vec<Complex<f64>>,
     pub(crate) orientation_start: usize,
-    pub(crate) override_pos: usize,
     pub(crate) mult_offset: usize,
     pub parametric: LoadedGenericEvaluator,
     pub iterative: Option<LoadedGenericEvaluator>,
     pub summed: Option<LoadedGenericEvaluator>,
     pub summed_fnmap: Option<LoadedGenericEvaluator>,
-}
-
-pub(crate) fn set_override_if<A: Clone>(
-    values: &mut [A],
-    one: A,
-    zero: A,
-    over_ride: bool,
-    start: usize,
-    multiplicative_offset: usize,
-) {
-    let o_start = start * multiplicative_offset;
-
-    if over_ride {
-        values[o_start] = one;
-    } else {
-        values[o_start] = zero;
-    }
 }
 
 pub(crate) fn set_orientation_values_impl<A: Clone + Neg<Output = A>>(
@@ -879,7 +858,7 @@ fn print_usage(program: &str) {
            --graph-name <name>\n\
            --stack <original|ct:N,M>\n\
            --method <single_parametric|iterative|summed_function_map|summed>\n\
-           --orientation-index <usize>\n\
+           --orientation-index <usize> (single_parametric only)\n\
            --artifact-dir <path>\n\
            --print-input\n\
            --help"
@@ -970,6 +949,12 @@ fn parse_cli_options() -> Result<StandaloneCliOptions> {
         }
     }
 
+    if options.orientation_index.is_some() && options.method != StandaloneMethod::SingleParametric {
+        return Err(eyre!(
+            "--orientation-index can only be used with --method single_parametric"
+        ));
+    }
+
     Ok(options)
 }
 
@@ -1012,19 +997,6 @@ impl LoadedStandaloneEvaluatorStack {
         }
     }
 
-    fn override_input(&self) -> Vec<Complex<f64>> {
-        let mut new_input = self.representative_input.clone();
-        set_override_if(
-            &mut new_input,
-            Complex::new(1., 0.),
-            Complex::new(0., 0.),
-            true,
-            self.override_pos,
-            self.mult_offset,
-        );
-        new_input
-    }
-
     fn evaluate_with_backend(
         &mut self,
         request: StandaloneEvaluationRequest<'_>,
@@ -1060,7 +1032,7 @@ impl LoadedStandaloneEvaluatorStack {
                 }
                 StandaloneMethod::Iterative
                 | StandaloneMethod::SummedFunctionMap
-                | StandaloneMethod::Summed => vec![self.override_input()],
+                | StandaloneMethod::Summed => vec![self.representative_input.clone()],
             }
         };
 
@@ -1319,19 +1291,11 @@ impl LoadedStandaloneEvaluatorStack {
             self.orientation_start,
             orientation,
         );
-        set_override_if(
-            &mut new_input,
-            Complex::new(1., 0.),
-            Complex::new(0., 0.),
-            false,
-            self.override_pos,
-            self.mult_offset,
-        );
         new_input
     }
 
     fn scramble_input<R: Rng + ?Sized>(&self, _rng: &mut R) -> Vec<Complex<f64>> {
-        self.override_input()
+        self.representative_input.clone()
     }
 
     fn set_orientation(&self, orientation: &[i8]) -> Vec<Complex<f64>> {
@@ -1465,7 +1429,7 @@ fn main() -> Result<()> {
                     custom_input
                         .as_ref()
                         .cloned()
-                        .unwrap_or_else(|| stack.override_input())
+                        .unwrap_or_else(|| stack.representative_input.clone())
                 );
             }
         }

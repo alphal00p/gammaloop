@@ -158,7 +158,6 @@ define_gamma_loop_pairs! {
     renormalization_localization_scale,
     mu_r_sq,
     orientations,
-    override_if,
     pub model_parameters,
     pub external_energies,
     external_spatial,
@@ -206,7 +205,6 @@ impl GammaLoopPairs {
         self.polarizations.validate();
         debug!("Validating orientations");
         self.orientations.validate();
-        self.override_if.validate();
         debug!("Validating emr_spatial");
         self.loop_moms_spatial.validate();
         debug!("Validating tstar");
@@ -335,7 +333,6 @@ impl GammaLoopPairs {
             params.push(GS.sign(i));
         }
 
-        self.override_if.params = vec![Atom::var(GS.override_if)];
         self.orientations.params = params;
     }
 
@@ -814,7 +811,6 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         InputParams {
             values: SliceMut::Borrowed(&mut self.values[value_index]),
             multiplicative_offset,
-            override_pos: self.pairs.override_if.value_range.start,
             orientations_start: self.pairs.orientations.value_range.start,
         }
     }
@@ -909,7 +905,6 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         InputParams {
             values: SliceMut::Owned(values),
             multiplicative_offset,
-            override_pos: self.pairs.override_if.value_range.start,
             orientations_start: self.pairs.orientations.value_range.start,
         }
     }
@@ -1007,7 +1002,6 @@ impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
         InputParams {
             values: SliceMut::Owned(values),
             multiplicative_offset,
-            override_pos: self.pairs.override_if.value_range.start,
             orientations_start: self.pairs.orientations.value_range.start,
         }
     }
