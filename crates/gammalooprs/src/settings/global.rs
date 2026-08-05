@@ -114,8 +114,8 @@ pub enum VectorPolarizationSumGauge {
 pub enum CompilationOptimizationLevel {
     O0,
     O1,
-    O2,
     #[default]
+    O2,
     O3,
 }
 
@@ -231,7 +231,7 @@ impl fmt::Display for ExternalCompilationOptionsSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
 pub enum FrozenCompilationMode {
     Eager,
-    Symjit,
+    Symjit(CompilationOptimizationLevel),
     Cpp(ExternalCompilationOptionsSnapshot),
     Assembly(ExternalCompilationOptionsSnapshot),
 }
@@ -244,7 +244,7 @@ impl FrozenCompilationMode {
     pub fn active_backend_name(&self) -> &'static str {
         match self {
             FrozenCompilationMode::Eager => "eager",
-            FrozenCompilationMode::Symjit => "symjit",
+            FrozenCompilationMode::Symjit(_) => "symjit",
             FrozenCompilationMode::Cpp(_) => "c++",
             FrozenCompilationMode::Assembly(_) => "assembly",
         }
@@ -255,7 +255,7 @@ impl FrozenCompilationMode {
             FrozenCompilationMode::Cpp(options) | FrozenCompilationMode::Assembly(options) => {
                 Some(options)
             }
-            FrozenCompilationMode::Eager | FrozenCompilationMode::Symjit => None,
+            FrozenCompilationMode::Eager | FrozenCompilationMode::Symjit(_) => None,
         }
     }
 
@@ -270,7 +270,7 @@ impl FrozenCompilationMode {
         ExportSettings::new().inline_asm(match self {
             FrozenCompilationMode::Assembly(_) => InlineASM::default(),
             FrozenCompilationMode::Cpp(_)
-            | FrozenCompilationMode::Symjit
+            | FrozenCompilationMode::Symjit(_)
             | FrozenCompilationMode::Eager => InlineASM::None,
         })
     }
@@ -292,7 +292,7 @@ impl fmt::Display for FrozenCompilationMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FrozenCompilationMode::Eager => f.write_str("eager"),
-            FrozenCompilationMode::Symjit => f.write_str("symjit"),
+            FrozenCompilationMode::Symjit(level) => write!(f, "symjit ({level})"),
             FrozenCompilationMode::Cpp(options) => write!(f, "c++ ({options})"),
             FrozenCompilationMode::Assembly(options) => write!(f, "assembly ({options})"),
         }
@@ -328,7 +328,7 @@ impl Default for GammaloopCompileOptions {
     fn default() -> Self {
         Self {
             compilation_mode: CompilationMode::Symjit,
-            optimization_level: CompilationOptimizationLevel::O3,
+            optimization_level: CompilationOptimizationLevel::O2,
             fast_math: true,
             unsafe_math: true,
             compiler: default_external_compiler_owned(),
@@ -365,7 +365,7 @@ impl GammaloopCompileOptions {
             CompilationMode::Assembly => {
                 FrozenCompilationMode::Assembly(self.external_options_snapshot())
             }
-            CompilationMode::Symjit => FrozenCompilationMode::Symjit,
+            CompilationMode::Symjit => FrozenCompilationMode::Symjit(self.optimization_level),
         }
     }
 

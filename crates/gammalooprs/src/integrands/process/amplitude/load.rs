@@ -7,10 +7,10 @@
 //! rand = "0.9"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev", default-features = false, features = ["bincode", "serde"] }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03", default-features = false, features = ["bincode", "native_code_generation", "serde"] }
 //! [patch.crates-io]
-//! numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-//! graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03" }
 //! ```
 
 #![allow(dead_code)]
@@ -495,8 +495,13 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
             }
             StandaloneBackend::Symjit => Ok(Self::Symjit(Box::new(
                 evaluator
-                    // SymJIT 2.21 cannot compact some complex temporary layouts.
-                    .jit_compile(JITCompilationSettings::default().with_option("compact", "false"))
+                    // SymJIT 2.21 supports optimization levels up to O2 and cannot compact some
+                    // complex temporary layouts.
+                    .jit_compile(
+                        JITCompilationSettings::new()
+                            .optimization_level(2)
+                            .with_option("compact", "false"),
+                    )
                     .map_err(|err| eyre!(err))?,
             ))),
         }

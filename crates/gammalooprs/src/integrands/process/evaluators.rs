@@ -55,7 +55,10 @@ use crate::{
         ContractionMode, EvaluatorBuildTimings, EvaluatorSettings, ExecutionMode,
         TensorNetworkContractionOrder,
     },
-    settings::{RuntimeSettings, global::FrozenCompilationMode},
+    settings::{
+        RuntimeSettings,
+        global::{CompilationOptimizationLevel, FrozenCompilationMode},
+    },
     utils::{
         ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
         hyperdual_utils::{DualOrNot, new_from_values},
@@ -213,7 +216,7 @@ impl ActiveF64Backend {
     pub fn from_frozen_mode(mode: &FrozenCompilationMode) -> Self {
         match mode {
             FrozenCompilationMode::Eager => ActiveF64Backend::Eager,
-            FrozenCompilationMode::Symjit => ActiveF64Backend::Symjit,
+            FrozenCompilationMode::Symjit(_) => ActiveF64Backend::Symjit,
             FrozenCompilationMode::Cpp(_) => ActiveF64Backend::Cpp,
             FrozenCompilationMode::Assembly(_) => ActiveF64Backend::Assembly,
         }
@@ -1440,7 +1443,10 @@ impl GenericEvaluator {
         self.active_f64_backend.set(ActiveF64Backend::Eager);
     }
 
-    pub(crate) fn activate_symjit(&mut self) -> Result<()> {
+    pub(crate) fn activate_symjit(
+        &mut self,
+        optimization_level: CompilationOptimizationLevel,
+    ) -> Result<()> {
         if self.is_eager_only() {
             self.activate_eager_only();
             return Ok(());
@@ -1450,10 +1456,13 @@ impl GenericEvaluator {
             .rational
             .as_ref()
             .ok_or_else(|| eyre!("Cannot build symjit backend without the rational evaluator"))?;
-        // SymJIT 2.21 cannot compact some complex temporary layouts.
+        // SymJIT 2.21 supports optimization levels up to O2 and cannot compact some complex
+        // temporary layouts.
         let evaluator = rational
             .jit_compile::<SymComplex<f64>>(
-                JITCompilationSettings::default().with_option("compact", "false"),
+                JITCompilationSettings::new()
+                    .optimization_level(usize::from(optimization_level).min(2) as u8)
+                    .with_option("compact", "false"),
             )
             .map_err(|err| eyre!(err))?;
         self.loaded_f64_compiled.invalidate();
