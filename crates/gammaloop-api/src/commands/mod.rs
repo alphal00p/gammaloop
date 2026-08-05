@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn select_command_parses_graph_names() {
         let command: Commands =
-            "select -p #0 -i default --with-graph-names GL04 GL05 --without-graph-names GL06"
+            "select -p #0 -i default --with-only-graph-names GL02 GL03 --with-graph-names GL04 GL05 --without-graph-names GL06"
                 .parse()
                 .unwrap();
         match command {
@@ -319,10 +319,22 @@ mod tests {
                     select.with_graph_names,
                     vec!["GL04".to_string(), "GL05".to_string()]
                 );
+                assert_eq!(
+                    select.with_only_graph_names,
+                    vec!["GL02".to_string(), "GL03".to_string()]
+                );
                 assert_eq!(select.without_graph_names, vec!["GL06".to_string()]);
             }
             other => panic!("expected select command, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn select_command_requires_a_with_only_graph_name() {
+        let error = "select -p #0 -i default --with-only-graph-names"
+            .parse::<Commands>()
+            .unwrap_err();
+        assert!(error.to_string().contains("--with-only-graph-names"));
     }
 
     #[test]
