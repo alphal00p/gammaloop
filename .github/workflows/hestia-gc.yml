@@ -17,6 +17,10 @@ concurrency:
 permissions:
   contents: read
 
+# Keep GC in the same cache namespace as the Nix workflow.
+env:
+  HESTIA_CACHE_VERSION_SALT: gammaloop-no-closure-v1
+
 jobs:
   gc:
     name: Garbage collect
