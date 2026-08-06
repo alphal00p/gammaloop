@@ -247,6 +247,7 @@ fn scalars_profile() {
         add_marker: true,
         keep_marker: false,
         subtract_uv: true,
+        orchestrator: UVOrchestrator::LegacyDagForest,
         ..Default::default()
     });
 

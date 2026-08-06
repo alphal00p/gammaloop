@@ -78,9 +78,9 @@ impl Display for ApproximationType {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 pub enum UVOrchestrator {
-    #[default]
     #[serde(rename = "legacy_dag_forest", alias = "LegacyDagForest")]
     LegacyDagForest,
+    #[default]
     #[serde(rename = "hedge_poset", alias = "HedgePoset")]
     HedgePoset,
     #[serde(rename = "compare", alias = "Compare")]
@@ -484,7 +484,7 @@ impl Default for UVgenerationSettings {
             subtract_uv: true,
             final_integrand: FinalIntegrandDimension::default(),
             inner_products: true,
-            orchestrator: UVOrchestrator::LegacyDagForest,
+            orchestrator: UVOrchestrator::default(),
             add_marker: false,
             keep_marker: true,
             renormalization_prescription: RenormalizationPrescriptionSettings::default(),
@@ -744,9 +744,30 @@ external_pdg_set = [1]
     }
 
     #[test]
-    fn orchestrator_defaults_to_legacy_and_accepts_explicit_modes() {
-        let legacy = UVgenerationSettings::default();
+    fn orchestrator_defaults_to_hedge_poset_and_accepts_explicit_modes() {
+        assert_eq!(UVOrchestrator::default(), UVOrchestrator::HedgePoset);
+        assert_eq!(
+            UVgenerationSettings::default().orchestrator,
+            UVOrchestrator::HedgePoset
+        );
+        assert_eq!(
+            toml::from_str::<UVgenerationSettings>("")
+                .unwrap()
+                .orchestrator,
+            UVOrchestrator::HedgePoset
+        );
+
+        let legacy = UVgenerationSettings {
+            orchestrator: UVOrchestrator::LegacyDagForest,
+            ..Default::default()
+        };
         assert_eq!(legacy.orchestrator, UVOrchestrator::LegacyDagForest);
+        let legacy_toml = toml::to_string(&legacy).unwrap();
+        assert!(legacy_toml.contains("orchestrator = \"legacy_dag_forest\""));
+        assert_eq!(
+            toml::from_str::<UVgenerationSettings>(&legacy_toml).unwrap(),
+            legacy
+        );
 
         let compare = UVgenerationSettings {
             orchestrator: UVOrchestrator::Compare,

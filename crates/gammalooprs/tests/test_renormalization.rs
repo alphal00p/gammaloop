@@ -388,7 +388,10 @@ fn finite_part_ghost_2loop() {
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
 
-    let settings = pole_part_uv_settings();
+    let settings = UVgenerationSettings {
+        orchestrator: UVOrchestrator::LegacyDagForest,
+        ..pole_part_uv_settings()
+    };
 
     let new_settings = UVgenerationSettings {
         orchestrator: UVOrchestrator::HedgePoset,
