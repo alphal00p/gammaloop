@@ -66,6 +66,11 @@ pub enum AdditionalWeightKey {
         esurface_id: usize,
         overlap_group: usize,
     },
+    AmplitudeThresholdCountertermVariant {
+        variant_id: usize,
+        esurface_id: usize,
+        overlap_group: usize,
+    },
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -135,6 +140,10 @@ impl<T: FloatLike> GenericEventGroupList<T> {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct GenericAdditionalWeightInfo<T: FloatLike> {
     pub weights: BTreeMap<AdditionalWeightKey, Complex<F<T>>>,
+    /// Detailed, addable threshold-counterterm decomposition. It is absent on the legacy path so
+    /// no-directive event serialization remains unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub threshold_counterterms: Option<GenericThresholdCountertermEventInfo<T>>,
 }
 
 impl<T: FloatLike> GenericAdditionalWeightInfo<T> {
@@ -145,6 +154,10 @@ impl<T: FloatLike> GenericAdditionalWeightInfo<T> {
                 .iter()
                 .map(|(key, weight)| (*key, into_complex_ff64(weight)))
                 .collect(),
+            threshold_counterterms: self
+                .threshold_counterterms
+                .as_ref()
+                .map(GenericThresholdCountertermEventInfo::to_f64),
         }
     }
 
@@ -159,6 +172,138 @@ impl<T: FloatLike> GenericAdditionalWeightInfo<T> {
                         Complex::new(F::from_ff64(weight.re), F::from_ff64(weight.im)),
                     )
                 })
+                .collect(),
+            threshold_counterterms: additional_weights
+                .threshold_counterterms
+                .as_ref()
+                .map(GenericThresholdCountertermEventInfo::from_f64),
+        }
+    }
+}
+
+/// Runtime provenance distinguishing repeated uses of one static expanded component.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ThresholdCountertermComponentOccurrence {
+    Amplitude {
+        raised_esurface_id: usize,
+        overlap_group: usize,
+    },
+    LocalUnitarity {
+        /// One entry for a single component and left/right entries for an iterated component.
+        overlap_groups: SmallVec<[usize; 2]>,
+        left_threshold_order: Option<usize>,
+        right_threshold_order: Option<usize>,
+        lu_cut_order: Option<usize>,
+    },
+}
+
+/// One numeric use of a graph-registry component in an event.
+///
+/// `bare` and `weighted` include the counterterm sign and every event normalization. `bare`
+/// excludes only the user multiplier. An exact-zero multiplier may skip the expensive bare
+/// evaluation, in which case `bare` is `None`, `weighted` is exact zero, and
+/// `evaluation_skipped` is true.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenericThresholdCountertermComponentWeight<T: FloatLike> {
+    pub component_id: usize,
+    pub occurrence: ThresholdCountertermComponentOccurrence,
+    pub multiplier_values: SmallVec<[F<T>; 2]>,
+    pub effective_multiplier: F<T>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bare: Option<Complex<F<T>>>,
+    pub weighted: Complex<F<T>>,
+    pub evaluation_skipped: bool,
+}
+
+impl<T: FloatLike> GenericThresholdCountertermComponentWeight<T> {
+    fn to_f64(&self) -> GenericThresholdCountertermComponentWeight<f64> {
+        GenericThresholdCountertermComponentWeight {
+            component_id: self.component_id,
+            occurrence: self.occurrence.clone(),
+            multiplier_values: self.multiplier_values.iter().map(F::into_ff64).collect(),
+            effective_multiplier: self.effective_multiplier.into_ff64(),
+            bare: self.bare.as_ref().map(into_complex_ff64),
+            weighted: into_complex_ff64(&self.weighted),
+            evaluation_skipped: self.evaluation_skipped,
+        }
+    }
+
+    fn from_f64(
+        component: &GenericThresholdCountertermComponentWeight<f64>,
+    ) -> GenericThresholdCountertermComponentWeight<T> {
+        GenericThresholdCountertermComponentWeight {
+            component_id: component.component_id,
+            occurrence: component.occurrence.clone(),
+            multiplier_values: component
+                .multiplier_values
+                .iter()
+                .copied()
+                .map(F::from_ff64)
+                .collect(),
+            effective_multiplier: F::from_ff64(component.effective_multiplier),
+            bare: component
+                .bare
+                .as_ref()
+                .map(|bare| Complex::new(F::from_ff64(bare.re), F::from_ff64(bare.im))),
+            weighted: Complex::new(
+                F::from_ff64(component.weighted.re),
+                F::from_ff64(component.weighted.im),
+            ),
+            evaluation_skipped: component.evaluation_skipped,
+        }
+    }
+}
+
+/// Addable threshold-counterterm decomposition for one event. The original contribution appears
+/// exactly once and is not assigned a synthetic component ID.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenericThresholdCountertermEventInfo<T: FloatLike> {
+    pub original: Complex<F<T>>,
+    pub components: Vec<GenericThresholdCountertermComponentWeight<T>>,
+}
+
+impl<T: FloatLike> GenericThresholdCountertermEventInfo<T> {
+    pub fn total(&self) -> Complex<F<T>> {
+        self.components
+            .iter()
+            .fold(self.original.clone(), |total, component| {
+                total + &component.weighted
+            })
+    }
+
+    /// Apply an event-level normalization without changing dimensionless multiplier values.
+    pub fn apply_multiplicative_factor(&mut self, factor: &Complex<F<T>>) {
+        self.original *= factor;
+        for component in &mut self.components {
+            if let Some(bare) = &mut component.bare {
+                *bare *= factor;
+            }
+            component.weighted *= factor;
+        }
+    }
+
+    pub fn to_f64(&self) -> GenericThresholdCountertermEventInfo<f64> {
+        GenericThresholdCountertermEventInfo {
+            original: into_complex_ff64(&self.original),
+            components: self
+                .components
+                .iter()
+                .map(GenericThresholdCountertermComponentWeight::to_f64)
+                .collect(),
+        }
+    }
+
+    pub fn from_f64(info: &GenericThresholdCountertermEventInfo<f64>) -> Self {
+        GenericThresholdCountertermEventInfo {
+            original: Complex::new(
+                F::from_ff64(info.original.re),
+                F::from_ff64(info.original.im),
+            ),
+            components: info
+                .components
+                .iter()
+                .map(GenericThresholdCountertermComponentWeight::from_f64)
                 .collect(),
         }
     }
@@ -181,6 +326,16 @@ pub struct GenericEvent<T: FloatLike> {
 }
 
 impl<T: FloatLike> GenericEvent<T> {
+    /// Scale the event and its addable threshold decomposition through the same normalization
+    /// boundary. The detailed path is made authoritative so its sum equals the stored event.
+    pub(crate) fn apply_multiplicative_factor(&mut self, factor: &Complex<F<T>>) {
+        self.weight *= factor;
+        if let Some(decomposition) = &mut self.additional_weights.threshold_counterterms {
+            decomposition.apply_multiplicative_factor(factor);
+            self.weight = decomposition.total();
+        }
+    }
+
     pub(crate) fn inverse_rotate(&mut self, rotation: &Rotation) {
         if rotation.is_identity() {
             return;
@@ -284,6 +439,38 @@ struct MomentumRow {
 struct AdditionalWeightRow {
     key: String,
     value: String,
+}
+
+#[derive(Tabled)]
+struct ThresholdCountertermWeightRow {
+    #[tabled(rename = "component")]
+    component_id: usize,
+    occurrence: String,
+    multipliers: String,
+    effective: String,
+    bare: String,
+    weighted: String,
+    skipped: bool,
+}
+
+fn format_threshold_counterterm_occurrence(
+    occurrence: &ThresholdCountertermComponentOccurrence,
+) -> String {
+    match occurrence {
+        ThresholdCountertermComponentOccurrence::Amplitude {
+            raised_esurface_id,
+            overlap_group,
+        } => format!("amplitude E{raised_esurface_id}, overlap {overlap_group}"),
+        ThresholdCountertermComponentOccurrence::LocalUnitarity {
+            overlap_groups,
+            left_threshold_order,
+            right_threshold_order,
+            lu_cut_order,
+        } => format!(
+            "LU overlaps {:?}, orders L={left_threshold_order:?} R={right_threshold_order:?} cut={lu_cut_order:?}",
+            overlap_groups,
+        ),
+    }
 }
 
 fn display_decimal_precision<T: FloatLike>(value: &F<T>) -> usize {
@@ -492,6 +679,14 @@ impl fmt::Display for AdditionalWeightKey {
             } => {
                 write!(f, "threshold_counterterm:{esurface_id}:{overlap_group}")
             }
+            AdditionalWeightKey::AmplitudeThresholdCountertermVariant {
+                variant_id,
+                esurface_id,
+                overlap_group,
+            } => write!(
+                f,
+                "threshold_counterterm_variant:{variant_id}:{esurface_id}:{overlap_group}",
+            ),
         }
     }
 }
@@ -664,6 +859,48 @@ impl<T: FloatLike> fmt::Display for GenericEvent<T> {
             )?;
         }
 
+        if let Some(decomposition) = &self.additional_weights.threshold_counterterms {
+            let summary = [
+                EventSummaryRow {
+                    field: "original".to_string(),
+                    value: format_complex_generic(&decomposition.original),
+                },
+                EventSummaryRow {
+                    field: "total".to_string(),
+                    value: format_complex_generic(&decomposition.total()),
+                },
+            ];
+            let components = decomposition
+                .components
+                .iter()
+                .map(|component| ThresholdCountertermWeightRow {
+                    component_id: component.component_id,
+                    occurrence: format_threshold_counterterm_occurrence(&component.occurrence),
+                    multipliers: component
+                        .multiplier_values
+                        .iter()
+                        .map(format_real_generic)
+                        .collect::<Vec<_>>()
+                        .join(" × "),
+                    effective: format_real_generic(&component.effective_multiplier),
+                    bare: component
+                        .bare
+                        .as_ref()
+                        .map(format_complex_generic)
+                        .unwrap_or_else(|| "—".to_string()),
+                    weighted: format_complex_generic(&component.weighted),
+                    skipped: component.evaluation_skipped,
+                })
+                .collect::<Vec<_>>();
+
+            writeln!(f)?;
+            writeln!(f, "{}", "Threshold counterterms".bold().bright_magenta())?;
+            writeln!(f, "{}", Table::new(summary).with(Style::rounded()))?;
+            if !components.is_empty() {
+                write!(f, "{}", Table::new(components).with(Style::rounded()))?;
+            }
+        }
+
         Ok(())
     }
 }
@@ -700,5 +937,138 @@ impl<T: FloatLike> fmt::Display for GenericEventGroupList<T> {
             writeln!(f, "{}", indent_block(&group.to_string(), "  "))?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use spenso::algebra::complex::Complex;
+
+    use crate::utils::{F, f128};
+
+    use super::{
+        GenericAdditionalWeightInfo, GenericEvent, GenericThresholdCountertermComponentWeight,
+        GenericThresholdCountertermEventInfo, ThresholdCountertermComponentOccurrence,
+    };
+
+    fn decomposition() -> GenericThresholdCountertermEventInfo<f64> {
+        GenericThresholdCountertermEventInfo {
+            original: Complex::new(F(3.0), F(0.5)),
+            components: vec![
+                GenericThresholdCountertermComponentWeight {
+                    component_id: 4,
+                    occurrence: ThresholdCountertermComponentOccurrence::Amplitude {
+                        raised_esurface_id: 2,
+                        overlap_group: 1,
+                    },
+                    multiplier_values: smallvec::smallvec![F(0.5)],
+                    effective_multiplier: F(0.5),
+                    bare: Some(Complex::new(F(-2.0), F(1.0))),
+                    weighted: Complex::new(F(-1.0), F(0.5)),
+                    evaluation_skipped: false,
+                },
+                GenericThresholdCountertermComponentWeight {
+                    component_id: 5,
+                    occurrence: ThresholdCountertermComponentOccurrence::LocalUnitarity {
+                        overlap_groups: smallvec::smallvec![3],
+                        left_threshold_order: Some(1),
+                        right_threshold_order: None,
+                        lu_cut_order: Some(2),
+                    },
+                    multiplier_values: smallvec::smallvec![F(0.0)],
+                    effective_multiplier: F(0.0),
+                    bare: None,
+                    weighted: Complex::new(F(0.0), F(0.0)),
+                    evaluation_skipped: true,
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn absent_decomposition_preserves_legacy_json_shape() {
+        let info = GenericAdditionalWeightInfo::<f64>::default();
+        assert_eq!(
+            serde_json::to_value(&info).unwrap(),
+            json!({ "weights": {} })
+        );
+
+        let decoded: GenericAdditionalWeightInfo<f64> =
+            serde_json::from_value(json!({ "weights": {} })).unwrap();
+        assert!(decoded.threshold_counterterms.is_none());
+    }
+
+    #[test]
+    fn decomposition_scaling_preserves_multiplier_values_and_additivity() {
+        let mut info = decomposition();
+        assert_eq!(info.total(), Complex::new(F(2.0), F(1.0)));
+
+        info.apply_multiplicative_factor(&Complex::new(F(4.0), F(0.0)));
+
+        assert_eq!(info.total(), Complex::new(F(8.0), F(4.0)));
+        assert_eq!(info.components[0].bare, Some(Complex::new(F(-8.0), F(4.0))));
+        assert_eq!(info.components[0].multiplier_values[0], F(0.5));
+        assert_eq!(info.components[0].effective_multiplier, F(0.5));
+        assert!(info.components[1].bare.is_none());
+        assert_eq!(info.components[1].weighted, Complex::new(F(0.0), F(0.0)));
+    }
+
+    #[test]
+    fn decomposition_converts_between_active_precision_and_f64() {
+        let original = decomposition();
+        let precise = GenericThresholdCountertermEventInfo::<f128>::from_f64(&original);
+        let roundtrip = precise.to_f64();
+
+        assert_eq!(roundtrip.total(), original.total());
+        assert_eq!(roundtrip.components.len(), 2);
+        assert_eq!(
+            roundtrip.components[0].multiplier_values,
+            original.components[0].multiplier_values
+        );
+        assert!(roundtrip.components[1].bare.is_none());
+        assert!(roundtrip.components[1].evaluation_skipped);
+    }
+
+    #[test]
+    fn event_scaling_reconciles_weight_with_decomposition_total() {
+        let mut event = GenericEvent::<f64> {
+            weight: Complex::new(F(99.0), F(0.0)),
+            additional_weights: GenericAdditionalWeightInfo {
+                weights: Default::default(),
+                threshold_counterterms: Some(decomposition()),
+            },
+            ..Default::default()
+        };
+
+        event.apply_multiplicative_factor(&Complex::new(F(4.0), F(0.0)));
+
+        assert_eq!(event.weight, Complex::new(F(8.0), F(4.0)));
+        assert_eq!(
+            event.weight,
+            event
+                .additional_weights
+                .threshold_counterterms
+                .as_ref()
+                .unwrap()
+                .total()
+        );
+    }
+
+    #[test]
+    fn event_display_includes_detailed_threshold_components() {
+        let event = GenericEvent::<f64> {
+            weight: decomposition().total(),
+            additional_weights: GenericAdditionalWeightInfo {
+                weights: Default::default(),
+                threshold_counterterms: Some(decomposition()),
+            },
+            ..Default::default()
+        };
+
+        let rendered = event.to_string();
+        assert!(rendered.contains("Threshold counterterms"));
+        assert!(rendered.contains("amplitude E2, overlap 1"));
+        assert!(rendered.contains("LU overlaps [3]"));
     }
 }

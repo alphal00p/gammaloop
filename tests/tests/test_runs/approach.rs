@@ -165,7 +165,17 @@ fn plot_fixture(process: &str, kind: &str, scale: f64) -> JsonValue {
                         "lmb_sample_id": axis_index,
                         "weight": {"re": sign * value, "im": 0.0}
                     }],
-                    "events": [],
+                    "events": [{
+                        "graph_id": axis_index,
+                        "threshold_counterterms": {
+                            "original": {"re": 1.2 * value, "im": 0.0},
+                            "components": [{
+                                "component_id": 0,
+                                "weighted": {"re": -0.2 * value, "im": 0.0},
+                                "evaluation_skipped": false
+                            }]
+                        }
+                    }],
                     "metadata": {
                         "generated_event_count": 1,
                         "accepted_event_count": 1,
@@ -183,16 +193,33 @@ fn plot_fixture(process: &str, kind: &str, scale: f64) -> JsonValue {
     }
 
     json!({
-        "schema_version": 1,
+        "schema_version": 2,
         "command": {
             "name": "approach",
             "use_arb_prec": false,
+            "skip_midpoint": false,
             "graph_id": null,
             "orientation_id": null,
             "discrete_dim": []
         },
         "process": {"id": 0, "name": process},
-        "integrand": {"name": "default", "kind": kind},
+        "integrand": {
+            "name": "default",
+            "kind": kind,
+            "threshold_counterterms": [{
+                "graph_id": 0,
+                "registry": {
+                    "graph_name": "GL0",
+                    "variants": [{"variant_id": 0, "name": "forced"}],
+                    "components": [{
+                        "component_id": 0,
+                        "cut_group_id": 0,
+                        "kind": "local",
+                        "variant_ids": [0]
+                    }]
+                }
+            }]
+        },
         "space": "coordinate",
         "base_point": [0.5, 0.25],
         "axes": [[0.01, 0.0], [0.0, 0.02]],
@@ -231,7 +258,7 @@ fn approach_cross_section_json_has_cut_metadata_and_parallel_matches_sequential(
     let sequential = run_approach_command(&mut cli, &point, &axis, 1, &sequential_path, "")?;
     let parallel = run_approach_command(&mut cli, &point, &axis, 2, &parallel_path, "")?;
 
-    assert_eq!(sequential["schema_version"], 1);
+    assert_eq!(sequential["schema_version"], 2);
     assert_eq!(sequential["integrand"]["kind"], "cross_section");
     assert_eq!(sequential["space"], "coordinate");
     assert_eq!(sequential["evaluated_points"], 3);
@@ -288,12 +315,15 @@ fn approach_cross_section_momentum_space_uses_graph_orientation_selectors() -> R
         &axis,
         1,
         &output_path,
-        "--momentum-space --graph-id 0 --orientation-id 0",
+        "--momentum-space --graph-id 0 --orientation-id 0 --skip-midpoint",
     )?;
 
     assert_eq!(result["integrand"]["kind"], "cross_section");
     assert_eq!(result["space"], "momentum");
-    assert_eq!(result["evaluated_points"], 3);
+    assert_eq!(result["command"]["skip_midpoint"], true);
+    assert_eq!(result["points_per_axis"], 2);
+    assert_eq!(result["spacing"]["t_values"], json!([-1.0, 1.0]));
+    assert_eq!(result["evaluated_points"], 2);
     assert_eq!(result["skipped_points"], 0);
     assert!(
         evaluated_points(&result)[0]["evaluation"]["events"]
@@ -544,10 +574,17 @@ fn plot_approach_result_script_smoke() -> Result<()> {
         &xs_path,
         serde_json::to_vec_pretty(&plot_fixture("smoke_xs", "cross_section", 1.0))?,
     )?;
-    std::fs::write(
-        &amp_path,
-        serde_json::to_vec_pretty(&plot_fixture("smoke_amp", "amplitude", 0.7))?,
-    )?;
+    let mut legacy_amplitude = plot_fixture("smoke_amp", "amplitude", 0.7);
+    legacy_amplitude["schema_version"] = json!(1);
+    legacy_amplitude["command"]
+        .as_object_mut()
+        .unwrap()
+        .remove("skip_midpoint");
+    legacy_amplitude["integrand"]
+        .as_object_mut()
+        .unwrap()
+        .remove("threshold_counterterms");
+    std::fs::write(&amp_path, serde_json::to_vec_pretty(&legacy_amplitude)?)?;
 
     let workspace_root = gammaloop_integration_tests::workspace_root();
     let script = workspace_root.join("assets/plot_approach_result.py");
@@ -558,10 +595,6 @@ fn plot_approach_result_script_smoke() -> Result<()> {
         .arg(&amp_path)
         .arg("--output")
         .arg(&default_pdf_path)
-        .arg("--include-contribution")
-        .arg("event_weight|total_weight|ct_8_3")
-        .arg("--exclude-contribution")
-        .arg("full_multiplicative_factor")
         .status()?;
     assert!(
         default_status.success(),
@@ -585,7 +618,7 @@ fn plot_approach_result_script_smoke() -> Result<()> {
 
     let pdf_path = output_dir.join("approach_combined.pdf");
     let status = std::process::Command::new("python3")
-        .arg(script)
+        .arg(&script)
         .arg(&xs_path)
         .arg(&amp_path)
         .arg("--output")
@@ -602,6 +635,32 @@ fn plot_approach_result_script_smoke() -> Result<()> {
         .arg("full_multiplicative_factor")
         .status()?;
     assert!(status.success(), "plot_approach_result.py should succeed");
+
+    let threshold_pdf_path = output_dir.join("approach_threshold_decomposition.pdf");
+    let threshold_status = std::process::Command::new("python3")
+        .arg(&script)
+        .arg(&xs_path)
+        .arg("--output")
+        .arg(&threshold_pdf_path)
+        .arg("--threshold-decomposition")
+        .arg("all")
+        .arg("--include-contribution")
+        .arg("^threshold:")
+        .arg("--t-branch")
+        .arg("positive")
+        .arg("--x-log-scale")
+        .arg("--fit-log-slope")
+        .arg("--hide-info-box")
+        .arg("--axis-id")
+        .arg("1")
+        .arg("--title")
+        .arg("Threshold decomposition smoke test")
+        .status()?;
+    assert!(
+        threshold_status.success(),
+        "threshold decomposition plot should succeed"
+    );
+    assert!(threshold_pdf_path.metadata()?.len() > 0);
 
     let pdfinfo_output = std::process::Command::new("pdfinfo")
         .arg(&pdf_path)

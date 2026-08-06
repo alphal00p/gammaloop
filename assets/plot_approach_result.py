@@ -113,6 +113,22 @@ def parse_args() -> argparse.Namespace:
         default="abs",
         help="Complex component to plot",
     )
+    parser.add_argument(
+        "--t-branch",
+        choices=("both", "positive", "negative"),
+        default="both",
+        help="Plot both signed approach branches or only one branch",
+    )
+    parser.add_argument(
+        "--x-log-scale",
+        action="store_true",
+        help="Plot |t| on a logarithmic x-axis; requires --t-branch positive or negative",
+    )
+    parser.add_argument(
+        "--fit-log-slope",
+        action="store_true",
+        help="Append the fitted log-log power over the visible x-range to each legend label",
+    )
     y_scale_group = parser.add_mutually_exclusive_group()
     y_scale_group.add_argument(
         "--y-log-scale",
@@ -131,7 +147,7 @@ def parse_args() -> argparse.Namespace:
         "--include-contribution",
         action="append",
         default=[],
-        help="Regex for labels to include; can be repeated",
+        help="Regex for labels to include; can be repeated (default: total_weight only)",
     )
     parser.add_argument(
         "--exclude-contribution",
@@ -153,6 +169,20 @@ def parse_args() -> argparse.Namespace:
         "--sum-lmb-samples-per-cut",
         action="store_true",
         help="Aggregate contribution curves over all lmb_sample_id values within each cut",
+    )
+    parser.add_argument(
+        "--threshold-decomposition",
+        choices=("summary", "components", "all"),
+        help="Add threshold-counterterm summary curves, individual weighted components, or both",
+    )
+    parser.add_argument(
+        "--title",
+        help="Replace the generated plot title",
+    )
+    parser.add_argument(
+        "--hide-info-box",
+        action="store_true",
+        help="Omit the process, integrand, kinematics, and source summary box",
     )
     parser.add_argument(
         "--x-range",
@@ -192,13 +222,19 @@ def validate_range_option(
         )
     if log_scale and lower <= 0.0:
         raise ValueError(
-            f"{option_name} lower bound must be positive with logarithmic y-scale, got {lower:.17g}."
+            f"{option_name} lower bound must be positive with logarithmic scale, got {lower:.17g}."
         )
 
 
 def validate_args(args: argparse.Namespace) -> None:
-    validate_range_option("--x-range", args.x_range)
+    validate_range_option("--x-range", args.x_range, log_scale=args.x_log_scale)
     validate_range_option("--y-range", args.y_range, log_scale=args.y_log_scale)
+    if args.x_log_scale and args.t_branch == "both":
+        raise ValueError(
+            "--x-log-scale requires --t-branch positive or --t-branch negative."
+        )
+    if args.fit_log_slope and not (args.x_log_scale and args.y_log_scale):
+        raise ValueError("--fit-log-slope requires logarithmic x and y axes.")
     args.selected_axis_indices = parse_selected_axis_indices(args.axis_id)
 
 
@@ -446,6 +482,131 @@ def contribution_group_label(
     return " ".join(parts)
 
 
+def complex_value(
+    value: Any,
+    warnings: NonFiniteWarnings,
+    result: ResultFile,
+    point: dict[str, Any],
+    label: str,
+) -> complex:
+    if not isinstance(value, dict):
+        return 0j
+    return complex(
+        sanitized_float(value.get("re", 0.0), warnings, result, point, label, "re"),
+        sanitized_float(value.get("im", 0.0), warnings, result, point, label, "im"),
+    )
+
+
+def threshold_component_catalog(result: ResultFile) -> dict[tuple[int, int], str]:
+    catalog: dict[tuple[int, int], str] = {}
+    entries = result.data.get("integrand", {}).get("threshold_counterterms", [])
+    if not isinstance(entries, list):
+        return catalog
+    kind_labels = {
+        "local": "L",
+        "integrated": "I",
+        "local_local": "LL",
+        "local_integrated": "LI",
+        "integrated_local": "IL",
+        "integrated_integrated": "II",
+    }
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        graph_id = int(entry.get("graph_id", -1))
+        registry = entry.get("registry", entry)
+        if not isinstance(registry, dict):
+            continue
+        graph_name = str(registry.get("graph_name", f"#{graph_id}"))
+        variants = {
+            int(variant.get("variant_id", -1)): str(variant.get("name", "?"))
+            for variant in registry.get("variants", [])
+            if isinstance(variant, dict)
+        }
+        for component in registry.get("components", []):
+            if not isinstance(component, dict):
+                continue
+            component_id = int(component.get("component_id", -1))
+            kind = str(component.get("kind", "component"))
+            kind_label = kind_labels.get(kind, kind)
+            variant_label = "×".join(
+                f"v{variant_id}:{variants.get(int(variant_id), '?')}"
+                for variant_id in component.get("variant_ids", [])
+            )
+            cut_group_id = component.get("cut_group_id")
+            cut_label = "" if cut_group_id is None else f" cg{cut_group_id}"
+            catalog[(graph_id, component_id)] = (
+                f"threshold:component c{component_id} {kind_label} {variant_label} "
+                f"[{graph_name}{cut_label}]"
+            )
+    return catalog
+
+
+def threshold_decomposition_values(
+    result: ResultFile,
+    point: dict[str, Any],
+    mode: str,
+    warnings: NonFiniteWarnings,
+) -> list[tuple[str, complex]]:
+    evaluation = point.get("evaluation", {})
+    events = evaluation.get("events", []) if isinstance(evaluation, dict) else []
+    original = 0j
+    counterterms = 0j
+    components: dict[str, complex] = defaultdict(complex)
+    catalog = threshold_component_catalog(result)
+    found = False
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        decomposition = event.get("threshold_counterterms")
+        if not isinstance(decomposition, dict):
+            continue
+        found = True
+        original += complex_value(
+            decomposition.get("original"), warnings, result, point, "threshold:original"
+        )
+        graph_id = int(event.get("graph_id", -1))
+        for component in decomposition.get("components", []):
+            if not isinstance(component, dict):
+                continue
+            component_id = int(component.get("component_id", -1))
+            label = catalog.get(
+                (graph_id, component_id),
+                f"threshold:component c{component_id} [graph#{graph_id}]",
+            )
+            weighted = complex_value(
+                component.get("weighted"), warnings, result, point, label
+            )
+            counterterms += weighted
+            components[label] += weighted
+    if not found:
+        return []
+
+    values: list[tuple[str, complex]] = []
+    if mode in ("summary", "all"):
+        values.extend(
+            [
+                ("threshold:original", original),
+                ("threshold:counterterm_sum", counterterms),
+                ("threshold:decomposition_total", original + counterterms),
+            ]
+        )
+    if mode in ("components", "all"):
+        values.extend(sorted(components.items()))
+    return values
+
+
+def selected_t_value(
+    point: dict[str, Any], branch: str, x_log_scale: bool
+) -> float | None:
+    value = float(point["t"])
+    if branch == "positive" and value <= 0.0:
+        return None
+    if branch == "negative" and value >= 0.0:
+        return None
+    return abs(value) if x_log_scale else value
+
+
 def collect_series(
     result: ResultFile,
     axis_index: int,
@@ -454,6 +615,9 @@ def collect_series(
     exclude_patterns: list[re.Pattern[str]],
     sum_lmb_samples: bool,
     warnings: NonFiniteWarnings,
+    t_branch: str,
+    x_log_scale: bool,
+    threshold_decomposition: str | None,
     label_prefix: str = "",
 ) -> list[Series]:
     points = [
@@ -472,7 +636,9 @@ def collect_series(
         evaluation = point.get("evaluation")
         if not isinstance(evaluation, dict):
             continue
-        t_value = float(point["t"])
+        t_value = selected_t_value(point, t_branch, x_log_scale)
+        if t_value is None:
+            continue
 
         base_values: list[tuple[str, dict[str, Any]]] = [
             ("total_weight", evaluation.get("total_weight", {})),
@@ -483,16 +649,33 @@ def collect_series(
         ):
             base_values.append((f"additional:{weight_name}", weight_value))
 
-        for label, complex_value in base_values:
+        for label, serialized_value in base_values:
             if not label_is_selected(label, include_patterns, exclude_patterns):
                 continue
             y_value = value_or_none(
-                complex_value, component, warnings, result, point, label
+                serialized_value, component, warnings, result, point, label
             )
             if y_value is not None and math.isfinite(y_value):
                 series_values.setdefault(f"{label_prefix}{label}", []).append(
                     (t_value, y_value)
                 )
+
+        if threshold_decomposition is not None:
+            for label, value in threshold_decomposition_values(
+                result, point, threshold_decomposition, warnings
+            ):
+                if not label_is_selected(label, include_patterns, exclude_patterns):
+                    continue
+                if component == "real":
+                    y_value = value.real
+                elif component == "imag":
+                    y_value = value.imag
+                else:
+                    y_value = abs(value)
+                if math.isfinite(y_value):
+                    series_values.setdefault(f"{label_prefix}{label}", []).append(
+                        (t_value, y_value)
+                    )
 
         contribution_accumulator: dict[str, complex] = defaultdict(complex)
         for contribution in evaluation.get("contributions", []):
@@ -542,16 +725,44 @@ def finite_abs(value: float) -> float:
     return abs(value)
 
 
+def log_slope(series: Series, x_range: list[float] | None = None) -> float | None:
+    points = [
+        (math.log(x), math.log(abs(y)))
+        for x, y in zip(series.t_values, series.values)
+        if x > 0.0
+        and y != 0.0
+        and math.isfinite(x)
+        and math.isfinite(y)
+        and (x_range is None or x_range[0] <= x <= x_range[1])
+    ]
+    if len(points) < 2:
+        return None
+    mean_x = sum(x for x, _ in points) / len(points)
+    mean_y = sum(y for _, y in points) / len(points)
+    denominator = sum((x - mean_x) ** 2 for x, _ in points)
+    if denominator == 0.0:
+        return None
+    return sum((x - mean_x) * (y - mean_y) for x, y in points) / denominator
+
+
 def plot_series(
-    ax: plt.Axes, series: Series, component: str, y_log_scale: bool
+    ax: plt.Axes,
+    series: Series,
+    component: str,
+    y_log_scale: bool,
+    fit_log_slope: bool,
+    x_range: list[float] | None,
 ) -> None:
     if not series.t_values:
         return
+    label = series.label
+    if fit_log_slope and (slope := log_slope(series, x_range)) is not None:
+        label = f"{label} (p={slope:+.2f})"
     if not y_log_scale or component == "abs":
         y_values = [
             finite_abs(value) if y_log_scale else value for value in series.values
         ]
-        ax.plot(series.t_values, y_values, linewidth=1.4, label=series.label)
+        ax.plot(series.t_values, y_values, linewidth=1.4, label=label)
         return
 
     positive = [
@@ -566,7 +777,7 @@ def plot_series(
             series.t_values,
             positive,
             linewidth=1.4,
-            label=series.label,
+            label=label,
         )
     if any(math.isfinite(value) for value in negative):
         color = positive_line.get_color() if positive_line is not None else None
@@ -576,7 +787,7 @@ def plot_series(
             linewidth=1.4,
             linestyle="--",
             color=color,
-            label=f"{series.label} (negative)",
+            label=f"{label} (negative)",
         )
 
 
@@ -609,32 +820,39 @@ def decorate_axes(
     result: ResultFile,
     component: str,
     y_log_scale: bool,
+    x_log_scale: bool,
+    hide_info_box: bool,
 ) -> None:
     ax.set_title(title, fontsize=12, fontweight="bold")
-    ax.set_xlabel("approach parameter t")
-    ylabel = f"{component} weight"
+    ax.set_xlabel("|approach parameter t|" if x_log_scale else "approach parameter t")
+    if x_log_scale:
+        ax.set_xscale("log")
+    ylabel = "weight magnitude" if component == "abs" else f"{component} weight"
     if y_log_scale:
-        ylabel = f"|{ylabel}|"
+        if component != "abs":
+            ylabel = f"|{ylabel}|"
         ax.set_yscale("log")
     ax.set_ylabel(ylabel)
-    ax.axvline(0.0, color="0.35", linewidth=0.9, alpha=0.7)
+    if not x_log_scale:
+        ax.axvline(0.0, color="0.35", linewidth=0.9, alpha=0.7)
     ax.grid(True, which="major", color="0.88", linewidth=0.8)
     ax.grid(True, which="minor", color="0.94", linewidth=0.5)
-    ax.text(
-        0.012,
-        0.988,
-        info_box_text(result),
-        transform=ax.transAxes,
-        ha="left",
-        va="top",
-        fontsize=7.5,
-        bbox={
-            "boxstyle": "round,pad=0.36",
-            "facecolor": "white",
-            "edgecolor": "0.7",
-            "alpha": 0.92,
-        },
-    )
+    if not hide_info_box:
+        ax.text(
+            0.012,
+            0.988,
+            info_box_text(result),
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=7.5,
+            bbox={
+                "boxstyle": "round,pad=0.36",
+                "facecolor": "white",
+                "edgecolor": "0.7",
+                "alpha": 0.92,
+            },
+        )
 
 
 def apply_axis_ranges(ax: plt.Axes, args: argparse.Namespace) -> None:
@@ -672,17 +890,35 @@ def draw_page(
             exclude_patterns,
             args.sum_lmb_samples_per_cut,
             warnings,
+            args.t_branch,
+            args.x_log_scale,
+            args.threshold_decomposition,
             label_prefix=label_prefix,
         )
         for item in series:
             has_series = True
-            plot_series(ax, item, args.component, args.y_log_scale)
+            plot_series(
+                ax,
+                item,
+                args.component,
+                args.y_log_scale,
+                args.fit_log_slope,
+                args.x_range,
+            )
 
     first_result, first_axis = result_axis_pairs[0]
-    title = axis_label(first_result, first_axis)
-    if len(result_axis_pairs) > 1:
+    title = args.title or axis_label(first_result, first_axis)
+    if args.title is None and len(result_axis_pairs) > 1:
         title = "combined approach curves"
-    decorate_axes(ax, title, first_result, args.component, args.y_log_scale)
+    decorate_axes(
+        ax,
+        title,
+        first_result,
+        args.component,
+        args.y_log_scale,
+        args.x_log_scale,
+        args.hide_info_box,
+    )
     apply_axis_ranges(ax, args)
     if has_series:
         _, labels = ax.get_legend_handles_labels()
@@ -766,7 +1002,12 @@ def main() -> int:
         validate_args(args)
         results = [load_result(path) for path in args.results]
         warnings = NonFiniteWarnings()
-        include_patterns = compile_patterns(args.include_contribution)
+        include_contributions = list(args.include_contribution)
+        if not include_contributions:
+            include_contributions.append(r"^total_weight$")
+            if args.threshold_decomposition is not None:
+                include_contributions.append(r"^threshold:")
+        include_patterns = compile_patterns(include_contributions)
         exclude_patterns = compile_patterns(args.exclude_contribution)
         groups = page_groups(results, args)
         if not groups:

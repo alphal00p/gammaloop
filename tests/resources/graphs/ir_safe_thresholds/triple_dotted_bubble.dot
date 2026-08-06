@@ -1,0 +1,24 @@
+digraph triple_dotted_bubble {
+    num = 1
+    edge [pdg=1001]
+    node [num=1]
+
+    ext0 [style=invis, is_cut=0]
+    ext0 -> v0 [id=0]
+
+    // Three serial bubble loops. The two-edge branch in each bubble represents a repeated
+    // propagator and therefore creates order-two raised E-surface groups.
+    v0 -> dl [id=1, lmb_id=0]
+    dl -> v1 [id=2]
+    v0 -> v1 [id=3]
+
+    v1 -> dm [id=4, lmb_id=1]
+    dm -> v2 [id=5]
+    v1 -> v2 [id=6]
+
+    v2 -> dr [id=7, lmb_id=2]
+    dr -> v3 [id=8]
+    v2 -> v3 [id=9]
+
+    v3 -> ext0 [id=10]
+}
