@@ -18,6 +18,7 @@
   };
 
   outputs = {
+    self,
     nixpkgs,
     crane,
     fenix,
@@ -35,6 +36,24 @@
     flake-utils.lib.eachSystem supportedSystems (system: let
       pkgs = nixpkgs.legacyPackages.${system};
       inherit (pkgs) lib;
+
+      nixCiBarrierRevision =
+        if self ? dirtyRev
+        then self.dirtyRev
+        else if self ? rev
+        then self.rev
+        else if self ? narHash
+        then self.narHash
+        else "local";
+      # NixCI memoizes successful top-level derivations across commits without
+      # re-realizing their closures. Salt only this zero-copy scheduling
+      # wrapper so each commit primes the stable artifact in the shared cache.
+      nixCiArtifactBarrier = name: artifact:
+        pkgs.runCommand "nix-ci-artifact-barrier-${name}" {
+          NIX_CI_BARRIER_REVISION = nixCiBarrierRevision;
+        } ''
+          ln -s ${artifact} "$out"
+        '';
 
       baseCraneLib = crane.mkLib pkgs;
       stableToolchain = fenix.packages.${system}.stable;
@@ -1337,10 +1356,7 @@
       '';
       gammaloop-python-lib = craneLib.buildPackage (ciArgs
         // {
-          cargoArtifacts = mergeCargoArtifacts "gammaloop-python-package-inputs" [
-            cranePythonBuildArtifacts
-          ];
-          doNotLinkInheritedArtifacts = true;
+          cargoArtifacts = cranePythonBuildArtifacts;
           pname = "gammaloop-api-python";
           src = workspacePackageSrcFor "gammaloop-api";
           cargoExtraArgs = cranePythonCargoArgs;
@@ -1805,6 +1821,10 @@
           }
 
           ${lib.concatMapStringsSep "\n" (artifact: "unpack_artifact ${artifact}") artifactList}
+
+          # Crane deletes inherited Cargo locks before using an artifact tree.
+          # Remove them here while the merged files are still ordinary files.
+          find "$out/target" -name .cargo-lock -delete
         '';
 
       mergeCargoArtifactsOrNull = name: artifacts: let
@@ -2009,7 +2029,9 @@
                     ${stripWorkspaceArtifactsScriptText}
                   )
 
-                  tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -C "$tmp/target" -cf - . \
+                  # Match Crane's artifact and Nix source timestamps so Cargo
+                  # does not treat the compacted target as stale.
+                  tar --sort=name --mtime=@1 --owner=0 --group=0 --numeric-owner -C "$tmp/target" -cf - . \
                     | zstd -T0 --stdout > "$out/target.tar.zst.tmp"
                   mv "$out/target.tar.zst.tmp" "$out/target.tar.zst"
                   rm -f "$out/target.tar.zst.prev"
@@ -2140,13 +2162,10 @@
           else
             craneLib.cargoBuild (ciArgs
               // {
-                cargoArtifacts = mergeCargoArtifacts "gammaloop-crate-${package}-deps" (
-                  [
-                    cargoArtifacts
-                    cranePackageDependencyArtifacts.${package}
-                  ]
-                );
-                doNotLinkInheritedArtifacts = true;
+                cargoArtifacts =
+                  if cranePackageDependencyArtifacts.${package} == null
+                  then cargoArtifacts
+                  else cranePackageDependencyArtifacts.${package};
                 pname = "gammaloop-crate-${package}";
                 src = workspacePackageSrcFor package;
                 cargoExtraArgs =
@@ -2445,10 +2464,7 @@
 
       cranePythonBuildArtifacts = craneLib.cargoBuild (ciArgs
         // {
-          cargoArtifacts = mergeCargoArtifacts "gammaloop-python-build-inputs" [
-            cranePythonDependencyArtifacts
-          ];
-          doNotLinkInheritedArtifacts = true;
+          cargoArtifacts = cranePythonDependencyArtifacts;
           pname = "gammaloop-api-python-build";
           src = workspacePackageSrcFor "gammaloop-api";
           cargoExtraArgs = cranePythonCargoArgs;
@@ -2463,14 +2479,20 @@
 
       cranePackageDependencyOutputs = lib.listToAttrs (map (package: {
           name = "crate-deps-${package}";
-          value = cranePackageDependencyArtifacts.${package};
+          value =
+            nixCiArtifactBarrier
+            "crate-deps-${package}"
+            cranePackageDependencyArtifacts.${package};
         })
         (lib.filter (package: cranePackageDependencyArtifacts.${package} != null)
           workspacePackages));
 
       craneTestBinaryPackageOutputs = lib.listToAttrs (map (package: {
           name = "crate-test-binaries-${package}";
-          value = craneTestBinaryArtifacts.${package};
+          value =
+            nixCiArtifactBarrier
+            "crate-test-binaries-${package}"
+            craneTestBinaryArtifacts.${package};
         })
         workspacePackages);
 
@@ -2478,7 +2500,10 @@
           context = workspaceTestContextFor {packages = [representative];};
         in {
           name = "crate-test-dependencies-${representative}";
-          value = craneTestDependencyArtifacts.${context.key};
+          value =
+            nixCiArtifactBarrier
+            "crate-test-dependencies-${representative}"
+            craneTestDependencyArtifacts.${context.key};
         })
         workspaceTestDependencyComponentRepresentatives);
 
@@ -2641,7 +2666,7 @@
           ++ lib.optional (nextestFeatureArgsFor target != "") (nextestFeatureArgsFor target)
         );
 
-      nextestArchiveNameFor = target: "gammaloop-nextest-${target.name}.tar.zst";
+      nextestArchiveNameFor = target: package: "gammaloop-nextest-${target.name}-${package}.tar.zst";
 
       nextestPackageTestBinaryArtifactFor = target: package: let
         context = nextestPackageContextFor target package;
@@ -2651,21 +2676,16 @@
         then craneTestBinaryArtifacts.${package}
         else craneTestBinaryArtifactFor context package;
 
-      nextestArchiveCargoArtifactsFor = target:
-        mergeCargoArtifacts "gammaloop-nextest-binaries-${target.name}-inputs" (
-          [
-            cargoArtifacts
-          ]
-          ++ map (nextestPackageTestBinaryArtifactFor target) target.packages
-        );
-
-      nextestArchiveFor = target:
+      nextestPackageArchiveFor = target: package: let
+        packageTarget = target // {packages = [package];};
+        context = nextestPackageContextFor target package;
+        packageCargoArtifacts = nextestPackageTestBinaryArtifactFor target package;
+      in
         craneLib.mkCargoDerivation (ciArgs
           // {
-            pname = "gammaloop-nextest-binaries-${target.name}";
-            src = nextestSrcFor target;
-            cargoArtifacts = nextestArchiveCargoArtifactsFor target;
-            doNotLinkInheritedArtifacts = true;
+            pname = "gammaloop-nextest-binaries-${target.name}-${package}";
+            src = nextestSrcFor packageTarget;
+            cargoArtifacts = packageCargoArtifacts;
             doCheck = false;
             doInstallCargoArtifacts = false;
             nativeBuildInputs =
@@ -2674,26 +2694,30 @@
               ++ lib.optionals (nextestUsesPythonModule target) [nextestPython];
             postPatch = ''
               ${workspaceMissingCargoTargetsScript}
-              ${lib.concatMapStringsSep "\n" (package: let
-                  context = nextestPackageContextFor target package;
-                in ''
-                  ${testBinaryFeatureAnchorSourceScriptFor context ""}
-                  ${testBinaryFeatureAnchorDevDependencyScriptFor context package ""}
-                '')
-                target.packages}
+              ${testBinaryFeatureAnchorSourceScriptFor context ""}
+              ${testBinaryFeatureAnchorDevDependencyScriptFor context package ""}
+
+              # Crane only follows file-valued incremental artifact links. The
+              # test-binary delta points directly to its materialized input
+              # directory, so inherit that base before Crane overlays the
+              # package-specific, writable delta in its post-patch hook.
+              if [ -d ${packageCargoArtifacts}/target.tar.zst.prev ]; then
+                inheritCargoArtifacts "$(realpath ${packageCargoArtifacts}/target.tar.zst.prev)" target
+              fi
             '';
             buildPhaseCargoCommand = ''
               mkdir -p "$out"
               if [ -d target ]; then
                 chmod -R u+w target
+                find target -name .cargo-lock -delete
               fi
               cargo nextest --version
               cargo nextest archive \
                 --cargo-profile ${ciCargoProfile} \
-                ${nextestCargoArgsFor target} \
-                ${nextestFilterFor target} \
+                ${nextestCargoArgsFor packageTarget} \
+                ${nextestFilterFor packageTarget} \
                 --profile ${nextestProfile} \
-                --archive-file "$out/${nextestArchiveNameFor target}"
+                --archive-file "$out/${nextestArchiveNameFor target package}"
             '';
             checkPhaseCargoCommand = "";
             installPhaseCommand = "";
@@ -2703,11 +2727,42 @@
             PYTHONPATH = "${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}";
           });
 
+      nextestArchiveFor = target: let
+        packageArchives = lib.genAttrs target.packages (nextestPackageArchiveFor target);
+      in
+        pkgs.linkFarm "gammaloop-nextest-binaries-${target.name}" (map (package: {
+            name = nextestArchiveNameFor target package;
+            path = "${packageArchives.${package}}/${nextestArchiveNameFor target package}";
+          })
+          target.packages);
+
       nextestBinarySets = lib.listToAttrs (map (target: {
           name = "gammaloop-nextest-binaries-${target.name}";
           value = nextestArchiveFor target;
         })
         checkedNextestPackageGroups);
+
+      nextestContextualTestOutputs = lib.listToAttrs (lib.concatMap (target:
+          lib.concatMap (package: let
+              context = nextestPackageContextFor target package;
+            in [
+              {
+                name = "crate-test-dependencies-${target.name}-${package}";
+                value =
+                  nixCiArtifactBarrier
+                  "crate-test-dependencies-${target.name}-${package}"
+                  craneTestDependencyArtifacts.${context.key};
+              }
+              {
+                name = "crate-test-binaries-${target.name}-${package}";
+                value =
+                  nixCiArtifactBarrier
+                  "crate-test-binaries-${target.name}-${package}"
+                  (nextestPackageTestBinaryArtifactFor target package);
+              }
+            ])
+          target.packages)
+        (lib.filter (target: target ? extraFeatures) checkedNextestPackageGroups));
 
       nextestBinarySetForTarget = target: nextestBinarySets."gammaloop-nextest-binaries-${target.name}";
 
@@ -2768,12 +2823,20 @@
 
           mkdir -p target/nextest
           set +e
-          cargo nextest run \
-            --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target} \
-            --workspace-remap . \
-            ${nextestBaseExtraArgs}
-          status=$?
-          nextest-failure-summary ${lib.escapeShellArg nextestJunitPath} || true
+          status=0
+          ${lib.concatMapStringsSep "\n" (package: ''
+              rm -f ${lib.escapeShellArg nextestJunitPath}
+              cargo nextest run \
+                --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target package} \
+                --workspace-remap . \
+                ${nextestBaseExtraArgs}
+              package_status=$?
+              nextest-failure-summary ${lib.escapeShellArg nextestJunitPath} || true
+              if [ "$package_status" -ne 0 ] && [ "$status" -eq 0 ]; then
+                status="$package_status"
+              fi
+            '')
+            target.packages}
           mkdir -p "$out"
           exit "$status"
         '');
@@ -2849,8 +2912,8 @@
           echo "All NixCI build and test jobs passed."
         '';
       };
-    in {
-      checks =
+
+      allChecks =
         {
           # Keep existing check names for CI compatibility.
           gammaloop = gammaloop-cli;
@@ -2888,25 +2951,43 @@
           gammaloop-nextest = nextestAggregate;
         };
 
+      # Hestia builds the binary producers before evaluating this consumer
+      # matrix. Omit those producers and the aggregate nextest check so each
+      # nextest execution remains an independent row without racing its leaves.
+      hestiaChecks = builtins.removeAttrs allChecks (
+        [
+          "gammaloop-nextest"
+          "gammaloop-nextest-binaries"
+        ]
+        ++ map (target: "gammaloop-nextest-binaries-${target.name}") checkedNextestPackageGroups
+      );
+    in {
+      checks = allChecks;
+
+      hydraJobs = hestiaChecks;
+
       packages =
         {
           default = gammaloop-cli;
           gammaloop = gammaloop-cli;
           inherit clinnet-cli;
-          "gammaloop-python-module" = gammaloop-python-module;
+          "gammaloop-python-module" = nixCiArtifactBarrier "gammaloop-python-module" gammaloop-python-module;
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
-          inherit linnest-wasm linnestWasmCargoArtifacts;
+          inherit linnest-wasm;
+          linnestWasmCargoArtifacts =
+            nixCiArtifactBarrier "linnest-wasm-cargo-artifacts" linnestWasmCargoArtifacts;
           "crane-ci-prebuild" = cargoArtifacts;
-          inherit
-            cargoArtifacts
-            gammaloopApiPackageArtifacts
-            workspaceBuildArtifacts;
+          cargoArtifacts = nixCiArtifactBarrier "cargo-artifacts" cargoArtifacts;
+          gammaloopApiPackageArtifacts =
+            nixCiArtifactBarrier "gammaloop-api-package-artifacts" gammaloopApiPackageArtifacts;
+          inherit workspaceBuildArtifacts;
           "nix-ci-passed" = nixCiPassed;
         }
         // cranePackageDependencyOutputs
         // cranePackageOutputs
         // craneTestDependencyOutputs
         // craneTestBinaryPackageOutputs
+        // nextestContextualTestOutputs
         // impureCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
           gammaloop-llvm-coverage = craneLib.cargoLlvmCov (commonArgs

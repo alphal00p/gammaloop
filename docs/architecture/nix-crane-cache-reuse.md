@@ -1221,9 +1221,10 @@ ordinary integration tests.
 
 `crate-test-binaries-<package>` is now a genuine package-local derivation. It
 consumes that context's dependency artifact, receives the own-test source for
-that package alone, and runs `cargo test --no-run -p <package>`. Nextest archives
-merge these package-local binary artifacts directly. Dependency test sources and
-test binaries therefore never cross a downstream package boundary.
+that package alone, and runs `cargo test --no-run -p <package>`. Each nextest
+archive consumes its matching package-local binary artifact directly. Dependency
+test sources and test binaries therefore never cross a downstream package
+boundary.
 
 The own-test tier is split again at the archive boundary. Compilation and
 packaging receive Rust test, bench, example, and binary sources plus explicitly
@@ -1350,6 +1351,101 @@ reusable artifact producers. They consume the base dependency artifact to avoid
 starting completely cold, but they do not publish merged workspace target trees
 back to the cache.
 
+## Follow-up: cross-job producer barriers
+
+The cold NixCI fan-out exposed a scheduling problem outside Cargo and Crane:
+identical hidden derivations could start on separate workers before either copy
+reached the shared cache. The manual graph is still defined over all flake
+outputs, including `doNotBuild` outputs, but its NixCI projection now contracts
+each hidden path to the nearest job that NixCI actually builds. It stops at that
+first producer rather than adding the entire transitive closure as direct edges.
+
+An explicit producer attribute alone is not a sufficient barrier. NixCI
+memoizes a successful top-level derivation across commits and can report
+`Nothing to build: this was already built successfully before.` without asking
+a worker to realize its output or closure. If that nested Cargo artifact is no
+longer available to the next workers, every released consumer can still build
+the same derivation. A replacement run exposed 15 exact derivations built in
+two archive jobs each. Five were test-dependency producers and accounted for 25
+redundant `Compiling` lines.
+
+Scheduled Cargo artifact outputs are therefore exposed through a tiny
+revision-scoped barrier derivation. The barrier output is a symlink to the
+stable raw artifact, so building it realizes the artifact and lets NixCI's
+post-build hook publish the closure before dependent jobs start. Only the
+wrapper contains the flake revision: the Cargo artifact derivation and its
+cross-commit cache key remain unchanged. This adds no target-tree copy and
+preserves paths such as `${artifact}/target.tar.zst` through the output symlink.
+The wrappers cover the global artifact, package dependency artifacts, ordinary
+and contextual test dependencies and binaries, the Python module artifact
+chain, and the other scheduled shared Cargo artifacts. Hidden aliases such as
+the unused `spynso3` test outputs remain hidden.
+
+The ordinary Rust API and Python ABI lanes share
+`crate-deps-gammalooprs`, so that artifact is now an explicit producer barrier.
+Both lanes wait for this sequence before their distinct Cargo contexts branch:
+
+```text
+crate-deps-gammaloop-workspace-hack
+  -> cargoArtifacts
+  -> crate-deps-gammalooprs
+  -> {gammaloopApiPackageArtifacts, gammaloop-python-module}
+```
+
+Every non-hack `crate-deps-*` node also records its real `cargoArtifacts`
+dependency in the scheduling graph. The duplicate final-package and test-binary
+aliases for the workspace hack are hidden, leaving its `crate-deps-*` attribute
+as the single producer for that exact derivation. The `checks.gammaloop` alias
+is also hidden because it is the same derivation as `packages.gammaloop`.
+
+The nextest scheduling graph now matches the flake contexts:
+
+- the Spenso archive waits for `symbolica-utils`;
+- the Python API archive waits for a stable, target-named output for the
+  `python-api-tests` integration binary and its distinct dependency context;
+- the unconsumed `spynso3` test-dependency and test-binary outputs are not NixCI
+  jobs.
+
+Grouped archive commands were the remaining Cargo-context mismatch. Package
+test binaries are deliberately built from package-local sources and features,
+so each package now has a nextest archive derivation with the same singleton
+Cargo arguments. A lightweight link farm retains the existing group output. The
+corresponding group test job executes those archives sequentially, reports each
+JUnit result, and returns the first failing status. This retains one NixCI
+archive and test job per existing group without asking Cargo to reunify all
+packages in a new grouped compilation context or letting one archive command
+mutate another package's Cargo context.
+
+Three redundant materialization layers were also removed. Final crate builds
+consume their self-contained, stripped `crate-deps-*` archive directly, and the
+Python build and package phases consume their preceding self-contained archive
+instead of routing it through a one-input `mergeCargoArtifacts`. The terminal
+nextest archives consume the matching package-local incremental artifact, use
+Crane's symlink-heavy inheritance for its materialized base, and overlay its
+writable delta. Crane does not follow a `target.tar.zst.prev` link whose target
+is a directory, so the archive derivation explicitly inherits that base before
+Crane's normal post-patch hook applies the delta. This avoids both a new
+materialized group merge and publication of another Cargo target tree.
+
+The self-contained archive compaction step uses mtime epoch 1, matching Crane's
+artifact installer and Nix source timestamps. Using epoch 0 for the compacted
+target made Cargo treat every inherited artifact as older than its source when
+a consumer skipped the materializing merge layer.
+
+The static graph and derivation shapes can be checked without building the cold
+Cargo closure:
+
+```bash
+nix eval --json --file nix-ci.nix
+nix flake check --impure --no-build 'path:.'
+nix derivation show \
+  'path:.#checks.x86_64-linux.gammaloop-nextest-binaries-spenso'
+```
+
+A fresh NixCI run is still required to measure cross-worker execution counts and
+cache upload time; one local Nix daemon serializes identical derivations and
+therefore cannot reproduce the original stampede.
+
 ## Remaining caveats
 
 - Dependency-only derivations can still compile generated feature-anchor or
@@ -1366,8 +1462,9 @@ back to the cache.
 - Python ABI builds intentionally use different `gammaloop-api` features
   (`python_abi`, `pyo3-extension-module`) and remain a separate artifact family.
   Normal Rust test archives should not depend on that family.
-- `doNotLinkInheritedArtifacts = true` still deep-copies inherited artifacts in
-  some derivations. That should not cause recompilation, but it can add wall
-  time and larger outputs. If compile reuse is fixed but CI still spends a lot
-  of time copying artifact trees, the next follow-up is to remove that override
-  and use Crane's default symlink-heavy inheritance mode where safe.
+- `doNotLinkInheritedArtifacts = true` remains on producer paths whose archive
+  and stripping behavior still needs a focused chain test before switching to
+  Crane's symlink-heavy inheritance mode. It should not cause recompilation, but
+  it can add wall time. The next publication experiment should compare Crane's
+  `use-symlink` artifact-install mode across a complete
+  root-to-package-to-test-to-archive chain.

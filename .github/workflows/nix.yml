@@ -1,0 +1,197 @@
+name: Nix
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Matrix evaluation embeds this value in derivations registered with Hestia, so
+# keep it public. Licensed worker builds re-evaluate their attributes locally.
+env:
+  CARGO_TERM_COLOR: always
+  HESTIA_CACHE_WRITABLE: >-
+    ${{ github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+        github.actor != 'dependabot[bot]') }}
+  HESTIA_DRAIN_TIMEOUT: 7200
+  # Bump this only for an intentional Hestia cache-format migration.
+  HESTIA_CACHE_VERSION_SALT: gammaloop-no-closure-v1
+  RUST_BACKTRACE: "1"
+  SYMBOLICA_LICENSE: GAMMALOOP_USER
+
+jobs:
+  # Publish shared roots here so consumers wait on their manifest before
+  # running in parallel.
+  prepare:
+    name: Prepare shared artifacts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    outputs:
+      matrix: ${{ steps.filter-matrix.outputs.matrix }}
+      any-jobs: ${{ steps.filter-matrix.outputs.any-jobs }}
+      manifest-version: ${{ steps.matrix.outputs.manifest-version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: NixOS/nix-installer-action@main
+      - uses: Mic92/hestia@v3
+        with:
+          version: v3.0.0
+          drain-timeout: ${{ env.HESTIA_DRAIN_TIMEOUT }}
+          no-closure: true
+          upstream-cache-filter: true
+      - name: Build and publish shared artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Avoid publishing every large intermediate Crane merge tree.
+          test -z "$(nix --option post-build-hook "" config show post-build-hook)"
+          producer_output_lines=$(
+            nix --option post-build-hook "" build \
+              --impure \
+              --keep-going \
+              --no-link \
+              --print-build-logs \
+              --print-out-paths \
+              .#packages.x86_64-linux.crane-ci-prebuild \
+              .#packages.x86_64-linux.gammaloop \
+              .#packages.x86_64-linux.gammaloop-python-module \
+              .#checks.x86_64-linux.gammaloop-nextest-binaries
+          )
+          mapfile -t producer_outputs <<< "$producer_output_lines"
+          test "${#producer_outputs[@]}" -eq 4
+          publish_path_lines=$(
+            nix-store --query --requisites "${producer_outputs[@]}" | LC_ALL=C sort -u
+          )
+          mapfile -t publish_paths <<< "$publish_path_lines"
+          test "${#publish_paths[@]}" -gt 0
+          # no-closure makes this explicit, compact path set the upload boundary.
+          closure_bytes=$(nix path-info --json --recursive "${producer_outputs[@]}" |
+            jq '[.[] | .narSize] | add')
+          echo "Selected producer closure: $closure_bytes raw NAR bytes (${#publish_paths[@]} paths)"
+          test "$closure_bytes" -lt $((8 * 1024 * 1024 * 1024))
+          "$HESTIA_BIN" hook --socket "$HESTIA_SOCKET" "${publish_paths[@]}"
+          "$HESTIA_BIN" drain \
+            --socket "$HESTIA_SOCKET" \
+            --timeout "$HESTIA_DRAIN_TIMEOUT"
+          if [ "$HESTIA_CACHE_WRITABLE" = true ]; then
+            # The hook is deliberately non-fatal, so verify its committed roots.
+            for output in "${producer_outputs[@]}"; do
+              store_hash=${output#/nix/store/}
+              store_hash=${store_hash%%-*}
+              curl -fsS "http://$HESTIA_LISTEN/$store_hash.narinfo" >/dev/null
+            done
+          fi
+      # The composite matrix action treats a drain timeout as non-fatal. Keep
+      # the producer barrier enforceable with the CLI's manifest-version output.
+      - id: matrix
+        name: Create Hestia matrix
+        shell: bash
+        # Keep licensed checks uncached in this public evaluation. Workers
+        # re-evaluate them with the secret, which produces distinct drv paths.
+        env:
+          SYMBOLICA_LICENSE: GAMMALOOP_MATRIX_${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          "$HESTIA_BIN" matrix \
+            --flake ".#hydraJobs.x86_64-linux" \
+            --socket "$HESTIA_SOCKET" \
+            --nix-eval-jobs "nix run nixpkgs#nix-eval-jobs -- --impure" \
+            --attr-prefix "hydraJobs.x86_64-linux" \
+            --drain-timeout "$HESTIA_DRAIN_TIMEOUT"
+      - id: filter-matrix
+        name: Filter unavailable licensed tests
+        env:
+          LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
+          MATRIX: ${{ steps.matrix.outputs.matrix }}
+        run: |
+          set -euo pipefail
+          if [ -n "$LICENSE" ]; then
+            filtered="$MATRIX"
+          else
+            echo "::notice::Skipping Nix-sandboxed doctest and nextest rows because the Symbolica secret is unavailable"
+            filtered=$(jq -c '
+              .include |= map(select(
+                (.attr == "hydraJobs.x86_64-linux.gammaloop-doctest"
+                  or (.attr | startswith("hydraJobs.x86_64-linux.gammaloop-nextest-")))
+                | not
+              ))
+            ' <<< "$MATRIX")
+          fi
+          echo "matrix=$filtered" >> "$GITHUB_OUTPUT"
+          echo "any-jobs=$(jq -r '.include | length > 0' <<< "$filtered")" >> "$GITHUB_OUTPUT"
+      - name: Confirm producer manifest
+        if: steps.filter-matrix.outputs.any-jobs == 'true' && env.HESTIA_CACHE_WRITABLE == 'true'
+        env:
+          MANIFEST_VERSION: ${{ steps.matrix.outputs.manifest-version }}
+        run: test "$MANIFEST_VERSION" -gt 0
+
+  build:
+    name: ${{ matrix.name }} (${{ matrix.system }})
+    needs: prepare
+    if: needs.prepare.outputs.any-jobs == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: NixOS/nix-installer-action@main
+      - uses: Mic92/hestia@v3
+        with:
+          version: v3.0.0
+          drain-timeout: ${{ env.HESTIA_DRAIN_TIMEOUT }}
+          no-closure: true
+          upstream-cache-filter: true
+          wait-manifest-version: ${{ needs.prepare.outputs.manifest-version }}
+      - name: Build checks
+        env:
+          CHECK_ATTR: ${{ matrix.attr }}
+          SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE || 'GAMMALOOP_USER' }}
+        run: |
+          set -euo pipefail
+          nix_options=()
+          case "$CHECK_ATTR" in
+            *.gammaloop-doctest|*.gammaloop-nextest-*)
+              # Do not persist secret-derived test identities or results.
+              nix_options+=(--option post-build-hook "")
+              ;;
+          esac
+          nix "${nix_options[@]}" build \
+            --impure \
+            --keep-going \
+            --no-link \
+            --print-build-logs \
+            ".#$CHECK_ATTR"
+
+  flake-checks:
+    name: Flake checks
+    needs: [prepare, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm matrix result
+        env:
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          ANY_JOBS: ${{ needs.prepare.outputs.any-jobs }}
+        run: |
+          test "$PREPARE_RESULT" = success
+          if [ "$ANY_JOBS" = true ]; then
+            test "$BUILD_RESULT" = success
+          else
+            test "$ANY_JOBS" = false
+            test "$BUILD_RESULT" = skipped
+          fi
