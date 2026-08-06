@@ -87,7 +87,10 @@ fn make_multi_event(
             lmb_channel_edge_ids: None,
         },
         weight: Complex::new(F(weight.0), F(weight.1)),
-        additional_weights: gammalooprs::observables::GenericAdditionalWeightInfo { weights },
+        additional_weights: gammalooprs::observables::GenericAdditionalWeightInfo {
+            weights,
+            threshold_counterterms: None,
+        },
         derived_observable_data: Default::default(),
     }
 }

@@ -126,6 +126,26 @@ pub struct SubspaceData {
 }
 
 impl SubspaceData {
+    pub(crate) fn has_same_embedding(&self, other: &Self) -> bool {
+        self.lmb == other.lmb
+            && self.lmb_indices == other.lmb_indices
+            && self.subgraph.filter == other.subgraph.filter
+            && self.complement_subgraph == other.complement_subgraph
+    }
+
+    pub(crate) fn has_equivalent_embedding(
+        &self,
+        other: &Self,
+        _all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> bool {
+        // Different parent bases are equivalent when they select the same geometric active
+        // topology and therefore hold the same complement fixed. Runtime data may still retain
+        // either parent-specific index representation.
+        self.subgraph.filter == other.subgraph.filter
+            && self.complement_subgraph == other.complement_subgraph
+            && self.loopcount() == other.loopcount()
+    }
+
     pub(crate) fn is_mergable_with(&self, other: &Self) -> bool {
         self.lmb == other.lmb
             && self
@@ -136,6 +156,62 @@ impl SubspaceData {
                 .lmb_indices
                 .iter()
                 .all(|idx| !self.lmb_indices.contains(idx))
+    }
+
+    /// Build the smallest active subspace containing every supplied subspace in one parent LMB.
+    ///
+    /// This is used only to choose common overlap-center coordinates. Each threshold still keeps
+    /// its original subspace, so coordinates outside that threshold's active set remain fixed at
+    /// the sampled point when its E-surface is constrained or radially solved.
+    pub(crate) fn union_in_common_parent<'a>(
+        subspaces: impl IntoIterator<Item = &'a Self>,
+        graph: &Graph,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> Result<Self> {
+        let mut subspaces = subspaces.into_iter();
+        let first = subspaces
+            .next()
+            .ok_or_else(|| eyre!("Cannot build a common threshold subspace from an empty set"))?;
+        let parent_lmb_index = first.lmb;
+        let mut active_subgraph = first.subgraph.filter.clone();
+        let mut expected_indices = first
+            .lmb_indices
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+
+        for subspace in subspaces {
+            if subspace.lmb != parent_lmb_index {
+                return Err(eyre!(
+                    "Threshold subspaces use different parent LMBs {} and {}",
+                    usize::from(parent_lmb_index),
+                    usize::from(subspace.lmb),
+                ));
+            }
+            active_subgraph = active_subgraph.union(&subspace.subgraph.filter);
+            expected_indices.extend(subspace.lmb_indices.iter().copied());
+        }
+
+        let mut union =
+            Self::new_with_user_selected_lmb(active_subgraph, parent_lmb_index, graph, all_lmbs)?;
+        let resolved_indices = union
+            .lmb_indices
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        if !expected_indices.is_subset(&resolved_indices) {
+            return Err(eyre!(
+                "Common threshold subspace resolved active indices {:?}, which do not contain the requested union {:?}",
+                resolved_indices,
+                expected_indices,
+            ));
+        }
+        // Joining projected subgraphs can close an additional graph-theoretic cycle even though
+        // none of the participating threshold variants varies that coordinate. The common
+        // object is a center-coordinate frame, not another threshold surface: keep precisely the
+        // union of the variants' parent-LMB coordinates and leave every other coordinate fixed.
+        union.lmb_indices = expected_indices.into_iter().collect();
+        Ok(union)
     }
 
     fn cleaned_filter_pessimist<E, V, H, N: NodeStorageOps<NodeData = V>>(
@@ -219,6 +295,91 @@ impl SubspaceData {
         })
     }
 
+    /// Build a subspace from defining edges in an already selected parent LMB.
+    ///
+    /// The requested order is intentionally not stored here: [`SubspaceData`] describes the
+    /// geometric active-coordinate set and canonicalizes its loop indices. Callers that attach
+    /// semantic meaning to the user's ordering must retain the original edge list separately.
+    pub(crate) fn new_from_parent_basis_edges(
+        requested_basis_edges: &[EdgeIndex],
+        containing_subgraph: &SuBitGraph,
+        parent_lmb_index: LmbIndex,
+        graph: &Graph,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> Result<Self> {
+        if requested_basis_edges.is_empty() {
+            return Err(eyre!(
+                "A threshold-counterterm subspace must contain at least one basis edge"
+            ));
+        }
+
+        let parent_lmb = all_lmbs.get(parent_lmb_index).ok_or_else(|| {
+            eyre!(
+                "Threshold-counterterm parent LMB {} is out of range ({} generated LMBs)",
+                usize::from(parent_lmb_index),
+                all_lmbs.len(),
+            )
+        })?;
+        let mut requested_indices = Vec::with_capacity(requested_basis_edges.len());
+        let mut seen_basis_edges = std::collections::BTreeSet::new();
+        for &edge in requested_basis_edges {
+            if !seen_basis_edges.insert(edge) {
+                return Err(eyre!(
+                    "Threshold-counterterm subspace repeats basis edge {edge}"
+                ));
+            }
+            let loop_index = parent_lmb
+                .loop_edges
+                .iter_enumerated()
+                .find_map(|(loop_index, &parent_edge)| {
+                    (parent_edge == edge).then_some(loop_index)
+                })
+                .ok_or_else(|| {
+                    eyre!(
+                        "Threshold-counterterm subspace edge {edge} is not a defining edge of parent LMB {:?}",
+                        parent_lmb.loop_edges,
+                    )
+                })?;
+            requested_indices.push(loop_index);
+        }
+
+        // A parent's fundamental cycle contains precisely the edges whose signature carries the
+        // corresponding defining loop momentum. Restricting the union to the inferred cut side
+        // produces the active topology while preserving the sampled complement outside it.
+        let mut cycle_union: SuBitGraph = graph.empty_subgraph();
+        for (edge_pair, edge, _) in graph.iter_edges() {
+            if requested_indices.iter().any(|&loop_index| {
+                parent_lmb.edge_signatures[edge].internal[loop_index] != SignOrZero::Zero
+            }) {
+                cycle_union.add(edge_pair);
+            }
+        }
+        let active_subgraph = cycle_union.intersection(containing_subgraph);
+        let subspace =
+            Self::new_with_user_selected_lmb(active_subgraph, parent_lmb_index, graph, all_lmbs)?;
+
+        let resolved_basis_edges = subspace.iter_basis_edges(all_lmbs).collect::<Vec<_>>();
+        let requested_set = requested_basis_edges
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        let resolved_set = resolved_basis_edges
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        if subspace.loopcount() != requested_basis_edges.len() || resolved_set != requested_set {
+            return Err(eyre!(
+                "Requested threshold-counterterm basis {:?} resolves to basis {:?} with loop count {} in parent LMB {:?}",
+                requested_basis_edges,
+                resolved_basis_edges,
+                subspace.loopcount(),
+                parent_lmb.loop_edges,
+            ));
+        }
+
+        Ok(subspace)
+    }
+
     /// this function chooses the lmb automatically based on the subgraph
     #[allow(dead_code)]
     pub(crate) fn new(
@@ -244,6 +405,10 @@ impl SubspaceData {
         all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> &'a LoopMomentumBasis {
         &all_lmbs[self.lmb]
+    }
+
+    pub(crate) fn parent_lmb_index(&self) -> LmbIndex {
+        self.lmb
     }
 
     pub(crate) fn does_not_contain<'a>(
@@ -327,7 +492,11 @@ impl SubspaceData {
     }
 
     pub(crate) fn loopcount(&self) -> usize {
-        self.subgraph.loopcount.unwrap()
+        // `lmb_indices` is the runtime definition of an active coordinate. For ordinary
+        // threshold subspaces its length equals the graph-theoretic subgraph loop count. A
+        // projected common-center frame may deliberately exclude incidental cycles closed by
+        // the union of several variant subgraphs.
+        self.lmb_indices.len()
     }
 
     pub(crate) fn as_subspace_simple(&self) -> Subspace<'_> {
@@ -934,5 +1103,102 @@ impl<T: FloatLike> MomentumSample<T> {
         Self {
             sample: self.sample.lmb_transform(from, to),
         }
+    }
+}
+
+#[cfg(test)]
+mod subspace_tests {
+    use super::*;
+    use crate::{dot, graph::parse::from_dot::IntoGraph, initialisation::test_initialise};
+    use typed_index_collections::ti_vec;
+
+    #[test]
+    fn explicit_parent_basis_edges_recover_their_fundamental_cycle_subspace() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph explicit_basis_subspace {
+            ext [style=invis]
+            edge [num=1 mass=0]
+            node [num=1]
+            ext->v1:0 [id=0]
+            v1->v2 [id=1]
+            v2->v1 [id=2]
+            v1->v2 [id=3]
+            v2->v1 [id=4]
+            ext->v2:1 [id=5]
+        })
+        .unwrap();
+        let all_lmbs = ti_vec![graph.loop_momentum_basis.clone()];
+        let requested = [
+            graph.loop_momentum_basis.loop_edges[LoopIndex(0)],
+            graph.loop_momentum_basis.loop_edges[LoopIndex(2)],
+        ];
+        let containing_subgraph: SuBitGraph = graph.full_filter();
+
+        let subspace = SubspaceData::new_from_parent_basis_edges(
+            &requested,
+            &containing_subgraph,
+            LmbIndex::from(0),
+            &graph,
+            &all_lmbs,
+        )
+        .unwrap();
+
+        assert_eq!(subspace.loopcount(), requested.len());
+        assert_eq!(
+            subspace
+                .iter_basis_edges(&all_lmbs)
+                .collect::<std::collections::BTreeSet<_>>(),
+            requested.into_iter().collect(),
+        );
+        let nested_subspace = SubspaceData::new_from_parent_basis_edges(
+            &[requested[0]],
+            &containing_subgraph,
+            LmbIndex::from(0),
+            &graph,
+            &all_lmbs,
+        )
+        .unwrap();
+        let common_subspace =
+            SubspaceData::union_in_common_parent([&nested_subspace, &subspace], &graph, &all_lmbs)
+                .unwrap();
+        assert_eq!(
+            common_subspace
+                .iter_basis_edges(&all_lmbs)
+                .collect::<std::collections::BTreeSet<_>>(),
+            requested.into_iter().collect(),
+        );
+        let disjoint_subspace = SubspaceData::new_from_parent_basis_edges(
+            &[requested[1]],
+            &containing_subgraph,
+            LmbIndex::from(0),
+            &graph,
+            &all_lmbs,
+        )
+        .unwrap();
+        let sparse_common_subspace = SubspaceData::union_in_common_parent(
+            [&nested_subspace, &disjoint_subspace],
+            &graph,
+            &all_lmbs,
+        )
+        .unwrap();
+        assert_eq!(sparse_common_subspace.loopcount(), 2);
+        assert_eq!(
+            sparse_common_subspace
+                .iter_basis_edges(&all_lmbs)
+                .collect::<std::collections::BTreeSet<_>>(),
+            requested.into_iter().collect(),
+        );
+        assert!(
+            SubspaceData::new_from_parent_basis_edges(
+                &[requested[0], requested[0]],
+                &containing_subgraph,
+                LmbIndex::from(0),
+                &graph,
+                &all_lmbs,
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("repeats basis edge")
+        );
     }
 }
