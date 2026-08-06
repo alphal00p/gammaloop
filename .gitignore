@@ -49,6 +49,15 @@ examples/cli/qq_aaa/*
 !examples/cli/qq_aaa/qqx_aaa_subtracted.toml
 examples/cli/epem_a_ttxh/NNLO/*
 !examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO.toml
+!examples/cli/epem_a_ttxh/NNLO/graphs/
+!examples/cli/epem_a_ttxh/NNLO/graphs/*.dot
+!examples/cli/epem_a_ttxh/NNLO/analyses/
+!examples/cli/epem_a_ttxh/NNLO/analyses/*/
+!examples/cli/epem_a_ttxh/NNLO/analyses/*/.gitignore
+!examples/cli/epem_a_ttxh/NNLO/analyses/*/README.md
+!examples/cli/epem_a_ttxh/NNLO/analyses/*/analysis.toml
+!examples/cli/epem_a_ttxh/NNLO/analyses/*/plot.py
+!examples/cli/epem_a_ttxh/NNLO/analyses/*/*.dot
 examples/**/*state*/
 examples/**/OLD_*
 examples/**/gammaloop_state/

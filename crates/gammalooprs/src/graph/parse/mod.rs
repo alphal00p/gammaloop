@@ -572,7 +572,7 @@ impl ParseGraph {
 impl ParseGraph {
     pub(crate) fn from_parsed(graph: DotGraph, model: &Model) -> Result<Self> {
         warn_about_unknown_attributes(&graph);
-        let global_data = graph.global_data.into();
+        let global_data = graph.global_data.try_into()?;
         let graph = graph
             .graph
             .map_data_ref_result(
@@ -599,6 +599,7 @@ struct InitialGraphData {
     group_id: Option<GroupId>,
     is_group_master: bool,
     name: String,
+    threshold_counterterms: Autogen<super::threshold_counterterms::ThresholdCountertermSpec>,
 }
 
 /// Result of processing cut edges
@@ -610,7 +611,7 @@ struct CutProcessingResult {
 }
 
 impl CutProcessingResult {
-    fn permute(&mut self, graph: &mut NumGraph) -> Result<()> {
+    fn permute(&mut self, graph: &mut NumGraph) -> Result<Permutation> {
         let (h_perm, edge_perm): (Vec<_>, Vec<_>) = self
             .xs_ext_id
             .iter()
@@ -636,7 +637,7 @@ impl CutProcessingResult {
         <HedgeGraph<_, _, _> as Swap<EdgeIndex>>::permute(graph, &per);
 
         debug!(" after: {}", graph.dot(&self.initial_hedges));
-        Ok(())
+        Ok(per)
     }
 }
 
@@ -707,7 +708,7 @@ impl Graph {
 
     #[instrument(skip_all, fields(graph= %graph.debug_dot(),name = %graph.global_data.name.as_str()))]
     pub(crate) fn from_parsed(graph: ParseGraph, model: &Model) -> Result<Self> {
-        let (initial_data, mut graph) = Self::extract_initial_data(&graph, model)?;
+        let (mut initial_data, mut graph) = Self::extract_initial_data(&graph, model)?;
 
         // Sew the graph based on cut edges
         graph
@@ -729,7 +730,10 @@ impl Graph {
 
         let mut cut_result = Self::process_cut_edges(&graph)?;
 
-        cut_result.permute(&mut graph)?;
+        let edge_permutation = cut_result.permute(&mut graph)?;
+        initial_data
+            .threshold_counterterms
+            .remap_edges(&edge_permutation)?;
 
         let numerators = Self::generate_numerators(&graph, model)?;
 
@@ -786,7 +790,10 @@ impl Graph {
             group_id: initial_data.group_id,
             is_group_master: initial_data.is_group_master,
             param_builder,
+            threshold_counterterms: initial_data.threshold_counterterms,
         };
+
+        g.threshold_counterterms.validate_for_graph(&g)?;
 
         let external_momentum_edge_order = g.external_momentum_edge_order();
         g.loop_momentum_basis
@@ -868,6 +875,10 @@ impl Graph {
             group_id: global_data.group_id,
             is_group_master: global_data.is_group_master,
             name: global_data.name.clone(),
+            threshold_counterterms: Autogen::from_option_or_generate(
+                global_data.threshold_counterterms.clone(),
+                Default::default,
+            ),
         };
 
         let num_graph = parse_graph.graph.map_data_ref(

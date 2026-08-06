@@ -20,7 +20,7 @@ use walkdir::WalkDir;
 use color_eyre::Result;
 use eyre::{eyre, Context};
 use gammalooprs::{
-    processes::{Amplitude, CrossSection, Process, ProcessCollection},
+    processes::{Amplitude, CrossSection, Process, ProcessCollection, ThresholdCountertermSide},
     settings::RuntimeSettings,
 };
 
@@ -120,6 +120,14 @@ pub enum Display {
         )]
         #[serde(default)]
         hide_non_existing_thresholds: bool,
+        /// Show full threshold-counterterm multiplier expressions and flags
+        #[arg(
+            long = "show-threshold-functions",
+            default_value_t = false,
+            requires = "integrand_name"
+        )]
+        #[serde(default)]
+        show_threshold_functions: bool,
     },
     Quantities {
         #[command(flatten)]
@@ -189,20 +197,33 @@ impl Display {
                 graphs,
                 categories,
                 hide_non_existing_thresholds,
+                show_threshold_functions,
             } => {
                 let process_id = process
                     .as_ref()
                     .map(|process_ref| state.resolve_process_ref(Some(process_ref)))
                     .transpose()?;
                 if let Some(integrand_name) = integrand_name.as_deref() {
-                    render_integrand_detail(
-                        state,
+                    let process_id =
+                        process_id.expect("clap requires --process when --integrand-name is set");
+                    let detail = state.get_integrand_info(
+                        Some(&ProcessRef::Id(process_id)),
+                        Some(&integrand_name.to_string()),
+                    )?;
+                    let process = &state.process_list.processes[process_id];
+                    let artifact_sizes = collect_integrand_artifact_sizes(
                         &global_settings.state.folder,
-                        process_id.expect("clap requires --process when --integrand-name is set"),
-                        integrand_name,
+                        process,
+                        &detail.integrand_name,
+                    )?;
+                    render_integrand_detail_from_info(
+                        &detail,
+                        &artifact_sizes,
+                        state.generation_summary(process_id, &detail.integrand_name),
                         graphs,
                         categories,
                         *hide_non_existing_thresholds,
+                        *show_threshold_functions,
                     )?;
                 } else {
                     render_integrands_table(state, &global_settings.state.folder, process_id)?;
@@ -550,33 +571,6 @@ fn filtered_graph_groups<'a>(
         .collect())
 }
 
-fn render_integrand_detail(
-    state: &State,
-    state_folder: &Path,
-    process_id: usize,
-    integrand_name: &str,
-    requested_graphs: &[String],
-    requested_categories: &[IntegrandDisplayCategory],
-    hide_non_existing_thresholds: bool,
-) -> Result<()> {
-    let detail = state.get_integrand_info(
-        Some(&ProcessRef::Id(process_id)),
-        Some(&integrand_name.to_string()),
-    )?;
-    let process = &state.process_list.processes[process_id];
-    let artifact_sizes =
-        collect_integrand_artifact_sizes(state_folder, process, &detail.integrand_name)?;
-    let generation_summary = state.generation_summary(process_id, &detail.integrand_name);
-    render_integrand_detail_from_info(
-        &detail,
-        &artifact_sizes,
-        generation_summary,
-        requested_graphs,
-        requested_categories,
-        hide_non_existing_thresholds,
-    )
-}
-
 fn category_rows(
     group: &IntegrandGraphGroupInfo,
     category: IntegrandDisplayCategory,
@@ -789,6 +783,143 @@ fn render_integrand_thresholds_table(
     Ok(Some(table.to_string()))
 }
 
+fn render_threshold_counterterm_directives(
+    groups: &[&IntegrandGraphGroupInfo],
+    show_functions: bool,
+) -> Option<String> {
+    let graphs = groups
+        .iter()
+        .flat_map(|group| &group.graphs)
+        .filter(|graph| !graph.threshold_counterterm_directives.is_empty())
+        .collect_vec();
+    if graphs.is_empty() {
+        return None;
+    }
+
+    let mut builder = Builder::new();
+    builder.push_record([
+        "G".bold().blue().to_string(),
+        "C".bold().blue().to_string(),
+        "T".bold().blue().to_string(),
+        "V".bold().blue().to_string(),
+        "↔".bold().blue().to_string(),
+        "S".bold().blue().to_string(),
+        "P".bold().blue().to_string(),
+        "f".bold().blue().to_string(),
+    ]);
+
+    for graph in graphs {
+        let mut previous_cut: Option<&[usize]> = None;
+        let mut previous_threshold: Option<&[usize]> = None;
+        for (directive_index, directive) in
+            graph.threshold_counterterm_directives.iter().enumerate()
+        {
+            let resolved = graph.threshold_counterterms.as_ref().and_then(|registry| {
+                registry.variants.iter().find(|variant| {
+                    variant.name == directive.name
+                        && variant.associations.iter().any(|association| {
+                            association.cut_edges == directive.cut_edge_ids
+                                && association.threshold_edges == directive.threshold_edge_ids
+                        })
+                })
+            });
+            let suffix = if directive.implicit_default { "*" } else { "" };
+            let variant = if directive.disabled {
+                format!("× {}{suffix}", directive.name).red().to_string()
+            } else if resolved.is_some_and(|variant| variant.active) {
+                format!("● {}{suffix}", directive.name).green().to_string()
+            } else {
+                format!("○ {}{suffix}", directive.name).yellow().to_string()
+            };
+            let side = resolved
+                .map(|variant| match variant.side {
+                    ThresholdCountertermSide::Amplitude => "A".cyan().to_string(),
+                    ThresholdCountertermSide::Left => "L".green().to_string(),
+                    ThresholdCountertermSide::Right => "R".yellow().to_string(),
+                })
+                .unwrap_or_else(|| "?".dimmed().to_string());
+            let subspace = directive
+                .requested_subspace
+                .as_deref()
+                .map(render_edge_ids)
+                .unwrap_or_else(|| "max".dimmed().to_string());
+            let parent = directive
+                .requested_parent_lmb
+                .as_deref()
+                .map(render_edge_ids)
+                .unwrap_or_else(|| "auto".dimmed().to_string());
+            let multiplier = directive
+                .multiplier
+                .as_ref()
+                .map(|multiplier| {
+                    if show_functions {
+                        format!(
+                            "{} [s={},o={}]",
+                            multiplier.expression,
+                            u8::from(multiplier.symmetrize),
+                            u8::from(multiplier.opaque_derivatives),
+                        )
+                        .magenta()
+                        .to_string()
+                    } else {
+                        "ƒ".magenta().bold().to_string()
+                    }
+                })
+                .unwrap_or_else(|| "1".dimmed().to_string());
+            let graph_label = if directive_index == 0 {
+                format!("#{} {}", graph.graph_id, graph.name)
+                    .blue()
+                    .to_string()
+            } else {
+                "·".dimmed().to_string()
+            };
+            let cut = if previous_cut == Some(directive.cut_edge_ids.as_slice()) {
+                "·".dimmed().to_string()
+            } else if directive.cut_edge_ids.is_empty() {
+                "∅".cyan().to_string()
+            } else {
+                render_edge_ids(&directive.cut_edge_ids)
+            };
+            let threshold = if previous_threshold == Some(directive.threshold_edge_ids.as_slice())
+                && previous_cut == Some(directive.cut_edge_ids.as_slice())
+            {
+                "·".dimmed().to_string()
+            } else {
+                format!(
+                    "({})",
+                    directive
+                        .threshold_edge_ids
+                        .iter()
+                        .map(ToString::to_string)
+                        .join(",")
+                )
+                .yellow()
+                .to_string()
+            };
+            builder.push_record([
+                graph_label,
+                cut,
+                threshold,
+                variant,
+                side,
+                subspace,
+                parent,
+                multiplier,
+            ]);
+            previous_cut = Some(directive.cut_edge_ids.as_slice());
+            previous_threshold = Some(directive.threshold_edge_ids.as_slice());
+        }
+    }
+
+    let mut table = builder.build();
+    table.with(Style::rounded().remove_horizontals());
+    Some(format!(
+        "{table}\n{}",
+        "● active  ○ inactive/dormant  × disabled  · repeated  * shorthand default; ↔ = A/L/R, S = subspace, P = parent LMB"
+            .dimmed()
+    ))
+}
+
 fn render_integrand_category_table(
     groups: &[&IntegrandGraphGroupInfo],
     category: IntegrandDisplayCategory,
@@ -956,6 +1087,7 @@ fn render_integrand_detail_from_info(
     requested_graphs: &[String],
     requested_categories: &[IntegrandDisplayCategory],
     hide_non_existing_thresholds: bool,
+    show_threshold_functions: bool,
 ) -> Result<()> {
     info!(
         "{}",
@@ -1059,6 +1191,16 @@ fn render_integrand_detail_from_info(
 {}
 {table}",
                     "Threshold esurfaces".bold().blue()
+                );
+            }
+            if let Some(table) =
+                render_threshold_counterterm_directives(&groups, show_threshold_functions)
+            {
+                info!(
+                    "
+{}
+{table}",
+                    "Threshold counterterm directives".bold().blue()
                 );
             }
         }
@@ -1783,18 +1925,26 @@ mod test {
         integrand_info::{
             IntegrandActiveThresholdCutInfo, IntegrandCutThresholdInfo,
             IntegrandEsurfaceClassification, IntegrandGraphGroupInfo, IntegrandGraphInfo,
-            IntegrandKind, IntegrandThresholdEsurfaceInfo, IntegrandThresholdStatus,
+            IntegrandKind, IntegrandThresholdCountertermDirectiveInfo,
+            IntegrandThresholdEsurfaceInfo, IntegrandThresholdStatus,
         },
         state::{CommandHistory, CommandsBlock, ProcessRef, RunHistory},
         CLISettings, Repl,
     };
-    use gammalooprs::settings::RuntimeSettings;
+    use gammalooprs::{
+        processes::{
+            ThresholdCountertermAssociationMetadata, ThresholdCountertermMetadataRegistry,
+            ThresholdCountertermMultiplierMetadata, ThresholdCountertermOrigin,
+            ThresholdCountertermSide, ThresholdCountertermVariantMetadata,
+        },
+        settings::RuntimeSettings,
+    };
 
     use super::{
         command_block_contents, format_bytes, render_command_blocks_table,
-        render_integrand_thresholds_table, render_threshold_counterterms,
-        serialize_settings_with_defaults, value_at_path, Display, DisplaySettingsTarget,
-        IntegrandDisplayCategory,
+        render_integrand_thresholds_table, render_threshold_counterterm_directives,
+        render_threshold_counterterms, serialize_settings_with_defaults, value_at_path, Display,
+        DisplaySettingsTarget, IntegrandDisplayCategory,
     };
 
     #[test]
@@ -1833,6 +1983,8 @@ mod test {
                 graph_id: 0,
                 name: "generic".to_string(),
                 is_master: true,
+                threshold_counterterm_directives: Vec::new(),
+                threshold_counterterms: None,
             }],
             orientation_edge_ids: Vec::new(),
             orientations: Vec::new(),
@@ -1867,11 +2019,15 @@ mod test {
                     graph_id: 0,
                     name: "master".to_string(),
                     is_master: true,
+                    threshold_counterterm_directives: Vec::new(),
+                    threshold_counterterms: None,
                 },
                 IntegrandGraphInfo {
                     graph_id: 1,
                     name: "member".to_string(),
                     is_master: false,
+                    threshold_counterterm_directives: Vec::new(),
+                    threshold_counterterms: None,
                 },
             ],
             orientation_edge_ids: Vec::new(),
@@ -1895,6 +2051,174 @@ mod test {
         assert!(!rendered.contains("Active in cuts"));
         assert!(rendered.contains("#1 : member"));
         assert!(rendered.contains("pinched"));
+    }
+
+    #[test]
+    fn threshold_counterterm_directive_display_is_compact_and_expression_optional() {
+        let amplitude_registry = ThresholdCountertermMetadataRegistry {
+            graph_name: "amp".to_string(),
+            variants: vec![ThresholdCountertermVariantMetadata {
+                variant_id: 0,
+                name: "forced".to_string(),
+                cut_group_id: None,
+                associations: vec![ThresholdCountertermAssociationMetadata {
+                    cut_id: None,
+                    cut_edges: Vec::new(),
+                    threshold_edges: vec![3, 4],
+                    esurface_id: 2,
+                    eligible: true,
+                    origin: ThresholdCountertermOrigin::Explicit,
+                }],
+                side: ThresholdCountertermSide::Amplitude,
+                threshold_esurface_ids: vec![2],
+                requested_subspace: Some(vec![3]),
+                resolved_subspace: vec![3],
+                requested_parent_lmb: None,
+                resolved_parent_lmb: vec![3],
+                subspace_loop_count: 1,
+                multiplier: Some(ThresholdCountertermMultiplierMetadata {
+                    expression: "eta(effective, 3, 4)^2".to_string(),
+                    symmetrize: false,
+                    opaque_derivatives: true,
+                }),
+                generated: true,
+                active: true,
+            }],
+            evaluators: Vec::new(),
+            components: Vec::new(),
+        };
+        let cross_registry = ThresholdCountertermMetadataRegistry {
+            graph_name: "cross".to_string(),
+            variants: vec![ThresholdCountertermVariantMetadata {
+                variant_id: 0,
+                name: "intrinsic".to_string(),
+                cut_group_id: Some(0),
+                associations: vec![ThresholdCountertermAssociationMetadata {
+                    cut_id: Some(0),
+                    cut_edges: vec![2, 4, 12],
+                    threshold_edges: vec![7, 8],
+                    esurface_id: 9,
+                    eligible: true,
+                    origin: ThresholdCountertermOrigin::Explicit,
+                }],
+                side: ThresholdCountertermSide::Left,
+                threshold_esurface_ids: vec![9],
+                requested_subspace: Some(vec![7]),
+                resolved_subspace: vec![7],
+                requested_parent_lmb: Some(vec![3, 4, 7, 10]),
+                resolved_parent_lmb: vec![3, 4, 7, 10],
+                subspace_loop_count: 1,
+                multiplier: None,
+                generated: true,
+                active: true,
+            }],
+            evaluators: Vec::new(),
+            components: Vec::new(),
+        };
+        let group = IntegrandGraphGroupInfo {
+            group_id: 0,
+            graphs: vec![
+                IntegrandGraphInfo {
+                    graph_id: 0,
+                    name: "amp".to_string(),
+                    is_master: true,
+                    threshold_counterterm_directives: vec![
+                        IntegrandThresholdCountertermDirectiveInfo {
+                            cut_edge_ids: Vec::new(),
+                            threshold_edge_ids: vec![3, 4],
+                            name: "forced".to_string(),
+                            implicit_default: false,
+                            requested_subspace: Some(vec![3]),
+                            requested_parent_lmb: None,
+                            disabled: false,
+                            multiplier: Some(ThresholdCountertermMultiplierMetadata {
+                                expression: "eta(effective, 3, 4)^2".to_string(),
+                                symmetrize: false,
+                                opaque_derivatives: true,
+                            }),
+                        },
+                    ],
+                    threshold_counterterms: Some(amplitude_registry),
+                },
+                IntegrandGraphInfo {
+                    graph_id: 1,
+                    name: "cross".to_string(),
+                    is_master: false,
+                    threshold_counterterm_directives: vec![
+                        IntegrandThresholdCountertermDirectiveInfo {
+                            cut_edge_ids: vec![2, 4, 12],
+                            threshold_edge_ids: vec![7, 8],
+                            name: "intrinsic".to_string(),
+                            implicit_default: false,
+                            requested_subspace: Some(vec![7]),
+                            requested_parent_lmb: Some(vec![3, 4, 7, 10]),
+                            disabled: false,
+                            multiplier: None,
+                        },
+                        IntegrandThresholdCountertermDirectiveInfo {
+                            cut_edge_ids: vec![2, 4, 12],
+                            threshold_edge_ids: vec![7, 8],
+                            name: "off".to_string(),
+                            implicit_default: false,
+                            requested_subspace: None,
+                            requested_parent_lmb: None,
+                            disabled: true,
+                            multiplier: None,
+                        },
+                    ],
+                    threshold_counterterms: Some(cross_registry),
+                },
+            ],
+            orientation_edge_ids: Vec::new(),
+            orientations: Vec::new(),
+            loop_momentum_bases: Vec::new(),
+            threshold_esurface_ids: Vec::new(),
+            threshold_esurfaces: Vec::new(),
+            cuts: Vec::new(),
+        };
+
+        let compact = render_threshold_counterterm_directives(&[&group], false).unwrap();
+        assert!(compact.contains("#0 amp"));
+        assert!(compact.contains("#1 cross"));
+        assert!(compact.contains('∅'));
+        assert!(compact.contains("● forced"));
+        assert!(compact.contains('ƒ'));
+        assert!(compact.contains("× off"));
+        assert!(!compact.contains("eta(effective"));
+        assert!(
+            !compact.contains("\u{1b}["),
+            "colour-disabled output: {compact}"
+        );
+
+        let expanded = render_threshold_counterterm_directives(&[&group], true).unwrap();
+        assert!(expanded.contains("eta(effective, 3, 4)^2 [s=0,o=1]"));
+    }
+
+    #[test]
+    fn threshold_counterterm_directive_display_omits_empty_specifications() {
+        let group = IntegrandGraphGroupInfo {
+            group_id: 0,
+            graphs: vec![IntegrandGraphInfo {
+                graph_id: 0,
+                name: "legacy".to_string(),
+                is_master: true,
+                threshold_counterterm_directives: Vec::new(),
+                threshold_counterterms: Some(ThresholdCountertermMetadataRegistry {
+                    graph_name: "legacy".to_string(),
+                    variants: Vec::new(),
+                    evaluators: Vec::new(),
+                    components: Vec::new(),
+                }),
+            }],
+            orientation_edge_ids: Vec::new(),
+            orientations: Vec::new(),
+            loop_momentum_bases: Vec::new(),
+            threshold_esurface_ids: Vec::new(),
+            threshold_esurfaces: Vec::new(),
+            cuts: Vec::new(),
+        };
+
+        assert!(render_threshold_counterterm_directives(&[&group], false).is_none());
     }
 
     #[test]
@@ -2144,25 +2468,28 @@ mod test {
                 graphs,
                 categories,
                 hide_non_existing_thresholds,
+                show_threshold_functions,
             }) => {
                 assert_eq!(process, None);
                 assert_eq!(integrand_name, None);
                 assert!(graphs.is_empty());
                 assert!(categories.is_empty());
                 assert!(!hide_non_existing_thresholds);
+                assert!(!show_threshold_functions);
             }
             other => panic!("Expected display integrand command, got {other:?}"),
         }
     }
 
     #[test]
-    fn structured_display_integrand_defaults_missing_threshold_filter() {
+    fn structured_display_integrand_defaults_missing_threshold_options() {
         let mut value = serde_json::to_value(Display::Integrands {
             process: None,
             integrand_name: None,
             graphs: Vec::new(),
             categories: Vec::new(),
             hide_non_existing_thresholds: false,
+            show_threshold_functions: false,
         })
         .unwrap();
         value
@@ -2170,12 +2497,18 @@ mod test {
             .and_then(serde_json::Value::as_object_mut)
             .unwrap()
             .remove("hide_non_existing_thresholds");
+        value
+            .get_mut("Integrands")
+            .and_then(serde_json::Value::as_object_mut)
+            .unwrap()
+            .remove("show_threshold_functions");
 
         let display: Display = serde_json::from_value(value).unwrap();
         assert!(matches!(
             display,
             Display::Integrands {
                 hide_non_existing_thresholds: false,
+                show_threshold_functions: false,
                 ..
             }
         ));
@@ -2201,6 +2534,7 @@ mod test {
                 graphs,
                 categories,
                 hide_non_existing_thresholds,
+                show_threshold_functions,
             }) => {
                 assert_eq!(
                     process,
@@ -2210,6 +2544,7 @@ mod test {
                 assert!(graphs.is_empty());
                 assert!(categories.is_empty());
                 assert!(!hide_non_existing_thresholds);
+                assert!(!show_threshold_functions);
             }
             other => panic!("Expected display integrand command, got {other:?}"),
         }
@@ -2233,6 +2568,7 @@ mod test {
             "orientation",
             "cuts",
             "--hide-non-existing-thresholds",
+            "--show-threshold-functions",
         ])
         .unwrap();
 
@@ -2243,12 +2579,14 @@ mod test {
                 graphs,
                 categories,
                 hide_non_existing_thresholds,
+                show_threshold_functions,
             }) => {
                 assert_eq!(
                     process,
                     Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
                 );
                 assert!(hide_non_existing_thresholds);
+                assert!(show_threshold_functions);
                 assert_eq!(integrand_name.as_deref(), Some("LO"));
                 assert_eq!(graphs, vec!["GL0".to_string(), "GL2".to_string()]);
                 assert_eq!(

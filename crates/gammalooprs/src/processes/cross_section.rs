@@ -26,6 +26,7 @@ use crate::{
         CutCFFIndex,
         esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
         expression::{CFFExpression, OrientationID},
+        surface::HybridSurfaceID,
     },
     debug_tags, define_index,
     graph::{
@@ -34,6 +35,7 @@ use crate::{
         cuts::{CutSet, ResidueSelector},
         edge::EdgeMass,
         parse::complete_group_parsing,
+        threshold_counterterms::{ThresholdCountertermMultiplier, ThresholdCountertermVariant},
     },
     integrands::process::{
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
@@ -76,6 +78,11 @@ use tracing::{debug, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
 use super::generation_progress::{self, GenerationProcessKind, GenerationProgressPhase};
+use super::threshold_counterterms::{
+    ResolvedCutGroupThresholdCounterterms, ResolvedThresholdCountertermAssociation,
+    ResolvedThresholdCountertermVariant, ResolvedThresholdCounterterms, ThresholdCountertermOrigin,
+    ThresholdCountertermSide, ThresholdCountertermVariantId,
+};
 
 use crate::{
     cff::esurface::{Esurface, EsurfaceID},
@@ -94,6 +101,10 @@ pub struct IteratedCtCollection<T> {
     data: Vec<T>,
     num_right_thresholds: usize,
 }
+
+#[cfg(test)]
+#[path = "cross_section/ir_safe_threshold_fixture_tests.rs"]
+mod ir_safe_threshold_fixture_tests;
 
 impl<T> IteratedCtCollection<T> {
     pub(crate) fn new(
@@ -160,9 +171,34 @@ impl<T> IndexMut<(LeftThresholdId, RightThresholdId)> for IteratedCtCollection<T
 pub struct LUCounterTermData {
     pub left_thresholds: TiVec<LeftThresholdId, RaisedEsurfaceGroup>,
     pub right_thresholds: TiVec<RightThresholdId, RaisedEsurfaceGroup>,
+    pub left_variant_ids: TiVec<LeftThresholdId, ThresholdCountertermVariantId>,
+    pub right_variant_ids: TiVec<RightThresholdId, ThresholdCountertermVariantId>,
+    pub left_subspaces: TiVec<LeftThresholdId, SubspaceData>,
+    pub right_subspaces: TiVec<RightThresholdId, SubspaceData>,
     pub left_atoms: TiVec<LeftThresholdId, ParametricIntegrands>,
     pub right_atoms: TiVec<RightThresholdId, ParametricIntegrands>,
     pub iterated: IteratedCtCollection<ParametricIntegrands>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct SingleThresholdPieces<T> {
+    pub(crate) local: T,
+    pub(crate) integrated: T,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct IteratedThresholdPieces<T> {
+    pub(crate) local_local: T,
+    pub(crate) local_integrated: T,
+    pub(crate) integrated_local: T,
+    pub(crate) integrated_integrated: T,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LUThresholdHelperOutputs {
+    Legacy,
+    Pieces,
+    LegacyAndPieces,
 }
 
 fn max_dual_size_for_cut_cff_indices<'a>(
@@ -412,7 +448,50 @@ struct TopologicalThresholdCandidate {
     left: SuBitGraph,
     cut: OrientedCut,
     right: SuBitGraph,
+    threshold_esurface: Esurface,
+    selected_orientation_esurface_id: Option<EsurfaceID>,
+}
+
+#[derive(Clone)]
+struct ResolvedThresholdCountertermDraft {
+    name: String,
+    origin: ThresholdCountertermOrigin,
+    disable: bool,
+    requested_subspace: Option<Vec<EdgeIndex>>,
+    requested_parent_lmb: Option<Vec<EdgeIndex>>,
+    multiplier: Option<ThresholdCountertermMultiplier>,
+    subspace: SubspaceData,
+    status: ThresholdCountertermStatus,
+    uses_global_subspace: bool,
+}
+
+impl ResolvedThresholdCountertermDraft {
+    fn is_compatible_with(
+        &self,
+        other: &Self,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> bool {
+        self.name == other.name
+            && self.disable == other.disable
+            && self.multiplier == other.multiplier
+            && self
+                .subspace
+                .has_equivalent_embedding(&other.subspace, all_lmbs)
+    }
+}
+
+#[derive(Clone)]
+struct PhysicalThresholdCountertermDraft {
+    cut_id: CutId,
+    cut_group_id: CutGroupId,
+    cut_edges: Vec<EdgeIndex>,
+    side: ThresholdCountertermSide,
     esurface_id: EsurfaceID,
+    threshold_edges: Vec<EdgeIndex>,
+    raised_threshold_id: RaisedEsurfaceId,
+    raised_esurface_group: RaisedEsurfaceGroup,
+    containing_subgraph: SuBitGraph,
+    variants: Vec<ResolvedThresholdCountertermDraft>,
 }
 
 use derive_more::{From, Into};
@@ -1420,10 +1499,13 @@ impl CrossSectionGraph {
         let threshold_candidates = self.topological_threshold_candidates()?;
         self.derived_data.threshold_candidate_esurface_ids = threshold_candidates
             .iter()
-            .map(|candidate| candidate.esurface_id)
+            .filter_map(|candidate| candidate.selected_orientation_esurface_id)
             .sorted()
             .dedup()
             .collect();
+        self.derived_data.resolved_threshold_counterterms = None;
+        self.derived_data.threshold_counterterms = TiVec::new();
+        self.derived_data.subspace_data = TiVec::new();
         self.derived_data.cut_threshold_associations =
             ti_vec![CutThresholdCountertermAssociations::default(); self.cuts.len()];
 
@@ -1431,13 +1513,20 @@ impl CrossSectionGraph {
             debug_tags!(#generation, #subtraction; "building threshold counterterm");
             self.build_subspace_data()?;
             let runtime_settings: RuntimeSettings = runtime_default.into();
-            self.build_threshold_counterterm(
+            if let Err(error) = self.build_threshold_counterterm(
                 model,
                 settings,
                 &runtime_settings,
                 &threshold_candidates,
                 vk,
-            )?;
+            ) {
+                self.derived_data.resolved_threshold_counterterms = None;
+                self.derived_data.threshold_counterterms = TiVec::new();
+                self.derived_data.subspace_data = TiVec::new();
+                self.derived_data.cut_threshold_associations =
+                    ti_vec![CutThresholdCountertermAssociations::default(); self.cuts.len()];
+                return Err(error);
+            }
         }
 
         stats.total_time += preprocess_started.elapsed();
@@ -1450,7 +1539,11 @@ impl CrossSectionGraph {
         writer: &mut W,
         settings: &DotExportSettings,
     ) -> Result<(), std::io::Error> {
-        self.graph.dot_serialize_io(writer, settings)
+        if let Some(graph) = self.graph_with_materialized_threshold_counterterms(settings) {
+            graph.dot_serialize_io(writer, settings)
+        } else {
+            self.graph.dot_serialize_io(writer, settings)
+        }
     }
 
     pub(crate) fn write_dot_fmt<W: std::fmt::Write>(
@@ -1458,7 +1551,27 @@ impl CrossSectionGraph {
         writer: &mut W,
         settings: &DotExportSettings,
     ) -> Result<(), std::fmt::Error> {
-        self.graph.dot_serialize_fmt(writer, settings)
+        if let Some(graph) = self.graph_with_materialized_threshold_counterterms(settings) {
+            graph.dot_serialize_fmt(writer, settings)
+        } else {
+            self.graph.dot_serialize_fmt(writer, settings)
+        }
+    }
+
+    fn graph_with_materialized_threshold_counterterms(
+        &self,
+        settings: &DotExportSettings,
+    ) -> Option<Graph> {
+        if !settings.include_autogenerated_fields {
+            return None;
+        }
+        let resolved = self.derived_data.resolved_threshold_counterterms.as_ref()?;
+        let all_lmbs = self.derived_data.lmbs.as_ref()?;
+        let mut graph = self.graph.clone();
+        graph.threshold_counterterms = crate::graph::autogen::Autogen::explicit(
+            resolved.materialized_spec(&self.graph.threshold_counterterms, all_lmbs),
+        );
+        Some(graph)
     }
 
     fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<GraphGenerationStats> {
@@ -1772,12 +1885,21 @@ impl CrossSectionGraph {
         tsrat_pow * hfunction * energy_conservation_delta_factor
     }
 
-    fn single_th_prefactor_helper_atom(
+    fn threshold_rstar_power(subspace_loop_count: usize, is_on_right: bool) -> Atom {
+        let radius_star = if is_on_right {
+            GS.radius_star_right
+        } else {
+            GS.radius_star_left
+        };
+        Atom::var(radius_star).pow(subspace_loop_count as i32 * 3 - 1)
+    }
+
+    fn single_th_prefactor_helper_atoms(
         order: u8,
         subspace_loop_count: usize,
         is_on_right: bool,
         include_integrated: bool,
-    ) -> Atom {
+    ) -> (SingleThresholdPieces<Atom>, Atom) {
         let loop_3 = subspace_loop_count as i64 * 3;
 
         let i = Atom::i();
@@ -1835,55 +1957,90 @@ impl CrossSectionGraph {
             Atom::zero()
         };
 
-        let mut result = (local_prefactor + integrated_prefactor) * laurent_coeffs.next().unwrap();
+        let leading_laurent_coeff = laurent_coeffs.next().unwrap();
+        // Keep the no-directive helper structurally identical to the historical single-output
+        // lane. Evaluating the split pieces and adding them later changes f64 rounding.
+        let mut legacy = (local_prefactor.clone() + integrated_prefactor.clone())
+            * leading_laurent_coeff.clone();
+        let mut local = local_prefactor * &leading_laurent_coeff;
+        let integrated = integrated_prefactor * leading_laurent_coeff;
 
         for pow in 2..=order {
-            result += laurent_coeffs.next().unwrap()
+            let raised = laurent_coeffs.next().unwrap()
                 * &jacobian_ratio
                 * (Atom::one() / delta_r_plus.pow(pow as i64)
                     + Atom::one() / delta_r_minus.pow(pow as i64));
+            legacy += raised.clone();
+            local += raised;
         }
 
         debug!(
-            "Threshold counterterm helper atom for order {} and loop number {}: {}",
-            order, subspace_loop_count, result
+            "Threshold counterterm helper atoms for order {} and loop number {}: local={}, integrated={}, legacy={}",
+            order, subspace_loop_count, local, integrated, legacy,
         );
 
-        result
+        (SingleThresholdPieces { local, integrated }, legacy)
     }
 
-    fn iterated_th_prefactor_helper_atom(
+    fn iterated_th_prefactor_helper_atoms(
         left_order: u8,
         right_order: u8,
         left_subspace_loop_count: usize,
         right_subspace_loop_count: usize,
         include_integrated: bool,
-    ) -> Atom {
-        let left_prefactor = Self::single_th_prefactor_helper_atom(
+    ) -> (IteratedThresholdPieces<Atom>, Atom) {
+        let (left_prefactors, left_legacy) = Self::single_th_prefactor_helper_atoms(
             left_order,
             left_subspace_loop_count,
             false,
             include_integrated,
-        )
-        .replace(GS.eta)
-        .with(Atom::var(GS.eta_left));
-        let right_prefactor = Self::single_th_prefactor_helper_atom(
+        );
+        let left_local = left_prefactors
+            .local
+            .replace(GS.eta)
+            .with(Atom::var(GS.eta_left));
+        let left_integrated = left_prefactors
+            .integrated
+            .replace(GS.eta)
+            .with(Atom::var(GS.eta_left));
+
+        let (right_prefactors, right_legacy) = Self::single_th_prefactor_helper_atoms(
             right_order,
             right_subspace_loop_count,
             true,
             include_integrated,
-        )
-        .replace(GS.eta)
-        .with(Atom::var(GS.eta_right));
-
-        let mut product = (left_prefactor * right_prefactor).expand();
+        );
+        let right_local = right_prefactors
+            .local
+            .replace(GS.eta)
+            .with(Atom::var(GS.eta_right));
+        let right_integrated = right_prefactors
+            .integrated
+            .replace(GS.eta)
+            .with(Atom::var(GS.eta_right));
 
         // The two single-side helpers start with the same generic `f` and `η` families.
         // Iterated subtraction evaluates one bivariate `f` and distinct left/right inverse-map
         // derivatives. Expansion exposes every product of univariate `f` derivatives so the
         // replacements below can fuse them into the corresponding bivariate derivative.
-        product = product.replace_multiple(Self::fuse_left_right_replacement());
-        product
+        let fuse = |left: Atom, right: Atom| {
+            (left * right)
+                .expand()
+                .replace_multiple(Self::fuse_left_right_replacement())
+        };
+
+        let pieces = IteratedThresholdPieces {
+            local_local: fuse(left_local.clone(), right_local.clone()),
+            local_integrated: fuse(left_local, right_integrated.clone()),
+            integrated_local: fuse(left_integrated.clone(), right_local),
+            integrated_integrated: fuse(left_integrated, right_integrated),
+        };
+        let legacy = fuse(
+            left_legacy.replace(GS.eta).with(Atom::var(GS.eta_left)),
+            right_legacy.replace(GS.eta).with(Atom::var(GS.eta_right)),
+        );
+
+        (pieces, legacy)
     }
 
     fn single_th_prefactor_helper_params(
@@ -1965,16 +2122,24 @@ impl CrossSectionGraph {
         subspace_loop_count: usize,
         is_on_right: bool,
         include_integrated: bool,
+        outputs: LUThresholdHelperOutputs,
         dual_shape: Option<Vec<Vec<usize>>>,
         optimization_settings: OptimizationSettings,
         evaluator_settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
-        let atom = Self::single_th_prefactor_helper_atom(
+        let (pieces, legacy) = Self::single_th_prefactor_helper_atoms(
             order,
             subspace_loop_count,
             is_on_right,
             include_integrated,
         );
+        let atoms = match outputs {
+            LUThresholdHelperOutputs::Legacy => vec![legacy],
+            LUThresholdHelperOutputs::Pieces => vec![pieces.local, pieces.integrated],
+            LUThresholdHelperOutputs::LegacyAndPieces => {
+                vec![legacy, pieces.local, pieces.integrated]
+            }
+        };
         let params =
             Self::single_th_prefactor_helper_params(order, subspace_loop_count, is_on_right);
 
@@ -1987,7 +2152,7 @@ impl CrossSectionGraph {
             .unwrap();
 
         let evaluator = GenericEvaluator::new_from_raw_params(
-            [atom],
+            atoms,
             &params,
             &fn_map,
             vec![],
@@ -2008,17 +2173,34 @@ impl CrossSectionGraph {
         left_subspace_loop_count: usize,
         right_subspace_loop_count: usize,
         include_integrated: bool,
+        outputs: LUThresholdHelperOutputs,
         dual_shape: Option<Vec<Vec<usize>>>,
         optimization_settings: OptimizationSettings,
         evaluator_settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
-        let atom = Self::iterated_th_prefactor_helper_atom(
+        let (pieces, legacy) = Self::iterated_th_prefactor_helper_atoms(
             left_order,
             right_order,
             left_subspace_loop_count,
             right_subspace_loop_count,
             include_integrated,
         );
+        let atoms = match outputs {
+            LUThresholdHelperOutputs::Legacy => vec![legacy],
+            LUThresholdHelperOutputs::Pieces => vec![
+                pieces.local_local,
+                pieces.local_integrated,
+                pieces.integrated_local,
+                pieces.integrated_integrated,
+            ],
+            LUThresholdHelperOutputs::LegacyAndPieces => vec![
+                legacy,
+                pieces.local_local,
+                pieces.local_integrated,
+                pieces.integrated_local,
+                pieces.integrated_integrated,
+            ],
+        };
 
         let params = Self::iterated_th_prefactor_helper_params(left_order, right_order);
 
@@ -2031,7 +2213,7 @@ impl CrossSectionGraph {
             .unwrap();
 
         let evaluator = GenericEvaluator::new_from_raw_params(
-            [atom],
+            atoms,
             &params,
             &fn_map,
             vec![],
@@ -2499,7 +2681,9 @@ impl CrossSectionGraph {
             boundary_edges(&threshold_candidate.cut);
 
         ThresholdCountertermAssociation {
-            esurface_id: threshold_candidate.esurface_id,
+            esurface_id: threshold_candidate
+                .selected_orientation_esurface_id
+                .expect("only selected-orientation threshold instances have associations"),
             cut_boundary_edges,
             threshold_boundary_edges,
             invariant_bound_is_applicable: cut_bound_is_applicable && threshold_bound_is_applicable,
@@ -2579,6 +2763,25 @@ impl CrossSectionGraph {
     }
 
     fn topological_threshold_candidates(&self) -> Result<Vec<TopologicalThresholdCandidate>> {
+        let global_cff = self
+            .derived_data
+            .global_cff_expression
+            .as_ref()
+            .expect("global_cff_expression should have been created");
+        let selected_cff_esurface_ids = global_cff
+            .orientations
+            .iter()
+            .flat_map(|orientation| {
+                orientation
+                    .expression
+                    .iter_nodes()
+                    .filter_map(|node| match node.data {
+                        HybridSurfaceID::Esurface(esurface_id) => Some(esurface_id),
+                        _ => None,
+                    })
+            })
+            .collect::<BTreeSet<_>>();
+
         let mut candidates = self.graph.all_st_cuts_for_cs(
             self.source_nodes.clone(),
             self.target_nodes.clone(),
@@ -2599,41 +2802,651 @@ impl CrossSectionGraph {
                     },
                     Some(&self.graph.initial_state_cut),
                 );
-                let esurface_id = self
+                let has_selected_orientation_instance =
+                    global_cff.orientations.iter().any(|orientation| {
+                        let selected_orientation = &orientation.data.orientation;
+                        self.graph
+                            .iter_edges_of(&cut)
+                            .map(|(_, edge_id, _)| edge_id)
+                            .zip(cut.iter_edges(&self.graph).map(|(direction, _)| direction))
+                            .all(|(edge_id, direction)| {
+                                selected_orientation[edge_id] == direction
+                            })
+                    });
+                if !has_selected_orientation_instance {
+                    debug!(
+                        "Keeping topology-discovered threshold surface {:?} dormant in graph '{}': no selected-orientation instance occurs",
+                        threshold_esurface.energies, self.graph.name,
+                    );
+                    return Ok(TopologicalThresholdCandidate {
+                        left,
+                        cut,
+                        right,
+                        threshold_esurface,
+                        selected_orientation_esurface_id: None,
+                    });
+                }
+
+                let esurface_id = match self
                     .graph
                     .surface_cache
                     .esurface_cache
                     .position(|esurface| esurface == &threshold_esurface)
-                    .ok_or_else(|| {
-                        eyre!(
-                            "Topology-discovered threshold surface {:?} is missing from graph '{}' CFF surface cache",
+                {
+                    Some(esurface_id) => esurface_id,
+                    None => {
+                        return Err(eyre!(
+                            "Topology-discovered threshold surface {:?} has a selected-orientation instance but is missing from graph '{}' selected CFF surface cache",
                             threshold_esurface.energies,
                             self.graph.name,
-                        )
-                    })?;
+                        ));
+                    }
+                };
+                if !selected_cff_esurface_ids.contains(&esurface_id) {
+                    return Err(eyre!(
+                        "Topology-discovered threshold surface {:?} has a selected-orientation instance in graph '{}' but E-surface {} does not occur in its selected CFF expression",
+                        threshold_esurface.energies,
+                        self.graph.name,
+                        esurface_id.0,
+                    ));
+                }
+
                 Ok(TopologicalThresholdCandidate {
                     left,
                     cut,
                     right,
-                    esurface_id,
+                    threshold_esurface,
+                    selected_orientation_esurface_id: Some(esurface_id),
                 })
             })
             .collect()
     }
 
-    fn build_threshold_counterterm(
-        &mut self,
+    fn physical_cut_edges(&self, cut_id: CutId) -> Vec<EdgeIndex> {
+        self.graph
+            .iter_edges_of(&self.cuts[cut_id].cut)
+            .map(|(_, edge_id, _)| edge_id)
+            .sorted()
+            .collect()
+    }
+
+    #[cfg(test)]
+    fn threshold_energy_edges(&self, esurface_id: EsurfaceID) -> Vec<EdgeIndex> {
+        self.graph.surface_cache.esurface_cache[esurface_id]
+            .energies
+            .iter()
+            .copied()
+            .sorted()
+            .collect()
+    }
+
+    fn cut_group_side_subgraphs(
+        &self,
+        cut_group_id: CutGroupId,
+    ) -> Result<(SuBitGraph, SuBitGraph)> {
+        let cut_group = &self.derived_data.cut_group_data.cut_groups[cut_group_id];
+        let smallest_side = |side: ThresholdCountertermSide| {
+            cut_group
+                .cuts
+                .iter()
+                .map(|cut_id| match side {
+                    ThresholdCountertermSide::Amplitude => {
+                        unreachable!("amplitude side is not valid in cross-section resolution")
+                    }
+                    ThresholdCountertermSide::Left => self.cuts[*cut_id].left.clone(),
+                    ThresholdCountertermSide::Right => self.cuts[*cut_id].right.clone(),
+                })
+                .min_by_key(|subgraph| subgraph.nedges(&self.graph))
+                .ok_or_else(|| {
+                    eyre!(
+                        "Graph '{}' cut group {} has no {:?} subgraph",
+                        self.graph.name,
+                        cut_group_id.0,
+                        side,
+                    )
+                })
+        };
+
+        Ok((
+            smallest_side(ThresholdCountertermSide::Left)?,
+            smallest_side(ThresholdCountertermSide::Right)?,
+        ))
+    }
+
+    fn cut_group_compatible_parent_lmbs(&self, cut_group_id: CutGroupId) -> Result<Vec<LmbIndex>> {
+        let representative_cut_id = self.derived_data.cut_group_data.cut_groups[cut_group_id]
+            .cuts
+            .first()
+            .copied()
+            .ok_or_else(|| {
+                eyre!(
+                    "Graph '{}' has an empty cut group {} while selecting threshold-counterterm parents",
+                    self.graph.name,
+                    cut_group_id.0,
+                )
+            })?;
+        let all_lmbs = self
+            .derived_data
+            .lmbs
+            .as_ref()
+            .expect("threshold resolution requires loop-momentum bases");
+        Ok(all_lmbs
+            .iter_enumerated()
+            .filter_map(|(lmb_index, lmb)| {
+                let mut cut_edges = self
+                    .graph
+                    .iter_edges_of(&self.cuts[representative_cut_id].cut)
+                    .map(|(_, edge_id, _)| edge_id)
+                    .collect_vec();
+                cut_edges.retain(|edge_id| !lmb.loop_edges.contains(edge_id));
+                (cut_edges.len() == 1).then_some(lmb_index)
+            })
+            .collect())
+    }
+
+    fn configured_threshold_variants(
+        spec: &crate::graph::threshold_counterterms::ThresholdCountertermSpec,
+        cut_edges: &[EdgeIndex],
+        threshold_edges: &[EdgeIndex],
+    ) -> Vec<(ThresholdCountertermVariant, ThresholdCountertermOrigin)> {
+        let configured = spec
+            .cuts
+            .iter()
+            .find(|cut| cut.edges == cut_edges)
+            .and_then(|cut| {
+                cut.thresholds
+                    .iter()
+                    .find(|threshold| threshold.edges == threshold_edges)
+            })
+            .filter(|threshold| !threshold.counterterms.is_empty());
+
+        match configured {
+            Some(threshold) => threshold
+                .counterterms
+                .iter()
+                .cloned()
+                .map(|variant| (variant, ThresholdCountertermOrigin::Explicit))
+                .collect(),
+            None => vec![(
+                ThresholdCountertermVariant {
+                    name: Some("default".to_string()),
+                    subspace: None,
+                    parent_lmb: None,
+                    disable: false,
+                    multiplier: None,
+                },
+                ThresholdCountertermOrigin::Autogenerated,
+            )],
+        }
+    }
+
+    fn resolve_threshold_variant_subspace(
+        &self,
+        variant: &ThresholdCountertermVariant,
+        cut_group_id: CutGroupId,
+        legacy_subspace: &SubspaceData,
+        containing_subgraph: &SuBitGraph,
+        context: &str,
+    ) -> Result<(SubspaceData, bool)> {
+        let all_lmbs = self
+            .derived_data
+            .lmbs
+            .as_ref()
+            .expect("threshold resolution requires loop-momentum bases");
+        let compatible_parent_lmbs = self.cut_group_compatible_parent_lmbs(cut_group_id)?;
+
+        let build_in_parent = |parent_lmb_index| match &variant.subspace {
+            Some(requested_basis_edges) => SubspaceData::new_from_parent_basis_edges(
+                requested_basis_edges,
+                containing_subgraph,
+                parent_lmb_index,
+                &self.graph,
+                all_lmbs,
+            ),
+            None => SubspaceData::new_with_user_selected_lmb(
+                containing_subgraph.clone(),
+                parent_lmb_index,
+                &self.graph,
+                all_lmbs,
+            ),
+        };
+        let build_globally_in_parent = |parent_lmb_index| {
+            let requested_basis_edges = variant
+                .subspace
+                .as_ref()
+                .ok_or_else(|| eyre!("{context} has no explicit subspace to resolve globally"))?;
+            SubspaceData::new_from_parent_basis_edges(
+                requested_basis_edges,
+                &self.graph.full_filter(),
+                parent_lmb_index,
+                &self.graph,
+                all_lmbs,
+            )
+        };
+
+        if let Some(requested_parent_lmb) = &variant.parent_lmb {
+            let matching_lmbs = all_lmbs
+                .iter_enumerated()
+                .filter_map(|(lmb_index, lmb)| {
+                    lmb.loop_edges
+                        .iter()
+                        .eq(requested_parent_lmb.iter())
+                        .then_some(lmb_index)
+                })
+                .collect_vec();
+            if matching_lmbs.is_empty() {
+                return Err(eyre!(
+                    "{context} requests parent_lmb {:?}, which is not among graph '{}' generated LMBs",
+                    requested_parent_lmb,
+                    self.graph.name,
+                ));
+            }
+            let mut built = matching_lmbs
+                .iter()
+                .map(|&lmb_index| {
+                    build_in_parent(lmb_index)
+                        .map(|subspace| (lmb_index, subspace, false))
+                        .or_else(|side_error| {
+                            build_globally_in_parent(lmb_index)
+                                .map(|subspace| (lmb_index, subspace, true))
+                                .with_context(|| {
+                                    format!(
+                                        "side-projected embedding was rejected with: {side_error:#}"
+                                    )
+                                })
+                        })
+                })
+                .collect::<Result<Vec<_>>>()
+                .with_context(|| {
+                    format!("{context} is incompatible with its requested parent_lmb")
+                })?;
+            let (_, selected, uses_global_subspace) = built.remove(0);
+            if built
+                .iter()
+                .all(|(_, candidate, _)| selected.has_equivalent_embedding(candidate, all_lmbs))
+            {
+                return Ok((selected, uses_global_subspace));
+            }
+            return Err(eyre!(
+                "{context} parent_lmb {:?} has genuinely different generated embeddings",
+                requested_parent_lmb,
+            ));
+        }
+
+        if variant.subspace.is_none() {
+            return Ok((legacy_subspace.clone(), false));
+        }
+
+        let preferred_parent = legacy_subspace.parent_lmb_index();
+        if let Ok(subspace) = build_in_parent(preferred_parent) {
+            return Ok((subspace, false));
+        }
+
+        let mut compatible = Vec::new();
+        let mut rejections = Vec::new();
+        for &lmb_index in &compatible_parent_lmbs {
+            if lmb_index == preferred_parent {
+                continue;
+            }
+            match build_in_parent(lmb_index) {
+                Ok(subspace) => compatible.push((lmb_index, subspace)),
+                Err(error) => rejections.push(format!(
+                    "parent {:?}: {error:#}",
+                    all_lmbs[lmb_index].loop_edges,
+                )),
+            }
+        }
+
+        match compatible.len() {
+            1 => Ok((compatible.pop().unwrap().1, false)),
+            0 => {
+                let generation_parent = all_lmbs.iter_enumerated().find_map(|(lmb_index, lmb)| {
+                    (lmb.loop_edges == self.graph.loop_momentum_basis.loop_edges)
+                        .then_some(lmb_index)
+                });
+                if let Some(generation_parent) = generation_parent {
+                    match build_globally_in_parent(generation_parent) {
+                        Ok(subspace) => return Ok((subspace, true)),
+                        Err(error) => rejections.push(format!(
+                            "global generation parent {:?}: {error:#}",
+                            all_lmbs[generation_parent].loop_edges,
+                        )),
+                    }
+                }
+
+                let mut global = Vec::new();
+                for (lmb_index, lmb) in all_lmbs.iter_enumerated() {
+                    if Some(lmb_index) == generation_parent {
+                        continue;
+                    }
+                    match build_globally_in_parent(lmb_index) {
+                        Ok(subspace) => global.push((lmb_index, subspace)),
+                        Err(error) => rejections
+                            .push(format!("global parent {:?}: {error:#}", lmb.loop_edges,)),
+                    }
+                }
+                match global.len() {
+                    0 => Err(eyre!(
+                        "{context} cannot resolve subspace {:?} in any generated parent LMB. Rejections:\n{}",
+                        variant.subspace,
+                        rejections.join("\n"),
+                    )),
+                    1 => Ok((global.pop().unwrap().1, true)),
+                    _ => {
+                        let (_, selected) = global.remove(0);
+                        if global.iter().all(|(_, candidate)| {
+                            selected.has_equivalent_embedding(candidate, all_lmbs)
+                        }) {
+                            Ok((selected, true))
+                        } else {
+                            Err(eyre!(
+                                "{context} subspace {:?} has multiple genuinely different graph-global embeddings {:?}; specify parent_lmb",
+                                variant.subspace,
+                                global
+                                    .iter()
+                                    .map(|(lmb_index, _)| &all_lmbs[*lmb_index].loop_edges)
+                                    .collect_vec(),
+                            ))
+                        }
+                    }
+                }
+            }
+            _ => {
+                let (_, selected) = compatible.remove(0);
+                if compatible
+                    .iter()
+                    .all(|(_, candidate)| selected.has_equivalent_embedding(candidate, all_lmbs))
+                {
+                    Ok((selected, false))
+                } else {
+                    Err(eyre!(
+                        "{context} subspace {:?} has multiple genuinely different non-preferred parent LMB embeddings {:?}; specify parent_lmb",
+                        variant.subspace,
+                        compatible
+                            .iter()
+                            .map(|(lmb_index, _)| &all_lmbs[*lmb_index].loop_edges)
+                            .collect_vec(),
+                    ))
+                }
+            }
+        }
+    }
+
+    fn threshold_subspaces_are_equivalent(
+        left: &SubspaceData,
+        right: &SubspaceData,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> bool {
+        left.has_equivalent_embedding(right, all_lmbs)
+    }
+
+    fn rebase_graph_global_threshold_cut_groups(
+        &self,
+        drafts: &mut [PhysicalThresholdCountertermDraft],
+        settings: &GenerationSettings,
+    ) -> Result<()> {
+        let all_lmbs = self
+            .derived_data
+            .lmbs
+            .as_ref()
+            .expect("threshold resolution requires loop-momentum bases");
+        let is_eligible = |variant: &ResolvedThresholdCountertermDraft| {
+            !variant.disable
+                && variant.status.is_eligible_for_generation(
+                    settings.threshold_subtraction.check_esurface_at_generation,
+                )
+        };
+        let generalized_cut_groups = drafts
+            .iter()
+            .filter(|draft| {
+                draft
+                    .variants
+                    .iter()
+                    .any(|variant| variant.uses_global_subspace && is_eligible(variant))
+            })
+            .map(|draft| draft.cut_group_id)
+            .collect::<BTreeSet<_>>();
+
+        for cut_group_id in generalized_cut_groups {
+            let draft_indices = drafts
+                .iter()
+                .enumerate()
+                .filter_map(|(index, draft)| (draft.cut_group_id == cut_group_id).then_some(index))
+                .collect_vec();
+            let requested_parents = draft_indices
+                .iter()
+                .flat_map(|&draft_index| &drafts[draft_index].variants)
+                .filter(|variant| is_eligible(variant))
+                .filter_map(|variant| variant.requested_parent_lmb.clone())
+                .collect::<BTreeSet<_>>();
+            if requested_parents.len() > 1 {
+                return Err(eyre!(
+                    "Graph '{}' cut group {} has incompatible explicit threshold-counterterm parents {:?}",
+                    self.graph.name,
+                    cut_group_id.0,
+                    requested_parents,
+                ));
+            }
+
+            let mut candidate_parents = Vec::new();
+            if let Some(requested_parent) = requested_parents.first() {
+                candidate_parents.extend(all_lmbs.iter_enumerated().filter_map(
+                    |(lmb_index, lmb)| {
+                        lmb.loop_edges
+                            .iter()
+                            .eq(requested_parent.iter())
+                            .then_some(lmb_index)
+                    },
+                ));
+            } else {
+                let legacy_parent = self.derived_data.subspace_data[cut_group_id]
+                    .0
+                    .parent_lmb_index();
+                candidate_parents.push(legacy_parent);
+                if let Some(generation_parent) =
+                    all_lmbs.iter_enumerated().find_map(|(lmb_index, lmb)| {
+                        (lmb.loop_edges == self.graph.loop_momentum_basis.loop_edges)
+                            .then_some(lmb_index)
+                    })
+                    && !candidate_parents.contains(&generation_parent)
+                {
+                    candidate_parents.push(generation_parent);
+                }
+                let other_parents = all_lmbs
+                    .iter_enumerated()
+                    .map(|(lmb_index, _)| lmb_index)
+                    .filter(|lmb_index| !candidate_parents.contains(lmb_index))
+                    .collect_vec();
+                candidate_parents.extend(other_parents);
+            }
+            if candidate_parents.is_empty() {
+                return Err(eyre!(
+                    "Graph '{}' cut group {} has no generated LMB matching requested parent {:?}",
+                    self.graph.name,
+                    cut_group_id.0,
+                    requested_parents.first(),
+                ));
+            }
+
+            let build_solution = |parent_lmb_index: LmbIndex| {
+                let mut solution = drafts
+                    .iter()
+                    .map(|draft| vec![None; draft.variants.len()])
+                    .collect_vec();
+                for &draft_index in &draft_indices {
+                    let draft = &drafts[draft_index];
+                    for (variant_index, variant) in draft.variants.iter().enumerate() {
+                        if !is_eligible(variant) {
+                            continue;
+                        }
+                        let subspace = match &variant.requested_subspace {
+                            Some(requested_basis_edges) => {
+                                SubspaceData::new_from_parent_basis_edges(
+                                    requested_basis_edges,
+                                    &draft.containing_subgraph,
+                                    parent_lmb_index,
+                                    &self.graph,
+                                    all_lmbs,
+                                )
+                                .or_else(|_| {
+                                    SubspaceData::new_from_parent_basis_edges(
+                                        requested_basis_edges,
+                                        &self.graph.full_filter(),
+                                        parent_lmb_index,
+                                        &self.graph,
+                                        all_lmbs,
+                                    )
+                                })
+                            }
+                            None => SubspaceData::new_with_user_selected_lmb(
+                                draft.containing_subgraph.clone(),
+                                parent_lmb_index,
+                                &self.graph,
+                                all_lmbs,
+                            ),
+                        }
+                        .with_context(|| {
+                            format!(
+                                "graph '{}' cut {:?} threshold {:?} variant '{}' cannot be represented in common parent {:?}",
+                                self.graph.name,
+                                draft.cut_edges,
+                                draft.threshold_edges,
+                                variant.name,
+                                all_lmbs[parent_lmb_index].loop_edges,
+                            )
+                        })?;
+                        let esurface = &self.graph.surface_cache.esurface_cache[draft.esurface_id];
+                        if !esurface.has_radial_dependence_in_subspace(
+                            &subspace,
+                            all_lmbs,
+                            &self.graph,
+                        ) {
+                            return Err(eyre!(
+                                "graph '{}' cut {:?} threshold {:?} variant '{}' has no radial dependence in common parent {:?}",
+                                self.graph.name,
+                                draft.cut_edges,
+                                draft.threshold_edges,
+                                variant.name,
+                                all_lmbs[parent_lmb_index].loop_edges,
+                            ));
+                        }
+                        solution[draft_index][variant_index] = Some(subspace);
+                    }
+                }
+
+                for &left_draft_index in &draft_indices {
+                    let left_draft = &drafts[left_draft_index];
+                    if left_draft.side != ThresholdCountertermSide::Left {
+                        continue;
+                    }
+                    for &right_draft_index in &draft_indices {
+                        let right_draft = &drafts[right_draft_index];
+                        if right_draft.side != ThresholdCountertermSide::Right {
+                            continue;
+                        }
+                        for (left_variant_index, left_variant) in
+                            left_draft.variants.iter().enumerate()
+                        {
+                            if !is_eligible(left_variant) {
+                                continue;
+                            }
+                            for (right_variant_index, right_variant) in
+                                right_draft.variants.iter().enumerate()
+                            {
+                                if !is_eligible(right_variant) {
+                                    continue;
+                                }
+                                let left = solution[left_draft_index][left_variant_index]
+                                    .as_ref()
+                                    .expect("eligible variants are rebuilt");
+                                let right = solution[right_draft_index][right_variant_index]
+                                    .as_ref()
+                                    .expect("eligible variants are rebuilt");
+                                if !left.is_mergable_with(right) {
+                                    return Err(eyre!(
+                                        "graph '{}' cut group {} threshold variants '{}' and '{}' overlap in common parent {:?}",
+                                        self.graph.name,
+                                        cut_group_id.0,
+                                        left_variant.name,
+                                        right_variant.name,
+                                        all_lmbs[parent_lmb_index].loop_edges,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(solution)
+            };
+
+            let mut accepted = Vec::new();
+            let mut rejections = Vec::new();
+            for parent_lmb_index in candidate_parents {
+                match build_solution(parent_lmb_index) {
+                    Ok(solution) => {
+                        accepted.push((parent_lmb_index, solution));
+                    }
+                    Err(error) => rejections.push(format!(
+                        "parent {:?}: {error:#}",
+                        all_lmbs[parent_lmb_index].loop_edges,
+                    )),
+                }
+            }
+            let Some((_, selected_solution)) = accepted.first() else {
+                return Err(eyre!(
+                    "Graph '{}' cut group {} cannot place graph-global threshold-counterterm variants in one parent LMB. Rejections:\n{}",
+                    self.graph.name,
+                    cut_group_id.0,
+                    rejections.join("\n"),
+                ));
+            };
+            if accepted.iter().skip(1).any(|(_, candidate_solution)| {
+                draft_indices.iter().any(|&draft_index| {
+                    selected_solution[draft_index]
+                        .iter()
+                        .zip(&candidate_solution[draft_index])
+                        .any(|(selected, candidate)| match (selected, candidate) {
+                            (Some(selected), Some(candidate)) => {
+                                !selected.has_equivalent_embedding(candidate, all_lmbs)
+                            }
+                            (None, None) => false,
+                            _ => true,
+                        })
+                })
+            }) {
+                return Err(eyre!(
+                    "Graph '{}' cut group {} has genuinely different common-parent embeddings; specify parent_lmb",
+                    self.graph.name,
+                    cut_group_id.0,
+                ));
+            }
+
+            for &draft_index in &draft_indices {
+                for (variant_index, subspace) in selected_solution[draft_index].iter().enumerate() {
+                    if let Some(subspace) = subspace {
+                        drafts[draft_index].variants[variant_index].subspace = subspace.clone();
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn resolve_threshold_counterterm_directives(
+        &self,
         model: &Model,
         settings: &GenerationSettings,
         runtime_settings: &RuntimeSettings,
         all_possible_thresholds: &[TopologicalThresholdCandidate],
-        vakint: &Vakint,
-    ) -> Result<()> {
-        // Thresholds are topology-discovered independently of whether a CT association survives
-        // the structural and optional current-model checks below.
-        let mut cut_threshold_associations: TiVec<CutId, CutThresholdCountertermAssociations> =
-            ti_vec![CutThresholdCountertermAssociations::default(); self.cuts.len()];
-
+    ) -> Result<(
+        ResolvedThresholdCounterterms,
+        TiVec<CutId, CutThresholdCountertermAssociations>,
+    )> {
+        let all_lmbs = self
+            .derived_data
+            .lmbs
+            .as_ref()
+            .expect("threshold resolution requires loop-momentum bases");
         let mut cut_group_by_cut = vec![None; self.cuts.len()];
         for (cut_group_id, cut_group) in self
             .derived_data
@@ -2645,120 +3458,6 @@ impl CrossSectionGraph {
                 cut_group_by_cut[cut_id.0] = Some(cut_group_id);
             }
         }
-        let all_lmbs = self
-            .derived_data
-            .lmbs
-            .as_ref()
-            .expect("threshold generation requires loop-momentum bases");
-
-        // Keep topology-discovered E-surfaces in the graph inventory, but do not generate a
-        // threshold CT association for any E-surface that is also one of this graph's physical
-        // Cutkosky cuts when the corresponding generation setting is enabled. This comparison
-        // must cover every physical cut, not only the cut currently being processed below.
-        let subtraction_threshold_candidates = all_possible_thresholds
-            .iter()
-            .filter(|threshold_candidate| {
-                !settings.threshold_subtraction.skip_thresholds_that_are_cuts
-                    || !self
-                        .cuts
-                        .iter()
-                        .any(|physical_cut| physical_cut.cut == threshold_candidate.cut)
-            })
-            .collect_vec();
-
-        for (cut_id, cut) in self.cuts.iter_enumerated() {
-            let cut_group_id = cut_group_by_cut[cut_id.0].ok_or_else(|| {
-                eyre!(
-                    "Physical cut {} in graph '{}' is missing from the cut-group partition",
-                    cut_id.0,
-                    self.graph.name,
-                )
-            })?;
-            let (left_subspace, right_subspace) = &self.derived_data.subspace_data[cut_group_id];
-
-            for threshold_candidate in &subtraction_threshold_candidates {
-                // if the subgraph on the left of the threshold cut is a subgraph of the left amplitude, then the threshold is on the left of the cut
-                if cut.left.includes(&threshold_candidate.left) {
-                    let sandwich = cut.left.intersection(&threshold_candidate.right);
-
-                    // The shared projected-signature check below determines whether the threshold
-                    // cuts an active loop. Connectivity remains a separate structural requirement.
-                    if self.graph.underlying.is_connected(&sandwich) {
-                        let association = self.threshold_counterterm_association(
-                            threshold_candidate,
-                            &sandwich,
-                            &cut.cut,
-                        );
-                        let status = self.classify_threshold_counterterm_association(
-                            &association,
-                            cut_id,
-                            cut,
-                            left_subspace,
-                            all_lmbs,
-                            model,
-                            runtime_settings,
-                            settings,
-                        );
-                        if status.is_eligible_for_generation(
-                            settings.threshold_subtraction.check_esurface_at_generation,
-                        ) {
-                            cut_threshold_associations[cut_id].left.push(association);
-                        }
-                    }
-                } else if cut.right.includes(&threshold_candidate.right) {
-                    let sandwich = cut.right.intersection(&threshold_candidate.left);
-                    if self.graph.underlying.is_connected(&sandwich) {
-                        // threshold_esurface.subspace_graph =
-                        //     InternalSubGraph::cleaned_filter_pessimist(
-                        //         cut.right.clone(),
-                        //         &self.graph,
-                        //     );
-                        let association = self.threshold_counterterm_association(
-                            threshold_candidate,
-                            &sandwich,
-                            &cut.cut,
-                        );
-                        let status = self.classify_threshold_counterterm_association(
-                            &association,
-                            cut_id,
-                            cut,
-                            right_subspace,
-                            all_lmbs,
-                            model,
-                            runtime_settings,
-                            settings,
-                        );
-                        if status.is_eligible_for_generation(
-                            settings.threshold_subtraction.check_esurface_at_generation,
-                        ) {
-                            cut_threshold_associations[cut_id].right.push(association);
-                        }
-                    }
-                }
-            }
-        }
-
-        let left_cut_threshold_data: TiVec<CutId, Vec<EsurfaceID>> = cut_threshold_associations
-            .iter()
-            .map(|associations| {
-                associations
-                    .left
-                    .iter()
-                    .map(|association| association.esurface_id)
-                    .collect()
-            })
-            .collect();
-        let right_cut_threshold_data: TiVec<CutId, Vec<EsurfaceID>> = cut_threshold_associations
-            .iter()
-            .map(|associations| {
-                associations
-                    .right
-                    .iter()
-                    .map(|association| association.esurface_id)
-                    .collect()
-            })
-            .collect();
-        self.derived_data.cut_threshold_associations = cut_threshold_associations;
 
         let threshold_raised_data = self.graph.determine_raised_esurfaces_from_expression(
             self.derived_data
@@ -2768,7 +3467,6 @@ impl CrossSectionGraph {
         );
         let mut raised_threshold_ids: TiVec<EsurfaceID, Option<RaisedEsurfaceId>> =
             ti_vec![None; self.graph.surface_cache.esurface_cache.len()];
-
         for (raised_threshold_id, raised_group) in
             threshold_raised_data.raised_groups.iter_enumerated()
         {
@@ -2777,69 +3475,535 @@ impl CrossSectionGraph {
             }
         }
 
-        let raised_threshold_ids: TiVec<EsurfaceID, RaisedEsurfaceId> = raised_threshold_ids
-            .into_iter()
-            .map(|raised_threshold_id| {
-                raised_threshold_id
-                    .expect("every esurface should belong to exactly one raised threshold group")
-            })
-            .collect();
+        let mut physical_drafts = Vec::new();
+        let mut cut_threshold_associations: TiVec<CutId, CutThresholdCountertermAssociations> =
+            ti_vec![CutThresholdCountertermAssociations::default(); self.cuts.len()];
+        let mut legacy_equivalent = true;
+        let mut matched_explicit_cuts = BTreeSet::new();
+        let mut matched_explicit_thresholds = BTreeSet::new();
 
-        let collect_raised_threshold_groups = |threshold_ids: Vec<EsurfaceID>| {
-            let mut groups = Vec::new();
-            for esurface_id in threshold_ids.into_iter().sorted().dedup() {
-                let raised_threshold_id = raised_threshold_ids[esurface_id];
-                let raised_group = threshold_raised_data.raised_groups[raised_threshold_id].clone();
-                if !groups.contains(&raised_group) {
-                    groups.push(raised_group);
-                }
+        for (cut_id, cut) in self.cuts.iter_enumerated() {
+            let cut_group_id = cut_group_by_cut[cut_id.0].ok_or_else(|| {
+                eyre!(
+                    "Physical cut {} in graph '{}' is missing from the cut-group partition",
+                    cut_id.0,
+                    self.graph.name,
+                )
+            })?;
+            let cut_edges = self.physical_cut_edges(cut_id);
+            if self
+                .graph
+                .threshold_counterterms
+                .cuts
+                .iter()
+                .any(|configured| configured.edges == cut_edges)
+            {
+                matched_explicit_cuts.insert(cut_edges.clone());
             }
-            groups
-        };
+            let (left_containing_subgraph, right_containing_subgraph) =
+                self.cut_group_side_subgraphs(cut_group_id)?;
+            let (legacy_left_subspace, legacy_right_subspace) =
+                &self.derived_data.subspace_data[cut_group_id];
 
-        let mut left_cut_group_threshold_data: TiVec<
-            CutGroupId,
-            TiVec<LeftThresholdId, RaisedEsurfaceGroup>,
-        > = TiVec::new();
+            for threshold_candidate in all_possible_thresholds {
+                let inferred = if cut.left.includes(&threshold_candidate.left) {
+                    let sandwich = cut.left.intersection(&threshold_candidate.right);
+                    self.graph.underlying.is_connected(&sandwich).then_some((
+                        ThresholdCountertermSide::Left,
+                        sandwich,
+                        legacy_left_subspace,
+                        &left_containing_subgraph,
+                    ))
+                } else if cut.right.includes(&threshold_candidate.right) {
+                    let sandwich = cut.right.intersection(&threshold_candidate.left);
+                    self.graph.underlying.is_connected(&sandwich).then_some((
+                        ThresholdCountertermSide::Right,
+                        sandwich,
+                        legacy_right_subspace,
+                        &right_containing_subgraph,
+                    ))
+                } else {
+                    None
+                };
+                let Some((side, sandwich, legacy_subspace, containing_subgraph)) = inferred else {
+                    continue;
+                };
 
-        let mut right_cut_group_threshold_data: TiVec<
-            CutGroupId,
-            TiVec<RightThresholdId, RaisedEsurfaceGroup>,
-        > = TiVec::new();
-
-        for cut_group in self.derived_data.cut_group_data.cut_groups.iter() {
-            let left_thresholds = collect_raised_threshold_groups(
-                cut_group
+                let threshold_edges = threshold_candidate
+                    .threshold_esurface
+                    .energies
+                    .iter()
+                    .copied()
+                    .sorted()
+                    .collect_vec();
+                if self
+                    .graph
+                    .threshold_counterterms
                     .cuts
                     .iter()
-                    .flat_map(|cut_id| left_cut_threshold_data[*cut_id].iter().copied())
-                    .collect(),
-            );
+                    .find(|configured| configured.edges == cut_edges)
+                    .is_some_and(|configured| {
+                        configured
+                            .thresholds
+                            .iter()
+                            .any(|threshold| threshold.edges == threshold_edges)
+                    })
+                {
+                    matched_explicit_thresholds
+                        .insert((cut_edges.clone(), threshold_edges.clone()));
+                }
+                if threshold_candidate
+                    .selected_orientation_esurface_id
+                    .is_none()
+                {
+                    debug!(
+                        "Leaving graph '{}' cut {:?} threshold {:?} dormant because it has no selected-orientation instance",
+                        self.graph.name, cut_edges, threshold_edges,
+                    );
+                    continue;
+                }
 
-            let mut right_thresholds = collect_raised_threshold_groups(
-                cut_group
-                    .cuts
+                let association = self.threshold_counterterm_association(
+                    threshold_candidate,
+                    &sandwich,
+                    &cut.cut,
+                );
+                if settings.threshold_subtraction.skip_thresholds_that_are_cuts
+                    && self
+                        .cuts
+                        .iter()
+                        .any(|physical_cut| physical_cut.cut == threshold_candidate.cut)
+                {
+                    continue;
+                }
+                let configured_variants = Self::configured_threshold_variants(
+                    &self.graph.threshold_counterterms,
+                    &cut_edges,
+                    &threshold_edges,
+                );
+                let mut variants = Vec::with_capacity(configured_variants.len());
+                for (variant, origin) in configured_variants {
+                    if !variant.disable
+                        && variant
+                            .multiplier
+                            .as_ref()
+                            .is_some_and(|multiplier| multiplier.symmetrize)
+                    {
+                        unimplemented!(
+                            "symmetrized threshold-counterterm multipliers are not implemented (graph '{}', cut {:?}, threshold {:?}, variant '{}')",
+                            self.graph.name,
+                            cut_edges,
+                            threshold_edges,
+                            variant.name.as_deref().unwrap_or("default"),
+                        );
+                    }
+                    let name = variant
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| "default".to_string());
+                    let context = format!(
+                        "graph '{}' cut {:?} threshold {:?} variant '{}'",
+                        self.graph.name, cut_edges, threshold_edges, name,
+                    );
+                    let (subspace, uses_global_subspace) = self
+                        .resolve_threshold_variant_subspace(
+                            &variant,
+                            cut_group_id,
+                            legacy_subspace,
+                            containing_subgraph,
+                            &context,
+                        )?;
+                    let status = self.classify_threshold_counterterm_association(
+                        &association,
+                        cut_id,
+                        cut,
+                        &subspace,
+                        all_lmbs,
+                        model,
+                        runtime_settings,
+                        settings,
+                    );
+                    variants.push(ResolvedThresholdCountertermDraft {
+                        name,
+                        origin,
+                        disable: variant.disable,
+                        requested_subspace: variant.subspace,
+                        requested_parent_lmb: variant.parent_lmb,
+                        multiplier: variant.multiplier,
+                        subspace,
+                        status,
+                        uses_global_subspace,
+                    });
+                }
+
+                let is_eligible = |status: ThresholdCountertermStatus| {
+                    status.is_eligible_for_generation(
+                        settings.threshold_subtraction.check_esurface_at_generation,
+                    )
+                };
+                let legacy_status = self.classify_threshold_counterterm_association(
+                    &association,
+                    cut_id,
+                    cut,
+                    legacy_subspace,
+                    all_lmbs,
+                    model,
+                    runtime_settings,
+                    settings,
+                );
+                if is_eligible(legacy_status)
+                    && (variants.len() != 1
+                        || variants[0].disable
+                        || variants[0].multiplier.is_some()
+                        || !Self::threshold_subspaces_are_equivalent(
+                            &variants[0].subspace,
+                            legacy_subspace,
+                            all_lmbs,
+                        ))
+                {
+                    legacy_equivalent = false;
+                }
+
+                let has_active_variant = variants
                     .iter()
-                    .flat_map(|cut_id| right_cut_threshold_data[*cut_id].iter().copied())
-                    .collect(),
-            );
+                    .any(|variant| !variant.disable && is_eligible(variant.status));
+                if has_active_variant {
+                    match side {
+                        ThresholdCountertermSide::Amplitude => {
+                            unreachable!("amplitude side is not valid in cross-section resolution")
+                        }
+                        ThresholdCountertermSide::Left => cut_threshold_associations[cut_id]
+                            .left
+                            .push(association.clone()),
+                        ThresholdCountertermSide::Right => cut_threshold_associations[cut_id]
+                            .right
+                            .push(association.clone()),
+                    }
+                }
 
-            right_thresholds.retain(|raised_group| !left_thresholds.contains(raised_group));
-
-            left_cut_group_threshold_data.push(left_thresholds.into());
-            right_cut_group_threshold_data.push(right_thresholds.into());
+                let raised_threshold_id = raised_threshold_ids[association.esurface_id]
+                    .ok_or_else(|| {
+                        eyre!(
+                            "Graph '{}' threshold E-surface {} is missing from raised-threshold data",
+                            self.graph.name,
+                            association.esurface_id.0,
+                        )
+                    })?;
+                physical_drafts.push(PhysicalThresholdCountertermDraft {
+                    cut_id,
+                    cut_group_id,
+                    cut_edges: cut_edges.clone(),
+                    side,
+                    esurface_id: association.esurface_id,
+                    threshold_edges,
+                    raised_threshold_id,
+                    raised_esurface_group: threshold_raised_data.raised_groups[raised_threshold_id]
+                        .clone(),
+                    containing_subgraph: containing_subgraph.clone(),
+                    variants,
+                });
+            }
         }
 
-        let mut cut_structure = vec![];
+        for configured_cut in &self.graph.threshold_counterterms.cuts {
+            if !matched_explicit_cuts.contains(&configured_cut.edges) {
+                return Err(eyre!(
+                    "Graph '{}' threshold_counterterms cut {:?} does not match any current physical cut",
+                    self.graph.name,
+                    configured_cut.edges,
+                ));
+            }
+            for configured_threshold in &configured_cut.thresholds {
+                if !matched_explicit_thresholds.contains(&(
+                    configured_cut.edges.clone(),
+                    configured_threshold.edges.clone(),
+                )) {
+                    return Err(eyre!(
+                        "Graph '{}' threshold_counterterms cut {:?} threshold {:?} does not match a topology-discovered association",
+                        self.graph.name,
+                        configured_cut.edges,
+                        configured_threshold.edges,
+                    ));
+                }
+            }
+        }
 
+        self.rebase_graph_global_threshold_cut_groups(&mut physical_drafts, settings)?;
+
+        let mut grouped = BTreeMap::<
+            (CutGroupId, RaisedEsurfaceId),
+            Vec<PhysicalThresholdCountertermDraft>,
+        >::new();
+        for draft in physical_drafts {
+            grouped
+                .entry((draft.cut_group_id, draft.raised_threshold_id))
+                .or_default()
+                .push(draft);
+        }
+
+        let mut aggregated = Vec::new();
+        for ((cut_group_id, raised_threshold_id), mut drafts) in grouped {
+            let raised_group_is_legacy_equivalent = drafts.iter().all(|draft| {
+                let legacy_subspace = match draft.side {
+                    ThresholdCountertermSide::Amplitude => return false,
+                    ThresholdCountertermSide::Left => {
+                        &self.derived_data.subspace_data[cut_group_id].0
+                    }
+                    ThresholdCountertermSide::Right => {
+                        &self.derived_data.subspace_data[cut_group_id].1
+                    }
+                };
+                draft.variants.len() == 1
+                    && !draft.variants[0].disable
+                    && draft.variants[0].multiplier.is_none()
+                    && Self::threshold_subspaces_are_equivalent(
+                        &draft.variants[0].subspace,
+                        legacy_subspace,
+                        all_lmbs,
+                    )
+            });
+            let has_left = drafts
+                .iter()
+                .any(|draft| draft.side == ThresholdCountertermSide::Left);
+            let has_right = drafts
+                .iter()
+                .any(|draft| draft.side == ThresholdCountertermSide::Right);
+            if has_left && has_right {
+                if raised_group_is_legacy_equivalent {
+                    // Preserve the legacy left-side precedence for a raised threshold seen on
+                    // both sides of physical members of one cut group.
+                    drafts.retain(|draft| draft.side == ThresholdCountertermSide::Left);
+                } else {
+                    return Err(eyre!(
+                        "Graph '{}' cut group {} raised threshold {:?} is inferred on both sides; non-legacy directives must resolve compatibly across raised physical cuts",
+                        self.graph.name,
+                        cut_group_id.0,
+                        threshold_raised_data.raised_groups[raised_threshold_id].esurface_ids,
+                    ));
+                }
+            }
+
+            let representative = drafts.first().expect("grouped drafts are non-empty");
+            for draft in drafts.iter().skip(1) {
+                if draft.variants.len() != representative.variants.len() {
+                    return Err(eyre!(
+                        "Graph '{}' cut group {} raised threshold {:?} has incompatible physical-cut threshold directives",
+                        self.graph.name,
+                        cut_group_id.0,
+                        representative.raised_esurface_group.esurface_ids,
+                    ));
+                }
+                for (variant, expected) in draft.variants.iter().zip(&representative.variants) {
+                    if !variant.is_compatible_with(expected, all_lmbs) {
+                        return Err(eyre!(
+                            "Graph '{}' cut group {} raised threshold {:?} variant '{}' resolves incompatibly across physical cuts {} and {}",
+                            self.graph.name,
+                            cut_group_id.0,
+                            representative.raised_esurface_group.esurface_ids,
+                            expected.name,
+                            representative.cut_id.0,
+                            draft.cut_id.0,
+                        ));
+                    }
+                }
+            }
+            aggregated.push(drafts);
+        }
+
+        aggregated.sort_by_key(|drafts| {
+            let representative = &drafts[0];
+            (
+                representative.cut_group_id.0,
+                match representative.side {
+                    ThresholdCountertermSide::Amplitude => 2,
+                    ThresholdCountertermSide::Left => 0,
+                    ThresholdCountertermSide::Right => 1,
+                },
+                representative
+                    .raised_esurface_group
+                    .esurface_ids
+                    .iter()
+                    .map(|id| id.0)
+                    .collect_vec(),
+            )
+        });
+
+        let mut variants =
+            TiVec::<ThresholdCountertermVariantId, ResolvedThresholdCountertermVariant>::new();
+        let mut cut_groups = ti_vec![
+            ResolvedCutGroupThresholdCounterterms::default();
+            self.derived_data.cut_group_data.cut_groups.len()
+        ];
+        let is_eligible = |status: ThresholdCountertermStatus| {
+            status.is_eligible_for_generation(
+                settings.threshold_subtraction.check_esurface_at_generation,
+            )
+        };
+
+        for drafts in aggregated {
+            let representative = &drafts[0];
+            let mut active_variant_count = 0;
+            for variant_index in 0..representative.variants.len() {
+                let representative_variant = &representative.variants[variant_index];
+                if representative_variant.disable {
+                    continue;
+                }
+                let eligible_cut_ids = drafts
+                    .iter()
+                    .filter(|draft| is_eligible(draft.variants[variant_index].status))
+                    .map(|draft| draft.cut_id)
+                    .sorted_by_key(|cut_id| cut_id.0)
+                    .dedup()
+                    .collect_vec();
+                if eligible_cut_ids.is_empty() {
+                    continue;
+                }
+
+                active_variant_count += 1;
+                let associations = drafts
+                    .iter()
+                    .map(|draft| {
+                        let resolved_variant = &draft.variants[variant_index];
+                        let legacy_subspace = match draft.side {
+                            ThresholdCountertermSide::Amplitude => unreachable!(
+                                "amplitude side is not valid in cross-section resolution"
+                            ),
+                            ThresholdCountertermSide::Left => {
+                                &self.derived_data.subspace_data[draft.cut_group_id].0
+                            }
+                            ThresholdCountertermSide::Right => {
+                                &self.derived_data.subspace_data[draft.cut_group_id].1
+                            }
+                        };
+                        ResolvedThresholdCountertermAssociation {
+                            cut_id: Some(draft.cut_id),
+                            cut_edges: draft.cut_edges.clone(),
+                            threshold_edges: draft.threshold_edges.clone(),
+                            esurface_id: draft.esurface_id,
+                            subspace: resolved_variant.subspace.clone(),
+                            requires_explicit_parent_lmb: resolved_variant
+                                .subspace
+                                .parent_lmb_index()
+                                != legacy_subspace.parent_lmb_index(),
+                            eligible: is_eligible(resolved_variant.status),
+                            origin: resolved_variant.origin,
+                        }
+                    })
+                    .sorted_by_key(|association| {
+                        (
+                            association.cut_id.map(|cut_id| cut_id.0),
+                            association.esurface_id.0,
+                            association.threshold_edges.clone(),
+                        )
+                    })
+                    .collect();
+                let parent_lmb_index = representative_variant.subspace.parent_lmb_index();
+                let variant_id = ThresholdCountertermVariantId::from(variants.len());
+                variants.push(ResolvedThresholdCountertermVariant {
+                    name: representative_variant.name.clone(),
+                    cut_group_id: Some(representative.cut_group_id),
+                    associations,
+                    side: representative.side,
+                    threshold_esurface_ids: representative
+                        .raised_esurface_group
+                        .esurface_ids
+                        .clone(),
+                    raised_esurface_group: representative.raised_esurface_group.clone(),
+                    requested_subspace: representative_variant.requested_subspace.clone(),
+                    requested_parent_lmb: representative_variant.requested_parent_lmb.clone(),
+                    resolved_parent_lmb: all_lmbs[parent_lmb_index].loop_edges.clone().into(),
+                    subspace: representative_variant.subspace.clone(),
+                    subspace_loop_count: representative_variant.subspace.loopcount(),
+                    multiplier: representative_variant.multiplier.clone(),
+                });
+                match representative.side {
+                    ThresholdCountertermSide::Amplitude => {
+                        unreachable!("amplitude side is not valid in cross-section resolution")
+                    }
+                    ThresholdCountertermSide::Left => cut_groups[representative.cut_group_id]
+                        .left
+                        .push(variant_id),
+                    ThresholdCountertermSide::Right => cut_groups[representative.cut_group_id]
+                        .right
+                        .push(variant_id),
+                }
+            }
+
+            let legacy_subspace = match representative.side {
+                ThresholdCountertermSide::Amplitude => {
+                    unreachable!("amplitude side is not valid in cross-section resolution")
+                }
+                ThresholdCountertermSide::Left => {
+                    &self.derived_data.subspace_data[representative.cut_group_id].0
+                }
+                ThresholdCountertermSide::Right => {
+                    &self.derived_data.subspace_data[representative.cut_group_id].1
+                }
+            };
+            if active_variant_count > 0
+                && (active_variant_count != 1
+                    || representative.variants.len() != 1
+                    || representative.variants[0].multiplier.is_some()
+                    || !Self::threshold_subspaces_are_equivalent(
+                        &representative.variants[0].subspace,
+                        legacy_subspace,
+                        all_lmbs,
+                    ))
+            {
+                legacy_equivalent = false;
+            }
+        }
+
+        for (cut_group_id, cut_group) in cut_groups.iter_enumerated() {
+            for (left_variant_id, right_variant_id) in cut_group.iter_pairs() {
+                let left = &variants[left_variant_id];
+                let right = &variants[right_variant_id];
+                if !left.subspace.is_mergable_with(&right.subspace) {
+                    return Err(eyre!(
+                        "Graph '{}' cut group {} threshold variants '{}' and '{}' do not share disjoint coordinates in one parent LMB",
+                        self.graph.name,
+                        cut_group_id.0,
+                        left.name,
+                        right.name,
+                    ));
+                }
+            }
+        }
+
+        Ok((
+            ResolvedThresholdCounterterms {
+                legacy_equivalent,
+                variants,
+                cross_section_cut_groups: cut_groups,
+            },
+            cut_threshold_associations,
+        ))
+    }
+
+    fn build_threshold_counterterm(
+        &mut self,
+        model: &Model,
+        settings: &GenerationSettings,
+        runtime_settings: &RuntimeSettings,
+        all_possible_thresholds: &[TopologicalThresholdCandidate],
+        vakint: &Vakint,
+    ) -> Result<()> {
+        let (resolved, cut_threshold_associations) = self
+            .resolve_threshold_counterterm_directives(
+                model,
+                settings,
+                runtime_settings,
+                all_possible_thresholds,
+            )?;
+
+        let mut cut_structure = vec![];
         for (cut_group_id, cut_group) in self
             .derived_data
             .cut_group_data
             .cut_groups
             .iter_enumerated()
         {
-            let left_thresholds = &left_cut_group_threshold_data[cut_group_id];
-            let right_thresholds = &right_cut_group_threshold_data[cut_group_id];
+            let resolved_group = &resolved.cross_section_cut_groups[cut_group_id];
 
             let cutkosky_cut_union = cut_group
                 .cuts
@@ -2860,7 +4024,8 @@ impl CrossSectionGraph {
                         .fold(base, |acc, subgraph| acc.union(&subgraph))
                 };
 
-            for raised_esurface_group in left_thresholds {
+            for &variant_id in &resolved_group.left {
+                let raised_esurface_group = &resolved.variants[variant_id].raised_esurface_group;
                 let esurface_cut_union =
                     add_threshold_group_to_union(cutkosky_cut_union.clone(), raised_esurface_group);
 
@@ -2875,7 +4040,8 @@ impl CrossSectionGraph {
                 });
             }
 
-            for raised_esurface_group in right_thresholds {
+            for &variant_id in &resolved_group.right {
+                let raised_esurface_group = &resolved.variants[variant_id].raised_esurface_group;
                 let esurface_cut_union =
                     add_threshold_group_to_union(cutkosky_cut_union.clone(), raised_esurface_group);
 
@@ -2890,10 +4056,11 @@ impl CrossSectionGraph {
                 });
             }
 
-            for (left_raised_esurface_group, right_raised_esurface_group) in left_thresholds
-                .iter()
-                .cartesian_product(right_thresholds.iter())
-            {
+            for (left_variant_id, right_variant_id) in resolved_group.iter_pairs() {
+                let left_raised_esurface_group =
+                    &resolved.variants[left_variant_id].raised_esurface_group;
+                let right_raised_esurface_group =
+                    &resolved.variants[right_variant_id].raised_esurface_group;
                 let esurface_cut_union = add_threshold_group_to_union(
                     add_threshold_group_to_union(
                         cutkosky_cut_union.clone(),
@@ -2943,50 +4110,91 @@ impl CrossSectionGraph {
         let lu_prefactor = self.lu_prefactor_helper();
 
         let mut result = TiVec::<CutGroupId, LUCounterTermData>::new();
-        for (cut_group_id, _cut_group) in self
+        for (cut_group_id, _) in self
             .derived_data
             .cut_group_data
             .cut_groups
             .iter_enumerated()
         {
-            let (left_subspace, right_subspace) = &self.derived_data.subspace_data[cut_group_id];
-
-            let left_rstar_pow =
-                Atom::var(GS.radius_star_left).pow(left_subspace.loopcount() as i32 * 3 - 1);
-
-            let right_rstar_pow =
-                Atom::var(GS.radius_star_right).pow(right_subspace.loopcount() as i32 * 3 - 1);
-
+            let resolved_group = &resolved.cross_section_cut_groups[cut_group_id];
+            let left_variant_ids: TiVec<LeftThresholdId, ThresholdCountertermVariantId> =
+                resolved_group.left.iter().copied().collect();
+            let right_variant_ids: TiVec<RightThresholdId, ThresholdCountertermVariantId> =
+                resolved_group.right.iter().copied().collect();
+            let left_thresholds = left_variant_ids
+                .iter()
+                .map(|variant_id| resolved.variants[*variant_id].raised_esurface_group.clone())
+                .collect();
+            let right_thresholds = right_variant_ids
+                .iter()
+                .map(|variant_id| resolved.variants[*variant_id].raised_esurface_group.clone())
+                .collect();
+            let left_subspaces = left_variant_ids
+                .iter()
+                .map(|variant_id| resolved.variants[*variant_id].subspace.clone())
+                .collect();
+            let right_subspaces = right_variant_ids
+                .iter()
+                .map(|variant_id| resolved.variants[*variant_id].subspace.clone())
+                .collect();
             let mut left_atoms = TiVec::<LeftThresholdId, _>::new();
             let mut right_atoms = TiVec::<RightThresholdId, _>::new();
             let mut iterated_atoms = vec![];
 
-            for _ in 0..left_cut_group_threshold_data[cut_group_id].len() {
-                left_atoms.push(
-                    threshold_counterterms
-                        .next()
-                        .unwrap()
-                        .map(|x| x * &lu_prefactor * &left_rstar_pow),
-                );
+            for variant_id in &left_variant_ids {
+                let variant = &resolved.variants[*variant_id];
+                let rstar_pow = Self::threshold_rstar_power(variant.subspace_loop_count, false);
+                let counterterm = threshold_counterterms.next().ok_or_else(|| {
+                    eyre!(
+                        "Threshold orchestrator returned too few single-left integrands for graph '{}' cut group {}",
+                        self.graph.name,
+                        cut_group_id.0,
+                    )
+                })?;
+                left_atoms.push(counterterm.map(|x| x * &lu_prefactor * &rstar_pow));
             }
 
-            for _ in 0..right_cut_group_threshold_data[cut_group_id].len() {
-                right_atoms.push(
-                    threshold_counterterms
-                        .next()
-                        .unwrap()
-                        .map(|x| x * &lu_prefactor * &right_rstar_pow),
-                );
+            for variant_id in &right_variant_ids {
+                let variant = &resolved.variants[*variant_id];
+                let rstar_pow = Self::threshold_rstar_power(variant.subspace_loop_count, true);
+                let counterterm = threshold_counterterms.next().ok_or_else(|| {
+                    eyre!(
+                        "Threshold orchestrator returned too few single-right integrands for graph '{}' cut group {}",
+                        self.graph.name,
+                        cut_group_id.0,
+                    )
+                })?;
+                right_atoms.push(counterterm.map(|x| x * &lu_prefactor * &rstar_pow));
             }
 
-            for _ in 0..(left_cut_group_threshold_data[cut_group_id].len()
-                * right_cut_group_threshold_data[cut_group_id].len())
-            {
+            for (left_variant_id, right_variant_id) in resolved_group.iter_pairs() {
+                let left_variant = &resolved.variants[left_variant_id];
+                let right_variant = &resolved.variants[right_variant_id];
+                if !left_variant
+                    .subspace
+                    .is_mergable_with(&right_variant.subspace)
+                {
+                    return Err(eyre!(
+                        "Graph '{}' cut group {} threshold variants '{}' and '{}' do not share disjoint coordinates in one parent LMB",
+                        self.graph.name,
+                        cut_group_id.0,
+                        left_variant.name,
+                        right_variant.name,
+                    ));
+                }
+                let left_rstar_pow =
+                    Self::threshold_rstar_power(left_variant.subspace_loop_count, false);
+                let right_rstar_pow =
+                    Self::threshold_rstar_power(right_variant.subspace_loop_count, true);
+                let counterterm = threshold_counterterms.next().ok_or_else(|| {
+                    eyre!(
+                        "Threshold orchestrator returned too few iterated integrands for graph '{}' cut group {}",
+                        self.graph.name,
+                        cut_group_id.0,
+                    )
+                })?;
                 iterated_atoms.push(
-                    threshold_counterterms
-                        .next()
-                        .unwrap()
-                        .map(|x| x * &lu_prefactor * &left_rstar_pow * &right_rstar_pow),
+                    counterterm.map(|x| x * &lu_prefactor * &left_rstar_pow * &right_rstar_pow),
                 );
             }
 
@@ -2994,13 +4202,23 @@ impl CrossSectionGraph {
                 IteratedCtCollection::new(iterated_atoms, left_atoms.len(), right_atoms.len());
 
             let counterterm_data = LUCounterTermData {
-                left_thresholds: left_cut_group_threshold_data[cut_group_id].clone(),
-                right_thresholds: right_cut_group_threshold_data[cut_group_id].clone(),
+                left_thresholds,
+                right_thresholds,
+                left_variant_ids,
+                right_variant_ids,
+                left_subspaces,
+                right_subspaces,
                 left_atoms,
                 right_atoms,
                 iterated: iterated_collection,
             };
             result.push(counterterm_data);
+        }
+        if threshold_counterterms.next().is_some() {
+            return Err(eyre!(
+                "Threshold orchestrator returned too many integrands for graph '{}'",
+                self.graph.name,
+            ));
         }
 
         let max_dual_size =
@@ -3014,7 +4232,9 @@ impl CrossSectionGraph {
             }));
         self.graph.param_builder.initialize_duals(max_dual_size);
 
+        self.derived_data.cut_threshold_associations = cut_threshold_associations;
         self.derived_data.threshold_counterterms = result;
+        self.derived_data.resolved_threshold_counterterms = Some(resolved);
         Ok(())
     }
 
@@ -3026,69 +4246,11 @@ impl CrossSectionGraph {
             .cut_group_data
             .cut_groups
             .iter_enumerated()
-            .map(|(cut_group_id, cut_group)| {
-                let representative_cut_id = cut_group.cuts.first().copied().ok_or_else(|| {
-                    eyre!(
-                        "Graph '{}' has an empty cut group {} while building threshold-counterterm subspaces",
-                        self.graph.name,
-                        cut_group_id.0,
-                    )
-                })?;
-                let valid_subspace_lmbs = all_lmbs
-                    .iter_enumerated()
-                    .filter_map(|(index, lmb)| {
-                        let mut edges_in_cut = self
-                            .graph
-                            .underlying
-                            .iter_edges_of(&self.cuts[representative_cut_id].cut)
-                            .map(|(_, e, _)| e)
-                            .collect_vec();
-
-                        edges_in_cut.retain(|e| !lmb.loop_edges.contains(e));
-                        if edges_in_cut.len() == 1 {
-                            Some(index)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect_vec();
-
-                let left_subgraphs = cut_group
-                    .cuts
-                    .iter()
-                    .map(|cut_id| self.cuts[*cut_id].left.clone())
-                    .sorted_by(|subgraph_a, subgraph_b| {
-                        let n_edges_a = subgraph_a.nedges(&self.graph);
-                        let n_edges_b = subgraph_b.nedges(&self.graph);
-                        n_edges_a.cmp(&n_edges_b)
-                    })
-                    .collect_vec();
-
-                let right_subgraphs = cut_group
-                    .cuts
-                    .iter()
-                    .map(|cut_id| self.cuts[*cut_id].right.clone())
-                    .sorted_by(|subgraph_a, subgraph_b| {
-                        let n_edges_a = subgraph_a.nedges(&self.graph);
-                        let n_edges_b = subgraph_b.nedges(&self.graph);
-                        n_edges_a.cmp(&n_edges_b)
-                    })
-                    .collect_vec();
-
-                let smallest_left_subgraph = left_subgraphs.first().cloned().ok_or_else(|| {
-                    eyre!(
-                        "Graph '{}' cut group {} has no left subgraph",
-                        self.graph.name,
-                        cut_group_id.0,
-                    )
-                })?;
-                let smallest_right_subgraph = right_subgraphs.first().cloned().ok_or_else(|| {
-                    eyre!(
-                        "Graph '{}' cut group {} has no right subgraph",
-                        self.graph.name,
-                        cut_group_id.0,
-                    )
-                })?;
+            .map(|(cut_group_id, _)| {
+                let valid_subspace_lmbs =
+                    self.cut_group_compatible_parent_lmbs(cut_group_id)?;
+                let (smallest_left_subgraph, smallest_right_subgraph) =
+                    self.cut_group_side_subgraphs(cut_group_id)?;
 
                 let mut possible_subspaces = Vec::new();
                 let mut rejected_lmbs = Vec::new();
@@ -3170,8 +4332,10 @@ pub struct CrossSectionDerivedData {
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub threshold_counterterms: TiVec<CutGroupId, LUCounterTermData>,
-    /// Graph-level inventory of every topology-discovered threshold E-surface. This remains
-    /// independent of whether a counterterm is generated for any particular physical cut.
+    pub resolved_threshold_counterterms: Option<ResolvedThresholdCounterterms>,
+    /// Graph-level inventory of topology-discovered threshold E-surfaces that have an instance
+    /// in the selected generation orientations. Orientation-excluded topology identities remain
+    /// available while resolving directives, but have no CFF E-surface ID to store here.
     pub threshold_candidate_esurface_ids: Vec<EsurfaceID>,
     /// Exact generated left/right threshold associations for each physical cut. Runtime
     /// evaluators aggregate these into cut groups, but display and model reclassification
@@ -3290,6 +4454,7 @@ impl CrossSectionDerivedData {
             lmbs: None,
             multi_channeling_setup: None,
             threshold_counterterms: TiVec::new(),
+            resolved_threshold_counterterms: None,
             threshold_candidate_esurface_ids: Vec::new(),
             cut_threshold_associations: TiVec::new(),
             subspace_data: TiVec::new(),
@@ -3496,8 +4661,12 @@ mod tests {
     use symbolica::{atom::AtomCore, function, symbol};
 
     use crate::{
-        cff::CutCFFIndex, dot, graph::parse::from_dot::IntoGraph, initialisation::test_initialise,
-        utils::GS,
+        cff::CutCFFIndex,
+        dot,
+        graph::parse::from_dot::IntoGraph,
+        initialisation::test_initialise,
+        settings::global::{GenerationSettings, OrientationPattern},
+        utils::{GS, load_generic_model},
     };
     use linnet::half_edge::{
         involution::EdgeIndex,
@@ -3685,6 +4854,217 @@ mod tests {
     }
 
     #[test]
+    fn selected_orientation_keeps_only_selected_threshold_instances_active() {
+        use crate::graph::FeynmanGraph;
+
+        std::thread::Builder::new()
+            .name("selected-orientation-threshold-test".to_string())
+            .stack_size(64 * 1024 * 1024)
+            .spawn(|| {
+                test_initialise().unwrap();
+                let model = load_generic_model("sm");
+                let graph =
+                    include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL638.dot")
+                        .into_graph(&model)
+                        .unwrap();
+                let mut cross_section = super::CrossSectionGraph::new(graph);
+                let target_cut_edges =
+                    vec![EdgeIndex::from(2), EdgeIndex::from(4), EdgeIndex::from(12)];
+                let (left, cut, right) = cross_section
+                    .graph
+                    .all_st_cuts_for_cs(
+                        cross_section.source_nodes.clone(),
+                        cross_section.target_nodes.clone(),
+                        &cross_section.graph.get_initial_state_tree().0,
+                    )
+                    .into_iter()
+                    .find(|(_, candidate, _)| {
+                        let mut edges = cross_section
+                            .graph
+                            .iter_edges_of(candidate)
+                            .map(|(_, edge_id, _)| edge_id)
+                            .collect::<Vec<_>>();
+                        edges.sort();
+                        edges == target_cut_edges
+                    })
+                    .expect("GL638 must contain the target physical cut");
+                cross_section
+                    .cuts
+                    .push(super::CrossSectionCut { cut, left, right });
+                let settings = GenerationSettings {
+                    orientation_pattern: OrientationPattern::from_user_pattern(
+                        "(+,+,+,+,-,-,-,+,-,0,+,0,+,-,+)",
+                    )
+                    .unwrap(),
+                    ..Default::default()
+                };
+                cross_section.generate_esurface_cuts();
+                cross_section.generate_cff(&settings).unwrap();
+
+                let topology_candidates = cross_section.topological_threshold_candidates().unwrap();
+                let selected_orientation_energy_sets = topology_candidates
+                    .iter()
+                    .filter_map(|candidate| {
+                        candidate
+                            .selected_orientation_esurface_id
+                            .map(|esurface_id| cross_section.threshold_energy_edges(esurface_id))
+                    })
+                    .collect::<Vec<_>>();
+                for expected in [
+                    vec![EdgeIndex::from(7), EdgeIndex::from(8)],
+                    vec![EdgeIndex::from(8), EdgeIndex::from(12), EdgeIndex::from(14)],
+                    vec![EdgeIndex::from(5), EdgeIndex::from(10)],
+                    vec![EdgeIndex::from(5), EdgeIndex::from(12), EdgeIndex::from(13)],
+                ] {
+                    assert!(selected_orientation_energy_sets.contains(&expected));
+                }
+                let orientation_excluded_edges = vec![
+                    EdgeIndex::from(8),
+                    EdgeIndex::from(10),
+                    EdgeIndex::from(13),
+                    EdgeIndex::from(14),
+                ];
+                assert!(!selected_orientation_energy_sets.contains(&orientation_excluded_edges));
+                assert!(topology_candidates.iter().any(|candidate| {
+                    candidate.threshold_esurface.energies == orientation_excluded_edges
+                        && candidate.selected_orientation_esurface_id.is_none()
+                }));
+
+                // Orientation selection may leave topology-wide candidates dormant, but a surface
+                // required by a selected-orientation instance must still exist in the CFF cache.
+                cross_section.graph.surface_cache.esurface_cache.raw.clear();
+                let error = cross_section
+                    .topological_threshold_candidates()
+                    .err()
+                    .expect("a corrupted selected CFF cache must be rejected");
+                assert!(
+                    error
+                        .to_string()
+                        .contains("has a selected-orientation instance but is missing")
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn orientation_excluded_explicit_threshold_is_dormant_not_unmatched() {
+        std::thread::Builder::new()
+            .name("dormant-orientation-threshold-test".to_string())
+            .stack_size(64 * 1024 * 1024)
+            .spawn(|| {
+                use crate::graph::{
+                    FeynmanGraph,
+                    autogen::Autogen,
+                    threshold_counterterms::{
+                        ThresholdCountertermCut, ThresholdCountertermMultiplier,
+                        ThresholdCountertermSpec, ThresholdCountertermThreshold,
+                        ThresholdCountertermVariant,
+                    },
+                };
+
+                test_initialise().unwrap();
+                let model = load_generic_model("sm");
+                let graph =
+                    include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL638.dot")
+                        .into_graph(&model)
+                        .unwrap();
+                let mut cross_section = super::CrossSectionGraph::new(graph);
+                let target_cut_edges =
+                    vec![EdgeIndex::from(2), EdgeIndex::from(4), EdgeIndex::from(12)];
+                let (left, cut, right) = cross_section
+                    .graph
+                    .all_st_cuts_for_cs(
+                        cross_section.source_nodes.clone(),
+                        cross_section.target_nodes.clone(),
+                        &cross_section.graph.get_initial_state_tree().0,
+                    )
+                    .into_iter()
+                    .find(|(_, candidate, _)| {
+                        let mut edges = cross_section
+                            .graph
+                            .iter_edges_of(candidate)
+                            .map(|(_, edge_id, _)| edge_id)
+                            .collect::<Vec<_>>();
+                        edges.sort();
+                        edges == target_cut_edges
+                    })
+                    .expect("GL638 must contain the target physical cut");
+                cross_section
+                    .cuts
+                    .push(super::CrossSectionCut { cut, left, right });
+
+                let dormant_threshold_edges = vec![EdgeIndex::from(5), EdgeIndex::from(10)];
+                cross_section.graph.threshold_counterterms =
+                    Autogen::explicit(ThresholdCountertermSpec {
+                        schema_version: 1,
+                        cuts: vec![ThresholdCountertermCut {
+                            edges: target_cut_edges,
+                            thresholds: vec![ThresholdCountertermThreshold {
+                                edges: dormant_threshold_edges.clone(),
+                                counterterms: vec![ThresholdCountertermVariant {
+                                    name: Some("dormant".to_string()),
+                                    subspace: None,
+                                    parent_lmb: None,
+                                    disable: false,
+                                    multiplier: Some(ThresholdCountertermMultiplier {
+                                        expression: "1".to_string(),
+                                        symmetrize: true,
+                                        opaque_derivatives: true,
+                                    }),
+                                }],
+                            }],
+                        }],
+                    });
+
+                // This orientation contains the physical cut and both left thresholds, but excludes the
+                // right-side (5,10) threshold. Its explicit directive must remain matched and dormant.
+                let settings = GenerationSettings {
+                    orientation_pattern: OrientationPattern::from_user_pattern(
+                        "(+,+,+,+,-,+,-,+,-,0,+,0,+,-,+)",
+                    )
+                    .unwrap(),
+                    ..Default::default()
+                };
+                cross_section.generate_esurface_cuts();
+                cross_section.generate_cff(&settings).unwrap();
+                cross_section.build_lmbs().unwrap();
+                cross_section.build_subspace_data().unwrap();
+                let topology_candidates = cross_section.topological_threshold_candidates().unwrap();
+                assert!(topology_candidates.iter().any(|candidate| {
+                    candidate.threshold_esurface.energies == dormant_threshold_edges
+                        && candidate.selected_orientation_esurface_id.is_none()
+                }));
+
+                let (resolved, _) = cross_section
+                    .resolve_threshold_counterterm_directives(
+                        &model,
+                        &settings,
+                        &crate::settings::RuntimeSettings::default(),
+                        &topology_candidates,
+                    )
+                    .unwrap();
+                assert!(resolved.variants.iter().all(|variant| {
+                    variant.name != "dormant"
+                        && variant.associations.iter().all(|association| {
+                            association.threshold_edges != dormant_threshold_edges
+                        })
+                }));
+                assert!(
+                    resolved
+                        .cross_section_cut_groups
+                        .iter()
+                        .any(|cut_group| !cut_group.right.is_empty()),
+                    "the orientation retains its other right-side threshold"
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
     fn cross_section_lmb_cut_edge_exclusion_prefers_massive_then_fermion_then_id() {
         test_initialise().unwrap();
         let graph = dot!(
@@ -3817,6 +5197,174 @@ mod tests {
     }
 
     #[test]
+    fn directive_resolution_defaults_and_explicit_lists_are_authoritative() {
+        use crate::{
+            graph::threshold_counterterms::{
+                ThresholdCountertermCut, ThresholdCountertermSpec, ThresholdCountertermThreshold,
+                ThresholdCountertermVariant,
+            },
+            processes::threshold_counterterms::ThresholdCountertermOrigin,
+        };
+
+        let cut_edges = vec![EdgeIndex::from(2), EdgeIndex::from(4)];
+        let threshold_edges = vec![EdgeIndex::from(7), EdgeIndex::from(8)];
+        let mut spec = ThresholdCountertermSpec {
+            schema_version: 1,
+            cuts: vec![ThresholdCountertermCut {
+                edges: cut_edges.clone(),
+                thresholds: vec![ThresholdCountertermThreshold {
+                    edges: threshold_edges.clone(),
+                    counterterms: Vec::new(),
+                }],
+            }],
+        };
+
+        let implicit = super::CrossSectionGraph::configured_threshold_variants(
+            &spec,
+            &cut_edges,
+            &threshold_edges,
+        );
+        assert_eq!(implicit.len(), 1);
+        assert_eq!(implicit[0].0.name.as_deref(), Some("default"));
+        assert_eq!(implicit[0].1, ThresholdCountertermOrigin::Autogenerated);
+
+        spec.cuts[0].thresholds[0].counterterms = vec![
+            ThresholdCountertermVariant {
+                name: Some("disabled".to_string()),
+                subspace: None,
+                parent_lmb: None,
+                disable: true,
+                multiplier: None,
+            },
+            ThresholdCountertermVariant {
+                name: Some("duplicate".to_string()),
+                subspace: Some(vec![EdgeIndex::from(7)]),
+                parent_lmb: None,
+                disable: false,
+                multiplier: None,
+            },
+        ];
+        let explicit = super::CrossSectionGraph::configured_threshold_variants(
+            &spec,
+            &cut_edges,
+            &threshold_edges,
+        );
+        assert_eq!(explicit.len(), 2);
+        assert!(explicit[0].0.disable);
+        assert_eq!(explicit[1].0.name.as_deref(), Some("duplicate"));
+        assert!(
+            explicit
+                .iter()
+                .all(|(_, origin)| *origin == ThresholdCountertermOrigin::Explicit)
+        );
+    }
+
+    #[test]
+    fn raised_member_compatibility_uses_directives_and_embedding_not_provenance() {
+        use crate::{
+            graph::{Graph, LMBext},
+            momentum::sample::SubspaceData,
+            processes::threshold_counterterms::ThresholdCountertermOrigin,
+        };
+
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph raised_compatibility {
+            ext [style=invis]
+            edge [num=1 mass=0]
+            node [num=1]
+            ext->v1:0 [id=0]
+            v1->v2 [id=1]
+            v2->v1 [id=2]
+            v1->v2 [id=3]
+            v2->v1 [id=4]
+            ext->v2:1 [id=5]
+        })
+        .unwrap();
+        let all_lmbs = graph.generate_loop_momentum_bases();
+        let subspaces = all_lmbs
+            .iter_enumerated()
+            .filter_map(|(lmb_index, _)| {
+                SubspaceData::new_with_user_selected_lmb(
+                    graph.full_filter(),
+                    lmb_index,
+                    &graph,
+                    &all_lmbs,
+                )
+                .ok()
+            })
+            .collect::<Vec<_>>();
+        let (subspace, raised_subspace) = subspaces
+            .iter()
+            .enumerate()
+            .flat_map(|(left_index, left)| {
+                subspaces
+                    .iter()
+                    .skip(left_index + 1)
+                    .map(move |right| (left, right))
+            })
+            .find(|(left, right)| {
+                left.parent_lmb_index() != right.parent_lmb_index()
+                    && left.has_equivalent_embedding(right, &all_lmbs)
+            })
+            .expect("raised fixture must have equivalent distinct parent embeddings");
+        let requested = subspace.iter_basis_edges(&all_lmbs).collect::<Vec<_>>();
+        let first = super::ResolvedThresholdCountertermDraft {
+            name: "v".to_string(),
+            origin: ThresholdCountertermOrigin::Explicit,
+            disable: false,
+            requested_subspace: Some(requested),
+            requested_parent_lmb: None,
+            multiplier: None,
+            subspace: subspace.clone(),
+            status: super::ThresholdCountertermStatus::PotentiallyExisting,
+            uses_global_subspace: false,
+        };
+        let mut raised_member = first.clone();
+        raised_member.origin = ThresholdCountertermOrigin::Autogenerated;
+        raised_member.status = super::ThresholdCountertermStatus::ProvenNonExisting;
+        raised_member.requested_subspace = None;
+        raised_member.requested_parent_lmb = Some(
+            raised_subspace
+                .get_lmb(&all_lmbs)
+                .loop_edges
+                .iter()
+                .copied()
+                .collect(),
+        );
+        raised_member.subspace = raised_subspace.clone();
+
+        // Provenance and syntactic requests live on each physical declaration. Raised-member
+        // compatibility is semantic, so equivalent resolved embeddings remain compatible.
+        assert!(
+            super::CrossSectionGraph::threshold_subspaces_are_equivalent(
+                subspace,
+                raised_subspace,
+                &all_lmbs,
+            )
+        );
+        assert!(first.is_compatible_with(&raised_member, &all_lmbs));
+        raised_member.name = "different".to_string();
+        assert!(!first.is_compatible_with(&raised_member, &all_lmbs));
+    }
+
+    #[test]
+    fn threshold_radial_power_uses_each_variant_loop_count() {
+        let one_loop = super::CrossSectionGraph::threshold_rstar_power(1, false);
+        let two_loop = super::CrossSectionGraph::threshold_rstar_power(2, true);
+
+        assert!(
+            (one_loop - super::Atom::var(GS.radius_star_left).pow(2))
+                .expand()
+                .is_zero()
+        );
+        assert!(
+            (two_loop - super::Atom::var(GS.radius_star_right).pow(5))
+                .expand()
+                .is_zero()
+        );
+    }
+
+    #[test]
     fn max_dual_size_for_cut_cff_indices_tracks_mixed_threshold_shapes() {
         let cut_cff_indices = [
             CutCFFIndex {
@@ -3923,46 +5471,121 @@ mod tests {
 
     #[test]
     fn iterated_threshold_helper_atom_matches_its_left_right_parameter_families() {
-        test_initialise().unwrap();
+        std::thread::Builder::new()
+            .name("iterated-threshold-helper-test".to_string())
+            .stack_size(16 * 1024 * 1024)
+            .spawn(|| {
+                test_initialise().unwrap();
 
-        let mut fn_map = super::FunctionMap::new();
-        fn_map
-            .add_aliases([(
-                GS.pi.into(),
-                super::Atom::num(super::Rational::try_from(std::f64::consts::PI).unwrap()),
-            )])
-            .unwrap();
+                let mut fn_map = super::FunctionMap::new();
+                fn_map
+                    .add_aliases([(
+                        GS.pi.into(),
+                        super::Atom::num(
+                            super::Rational::try_from(std::f64::consts::PI).unwrap(),
+                        ),
+                    )])
+                    .unwrap();
 
-        for left_order in 1..=3 {
-            for right_order in 1..=3 {
-                let atom = super::CrossSectionGraph::iterated_th_prefactor_helper_atom(
-                    left_order,
-                    right_order,
-                    1,
-                    1,
-                    true,
-                );
-                let params = super::CrossSectionGraph::iterated_th_prefactor_helper_params(
-                    left_order,
-                    right_order,
-                );
+                for left_order in 1..=3 {
+                    for right_order in 1..=3 {
+                        let (pieces, legacy) =
+                            super::CrossSectionGraph::iterated_th_prefactor_helper_atoms(
+                            left_order,
+                            right_order,
+                            1,
+                            1,
+                            true,
+                        );
+                        let params = super::CrossSectionGraph::iterated_th_prefactor_helper_params(
+                            left_order,
+                            right_order,
+                        );
 
-                super::GenericEvaluator::new_from_raw_params(
-                    [atom],
-                    &params,
-                    &fn_map,
-                    vec![],
-                    super::OptimizationSettings::default(),
-                    None,
-                    &super::EvaluatorSettings::default(),
-                )
-                .unwrap_or_else(|error| {
-                    panic!(
-                        "iterated {left_order}x{right_order} threshold helper atom and parameter families must agree: {error}"
-                    )
-                });
-            }
-        }
+                        super::GenericEvaluator::new_from_raw_params(
+                            [
+                                legacy,
+                                pieces.local_local,
+                                pieces.local_integrated,
+                                pieces.integrated_local,
+                                pieces.integrated_integrated,
+                            ],
+                            &params,
+                            &fn_map,
+                            vec![],
+                            super::OptimizationSettings::default(),
+                            None,
+                            &super::EvaluatorSettings::default(),
+                        )
+                        .unwrap_or_else(|error| {
+                            panic!(
+                                "iterated {left_order}x{right_order} threshold helper atom and parameter families must agree: {error}"
+                            )
+                        });
+                    }
+                }
+            })
+            .expect("iterated threshold-helper test thread must start")
+            .join()
+            .expect("iterated threshold-helper test thread must finish successfully");
+    }
+
+    #[test]
+    fn single_threshold_helper_keeps_raised_poles_in_the_local_piece() {
+        let (with_integrated, legacy) =
+            super::CrossSectionGraph::single_th_prefactor_helper_atoms(3, 1, false, true);
+        let (without_integrated, _) =
+            super::CrossSectionGraph::single_th_prefactor_helper_atoms(3, 1, false, false);
+
+        assert!(
+            (with_integrated.local.clone() - without_integrated.local)
+                .expand()
+                .is_zero()
+        );
+        assert!(without_integrated.integrated.is_zero());
+        assert!(!with_integrated.integrated.is_zero());
+        assert!(
+            (legacy - with_integrated.local - with_integrated.integrated)
+                .expand()
+                .is_zero()
+        );
+    }
+
+    #[test]
+    fn iterated_threshold_helper_pieces_sum_to_the_legacy_product() {
+        let (left, _) =
+            super::CrossSectionGraph::single_th_prefactor_helper_atoms(3, 1, false, true);
+        let left_local = left
+            .local
+            .replace(GS.eta)
+            .with(super::Atom::var(GS.eta_left));
+        let left_integrated = left
+            .integrated
+            .replace(GS.eta)
+            .with(super::Atom::var(GS.eta_left));
+        let (right, _) =
+            super::CrossSectionGraph::single_th_prefactor_helper_atoms(2, 1, true, true);
+        let right_local = right
+            .local
+            .replace(GS.eta)
+            .with(super::Atom::var(GS.eta_right));
+        let right_integrated = right
+            .integrated
+            .replace(GS.eta)
+            .with(super::Atom::var(GS.eta_right));
+
+        let legacy_product = ((left_local + left_integrated) * (right_local + right_integrated))
+            .expand()
+            .replace_multiple(super::CrossSectionGraph::fuse_left_right_replacement());
+        let (pieces, legacy) =
+            super::CrossSectionGraph::iterated_th_prefactor_helper_atoms(3, 2, 1, 1, true);
+        let piece_sum = pieces.local_local
+            + pieces.local_integrated
+            + pieces.integrated_local
+            + pieces.integrated_integrated;
+
+        assert!((legacy_product - &legacy).expand().is_zero());
+        assert!((legacy - piece_sum).expand().is_zero());
     }
 
     #[test]

@@ -15,7 +15,7 @@
 
 #![allow(dead_code)]
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::Cursor,
     ops::Neg,
@@ -31,9 +31,16 @@ use symbolica::{
     domains::rational::Fraction, evaluate::JITCompiledEvaluator, prelude::*, state::StateMap,
 };
 
-use crate::processes::StandaloneNumericTarget;
+use crate::integrands::process::cross_section::load::{
+    LoadedStandaloneThresholdMultiplierCollection, StandaloneThresholdMultiplierCollectionArchive,
+    build_threshold_multiplier_collection, validate_threshold_multiplier_archive,
+};
+use crate::processes::{
+    StandaloneNumericTarget, ThresholdCountertermComponentKind,
+    ThresholdCountertermMetadataRegistry, ThresholdCountertermOrigin, ThresholdCountertermSide,
+};
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 5;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 8;
 pub const STANDALONE_MODE_RUST: u8 = 0;
 
 #[derive(
@@ -85,7 +92,13 @@ impl StandaloneEvaluatorArchive<(), String> {
     }
 }
 
-impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
+impl<S, A> StandaloneEvaluatorArchive<S, A>
+where
+    A: ImportWithMap
+        + crate::integrands::process::cross_section::load::ImportWithMap
+        + Clone
+        + PartialEq,
+{
     #[allow(clippy::type_complexity)]
     pub fn load_impl(self, state_map: &StateMap) -> Result<LoadedStandaloneEvaluators> {
         let mut graph_terms = Vec::new();
@@ -95,7 +108,7 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
             let params = graph
                 .param_builder_params
                 .iter()
-                .map(|b| b.import_with_map(state_map))
+                .map(|b| ImportWithMap::import_with_map(b, state_map))
                 .collect::<Result<Vec<_>>>()?;
 
             for p in params.iter() {
@@ -236,6 +249,47 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                 })
                 .collect::<Result<Vec<_>>>()?;
 
+            validate_amplitude_threshold_archive(
+                &graph.graph_name,
+                graph.threshold_counterterms_are_variants,
+                threshold_counterterms.len(),
+                &graph.threshold_variants,
+                graph.threshold_multipliers.as_ref(),
+            )?;
+            if let Some(registry) = &graph.metadata_registry {
+                validate_amplitude_threshold_metadata_archive(
+                    registry,
+                    &graph.graph_name,
+                    graph.threshold_counterterms_are_variants,
+                    threshold_counterterms.len(),
+                    &graph.threshold_variants,
+                    graph.threshold_multipliers.as_ref(),
+                )?;
+            } else if graph.threshold_counterterms_are_variants {
+                return Err(eyre!(
+                    "generalized amplitude graph '{}' is missing its threshold metadata registry",
+                    graph.graph_name,
+                ));
+            }
+            let threshold_multipliers = graph
+                .threshold_multipliers
+                .map(|collection| {
+                    build_threshold_multiplier_collection(
+                        collection,
+                        graph.threshold_variants.len(),
+                        0,
+                        state_map,
+                    )
+                })
+                .transpose()?;
+            if let Some(registry) = &graph.metadata_registry {
+                validate_loaded_amplitude_threshold_evaluators(
+                    registry,
+                    threshold_multipliers.as_ref(),
+                    &graph.graph_name,
+                )?;
+            }
+
             println!("Loaded evaluators for graph {}", graph.graph_name);
             graph_terms.push(LoadedStandaloneGraphTerm {
                 orientations: graph.orientations,
@@ -243,6 +297,10 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                 param_builder_params: params,
                 original_integrand,
                 threshold_counterterms,
+                threshold_counterterms_are_variants: graph.threshold_counterterms_are_variants,
+                threshold_variants: graph.threshold_variants,
+                threshold_multipliers,
+                metadata_registry: graph.metadata_registry,
             });
         }
 
@@ -275,6 +333,494 @@ pub struct StandaloneGraphTermArchive<A = Vec<u8>> {
     pub(crate) fn_map_entries: Vec<SerializedFnMapEntry<A>>,
     pub(crate) original_integrand: StandaloneEvaluatorStackArchive<A>,
     pub(crate) threshold_counterterms: Vec<Vec<StandaloneIndexedEvaluatorStackArchive<A>>>,
+    pub(crate) threshold_counterterms_are_variants: bool,
+    pub(crate) threshold_variants: Vec<StandaloneAmplitudeThresholdVariant>,
+    pub(crate) threshold_multipliers: Option<StandaloneThresholdMultiplierCollectionArchive<A>>,
+    pub(crate) metadata_registry: Option<ThresholdCountertermMetadataRegistry>,
+}
+
+#[derive(Clone, Encode, Decode, Serialize, Deserialize)]
+pub struct StandaloneAmplitudeThresholdVariant {
+    pub(crate) variant_id: usize,
+    pub(crate) name: String,
+    pub(crate) raised_esurface_id: usize,
+    pub(crate) generated: bool,
+    pub(crate) active: bool,
+    pub(crate) requested_subspace: Option<Vec<usize>>,
+    pub(crate) requested_parent_lmb: Option<Vec<usize>>,
+    pub(crate) resolved_parent_lmb: Vec<usize>,
+    pub(crate) resolved_subspace: Vec<usize>,
+    pub(crate) subspace_loop_count: usize,
+    pub(crate) multiplier_expression: Option<String>,
+    pub(crate) multiplier_symmetrize: bool,
+    pub(crate) multiplier_opaque_derivatives: bool,
+    pub(crate) threshold_edge_sets: Vec<Vec<usize>>,
+    pub(crate) explicit_associations: Vec<bool>,
+}
+
+fn validate_amplitude_threshold_archive<A: PartialEq>(
+    graph_name: &str,
+    generalized: bool,
+    evaluator_slots: usize,
+    variants: &[StandaloneAmplitudeThresholdVariant],
+    multipliers: Option<&StandaloneThresholdMultiplierCollectionArchive<A>>,
+) -> Result<()> {
+    if !generalized {
+        if !variants.is_empty() || multipliers.is_some() {
+            return Err(eyre!(
+                "legacy amplitude graph '{graph_name}' cannot contain generalized threshold variant metadata or multipliers",
+            ));
+        }
+        return Ok(());
+    }
+    if variants.len() != evaluator_slots {
+        return Err(eyre!(
+            "amplitude graph '{graph_name}' standalone archive has {evaluator_slots} variant evaluator slots but {} variant metadata entries",
+            variants.len(),
+        ));
+    }
+
+    for (variant_id, variant) in variants.iter().enumerate() {
+        if variant.variant_id != variant_id {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' standalone threshold variant IDs are not contiguous and ordered",
+            ));
+        }
+        if variant.name.trim().is_empty() {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold variant {variant_id} has a blank name",
+            ));
+        }
+        if variant.subspace_loop_count == 0
+            || variant.resolved_subspace.len() != variant.subspace_loop_count
+            || variant.resolved_parent_lmb.is_empty()
+            || variant
+                .resolved_parent_lmb
+                .iter()
+                .collect::<BTreeSet<_>>()
+                .len()
+                != variant.resolved_parent_lmb.len()
+            || variant
+                .resolved_subspace
+                .iter()
+                .collect::<BTreeSet<_>>()
+                .len()
+                != variant.resolved_subspace.len()
+            || variant
+                .resolved_subspace
+                .iter()
+                .any(|edge| !variant.resolved_parent_lmb.contains(edge))
+        {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold variant {variant_id} has inconsistent resolved parent/subspace metadata",
+            ));
+        }
+        for (label, edges) in [
+            ("requested subspace", variant.requested_subspace.as_deref()),
+            (
+                "requested parent LMB",
+                variant.requested_parent_lmb.as_deref(),
+            ),
+        ] {
+            if edges.is_some_and(|edges| {
+                edges.is_empty() || edges.iter().collect::<BTreeSet<_>>().len() != edges.len()
+            }) {
+                return Err(eyre!(
+                    "amplitude graph '{graph_name}' threshold variant {variant_id} has an invalid {label}",
+                ));
+            }
+        }
+        if variant.threshold_edge_sets.len() != variant.explicit_associations.len()
+            || variant.threshold_edge_sets.is_empty()
+            || variant
+                .threshold_edge_sets
+                .iter()
+                .any(|edges| edges.is_empty() || edges.windows(2).any(|pair| pair[0] >= pair[1]))
+        {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold variant {variant_id} has invalid association metadata",
+            ));
+        }
+        if variant.multiplier_symmetrize
+            || !variant.multiplier_opaque_derivatives
+            || variant
+                .multiplier_expression
+                .as_ref()
+                .is_some_and(|expression| expression.trim().is_empty())
+        {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold variant {variant_id} has unsupported multiplier metadata",
+            ));
+        }
+    }
+
+    let has_multiplier = variants
+        .iter()
+        .any(|variant| variant.multiplier_expression.is_some());
+    if has_multiplier != multipliers.is_some() {
+        return Err(eyre!(
+            "amplitude graph '{graph_name}' threshold multiplier metadata and evaluator payload disagree",
+        ));
+    }
+    if let Some(multipliers) = multipliers
+        && (multipliers.left_variants.len() != variants.len()
+            || !multipliers.right_variants.is_empty()
+            || multipliers
+                .left_variants
+                .iter()
+                .enumerate()
+                .any(|(variant_id, reference)| {
+                    reference.variant_id != variant_id
+                        || reference.evaluator_id.is_some()
+                            != variants[variant_id].multiplier_expression.is_some()
+                }))
+    {
+        return Err(eyre!(
+            "amplitude graph '{graph_name}' standalone multiplier references disagree with its variant registry",
+        ));
+    }
+    if let Some(multipliers) = multipliers {
+        validate_threshold_multiplier_archive(multipliers, variants.len(), 0).with_context(
+            || format!("amplitude graph '{graph_name}' has invalid threshold multipliers"),
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_amplitude_threshold_metadata_archive<A: PartialEq>(
+    registry: &ThresholdCountertermMetadataRegistry,
+    graph_name: &str,
+    generalized: bool,
+    evaluator_slots: usize,
+    variants: &[StandaloneAmplitudeThresholdVariant],
+    multipliers: Option<&StandaloneThresholdMultiplierCollectionArchive<A>>,
+) -> Result<()> {
+    registry.validate().with_context(|| {
+        format!("amplitude graph '{graph_name}' has an invalid threshold metadata registry")
+    })?;
+    if registry.graph_name != graph_name {
+        return Err(eyre!(
+            "amplitude graph '{graph_name}' threshold metadata registry belongs to '{}'",
+            registry.graph_name,
+        ));
+    }
+
+    let expected_variant_count = if generalized {
+        variants.len()
+    } else {
+        evaluator_slots
+    };
+    if registry.variants.len() != expected_variant_count {
+        return Err(eyre!(
+            "amplitude graph '{graph_name}' threshold metadata registry has {} variants but its runtime payload has {expected_variant_count}",
+            registry.variants.len(),
+        ));
+    }
+
+    let mut raised_to_esurfaces = BTreeMap::<usize, Vec<usize>>::new();
+    let mut esurfaces_to_raised = BTreeMap::<Vec<usize>, usize>::new();
+    for (variant_id, metadata) in registry.variants.iter().enumerate() {
+        if metadata.cut_group_id.is_some() || metadata.side != ThresholdCountertermSide::Amplitude {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold metadata variant {variant_id} has a cut group or non-amplitude side",
+            ));
+        }
+        if metadata.name.trim().is_empty()
+            || metadata.subspace_loop_count == 0
+            || metadata.resolved_subspace.len() != metadata.subspace_loop_count
+            || metadata.resolved_parent_lmb.is_empty()
+            || metadata
+                .resolved_parent_lmb
+                .iter()
+                .collect::<BTreeSet<_>>()
+                .len()
+                != metadata.resolved_parent_lmb.len()
+            || metadata
+                .resolved_subspace
+                .iter()
+                .collect::<BTreeSet<_>>()
+                .len()
+                != metadata.resolved_subspace.len()
+            || metadata
+                .resolved_subspace
+                .iter()
+                .any(|edge| !metadata.resolved_parent_lmb.contains(edge))
+        {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold metadata variant {variant_id} has invalid name or resolved subspace metadata",
+            ));
+        }
+        for (label, edges) in [
+            ("requested subspace", metadata.requested_subspace.as_deref()),
+            (
+                "requested parent LMB",
+                metadata.requested_parent_lmb.as_deref(),
+            ),
+        ] {
+            if edges.is_some_and(|edges| {
+                edges.is_empty() || edges.iter().collect::<BTreeSet<_>>().len() != edges.len()
+            }) {
+                return Err(eyre!(
+                    "amplitude graph '{graph_name}' threshold metadata variant {variant_id} has an invalid {label}",
+                ));
+            }
+        }
+        if metadata.associations.is_empty()
+            || metadata.threshold_esurface_ids
+                != metadata
+                    .associations
+                    .iter()
+                    .map(|association| association.esurface_id)
+                    .collect::<Vec<_>>()
+            || metadata
+                .threshold_esurface_ids
+                .iter()
+                .collect::<BTreeSet<_>>()
+                .len()
+                != metadata.threshold_esurface_ids.len()
+            || metadata.associations.iter().any(|association| {
+                association.cut_id.is_some()
+                    || !association.cut_edges.is_empty()
+                    || association.threshold_edges.is_empty()
+                    || association
+                        .threshold_edges
+                        .windows(2)
+                        .any(|pair| pair[0] >= pair[1])
+                    || !association.eligible
+            })
+        {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold metadata variant {variant_id} has invalid amplitude associations",
+            ));
+        }
+        if metadata.multiplier.as_ref().is_some_and(|multiplier| {
+            multiplier.expression.trim().is_empty()
+                || multiplier.symmetrize
+                || !multiplier.opaque_derivatives
+        }) {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold metadata variant {variant_id} has unsupported multiplier metadata",
+            ));
+        }
+
+        if !generalized {
+            if metadata.multiplier.is_some() {
+                return Err(eyre!(
+                    "legacy amplitude graph '{graph_name}' threshold metadata variant {variant_id} cannot have a multiplier",
+                ));
+            }
+            continue;
+        }
+
+        let archived = &variants[variant_id];
+        if metadata.name != archived.name
+            || metadata.requested_subspace != archived.requested_subspace
+            || metadata.requested_parent_lmb != archived.requested_parent_lmb
+            || metadata.resolved_parent_lmb != archived.resolved_parent_lmb
+            || metadata.resolved_subspace != archived.resolved_subspace
+            || metadata.subspace_loop_count != archived.subspace_loop_count
+            || metadata.generated != archived.generated
+            || metadata.active != archived.active
+        {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold metadata variant {variant_id} disagrees with its standalone runtime record",
+            ));
+        }
+        if metadata.associations.len() != archived.threshold_edge_sets.len()
+            || metadata
+                .associations
+                .iter()
+                .zip(&archived.threshold_edge_sets)
+                .zip(&archived.explicit_associations)
+                .any(|((association, threshold_edges), explicit)| {
+                    association.threshold_edges != *threshold_edges
+                        || (association.origin == ThresholdCountertermOrigin::Explicit) != *explicit
+                })
+        {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold metadata variant {variant_id} association provenance disagrees with its standalone runtime record",
+            ));
+        }
+        match (&metadata.multiplier, &archived.multiplier_expression) {
+            (None, None) => {}
+            (Some(multiplier), Some(expression))
+                if multiplier.expression == *expression
+                    && multiplier.symmetrize == archived.multiplier_symmetrize
+                    && multiplier.opaque_derivatives == archived.multiplier_opaque_derivatives => {}
+            _ => {
+                return Err(eyre!(
+                    "amplitude graph '{graph_name}' threshold metadata variant {variant_id} multiplier disagrees with its standalone runtime record",
+                ));
+            }
+        }
+
+        if let Some(previous) = raised_to_esurfaces.insert(
+            archived.raised_esurface_id,
+            metadata.threshold_esurface_ids.clone(),
+        ) && previous != metadata.threshold_esurface_ids
+        {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' raised E-surface {} is associated with inconsistent threshold E-surface groups",
+                archived.raised_esurface_id,
+            ));
+        }
+        if let Some(previous) = esurfaces_to_raised.insert(
+            metadata.threshold_esurface_ids.clone(),
+            archived.raised_esurface_id,
+        ) && previous != archived.raised_esurface_id
+        {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold E-surface group {:?} refers to inconsistent raised E-surfaces",
+                metadata.threshold_esurface_ids,
+            ));
+        }
+    }
+
+    let collection_references = multipliers.map(|collection| &collection.left_variants);
+    let mut variant_evaluators = vec![None; registry.variants.len()];
+    let mut collection_evaluators = BTreeSet::new();
+    for (evaluator_id, evaluator) in registry.evaluators.iter().enumerate() {
+        if evaluator.cut_group_id.is_some() || evaluator.expression.trim().is_empty() {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold metadata evaluator {evaluator_id} has a cut group or blank expression",
+            ));
+        }
+        if !collection_evaluators.insert(evaluator.collection_evaluator_id) {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold metadata refers to cut-local evaluator {} more than once",
+                evaluator.collection_evaluator_id,
+            ));
+        }
+        let collection = multipliers.ok_or_else(|| {
+            eyre!(
+                "amplitude graph '{graph_name}' threshold metadata evaluator {evaluator_id} has no multiplier archive",
+            )
+        })?;
+        if evaluator.collection_evaluator_id >= collection.evaluators.len() {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold metadata evaluator {evaluator_id} refers to missing cut-local evaluator {}",
+                evaluator.collection_evaluator_id,
+            ));
+        }
+        let archived_variant_ids = collection
+            .left_variants
+            .iter()
+            .filter_map(|reference| {
+                (reference.evaluator_id == Some(evaluator.collection_evaluator_id))
+                    .then_some(reference.variant_id)
+            })
+            .collect::<Vec<_>>();
+        if evaluator.variant_ids != archived_variant_ids {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold metadata evaluator {evaluator_id} variant links disagree with the multiplier archive",
+            ));
+        }
+        for &variant_id in &evaluator.variant_ids {
+            let variant = registry.variants.get(variant_id).ok_or_else(|| {
+                eyre!(
+                    "amplitude graph '{graph_name}' threshold metadata evaluator {evaluator_id} refers to missing variant {variant_id}",
+                )
+            })?;
+            if variant.multiplier.is_none()
+                || variant_evaluators[variant_id]
+                    .replace(evaluator_id)
+                    .is_some()
+            {
+                return Err(eyre!(
+                    "amplitude graph '{graph_name}' threshold metadata variant {variant_id} has an invalid evaluator assignment",
+                ));
+            }
+        }
+    }
+    if collection_evaluators.len()
+        != multipliers.map_or(0, |collection| collection.evaluators.len())
+    {
+        return Err(eyre!(
+            "amplitude graph '{graph_name}' threshold metadata does not cover every multiplier evaluator",
+        ));
+    }
+    for (variant_id, variant) in registry.variants.iter().enumerate() {
+        let archived_evaluator = collection_references
+            .and_then(|references| references.get(variant_id))
+            .and_then(|reference| reference.evaluator_id);
+        let metadata_evaluator = variant_evaluators[variant_id]
+            .map(|evaluator_id| registry.evaluators[evaluator_id].collection_evaluator_id);
+        if archived_evaluator != metadata_evaluator
+            || variant.multiplier.is_some() != metadata_evaluator.is_some()
+        {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold metadata variant {variant_id} multiplier/evaluator links disagree",
+            ));
+        }
+    }
+
+    let mut actual_components = BTreeSet::new();
+    for (component_id, component) in registry.components.iter().enumerate() {
+        if component.cut_group_id.is_some()
+            || component.variant_ids.len() != 1
+            || component.evaluator_ids.len() != 1
+        {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold metadata component {component_id} is not a single-variant amplitude component",
+            ));
+        }
+        let variant_id = component.variant_ids[0];
+        if component.evaluator_ids[0] != variant_evaluators.get(variant_id).copied().flatten() {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold metadata component {component_id} has an inconsistent evaluator link",
+            ));
+        }
+        if !actual_components.insert((component.kind, variant_id)) {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' has duplicate threshold component metadata for variant {variant_id}",
+            ));
+        }
+    }
+    let expected_components = (0..registry.variants.len())
+        .flat_map(|variant_id| {
+            [
+                (ThresholdCountertermComponentKind::Local, variant_id),
+                (ThresholdCountertermComponentKind::Integrated, variant_id),
+            ]
+        })
+        .collect::<BTreeSet<_>>();
+    if actual_components != expected_components {
+        return Err(eyre!(
+            "amplitude graph '{graph_name}' threshold component registry does not contain exactly one local and integrated component per variant",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_loaded_amplitude_threshold_evaluators(
+    registry: &ThresholdCountertermMetadataRegistry,
+    multipliers: Option<&LoadedStandaloneThresholdMultiplierCollection>,
+    graph_name: &str,
+) -> Result<()> {
+    for evaluator in &registry.evaluators {
+        let archived_expression = multipliers
+            .and_then(|collection| collection.evaluators.get(evaluator.collection_evaluator_id))
+            .and_then(|loaded| loaded.0.first())
+            .ok_or_else(|| {
+                eyre!(
+                    "amplitude graph '{graph_name}' threshold metadata evaluator {} has no loaded expression",
+                    evaluator.evaluator_id,
+                )
+            })?;
+        let metadata_expression = try_parse!(evaluator.expression.as_str()).map_err(|error| {
+            eyre!(
+                "amplitude graph '{graph_name}' threshold metadata evaluator {} has an invalid expression: {error}",
+                evaluator.evaluator_id,
+            )
+        })?;
+        if archived_expression != &metadata_expression {
+            return Err(eyre!(
+                "amplitude graph '{graph_name}' threshold metadata evaluator {} expression disagrees with the multiplier archive",
+                evaluator.evaluator_id,
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
@@ -723,6 +1269,10 @@ pub struct LoadedStandaloneGraphTerm {
     pub original_integrand: LoadedStandaloneEvaluatorStack,
     pub threshold_counterterms:
         Vec<BTreeMap<StandaloneCutCFFIndex, LoadedStandaloneEvaluatorStack>>,
+    pub threshold_counterterms_are_variants: bool,
+    pub threshold_variants: Vec<StandaloneAmplitudeThresholdVariant>,
+    pub threshold_multipliers: Option<LoadedStandaloneThresholdMultiplierCollection>,
+    pub metadata_registry: Option<ThresholdCountertermMetadataRegistry>,
 }
 
 #[allow(clippy::type_complexity)]
@@ -1468,4 +2018,538 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod threshold_variant_archive_tests {
+    use super::*;
+    use crate::{
+        initialisation::test_initialise,
+        integrands::process::{
+            cross_section::{
+                export::export_threshold_multiplier_collection,
+                load::{
+                    StandaloneGenericEvaluatorArchive as CrossSectionGenericEvaluatorArchive,
+                    StandaloneThresholdMultiplierLayoutArchive,
+                    StandaloneThresholdMultiplierVariantReference,
+                },
+            },
+            threshold_multiplier::{
+                ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierLayout,
+            },
+        },
+        processes::{
+            EvaluatorSettings, ThresholdCountertermAssociationMetadata,
+            ThresholdCountertermComponentMetadata, ThresholdCountertermEvaluatorMetadata,
+            ThresholdCountertermMultiplierMetadata, ThresholdCountertermVariantId,
+            ThresholdCountertermVariantMetadata,
+        },
+    };
+    use symbolica::state::State;
+
+    fn variant() -> StandaloneAmplitudeThresholdVariant {
+        StandaloneAmplitudeThresholdVariant {
+            variant_id: 0,
+            name: "default".to_string(),
+            raised_esurface_id: 0,
+            generated: true,
+            active: true,
+            requested_subspace: None,
+            requested_parent_lmb: None,
+            resolved_parent_lmb: vec![1, 2],
+            resolved_subspace: vec![1],
+            subspace_loop_count: 1,
+            multiplier_expression: None,
+            multiplier_symmetrize: false,
+            multiplier_opaque_derivatives: true,
+            threshold_edge_sets: vec![vec![3, 4]],
+            explicit_associations: vec![true],
+        }
+    }
+
+    fn identity_registry() -> ThresholdCountertermMetadataRegistry {
+        ThresholdCountertermMetadataRegistry {
+            graph_name: "graph".to_string(),
+            variants: vec![ThresholdCountertermVariantMetadata {
+                variant_id: 0,
+                name: "default".to_string(),
+                cut_group_id: None,
+                associations: vec![ThresholdCountertermAssociationMetadata {
+                    cut_id: None,
+                    cut_edges: Vec::new(),
+                    threshold_edges: vec![3, 4],
+                    esurface_id: 7,
+                    eligible: true,
+                    origin: ThresholdCountertermOrigin::Explicit,
+                }],
+                side: ThresholdCountertermSide::Amplitude,
+                threshold_esurface_ids: vec![7],
+                requested_subspace: None,
+                resolved_subspace: vec![1],
+                requested_parent_lmb: None,
+                resolved_parent_lmb: vec![1, 2],
+                subspace_loop_count: 1,
+                multiplier: None,
+                generated: true,
+                active: true,
+            }],
+            evaluators: Vec::new(),
+            components: vec![
+                ThresholdCountertermComponentMetadata {
+                    component_id: 0,
+                    cut_group_id: None,
+                    kind: ThresholdCountertermComponentKind::Local,
+                    variant_ids: vec![0],
+                    evaluator_ids: vec![None],
+                    sign: -1,
+                },
+                ThresholdCountertermComponentMetadata {
+                    component_id: 1,
+                    cut_group_id: None,
+                    kind: ThresholdCountertermComponentKind::Integrated,
+                    variant_ids: vec![0],
+                    evaluator_ids: vec![None],
+                    sign: -1,
+                },
+            ],
+        }
+    }
+
+    fn multiplier_registry(expression: &str) -> ThresholdCountertermMetadataRegistry {
+        let mut registry = identity_registry();
+        registry.variants[0].multiplier = Some(ThresholdCountertermMultiplierMetadata {
+            expression: expression.to_string(),
+            symmetrize: false,
+            opaque_derivatives: true,
+        });
+        registry.evaluators = vec![ThresholdCountertermEvaluatorMetadata {
+            evaluator_id: 0,
+            cut_group_id: None,
+            collection_evaluator_id: 0,
+            expression: expression.to_string(),
+            variant_ids: vec![0],
+        }];
+        for component in &mut registry.components {
+            component.evaluator_ids = vec![Some(0)];
+        }
+        registry
+    }
+
+    fn assert_metadata_rejected(
+        mutate: impl FnOnce(&mut ThresholdCountertermMetadataRegistry),
+        expected: &str,
+    ) {
+        let mut registry = identity_registry();
+        mutate(&mut registry);
+        let error = validate_amplitude_threshold_metadata_archive::<String>(
+            &registry,
+            "graph",
+            true,
+            1,
+            &[variant()],
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            format!("{error:?}").contains(expected),
+            "unexpected validation error: {error:?}",
+        );
+    }
+
+    #[test]
+    fn identity_variant_archive_needs_no_multiplier_payload() {
+        validate_amplitude_threshold_archive::<String>("graph", true, 1, &[variant()], None)
+            .unwrap();
+        validate_amplitude_threshold_metadata_archive::<String>(
+            &identity_registry(),
+            "graph",
+            true,
+            1,
+            &[variant()],
+            None,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn normalized_legacy_metadata_uses_the_runtime_evaluator_dimensions() {
+        validate_amplitude_threshold_metadata_archive::<String>(
+            &identity_registry(),
+            "graph",
+            false,
+            1,
+            &[],
+            None,
+        )
+        .unwrap();
+
+        let error = validate_amplitude_threshold_metadata_archive::<String>(
+            &identity_registry(),
+            "graph",
+            false,
+            2,
+            &[],
+            None,
+        )
+        .unwrap_err();
+        assert!(format!("{error:?}").contains("runtime payload has 2"));
+    }
+
+    #[test]
+    fn amplitude_metadata_rejects_tampered_variant_fields() {
+        assert_metadata_rejected(
+            |registry| registry.variants[0].variant_id = 1,
+            "stored at index",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].name = "renamed".to_string(),
+            "runtime record",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].cut_group_id = Some(0),
+            "cut group",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].side = ThresholdCountertermSide::Left,
+            "non-amplitude side",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].associations[0].cut_id = Some(0),
+            "invalid amplitude associations",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].associations[0].cut_edges = vec![1],
+            "invalid amplitude associations",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].associations[0].threshold_edges = vec![3, 5],
+            "association provenance",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].associations[0].eligible = false,
+            "invalid amplitude associations",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].associations[0].esurface_id = 8,
+            "invalid amplitude associations",
+        );
+        assert_metadata_rejected(
+            |registry| {
+                registry.variants[0].associations[0].origin =
+                    ThresholdCountertermOrigin::Autogenerated
+            },
+            "association provenance",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].requested_subspace = Some(vec![2]),
+            "runtime record",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].requested_parent_lmb = Some(vec![1, 2]),
+            "runtime record",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].resolved_subspace = vec![2],
+            "runtime record",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].resolved_parent_lmb = vec![1],
+            "runtime record",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].subspace_loop_count = 2,
+            "invalid name or resolved subspace",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].generated = false,
+            "runtime record",
+        );
+        assert_metadata_rejected(
+            |registry| registry.variants[0].active = false,
+            "runtime record",
+        );
+    }
+
+    #[test]
+    fn amplitude_metadata_rejects_tampered_components_and_evaluator_links() {
+        assert_metadata_rejected(
+            |registry| {
+                registry.components.pop();
+            },
+            "exactly one local and integrated",
+        );
+        assert_metadata_rejected(
+            |registry| registry.components[1].kind = ThresholdCountertermComponentKind::Local,
+            "duplicate threshold component",
+        );
+        assert_metadata_rejected(
+            |registry| registry.components[1].component_id = 0,
+            "stored at index",
+        );
+        assert_metadata_rejected(
+            |registry| registry.components[0].cut_group_id = Some(0),
+            "different cut groups",
+        );
+        assert_metadata_rejected(
+            |registry| registry.components[0].variant_ids = vec![1],
+            "missing variant",
+        );
+
+        let mut standalone_variant = variant();
+        standalone_variant.multiplier_expression = Some("1".to_string());
+        let multiplier_archive = StandaloneThresholdMultiplierCollectionArchive {
+            layout: StandaloneThresholdMultiplierLayoutArchive {
+                model_parameter_count: 0,
+                additional_parameters: Vec::new(),
+                external_count: 0,
+                edges: Vec::new(),
+                esurfaces: Vec::new(),
+                inputs: Vec::new(),
+                parameters: Vec::<String>::new(),
+            },
+            evaluators: vec![CrossSectionGenericEvaluatorArchive {
+                exprs: vec!["1".to_string()],
+                additional_fn_map_entries: Vec::new(),
+                dual_shape: None,
+            }],
+            left_variants: vec![StandaloneThresholdMultiplierVariantReference {
+                variant_id: 0,
+                evaluator_id: Some(0),
+            }],
+            right_variants: Vec::new(),
+        };
+        let mut registry = multiplier_registry("1");
+        validate_amplitude_threshold_metadata_archive(
+            &registry,
+            "graph",
+            true,
+            1,
+            &[standalone_variant.clone()],
+            Some(&multiplier_archive),
+        )
+        .unwrap();
+
+        let mut duplicate_id = multiplier_registry("1");
+        duplicate_id.evaluators[0].evaluator_id = 1;
+        let error = validate_amplitude_threshold_metadata_archive(
+            &duplicate_id,
+            "graph",
+            true,
+            1,
+            &[standalone_variant.clone()],
+            Some(&multiplier_archive),
+        )
+        .unwrap_err();
+        assert!(format!("{error:?}").contains("stored at index"));
+
+        let mut changed_expression = multiplier_registry("2");
+        changed_expression.evaluators[0].expression = "1".to_string();
+        let error = validate_amplitude_threshold_metadata_archive(
+            &changed_expression,
+            "graph",
+            true,
+            1,
+            &[standalone_variant.clone()],
+            Some(&multiplier_archive),
+        )
+        .unwrap_err();
+        assert!(format!("{error:?}").contains("multiplier disagrees"));
+
+        let mut unsupported_flags = multiplier_registry("1");
+        unsupported_flags.variants[0]
+            .multiplier
+            .as_mut()
+            .unwrap()
+            .opaque_derivatives = false;
+        let error = validate_amplitude_threshold_metadata_archive(
+            &unsupported_flags,
+            "graph",
+            true,
+            1,
+            &[standalone_variant.clone()],
+            Some(&multiplier_archive),
+        )
+        .unwrap_err();
+        assert!(format!("{error:?}").contains("unsupported multiplier"));
+
+        registry.evaluators[0].variant_ids.clear();
+        registry.components.clear();
+        let error = validate_amplitude_threshold_metadata_archive(
+            &registry,
+            "graph",
+            true,
+            1,
+            &[standalone_variant.clone()],
+            Some(&multiplier_archive),
+        )
+        .unwrap_err();
+        assert!(format!("{error:?}").contains("variant links"));
+
+        let mut registry = multiplier_registry("1");
+        registry.components[0].evaluator_ids[0] = None;
+        let error = validate_amplitude_threshold_metadata_archive(
+            &registry,
+            "graph",
+            true,
+            1,
+            &[standalone_variant],
+            Some(&multiplier_archive),
+        )
+        .unwrap_err();
+        assert!(format!("{error:?}").contains("omits the evaluator"));
+    }
+
+    #[test]
+    fn default_name_can_repeat_for_distinct_thresholds() {
+        let first = variant();
+        let mut second = variant();
+        second.variant_id = 1;
+        second.threshold_edge_sets = vec![vec![5, 6]];
+
+        validate_amplitude_threshold_archive::<String>("graph", true, 2, &[first, second], None)
+            .unwrap();
+    }
+
+    #[test]
+    fn multiplier_references_must_match_variant_metadata() {
+        let mut variant = variant();
+        variant.multiplier_expression = Some("1".to_string());
+        let collection = StandaloneThresholdMultiplierCollectionArchive {
+            layout: StandaloneThresholdMultiplierLayoutArchive {
+                model_parameter_count: 0,
+                additional_parameters: Vec::new(),
+                external_count: 0,
+                edges: Vec::new(),
+                esurfaces: Vec::new(),
+                inputs: Vec::new(),
+                parameters: Vec::<String>::new(),
+            },
+            evaluators: vec![CrossSectionGenericEvaluatorArchive {
+                exprs: vec!["1".to_string()],
+                additional_fn_map_entries: Vec::new(),
+                dual_shape: None,
+            }],
+            left_variants: vec![StandaloneThresholdMultiplierVariantReference {
+                variant_id: 0,
+                evaluator_id: None,
+            }],
+            right_variants: Vec::new(),
+        };
+
+        let error =
+            validate_amplitude_threshold_archive("graph", true, 1, &[variant], Some(&collection))
+                .unwrap_err();
+        assert!(error.to_string().contains("disagree"));
+    }
+
+    #[test]
+    fn standalone_roundtrip_preserves_multiplier_evaluator_and_layout() {
+        test_initialise().unwrap();
+        let additional_parameters = [
+            Atom::var(symbol!("archive_weight_b")),
+            Atom::var(symbol!("archive_weight_a")),
+        ];
+        let layout = ThresholdMultiplierLayout::new(
+            Vec::new(),
+            additional_parameters.to_vec(),
+            0,
+            vec![0],
+            Vec::new(),
+        )
+        .unwrap();
+        let expression = layout
+            .parse_expression("2 * archive_weight_b + archive_weight_a")
+            .unwrap();
+        let collection = ThresholdMultiplierEvaluatorCollection::build(
+            layout,
+            vec![(ThresholdCountertermVariantId(0), Some(expression))],
+            Vec::new(),
+            &EvaluatorSettings::default(),
+        )
+        .unwrap()
+        .unwrap();
+        let archive = export_threshold_multiplier_collection::<String>(&collection).unwrap();
+        let mut multiplier_variant = variant();
+        multiplier_variant.multiplier_expression =
+            Some(collection.evaluators()[0].expression().to_string());
+        let registry =
+            multiplier_registry(multiplier_variant.multiplier_expression.as_deref().unwrap());
+        validate_amplitude_threshold_archive(
+            "archive_graph",
+            true,
+            1,
+            &[multiplier_variant.clone()],
+            Some(&archive),
+        )
+        .unwrap();
+        let mut archive_registry = registry.clone();
+        archive_registry.graph_name = "archive_graph".to_string();
+        validate_amplitude_threshold_metadata_archive(
+            &archive_registry,
+            "archive_graph",
+            true,
+            1,
+            &[multiplier_variant.clone()],
+            Some(&archive),
+        )
+        .unwrap();
+        let mut renamed = archive.clone();
+        renamed.layout.parameters[0] = "renamed_weight".to_owned();
+        let error = validate_amplitude_threshold_archive(
+            "archive_graph",
+            true,
+            1,
+            &[multiplier_variant],
+            Some(&renamed),
+        )
+        .unwrap_err();
+        let error = format!("{error:?}");
+        assert!(error.contains("amplitude graph 'archive_graph'"));
+        assert!(error.contains("additional-parameter atoms and order"));
+
+        let expected_inputs = archive.layout.inputs.clone();
+        let expected_additional_parameters = archive.layout.additional_parameters.clone();
+        let encoded = bincode::encode_to_vec(&archive, bincode::config::standard()).unwrap();
+        let (decoded, _): (StandaloneThresholdMultiplierCollectionArchive<String>, _) =
+            bincode::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
+        assert_eq!(
+            decoded.layout.additional_parameters,
+            expected_additional_parameters,
+        );
+        let mut state_bytes = Vec::new();
+        State::export(&mut state_bytes).unwrap();
+        let state_map = State::import(&mut Cursor::new(state_bytes), None).unwrap();
+        let mut loaded = build_threshold_multiplier_collection(decoded, 1, 0, &state_map).unwrap();
+        validate_loaded_amplitude_threshold_evaluators(
+            &archive_registry,
+            Some(&loaded),
+            "archive_graph",
+        )
+        .unwrap();
+        let mut tampered_registry = archive_registry;
+        tampered_registry.evaluators[0].expression = "0".to_string();
+        let error = validate_loaded_amplitude_threshold_evaluators(
+            &tampered_registry,
+            Some(&loaded),
+            "archive_graph",
+        )
+        .unwrap_err();
+        assert!(format!("{error:?}").contains("expression disagrees"));
+
+        assert_eq!(loaded.layout.edges, vec![0]);
+        assert_eq!(loaded.layout.inputs, expected_inputs);
+        assert_eq!(loaded.layout.additional_parameters, additional_parameters);
+        assert_eq!(loaded.evaluators.len(), 1);
+        assert_eq!(loaded.left_variants.len(), 1);
+        assert_eq!(loaded.left_variants[0].variant_id, 0);
+        assert_eq!(loaded.left_variants[0].evaluator_id, Some(0));
+        assert!(loaded.right_variants.is_empty());
+
+        let mut values = vec![Complex::new(0.0, 0.0); loaded.layout.parameters.len()];
+        values[0] = Complex::new(3.5, 0.0);
+        values[1] = Complex::new(1.25, 0.0);
+        let (_, _, evaluator, result) = &mut loaded.evaluators[0];
+        evaluator.evaluate(&values, result);
+        assert_eq!(result.as_slice(), &[Complex::new(8.25, 0.0)]);
+    }
 }

@@ -65,6 +65,8 @@ pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
 pub mod param_builder;
 pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};
 
+pub mod threshold_multiplier;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum OrientationProfileMode {
     #[default]
@@ -1522,7 +1524,7 @@ fn apply_full_event_multiplicative_factor(
 ) {
     for event_group in event_groups.iter_mut() {
         for event in event_group.iter_mut() {
-            event.weight *= full_factor;
+            event.apply_multiplicative_factor(full_factor);
             if !event.additional_weights.weights.is_empty() {
                 event
                     .additional_weights
@@ -1549,7 +1551,7 @@ fn apply_full_event_multiplicative_factor_precise<T: FloatLike>(
 ) {
     for event_group in event_groups.iter_mut() {
         for event in event_group.iter_mut() {
-            event.weight *= full_factor.clone();
+            event.apply_multiplicative_factor(full_factor);
 
             if !event.additional_weights.weights.is_empty() {
                 event.additional_weights.weights.insert(

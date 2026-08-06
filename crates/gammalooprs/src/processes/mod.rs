@@ -592,6 +592,13 @@ pub mod amplitude;
 pub use amplitude::*;
 pub mod cross_section;
 pub use cross_section::*;
+pub mod threshold_counterterms;
+pub use threshold_counterterms::*;
+
+#[cfg(test)]
+mod no_directive_equivalence_tests;
+#[cfg(test)]
+mod raised_cross_section_tests;
 
 #[cfg(test)]
 mod tests {

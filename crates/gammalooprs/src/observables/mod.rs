@@ -25,6 +25,8 @@ pub use clustering::{ClusteringResult, Jet, JetAlgorithm, JetClustering};
 pub use events::{
     AdditionalWeightKey, CutInfo, Event, EventGroup, EventGroupList, GenericAdditionalWeightInfo,
     GenericEvent, GenericEventGroup, GenericEventGroupList,
+    GenericThresholdCountertermComponentWeight, GenericThresholdCountertermEventInfo,
+    ThresholdCountertermComponentOccurrence,
 };
 
 pub type QuantitiesSettings = BTreeMap<String, QuantitySettings>;
