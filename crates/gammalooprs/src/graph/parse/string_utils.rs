@@ -28,6 +28,41 @@ pub(crate) fn dot_statement_value(value: &str) -> String {
     escaped_dot_string(value)
 }
 
+/// Decodes the quoted-string escapes retained by the DOT parser.
+///
+/// Unknown Graphviz escapes are preserved literally. This matters for embedded languages such as
+/// TOML, where a backslash may itself be meaningful after the DOT layer has been removed.
+pub(crate) fn decode_dot_string(value: &str) -> Result<String> {
+    let value = value
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .unwrap_or(value);
+    let mut decoded = String::with_capacity(value.len());
+    let mut chars = value.chars();
+    while let Some(character) = chars.next() {
+        if character != '\\' {
+            decoded.push(character);
+            continue;
+        }
+
+        let escaped = chars
+            .next()
+            .ok_or_else(|| eyre!("DOT string ends with an incomplete escape"))?;
+        match escaped {
+            '\\' => decoded.push('\\'),
+            '"' => decoded.push('"'),
+            'n' => decoded.push('\n'),
+            'r' => decoded.push('\r'),
+            't' => decoded.push('\t'),
+            other => {
+                decoded.push('\\');
+                decoded.push(other);
+            }
+        }
+    }
+    Ok(decoded)
+}
+
 pub trait ToQuoted {
     fn to_quoted(&self) -> String;
 }
@@ -150,7 +185,7 @@ impl FromStripedStr for usize {
 mod tests {
     use linnet::parser::DotGraph;
 
-    use super::{dot_attr_value, dot_statement_value};
+    use super::{decode_dot_string, dot_attr_value, dot_statement_value};
 
     const RAW_DOT_VALUE: &str = "quote:\" slash:\\ lf:\n cr:\r tab:\t";
     const ESCAPED_DOT_VALUE: &str = r#"quote:\" slash:\\ lf:\n cr:\r tab:\t"#;
@@ -178,5 +213,17 @@ mod tests {
             reparsed.global_data.statements["escaped"],
             ESCAPED_DOT_VALUE
         );
+        assert_eq!(
+            decode_dot_string(&reparsed.global_data.statements["escaped"]).unwrap(),
+            RAW_DOT_VALUE
+        );
+    }
+
+    #[test]
+    fn dot_codec_round_trips_unicode_and_unknown_escapes() {
+        let raw = "eta:η theta:θ regex:\\d quote:\" newline:\n";
+        let encoded = dot_statement_value(raw);
+
+        assert_eq!(decode_dot_string(&encoded).unwrap(), raw);
     }
 }

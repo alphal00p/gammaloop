@@ -19,6 +19,7 @@ const GRAPH_SPEC: AttributeSpec = AttributeSpec {
         "pole_part",
         "params",
         "projector",
+        "threshold_counterterms",
     ],
     ignored: &[
         "bgcolor",
@@ -180,6 +181,9 @@ fn warn_attributes<'a>(
             .iter()
             .chain(spec.ignored.iter())
             .any(|known| *known == attr)
+            || attr
+                .strip_suffix("_autogen")
+                .is_some_and(|base| spec.known.contains(&base))
         {
             continue;
         }

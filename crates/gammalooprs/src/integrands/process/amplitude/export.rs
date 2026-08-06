@@ -21,18 +21,19 @@ use crate::{
         amplitude::{
             AmplitudeIntegrand,
             load::{
-                STANDALONE_EVALUATORS_VERSION, StandaloneComplexInput, StandaloneCutCFFIndex,
-                StandaloneEvaluatorArchive, StandaloneEvaluatorStackArchive,
-                StandaloneGenericEvaluatorArchive, StandaloneGraphTermArchive,
-                StandaloneIndexedEvaluatorStackArchive,
+                STANDALONE_EVALUATORS_VERSION, StandaloneAmplitudeThresholdVariant,
+                StandaloneComplexInput, StandaloneCutCFFIndex, StandaloneEvaluatorArchive,
+                StandaloneEvaluatorStackArchive, StandaloneGenericEvaluatorArchive,
+                StandaloneGraphTermArchive, StandaloneIndexedEvaluatorStackArchive,
             },
         },
+        cross_section::export::export_threshold_multiplier_collection,
     },
     momentum::ThreeMomentum,
     momentum::sample::{LoopMomenta, MomentumSample},
     processes::{
         StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
-        StandaloneNumericTarget,
+        StandaloneNumericTarget, ThresholdCountertermOrigin,
     },
     utils::{ArbPrec, F, FloatLike, f128},
 };
@@ -278,19 +279,95 @@ impl AmplitudeIntegrand {
                             .transpose()?,
                     };
 
-                    let threshold_counterterms = term
+                    let export_counterterm = |counterterm: &crate::subtraction::amplitude_counterterm::AmplitudeCountertermEvaluator| {
+                        export_evaluator_map(
+                            &counterterm.evaluator_stacks,
+                            orientation_start,
+                            multiplicative_offset,
+                            &representative_input,
+                        )
+                    };
+                    let threshold_counterterms = if term.threshold_counterterm.legacy_equivalent {
+                        term.threshold_counterterm
+                            .evaluators
+                            .iter()
+                            .map(export_counterterm)
+                            .collect::<Result<Vec<_>>>()?
+                    } else {
+                        term.threshold_counterterm
+                            .variant_evaluators
+                            .iter()
+                            .map(export_counterterm)
+                            .collect::<Result<Vec<_>>>()?
+                    };
+                    let threshold_variants = term
                         .threshold_counterterm
-                        .evaluators
-                        .iter()
-                        .map(|counterterm| {
-                            export_evaluator_map(
-                                &counterterm.evaluator_stacks,
-                                orientation_start,
-                                multiplicative_offset,
-                                &representative_input,
-                            )
+                        .variant_metadata
+                        .iter_enumerated()
+                        .map(|(variant_id, variant)| {
+                            let multiplier = variant.multiplier.as_ref();
+                            StandaloneAmplitudeThresholdVariant {
+                                variant_id: variant_id.0,
+                                name: variant.name.clone(),
+                                raised_esurface_id: term
+                                    .threshold_counterterm
+                                    .variant_raised_esurfaces[variant_id]
+                                    .0,
+                                generated: term.threshold_counterterm.variant_generated_mask
+                                    [variant_id],
+                                active: term.threshold_counterterm.variant_active_mask[variant_id],
+                                requested_subspace: variant
+                                    .requested_subspace
+                                    .as_ref()
+                                    .map(|edges| edges.iter().map(|edge| edge.0).collect()),
+                                requested_parent_lmb: variant
+                                    .requested_parent_lmb
+                                    .as_ref()
+                                    .map(|edges| edges.iter().map(|edge| edge.0).collect()),
+                                resolved_parent_lmb: variant
+                                    .resolved_parent_lmb
+                                    .iter()
+                                    .map(|edge| edge.0)
+                                    .collect(),
+                                resolved_subspace: variant
+                                    .subspace
+                                    .iter_basis_edges(&term.threshold_counterterm.lmbs)
+                                    .map(|edge| edge.0)
+                                    .collect(),
+                                subspace_loop_count: variant.subspace_loop_count,
+                                multiplier_expression: multiplier
+                                    .map(|multiplier| multiplier.expression.clone()),
+                                multiplier_symmetrize: multiplier
+                                    .is_some_and(|multiplier| multiplier.symmetrize),
+                                multiplier_opaque_derivatives: multiplier
+                                    .is_none_or(|multiplier| multiplier.opaque_derivatives),
+                                threshold_edge_sets: variant
+                                    .associations
+                                    .iter()
+                                    .map(|association| {
+                                        association
+                                            .threshold_edges
+                                            .iter()
+                                            .map(|edge| edge.0)
+                                            .collect()
+                                    })
+                                    .collect(),
+                                explicit_associations: variant
+                                    .associations
+                                    .iter()
+                                    .map(|association| {
+                                        association.origin == ThresholdCountertermOrigin::Explicit
+                                    })
+                                    .collect(),
+                            }
                         })
-                        .collect::<Result<Vec<_>>>()?;
+                        .collect();
+                    let threshold_multipliers = term
+                        .threshold_counterterm
+                        .threshold_multipliers
+                        .as_ref()
+                        .map(export_threshold_multiplier_collection)
+                        .transpose()?;
 
                     Ok(StandaloneGraphTermArchive {
                         graph_name: term.graph.name.clone(),
@@ -299,6 +376,12 @@ impl AmplitudeIntegrand {
                         fn_map_entries,
                         original_integrand,
                         threshold_counterterms,
+                        threshold_counterterms_are_variants: !term
+                            .threshold_counterterm
+                            .legacy_equivalent,
+                        threshold_variants,
+                        threshold_multipliers,
+                        metadata_registry: term.threshold_counterterm.metadata_registry.clone(),
                     })
                 },
             )
@@ -429,5 +512,26 @@ impl AmplitudeIntegrand {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{STANDALONE_EVALUATORS_VERSION, standalone_rust_script};
+
+    #[test]
+    fn generated_standalone_loader_tracks_threshold_archive_version_and_fields() {
+        let script = standalone_rust_script();
+        assert!(script.contains(&format!(
+            "const STANDALONE_EVALUATORS_VERSION: u32 = {STANDALONE_EVALUATORS_VERSION};"
+        )));
+        for field in [
+            "threshold_counterterms_are_variants",
+            "threshold_variants",
+            "threshold_multipliers",
+            "metadata_registry",
+        ] {
+            assert!(script.contains(field), "standalone loader omits {field}");
+        }
     }
 }

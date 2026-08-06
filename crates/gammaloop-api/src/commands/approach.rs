@@ -16,7 +16,8 @@ use eyre::{eyre, Context};
 use gammalooprs::{
     integrands::{evaluation::EvaluationResult, process::ProcessIntegrand},
     model::Model,
-    observables::events::AdditionalWeightKey,
+    observables::events::{AdditionalWeightKey, GenericThresholdCountertermEventInfo},
+    processes::ThresholdCountertermMetadataRegistry,
     utils::F,
 };
 use indicatif::ProgressBar;
@@ -76,6 +77,11 @@ pub struct Approach {
     /// Number of points on each side of the midpoint
     #[arg(long = "n-points", value_name = "N")]
     pub n_points: usize,
+
+    /// Do not evaluate the midpoint at t = 0
+    #[arg(long)]
+    #[serde(default)]
+    pub skip_midpoint: bool,
 
     /// Use linear spacing in t
     #[arg(long, conflicts_with = "logarithmic")]
@@ -172,6 +178,7 @@ struct ApproachOutput {
 struct ApproachCommandJson {
     name: &'static str,
     use_arb_prec: bool,
+    skip_midpoint: bool,
     graph_id: Option<usize>,
     orientation_id: Option<usize>,
     discrete_dim: Vec<usize>,
@@ -187,6 +194,14 @@ struct ApproachProcessJson {
 struct ApproachIntegrandJson {
     name: String,
     kind: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    threshold_counterterms: Vec<ApproachThresholdCountertermRegistryJson>,
+}
+
+#[derive(Debug, Serialize)]
+struct ApproachThresholdCountertermRegistryJson {
+    graph_id: usize,
+    registry: ThresholdCountertermMetadataRegistry,
 }
 
 #[derive(Debug, Serialize)]
@@ -250,6 +265,8 @@ struct EventRecord {
     lmb_sample_id: Option<usize>,
     weight: ComplexJson,
     additional_weights: BTreeMap<String, ComplexJson>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    threshold_counterterms: Option<GenericThresholdCountertermEventInfo<f64>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -321,6 +338,7 @@ impl Approach {
         let axes = self.parse_axes()?;
         let spacing = self.spacing()?;
         let t_values = self.t_values(spacing)?;
+        let points_per_axis = t_values.len();
         let jobs = self.build_jobs(&axes, &t_values);
         let n_cores = self
             .n_cores
@@ -428,10 +446,11 @@ impl Approach {
             .count();
         let skipped_points = point_records.len() - evaluated_points;
         let output = ApproachOutput {
-            schema_version: 1,
+            schema_version: 2,
             command: ApproachCommandJson {
                 name: "approach",
                 use_arb_prec: self.use_arb_prec,
+                skip_midpoint: self.skip_midpoint,
                 graph_id: self.graph_id,
                 orientation_id: self.orientation_id,
                 discrete_dim: self.discrete_dim.clone(),
@@ -443,6 +462,7 @@ impl Approach {
             integrand: ApproachIntegrandJson {
                 name: integrand_name,
                 kind: base_integrand.kind_name().to_string(),
+                threshold_counterterms: threshold_counterterm_registries(&base_integrand),
             },
             space: if self.momentum_space {
                 "momentum".to_string()
@@ -459,7 +479,7 @@ impl Approach {
                 t_values,
             },
             n_cores,
-            points_per_axis: 2 * self.n_points + 1,
+            points_per_axis,
             evaluated_points,
             skipped_points,
             points: point_records,
@@ -601,7 +621,9 @@ impl Approach {
             .rev()
             .map(|value| -*value)
             .collect::<Vec<_>>();
-        t_values.push(0.0);
+        if !self.skip_midpoint {
+            t_values.push(0.0);
+        }
         t_values.extend(magnitudes);
         Ok(t_values)
     }
@@ -748,6 +770,40 @@ fn force_event_output(integrand: &mut ProcessIntegrand) {
     settings.general.store_additional_weights_in_event = true;
 }
 
+fn threshold_counterterm_registries(
+    integrand: &ProcessIntegrand,
+) -> Vec<ApproachThresholdCountertermRegistryJson> {
+    let collect = |registries: Vec<Option<&ThresholdCountertermMetadataRegistry>>| {
+        registries
+            .into_iter()
+            .enumerate()
+            .filter_map(|(graph_id, registry)| {
+                registry
+                    .cloned()
+                    .map(|registry| ApproachThresholdCountertermRegistryJson { graph_id, registry })
+            })
+            .collect()
+    };
+    match integrand {
+        ProcessIntegrand::Amplitude(integrand) => collect(
+            integrand
+                .data
+                .graph_terms
+                .iter()
+                .map(|graph| graph.threshold_counterterm_metadata())
+                .collect(),
+        ),
+        ProcessIntegrand::CrossSection(integrand) => collect(
+            integrand
+                .data
+                .graph_terms
+                .iter()
+                .map(|graph| graph.threshold_counterterm_metadata())
+                .collect(),
+        ),
+    }
+}
+
 fn approach_evaluation_record(
     integrand: &ProcessIntegrand,
     evaluation: EvaluationResult,
@@ -837,6 +893,7 @@ fn approach_evaluation_record(
                 lmb_sample_id,
                 weight: complex_json(event.weight),
                 additional_weights,
+                threshold_counterterms: event.additional_weights.threshold_counterterms.clone(),
             });
         }
     }
@@ -947,6 +1004,11 @@ fn additional_weight_key_label(key: AdditionalWeightKey) -> String {
             esurface_id,
             overlap_group,
         } => format!("ct_{esurface_id}_{overlap_group}"),
+        AdditionalWeightKey::AmplitudeThresholdCountertermVariant {
+            variant_id,
+            esurface_id,
+            overlap_group,
+        } => format!("ct_variant_{variant_id}_{esurface_id}_{overlap_group}"),
     }
 }
 
@@ -1052,6 +1114,26 @@ mod tests {
         assert_eq!(t_values[3], 0.0);
         assert!((t_values[4] - 1.0e-4).abs() < 1.0e-14);
         assert!((t_values[6] - 1.0).abs() < 1.0e-14);
+    }
+
+    #[test]
+    fn skip_midpoint_omits_zero_from_t_values() {
+        let command = Approach {
+            skip_midpoint: true,
+            ..command_with_spacing(2, false, 1.0e-6)
+        };
+        assert_eq!(
+            command.t_values(ApproachSpacing::Linear).unwrap(),
+            vec![-1.0, -0.5, 0.5, 1.0]
+        );
+    }
+
+    #[test]
+    fn missing_skip_midpoint_deserializes_to_false() {
+        let mut serialized = serde_json::to_value(command_with_spacing(2, false, 1.0e-6)).unwrap();
+        serialized.as_object_mut().unwrap().remove("skip_midpoint");
+        let command: Approach = serde_json::from_value(serialized).unwrap();
+        assert!(!command.skip_midpoint);
     }
 
     #[test]

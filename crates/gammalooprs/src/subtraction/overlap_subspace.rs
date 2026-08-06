@@ -1,5 +1,6 @@
 use crate::GammaLoopContext;
 use crate::cff::esurface::EsurfaceCollection;
+use crate::cff::esurface::EsurfaceID;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingThresholds;
 use crate::cff::esurface::esurface_value_is_strictly_inside;
@@ -98,6 +99,7 @@ impl OverlapStructure {
 struct PropagatorConstraint<'a> {
     mass_pointer: Option<usize>, // pointer to value of unique mass
     signature: &'a LoopExtSignature,
+    subspace: &'a SubspaceData,
 }
 
 impl PropagatorConstraint<'_> {
@@ -158,19 +160,17 @@ fn construct_solver(
         let surface_id = existing_esurfaces[*existing_esurface_id];
 
         let esurface = &overlap_input.thresholds[surface_id];
-        let lmb = overlap_input.subspace.get_lmb(overlap_input.lmbs);
+        let threshold_subspace = overlap_input.threshold_subspace(surface_id);
+        let lmb = threshold_subspace.get_lmb(overlap_input.lmbs);
         let edge_masses = &overlap_input.edge_masses;
 
         let mut esurface_constraint_indices: Vec<usize> = Vec::with_capacity(6);
 
-        for edge_id in overlap_input
-            .subspace
-            .contains(&esurface.energies, overlap_input.graph)
-        {
-            if let Some(edge_position) = propagator_constraints
-                .iter()
-                .position(|constraint| *constraint.signature == lmb.edge_signatures[edge_id])
-            {
+        for edge_id in threshold_subspace.contains(&esurface.energies, overlap_input.graph) {
+            if let Some(edge_position) = propagator_constraints.iter().position(|constraint| {
+                *constraint.signature == lmb.edge_signatures[edge_id]
+                    && constraint.subspace.has_same_embedding(threshold_subspace)
+            }) {
                 esurface_constraint_indices.push(edge_position);
             } else {
                 let mass_pointer = if edge_masses[edge_id].is_zero() {
@@ -194,6 +194,7 @@ fn construct_solver(
                 let propagator_constraint = PropagatorConstraint {
                     mass_pointer,
                     signature,
+                    subspace: threshold_subspace,
                 };
 
                 propagator_constraints.push(propagator_constraint);
@@ -254,11 +255,12 @@ fn construct_solver(
 
         let esurface_id = existing_esurfaces[*existing_esurface_id];
         let esurface = &overlap_input.thresholds[esurface_id];
+        let threshold_subspace = overlap_input.threshold_subspace(esurface_id);
 
         let shift_part = esurface.compute_shift_part_from_momenta_in_subspace(
             loop_moms,
             external_momenta,
-            overlap_input.subspace,
+            threshold_subspace,
             overlap_input.lmbs,
             overlap_input.graph,
             &overlap_input.edge_masses,
@@ -280,18 +282,23 @@ fn construct_solver(
             &propagator_constraint.signature.external,
             loop_moms,
             &spatial_part_of_externals,
-            overlap_input.subspace,
+            propagator_constraint.subspace,
         );
 
         b_vector[vertical_offset] = spatial_shift.px.0;
         b_vector[vertical_offset + 1] = spatial_shift.py.0;
         b_vector[vertical_offset + 2] = spatial_shift.pz.0;
 
-        for (subspace_loop_index, individual_loop_signature) in overlap_input
-            .subspace
-            .project_loop_signature_filtered(&propagator_constraint.signature.internal)
-            .enumerate()
+        for (subspace_loop_index, loop_index) in
+            overlap_input.subspace.iter_lmb_indices().enumerate()
         {
+            if !propagator_constraint
+                .subspace
+                .contains_loop_index(loop_index)
+            {
+                continue;
+            }
+            let individual_loop_signature = propagator_constraint.signature.internal[loop_index];
             if individual_loop_signature.is_sign() {
                 a_matrix[vertical_offset][loop_momentum_offset + 3 * subspace_loop_index] =
                     -(individual_loop_signature as i8) as f64;
@@ -398,10 +405,54 @@ pub(crate) fn find_center(
 pub(crate) struct OverlapInput<'a> {
     pub graph: &'a Graph,
     pub settings: &'a RuntimeSettings,
+    /// Union of the active coordinates used to represent a common center.
     pub subspace: &'a SubspaceData,
+    /// Optional per-threshold active coordinates. `None` retains the homogeneous legacy path.
+    pub threshold_subspaces: Option<&'a [SubspaceData]>,
     pub lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
     pub thresholds: &'a EsurfaceCollection,
     pub edge_masses: EdgeVec<F<f64>>,
+}
+
+impl OverlapInput<'_> {
+    fn threshold_subspace(&self, esurface_id: EsurfaceID) -> &SubspaceData {
+        self.threshold_subspaces
+            .map_or(self.subspace, |subspaces| &subspaces[esurface_id.0])
+    }
+
+    fn validate_subspaces(&self) -> Result<()> {
+        let Some(threshold_subspaces) = self.threshold_subspaces else {
+            return Ok(());
+        };
+        if threshold_subspaces.len() != self.thresholds.len() {
+            return Err(eyre!(
+                "Projected threshold overlap has {} subspaces for {} E-surfaces",
+                threshold_subspaces.len(),
+                self.thresholds.len(),
+            ));
+        }
+        let common_parent = self.subspace.parent_lmb_index();
+        for (esurface_index, subspace) in threshold_subspaces.iter().enumerate() {
+            if subspace.parent_lmb_index() != common_parent {
+                return Err(eyre!(
+                    "Projected threshold E-surface instance {} uses parent LMB {}, while its common center uses parent LMB {}",
+                    esurface_index,
+                    usize::from(subspace.parent_lmb_index()),
+                    usize::from(common_parent),
+                ));
+            }
+            if subspace
+                .iter_lmb_indices()
+                .any(|loop_index| !self.subspace.contains_loop_index(loop_index))
+            {
+                return Err(eyre!(
+                    "Projected threshold E-surface instance {} contains coordinates outside the common-center subspace",
+                    esurface_index,
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 pub(crate) fn check_global_center(
@@ -411,15 +462,15 @@ pub(crate) fn check_global_center(
     loop_moms: &LoopMomenta<F<f64>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
 ) -> bool {
-    let mut center_with_fixed_complement = loop_moms.clone();
-    for loop_index in overlap_input.subspace.iter_lmb_indices() {
-        center_with_fixed_complement[loop_index] = center[loop_index];
-    }
-
     existing_esurfaces.iter().all(|esurface_id| {
         let esurface = &overlap_input.thresholds[*esurface_id];
+        let threshold_subspace = overlap_input.threshold_subspace(*esurface_id);
+        let mut center_with_fixed_complement = loop_moms.clone();
+        for loop_index in threshold_subspace.iter_lmb_indices() {
+            center_with_fixed_complement[loop_index] = center[loop_index];
+        }
 
-        let lmb = overlap_input.subspace.get_lmb(overlap_input.lmbs);
+        let lmb = threshold_subspace.get_lmb(overlap_input.lmbs);
         let edge_masses = &overlap_input.edge_masses;
 
         let esurface_val = esurface.compute_from_momenta(
@@ -445,6 +496,7 @@ pub(crate) fn find_maximal_overlap(
     external_momenta: &ExternalFourMomenta<F<f64>>,
     probe_rotation: &Rotation,
 ) -> Result<OverlapStructure> {
+    overlap_input.validate_subspaces()?;
     let mut res = OverlapStructure {
         overlap_groups: vec![],
         existing_esurfaces: existing_esurfaces.clone(),
@@ -1046,6 +1098,7 @@ mod tests {
             graph: &graph,
             settings: &settings,
             subspace: &subspace,
+            threshold_subspaces: None,
             lmbs: &all_lmbs,
             thresholds: &thresholds,
             edge_masses: masses,
@@ -1088,6 +1141,52 @@ mod tests {
             &external_momenta,
         ));
 
+        let full_parent_subspace = SubspaceData::new_with_user_selected_lmb(
+            graph.full_filter(),
+            LmbIndex::from(0),
+            &graph,
+            &all_lmbs,
+        )
+        .unwrap();
+        let common_subspace = SubspaceData::union_in_common_parent(
+            [&subspace, &full_parent_subspace],
+            &graph,
+            &all_lmbs,
+        )
+        .unwrap();
+        // The same supergraph geometry is deliberately presented twice as distinct projected
+        // E-surface instances, each retaining its own fixed complement.
+        let projected_thresholds: crate::cff::esurface::EsurfaceCollection = vec![
+            thresholds[EsurfaceID::from(0)].clone(),
+            thresholds[EsurfaceID::from(0)].clone(),
+        ]
+        .into();
+        let projected_subspaces: TiVec<EsurfaceID, _> =
+            ti_vec![subspace.clone(), full_parent_subspace];
+        let projected_input = OverlapInput {
+            graph: &graph,
+            settings: &settings,
+            subspace: &common_subspace,
+            threshold_subspaces: Some(&projected_subspaces.raw),
+            lmbs: &all_lmbs,
+            thresholds: &projected_thresholds,
+            edge_masses: overlap_input.edge_masses.clone(),
+        };
+        assert!(!check_global_center(
+            &projected_input,
+            &ti_vec![EsurfaceID::from(0)],
+            &center,
+            &sampled_momenta,
+            &external_momenta,
+        ));
+        assert!(check_global_center(
+            &projected_input,
+            &ti_vec![EsurfaceID::from(1)],
+            &center,
+            &sampled_momenta,
+            &external_momenta,
+        ));
+
         let forced_center_coordinates = vec![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]];
         let identity_frame_center =
             LoopMomenta::from_iter(forced_center_coordinates.iter().map(|coordinates| {
@@ -1111,6 +1210,7 @@ mod tests {
             graph: &graph,
             settings: &forced_settings,
             subspace: &subspace,
+            threshold_subspaces: None,
             lmbs: &all_lmbs,
             thresholds: &thresholds,
             edge_masses: overlap_input.edge_masses.clone(),
@@ -1148,6 +1248,7 @@ mod tests {
             graph: &graph,
             settings: &forced_settings,
             subspace: &full_subspace,
+            threshold_subspaces: None,
             lmbs: &alternate_lmbs,
             thresholds: &empty_thresholds,
             edge_masses: overlap_input.edge_masses.clone(),
@@ -1220,6 +1321,7 @@ mod tests {
             graph: &graph,
             settings: &affine_forced_settings,
             subspace: &proper_alternate_subspace,
+            threshold_subspaces: None,
             lmbs: &alternate_lmbs,
             thresholds: &empty_thresholds,
             edge_masses: overlap_input.edge_masses.clone(),
@@ -1255,6 +1357,7 @@ mod tests {
             graph: &graph,
             settings: &settings,
             subspace: &subspace,
+            threshold_subspaces: None,
             lmbs: &all_lmbs,
             thresholds: &covariant_thresholds,
             edge_masses: overlap_input.edge_masses.clone(),

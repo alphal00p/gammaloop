@@ -4115,12 +4115,14 @@ b = 1.0
                 graphs,
                 categories,
                 hide_non_existing_thresholds,
+                show_threshold_functions,
             }) => {
                 assert_eq!(process, Some(ProcessRef::Id(12)));
                 assert_eq!(integrand_name, None);
                 assert!(graphs.is_empty());
                 assert!(categories.is_empty());
                 assert!(!hide_non_existing_thresholds);
+                assert!(!show_threshold_functions);
             }
             other => panic!("Expected display integrand command, got {other:?}"),
         }

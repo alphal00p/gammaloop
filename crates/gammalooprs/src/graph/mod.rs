@@ -44,6 +44,7 @@ pub(crate) mod attribute_warnings;
 pub mod autogen;
 pub mod cuts;
 pub mod global;
+pub mod threshold_counterterms;
 
 #[derive(Clone, Copy, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Default)]
 pub struct VertexOrder(pub u8);
@@ -67,6 +68,8 @@ pub struct Graph {
     /// Only relevant for cross sections, but stored here for the parsing
     pub initial_state_cut: OrientedCut,
     pub polarizations: Vec<(PolDef, Atom)>,
+    /// Compact graph-local threshold-counterterm directives from the DOT input.
+    pub threshold_counterterms: autogen::Autogen<threshold_counterterms::ThresholdCountertermSpec>,
 }
 
 impl LogMessage for Graph {

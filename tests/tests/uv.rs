@@ -1666,6 +1666,11 @@ fn additional_weight_key_label(key: AdditionalWeightKey) -> String {
             esurface_id,
             overlap_group,
         } => format!("ct_{esurface_id}_{overlap_group}"),
+        AdditionalWeightKey::AmplitudeThresholdCountertermVariant {
+            variant_id,
+            esurface_id,
+            overlap_group,
+        } => format!("ct_variant_{variant_id}_{esurface_id}_{overlap_group}"),
     }
 }
 
