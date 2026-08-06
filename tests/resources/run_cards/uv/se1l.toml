@@ -31,7 +31,7 @@ commands = [
 
 [default_runtime_settings.sampling]
 graphs = "monte_carlo"
-orientations = "monte_carlo"
+orientations = "summed"
 lmb_multichanneling = false
 lmb_channels = "summed"
 coordinate_system = "spherical"
@@ -39,7 +39,7 @@ mapping = "linear"
 b = 1.0
 
 [default_runtime_settings.general]
-evaluator_method = "SummedFunctionMap"
+evaluator_method = "SingleParametric"
 enable_cache = false
 debug_cache = false
 generate_events = false

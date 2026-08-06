@@ -95,7 +95,7 @@ pub struct EvaluatorSettings {
     pub direct_translation: bool,
     #[serde(
         default = "evaluator_default_horner_iterations",
-        skip_serializing_if = "is_usize::<10>"
+        skip_serializing_if = "is_usize::<1>"
     )]
     pub horner_iterations: usize,
     #[serde(
@@ -146,7 +146,7 @@ const fn evaluator_default_direct_translation() -> bool {
 }
 
 const fn evaluator_default_horner_iterations() -> usize {
-    10
+    1
 }
 
 const fn evaluator_default_n_cores() -> usize {

@@ -314,12 +314,47 @@ mod tests {
     }
 
     #[test]
-    fn compile_settings_default_to_symjit_backend() {
-        use crate::settings::global::{CompilationMode, GammaloopCompileOptions};
+    fn compile_settings_default_to_symjit_o2() {
+        use crate::{
+            processes::EvaluatorSettings,
+            settings::global::{
+                CompilationMode, CompilationOptimizationLevel, FrozenCompilationMode,
+                GammaloopCompileOptions,
+            },
+        };
+
+        let options = GammaloopCompileOptions::default();
+        assert_eq!(options.compilation_mode, CompilationMode::Symjit);
+        assert_eq!(options.optimization_level, CompilationOptimizationLevel::O2);
+        assert_eq!(
+            options.frozen_mode(&EvaluatorSettings {
+                compile: true,
+                ..Default::default()
+            }),
+            FrozenCompilationMode::Symjit(CompilationOptimizationLevel::O2)
+        );
+    }
+
+    #[test]
+    fn compile_settings_forward_symjit_optimization_level() {
+        use crate::{
+            processes::EvaluatorSettings,
+            settings::global::{
+                CompilationOptimizationLevel, FrozenCompilationMode, GammaloopCompileOptions,
+            },
+        };
+
+        let options = GammaloopCompileOptions {
+            optimization_level: CompilationOptimizationLevel::O1,
+            ..Default::default()
+        };
 
         assert_eq!(
-            GammaloopCompileOptions::default().compilation_mode,
-            CompilationMode::Symjit
+            options.frozen_mode(&EvaluatorSettings {
+                compile: true,
+                ..Default::default()
+            }),
+            FrozenCompilationMode::Symjit(CompilationOptimizationLevel::O1)
         );
     }
 

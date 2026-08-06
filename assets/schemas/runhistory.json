@@ -4273,6 +4273,13 @@
             "type": "string"
           }
         },
+        "with_only_graph_names": {
+          "description": "Retain exactly these graph groups and ignore every other selection filter",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "with_particles": {
           "description": "Retain graph groups containing all particles from at least one of these particle sets",
           "type": "array",
@@ -4375,6 +4382,7 @@
       "required": [
         "amplitude_graphs",
         "with_graph_names",
+        "with_only_graph_names",
         "without_graph_names",
         "with_raised_propagator_signatures",
         "without_raised_propagator_signatures",

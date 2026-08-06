@@ -6,10 +6,10 @@
 //! eyre = "0.6"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { git = "https://github.com/benruijl/symbolica", rev = "aa51532febc5f88e5b3443123a075523faa2883e", default-features = false, features = ["bincode", "serde"] }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03", default-features = false, features = ["bincode", "gmp", "native_code_generation", "serde"] }
 //! [patch.crates-io]
-//! numerica = { git = "https://github.com/benruijl/symbolica", rev = "aa51532febc5f88e5b3443123a075523faa2883e" }
-//! graphica = { git = "https://github.com/benruijl/symbolica", rev = "aa51532febc5f88e5b3443123a075523faa2883e" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "0441bd7a511209dce2ca99925fe87f8b18e4bf03" }
 //! ```
 
 #![allow(dead_code)]
@@ -31,7 +31,7 @@ use symbolica::{
     state::StateMap,
 };
 
-const STANDALONE_EVALUATORS_VERSION: u32 = 4;
+const STANDALONE_EVALUATORS_VERSION: u32 = 5;
 const ARB_PRECISION_BITS: u32 = 1000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
@@ -96,7 +96,6 @@ struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
     summed: Option<StandaloneGenericEvaluatorArchive<A>>,
     representative_input: Vec<StandaloneComplexInput>,
     start: usize,
-    override_pos: usize,
     mult_offset: usize,
 }
 
@@ -292,9 +291,12 @@ impl<'a> StandaloneRuntimeEvaluator<'a> {
             }
             StandaloneBackend::Symjit => Ok(Self::Symjit(
                 evaluator
-                    // SymJIT 2.21 cannot compact some complex temporary layouts.
+                    // SymJIT 2.21 supports optimization levels up to O2 and cannot compact some
+                    // complex temporary layouts.
                     .jit_compile(
-                        JITCompilationSettings::default().with_option("compact", "false"),
+                        JITCompilationSettings::new()
+                            .optimization_level(2)
+                            .with_option("compact", "false"),
                     )
                     .map_err(|error| eyre!(error))?,
             )),
@@ -357,7 +359,7 @@ impl StandaloneNumber for f64 {
 impl StandaloneNumber for DoubleFloat {
     fn parse_standalone_input(value: &str) -> Result<Self> {
         Ok(
-            ArbFloat::parse(value, Some(DoubleFloat::default().get_precision()))
+            Float::parse(value, Some(DoubleFloat::default().get_precision()))
                 .map_err(|error| eyre!(error))?
                 .to_double_float(),
         )
@@ -376,9 +378,9 @@ impl StandaloneNumber for DoubleFloat {
     }
 }
 
-impl StandaloneNumber for ArbFloat {
+impl StandaloneNumber for Float {
     fn parse_standalone_input(value: &str) -> Result<Self> {
-        ArbFloat::parse(value, Some(ARB_PRECISION_BITS)).map_err(|error| eyre!(error))
+        Float::parse(value, Some(ARB_PRECISION_BITS)).map_err(|error| eyre!(error))
     }
 
     fn exact_from_rational(value: &Rational) -> Self {
@@ -386,11 +388,11 @@ impl StandaloneNumber for ArbFloat {
     }
 
     fn zero_value() -> Self {
-        ArbFloat::new(ARB_PRECISION_BITS)
+        Float::new(ARB_PRECISION_BITS)
     }
 
     fn one_value() -> Self {
-        ArbFloat::new(ARB_PRECISION_BITS).one()
+        Float::new(ARB_PRECISION_BITS).one()
     }
 }
 
@@ -485,7 +487,10 @@ fn build_evaluator<T: StandaloneNumber, A: ImportWithMap>(
     mut fn_map_entries: Vec<ParsedFnMapEntry>,
     state_map: &StateMap,
     iterate: bool,
-) -> Result<(ExpressionEvaluator<Complex<T>>, usize)> {
+) -> Result<(ExpressionEvaluator<Complex<T>>, usize)>
+where
+    Complex<T>: EvaluationDomain,
+{
     let optimization_settings = OptimizationSettings::new()
         .horner_iterations(10)
         .cores(1)
@@ -567,18 +572,6 @@ fn build_evaluator<T: StandaloneNumber, A: ImportWithMap>(
     }
 }
 
-fn set_override_if<A: Clone>(
-    values: &mut [A],
-    one: A,
-    zero: A,
-    over_ride: bool,
-    start: usize,
-    multiplicative_offset: usize,
-) {
-    let override_start = start * multiplicative_offset;
-    values[override_start] = if over_ride { one } else { zero };
-}
-
 fn set_orientation_values_impl<A: Clone + Neg<Output = A>>(
     values: &mut [A],
     one: A,
@@ -633,21 +626,6 @@ impl<A> StandaloneEvaluatorStackArchive<A> {
             .iter()
             .map(StandaloneComplexInput::parse::<T>)
             .collect()
-    }
-
-    fn override_input<T: StandaloneNumber>(&self) -> Result<Vec<Complex<T>>> {
-        let mut input = self.representative_input::<T>()?;
-        let zero = T::zero_value();
-        let one = T::one_value();
-        set_override_if(
-            &mut input,
-            Complex::new(one, T::zero_value()),
-            Complex::new(zero, T::zero_value()),
-            true,
-            self.override_pos,
-            self.mult_offset,
-        );
-        Ok(input)
     }
 
     fn set_orientation<T: StandaloneNumber>(&self, orientation: &[i8]) -> Result<Vec<Complex<T>>> {
@@ -788,7 +766,7 @@ fn print_usage(program: &str) {
            --graph-name <name>\n\
            --stack <original|ct:N,M>\n\
            --method <single_parametric|iterative|summed_function_map|summed>\n\
-           --orientation-index <usize>\n\
+           --orientation-index <usize> (single_parametric only)\n\
            --artifact-dir <path>\n\
            --print-input\n\
            --help"
@@ -877,6 +855,12 @@ fn parse_cli_options() -> Result<StandaloneCliOptions> {
                 options.input = PathBuf::from(arg);
             }
         }
+    }
+
+    if options.orientation_index.is_some() && options.method != StandaloneMethod::SingleParametric {
+        return Err(eyre!(
+            "--orientation-index can only be used with --method single_parametric"
+        ));
     }
 
     Ok(options)
@@ -1034,7 +1018,7 @@ fn evaluate_double_archive<A: ImportWithMap, S>(
             }
             StandaloneMethod::Iterative
             | StandaloneMethod::SummedFunctionMap
-            | StandaloneMethod::Summed => vec![stack.override_input::<f64>()?],
+            | StandaloneMethod::Summed => vec![stack.representative_input::<f64>()?],
         }
     };
 
@@ -1108,7 +1092,10 @@ fn evaluate_higher_precision_archive<T: StandaloneNumber, A: ImportWithMap, S>(
     custom_input: Option<&[StandaloneComplexInput]>,
     precision_label: &str,
     numeric_target: StandaloneNumericTarget,
-) -> Result<()> {
+) -> Result<()>
+where
+    Complex<T>: EvaluationDomain,
+{
     let compare_backends = if options.compare_backends.is_empty() {
         vec![options.backend]
     } else {
@@ -1157,7 +1144,7 @@ fn evaluate_higher_precision_archive<T: StandaloneNumber, A: ImportWithMap, S>(
             }
             StandaloneMethod::Iterative
             | StandaloneMethod::SummedFunctionMap
-            | StandaloneMethod::Summed => vec![stack.override_input::<T>()?],
+            | StandaloneMethod::Summed => vec![stack.representative_input::<T>()?],
         }
     };
 
@@ -1219,7 +1206,7 @@ fn main() -> Result<()> {
                     )
                 }
                 StandaloneNumericTarget::Arb => {
-                    evaluate_higher_precision_archive::<ArbFloat, _, _>(
+                    evaluate_higher_precision_archive::<Float, _, _>(
                         archive,
                         &state_map,
                         &options,
@@ -1247,7 +1234,7 @@ fn main() -> Result<()> {
                     )
                 }
                 StandaloneNumericTarget::Arb => {
-                    evaluate_higher_precision_archive::<ArbFloat, _, _>(
+                    evaluate_higher_precision_archive::<Float, _, _>(
                         archive,
                         &state_map,
                         &options,

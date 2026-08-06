@@ -113,7 +113,6 @@ pub struct WildCards {
 
 pub struct GammaloopSymbols {
     pub integrand: Symbol,
-    pub override_if: Symbol,
     /// wrapper function for the 4d bridge denominators
     pub tree_denom_wrapper: Symbol,
 
@@ -220,11 +219,7 @@ pub struct GammaloopSymbols {
 }
 
 impl GammaloopSymbols {
-    pub fn collect_orientation_if<'a>(
-        &self,
-        arg: impl Into<AtomOrView<'a>>,
-        with_override: bool,
-    ) -> Atom {
+    pub fn collect_orientation_if<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
         arg.into()
             .replace(self.sign_theta(W_.a_))
             .with(Symbol::IF.call(Atom::var(W_.a_) + 1))
@@ -237,18 +232,6 @@ impl GammaloopSymbols {
             .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
             .replace(Symbol::IF.call_args([Atom::var(W_.a_)]))
             .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
-            .replace(Symbol::IF.call_args([W_.a_, W_.b_, W_.c_]))
-            .with({
-                if with_override {
-                    Symbol::IF.call_args([
-                        Atom::var(self.override_if),
-                        Atom::var(W_.b_),
-                        Symbol::IF.call_args([W_.a_, W_.b_, W_.c_]),
-                    ])
-                } else {
-                    Symbol::IF.call_args([W_.a_, W_.b_, W_.c_])
-                }
-            })
     }
 
     pub fn den<'a>(
@@ -705,7 +688,6 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         },
         tags = [SPENSO_TAG.index.clone()]
     ),
-    override_if: symbol!("override_if"),
     uv_subgraph: symbol!(
         "gammalooprs::uv::subgraph",
         print = |a, opt, _state| {

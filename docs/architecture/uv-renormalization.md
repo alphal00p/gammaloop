@@ -14,8 +14,9 @@ architecture.
 
 - `legacy_dag_forest` computes the established `Approximation` DAG and remains
   the reference implementation for connected graphs.
-- `hedge_poset` unfolds commuting UV operations into trace levels and stores
-  their results in a compute store. It supports disconnected unions.
+- `hedge_poset` is the default. It unfolds commuting UV operations into trace
+  levels and stores their results in a compute store. It supports disconnected
+  unions.
 - `compare` computes both connected-graph backends, compares normalized
   expressions, and returns the legacy result. It is a validation mode, not a
   request to execute the returned integrand with the hedge-poset backend.

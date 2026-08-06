@@ -44,10 +44,7 @@ use crate::{
     graph::Graph,
     integrands::{
         evaluation::EvaluationMetaData,
-        process::{
-            amplitude::load::set_override_if,
-            param_builder::{FnMapEntry, LUParams},
-        },
+        process::param_builder::{FnMapEntry, LUParams},
     },
     momentum::{Helicity, sample::MomentumSample},
     numerator::symbolica_ext::NumeratorAtomExt,
@@ -55,9 +52,12 @@ use crate::{
         ContractionMode, EvaluatorBuildTimings, EvaluatorSettings, ExecutionMode,
         TensorNetworkContractionOrder,
     },
-    settings::{RuntimeSettings, global::FrozenCompilationMode},
+    settings::{
+        RuntimeSettings,
+        global::{CompilationOptimizationLevel, FrozenCompilationMode},
+    },
     utils::{
-        ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
+        ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, f128,
         hyperdual_utils::{DualOrNot, new_from_values},
     },
 };
@@ -213,7 +213,7 @@ impl ActiveF64Backend {
     pub fn from_frozen_mode(mode: &FrozenCompilationMode) -> Self {
         match mode {
             FrozenCompilationMode::Eager => ActiveF64Backend::Eager,
-            FrozenCompilationMode::Symjit => ActiveF64Backend::Symjit,
+            FrozenCompilationMode::Symjit(_) => ActiveF64Backend::Symjit,
             FrozenCompilationMode::Cpp(_) => ActiveF64Backend::Cpp,
             FrozenCompilationMode::Assembly(_) => ActiveF64Backend::Assembly,
         }
@@ -281,53 +281,6 @@ pub struct EvaluatorStack {
     pub summed: Option<GenericEvaluator>,
 }
 
-fn sum_iterative_outputs_for_selected_orientations<V>(
-    output: Vec<V>,
-    num_generated_orientations: usize,
-    selected_orientation_ids: &[usize],
-) -> Vec<V>
-where
-    V: Clone + std::ops::AddAssign,
-{
-    assert!(
-        num_generated_orientations > 0,
-        "iterative evaluators must be generated with at least one orientation"
-    );
-    assert!(
-        !selected_orientation_ids.is_empty(),
-        "iterative subset evaluation requires at least one selected orientation"
-    );
-    assert!(
-        selected_orientation_ids
-            .iter()
-            .all(|selected_id| *selected_id < num_generated_orientations),
-        "selected orientation ids {:?} exceed generated orientation count {}",
-        selected_orientation_ids,
-        num_generated_orientations
-    );
-    assert!(
-        output.len().is_multiple_of(num_generated_orientations),
-        "iterative evaluator output length {} is not divisible by the generated orientation count {}",
-        output.len(),
-        num_generated_orientations
-    );
-
-    output
-        .chunks(num_generated_orientations)
-        .map(|chunk| {
-            let mut selected = selected_orientation_ids.iter();
-            let first = *selected
-                .next()
-                .expect("selected orientation ids must be non-empty");
-            let mut sum = chunk[first].clone();
-            for selected_id in selected {
-                sum += chunk[*selected_id].clone();
-            }
-            sum
-        })
-        .collect()
-}
-
 impl EvaluatorStack {
     pub(crate) fn generic_evaluator_count(&self) -> usize {
         let mut count = 1;
@@ -358,7 +311,7 @@ impl EvaluatorStack {
         GenericEvaluator::new_from_builder(
             parametric_atom
                 .iter()
-                .map(|atom| GS.collect_orientation_if(atom.as_atom_view(), false)),
+                .map(|atom| GS.collect_orientation_if(atom.as_atom_view())),
             param_builder,
             dual_shape.clone(),
             opt_settings.clone(),
@@ -375,14 +328,13 @@ impl EvaluatorStack {
     ) -> Result<(GenericEvaluator, usize)> {
         let _progress_guard =
             crate::processes::enter_detailed_progress_span("Generating Iterative Evaluator");
-        // let  n_orientations=;
+        // Each output group contains one entry per generated orientation.
 
         Ok((
             GenericEvaluator::new_from_builder(
                 parametric_atom.iter().flat_map(|atom| {
                     orientations.iter().map(|a| {
-                        let selected =
-                            GS.collect_orientation_if(a.select(atom.as_atom_view()), false);
+                        let selected = GS.collect_orientation_if(a.select(atom.as_atom_view()));
                         debug!(selected_expr = %selected.log_print(None), "Iterative");
                         selected
                     })
@@ -426,7 +378,7 @@ impl EvaluatorStack {
                     lhs = lhs.add_arg(GS.sign(e));
                     args.push(Indeterminate::try_from(GS.sign(e)).unwrap());
                 }
-                let param_integrand = GS.collect_orientation_if(a.as_atom_view(), false);
+                let param_integrand = GS.collect_orientation_if(a.as_atom_view());
                 fn_map
                     .add_tagged_function(
                         GS.integrand,
@@ -444,26 +396,13 @@ impl EvaluatorStack {
             })
             .collect::<Result<_>>()?;
 
-        // fn_map.add_conditional(name)
-
+        // Summed evaluators contain concrete orientation calls; runtime orientation
+        // selection stays in the single-parametric evaluator.
         let sum = (0..entries.len()).map(|i| {
             orientations
                 .iter()
-                .map(|a| {
-                    GS.collect_orientation_if(a.orientation_thetas() * GS.integrand(i, a), true)
-                    // GS.integrand(a)
-                })
+                .map(|orientation| GS.integrand(i, orientation))
                 .fold(Atom::Zero, |acc, n| acc + n)
-                .replace(
-                    Symbol::IF.call_args([GS.override_if, W_.b_, W_.c_])
-                        + Symbol::IF.call_args([GS.override_if, W_.d_, W_.e_]),
-                )
-                .repeat()
-                .with(Symbol::IF.call_args([
-                    Atom::var(GS.override_if),
-                    Atom::var(W_.b_) + Atom::var(W_.d_),
-                    Atom::var(W_.c_) + Atom::var(W_.e_),
-                ]))
         });
 
         GenericEvaluator::new_from_raw_params(
@@ -490,25 +429,12 @@ impl EvaluatorStack {
         let sum = atoms.iter().map(|atom| {
             orientations
                 .iter()
-                .map(|a| {
-                    let selected = GS.collect_orientation_if(
-                        a.orientation_thetas() * a.select(atom.as_atom_view()),
-                        true,
-                    );
-                    debug!(selected_expr = %selected.log_print(None), "Iterative");
+                .map(|orientation| {
+                    let selected = orientation.select(atom.as_atom_view());
+                    debug!(selected_expr = %selected.log_print(None), "Summed");
                     selected
                 })
                 .fold(Atom::Zero, |acc, n| acc + n)
-                .replace(
-                    Symbol::IF.call_args([GS.override_if, W_.b_, W_.c_])
-                        + Symbol::IF.call_args([GS.override_if, W_.d_, W_.e_]),
-                )
-                .repeat()
-                .with(Symbol::IF.call_args([
-                    Atom::var(GS.override_if),
-                    Atom::var(W_.b_) + Atom::var(W_.d_),
-                    Atom::var(W_.c_) + Atom::var(W_.e_),
-                ]))
         });
 
         GenericEvaluator::new_from_builder(
@@ -1021,10 +947,9 @@ impl EvaluatorStack {
                         let _ = std::fs::write(
                             dump_dir.join(format!("{stem}.txt")),
                             format!(
-                                "orientation_id={}\norientations_start={}\noverride_pos={}\nmultiplicative_offset={}\nf128_nonfinite_count={}\narb_nonfinite_count={}\n\n# f128_out\n{}\n\n# arb_out\n{}\n\n# params_after_orientation\n{}\n",
+                                "orientation_id={}\norientations_start={}\nmultiplicative_offset={}\nf128_nonfinite_count={}\narb_nonfinite_count={}\n\n# f128_out\n{}\n\n# arb_out\n{}\n\n# params_after_orientation\n{}\n",
                                 usize::from(orientation_id),
                                 input.orientations_start,
-                                input.override_pos,
                                 input.multiplicative_offset,
                                 f128_nonfinite_count,
                                 arb_nonfinite_count,
@@ -1057,162 +982,85 @@ impl EvaluatorStack {
         result.unwrap()
     }
 
-    fn evaluate_iterative<'a, T: FloatLike, OID: IndexLike>(
+    fn evaluate_iterative<'a, T: FloatLike>(
         &'a mut self,
         input: InputParams<'a, T>,
-        orientations: SingleOrAllOrientations<'a, OID>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
-    ) -> Result<Vec<DualOrNot<Complex<F<T>>>>>
-    where
-        usize: From<OID>,
-    {
+    ) -> Result<Vec<DualOrNot<Complex<F<T>>>>> {
         let Some((iterative, len)) = &mut self.iterative else {
             return Err(eyre!(
                 "Iterative evaluator not available. Regenerate with iterative set to true."
             ));
         };
 
-        let mut result = vec![];
-        if orientations.is_all() {
-            let mut push = 0;
-            let mut val = None;
-            for r in evaluate_evaluator(
-                iterative,
-                input.as_slice(),
-                evaluation_metadata,
-                record_primary_timing,
-            ) {
-                push += 1;
-                if let Some(mut value) = val.take() {
-                    value += r;
-                    if push == *len {
-                        push = 0;
-                        result.push(value);
-                    } else {
-                        val = Some(value)
-                    }
-                } else {
-                    val = Some(r);
-                }
-            }
-            Ok(result)
-        } else {
-            let selected_orientation_ids = orientations
-                .iter()
-                .map(|(id, _)| usize::from(id))
-                .collect::<Vec<_>>();
-            let output = evaluate_evaluator(
-                iterative,
-                input.as_slice(),
-                evaluation_metadata,
-                record_primary_timing,
-            );
-            Ok(sum_iterative_outputs_for_selected_orientations(
-                output,
-                *len,
-                &selected_orientation_ids,
-            ))
+        let output = evaluate_evaluator(
+            iterative,
+            input.as_slice(),
+            evaluation_metadata,
+            record_primary_timing,
+        );
+        if *len == 0 {
+            return Err(eyre!("Iterative evaluator has no generated orientations"));
         }
+
+        let mut values = output.into_iter();
+        let mut result = Vec::with_capacity(values.len() / *len);
+        while let Some(mut sum) = values.next() {
+            for _ in 1..*len {
+                sum += values
+                    .next()
+                    .ok_or_else(|| eyre!("Iterative evaluator returned an incomplete group"))?;
+            }
+            result.push(sum);
+        }
+        Ok(result)
     }
 
-    fn evaluate_summed_fnmap<'a, T: FloatLike, OID: IndexLike>(
+    fn evaluate_summed_fnmap<'a, T: FloatLike>(
         &'a mut self,
-        mut input: InputParams<'a, T>,
-        orientations: SingleOrAllOrientations<'a, OID>,
+        input: InputParams<'a, T>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
-    ) -> Result<Vec<DualOrNot<Complex<F<T>>>>>
-    where
-        usize: From<OID>,
-    {
+    ) -> Result<Vec<DualOrNot<Complex<F<T>>>>> {
         let Some(summed_function_map) = &mut self.summed_function_map else {
             return Err(eyre!(
                 "Runtime requested evaluator_method=SummedFunctionMap, but this integrand was generated without a summed function-map evaluator. Regenerate with global.generation.evaluator.summed_function_map=true, or set process runtime general.evaluator_method=SingleParametric."
             ));
         };
 
-        if orientations.is_all() {
-            input.override_if(true);
-            // if let Some(exprs) = &summed_function_map.exprs {
-            //     for e in exprs {
-            //         debug!(expr=%e.log_print(None),"Summed evaluator");
-            //     }
-            // }
+        // if let Some(exprs) = &summed_function_map.exprs {
+        //     for e in exprs {
+        //         debug!(expr=%e.log_print(None),"Summed evaluator");
+        //     }
+        // }
 
-            Ok(evaluate_evaluator(
-                summed_function_map,
-                input.as_slice(),
-                evaluation_metadata,
-                record_primary_timing,
-            ))
-        } else {
-            let mut result: Option<Vec<DualOrNot<Complex<F<T>>>>> = None;
-            for (_, e) in orientations.iter() {
-                input.set_orientation_values(e);
-                let output = evaluate_evaluator(
-                    summed_function_map,
-                    input.as_slice(),
-                    evaluation_metadata,
-                    record_primary_timing,
-                );
-                if let Some(result) = &mut result {
-                    for (r, v) in result.iter_mut().zip(output) {
-                        *r += v;
-                    }
-                } else {
-                    result = Some(output)
-                }
-            }
-            Ok(result.unwrap())
-        }
+        Ok(evaluate_evaluator(
+            summed_function_map,
+            input.as_slice(),
+            evaluation_metadata,
+            record_primary_timing,
+        ))
     }
 
-    fn evaluate_summed<'a, T: FloatLike, OID: IndexLike>(
+    fn evaluate_summed<'a, T: FloatLike>(
         &'a mut self,
-        mut input: InputParams<'a, T>,
-        orientations: SingleOrAllOrientations<'a, OID>,
+        input: InputParams<'a, T>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
-    ) -> Result<Vec<DualOrNot<Complex<F<T>>>>>
-    where
-        usize: From<OID>,
-    {
+    ) -> Result<Vec<DualOrNot<Complex<F<T>>>>> {
         let Some(summed) = &mut self.summed else {
             return Err(eyre!(
                 "Summed evaluator not available. Regenerate with summed set to true."
             ));
         };
 
-        if orientations.is_all() {
-            input.override_if(true);
-
-            Ok(evaluate_evaluator(
-                summed,
-                input.as_slice(),
-                evaluation_metadata,
-                record_primary_timing,
-            ))
-        } else {
-            let mut result: Option<Vec<DualOrNot<Complex<F<T>>>>> = None;
-            for (_, e) in orientations.iter() {
-                input.set_orientation_values(e);
-                let output = evaluate_evaluator(
-                    summed,
-                    input.as_slice(),
-                    evaluation_metadata,
-                    record_primary_timing,
-                );
-                if let Some(result) = &mut result {
-                    for (r, v) in result.iter_mut().zip(output) {
-                        *r += v;
-                    }
-                } else {
-                    result = Some(output)
-                }
-            }
-            Ok(result.unwrap())
-        }
+        Ok(evaluate_evaluator(
+            summed,
+            input.as_slice(),
+            evaluation_metadata,
+            record_primary_timing,
+        ))
     }
     #[instrument(
         name = "evaluate",
@@ -1241,6 +1089,18 @@ impl EvaluatorStack {
     where
         usize: From<OID>,
     {
+        if !orientations.is_all()
+            && !matches!(
+                settings.general.evaluator_method,
+                EvaluatorMethod::SingleParametric
+            )
+        {
+            return Err(eyre!(
+                "Runtime evaluator_method={:?} cannot select individual orientations; use SingleParametric for Monte Carlo sampling or runtime filtering over orientations.",
+                settings.general.evaluator_method
+            ));
+        }
+
         match settings.general.evaluator_method {
             EvaluatorMethod::SingleParametric => Ok(self.evaluate_parametric(
                 input,
@@ -1248,24 +1108,15 @@ impl EvaluatorStack {
                 evaluation_metadata,
                 record_primary_timing,
             )),
-            EvaluatorMethod::Iterative => self.evaluate_iterative(
-                input,
-                orientations,
-                evaluation_metadata,
-                record_primary_timing,
-            ),
-            EvaluatorMethod::SummedFunctionMap => self.evaluate_summed_fnmap(
-                input,
-                orientations,
-                evaluation_metadata,
-                record_primary_timing,
-            ),
-            EvaluatorMethod::Summed => self.evaluate_summed(
-                input,
-                orientations,
-                evaluation_metadata,
-                record_primary_timing,
-            ),
+            EvaluatorMethod::Iterative => {
+                self.evaluate_iterative(input, evaluation_metadata, record_primary_timing)
+            }
+            EvaluatorMethod::SummedFunctionMap => {
+                self.evaluate_summed_fnmap(input, evaluation_metadata, record_primary_timing)
+            }
+            EvaluatorMethod::Summed => {
+                self.evaluate_summed(input, evaluation_metadata, record_primary_timing)
+            }
         }
     }
 
@@ -1440,7 +1291,10 @@ impl GenericEvaluator {
         self.active_f64_backend.set(ActiveF64Backend::Eager);
     }
 
-    pub(crate) fn activate_symjit(&mut self) -> Result<()> {
+    pub(crate) fn activate_symjit(
+        &mut self,
+        optimization_level: CompilationOptimizationLevel,
+    ) -> Result<()> {
         if self.is_eager_only() {
             self.activate_eager_only();
             return Ok(());
@@ -1450,10 +1304,13 @@ impl GenericEvaluator {
             .rational
             .as_ref()
             .ok_or_else(|| eyre!("Cannot build symjit backend without the rational evaluator"))?;
-        // SymJIT 2.21 cannot compact some complex temporary layouts.
+        // SymJIT 2.21 supports optimization levels up to O2 and cannot compact some complex
+        // temporary layouts.
         let evaluator = rational
             .jit_compile::<SymComplex<f64>>(
-                JITCompilationSettings::default().with_option("compact", "false"),
+                JITCompilationSettings::new()
+                    .optimization_level(usize::from(optimization_level).min(2) as u8)
+                    .with_option("compact", "false"),
             )
             .map_err(|err| eyre!(err))?;
         self.loaded_f64_compiled.invalidate();
@@ -1637,7 +1494,6 @@ pub enum SliceMut<'a, T: FloatLike> {
 pub struct InputParams<'a, T: FloatLike> {
     pub values: SliceMut<'a, T>,
     pub orientations_start: usize,
-    pub override_pos: usize,
     pub multiplicative_offset: usize,
 }
 
@@ -1687,20 +1543,6 @@ impl<'a, T: FloatLike> InputParams<'a, T> {
         );
     }
 
-    pub(crate) fn override_if(&mut self, over_ride: bool) {
-        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
-        let one = zero.ref_one();
-        let multiplicative_offset = self.multiplicative_offset;
-        let start = self.override_pos;
-        set_override_if(
-            self.as_mut_slice(),
-            one,
-            zero,
-            over_ride,
-            start,
-            multiplicative_offset,
-        );
-    }
     pub fn as_mut_slice(&mut self) -> &mut [Complex<F<T>>] {
         match &mut self.values {
             SliceMut::Borrowed(s) => s,
@@ -2001,64 +1843,7 @@ mod tests {
     use idenso::color::CS;
     use symbolica::atom::Symbol;
 
-    use crate::utils::W_;
-
     use super::*;
-
-    #[test]
-    fn test_function_map_summed() {
-        fn integer_to_orientation(i: isize) -> Orientation {
-            match i {
-                1 => Orientation::Default,
-                -1 => Orientation::Reversed,
-                0 => Orientation::Undirected,
-                _ => panic!("Invalid orientation index"),
-            }
-        }
-
-        let a = [
-            EdgeVec::from_iter([1, -1, 1, 1].into_iter().map(integer_to_orientation)),
-            EdgeVec::from_iter([1, -1, -1, 1].into_iter().map(integer_to_orientation)),
-            EdgeVec::from_iter([-1, -1, 1, 1].into_iter().map(integer_to_orientation)),
-        ]
-        .iter()
-        .map(|a| {
-            GS.collect_orientation_if(a.orientation_thetas() * GS.integrand(1, a), true)
-
-            // GS.integrand(a)
-        })
-        .fold(Atom::Zero, |acc, n| acc + n)
-        .replace(
-            Symbol::IF.call_args([GS.override_if, W_.b_, W_.c_])
-                + Symbol::IF.call_args([GS.override_if, W_.d_, W_.e_]),
-        )
-        .repeat()
-        .with(Symbol::IF.call_args([
-            Atom::var(GS.override_if),
-            Atom::var(W_.b_) + Atom::var(W_.d_),
-            Atom::var(W_.c_) + Atom::var(W_.e_),
-        ]));
-
-        println!("{:100}", a);
-    }
-
-    #[test]
-    fn iterative_subset_output_sums_only_selected_orientation_blocks() {
-        let output = vec![10, 20, 30, 40, 50, 60];
-
-        let summed = sum_iterative_outputs_for_selected_orientations(output, 3, &[0, 2]);
-
-        assert_eq!(summed, vec![40, 100]);
-    }
-
-    #[test]
-    fn iterative_subset_output_keeps_single_selected_orientation() {
-        let output = vec![10, 20, 30, 40, 50, 60];
-
-        let summed = sum_iterative_outputs_for_selected_orientations(output, 3, &[1]);
-
-        assert_eq!(summed, vec![20, 50]);
-    }
 
     #[test]
     fn pi_eval() {

@@ -1,6 +1,6 @@
 [cli_settings]
 [cli_settings.state]
-folder = "./examples/cli/epem_a_ttxh/NNLO/gammaloop_state"
+folder = "./examples/cli/epem_a_ttxh/NNLO_user_experiment/gammaloop_state"
 name = "epem_a_ttxh_NNLO"
 
 #[cli_settings.global]
@@ -19,7 +19,7 @@ commands = [
   "set global kv global.n_cores.feyngen=10",
 
   "remove processes",
-  #    --global-prefactor-num "-1" 
+  #    --global-prefactor-num "-1"
   """generate xs e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states true
@@ -27,7 +27,7 @@ commands = [
       --global-prefactor-num "1𝑖"
       --only-diagrams""",
   #"select -p epem_a_tth -i NNLO --amplitude-graphs --without-raised-propagator-signatures ANY_RAISING --without-raised-cuts-signatures ANY_RAISING",
-  "select -p epem_a_tth -i NNLO --amplitude-graphs --without-raised-propagator-signatures ANY_RAISING --without-raised-cuts-signatures ANY_RAISING --without-graph-names GL168 GL568 GL592 GL648 GL672 GL673 GL677",
+  "select -p epem_a_tth -i NNLO --with-only-graph-names GL297",
   # Diagnostic subset previously used: GL076 GL090 GL132 GL134 GL190 GL443.
   "save dot",
 ]
@@ -36,6 +36,109 @@ commands = [
 name = "generate_integrands"
 commands = [
     "set global kv global.n_cores.generate=10",
+    """set global string '
+[global.generation]
+vector_polarization_sum_gauge = "LightLikeAxial"
+force_cuts = []
+override_lmb_heuristics = false
+
+[global.generation.evaluator]
+do_algebra = false
+iterative_orientation_optimization = false
+summed = false
+summed_function_map = true
+compile = true
+store_atom = false
+do_fn_map_replacements = false
+direct_translation = true
+horner_iterations = 1
+n_cores = 1
+# cpe_iterations is unset by default (None).
+abort_level = 0
+max_horner_scheme_variables = 500
+max_common_pair_cache_entries = 1000000
+max_common_pair_distance = 1000
+tensor_network_contraction_order = "sparse_atom_aware"
+verbose = false
+spenso_execution_mode = ["Sequential", "MinResultRank"]
+
+[global.generation.feyngen]
+gamma_simplification_closure_check = false
+
+[global.generation.orientation_pattern]
+# pat is unset by default (None).
+
+[global.generation.compile]
+compilation_mode = "symjit"
+optimization_level = "O2"
+fast_math = true
+unsafe_math = true
+compiler = "clang++"
+custom = []
+
+[global.generation.tropical_subgraph_table]
+panic_on_fail = true
+target_omega = 1.0
+disable_tropical_generation = false
+
+[global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = true
+esurface_existence_threshold = 1.0e-7
+skip_thresholds_that_are_cuts = true
+disable_integrated_ct = false
+assume_positive_external_energies = true
+
+[global.generation.uv]
+softct = false
+generate_integrated = true
+subtract_uv = true
+final_integrand = "ThreeD"
+add_marker = false
+keep_marker = true
+inner_products = true
+orchestrator = "legacy_dag_forest"
+
+[global.generation.uv.renormalization_prescription]
+log_divergent = "MUV"
+massive_power_divergent = "MUV"
+massless_power_divergent = "MUV"
+overrides = []
+
+[global.generation.uv.vakint]
+form_exe_path = "form"
+python_exe_path = "python3"
+evaluation_methods = ["alphaloop", "matad", "fmft"]
+run_time_decimal_precision = 100
+clean_tmp_dir = true
+# temporary_directory is unset by default (None).
+normalization = "MSbar"
+additional_normalization = "-1"
+
+[global.generation.uv.vakint.matad]
+expand_masters = true
+susbstitute_masters = true
+substitute_hpls = true
+direct_numerical_substition = true
+
+[global.generation.uv.vakint.alphaloop]
+susbstitute_masters = true
+
+[global.generation.uv.vakint.fmft]
+expand_masters = true
+susbstitute_masters = true
+
+[global.generation.uv.vakint.pysecdec]
+quiet = true
+relative_precision = 1.0e-7
+min_n_evals = 10000
+max_n_evals = 1000000000000
+# reuse_existing_output is unset by default (None).
+'""",
+    """set default-runtime string '
+[general]
+evaluator_method = "SummedFunctionMap"
+'""",
     "generate existing -p epem_a_tth -i NNLO",
     "duplicate integrand -p epem_a_tth -i NNLO --output_process_name epem_a_tth --output_integrand_name NNLO_semi_inclusive",
     "save state -o"
@@ -50,18 +153,18 @@ type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
 momenta = [
-   	[
-    	 500.0,
-    	 0.0,
-    	 0.0,
-    	 500.0,
-	],
-   	[
-    	 500.0,
-    	 0.0,
-    	 0.0,
-    	-500.0,
-	],
+    [
+        500.0,
+        0.0,
+        0.0,
+        500.0,
+    ],
+    [
+        500.0,
+        0.0,
+        0.0,
+        -500.0,
+    ],
 ]
 helicities = [
     "summed_averaged",
@@ -244,7 +347,7 @@ commands = [
   # --target epem_a_tth@NLO=-2.4706e-04,0.0
   #  GL08
   # --target epem_a_tth@NLO=-1.6168e-06,0.0
-  #               --target epem_a_tth@NLO=1.3472e-04,0.0  
+  #               --target epem_a_tth@NLO=1.3472e-04,0.0
   # -p epem_a_tth -i NNLO_m_uv_up
   """integrate -p epem_a_tth -i NNLO -p epem_a_tth -i NNLO_m_uv_up --n-cores 3
 				 --renderer ratatui
@@ -262,7 +365,7 @@ commands = [
 name = "set_model_parameters"
 commands = [
   "set model MT=173.0",
-  "set model MH=125.0",  
+  "set model MH=125.0",
   "set model WT=0.0",
   "set model ymt=173.0",
   "set model aS=0.118",

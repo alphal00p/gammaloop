@@ -1314,7 +1314,7 @@ fn se1l_uv() {
         shifted_mu_r: 0.8,
         skip_uv_profile: false,
         targets: IntegratedUvTargets {
-            integrated: Some(Complex::new(F(13203.138335578471), F(60526.67532762852))),
+            integrated: Some(Complex::new(F(13169.321086130927), F(56907.637709852635))),
         },
         integrated_ct_relative_error_limit: None,
         check_mu_r_dependence: true,

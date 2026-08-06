@@ -379,6 +379,23 @@ impl ProcessIntegrand {
     }
 
     pub fn warm_up(&mut self, model: &Model) -> Result<()> {
+        let settings = self.get_settings();
+        if matches!(
+            &settings.sampling,
+            SamplingSettings::DiscreteGraphs(settings) if settings.sample_orientations
+        ) {
+            if !matches!(
+                settings.general.evaluator_method,
+                evaluators::EvaluatorMethod::SingleParametric
+            ) {
+                return Err(eyre!(
+                    "Monte Carlo sampling over orientations requires general.evaluator_method=SingleParametric; got {:?}.",
+                    settings.general.evaluator_method
+                ));
+            }
+            warn!("Monte Carlo sampling over orientations is using the SingleParametric evaluator");
+        }
+
         match self {
             Self::Amplitude(a) => a.warm_up(model),
             Self::CrossSection(a) => a.warm_up(model),
