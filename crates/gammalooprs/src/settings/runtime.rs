@@ -608,6 +608,15 @@ pub struct ComponentDiscreteBreakdown {
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[serde(default, deny_unknown_fields)]
+pub struct AbsoluteIntegrationResult {
+    pub integral: IntegralEstimate,
+    pub table_results: Vec<IntegrationTableComponentResult>,
+    pub max_weight_info: Vec<MaxWeightInfoEntry>,
+    pub grid_breakdown: ComponentDiscreteBreakdown,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[serde(default, deny_unknown_fields)]
 pub struct SlotIntegrationResult {
     pub key: String,
     pub process: String,
@@ -618,6 +627,7 @@ pub struct SlotIntegrationResult {
     pub integration_statistics: IntegrationStatisticsSnapshot,
     pub max_weight_info: Vec<MaxWeightInfoEntry>,
     pub grid_breakdown: ComponentDiscreteBreakdown,
+    pub absolute: AbsoluteIntegrationResult,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]

@@ -18,11 +18,24 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - Multi-slot layout should use an all-slot ribbon plus a focused-slot detail
   area instead of a permanently wide all-columns matrix.
 - ETA for the current iteration should be shown.
+- Componentwise absolute-integrand monitoring is always collected alongside the
+  signed integral. It means `⟨|Re I|⟩` and `⟨|Im I|⟩`, not the complex modulus
+  and not `√⟨I²⟩`.
+- Absolute discrete monitoring uses separate shallow Havana accumulators for
+  only the configured monitored discrete level. These monitors must not copy
+  descendants, sample, adapt, or persist; they only copy the current monitored
+  bin PDFs, leaving the production grid and RNG sequence unchanged.
+- `a` / `A` globally toggles every Ratatui tab between `⟨I⟩` and `⟨|I|⟩`.
+  The selection survives tab changes and dashboard suspend/resume.
+- Absolute view keeps convergence history and uncertainty bands, but has no
+  target values, target line, or target-delta columns. Its progress header
+  retains `ETA to ⟨I⟩ target` because stopping is still controlled by the
+  signed integral.
 - Keyboard interrupt handling should become responsive inside
   `evaluate_samples(..)` / `evaluate_samples_raw(..)` after each individual
   sample finishes.
 
-## Implementation status (2026-03-21)
+## Implementation status (2026-08-07)
 
 ### Implemented
 
@@ -45,6 +58,15 @@ Update it whenever scope, decisions, or implementation sequencing changes.
     panel, results-summary table, and statistics composition bars
   - discrete tab with sortable/selectable bin rows and selected-bin detail
   - max-weight tab with overall and per-bin panels
+- Ratatui now has a dashboard-global, signed-by-default integral view:
+  - `a` / `A` switches the ribbon, complete chart history, focused and summary
+    results, discrete values and active-view sorting, χ², max-weight impact,
+    and overall/per-bin max-weight panels
+  - component labels switch from `re` / `im` to `|re|` / `|im|`, and panel
+    titles explicitly identify `⟨I⟩` versus `⟨|I|⟩`
+  - changing view or sort order preserves the selected logical discrete bin
+  - absolute max-weight rows are unsigned and target-specific UI remains
+    exclusive to signed view
 - Ratatui now renders upstream `StyledText` content directly in tables and
   panels instead of flattening values to plain strings, so backend-independent
   formatting is shared across tabled and ratatui.
@@ -524,10 +546,10 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   completed iteration when either configured accuracy target is reached.
 - Use only slot 0 and only slot 0's trained phase when evaluating accuracy
   targets, even in multi-slot runs.
-- Add `ETA to target` to the ratatui overview header, based on the current
+- Add `ETA to ⟨I⟩ target` to the ratatui overview header, based on the current
   slot-0 trained-phase error, current throughput, and `1/sqrt(N)` error
   scaling, and include the active target condition in the header as
-  `ETA to target (<spec>) <eta>`, with relative targets shown as percentages
+  `ETA to ⟨I⟩ target (<spec>) <eta>`, with relative targets shown as percentages
   in fixed notation above `1e-4%` and scientific notation at or below that
   threshold.
 - If both accuracy targets are configured, compute the ETA using whichever
