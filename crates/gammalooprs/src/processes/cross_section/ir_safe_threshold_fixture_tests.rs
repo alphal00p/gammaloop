@@ -178,7 +178,7 @@ edges = [2, 4, 12]
     subspace = [7]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "eta(effective, eset(7, 8))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
+      expression = "eta(star, eset(7, 8))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)"
 
     [[cuts.thresholds.counterterms]]
     name = "embedded_2l"
@@ -187,7 +187,7 @@ edges = [2, 4, 12]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "eta(effective, eset(8, 12, 14))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
+      expression = "eta(star, eset(8, 12, 14))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)"
 "#;
 
 const GL638_FULL_DIRECTIVES: &str = r#"
@@ -205,7 +205,7 @@ edges = [2, 6, 12, 13]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "eta(effective, eset(7, 8))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
+      expression = "eta(star, eset(7, 8))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)"
 
     [[cuts.thresholds.counterterms]]
     name = "embedded_2l"
@@ -213,7 +213,7 @@ edges = [2, 6, 12, 13]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "eta(effective, eset(8, 12, 14))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
+      expression = "eta(star, eset(8, 12, 14))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)"
 
 [[cuts]]
 edges = [2, 6, 10]
@@ -235,7 +235,7 @@ edges = [2, 6, 10]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "eta(effective, eset(7, 8))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
+      expression = "eta(star, eset(7, 8))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)"
 
     [[cuts.thresholds.counterterms]]
     name = "embedded_2l"
@@ -243,7 +243,7 @@ edges = [2, 6, 10]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "eta(effective, eset(8, 12, 14))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
+      expression = "eta(star, eset(8, 12, 14))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)"
 
 [[cuts]]
 edges = [2, 4, 12]
@@ -257,7 +257,7 @@ edges = [2, 4, 12]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "eta(effective, eset(7, 8))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
+      expression = "eta(star, eset(7, 8))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)"
 
     [[cuts.thresholds.counterterms]]
     name = "embedded_2l"
@@ -265,7 +265,7 @@ edges = [2, 4, 12]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "eta(effective, eset(8, 12, 14))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
+      expression = "eta(star, eset(8, 12, 14))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(8, 12, 14))^2)"
 
 [[cuts]]
 edges = [2, 4, 10, 13]
@@ -279,7 +279,7 @@ edges = [2, 4, 10, 13]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "eta(effective, eset(7, 8))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(2, 4, 10, 13))^2)"
+      expression = "eta(star, eset(7, 8))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(2, 4, 10, 13))^2)"
 
     [[cuts.thresholds.counterterms]]
     name = "embedded_2l"
@@ -287,7 +287,7 @@ edges = [2, 4, 10, 13]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "eta(effective, eset(2, 4, 10, 13))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(2, 4, 10, 13))^2)"
+      expression = "eta(star, eset(2, 4, 10, 13))^2 / (eta(star, eset(7, 8))^2 + eta(star, eset(2, 4, 10, 13))^2)"
 "#;
 
 fn runtime_settings() -> RuntimeSettings {
