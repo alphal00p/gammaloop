@@ -51,7 +51,7 @@ edges = [2, 4, 12] # provisional GL638 mapping
     subspace = [7] # provisional basis-edge mapping
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "1 / (1 + (eta(effective, 7, 8) / UFO::MT)^2)"
+      expression = "1 / (1 + (eta(effective, eset(7, 8)) / UFO::MT)^2)"
       symmetrize = false
       opaque_derivatives = true
 
@@ -60,7 +60,7 @@ edges = [2, 4, 12] # provisional GL638 mapping
     subspace = [3, 7] # provisional basis-edge mapping
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "(eta(effective, 7, 8) / UFO::MT)^2 / (1 + (eta(effective, 7, 8) / UFO::MT)^2)"
+      expression = "(eta(effective, eset(7, 8)) / UFO::MT)^2 / (1 + (eta(effective, eset(7, 8)) / UFO::MT)^2)"
       symmetrize = false
       opaque_derivatives = true
 
@@ -160,9 +160,9 @@ Q3(edge, lorentz_index)                  # effective alias
 Q3(effective, edge, lorentz_index)
 Q3(star, edge, lorentz_index)
 
-eta(edge_0, edge_1, ...)                 # effective alias
-eta(effective, edge_0, edge_1, ...)
-eta(star, edge_0, edge_1, ...)
+eta(eset(edge_0, edge_1, ...))                 # effective alias
+eta(effective, eset(edge_0, edge_1, ...))
+eta(star, eset(edge_0, edge_1, ...))
 
 P(external_position, lorentz_index)
 UFO::<model parameter>
@@ -171,6 +171,11 @@ UFO::<model parameter>
 `Q3` reuses GammaLoop’s existing spatial-momentum tensor. It remains Lorentz-indexed for Spenso, but its temporal component is exactly zero; Minkowski contraction therefore introduces the understood minus sign relative to a Euclidean spatial dot product. Reject multiplier `Q` and `K` with guidance to use `Q3`.
 
 Resolve each canonical, duplicate-free `eta` edge set against the owning cut’s fixed E-surface catalog. If identical energy edges correspond to different external shifts in that catalog, reject the call as ambiguous instead of choosing silently.
+
+The `eset` head is mandatory and is registered with Symbolica's symmetric
+attribute before parsing, so callers may write its edge arguments in any
+order. Flat `eta` edge arguments are rejected rather than accepted through a
+backward-compatibility lane.
 
 Parse expressions during generation, pass tensor expressions through the existing Spenso network/contraction machinery, and require one scalar Symbolica result. Reject free tensor indices, invalid frame names, unknown symbols, invalid edge/external IDs, and non-scalar results with graph/cut/threshold/variant context. At runtime require a finite, real result in the active f64, f128, or arbitrary-precision lane.
 
@@ -287,9 +292,10 @@ Historical GL638 hypotheses to verify:
 - One of those cuts was believed to have two right-side threshold partners, exercising the complete internal Cartesian products.
 - The historical basis-edge representations were `[7]` and `[3,7]` in parent LMB `(3,4,7,10)`, but none of these numeric values is authoritative.
 - After rederivation, verify both variants have independent IDs, subspaces, roots, overlap/multichannel entries, and multiplier references.
+- The current topology audit found one additional necessary forced association: threshold `(8,12,14)` under cut `(2,6,10)` resolves maximally in `[3,7]`, while the same threshold under the two cuts participating in its `q13` LU cancellation resolves in `[7]`. Declare the former as `shared_1l` in `[7]` so all three use one common projected subspace.
 - Verify the selected cut’s left×right products, including all four L/I components per pair.
 - Run fixed selected-orientation samples with a safe illustrative multiplier, asserting finite values, no crashes/NaNs, correct component/event sums, and save/load equivalence.
-- Do not make final GL638 IR scaling an implementation gate because its physical multichannel function is intentionally left for follow-up research.
+- For the revalidated cut `(2,4,12)` trajectory, require `q13`, `eta(eset(5,10))`, and `eta(eset(5,12,13))` to vanish linearly on both sides and require the original, threshold-CT sum, and total to fit no worse than `lambda^-1` at the four smallest scales. Do not generalize that acceptance result to other cuts without corresponding profiles.
 
 Run targeted tests first, then formatting/check/clippy and the complete `just test_gammaloop` suite under the repository’s 30 GB memory watchdog. The acceptance scope is the two revalidated selected-orientation fixtures plus generic amplitude/cross-section tests and the existing suite, not generation of all 166 graphs.
 
@@ -340,7 +346,11 @@ Only after both GL297 and GL638 have evidence appropriate to the claim being ill
 - Render and visually inspect every resulting PDF. Curate plotted quantities, legends, ranges, and layout so that the relevant cancellation is legible rather than hidden among every default series.
 - Keep all feature acceptance tests self-contained outside the example tree and fast enough for the curated `just test_gammaloop` suite.
 
-Do not describe a finite GL638 smoke run as a physical IR cure. Because final GL638 multiplier tuning was deferred, label it as cured only if a concrete ratio-of-E-surface prescription demonstrates the intended cancellation under a recorded approach. Otherwise preserve and report the remaining physics-evidence boundary.
+Do not describe a merely finite GL638 smoke run as a physical IR cure. The
+complementary squared-E-surface prescription is a demonstrated cure for the
+selected-orientation correlated `q13` soft/threshold limit of cut `(2,4,12)`;
+state that scope precisely and do not generalize the evidence to every other
+GL638 cut until corresponding approaches have been demonstrated.
 
 Include the graph and analysis sources in the eventual reviewed commit and tracked remote branch push; preserve the existing no-commit/no-push-before-review gate.
 
@@ -363,3 +373,37 @@ For overlap-center and COSP construction, treat every resolved counterterm varia
 - Impose that variant's own subspace and fixed-complement constraints when finding a common center.
 - Do not use the shared supergraph energy-edge set to merge variants or relax those constraints in v1. A later refinement may exploit their common origin without changing the public schema.
 - Keep the original×original contribution unique. One-sided variant×original records and left×right variant pairs contribute only their counterterm pieces; the original side is an identity kinematic transformation, not another copy of the original integrand.
+
+## Addendum: mandatory symmetric E-surface sets
+
+Every multiplier-language `eta` call wraps its energy-edge arguments in the
+Symbolica-symmetric `eset` head. Accepted forms are exactly
+`eta(eset(...))`, `eta(effective, eset(...))`, and
+`eta(star, eset(...))`; the flat historical forms are invalid. Symbolica
+canonicalizes permutations of `eset` arguments during parsing.
+
+The view name remains semantically significant. In an integrated expanded
+component, the global `effective` view is already replaced by that component's
+threshold root, while in a local component it remains the local sample. The
+`star` view always exposes the applicable root or merged-root sample. The
+curing GL638 prescription uses `effective`: it is the local `r` sample for a
+local component and is already replaced by `r_star` for an integrated
+component. This realizes the required `f(r)`/`f(r_star)` behavior and preserves
+the integrated CT's PV-zero property. Using explicit `star` for this ratio
+would instead evaluate the owning E-surface at its root even for local pieces,
+collapsing the two local branches to zero and one rather than multichanneling
+them. A left×right term still passes one global effective/star context to both
+functions, so the duplicated variants and full Cartesian expansion remain
+necessary.
+
+## Addendum: readable DOT serialization
+
+Serialize the `threshold_counterterms` graph attribute with literal line
+breaks inside its quoted DOT value. Quotes, backslashes, carriage returns, and
+tabs remain DOT-escaped, but TOML line breaks must not be flattened to visible
+`\n` sequences. Put the opening quote at the end of the assignment line and
+start `schema_version = 1` on the following line, so the representation is
+visibly multiline even at its first token. Apply this field-specific encoder in
+both ordinary and `--include-autogenerated-fields` graph exports and verify both
+forms through DOT re-import, including embedded quotes, Unicode, and
+backslashes.
