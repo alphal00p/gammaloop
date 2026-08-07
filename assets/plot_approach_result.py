@@ -462,8 +462,9 @@ class NonFiniteWarnings:
         )
         item["fields"][f"{label}.{component}"] = raw_value_label(raw_value)
 
-    def emit(self) -> None:
-        for item in self._items.values():
+    def emit(self, limit: int) -> None:
+        items = list(self._items.values())
+        for item in items[:limit]:
             result = item["result"]
             point = item["point"]
             axis_index = int(point.get("axis_index", -1))
@@ -495,6 +496,14 @@ class NonFiniteWarnings:
             print("  Inspect command:", file=sys.stderr)
             for line in inspect_command_lines(result, point):
                 print(f"    {line}", file=sys.stderr)
+        omitted = len(items) - limit
+        if omitted > 0:
+            print(
+                "plot_approach_result.py: warning: "
+                f"{omitted} additional gap sample(s) omitted; "
+                "raise --max-gap-warnings to inspect more.",
+                file=sys.stderr,
+            )
 
 
 def parse_args() -> argparse.Namespace:
@@ -520,15 +529,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--x-log-scale",
         action="store_true",
-        help="Plot |t| on a logarithmic x-axis",
+        help=(
+            "Use logarithmic |t| scaling; with both branches, the automatic "
+            "layout uses one signed symmetric-log axis"
+        ),
     )
     parser.add_argument(
         "--branch-layout",
-        choices=("auto", "overlay", "split"),
+        choices=("auto", "signed", "overlay", "split"),
         default="auto",
         help=(
-            "Layout for both logarithmic t branches: auto selects mirrored split "
-            "panels, overlay draws both branches on one panel"
+            "Layout for both logarithmic t branches: auto selects one signed "
+            "symmetric-log axis, overlay draws both against |t|, and split uses "
+            "mirrored panels"
         ),
     )
     parser.add_argument(
@@ -656,7 +669,18 @@ def parse_args() -> argparse.Namespace:
         nargs=2,
         type=float,
         metavar=("MIN", "MAX"),
-        help="Visible x-axis range to show",
+        help=(
+            "Visible x-axis range to show; signed symmetric-log plots use "
+            "the signed limits directly"
+        ),
+    )
+    parser.add_argument(
+        "--x-symlog-linthresh",
+        type=float,
+        help=(
+            "Width of the linear region around zero for a signed symmetric-log "
+            "x-axis (default: spacing.min_abs_t)"
+        ),
     )
     parser.add_argument(
         "--y-range",
@@ -682,6 +706,15 @@ def parse_args() -> argparse.Namespace:
             "be repeated and currently requires exactly one approach result"
         ),
     )
+    parser.add_argument(
+        "--max-gap-warnings",
+        type=int,
+        default=5,
+        help=(
+            "Maximum detailed non-finite/skipped-sample gap warnings to print "
+            "(default: 5; 0 prints only the omitted count)"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -704,6 +737,11 @@ def validate_range_option(
 
 
 def validate_args(args: argparse.Namespace) -> None:
+    signed_branches = (
+        args.x_log_scale
+        and args.t_branch == "both"
+        and args.branch_layout in ("auto", "signed")
+    )
     requested_report_sections = set(
         args.threshold_report_section or ("summary", "singles", "pairs")
     )
@@ -719,14 +757,33 @@ def validate_args(args: argparse.Namespace) -> None:
             or (report_uses_multiplier_scale and args.multiplier_log_scale)
         )
     )
-    validate_range_option("--x-range", args.x_range, log_scale=args.x_log_scale)
+    validate_range_option(
+        "--x-range", args.x_range, log_scale=args.x_log_scale and not signed_branches
+    )
+    if (
+        signed_branches
+        and args.x_range is not None
+        and not (args.x_range[0] < 0.0 < args.x_range[1])
+    ):
+        raise ValueError(
+            "A signed symmetric-log --x-range must straddle zero; use overlay or "
+            "split layout for a positive |t| range."
+        )
     validate_range_option("--y-range", args.y_range, log_scale=y_range_uses_log_scale)
-    if args.branch_layout == "split" and not (
+    if args.branch_layout in ("signed", "split") and not (
         args.x_log_scale and args.t_branch == "both"
     ):
         raise ValueError(
-            "--branch-layout split requires --x-log-scale --t-branch both."
+            f"--branch-layout {args.branch_layout} requires "
+            "--x-log-scale --t-branch both."
         )
+    if args.x_symlog_linthresh is not None:
+        if not math.isfinite(args.x_symlog_linthresh) or args.x_symlog_linthresh <= 0:
+            raise ValueError("--x-symlog-linthresh must be finite and positive.")
+        if not signed_branches:
+            raise ValueError(
+                "--x-symlog-linthresh requires a signed symmetric-log layout."
+            )
     fit_has_log_y_axis = (
         args.y_log_scale
         if not args.threshold_report
@@ -760,6 +817,8 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--multiplier-log-scale requires --threshold-report.")
     if args.facets_per_page < 1:
         raise ValueError("--facets-per-page must be a positive integer.")
+    if args.max_gap_warnings < 0:
+        raise ValueError("--max-gap-warnings must be non-negative.")
     if args.series_json and len(args.results) != 1:
         raise ValueError(
             "--series-json currently requires exactly one approach result."
@@ -767,10 +826,9 @@ def validate_args(args: argparse.Namespace) -> None:
     if args.series_json and args.threshold_report:
         raise ValueError("--series-json is only available for ordinary approach plots.")
     args.split_branches = (
-        args.x_log_scale
-        and args.t_branch == "both"
-        and args.branch_layout in ("auto", "split")
+        args.x_log_scale and args.t_branch == "both" and args.branch_layout == "split"
     )
+    args.signed_branches = signed_branches
     args.threshold_report_sections = list(
         dict.fromkeys(args.threshold_report_section or ("summary", "singles", "pairs"))
     )
@@ -1402,14 +1460,14 @@ def threshold_component_values(
 
 
 def selected_t_value(
-    point: dict[str, Any], branch: str, x_log_scale: bool
+    point: dict[str, Any], branch: str, x_log_scale: bool, signed_x: bool = False
 ) -> float | None:
     value = float(point["t"])
     if branch == "positive" and value <= 0.0:
         return None
     if branch == "negative" and value >= 0.0:
         return None
-    return abs(value) if x_log_scale else value
+    return abs(value) if x_log_scale and not signed_x else value
 
 
 def selected_evaluated_points(
@@ -1417,6 +1475,7 @@ def selected_evaluated_points(
     axis_index: int,
     branch: str,
     x_log_scale: bool,
+    signed_x: bool = False,
 ) -> list[tuple[dict[str, Any], float]]:
     points = []
     for point in result.data.get("points", []):
@@ -1425,7 +1484,7 @@ def selected_evaluated_points(
             or point.get("status") != "evaluated"
         ):
             continue
-        t_value = selected_t_value(point, branch, x_log_scale)
+        t_value = selected_t_value(point, branch, x_log_scale, signed_x)
         if t_value is not None:
             points.append((point, t_value))
     points.sort(key=lambda item: item[1])
@@ -1459,7 +1518,7 @@ def collect_threshold_summary_series(
         (label, []) for label in labels
     )
     for point, t_value in selected_evaluated_points(
-        result, axis_index, branch, args.x_log_scale
+        result, axis_index, branch, args.x_log_scale, args.signed_branches
     ):
         summary = threshold_summary(point)
         if summary is None:
@@ -1541,7 +1600,7 @@ def collect_threshold_facet_series(
     )
     catalog = threshold_component_catalog(result)
     for point, t_value in selected_evaluated_points(
-        result, axis_index, branch, args.x_log_scale
+        result, axis_index, branch, args.x_log_scale, args.signed_branches
     ):
         components = threshold_component_values(
             result, point, quantity, warnings, catalog, selected_keys
@@ -1611,7 +1670,9 @@ def collect_multiplier_facet_series(
     registry: ThresholdRegistry,
 ) -> list[Series]:
     component_keys = {key for keys in facet.component_groups.values() for key in keys}
-    points = selected_evaluated_points(result, axis_index, branch, args.x_log_scale)
+    points = selected_evaluated_points(
+        result, axis_index, branch, args.x_log_scale, args.signed_branches
+    )
     values: OrderedDict[str, dict[int, float]] = OrderedDict()
     for point, _ in points:
         point_index = int(point["index"])
@@ -1700,12 +1761,15 @@ def collect_supplemental_series(
     axis_index: int,
     branch: str,
     x_log_scale: bool,
+    signed_x: bool,
     include_patterns: list[re.Pattern[str]],
     exclude_patterns: list[re.Pattern[str]],
     warnings: NonFiniteWarnings,
 ) -> list[Series]:
     supplemental = result.supplemental_series or []
-    points = selected_evaluated_points(result, axis_index, branch, x_log_scale)
+    points = selected_evaluated_points(
+        result, axis_index, branch, x_log_scale, signed_x
+    )
     collected = []
     for external in supplemental:
         if external.axis_index != axis_index or not label_is_selected(
@@ -1749,6 +1813,7 @@ def collect_series(
     warnings: NonFiniteWarnings,
     t_branch: str,
     x_log_scale: bool,
+    signed_x: bool,
     threshold_decomposition: str | None,
     label_prefix: str = "",
 ) -> list[Series]:
@@ -1768,7 +1833,7 @@ def collect_series(
         evaluation = point.get("evaluation")
         if not isinstance(evaluation, dict):
             continue
-        t_value = selected_t_value(point, t_branch, x_log_scale)
+        t_value = selected_t_value(point, t_branch, x_log_scale, signed_x)
         if t_value is None:
             continue
 
@@ -1851,6 +1916,7 @@ def collect_series(
         axis_index,
         t_branch,
         x_log_scale,
+        signed_x,
         include_patterns,
         exclude_patterns,
         warnings,
@@ -1865,16 +1931,26 @@ def finite_abs(value: float) -> float:
 
 
 def log_fit(
-    series: Series, fit_points: int, x_range: list[float] | None = None
+    series: Series,
+    fit_points: int,
+    x_range: list[float] | None = None,
+    signed_x: bool = False,
 ) -> LogFit | None:
     points = [
-        (math.log(x), math.log(abs(y)))
+        (math.log(abs(x)), math.log(abs(y)))
         for x, y in zip(series.t_values, series.values)
-        if x > 0.0
+        if x != 0.0
         and y != 0.0
         and math.isfinite(x)
         and math.isfinite(y)
-        and (x_range is None or x_range[0] <= x <= x_range[1])
+        and (
+            x_range is None
+            or (
+                x_range[0] <= x <= x_range[1]
+                if signed_x
+                else x_range[0] <= abs(x) <= x_range[1]
+            )
+        )
     ]
     points.sort(key=lambda point: point[0])
     points = points[:fit_points]
@@ -1901,15 +1977,20 @@ def plot_series(
     fit_log_slope: bool,
     fit_points: int,
     x_range: list[float] | None,
+    signed_x: bool,
 ) -> bool:
     if not series.t_values:
         return False
     label = series.label
-    if fit_log_slope and (fit := log_fit(series, fit_points, x_range)) is not None:
+    if (
+        fit_log_slope
+        and (fit := log_fit(series, fit_points, x_range, signed_x)) is not None
+    ):
         label = (
             f"{label} (p={fit.slope:+.2f}, R^2={fit.r_squared:.3f}, "
             f"n={fit.point_count})"
         )
+    marker_every = max(1, math.ceil(len(series.t_values) / 30))
     if not y_log_scale or component == "abs":
         y_values = [
             finite_abs(value) if y_log_scale else value for value in series.values
@@ -1920,6 +2001,7 @@ def plot_series(
             linewidth=1.4,
             marker="o",
             markersize=2.5,
+            markevery=marker_every,
             label=label,
         )
         return False
@@ -1938,6 +2020,7 @@ def plot_series(
             linewidth=1.4,
             marker="o",
             markersize=2.5,
+            markevery=marker_every,
             label=label,
         )
     if any(math.isfinite(value) for value in negative):
@@ -1949,6 +2032,7 @@ def plot_series(
             linestyle="--",
             marker="o",
             markersize=2.5,
+            markevery=marker_every,
             color=color,
             label="_nolegend_" if positive_line is not None else label,
         )
@@ -1982,6 +2066,40 @@ def info_box_text(result: ResultFile) -> str:
     )
 
 
+def signed_log_bounds(
+    results: Iterable[ResultFile], args: argparse.Namespace
+) -> tuple[float, float | None]:
+    linthresh_candidates = []
+    extent_candidates = []
+    for result in results:
+        spacing = result.data.get("spacing", {})
+        min_abs_t = spacing.get("min_abs_t")
+        if (
+            isinstance(min_abs_t, (int, float))
+            and math.isfinite(float(min_abs_t))
+            and float(min_abs_t) > 0.0
+        ):
+            linthresh_candidates.append(float(min_abs_t))
+        else:
+            linthresh_candidates.extend(
+                abs(float(point["t"]))
+                for point in result.data.get("points", [])
+                if math.isfinite(float(point.get("t", 0.0)))
+                and float(point.get("t", 0.0)) != 0.0
+            )
+        extent_candidates.append(float(spacing["max_abs_t"]))
+    if args.x_symlog_linthresh is not None:
+        linthresh = args.x_symlog_linthresh
+    elif linthresh_candidates:
+        linthresh = min(linthresh_candidates)
+    else:
+        raise ValueError(
+            "Signed logarithmic plotting requires a positive spacing.min_abs_t "
+            "or at least one non-zero approach point."
+        )
+    return linthresh, None if args.x_range is not None else max(extent_candidates)
+
+
 def decorate_axis(
     ax: plt.Axes,
     result: ResultFile,
@@ -1991,23 +2109,32 @@ def decorate_axis(
     hide_info_box: bool,
     y_label: str | None = None,
     branch: str | None = None,
+    signed_x: bool = False,
+    signed_linthresh: float | None = None,
     show_ylabel: bool = True,
     show_xlabel: bool = True,
 ) -> None:
     parameter = parameter_name(result)
     if show_xlabel:
-        if x_log_scale and branch in ("negative", "positive"):
+        if signed_x:
+            ax.set_xlabel(parameter)
+        elif x_log_scale and branch in ("negative", "positive"):
             sign = "< 0" if branch == "negative" else "> 0"
             ax.set_xlabel(f"|{parameter}|  ({parameter} {sign})")
         else:
             ax.set_xlabel(f"|{parameter}|" if x_log_scale else parameter)
     else:
         ax.tick_params(axis="x", labelbottom=False)
-    if x_log_scale and any(
-        math.isfinite(float(value)) and float(value) > 0.0
+    has_nonzero_x = any(
+        math.isfinite(float(value)) and float(value) != 0.0
         for line in ax.lines
         for value in line.get_xdata()
-    ):
+    )
+    if signed_x and has_nonzero_x:
+        if signed_linthresh is None:
+            raise ValueError("Signed logarithmic plotting requires a linthresh.")
+        ax.set_xscale("symlog", linthresh=signed_linthresh)
+    elif x_log_scale and has_nonzero_x:
         ax.set_xscale("log")
     ylabel = y_label or (
         "weight magnitude" if component == "abs" else f"{component} weight"
@@ -2022,7 +2149,7 @@ def decorate_axis(
         ax.set_yscale("log")
     if show_ylabel:
         ax.set_ylabel(ylabel)
-    if not x_log_scale:
+    if not x_log_scale or signed_x:
         ax.axvline(0.0, color="0.35", linewidth=0.9, alpha=0.7)
     ax.grid(True, which="major", color="0.88", linewidth=0.8)
     ax.grid(True, which="minor", color="0.94", linewidth=0.5)
@@ -2045,9 +2172,15 @@ def decorate_axis(
 
 
 def apply_axis_ranges(
-    ax: plt.Axes, args: argparse.Namespace, *, reverse_x: bool = False
+    ax: plt.Axes,
+    args: argparse.Namespace,
+    *,
+    reverse_x: bool = False,
+    signed_extent: float | None = None,
 ) -> None:
-    if args.x_range is not None:
+    if signed_extent is not None:
+        ax.set_xlim(-signed_extent, signed_extent)
+    elif args.x_range is not None:
         limits = args.x_range[::-1] if reverse_x else args.x_range
         ax.set_xlim(limits[0], limits[1])
     elif reverse_x:
@@ -2170,6 +2303,11 @@ def draw_page(
     warnings: NonFiniteWarnings,
 ) -> None:
     column_count = 2 if args.split_branches else 1
+    signed_linthresh, signed_extent = (
+        signed_log_bounds((result for result, _ in result_axis_pairs), args)
+        if args.signed_branches
+        else (None, None)
+    )
     fig, raw_axes = plt.subplots(
         1,
         column_count,
@@ -2209,6 +2347,7 @@ def draw_page(
                     warnings,
                     branch,
                     args.x_log_scale,
+                    args.signed_branches,
                     args.threshold_decomposition,
                     label_prefix=label_prefix,
                 )
@@ -2227,6 +2366,7 @@ def draw_page(
                         args.fit_log_slope,
                         args.fit_points,
                         args.x_range,
+                        args.signed_branches,
                     )
         if not axis_has_series:
             ax.text(
@@ -2263,9 +2403,16 @@ def draw_page(
             args.hide_info_box or column > 0,
             y_label=args.y_label,
             branch=branch,
+            signed_x=args.signed_branches,
+            signed_linthresh=signed_linthresh,
             show_ylabel=column == 0,
         )
-        apply_axis_ranges(ax, args, reverse_x=branch == "negative")
+        apply_axis_ranges(
+            ax,
+            args,
+            reverse_x=branch == "negative",
+            signed_extent=signed_extent,
+        )
     bottom = (
         shared_figure_legend(fig, axes, has_negative_values) if has_series else 0.08
     )
@@ -2297,6 +2444,9 @@ def draw_threshold_report_page(
 ) -> None:
     row_count = len(facets)
     column_count = 2 if args.split_branches else 1
+    signed_linthresh, signed_extent = (
+        signed_log_bounds((result,), args) if args.signed_branches else (None, None)
+    )
     fig, axes = plt.subplots(
         row_count,
         column_count,
@@ -2369,6 +2519,7 @@ def draw_threshold_report_page(
                         args.fit_log_slope and y_log_scale and args.x_log_scale,
                         args.fit_points,
                         args.x_range,
+                        args.signed_branches,
                     )
             if not has_series:
                 ax.text(
@@ -2407,10 +2558,17 @@ def draw_threshold_report_page(
                     or ("unmultiplied CT" if quantity == "bare" else None)
                 ),
                 branch=branch,
+                signed_x=args.signed_branches,
+                signed_linthresh=signed_linthresh,
                 show_ylabel=column == 0,
                 show_xlabel=row + 1 == row_count,
             )
-            apply_axis_ranges(ax, args, reverse_x=branch == "negative")
+            apply_axis_ranges(
+                ax,
+                args,
+                reverse_x=branch == "negative",
+                signed_extent=signed_extent,
+            )
 
     if y_log_scale:
         for row, has_nonzero_values in enumerate(rows_with_nonzero_values):
@@ -2702,7 +2860,7 @@ def main() -> int:
                     draw_page(
                         pdf, group, args, include_patterns, exclude_patterns, warnings
                     )
-        warnings.emit()
+        warnings.emit(args.max_gap_warnings)
         print(f"plot_approach_result.py: PDF created at {display_path(args.output)}")
     except Exception as error:  # noqa: BLE001 - this script should print clean CLI errors.
         print(f"plot_approach_result.py: error: {error}", file=sys.stderr)

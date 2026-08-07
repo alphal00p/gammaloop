@@ -48,7 +48,7 @@ commands = [
       --approach-axis 258,-128,162,0,0,0,0,0,0,47,29,-31
       --axis-label 'e12 correlated soft + threshold'
       --parameter-name lambda
-      --n-points 7 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 1
       --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl297_forced_subspace_cure/e12_threshold_off.json""",
   """approach -p gl297_legacy -i GL297_legacy
@@ -57,7 +57,7 @@ commands = [
       --approach-axis 258,-128,162,0,0,0,0,0,0,47,29,-31
       --axis-label 'e12 correlated soft + threshold'
       --parameter-name lambda
-      --n-points 7 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 1
       --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl297_forced_subspace_cure/e12_legacy.json""",
   "set process -p gl297_forced -i GL297_forced kv subtraction.disable_threshold_subtraction=false",
@@ -67,7 +67,7 @@ commands = [
       --approach-axis 258,-128,162,0,0,0,0,0,0,47,29,-31
       --axis-label 'e12 correlated soft + threshold'
       --parameter-name lambda
-      --n-points 7 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 1
       --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl297_forced_subspace_cure/e12_forced.json""",
 ]
@@ -83,7 +83,7 @@ commands = [
       --approach-axis 0,0,0,47,29,-31,0,0,0,258,-128,162
       --axis-label 'e13 correlated soft + threshold'
       --parameter-name lambda
-      --n-points 7 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 1
       --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl297_forced_subspace_cure/e13_threshold_off.json""",
   """approach -p gl297_legacy -i GL297_legacy
@@ -92,7 +92,7 @@ commands = [
       --approach-axis 0,0,0,47,29,-31,0,0,0,258,-128,162
       --axis-label 'e13 correlated soft + threshold'
       --parameter-name lambda
-      --n-points 7 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 1
       --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl297_forced_subspace_cure/e13_legacy.json""",
   "set process -p gl297_forced -i GL297_forced kv subtraction.disable_threshold_subtraction=false",
@@ -102,7 +102,7 @@ commands = [
       --approach-axis 0,0,0,47,29,-31,0,0,0,258,-128,162
       --axis-label 'e13 correlated soft + threshold'
       --parameter-name lambda
-      --n-points 7 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 1
       --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl297_forced_subspace_cure/e13_forced.json""",
 ]

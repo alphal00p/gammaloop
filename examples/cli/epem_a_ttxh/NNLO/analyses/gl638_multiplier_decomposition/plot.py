@@ -43,15 +43,20 @@ def main() -> None:
     if json.loads(RESULT.read_text()).get("schema_version") != 3:
         raise ValueError(f"{RESULT} is not fresh approach schema v3 output")
 
-    variant_filter = r"^(?=.*c\(2,4,12\))(?=.*(?:intrinsic_1l|embedded_2l)).*$"
-    multiplier_filter = (
-        r"^(?=.*c\(2,4,12\))(?=.*(?:intrinsic_1l|embedded_2l))"
-        r"(?=.*η\(5,10\)).*$"
-    )
+    multiplier_filter = r"^threshold:component c(?:30|38) "
+    common_axis = [
+        "--x-log-scale",
+        "--branch-layout",
+        "signed",
+        "--x-range",
+        "-1",
+        "1",
+        "--x-symlog-linthresh",
+        "1e-4",
+    ]
     with tempfile.TemporaryDirectory(prefix="gl638_multiplier_plots_") as temporary:
         temp = Path(temporary)
         overview_pdf = temp / "overview.pdf"
-        components_pdf = temp / "components.pdf"
         multipliers_pdf = temp / "multipliers.pdf"
 
         run_plotter(
@@ -61,32 +66,9 @@ def main() -> None:
             "--component",
             "real",
             "--linear-y-scale",
+            *common_axis,
             "--title",
             "GL638: finite multiplier-deformation total",
-        )
-        run_plotter(
-            str(RESULT),
-            "--output",
-            str(components_pdf),
-            "--threshold-report",
-            "--threshold-report-section",
-            "summary",
-            "--threshold-report-section",
-            "singles",
-            "--threshold-report-section",
-            "pairs",
-            "--threshold-quantity",
-            "weighted",
-            "--threshold-quantity",
-            "bare",
-            "--include-contribution",
-            variant_filter,
-            "--facets-per-page",
-            "2",
-            "--component",
-            "abs",
-            "--title",
-            "GL638 cut (2,4,12): finite expanded-component decomposition",
         )
         run_plotter(
             str(RESULT),
@@ -97,12 +79,15 @@ def main() -> None:
             "multipliers",
             "--include-contribution",
             multiplier_filter,
+            "--facets-per-page",
+            "2",
+            *common_axis,
             "--title",
-            "GL638 cut (2,4,12): occurrence-resolved multipliers",
+            "GL638 cut (2,4,12): star-root selector for local-local pairs",
         )
 
         output = HERE / "multiplier_decomposition.pdf"
-        merge_pdfs(output, [overview_pdf, components_pdf, multipliers_pdf])
+        merge_pdfs(output, [overview_pdf, multipliers_pdf])
     print(f"created {output.relative_to(ROOT)}")
 
 
