@@ -215,6 +215,7 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyDiscreteBreakdownEntry>()?;
     m.add_class::<PyDiscreteBreakdown>()?;
     m.add_class::<PyComponentDiscreteBreakdown>()?;
+    m.add_class::<PyAbsoluteIntegrationResult>()?;
     m.add_class::<PySlotIntegrationResult>()?;
     m.add_class::<PyIntegrationResult>()?;
     m.add_class::<PyStabilityResult>()?;
@@ -596,6 +597,104 @@ mod settings_wrapper_tests {
                 .unwrap());
         });
     }
+
+    #[test]
+    fn threshold_counterterm_event_python_view_roundtrips_all_numeric_fields() {
+        let info = GenericThresholdCountertermEventInfo {
+            original: spenso::algebra::complex::Complex::new(
+                gammalooprs::utils::F(2.0),
+                gammalooprs::utils::F(0.25),
+            ),
+            components: vec![GenericThresholdCountertermComponentWeight {
+                component_id: 7,
+                occurrence: ThresholdCountertermComponentOccurrence::LocalUnitarity {
+                    overlap_groups: [1, 3].into_iter().collect(),
+                    left_threshold_order: Some(1),
+                    right_threshold_order: Some(2),
+                    lu_cut_order: Some(3),
+                },
+                multiplier_values: [gammalooprs::utils::F(0.5), gammalooprs::utils::F(0.25)]
+                    .into_iter()
+                    .collect(),
+                effective_multiplier: gammalooprs::utils::F(0.125),
+                bare: Some(spenso::algebra::complex::Complex::new(
+                    gammalooprs::utils::F(8.0),
+                    gammalooprs::utils::F(-2.0),
+                )),
+                weighted: spenso::algebra::complex::Complex::new(
+                    gammalooprs::utils::F(1.0),
+                    gammalooprs::utils::F(-0.25),
+                ),
+                evaluation_skipped: false,
+            }],
+        };
+
+        let roundtrip =
+            threshold_counterterm_event_from_py(&py_threshold_counterterm_event_from_event(&info));
+        assert_eq!(roundtrip.original, info.original);
+        assert_eq!(roundtrip.components[0].component_id, 7);
+        assert_eq!(
+            roundtrip.components[0].multiplier_values,
+            info.components[0].multiplier_values
+        );
+        assert_eq!(roundtrip.components[0].bare, info.components[0].bare);
+        assert_eq!(
+            roundtrip.components[0].weighted,
+            info.components[0].weighted
+        );
+        assert_eq!(roundtrip.total(), info.total());
+    }
+
+    #[test]
+    fn absolute_integration_result_python_view_preserves_bundle() {
+        let result = gammalooprs::settings::runtime::AbsoluteIntegrationResult {
+            integral: gammalooprs::settings::runtime::IntegralEstimate {
+                neval: 17,
+                ..Default::default()
+            },
+            table_results: vec![
+                gammalooprs::settings::runtime::IntegrationTableComponentResult {
+                    component: "|re|".to_string(),
+                    value: gammalooprs::utils::F(3.25),
+                    error: gammalooprs::utils::F(0.5),
+                    ..Default::default()
+                },
+            ],
+            max_weight_info: vec![gammalooprs::settings::runtime::MaxWeightInfoEntry {
+                component: "re".to_string(),
+                sign: "+".to_string(),
+                max_eval: gammalooprs::utils::F(9.0),
+                coordinates: Some("channel=2".to_string()),
+            }],
+            grid_breakdown: gammalooprs::settings::runtime::ComponentDiscreteBreakdown {
+                re: Some(gammalooprs::settings::runtime::DiscreteBreakdown {
+                    axis_label: "channel".to_string(),
+                    entries: vec![gammalooprs::settings::runtime::DiscreteBreakdownEntry {
+                        bin_index: 2,
+                        value: gammalooprs::utils::F(1.75),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+                im: None,
+            },
+        };
+
+        let python_result = py_absolute_integration_result_from_result(result);
+        assert_eq!(python_result.integral.neval, 17);
+        assert_eq!(python_result.table_results[0].component, "|re|");
+        assert_eq!(python_result.table_results[0].value, 3.25);
+        assert_eq!(python_result.max_weight_info[0].sign, "+");
+        assert_eq!(
+            python_result.max_weight_info[0].coordinates.as_deref(),
+            Some("channel=2")
+        );
+        assert_eq!(
+            python_result.grid_breakdown.re.unwrap().entries[0].value,
+            1.75
+        );
+    }
+
 }
 
 #[pyclass(from_py_object, name = "ComplexValue", get_all)]
@@ -1325,6 +1424,15 @@ pub struct PyComponentDiscreteBreakdown {
     pub im: Option<PyDiscreteBreakdown>,
 }
 
+#[pyclass(from_py_object, name = "AbsoluteIntegrationResult", get_all)]
+#[derive(Clone)]
+pub struct PyAbsoluteIntegrationResult {
+    pub integral: PyIntegralEstimate,
+    pub table_results: Vec<PyIntegrationTableComponentResult>,
+    pub max_weight_info: Vec<PyMaxWeightInfoEntry>,
+    pub grid_breakdown: PyComponentDiscreteBreakdown,
+}
+
 /// Result, diagnostics, and discrete breakdown for one named integration slot.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "SlotIntegrationResult", get_all)]
@@ -1339,6 +1447,7 @@ pub struct PySlotIntegrationResult {
     pub integration_statistics: PyIntegrationStatisticsSnapshot,
     pub max_weight_info: Vec<PyMaxWeightInfoEntry>,
     pub grid_breakdown: PyComponentDiscreteBreakdown,
+    pub absolute: PyAbsoluteIntegrationResult,
 }
 
 /// Collection of independently addressable integration-slot results.
@@ -2169,6 +2278,25 @@ fn py_component_discrete_breakdown_from_breakdown(
     }
 }
 
+fn py_absolute_integration_result_from_result(
+    result: gammalooprs::settings::runtime::AbsoluteIntegrationResult,
+) -> PyAbsoluteIntegrationResult {
+    PyAbsoluteIntegrationResult {
+        integral: py_integral_estimate_from_estimate(result.integral),
+        table_results: result
+            .table_results
+            .into_iter()
+            .map(py_table_component_result_from_result)
+            .collect(),
+        max_weight_info: result
+            .max_weight_info
+            .into_iter()
+            .map(py_max_weight_info_entry_from_entry)
+            .collect(),
+        grid_breakdown: py_component_discrete_breakdown_from_breakdown(result.grid_breakdown),
+    }
+}
+
 fn py_slot_integration_result_from_result(
     result: gammalooprs::settings::runtime::SlotIntegrationResult,
 ) -> PySlotIntegrationResult {
@@ -2192,6 +2320,7 @@ fn py_slot_integration_result_from_result(
             .map(py_max_weight_info_entry_from_entry)
             .collect(),
         grid_breakdown: py_component_discrete_breakdown_from_breakdown(result.grid_breakdown),
+        absolute: py_absolute_integration_result_from_result(result.absolute),
     }
 }
 
