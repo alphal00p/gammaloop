@@ -460,7 +460,7 @@ impl CLISettings {
             return Ok(());
         }
 
-        if !path_lies_within(&self.state.folder, target)? {
+        if !self.write_target_lies_within_active_state(target)? {
             return Ok(());
         }
 
@@ -491,6 +491,7 @@ impl CLISettings {
         PathBuf::from(".").join(name)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn default_active_state_output_path(&self, read_only_base_name: &str) -> PathBuf {
         if self.session.read_only_state {
             self.cwd_output_path_with_state_name(read_only_base_name)

@@ -1587,6 +1587,7 @@ dependencies = [
  "tabled",
  "tempfile",
  "thiserror 2.0.18",
+ "three-dimensional-reps",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "tracing-indicatif",
