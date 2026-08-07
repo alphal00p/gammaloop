@@ -20,12 +20,25 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.lines import Line2D
+
+
+THRESHOLD_KIND_LABELS = {
+    "local": "L",
+    "integrated": "I",
+    "local_local": "LL",
+    "local_integrated": "LI",
+    "integrated_local": "IL",
+    "integrated_integrated": "II",
+}
+THRESHOLD_KIND_ORDER = {kind: index for index, kind in enumerate(THRESHOLD_KIND_LABELS)}
 
 
 @dataclass
 class ResultFile:
     path: Path
     data: dict[str, Any]
+    label: str | None = None
 
 
 @dataclass
@@ -33,6 +46,293 @@ class Series:
     label: str
     t_values: list[float]
     values: list[float]
+
+
+@dataclass(frozen=True)
+class ThresholdVariant:
+    graph_id: int
+    graph_name: str
+    variant_id: int
+    name: str
+    cut_group_id: int | None
+    associations: tuple[tuple[tuple[int, ...], tuple[int, ...]], ...]
+    side: str
+    subspace: tuple[int, ...]
+
+    def cut_label(self) -> str:
+        cuts = sorted({cut for cut, _ in self.associations})
+        return "/".join(f"c({','.join(map(str, cut))})" for cut in cuts) or "c(?)"
+
+    def compact_label(self) -> str:
+        thresholds = sorted({threshold for _, threshold in self.associations})
+        eta = (
+            "/".join(f"η({','.join(map(str, threshold))})" for threshold in thresholds)
+            or "η(?)"
+        )
+        side = self.side[:1].upper() or "?"
+        subspace = ",".join(map(str, self.subspace)) or "max"
+        return f"v{self.variant_id} {self.name} · {side} {eta} · S[{subspace}]"
+
+
+@dataclass(frozen=True)
+class ThresholdComponent:
+    graph_id: int
+    component_id: int
+    cut_group_id: int | None
+    kind: str
+    variant_ids: tuple[int, ...]
+
+    @property
+    def key(self) -> tuple[int, int]:
+        return self.graph_id, self.component_id
+
+
+@dataclass
+class ThresholdRegistry:
+    variants: dict[tuple[int, int], ThresholdVariant]
+    components: dict[tuple[int, int], ThresholdComponent]
+
+    @classmethod
+    def from_result(cls, result: ResultFile) -> ThresholdRegistry:
+        variants = {}
+        components = {}
+        entries = result.data.get("integrand", {}).get("threshold_counterterms", [])
+        if not isinstance(entries, list):
+            return cls(variants, components)
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            graph_id = int(entry.get("graph_id", -1))
+            registry = entry.get("registry", entry)
+            if not isinstance(registry, dict):
+                continue
+            graph_name = str(registry.get("graph_name", f"#{graph_id}"))
+            for raw_variant in registry.get("variants", []):
+                if not isinstance(raw_variant, dict):
+                    continue
+                variant_id = int(raw_variant.get("variant_id", -1))
+                associations = []
+                for association in raw_variant.get("associations", []):
+                    if not isinstance(association, dict):
+                        continue
+                    associations.append(
+                        (
+                            tuple(
+                                int(edge) for edge in association.get("cut_edges", [])
+                            ),
+                            tuple(
+                                int(edge)
+                                for edge in association.get("threshold_edges", [])
+                            ),
+                        )
+                    )
+                raw_cut_group_id = raw_variant.get("cut_group_id", -1)
+                variants[(graph_id, variant_id)] = ThresholdVariant(
+                    graph_id=graph_id,
+                    graph_name=graph_name,
+                    variant_id=variant_id,
+                    name=str(raw_variant.get("name", "?")),
+                    cut_group_id=(
+                        None if raw_cut_group_id is None else int(raw_cut_group_id)
+                    ),
+                    associations=tuple(associations),
+                    side=str(raw_variant.get("side", "?")),
+                    subspace=tuple(
+                        int(edge) for edge in raw_variant.get("resolved_subspace") or []
+                    ),
+                )
+            for raw_component in registry.get("components", []):
+                if not isinstance(raw_component, dict):
+                    continue
+                raw_cut_group_id = raw_component.get("cut_group_id", -1)
+                component = ThresholdComponent(
+                    graph_id=graph_id,
+                    component_id=int(raw_component.get("component_id", -1)),
+                    cut_group_id=(
+                        None if raw_cut_group_id is None else int(raw_cut_group_id)
+                    ),
+                    kind=str(raw_component.get("kind", "component")),
+                    variant_ids=tuple(
+                        int(variant_id)
+                        for variant_id in raw_component.get("variant_ids", [])
+                    ),
+                )
+                components[component.key] = component
+        return cls(variants, components)
+
+    def variant(self, graph_id: int, variant_id: int) -> ThresholdVariant:
+        return self.variants.get(
+            (graph_id, variant_id),
+            ThresholdVariant(
+                graph_id,
+                f"#{graph_id}",
+                variant_id,
+                "?",
+                -1,
+                (),
+                "?",
+                (),
+            ),
+        )
+
+    def cut_group_label(self, graph_id: int, cut_group_id: int | None) -> str:
+        group_variants = [
+            variant
+            for (candidate_graph_id, _), variant in self.variants.items()
+            if candidate_graph_id == graph_id and variant.cut_group_id == cut_group_id
+        ]
+        graph_name = group_variants[0].graph_name if group_variants else f"#{graph_id}"
+        cuts = sorted(
+            {cut for variant in group_variants for cut, _ in variant.associations}
+        )
+        cut_label = "/".join(f"c({','.join(map(str, cut))})" for cut in cuts) or "c(?)"
+        if cut_group_id is None:
+            return f"{graph_name} · {cut_label}"
+        return f"{graph_name} · cg{cut_group_id} · {cut_label}"
+
+    def component_label(self, component: ThresholdComponent) -> str:
+        variants = "×".join(
+            self.variant(component.graph_id, variant_id).compact_label()
+            for variant_id in component.variant_ids
+        )
+        kind = THRESHOLD_KIND_LABELS.get(component.kind, component.kind)
+        return (
+            f"threshold:component c{component.component_id} {kind} {variants} "
+            f"[{self.cut_group_label(component.graph_id, component.cut_group_id)}]"
+        )
+
+    def observed_components(
+        self, result: ResultFile, axis_index: int
+    ) -> set[tuple[int, int]]:
+        observed = set()
+        for point in result.data.get("points", []):
+            if (
+                int(point.get("axis_index", -1)) != axis_index
+                or point.get("status") != "evaluated"
+            ):
+                continue
+            evaluation = point.get("evaluation", {})
+            for event in evaluation.get("events", []):
+                if not isinstance(event, dict):
+                    continue
+                graph_id = int(event.get("graph_id", -1))
+                decomposition = event.get("threshold_counterterms", {})
+                if not isinstance(decomposition, dict):
+                    continue
+                for raw_component in decomposition.get("components", []):
+                    if not isinstance(raw_component, dict):
+                        continue
+                    key = graph_id, int(raw_component.get("component_id", -1))
+                    if key in self.components:
+                        observed.add(key)
+        return observed
+
+    def single_facets(self, observed: set[tuple[int, int]]) -> list[ReportFacet]:
+        groups: dict[tuple[int, int | None], dict[int, list[tuple[int, int]]]] = (
+            defaultdict(lambda: defaultdict(list))
+        )
+        for key in observed:
+            component = self.components[key]
+            if len(component.variant_ids) != 1 or component.kind not in (
+                "local",
+                "integrated",
+            ):
+                continue
+            groups[(component.graph_id, component.cut_group_id)][
+                component.variant_ids[0]
+            ].append(key)
+
+        facets = []
+        for (graph_id, cut_group_id), variants in sorted(
+            groups.items(),
+            key=lambda item: (
+                item[0][0],
+                item[0][1] is None,
+                item[0][1] if item[0][1] is not None else -1,
+            ),
+        ):
+            entries = []
+            for variant_id, component_keys in sorted(variants.items()):
+                keys_by_kind: dict[str, list[tuple[int, int]]] = defaultdict(list)
+                for component_key in component_keys:
+                    keys_by_kind[self.components[component_key].kind].append(
+                        component_key
+                    )
+                for kind, kind_component_keys in sorted(
+                    keys_by_kind.items(),
+                    key=lambda item: THRESHOLD_KIND_ORDER.get(item[0], 99),
+                ):
+                    entries.append(
+                        (
+                            f"{self.variant(graph_id, variant_id).compact_label()} · {kind}",
+                            tuple(sorted(kind_component_keys)),
+                        )
+                    )
+            chunks = [entries[index : index + 8] for index in range(0, len(entries), 8)]
+            for chunk_index, chunk in enumerate(chunks):
+                title = self.cut_group_label(graph_id, cut_group_id)
+                if len(chunks) > 1:
+                    title += f" · {chunk_index + 1}/{len(chunks)}"
+                facets.append(ReportFacet(title, OrderedDict(chunk)))
+        return facets
+
+    def pair_facets(self, observed: set[tuple[int, int]]) -> list[ReportFacet]:
+        groups: dict[
+            tuple[int, int | None, tuple[int, ...]],
+            dict[str, list[tuple[int, int]]],
+        ] = defaultdict(lambda: defaultdict(list))
+        for key in observed:
+            component = self.components[key]
+            if len(component.variant_ids) != 2:
+                continue
+            groups[(component.graph_id, component.cut_group_id, component.variant_ids)][
+                component.kind
+            ].append(key)
+
+        facets = []
+        for (graph_id, cut_group_id, variant_ids), kinds in sorted(
+            groups.items(),
+            key=lambda item: (
+                item[0][0],
+                item[0][1] is None,
+                item[0][1] if item[0][1] is not None else -1,
+                item[0][2],
+            ),
+        ):
+            variants = [
+                self.variant(graph_id, variant_id).compact_label()
+                for variant_id in variant_ids
+            ]
+            component_groups = OrderedDict(
+                (
+                    THRESHOLD_KIND_LABELS.get(kind, kind),
+                    tuple(sorted(component_keys)),
+                )
+                for kind, component_keys in sorted(
+                    kinds.items(),
+                    key=lambda item: THRESHOLD_KIND_ORDER.get(item[0], 99),
+                )
+            )
+            facets.append(
+                ReportFacet(
+                    "\n".join(
+                        [
+                            self.cut_group_label(graph_id, cut_group_id),
+                            variants[0],
+                            f"× {variants[1]}",
+                        ]
+                    ),
+                    component_groups,
+                )
+            )
+        return facets
+
+
+@dataclass
+class ReportFacet:
+    title: str
+    component_groups: OrderedDict[str, tuple[tuple[int, int], ...]]
+    summary_labels: tuple[str, ...] = ()
 
 
 class NonFiniteWarnings:
@@ -122,7 +422,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--x-log-scale",
         action="store_true",
-        help="Plot |t| on a logarithmic x-axis; requires --t-branch positive or negative",
+        help="Plot |t| on a logarithmic x-axis",
+    )
+    parser.add_argument(
+        "--branch-layout",
+        choices=("auto", "overlay", "split"),
+        default="auto",
+        help=(
+            "Layout for both logarithmic t branches: auto selects mirrored split "
+            "panels, overlay draws both branches on one panel"
+        ),
+    )
+    parser.add_argument(
+        "--result-label",
+        action="append",
+        default=[],
+        help=(
+            "Legend label for the corresponding input result; repeat once per "
+            "result file"
+        ),
     )
     parser.add_argument(
         "--fit-log-slope",
@@ -174,6 +492,27 @@ def parse_args() -> argparse.Namespace:
         "--threshold-decomposition",
         choices=("summary", "components", "all"),
         help="Add threshold-counterterm summary curves, individual weighted components, or both",
+    )
+    parser.add_argument(
+        "--threshold-report",
+        action="store_true",
+        help=(
+            "Create a curated multipage threshold-counterterm closure, variant, "
+            "and iterated-component report"
+        ),
+    )
+    parser.add_argument(
+        "--threshold-report-section",
+        action="append",
+        choices=("summary", "singles", "pairs"),
+        default=[],
+        help="Threshold report section to emit; can be repeated (default: all)",
+    )
+    parser.add_argument(
+        "--facets-per-page",
+        type=int,
+        default=3,
+        help="Maximum one-sided cut-group facets per threshold-report page (default: 3)",
     )
     parser.add_argument(
         "--title",
@@ -229,12 +568,37 @@ def validate_range_option(
 def validate_args(args: argparse.Namespace) -> None:
     validate_range_option("--x-range", args.x_range, log_scale=args.x_log_scale)
     validate_range_option("--y-range", args.y_range, log_scale=args.y_log_scale)
-    if args.x_log_scale and args.t_branch == "both":
+    if args.branch_layout == "split" and not (
+        args.x_log_scale and args.t_branch == "both"
+    ):
         raise ValueError(
-            "--x-log-scale requires --t-branch positive or --t-branch negative."
+            "--branch-layout split requires --x-log-scale --t-branch both."
         )
     if args.fit_log_slope and not (args.x_log_scale and args.y_log_scale):
         raise ValueError("--fit-log-slope requires logarithmic x and y axes.")
+    if args.result_label and len(args.result_label) != len(args.results):
+        raise ValueError(
+            "--result-label must be repeated exactly once per input result file "
+            f"({len(args.results)} expected, {len(args.result_label)} supplied)."
+        )
+    if any(not label.strip() for label in args.result_label):
+        raise ValueError("--result-label values must be nonblank.")
+    if args.threshold_report and args.threshold_decomposition is not None:
+        raise ValueError(
+            "--threshold-report and --threshold-decomposition are mutually exclusive."
+        )
+    if args.threshold_report_section and not args.threshold_report:
+        raise ValueError("--threshold-report-section requires --threshold-report.")
+    if args.facets_per_page < 1:
+        raise ValueError("--facets-per-page must be a positive integer.")
+    args.split_branches = (
+        args.x_log_scale
+        and args.t_branch == "both"
+        and args.branch_layout in ("auto", "split")
+    )
+    args.threshold_report_sections = list(
+        dict.fromkeys(args.threshold_report_section or ("summary", "singles", "pairs"))
+    )
     args.selected_axis_indices = parse_selected_axis_indices(args.axis_id)
 
 
@@ -263,14 +627,14 @@ def parse_selected_axis_indices(raw_axis_ids: list[str]) -> set[int] | None:
     return selected
 
 
-def load_result(path: Path) -> ResultFile:
+def load_result(path: Path, label: str | None = None) -> ResultFile:
     with path.open("r", encoding="utf-8") as handle:
         data = json.load(handle)
     if "points" not in data:
         raise ValueError(
             f"{path} is not an approach result JSON file: missing 'points'"
         )
-    return ResultFile(path=path, data=data)
+    return ResultFile(path=path, data=data, label=label)
 
 
 def compile_patterns(patterns: Iterable[str]) -> list[re.Pattern[str]]:
@@ -498,48 +862,11 @@ def complex_value(
 
 
 def threshold_component_catalog(result: ResultFile) -> dict[tuple[int, int], str]:
-    catalog: dict[tuple[int, int], str] = {}
-    entries = result.data.get("integrand", {}).get("threshold_counterterms", [])
-    if not isinstance(entries, list):
-        return catalog
-    kind_labels = {
-        "local": "L",
-        "integrated": "I",
-        "local_local": "LL",
-        "local_integrated": "LI",
-        "integrated_local": "IL",
-        "integrated_integrated": "II",
+    registry = ThresholdRegistry.from_result(result)
+    return {
+        key: registry.component_label(component)
+        for key, component in registry.components.items()
     }
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        graph_id = int(entry.get("graph_id", -1))
-        registry = entry.get("registry", entry)
-        if not isinstance(registry, dict):
-            continue
-        graph_name = str(registry.get("graph_name", f"#{graph_id}"))
-        variants = {
-            int(variant.get("variant_id", -1)): str(variant.get("name", "?"))
-            for variant in registry.get("variants", [])
-            if isinstance(variant, dict)
-        }
-        for component in registry.get("components", []):
-            if not isinstance(component, dict):
-                continue
-            component_id = int(component.get("component_id", -1))
-            kind = str(component.get("kind", "component"))
-            kind_label = kind_labels.get(kind, kind)
-            variant_label = "×".join(
-                f"v{variant_id}:{variants.get(int(variant_id), '?')}"
-                for variant_id in component.get("variant_ids", [])
-            )
-            cut_group_id = component.get("cut_group_id")
-            cut_label = "" if cut_group_id is None else f" cg{cut_group_id}"
-            catalog[(graph_id, component_id)] = (
-                f"threshold:component c{component_id} {kind_label} {variant_label} "
-                f"[{graph_name}{cut_label}]"
-            )
-    return catalog
 
 
 def threshold_decomposition_values(
@@ -548,12 +875,43 @@ def threshold_decomposition_values(
     mode: str,
     warnings: NonFiniteWarnings,
 ) -> list[tuple[str, complex]]:
+    catalog = threshold_component_catalog(result)
+    found, original, components_by_id = threshold_point_values(
+        result, point, warnings, catalog
+    )
+    if not found:
+        return []
+
+    components: dict[str, complex] = defaultdict(complex)
+    for key, value in components_by_id.items():
+        components[
+            catalog.get(key, f"threshold:component c{key[1]} [graph#{key[0]}]")
+        ] += value
+    counterterms = sum(components_by_id.values(), 0j)
+    values: list[tuple[str, complex]] = []
+    if mode in ("summary", "all"):
+        values.extend(
+            [
+                ("threshold:original", original),
+                ("threshold:counterterm_sum", counterterms),
+                ("threshold:decomposition_total", original + counterterms),
+            ]
+        )
+    if mode in ("components", "all"):
+        values.extend(sorted(components.items()))
+    return values
+
+
+def threshold_point_values(
+    result: ResultFile,
+    point: dict[str, Any],
+    warnings: NonFiniteWarnings,
+    catalog: dict[tuple[int, int], str],
+) -> tuple[bool, complex, dict[tuple[int, int], complex]]:
     evaluation = point.get("evaluation", {})
     events = evaluation.get("events", []) if isinstance(evaluation, dict) else []
     original = 0j
-    counterterms = 0j
-    components: dict[str, complex] = defaultdict(complex)
-    catalog = threshold_component_catalog(result)
+    components: dict[tuple[int, int], complex] = defaultdict(complex)
     found = False
     for event in events:
         if not isinstance(event, dict):
@@ -570,30 +928,16 @@ def threshold_decomposition_values(
             if not isinstance(component, dict):
                 continue
             component_id = int(component.get("component_id", -1))
+            key = graph_id, component_id
             label = catalog.get(
-                (graph_id, component_id),
+                key,
                 f"threshold:component c{component_id} [graph#{graph_id}]",
             )
             weighted = complex_value(
                 component.get("weighted"), warnings, result, point, label
             )
-            counterterms += weighted
-            components[label] += weighted
-    if not found:
-        return []
-
-    values: list[tuple[str, complex]] = []
-    if mode in ("summary", "all"):
-        values.extend(
-            [
-                ("threshold:original", original),
-                ("threshold:counterterm_sum", counterterms),
-                ("threshold:decomposition_total", original + counterterms),
-            ]
-        )
-    if mode in ("components", "all"):
-        values.extend(sorted(components.items()))
-    return values
+            components[key] += weighted
+    return found, original, components
 
 
 def selected_t_value(
@@ -605,6 +949,109 @@ def selected_t_value(
     if branch == "negative" and value >= 0.0:
         return None
     return abs(value) if x_log_scale else value
+
+
+def displayed_component(value: complex, component: str) -> float:
+    if component == "real":
+        return value.real
+    if component == "imag":
+        return value.imag
+    return abs(value)
+
+
+def collect_threshold_summary_series(
+    result: ResultFile,
+    axis_index: int,
+    branch: str,
+    args: argparse.Namespace,
+    warnings: NonFiniteWarnings,
+    selected_labels: tuple[str, ...],
+) -> list[Series]:
+    labels = ("event sum", "original O", "Σ CT", "reconstructed O+ΣCT", "closure Δ")
+    values: OrderedDict[str, list[tuple[float, float]]] = OrderedDict(
+        (label, []) for label in labels
+    )
+    catalog = threshold_component_catalog(result)
+    for point in result.data.get("points", []):
+        if (
+            int(point.get("axis_index", -1)) != axis_index
+            or point.get("status") != "evaluated"
+        ):
+            continue
+        t_value = selected_t_value(point, branch, args.x_log_scale)
+        if t_value is None:
+            continue
+        found, original, components = threshold_point_values(
+            result, point, warnings, catalog
+        )
+        if not found:
+            continue
+        counterterms = sum(components.values(), 0j)
+        reconstructed = original + counterterms
+        event_sum = complex_value(
+            point.get("evaluation", {}).get("event_weight_sum"),
+            warnings,
+            result,
+            point,
+            "event_weight_sum",
+        )
+        for label, value in zip(
+            labels,
+            (
+                event_sum,
+                original,
+                counterterms,
+                reconstructed,
+                event_sum - reconstructed,
+            ),
+        ):
+            values[label].append((t_value, displayed_component(value, args.component)))
+    return [
+        Series(
+            label,
+            [t_value for t_value, _ in samples],
+            [value for _, value in samples],
+        )
+        for label, samples in values.items()
+        if samples and (not selected_labels or label in selected_labels)
+    ]
+
+
+def collect_threshold_facet_series(
+    result: ResultFile,
+    axis_index: int,
+    branch: str,
+    facet: ReportFacet,
+    component: str,
+    args: argparse.Namespace,
+    warnings: NonFiniteWarnings,
+) -> list[Series]:
+    values: OrderedDict[str, list[tuple[float, float]]] = OrderedDict(
+        (label, []) for label in facet.component_groups
+    )
+    catalog = threshold_component_catalog(result)
+    for point in result.data.get("points", []):
+        if (
+            int(point.get("axis_index", -1)) != axis_index
+            or point.get("status") != "evaluated"
+        ):
+            continue
+        t_value = selected_t_value(point, branch, args.x_log_scale)
+        if t_value is None:
+            continue
+        _, _, components = threshold_point_values(result, point, warnings, catalog)
+        for label, component_keys in facet.component_groups.items():
+            value = sum((components.get(key, 0j) for key in component_keys), 0j)
+            values[label].append((t_value, displayed_component(value, component)))
+    return [
+        Series(
+            label,
+            [t_value for t_value, _ in samples],
+            [value for _, value in samples],
+        )
+        for label, samples in values.items()
+        if samples
+    ]
 
 
 def collect_series(
@@ -752,9 +1199,9 @@ def plot_series(
     y_log_scale: bool,
     fit_log_slope: bool,
     x_range: list[float] | None,
-) -> None:
+) -> bool:
     if not series.t_values:
-        return
+        return False
     label = series.label
     if fit_log_slope and (slope := log_slope(series, x_range)) is not None:
         label = f"{label} (p={slope:+.2f})"
@@ -763,7 +1210,7 @@ def plot_series(
             finite_abs(value) if y_log_scale else value for value in series.values
         ]
         ax.plot(series.t_values, y_values, linewidth=1.4, label=label)
-        return
+        return False
 
     positive = [
         finite_abs(value) if value >= 0.0 else math.nan for value in series.values
@@ -787,8 +1234,10 @@ def plot_series(
             linewidth=1.4,
             linestyle="--",
             color=color,
-            label=f"{label} (negative)",
+            label="_nolegend_" if positive_line is not None else label,
         )
+        return True
+    return False
 
 
 def compact_vector(values: list[Any], limit: int = 8) -> str:
@@ -814,17 +1263,25 @@ def info_box_text(result: ResultFile) -> str:
     )
 
 
-def decorate_axes(
+def decorate_axis(
     ax: plt.Axes,
-    title: str,
     result: ResultFile,
     component: str,
     y_log_scale: bool,
     x_log_scale: bool,
     hide_info_box: bool,
+    branch: str | None = None,
+    show_ylabel: bool = True,
+    show_xlabel: bool = True,
 ) -> None:
-    ax.set_title(title, fontsize=12, fontweight="bold")
-    ax.set_xlabel("|approach parameter t|" if x_log_scale else "approach parameter t")
+    if show_xlabel:
+        if x_log_scale and branch in ("negative", "positive"):
+            sign = "< 0" if branch == "negative" else "> 0"
+            ax.set_xlabel(f"|approach parameter t|  (t {sign})")
+        else:
+            ax.set_xlabel(
+                "|approach parameter t|" if x_log_scale else "approach parameter t"
+            )
     if x_log_scale:
         ax.set_xscale("log")
     ylabel = "weight magnitude" if component == "abs" else f"{component} weight"
@@ -832,7 +1289,8 @@ def decorate_axes(
         if component != "abs":
             ylabel = f"|{ylabel}|"
         ax.set_yscale("log")
-    ax.set_ylabel(ylabel)
+    if show_ylabel:
+        ax.set_ylabel(ylabel)
     if not x_log_scale:
         ax.axvline(0.0, color="0.35", linewidth=0.9, alpha=0.7)
     ax.grid(True, which="major", color="0.88", linewidth=0.8)
@@ -855,11 +1313,68 @@ def decorate_axes(
         )
 
 
-def apply_axis_ranges(ax: plt.Axes, args: argparse.Namespace) -> None:
+def apply_axis_ranges(
+    ax: plt.Axes, args: argparse.Namespace, *, reverse_x: bool = False
+) -> None:
     if args.x_range is not None:
-        ax.set_xlim(args.x_range[0], args.x_range[1])
+        limits = args.x_range[::-1] if reverse_x else args.x_range
+        ax.set_xlim(limits[0], limits[1])
+    elif reverse_x:
+        ax.invert_xaxis()
     if args.y_range is not None:
         ax.set_ylim(args.y_range[0], args.y_range[1])
+
+
+def branches_on_axis(args: argparse.Namespace) -> list[tuple[str, str]]:
+    if args.t_branch != "both":
+        return [(args.t_branch, "")]
+    if args.x_log_scale:
+        return [("negative", "t<0"), ("positive", "t>0")]
+    return [("both", "")]
+
+
+def shared_figure_legend(
+    fig: plt.Figure, axes: Iterable[plt.Axes], has_negative_values: bool
+) -> float:
+    entries: OrderedDict[str, Any] = OrderedDict()
+    for ax in axes:
+        handles, labels = ax.get_legend_handles_labels()
+        for handle, label in zip(handles, labels):
+            if label and label != "_nolegend_":
+                entries.setdefault(label, handle)
+    if has_negative_values:
+        entries["dashed = negative value"] = Line2D(
+            [0], [0], color="0.25", linewidth=1.4, linestyle="--"
+        )
+    if not entries:
+        return 0.08
+    columns = min(5, max(1, len(entries)))
+    rows = math.ceil(len(entries) / columns)
+    fig.legend(
+        list(entries.values()),
+        list(entries),
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.018),
+        fontsize=6.2 if len(entries) > 8 else 7.0,
+        frameon=True,
+        ncols=columns,
+    )
+    return min(0.34, 0.1 + 0.045 * rows)
+
+
+def result_label_prefix(
+    result: ResultFile,
+    axis_index: int,
+    *,
+    multi_result: bool,
+    multi_axis: bool,
+) -> str:
+    parts = []
+    if result.label is not None or multi_result:
+        parts.append(result.label or result.path.stem)
+    if multi_axis:
+        parts.append(f"axis {axis_index + 1}")
+    return (" / ".join(parts) + " / ") if parts else ""
 
 
 def draw_page(
@@ -870,85 +1385,324 @@ def draw_page(
     exclude_patterns: list[re.Pattern[str]],
     warnings: NonFiniteWarnings,
 ) -> None:
-    fig, ax = plt.subplots(figsize=(13.5, 8.2), constrained_layout=False)
+    column_count = 2 if args.split_branches else 1
+    fig, raw_axes = plt.subplots(
+        1,
+        column_count,
+        figsize=(13.5, 8.2),
+        sharey=column_count == 2,
+        squeeze=False,
+    )
+    axes = list(raw_axes[0])
     has_series = False
+    has_negative_values = False
     multi_result = len({pair[0].path for pair in result_axis_pairs}) > 1
     multi_axis = len({pair[1] for pair in result_axis_pairs}) > 1
 
-    for result, axis_index in result_axis_pairs:
-        prefix_parts = []
-        if multi_result or args.combine_plots:
-            prefix_parts.append(result.path.stem)
-        if multi_axis or args.combine_axes:
-            prefix_parts.append(f"axis {axis_index + 1}")
-        label_prefix = (" / ".join(prefix_parts) + " / ") if prefix_parts else ""
-        series = collect_series(
-            result,
-            axis_index,
-            args.component,
-            include_patterns,
-            exclude_patterns,
-            args.sum_lmb_samples_per_cut,
-            warnings,
-            args.t_branch,
-            args.x_log_scale,
-            args.threshold_decomposition,
-            label_prefix=label_prefix,
+    for column, ax in enumerate(axes):
+        branch_specs = (
+            ([("negative", "")] if column == 0 else [("positive", "")])
+            if args.split_branches
+            else branches_on_axis(args)
         )
-        for item in series:
-            has_series = True
-            plot_series(
-                ax,
-                item,
-                args.component,
-                args.y_log_scale,
-                args.fit_log_slope,
-                args.x_range,
+        axis_has_series = False
+        for branch, branch_suffix in branch_specs:
+            for result, axis_index in result_axis_pairs:
+                label_prefix = result_label_prefix(
+                    result,
+                    axis_index,
+                    multi_result=multi_result or args.combine_plots,
+                    multi_axis=multi_axis or args.combine_axes,
+                )
+                series = collect_series(
+                    result,
+                    axis_index,
+                    args.component,
+                    include_patterns,
+                    exclude_patterns,
+                    args.sum_lmb_samples_per_cut,
+                    warnings,
+                    branch,
+                    args.x_log_scale,
+                    args.threshold_decomposition,
+                    label_prefix=label_prefix,
+                )
+                for item in series:
+                    if branch_suffix:
+                        item.label = f"{item.label} · {branch_suffix}"
+                    has_series = axis_has_series = True
+                    has_negative_values |= plot_series(
+                        ax,
+                        item,
+                        args.component,
+                        args.y_log_scale,
+                        args.fit_log_slope,
+                        args.x_range,
+                    )
+        if not axis_has_series:
+            ax.text(
+                0.5,
+                0.5,
+                "No evaluated series matched the requested filters.",
+                transform=ax.transAxes,
+                ha="center",
+                va="center",
+                fontsize=11,
+                color="0.35",
             )
 
     first_result, first_axis = result_axis_pairs[0]
     title = args.title or axis_label(first_result, first_axis)
     if args.title is None and len(result_axis_pairs) > 1:
         title = "combined approach curves"
-    decorate_axes(
-        ax,
-        title,
-        first_result,
-        args.component,
-        args.y_log_scale,
-        args.x_log_scale,
-        args.hide_info_box,
-    )
-    apply_axis_ranges(ax, args)
-    if has_series:
-        _, labels = ax.get_legend_handles_labels()
-        if len(labels) > 8:
-            legend_columns = min(5, max(2, math.ceil(len(labels) / 10)))
-            ax.legend(
-                loc="upper center",
-                bbox_to_anchor=(0.5, -0.14),
-                fontsize=5.8,
-                frameon=True,
-                ncols=legend_columns,
-                borderaxespad=0.0,
-            )
-            fig.subplots_adjust(left=0.08, right=0.98, top=0.92, bottom=0.28)
-        else:
-            ax.legend(loc="upper right", fontsize=7.0, frameon=True, ncols=1)
-            fig.tight_layout()
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            "No evaluated series matched the requested filters.",
-            transform=ax.transAxes,
-            ha="center",
-            va="center",
-            fontsize=12,
-            color="0.35",
+    fig.suptitle(title, fontsize=12, fontweight="bold")
+    for column, ax in enumerate(axes):
+        branch = ("negative", "positive")[column] if args.split_branches else None
+        if args.split_branches:
+            ax.set_title("t < 0" if branch == "negative" else "t > 0", fontsize=9)
+        decorate_axis(
+            ax,
+            first_result,
+            args.component,
+            args.y_log_scale,
+            args.x_log_scale,
+            args.hide_info_box or column > 0,
+            branch=branch,
+            show_ylabel=column == 0,
         )
+        apply_axis_ranges(ax, args, reverse_x=branch == "negative")
+    bottom = (
+        shared_figure_legend(fig, axes, has_negative_values) if has_series else 0.08
+    )
+    fig.subplots_adjust(
+        left=0.08,
+        right=0.98,
+        top=0.9,
+        bottom=bottom,
+        wspace=0.06 if args.split_branches else 0.2,
+    )
     pdf.savefig(fig, bbox_inches="tight")
     plt.close(fig)
+
+
+def draw_threshold_report_page(
+    pdf: PdfPages,
+    result: ResultFile,
+    axis_index: int,
+    facets: list[ReportFacet],
+    args: argparse.Namespace,
+    warnings: NonFiniteWarnings,
+    *,
+    title: str,
+    component: str,
+    summary: bool = False,
+) -> None:
+    row_count = len(facets)
+    column_count = 2 if args.split_branches else 1
+    fig, axes = plt.subplots(
+        row_count,
+        column_count,
+        figsize=(13.5, 8.2),
+        sharey="row" if column_count == 2 else False,
+        squeeze=False,
+    )
+    has_negative_values = False
+    flat_axes = [ax for row in axes for ax in row]
+    for row, facet in enumerate(facets):
+        for column in range(column_count):
+            ax = axes[row][column]
+            branch_specs = (
+                ([("negative", "")] if column == 0 else [("positive", "")])
+                if args.split_branches
+                else branches_on_axis(args)
+            )
+            has_series = False
+            for branch, branch_suffix in branch_specs:
+                series = (
+                    collect_threshold_summary_series(
+                        result,
+                        axis_index,
+                        branch,
+                        args,
+                        warnings,
+                        facet.summary_labels,
+                    )
+                    if summary
+                    else collect_threshold_facet_series(
+                        result,
+                        axis_index,
+                        branch,
+                        facet,
+                        component,
+                        args,
+                        warnings,
+                    )
+                )
+                for item in series:
+                    if branch_suffix:
+                        item.label = f"{item.label} · {branch_suffix}"
+                    has_series = True
+                    has_negative_values |= plot_series(
+                        ax,
+                        item,
+                        component,
+                        args.y_log_scale,
+                        args.fit_log_slope,
+                        args.x_range,
+                    )
+            if not has_series:
+                ax.text(
+                    0.5,
+                    0.5,
+                    "No observed components.",
+                    transform=ax.transAxes,
+                    ha="center",
+                    va="center",
+                    color="0.35",
+                )
+            branch = ("negative", "positive")[column] if args.split_branches else None
+            axis_title = facet.title
+            if args.split_branches:
+                axis_title += "\n" + ("t < 0" if branch == "negative" else "t > 0")
+            ax.set_title(
+                axis_title,
+                fontsize=8.2,
+                fontweight="semibold",
+                linespacing=1.12,
+            )
+            decorate_axis(
+                ax,
+                result,
+                component,
+                args.y_log_scale,
+                args.x_log_scale,
+                args.hide_info_box or row > 0 or column > 0,
+                branch=branch,
+                show_ylabel=column == 0,
+                show_xlabel=row + 1 == row_count,
+            )
+            apply_axis_ranges(ax, args, reverse_x=branch == "negative")
+
+    fig.suptitle(title, fontsize=12, fontweight="bold")
+    bottom = shared_figure_legend(fig, flat_axes, has_negative_values)
+    panel_title_lines = max(facet.title.count("\n") + 1 for facet in facets)
+    if args.split_branches:
+        panel_title_lines += 1
+    extra_title_lines = max(0, panel_title_lines - 2)
+    fig.subplots_adjust(
+        left=0.08,
+        right=0.98,
+        top=0.88 - 0.018 * extra_title_lines,
+        bottom=bottom,
+        hspace=0.52 + 0.12 * extra_title_lines,
+        wspace=0.06 if args.split_branches else 0.2,
+    )
+    pdf.savefig(fig, bbox_inches="tight")
+    plt.close(fig)
+
+
+def threshold_report_title(
+    result: ResultFile, axis_index: int, args: argparse.Namespace, section: str
+) -> str:
+    if args.title:
+        return f"{args.title} · {section}"
+    result_label = result.label or result.path.stem
+    return f"{result_label} · axis {axis_index + 1} · {section}"
+
+
+def draw_threshold_report(
+    pdf: PdfPages,
+    results: list[ResultFile],
+    args: argparse.Namespace,
+    warnings: NonFiniteWarnings,
+) -> int:
+    page_count = 0
+    for result in results:
+        registry = ThresholdRegistry.from_result(result)
+        for axis_index in axis_indices(result, args.selected_axis_indices):
+            observed = registry.observed_components(result, axis_index)
+            if not observed:
+                continue
+            if "summary" in args.threshold_report_sections:
+                summary_facets = [
+                    ReportFacet(
+                        "event decomposition",
+                        OrderedDict(),
+                        ("event sum", "original O", "Σ CT", "reconstructed O+ΣCT"),
+                    ),
+                    ReportFacet(
+                        "closure residual",
+                        OrderedDict(),
+                        ("closure Δ",),
+                    ),
+                ]
+                draw_threshold_report_page(
+                    pdf,
+                    result,
+                    axis_index,
+                    summary_facets,
+                    args,
+                    warnings,
+                    title=threshold_report_title(result, axis_index, args, "summary"),
+                    component=args.component,
+                    summary=True,
+                )
+                page_count += 1
+
+            if "singles" in args.threshold_report_sections:
+                single_facets = registry.single_facets(observed)
+                chunks = [
+                    single_facets[index : index + args.facets_per_page]
+                    for index in range(0, len(single_facets), args.facets_per_page)
+                ]
+                for chunk_index, facets in enumerate(chunks):
+                    suffix = (
+                        f" {chunk_index + 1}/{len(chunks)}" if len(chunks) > 1 else ""
+                    )
+                    draw_threshold_report_page(
+                        pdf,
+                        result,
+                        axis_index,
+                        facets,
+                        args,
+                        warnings,
+                        title=threshold_report_title(
+                            result,
+                            axis_index,
+                            args,
+                            f"variants{suffix}",
+                        ),
+                        component=args.component,
+                    )
+                    page_count += 1
+
+            if "pairs" in args.threshold_report_sections:
+                pair_facets = registry.pair_facets(observed)
+                chunks = [
+                    pair_facets[index : index + 2]
+                    for index in range(0, len(pair_facets), 2)
+                ]
+                for chunk_index, facets in enumerate(chunks):
+                    suffix = (
+                        f" {chunk_index + 1}/{len(chunks)}" if len(chunks) > 1 else ""
+                    )
+                    draw_threshold_report_page(
+                        pdf,
+                        result,
+                        axis_index,
+                        facets,
+                        args,
+                        warnings,
+                        title=threshold_report_title(
+                            result,
+                            axis_index,
+                            args,
+                            f"pairs{suffix}",
+                        ),
+                        component=args.component,
+                    )
+                    page_count += 1
+    return page_count
 
 
 def page_groups(
@@ -1000,7 +1754,10 @@ def main() -> int:
     args = parse_args()
     try:
         validate_args(args)
-        results = [load_result(path) for path in args.results]
+        labels = args.result_label or [None] * len(args.results)
+        results = [
+            load_result(path, label) for path, label in zip(args.results, labels)
+        ]
         warnings = NonFiniteWarnings()
         include_contributions = list(args.include_contribution)
         if not include_contributions:
@@ -1016,10 +1773,16 @@ def main() -> int:
             )
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with PdfPages(args.output) as pdf:
-            for group in groups:
-                draw_page(
-                    pdf, group, args, include_patterns, exclude_patterns, warnings
-                )
+            if args.threshold_report:
+                if draw_threshold_report(pdf, results, args, warnings) == 0:
+                    raise ValueError(
+                        "No observed threshold-counterterm report sections were found."
+                    )
+            else:
+                for group in groups:
+                    draw_page(
+                        pdf, group, args, include_patterns, exclude_patterns, warnings
+                    )
         warnings.emit()
         print(f"plot_approach_result.py: PDF created at {display_path(args.output)}")
     except Exception as error:  # noqa: BLE001 - this script should print clean CLI errors.

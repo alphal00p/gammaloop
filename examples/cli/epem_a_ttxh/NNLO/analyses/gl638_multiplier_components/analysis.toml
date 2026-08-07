@@ -30,6 +30,18 @@ commands = [
   "approach -p epem_a_tth -i GL638_ir_safe --momentum-space --graph-id 0 --orientation-id 0 -x 31 -47 83 -59 101 -73 127 41 -109 67 -89 53 --approach-axis 0.03,-0.02,0.01,-0.01,0.04,0.02,0.02,0.01,-0.03,-0.04,0.02,0.01 --n-points 5 --logarithmic --min-abs-t 0.001 --n-cores 1 --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl638_multiplier_components/component_approach.json",
 ]
 
+# This path reaches q13=0 and both right-side threshold surfaces of cut
+# (2,4,12) at t=0.  With lambda=10^-2 t, K0=K*+lambda*a and
+# K3=K*+lambda*(a+d), so q13=-lambda*d while eta(eset(5,10)) and
+# eta(eset(5,12,13))
+# both vanish linearly.  The midpoint is excluded because it is singular.
+[[command_blocks]]
+name = "approach_q13_correlated"
+commands = [
+  "run runtime_events",
+  "approach -p epem_a_tth -i GL638_ir_safe --momentum-space --graph-id 0 --orientation-id 0 -x 108.257828337953 -144.343771117271 433.031313351812 -59 101 -73 127 41 -109 108.257828337953 -144.343771117271 433.031313351812 --approach-axis 0.47,0.29,-0.31,0,0,0,0,0,0,2.58,-1.28,1.62 --n-points 7 --logarithmic --min-abs-t 0.0001 --skip-midpoint --n-cores 1 --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl638_multiplier_components/q13_correlated.json",
+]
+
 [[command_blocks]]
 name = "runtime_events"
 commands = [

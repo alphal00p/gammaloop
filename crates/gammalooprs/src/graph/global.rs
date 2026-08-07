@@ -191,7 +191,7 @@ impl Graph {
                 .expect("validated threshold_counterterms should serialize to TOML");
             g.statements.insert(
                 "threshold_counterterms".to_string(),
-                super::parse::string_utils::dot_statement_value(&threshold_counterterms),
+                super::parse::string_utils::dot_multiline_statement_value(&threshold_counterterms),
             );
         }
 
@@ -239,7 +239,7 @@ impl ParseGraph {
                 .expect("validated threshold_counterterms should serialize to TOML");
             g.statements.insert(
                 "threshold_counterterms".to_string(),
-                super::parse::string_utils::dot_statement_value(&threshold_counterterms),
+                super::parse::string_utils::dot_multiline_statement_value(&threshold_counterterms),
             );
         }
 

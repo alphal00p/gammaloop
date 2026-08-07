@@ -222,7 +222,8 @@ impl ThresholdMultiplierLayout {
 
     /// Build a layout from the graph's generation-time parameter ordering and a cut-owned
     /// E-surface catalog. E-surface IDs are deduplicated, while equations with equal energy edges
-    /// but different external shifts remain distinct so an `eta(...)` use can report ambiguity.
+    /// but different external shifts remain distinct so an `eta(eset(...))` use can report
+    /// ambiguity.
     pub fn from_graph_esurfaces(
         graph: &Graph,
         esurface_ids: impl IntoIterator<Item = EsurfaceID>,
@@ -369,11 +370,14 @@ impl ThresholdMultiplierLayout {
         // components into Q components. Parse multiplier Q3 calls through a private tensor
         // symbol so that the multiplier ABI can reject genuine Q while preserving Q3 aliases.
         let private_q3 = private_q3_symbol();
+        // Register the public grouping head before parsing so Symbolica canonicalizes edge-set
+        // arguments independently of their user-provided order.
+        let public_eset = public_eset_symbol();
         let rewritten = rewrite_q3_function_name(source, private_q3.get_name());
         let parsed = try_parse!(rewritten.as_str()).map_err(|error| {
             eyre!("failed to parse threshold-multiplier expression `{source}`: {error}")
         })?;
-        let normalized = self.normalize_before_contraction(&parsed, private_q3)?;
+        let normalized = self.normalize_before_contraction(&parsed, private_q3, public_eset)?;
         let scalar = scalarize(normalized.as_view()).with_context(|| {
             format!("threshold-multiplier expression `{source}` is not a scalar tensor expression")
         })?;
@@ -381,7 +385,12 @@ impl ThresholdMultiplierLayout {
         Ok(ThresholdMultiplierExpression { scalar })
     }
 
-    fn normalize_before_contraction(&self, atom: &Atom, private_q3: Symbol) -> Result<Atom> {
+    fn normalize_before_contraction(
+        &self,
+        atom: &Atom,
+        private_q3: Symbol,
+        public_eset: Symbol,
+    ) -> Result<Atom> {
         let ascii_eta = symbol!("eta");
         let mut error = None;
         let normalized = atom.replace_map(|view, _, output| {
@@ -406,7 +415,7 @@ impl ThresholdMultiplierLayout {
                     Err(call_error) => error = Some(call_error),
                 }
             } else if function_symbol == ascii_eta || function_symbol == GS.eta {
-                match self.normalize_eta_call(function.iter().collect()) {
+                match self.normalize_eta_call(function.iter().collect(), public_eset) {
                     Ok(replacement) => **output = replacement,
                     Err(call_error) => error = Some(call_error),
                 }
@@ -431,7 +440,24 @@ impl ThresholdMultiplierLayout {
                 }
             }
         });
-        error.map_or(Ok(normalized), Err)
+        if let Some(error) = error {
+            return Err(error);
+        }
+
+        let mut unconsumed_eset = None;
+        let _ = normalized.replace_map(|view, _, _| {
+            if unconsumed_eset.is_none()
+                && matches!(view, AtomView::Fun(function) if function.get_symbol() == public_eset)
+            {
+                unconsumed_eset = Some(view.to_string());
+            }
+        });
+        if let Some(call) = unconsumed_eset {
+            return Err(eyre!(
+                "`eset(...)` is only valid as the sole edge-set argument of `eta`, got `{call}`"
+            ));
+        }
+        Ok(normalized)
     }
 
     fn normalize_q3_call(&self, arguments: Vec<AtomView<'_>>, symbol: Symbol) -> Result<Atom> {
@@ -456,7 +482,11 @@ impl ThresholdMultiplierLayout {
         ]))
     }
 
-    fn normalize_eta_call(&self, arguments: Vec<AtomView<'_>>) -> Result<Atom> {
+    fn normalize_eta_call(
+        &self,
+        arguments: Vec<AtomView<'_>>,
+        public_eset: Symbol,
+    ) -> Result<Atom> {
         if arguments.is_empty() {
             return Err(eyre!("eta expects at least one graph edge"));
         }
@@ -471,11 +501,39 @@ impl ThresholdMultiplierLayout {
         if edge_arguments.is_empty() {
             return Err(eyre!("eta expects at least one graph edge"));
         }
-        let mut edges = edge_arguments
+        let has_eset = edge_arguments.iter().any(
+            |argument| matches!(argument, AtomView::Fun(function) if function.get_symbol() == public_eset),
+        );
+        if !has_eset {
+            return Err(eyre!(
+                "eta graph edges must be wrapped in `eset(...)`; use `eta(eset(edge, ...))` or `eta(effective|star, eset(edge, ...))`"
+            ));
+        }
+        if edge_arguments.len() != 1 {
+            return Err(eyre!(
+                "eta expects exactly one `eset(...)` edge group and cannot mix it with other arguments"
+            ));
+        }
+        let AtomView::Fun(eset) = edge_arguments[0] else {
+            unreachable!("has_eset guarantees one eset function argument")
+        };
+        if eset.get_nargs() == 0 {
+            return Err(eyre!("eta `eset(...)` expects at least one graph edge"));
+        }
+        // `eset` is a Symbolica `Symmetric` head, so its arguments are already in canonical
+        // order and any duplicate edges are adjacent.
+        let edges = eset
             .iter()
-            .map(|edge| parse_index(*edge, "eta graph edge"))
+            .map(|edge| {
+                if matches!(edge, AtomView::Fun(function) if function.get_symbol() == public_eset) {
+                    Err(eyre!(
+                        "nested `eset(...)` is not allowed in an eta edge set"
+                    ))
+                } else {
+                    parse_index(edge, "eta graph edge")
+                }
+            })
             .collect::<Result<Vec<_>>>()?;
-        edges.sort_unstable();
         if edges.windows(2).any(|pair| pair[0] == pair[1]) {
             return Err(eyre!(
                 "eta edge set `{edges:?}` contains a duplicate graph edge"
@@ -1276,6 +1334,10 @@ fn private_eta_symbol() -> Symbol {
     symbol!("gammalooprs::threshold_multiplier_eta")
 }
 
+fn public_eset_symbol() -> Symbol {
+    symbol!("eset"; Symmetric)
+}
+
 fn private_q3_symbol() -> Symbol {
     use spenso::network::tags::SPENSO_TAG;
 
@@ -1465,7 +1527,9 @@ mod tests {
             ],
         )
         .unwrap();
-        let error = ambiguous_layout.parse_expression("eta(0, 1)").unwrap_err();
+        let error = ambiguous_layout
+            .parse_expression("eta(eset(0, 1))")
+            .unwrap_err();
         assert!(error.to_string().contains("ambiguous in this cut"));
     }
 
@@ -1512,7 +1576,7 @@ mod tests {
             vec![esurface(vec![1, 0], Vec::new())],
         );
         let expression = layout
-            .parse_expression("eta(1, 0) + eta(star, 0, 1)")
+            .parse_expression("eta(eset(1, 0)) + eta(star, eset(0, 1))")
             .unwrap();
         let mut evaluator = layout
             .build_evaluator(&expression, &EvaluatorSettings::default())
@@ -1535,6 +1599,123 @@ mod tests {
             .evaluate(&values, &mut EvaluationMetaData::new_empty(), false)
             .unwrap();
         assert_eq!(result, F(7.0));
+    }
+
+    #[test]
+    fn eta_eset_aliases_canonicalize_and_share_evaluator_inputs() {
+        let layout = initialized_layout(
+            Vec::new(),
+            0,
+            vec![0, 1],
+            vec![esurface(vec![1, 0], Vec::new())],
+        );
+        let grouped = layout.parse_expression("eta(eset(1, 0))").unwrap();
+        let permuted = layout.parse_expression("eta(eset(0, 1))").unwrap();
+        let explicit_effective = layout
+            .parse_expression("eta(effective, eset(0, 1))")
+            .unwrap();
+        let star = layout.parse_expression("eta(star, eset(1, 0))").unwrap();
+        assert_eq!(grouped.scalar(), permuted.scalar());
+        assert_eq!(grouped.scalar(), explicit_effective.scalar());
+        assert_ne!(grouped.scalar(), star.scalar());
+
+        let mut collection = ThresholdMultiplierEvaluatorCollection::build(
+            layout,
+            vec![
+                (ThresholdCountertermVariantId(0), Some(grouped)),
+                (ThresholdCountertermVariantId(1), Some(permuted)),
+                (ThresholdCountertermVariantId(2), Some(explicit_effective)),
+                (ThresholdCountertermVariantId(3), Some(star)),
+            ],
+            Vec::new(),
+            &EvaluatorSettings::default(),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(collection.evaluators().len(), 2);
+        assert_eq!(
+            collection
+                .left_variants()
+                .iter()
+                .map(|reference| reference.evaluator_id.unwrap().0)
+                .collect::<Vec<_>>(),
+            vec![0, 0, 0, 1],
+        );
+
+        let mut values = ThresholdMultiplierInputValues::new(collection.layout(), F(0.0));
+        for (index, input) in collection.layout().inputs().iter().enumerate() {
+            if let ThresholdMultiplierInput::Esurface { point, .. } = input {
+                values
+                    .set_real(
+                        index,
+                        F(match point {
+                            ThresholdMultiplierPoint::Effective => 3.0,
+                            ThresholdMultiplierPoint::Star => 4.0,
+                        }),
+                    )
+                    .unwrap();
+            }
+        }
+        let mut metadata = EvaluationMetaData::new_empty();
+        assert_eq!(
+            collection.evaluators_mut()[0]
+                .evaluate(&values, &mut metadata, false)
+                .unwrap(),
+            F(3.0),
+        );
+        assert_eq!(
+            collection.evaluators_mut()[1]
+                .evaluate(&values, &mut metadata, false)
+                .unwrap(),
+            F(4.0),
+        );
+    }
+
+    #[test]
+    fn eta_eset_rejects_mixed_empty_nested_and_invalid_edge_sets() {
+        let layout = initialized_layout(
+            Vec::new(),
+            0,
+            vec![0, 1, 2],
+            vec![esurface(vec![0, 1], Vec::new())],
+        );
+        for expression in [
+            "eta(eset(0, 1), 2)",
+            "eta(star, 0, eset(1))",
+            "eta(eset(0), eset(1))",
+        ] {
+            let error = layout.parse_expression(expression).unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("exactly one `eset(...)` edge group"),
+                "unexpected error for `{expression}`: {error}"
+            );
+        }
+        for expression in ["eta(0, 1)", "eta(effective, 0, 1)", "eta(star, 0, 1)"] {
+            let error = layout.parse_expression(expression).unwrap_err();
+            assert!(
+                error.to_string().contains("must be wrapped in `eset(...)`"),
+                "unexpected error for `{expression}`: {error}"
+            );
+        }
+
+        let empty = layout.parse_expression("eta(eset())").unwrap_err();
+        assert!(empty.to_string().contains("at least one graph edge"));
+        let nested = layout
+            .parse_expression("eta(eset(0, eset(1)))")
+            .unwrap_err();
+        assert!(nested.to_string().contains("nested `eset(...)`"));
+        let duplicate = layout.parse_expression("eta(eset(1, 0, 1))").unwrap_err();
+        assert!(duplicate.to_string().contains("duplicate graph edge"));
+        let non_integer = layout.parse_expression("eta(eset(0, edge))").unwrap_err();
+        assert!(
+            non_integer
+                .to_string()
+                .contains("expected an integer eta graph edge")
+        );
+        let ungrouped = layout.parse_expression("eset(0, 1)").unwrap_err();
+        assert!(ungrouped.to_string().contains("only valid as the sole"));
     }
 
     #[test]
@@ -1871,7 +2052,7 @@ mod tests {
         .unwrap();
         let expression = layout
             .parse_expression(&format!(
-                "UFO::MT + graph_weight + P(0, cind(0)) + Q3({}, cind(1)) + Q3(star, {}, cind(1)) + eta({}) + eta(star, {})",
+                "UFO::MT + graph_weight + P(0, cind(0)) + Q3({}, cind(1)) + Q3(star, {}, cind(1)) + eta(eset({})) + eta(star, eset({}))",
                 energy_edge.0, energy_edge.0, energy_edge.0, energy_edge.0,
             ))
             .unwrap();
