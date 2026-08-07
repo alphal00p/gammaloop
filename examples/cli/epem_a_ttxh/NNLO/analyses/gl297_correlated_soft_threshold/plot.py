@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Plot the GL297 bare, legacy, and forced correlated approaches."""
+"""Build the GL297 correlated-cure comparison and component reports."""
 
 from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+
+import fitz
 
 
 ANALYSIS_DIR = Path(__file__).resolve().parent
@@ -18,33 +21,85 @@ def repository_root() -> Path:
     raise RuntimeError("could not locate assets/plot_approach_result.py")
 
 
+def run_plotter(root: Path, arguments: list[str]) -> None:
+    subprocess.run(
+        [sys.executable, str(root / "assets" / "plot_approach_result.py"), *arguments],
+        cwd=root,
+        check=True,
+    )
+
+
+def merge_pdfs(inputs: list[Path], output: Path) -> None:
+    merged = fitz.open()
+    try:
+        for input_path in inputs:
+            with fitz.open(input_path) as document:
+                merged.insert_pdf(document)
+        merged.save(output)
+    finally:
+        merged.close()
+
+
 def plot(direction: str, soft_edge: str) -> None:
     root = repository_root()
-    command = [
-        sys.executable,
-        str(root / "assets" / "plot_approach_result.py"),
-        *(
-            str(ANALYSIS_DIR / f"{direction}_{case}.json")
-            for case in ("bare", "legacy", "forced")
-        ),
-        "--output",
-        str(ANALYSIS_DIR / f"{direction}_cure.pdf"),
-        "--combine-plots",
-        "--component",
-        "real",
-        "--t-branch",
-        "positive",
-        "--x-log-scale",
-        "--y-log-scale",
-        "--fit-log-slope",
-        "--hide-info-box",
-        "--x-range",
-        "0.0001",
-        "1",
-        "--title",
-        f"GL297: correlated soft/threshold limit for {soft_edge}",
-    ]
-    subprocess.run(command, cwd=root, check=True)
+    with tempfile.TemporaryDirectory(prefix=f"gl297_{direction}_") as temporary:
+        temporary_dir = Path(temporary)
+        overview = temporary_dir / "overview.pdf"
+        components = temporary_dir / "components.pdf"
+        common = [
+            "--t-branch",
+            "both",
+            "--x-log-scale",
+            "--branch-layout",
+            "auto",
+            "--y-log-scale",
+            "--hide-info-box",
+            "--x-range",
+            "0.0001",
+            "1",
+        ]
+
+        run_plotter(
+            root,
+            [
+                *(
+                    str(ANALYSIS_DIR / f"{direction}_{case}.json")
+                    for case in ("threshold_off", "legacy", "forced")
+                ),
+                "--output",
+                str(overview),
+                "--result-label",
+                "threshold CT off",
+                "--result-label",
+                "legacy maximal-subspace CT",
+                "--result-label",
+                "forced one-loop CT",
+                "--combine-plots",
+                "--component",
+                "real",
+                "--fit-log-slope",
+                *common,
+                "--title",
+                f"GL297: correlated {soft_edge} soft/threshold cure",
+            ],
+        )
+        run_plotter(
+            root,
+            [
+                str(ANALYSIS_DIR / f"{direction}_forced.json"),
+                "--output",
+                str(components),
+                "--threshold-report",
+                "--component",
+                "real",
+                "--facets-per-page",
+                "3",
+                *common,
+                "--title",
+                f"GL297: forced one-loop components for {soft_edge}",
+            ],
+        )
+        merge_pdfs([overview, components], ANALYSIS_DIR / f"{direction}_cure.pdf")
 
 
 def main() -> None:
