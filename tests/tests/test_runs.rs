@@ -57,6 +57,8 @@ mod multi_integrand;
 mod photonic;
 #[path = "test_runs/profile_bulk.rs"]
 mod profile_bulk;
+#[path = "test_runs/repeated_masses.rs"]
+mod repeated_masses;
 #[path = "test_runs/runtime_graph_subset.rs"]
 mod runtime_graph_subset;
 #[path = "test_runs/smoke.rs"]
