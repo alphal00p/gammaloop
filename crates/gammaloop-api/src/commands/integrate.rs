@@ -876,6 +876,7 @@ fn handle_dashboard_key_event(
         KeyCode::Char('1') => dashboard.select_tab(0),
         KeyCode::Char('2') => dashboard.select_tab(1),
         KeyCode::Char('3') => dashboard.select_tab(2),
+        KeyCode::Char('a') | KeyCode::Char('A') => dashboard.toggle_integral_view(),
         KeyCode::Left => dashboard.previous_tab(),
         KeyCode::Right => dashboard.next_tab(),
         KeyCode::Char('[') => dashboard.focus_previous_slot(),
@@ -932,7 +933,7 @@ fn read_existing_workspace_state(
     )
     .map_err(|err| {
         eyre!(
-            "Could not deserialize integration state from {}: {err}",
+"Could not deserialize integration state from {}: {err}. The checkpoint may use an incompatible accumulator layout; use --restart to start a new integration.",
             state_path.display()
         )
     })?
@@ -1355,7 +1356,7 @@ impl Integrate {
                     )
                     .map_err(|err| {
                         eyre!(
-                            "Could not deserialize integration state from {}: {err}; use --restart to create a new workspace",
+"Could not deserialize integration state from {}: {err}. The checkpoint may use an incompatible accumulator layout; use --restart to start a new integration.",
                             path_to_state.display()
                         )
                     })?
@@ -2436,6 +2437,30 @@ mod tests {
             ),
             DashboardKeyAction::Redraw
         );
+    }
+
+    #[test]
+    fn dashboard_a_toggles_absolute_integral_view() {
+        let mut dashboard = gammalooprs::integrate::RatatuiDashboardState::new();
+        assert!(!dashboard.is_absolute_view());
+
+        assert_eq!(
+            super::handle_dashboard_key_event(
+                &mut dashboard,
+                KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE),
+            ),
+            DashboardKeyAction::Redraw
+        );
+        assert!(dashboard.is_absolute_view());
+
+        assert_eq!(
+            super::handle_dashboard_key_event(
+                &mut dashboard,
+                KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT),
+            ),
+            DashboardKeyAction::Redraw
+        );
+        assert!(!dashboard.is_absolute_view());
     }
 
     #[test]
