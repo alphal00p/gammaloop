@@ -1189,7 +1189,7 @@ mod test {
             model_value_format_hint, parse_model_parameter_value, MODEL_COMPLEX_VALUE_FORMAT_HINT,
             MODEL_REAL_VALUE_FORMAT_HINT,
         },
-        state::{ProcessRef, State},
+        state::{GraphImportOptions, ProcessRef, State},
         tracing::{get_stderr_log_filter, set_stderr_log_filter, set_stderr_log_filter_override},
         CLISettings, Repl,
     };
@@ -1214,11 +1214,14 @@ mod test {
             state
                 .import_graphs(
                     graphs.clone(),
-                    Some((*process_name).to_string()),
-                    None,
-                    Some("default".to_string()),
-                    false,
-                    false,
+                    GraphImportOptions {
+                        process_name: Some((*process_name).to_string()),
+                        process_id: None,
+                        process_definition: None,
+                        integrand_name: Some("default".to_string()),
+                        overwrite: false,
+                        append: false,
+                    },
                 )
                 .expect("graph import should succeed");
         }

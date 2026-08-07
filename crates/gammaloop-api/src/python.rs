@@ -44,7 +44,7 @@ use crate::{
     render_smart_toml,
     session::{display_command, CliSession, CliSessionState},
     settings_tree::{json_type_name, serialize_settings_with_defaults, value_at_path},
-    state::{ProcessListExt, ProcessRef, RunHistory, State},
+    state::{GraphImportOptions, ProcessListExt, ProcessRef, RunHistory, State},
     CLISettings, LoadedState, StateLoadOption,
 };
 use ahash::{HashMap, HashMapExt};
@@ -3034,11 +3034,14 @@ impl GammaLoopAPI {
 
         self.gammaloop_state.import_graphs(
             graphs,
-            process_name,
-            process_id,
-            integrand_name,
-            overwrite,
-            append,
+            GraphImportOptions {
+                process_name,
+                process_id,
+                process_definition: None,
+                integrand_name,
+                overwrite,
+                append,
+            },
         )
     }
 

@@ -49,6 +49,8 @@ examples/cli/qq_aaa/*
 !examples/cli/qq_aaa/qqx_aaa_subtracted.toml
 examples/cli/epem_a_ttxh/NNLO/*
 !examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO.toml
+!examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO_test_GL297.toml
+!examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO_test_GL638.toml
 !examples/cli/epem_a_ttxh/NNLO/graphs/
 !examples/cli/epem_a_ttxh/NNLO/graphs/*.dot
 !examples/cli/epem_a_ttxh/NNLO/analyses/
