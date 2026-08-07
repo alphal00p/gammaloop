@@ -106,29 +106,34 @@ def build_direction(direction: str) -> Path:
         if not path.is_file():
             raise FileNotFoundError(f"Run the analysis card first; missing {path}")
 
-    cut = r"2,6,7" if direction == "e12" else r"2,4,9"
+    # The approached eta(3,...) soft direction is cancelled by the eta(5,...)
+    # counterterms, and conversely for eta(5,...). Selecting the same-side cut
+    # would only display finite spectator components.
+    cut = r"2,4,9" if direction == "e12" else r"2,6,7"
     component_filter = rf"^(?=.*c\({cut}\))(?=.*forced_1l).*$"
+    cancellation_cuts = "0|6|7" if direction == "e12" else "0|3|5"
+    cancellation_component = "imag" if direction == "e12" else "real"
     title_name = direction.upper()
     with tempfile.TemporaryDirectory(prefix=f"gl297_{direction}_plots_") as temporary:
         temp = Path(temporary)
         sidecar = temp / "kinematics.json"
         kinematics_pdf = temp / "kinematics.pdf"
         comparison_pdf = temp / "comparison.pdf"
-        summary_pdf = temp / "summary.pdf"
+        cancellation_pdf = temp / "cancellation.pdf"
         components_pdf = temp / "components.pdf"
         write_sidecar(direction, forced, sidecar)
 
-        common_view = [
-            "--component",
-            "abs",
+        common_axis = [
             "--x-log-scale",
             "--branch-layout",
-            "split",
+            "signed",
             "--x-range",
-            "1e-6",
+            "-0.01",
             "1e-2",
+            "--x-symlog-linthresh",
+            "1e-6",
         ]
-        common_log = [*common_view, "--fit-log-slope", "--fit-points", "4"]
+        common_log = [*common_axis, "--fit-log-slope", "--fit-points", "12"]
         run_plotter(
             str(forced),
             "--series-json",
@@ -137,6 +142,8 @@ def build_direction(direction: str) -> Path:
             r"^series:",
             "--output",
             str(kinematics_pdf),
+            "--component",
+            "abs",
             *common_log,
             "--y-label",
             "kinematic distance [GeV]",
@@ -155,7 +162,11 @@ def build_direction(direction: str) -> Path:
             "legacy maximal subspace",
             "--result-label",
             "forced one-loop subspace",
+            "--include-contribution",
+            r"^total_weight$",
             "--combine-plots",
+            "--component",
+            "abs",
             *common_log,
             "--title",
             f"GL297 {title_name}: correlated soft + threshold approach",
@@ -163,15 +174,18 @@ def build_direction(direction: str) -> Path:
         run_plotter(
             str(forced),
             "--output",
-            str(summary_pdf),
-            "--threshold-report",
-            "--threshold-report-section",
-            "summary",
+            str(cancellation_pdf),
             "--include-contribution",
-            component_filter,
-            *common_view,
+            r"^total_weight$",
+            "--include-contribution",
+            rf"^contribution:event_weight GL297 cut(?:{cancellation_cuts}) ori0$",
+            "--component",
+            cancellation_component,
+            *common_log,
+            "--y-label",
+            f"|{cancellation_component} cut weight|",
             "--title",
-            f"GL297 {title_name}: forced-subspace decomposition",
+            f"GL297 {title_name}: leading LU cut cancellation",
         )
         run_plotter(
             str(forced),
@@ -180,23 +194,23 @@ def build_direction(direction: str) -> Path:
             "--threshold-report",
             "--threshold-report-section",
             "singles",
-            "--threshold-report-section",
-            "pairs",
             "--threshold-quantity",
             "weighted",
             "--include-contribution",
             component_filter,
             "--facets-per-page",
             "2",
+            "--component",
+            "abs",
             *common_log,
             "--title",
-            f"GL297 {title_name}: forced-subspace decomposition",
+            f"GL297 {title_name}: leading forced-subspace components",
         )
 
         output = HERE / f"{direction}_correlated_soft_threshold.pdf"
         merge_pdfs(
             output,
-            [kinematics_pdf, comparison_pdf, summary_pdf, components_pdf],
+            [kinematics_pdf, comparison_pdf, cancellation_pdf, components_pdf],
         )
     return output
 

@@ -92,30 +92,30 @@ def main() -> None:
         if not path.is_file():
             raise FileNotFoundError(f"Run the analysis card first; missing {path}")
 
-    variant_filter = r"^(?=.*c\(2,4,12\))(?=.*(?:intrinsic_1l|embedded_2l)).*$"
-    multiplier_filter = (
-        r"^(?=.*c\(2,4,12\))(?=.*(?:intrinsic_1l|embedded_2l))"
-        r"(?=.*η\(5,10\)).*$"
-    )
-    common_view = [
-        "--component",
-        "abs",
+    shared_ct_filter = r"^(?=.*η\(8,12,14\))(?=.*(?:shared_1l|default)).*$"
+    duplicated_single_filter = r"^threshold:component c(?:8|9|10|11) "
+    duplicated_pair_filter = r"^threshold:component c(?:30|31|32|33|38|39|40|41) "
+    common_axis = [
         "--x-log-scale",
         "--branch-layout",
-        "split",
+        "signed",
         "--x-range",
-        "1e-6",
+        "-0.01",
         "1e-2",
+        "--x-symlog-linthresh",
+        "1e-6",
     ]
-    common_log = [*common_view, "--fit-log-slope", "--fit-points", "4"]
+    common_log = [*common_axis, "--fit-log-slope", "--fit-points", "12"]
     with tempfile.TemporaryDirectory(prefix="gl638_correlated_plots_") as temporary:
         temp = Path(temporary)
         sidecar = temp / "kinematics.json"
         kinematics_pdf = temp / "kinematics.pdf"
         comparison_pdf = temp / "comparison.pdf"
-        summary_pdf = temp / "summary.pdf"
-        components_pdf = temp / "components.pdf"
-        multipliers_pdf = temp / "multipliers.pdf"
+        cut_cancellation_pdf = temp / "cut_cancellation.pdf"
+        ct_cancellation_pdf = temp / "ct_cancellation.pdf"
+        shared_components_pdf = temp / "shared_components.pdf"
+        duplicated_singles_pdf = temp / "duplicated_singles.pdf"
+        duplicated_pairs_pdf = temp / "duplicated_pairs.pdf"
         write_sidecar(ir_safe, sidecar)
 
         run_plotter(
@@ -126,6 +126,8 @@ def main() -> None:
             r"^series:",
             "--output",
             str(kinematics_pdf),
+            "--component",
+            "abs",
             *common_log,
             "--y-label",
             "kinematic distance [GeV]",
@@ -144,7 +146,11 @@ def main() -> None:
             "legacy maximal subspaces",
             "--result-label",
             "IR-safe directives",
+            "--include-contribution",
+            r"^total_weight$",
             "--combine-plots",
+            "--component",
+            "abs",
             *common_log,
             "--title",
             "GL638: correlated soft + both-threshold cure",
@@ -152,54 +158,95 @@ def main() -> None:
         run_plotter(
             str(ir_safe),
             "--output",
-            str(summary_pdf),
-            "--threshold-report",
-            "--threshold-report-section",
-            "summary",
+            str(cut_cancellation_pdf),
             "--include-contribution",
-            variant_filter,
-            *common_view,
+            r"^total_weight$",
+            "--include-contribution",
+            r"^contribution:event_weight GL638 cut(?:0|1|3) ori0$",
+            "--component",
+            "imag",
+            *common_log,
+            "--y-label",
+            "|imaginary cut weight|",
             "--title",
-            "GL638 cut (2,4,12): correlated cure decomposition",
+            "GL638: leading LU cut cancellation",
         )
         run_plotter(
             str(ir_safe),
             "--output",
-            str(components_pdf),
+            str(ct_cancellation_pdf),
+            "--include-contribution",
+            r"^additional:threshold_counterterm_0$",
+            "--include-contribution",
+            r"^contribution:threshold_counterterm_0 GL638 cut(?:0|1|3) ori0$",
+            "--component",
+            "imag",
+            *common_log,
+            "--y-label",
+            "|imaginary threshold CT weight|",
+            "--title",
+            "GL638: cross-cut threshold-counterterm cancellation",
+        )
+        run_plotter(
+            str(ir_safe),
+            "--output",
+            str(shared_components_pdf),
             "--threshold-report",
             "--threshold-report-section",
             "singles",
-            "--threshold-report-section",
-            "pairs",
             "--threshold-quantity",
             "weighted",
-            "--threshold-quantity",
-            "bare",
             "--include-contribution",
-            variant_filter,
+            shared_ct_filter,
             "--facets-per-page",
-            "2",
+            "3",
+            "--component",
+            "abs",
             *common_log,
             "--title",
-            "GL638 cut (2,4,12): correlated cure decomposition",
+            "GL638: shared one-loop threshold CTs across cancelling cuts",
         )
         run_plotter(
             str(ir_safe),
             "--output",
-            str(multipliers_pdf),
+            str(duplicated_singles_pdf),
             "--threshold-report",
             "--threshold-report-section",
-            "multipliers",
+            "singles",
+            "--threshold-quantity",
+            "bare",
             "--include-contribution",
-            multiplier_filter,
-            "--x-log-scale",
-            "--branch-layout",
-            "split",
-            "--x-range",
-            "1e-6",
-            "1e-2",
+            duplicated_single_filter,
+            "--facets-per-page",
+            "2",
+            "--component",
+            "abs",
+            "--hide-info-box",
+            "--max-gap-warnings",
+            "1",
+            *common_log,
             "--title",
-            "GL638 cut (2,4,12): correlated multiplier contexts",
+            "GL638: duplicated η(7,8) variants before multiplier weighting",
+        )
+        run_plotter(
+            str(ir_safe),
+            "--output",
+            str(duplicated_pairs_pdf),
+            "--threshold-report",
+            "--threshold-report-section",
+            "pairs",
+            "--threshold-quantity",
+            "bare",
+            "--include-contribution",
+            duplicated_pair_filter,
+            "--component",
+            "abs",
+            "--hide-info-box",
+            "--max-gap-warnings",
+            "1",
+            *common_axis,
+            "--title",
+            "GL638: duplicated variants paired with η(5,10) before weighting",
         )
 
         output = HERE / "correlated_soft_threshold_cure.pdf"
@@ -208,9 +255,11 @@ def main() -> None:
             [
                 kinematics_pdf,
                 comparison_pdf,
-                summary_pdf,
-                components_pdf,
-                multipliers_pdf,
+                cut_cancellation_pdf,
+                ct_cancellation_pdf,
+                shared_components_pdf,
+                duplicated_singles_pdf,
+                duplicated_pairs_pdf,
             ],
         )
     print(f"created {output.relative_to(ROOT)}")
