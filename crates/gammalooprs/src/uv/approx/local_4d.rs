@@ -14,13 +14,16 @@ use idenso::{
     },
 };
 
-use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike};
+use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubGraphLike, SubSetLike};
 use spenso::shadowing::TensorCollectExt;
-use symbolica::{atom::AtomCore, prelude::*};
+use symbolica::{
+    atom::{AtomCore, AtomView},
+    prelude::*,
+};
 
 use crate::{
     debug_tags,
-    graph::{Graph, LMBext, LoopMomentumBasis},
+    graph::{FourDDenominator, Graph, LMBext, LoopMomentumBasis},
     numerator::aind::Aind,
     utils::{GS, W_},
     uv::{
@@ -33,6 +36,12 @@ use crate::{
 pub(crate) struct Local4dCts(Atom);
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Full4dCts(Atom);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct FourDTerm {
+    pub(crate) numerator: Atom,
+    pub(crate) denominators: Vec<FourDDenominator>,
+}
 
 impl Full4dCts {
     pub(crate) fn atom(&self) -> &Atom {
@@ -60,6 +69,30 @@ impl Full4dCts {
     pub(crate) fn from_factorized_local(local: &Local4dCts) -> Self {
         Self(local.0.clone())
     }
+
+    /// Complete one typed local term with the propagators outside its owning
+    /// spinney. Numerator factors outside the spinney are deliberately not
+    /// attached here; final assembly grows those under the selected exact
+    /// production energy map.
+    pub(crate) fn with_cograph<S: SubGraphLike>(
+        local: &Local4dCts,
+        graph: &Graph,
+        cograph: &S,
+    ) -> Self {
+        Self(&local.0 * graph.denominator(cograph, |_| -1))
+    }
+
+    pub(crate) fn from_coefficient<S: SubGraphLike>(
+        coefficient: &Atom,
+        graph: &Graph,
+        cograph: &S,
+    ) -> Self {
+        Self(coefficient * graph.denominator(cograph, |_| -1))
+    }
+
+    pub(crate) fn terms(&self) -> Result<Vec<FourDTerm>> {
+        FourDTerm::from_view(self.0.as_view())
+    }
 }
 
 impl Neg for Local4dCts {
@@ -80,6 +113,116 @@ impl Local4dCts {
                 .into_iter()
                 .fold(Atom::one(), |product, factor| product * factor.0),
         )
+    }
+
+    /// Enumerate only the additive terms needed by the 3D projection while
+    /// retaining every non-denominator factor as a Symbolica atom. In
+    /// particular, numerator products and powers are not materialized into a
+    /// parallel expression tree or expanded polynomial.
+    #[cfg(test)]
+    pub(crate) fn terms(&self) -> Result<Vec<FourDTerm>> {
+        FourDTerm::from_view(self.0.as_view())
+    }
+}
+
+impl FourDTerm {
+    fn numerator(numerator: Atom) -> Self {
+        Self {
+            numerator,
+            denominators: Vec::new(),
+        }
+    }
+
+    fn product(mut left: Self, right: Self) -> Self {
+        left.numerator *= right.numerator;
+        left.denominators.extend(right.denominators);
+        left
+    }
+
+    fn from_view(view: AtomView<'_>) -> Result<Vec<Self>> {
+        match view {
+            AtomView::Add(add) => {
+                let terms = add
+                    .iter()
+                    .map(Self::from_view)
+                    .collect::<Result<Vec<_>>>()
+                    .map(|terms| terms.into_iter().flatten().collect::<Vec<_>>())?;
+                if terms.iter().all(|term| term.denominators.is_empty()) {
+                    Ok(vec![Self::numerator(view.to_owned())])
+                } else {
+                    Ok(terms)
+                }
+            }
+            AtomView::Mul(mul) => {
+                let mut terms = vec![Self::numerator(Atom::one())];
+                for factor in mul.iter() {
+                    let factor_terms = Self::from_view(factor)?;
+                    terms = terms
+                        .into_iter()
+                        .flat_map(|left| {
+                            factor_terms
+                                .iter()
+                                .cloned()
+                                .map(move |right| Self::product(left.clone(), right))
+                        })
+                        .collect();
+                }
+                Ok(terms)
+            }
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                let Some(denominator) = FourDDenominator::from_view(base)? else {
+                    return Ok(vec![Self::numerator(view.to_owned())]);
+                };
+                let Ok(exponent) = i64::try_from(exponent) else {
+                    return Err(eyre!(
+                        "4D denominator has non-integer power `{}`",
+                        exponent.to_owned()
+                    ));
+                };
+                if exponent >= 0 {
+                    return Ok(vec![Self::numerator(view.to_owned())]);
+                }
+                let multiplicity = usize::try_from(exponent.unsigned_abs())
+                    .map_err(|_| eyre!("4D denominator multiplicity does not fit in memory"))?;
+                Ok(vec![Self {
+                    numerator: Atom::one(),
+                    denominators: std::iter::repeat_n(denominator, multiplicity).collect(),
+                }])
+            }
+            _ => Ok(vec![Self::numerator(view.to_owned())]),
+        }
+    }
+}
+
+impl FourDDenominator {
+    fn from_view(view: AtomView<'_>) -> Result<Option<Self>> {
+        let AtomView::Fun(function) = view else {
+            return Ok(None);
+        };
+        if function.get_symbol() != GS.den {
+            return Ok(None);
+        }
+        if function.get_nargs() != 4 {
+            return Err(eyre!(
+                "expected a 4D denominator wrapper with four arguments, found {}",
+                function.get_nargs()
+            ));
+        }
+        let source_edge = linnet::half_edge::involution::EdgeIndex(
+            usize::try_from(function.get(0)).map_err(|_| {
+                eyre!(
+                    "4D denominator wrapper has non-integer edge id `{}`",
+                    function.get(0).to_owned()
+                )
+            })?,
+        );
+        Ok(Some(Self {
+            source_edge,
+            momentum: function.get(1).to_owned(),
+            mass_squared: function.get(2).to_owned(),
+            full_expr: function.get(3).to_owned(),
+        }))
     }
 }
 
@@ -328,5 +471,69 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
             )))
         }
         atype => Err(eyre!("Not yet implemented {:?}", atype)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::initialisation::test_initialise;
+    use symbolica::{function, symbol};
+
+    #[test]
+    fn term_projection_keeps_factorized_numerator_atoms() -> Result<()> {
+        test_initialise()?;
+        let affine = symbol!("local_4d_test::Affine");
+        let k0 = symbol!("local_4d_test::K0");
+        let k1 = symbol!("local_4d_test::K1");
+        let sum = function!(affine, Atom::var(k0)) + function!(affine, Atom::var(k1));
+        let numerator = sum.pow(2) * (Atom::var(k0) + Atom::var(k1));
+
+        let terms = Local4dCts(numerator.clone()).terms()?;
+        assert_eq!(terms.len(), 1);
+        assert_eq!(terms[0].numerator, numerator);
+        assert!(terms[0].denominators.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn term_projection_preserves_dots_and_distinct_same_edge_expressions() -> Result<()> {
+        test_initialise()?;
+        let first_full = Atom::var(symbol!("local_4d_test::first_full"));
+        let second_full = Atom::var(symbol!("local_4d_test::second_full"));
+        let first = GS.den(
+            0,
+            FunctionBuilder::new(GS.emr_mom).add_arg(0).finish(),
+            0,
+            &first_full,
+        );
+        let second = GS.den(
+            0,
+            FunctionBuilder::new(GS.emr_mom).add_arg(0).finish(),
+            0,
+            &second_full,
+        );
+        let source = Full4dCts(first.pow(-2) * second.pow(-1));
+
+        let terms = source.terms()?;
+        assert_eq!(terms.len(), 1);
+        assert_eq!(terms[0].denominators.len(), 3);
+        assert_eq!(
+            terms[0]
+                .denominators
+                .iter()
+                .filter(|denominator| denominator.full_expr == first_full)
+                .count(),
+            2
+        );
+        assert_eq!(
+            terms[0]
+                .denominators
+                .iter()
+                .filter(|denominator| denominator.full_expr == second_full)
+                .count(),
+            1
+        );
+        Ok(())
     }
 }

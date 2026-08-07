@@ -374,7 +374,16 @@ impl Approximation {
         self.local = Some(Local4dCts::root());
         let integrated = IntegratedCts::root();
         if let FinalIntegrandDimension::ThreeD = settings.final_integrand {
-            let local_3d = Local3DCts::root(graph, localizer)?;
+            let local_3d = if settings.local_uv_cts_from_expanded_4d_integrands {
+                let cograph = graph
+                    .full_filter()
+                    .subtract(self.subgraph())
+                    .subtract(&graph.initial_state_cut);
+                let source = Full4dCts::with_cograph(self.local(graph)?, graph, &cograph);
+                localizer.project_4d(&source, graph, false)?
+            } else {
+                Local3DCts::root(graph, localizer)?
+            };
             self.final_integrand = Some(FinalIntegrandBuilder::new(localizer, settings).build_3d(
                 graph,
                 self,
@@ -448,16 +457,25 @@ impl Approximation {
         localizer: Localizer<'_>,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        let parent_local = dependent.local_3d(graph)?;
-        let parent_integrated = dependent.integrated(graph)?;
-        let local_3d = Local3DApproximation::new(localizer, graph, settings).run(
-            parent_local,
-            parent_integrated,
-            self,
-            dependent,
-            self,
-            dependent,
-        )?;
+        let local_3d = if settings.local_uv_cts_from_expanded_4d_integrands {
+            let cograph = graph
+                .full_filter()
+                .subtract(self.subgraph())
+                .subtract(&graph.initial_state_cut);
+            let source = Full4dCts::with_cograph(self.local(graph)?, graph, &cograph);
+            localizer.project_4d(&source, graph, true)?
+        } else {
+            let parent_local = dependent.local_3d(graph)?;
+            let parent_integrated = dependent.integrated(graph)?;
+            Local3DApproximation::new(localizer, graph, settings).run(
+                parent_local,
+                parent_integrated,
+                self,
+                dependent,
+                self,
+                dependent,
+            )?
+        };
 
         let integrated = self.integrated(graph)?;
 

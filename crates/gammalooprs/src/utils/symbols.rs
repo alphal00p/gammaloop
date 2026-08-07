@@ -1216,7 +1216,10 @@ impl GammaloopSymbols {
         )
     }
 
-    /// Add the sign by splitting Q(i,mu)-> Q3(i,mu)+OSE(i)*σ(i)*δ(cind(0),mu)
+    /// Split Q(i,mu) into its spatial part and the already-generated on-shell
+    /// energy, with the production sign attached to the time component. The
+    /// typed 4D CFF source owns mass-dependent on-shell reconstruction before
+    /// this late numerator/export boundary.
     pub fn split_mom_pattern_simple(&self, e: EdgeIndex) -> Replacement {
         let eidc = usize::from(e) as i64;
         let index = Minkowski {}.to_symbolic([W_.a__]);

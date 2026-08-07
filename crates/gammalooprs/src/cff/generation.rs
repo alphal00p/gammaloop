@@ -8,7 +8,7 @@ use crate::{
             HybridSurfaceID, LinearEnergyExpr, LinearSurface, LinearSurfaceID, LinearSurfaceKind,
         },
     },
-    graph::{Graph, GraphThreeDSource},
+    graph::{FeynmanGraph, Graph, GraphThreeDSource},
     settings::global::{GenerationSettings, UniformNumeratorSamplingScale},
 };
 use ahash::HashSet;
@@ -48,6 +48,34 @@ struct RemappedDenominatorTree {
 }
 
 impl Graph {
+    pub(crate) fn generate_3d_expression_for_4d_term(
+        &self,
+        source: &GraphThreeDSource<'_>,
+        options: &Generate3DExpressionOptions,
+        analysis_numerator: &Atom,
+    ) -> Result<three_dimensional_reps::ThreeDExpression<OrientationID>> {
+        let mut source_options = options.clone();
+        source_options.numerator_energy_support =
+            source.numerator_energy_power_support(analysis_numerator)?;
+        let parsed = source.to_three_d_parsed_graph()?;
+        let generate_confluent = three_dimensional_reps::repeated_groups(&parsed)
+            .into_iter()
+            .any(|group| group.edge_ids.len() > 1);
+        let generated = if generate_confluent {
+            three_dimensional_reps::generate_confluent_cff_expression(source, &source_options)
+        } else {
+            three_dimensional_reps::generate_3d_expression(source, &source_options)
+        };
+        generated.map_err(|error| {
+            eyre::eyre!(
+                "generalized CFF expression generation failed for exact 4D source in graph `{}` with numerator energy-power support {:?}: {error}\n{}",
+                self.name,
+                source_options.numerator_energy_support,
+                three_d_source_summary(&parsed),
+            )
+        })
+    }
+
     pub(crate) fn generate_3d_expression_for_integrand(
         &mut self,
         contract_edges: &[EdgeIndex],
@@ -249,21 +277,78 @@ impl Graph {
 
     pub(crate) fn convert_generated_expression_surfaces(
         &mut self,
-        mut expression: three_dimensional_reps::ThreeDExpression<OrientationID>,
+        expression: three_dimensional_reps::ThreeDExpression<OrientationID>,
         use_generated_cff_half_edges: bool,
         canonize_esurface: &Option<ShiftRewrite>,
         initial_state_cut_edges: &[EdgeIndex],
     ) -> Result<CFFExpression<OrientationID>> {
+        self.convert_generated_expression_surfaces_impl(
+            expression,
+            use_generated_cff_half_edges,
+            canonize_esurface,
+            initial_state_cut_edges,
+            None,
+        )
+    }
+
+    pub(crate) fn convert_4d_expression_surfaces(
+        &mut self,
+        expression: three_dimensional_reps::ThreeDExpression<OrientationID>,
+        use_generated_cff_half_edges: bool,
+        physical_surfaces: &[Option<LinearSurface>],
+    ) -> Result<CFFExpression<OrientationID>> {
+        let canonize_esurface = self.get_esurface_canonization(&self.loop_momentum_basis);
+        let initial_state_cut_edges = self
+            .iter_edges_of(&self.initial_state_cut)
+            .map(|(_, edge_id, _)| edge_id)
+            .collect_vec();
+        self.convert_generated_expression_surfaces_impl(
+            expression,
+            use_generated_cff_half_edges,
+            &canonize_esurface,
+            &initial_state_cut_edges,
+            Some(physical_surfaces),
+        )
+    }
+
+    fn convert_generated_expression_surfaces_impl(
+        &mut self,
+        mut expression: three_dimensional_reps::ThreeDExpression<OrientationID>,
+        use_generated_cff_half_edges: bool,
+        canonize_esurface: &Option<ShiftRewrite>,
+        initial_state_cut_edges: &[EdgeIndex],
+        physical_surfaces: Option<&[Option<LinearSurface>]>,
+    ) -> Result<CFFExpression<OrientationID>> {
         let mut linear_surface_map = BTreeMap::<LinearSurfaceID, SurfaceMapEntry>::new();
+        let mut retained_linear_surfaces = Vec::new();
         for (linear_surface_id, surface) in
             expression.surfaces.linear_surface_cache.iter_enumerated()
         {
-            let converted = self.intern_generated_linear_surface(
-                surface,
-                canonize_esurface,
-                initial_state_cut_edges,
-            )?;
-            linear_surface_map.insert(linear_surface_id, converted);
+            let physical = physical_surfaces
+                .and_then(|surfaces| surfaces.get(usize::from(linear_surface_id)))
+                .and_then(Option::as_ref);
+            if physical_surfaces.is_some() && physical.is_none() {
+                retained_linear_surfaces.push((linear_surface_id, surface.clone()));
+            } else {
+                let converted = self.intern_generated_linear_surface(
+                    physical.unwrap_or(surface),
+                    canonize_esurface,
+                    initial_state_cut_edges,
+                )?;
+                linear_surface_map.insert(linear_surface_id, converted);
+            }
+        }
+        let mut surface_cache = self.surface_cache.clone();
+        for (source_id, surface) in retained_linear_surfaces {
+            let target_id = LinearSurfaceID(surface_cache.linear_surface_cache.len());
+            surface_cache.linear_surface_cache.push(surface);
+            linear_surface_map.insert(
+                source_id,
+                SurfaceMapEntry {
+                    surface_id: HybridSurfaceID::Linear(target_id),
+                    sign: 1,
+                },
+            );
         }
 
         for orientation in expression.orientations.iter_mut() {
@@ -302,7 +387,7 @@ impl Graph {
 
         Ok(CFFExpression {
             orientations: expression.orientations,
-            surfaces: self.surface_cache.clone(),
+            surfaces: surface_cache,
         })
     }
 

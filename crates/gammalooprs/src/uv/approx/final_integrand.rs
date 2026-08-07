@@ -9,6 +9,7 @@ use crate::{
             ForestNodeLike,
             integrated::IntegratedCts,
             local_3d::{Local3DCts, Localizer},
+            local_4d::Full4dCts,
         },
         marker::UvMarker,
     },
@@ -36,6 +37,7 @@ impl FinalIntegrands {
 pub(crate) struct FinalIntegrandBuilder<'a> {
     localizer: Localizer<'a>,
     marker: UvMarker,
+    project_from_4d: bool,
 }
 
 pub(crate) struct LocalizedIntegratedCt {
@@ -56,6 +58,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
         Self {
             localizer,
             marker: UvMarker::new(settings),
+            project_from_4d: settings.local_uv_cts_from_expanded_4d_integrands,
         }
     }
 
@@ -76,19 +79,35 @@ impl<'a> FinalIntegrandBuilder<'a> {
             "Computed global numerator"
         );
 
-        let localized_integrated = self
-            .localizer
-            .localize(
-                &integrated.physical_finite_counterterm_atom(),
-                graph,
-                current,
-            )?
-            .combine()?;
-
         let reduced = graph
             .full_filter()
             .subtract(current.subgraph())
             .subtract(&graph.initial_state_cut);
+        let localized_integrated = if self.project_from_4d {
+            // Keep finite addbacks for nested multi-loop entries. Integrated
+            // coefficients carry their forest-composition signs; projecting the
+            // complete typed coefficient preserves the Tint(T(...)) terms. The
+            // normalized spatial factor restores the integrated loop variables
+            // without sending it through numerator energy-map substitution.
+            let integrated_source = Full4dCts::from_coefficient(
+                &integrated.physical_finite_counterterm_atom(),
+                graph,
+                &reduced,
+            );
+            let localizing_integrand = GS.localizing_integrand(current.lmb());
+            self.localizer
+                .project_4d(&integrated_source, graph, true)?
+                .integrands()
+                .map(|atom| atom * &localizing_integrand)
+        } else {
+            self.localizer
+                .localize(
+                    &integrated.physical_finite_counterterm_atom(),
+                    graph,
+                    current,
+                )?
+                .combine()?
+        };
 
         let full_graph = graph.full_filter();
         let localized_integrated = localized_integrated

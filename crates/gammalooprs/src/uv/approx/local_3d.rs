@@ -25,7 +25,10 @@ use crate::{
     utils::{GS, W_},
     uv::{
         ApproximationType, Integrands, UVgenerationSettings, UltravioletGraph,
-        approx::{ForestNodeLike, OrientationProjection, UVCtx, integrated::IntegratedCts},
+        approx::{
+            ForestNodeLike, OrientationProjection, UVCtx, integrated::IntegratedCts,
+            local_4d::Full4dCts,
+        },
         marker::{UvMarker, UvOperation},
         uv_graph::UVE,
     },
@@ -216,6 +219,17 @@ impl<'a> Localizer<'a> {
             .exact_orientations()
             .expect("exact representatives are only requested for an exact projector");
         let contracted_edges = graph.paired_edges(contract_subgraph);
+        // A UV source's contracted-edge orientations resolve its internal
+        // energy residues; they are not outer production-map directions.
+        let mut explicit_reduced_orientation = reduced.data.orientation.clone();
+        for edge in &contracted_edges {
+            if explicit_reduced_orientation
+                .iter()
+                .any(|(explicit_edge, _)| explicit_edge == *edge)
+            {
+                explicit_reduced_orientation[*edge] = Orientation::Undirected;
+            }
+        }
         let surviving_edges = graph
             .as_ref()
             .iter_edges()
@@ -230,7 +244,7 @@ impl<'a> Localizer<'a> {
             .filter(|(_, full)| {
                 full.data
                     .orientation
-                    .is_compatible_with(&reduced.data.orientation)
+                    .is_compatible_with(&explicit_reduced_orientation)
                     && surviving_edges.iter().all(|edge_id| {
                         let edge = usize::from(*edge_id);
                         full.edge_energy_map
@@ -255,7 +269,7 @@ impl<'a> Localizer<'a> {
                 .filter(|(_, full)| {
                     full.data
                         .orientation
-                        .is_compatible_with(&reduced.data.orientation)
+                        .is_compatible_with(&explicit_reduced_orientation)
                 })
                 .collect::<Vec<_>>();
             let first_mismatch = compatible.first().map(|(id, full)| {
@@ -280,7 +294,7 @@ impl<'a> Localizer<'a> {
                         })
                         .collect::<Vec<_>>();
                     (
-                        id,
+                        *id,
                         full.data.label.as_deref(),
                         full.data.numerator_map_index,
                         full.variants
@@ -291,8 +305,8 @@ impl<'a> Localizer<'a> {
                     )
                 });
             Err(eyre!(
-                "no production energy map exactly extends reduced map {} after contracting edges {:?}; reduced provenance (label, numerator map, origins): ({:?}, {:?}, {:?}); {} production orientations are direction-compatible; first mismatch (orientation, label, numerator map, origins, edge/production/reduced): {first_mismatch:#?}",
-                GS.orientation_delta(&reduced.data.orientation),
+                "no production energy map exactly extends normalized reduced map {} after contracting edges {:?}; reduced provenance (label, numerator map, origins): ({:?}, {:?}, {:?}); {} production orientations match the surviving directions; first mismatch (orientation, label, numerator map, origins, edge/production/reduced): {first_mismatch:#?}",
+                GS.orientation_delta(&explicit_reduced_orientation),
                 contracted_edges,
                 reduced.data.label,
                 reduced.data.numerator_map_index,
@@ -381,15 +395,24 @@ impl<'a> Localizer<'a> {
         if representatives.is_empty() {
             return Ok(Vec::new());
         }
-        // Integrated localization splits a reduced term evenly among its full
-        // extensions. Root CFF selectors already partition unity and retain
-        // every full extension without this normalization.
+        // Collapsed local or integrated 4D sources split a reduced residue
+        // evenly among its full extensions. Root CFF already has distinct
+        // production residues and retains them without this normalization.
         let normalization = if average {
             Atom::num(representatives.len() as i64)
         } else {
             Atom::one()
         };
-        let reduced_selector = reduced.data.orientation.orientation_thetas();
+        let mut explicit_orientation = reduced.data.orientation.clone();
+        for edge in internal_edges {
+            if explicit_orientation
+                .iter()
+                .any(|(explicit_edge, _)| explicit_edge == *edge)
+            {
+                explicit_orientation[*edge] = Orientation::Undirected;
+            }
+        }
+        let reduced_selector = explicit_orientation.orientation_thetas();
 
         Ok(representatives
             .into_iter()
@@ -504,6 +527,116 @@ impl<'a> Localizer<'a> {
                 })
                 .collect(),
         ))
+    }
+
+    pub(crate) fn project_4d(
+        self,
+        source: &Full4dCts,
+        graph: &mut Graph,
+        average_extensions: bool,
+    ) -> Result<Local3DCts> {
+        let indices = self.cutset.residue_selector.generate_allowed_keys();
+        let mut projected = OrientationIntegrands::from_ids_and_indices(
+            self.orientation.orientation_ids(),
+            &indices,
+        );
+        let analysis_numerator = graph.production_numerator_atom_for_full_3d_expression();
+
+        for term in source.terms()? {
+            let mut active_denominators = Vec::new();
+            let mut residual_factor = Atom::one();
+            for denominator in term.denominators {
+                if denominator.depends_on_loop(graph)? {
+                    active_denominators.push(denominator);
+                } else {
+                    // Keep each exact occurrence. This deliberately does not
+                    // group by source edge: equal edge IDs can carry distinct
+                    // full expressions after a 4D Taylor expansion.
+                    residual_factor /= denominator.full_expr;
+                }
+            }
+
+            if active_denominators.is_empty() {
+                if !indices.contains(&CutCFFIndex::new_all_none()) {
+                    continue;
+                }
+                let contracted =
+                    graph.paired_edges(&graph.full_filter().subtract(&graph.initial_state_cut));
+                let orientation_ids = self.orientation.orientation_ids();
+                let normalization = if average_extensions {
+                    Atom::num(orientation_ids.len() as i64)
+                } else {
+                    Atom::one()
+                };
+                for orientation_id in orientation_ids {
+                    let selector = self
+                        .orientation
+                        .orientation(orientation_id)
+                        .map(|orientation| orientation.internal_orientation_selector(&contracted))
+                        .unwrap_or_else(Atom::one);
+                    let mapped_numerator =
+                        self.map_numerator(graph, orientation_id, &term.numerator)?;
+                    *projected
+                        .0
+                        .get_mut(&orientation_id)
+                        .unwrap()
+                        .0
+                        .get_mut(&CutCFFIndex::new_all_none())
+                        .unwrap() +=
+                        &selector * &mapped_numerator * &residual_factor / &normalization;
+                }
+                continue;
+            }
+
+            let options = self.orientation.cff_options(graph);
+            // The exact source CFF resolves contracted directions internally.
+            // Apply the user pattern only after those reduced maps are matched
+            // to complete production maps below.
+            let (cff, contract_subgraph) = graph.cff_from_4d_denominators(
+                &active_denominators,
+                self.cutset,
+                &options,
+                &analysis_numerator,
+            )?;
+            let contracted_edges = graph.paired_edges(&contract_subgraph);
+
+            for (index, cff_term) in cff.terms {
+                for orientation in cff_term.orientations {
+                    let localized_terms = self
+                        .localized_orientation_terms(
+                            graph,
+                            &orientation.orientation,
+                            &orientation.expression,
+                            &contract_subgraph,
+                            &contracted_edges,
+                            average_extensions,
+                        )
+                        .map_err(|error| {
+                            eyre!(
+                                "{error}; exact 4D term active denominators are {:?}",
+                                active_denominators
+                            )
+                        })?;
+                    for (orientation_id, localized) in localized_terms {
+                        let mapped_numerator =
+                            self.map_numerator(graph, orientation_id, &term.numerator)?;
+                        *projected
+                            .0
+                            .get_mut(&orientation_id)
+                            .expect("projected orientation belongs to the production map set")
+                            .0
+                            .get_mut(&index)
+                            .expect("4D CFF residue belongs to the selected cut shape") +=
+                            localized * &mapped_numerator * &residual_factor;
+                    }
+                }
+            }
+        }
+
+        Ok(Local3DCts {
+            integrands: projected,
+            active_sectors: None,
+        })
     }
 
     pub(crate) fn localize<S: ForestNodeLike>(
@@ -1369,7 +1502,11 @@ mod tests {
         utils::GS,
         uv::{
             Spinney,
-            approx::{OrientationProjection, local_3d::Localizer},
+            approx::{
+                OrientationProjection, Rooted,
+                local_3d::Localizer,
+                local_4d::{Full4dCts, Local4dCts},
+            },
             hedge_poset::OwnedForestNode,
         },
     };
@@ -1800,6 +1937,263 @@ mod tests {
         assert_eq!(root[1].1, expected_reversed);
         assert_eq!(localized[0].1, root[0].1.clone() / 2);
         assert_eq!(localized[1].1, root[1].1.clone() / 2);
+        Ok(())
+    }
+
+    #[test]
+    fn exact_typed_4d_projection_defers_contracted_edge_patterns_to_full_projection() -> Result<()>
+    {
+        let mut graph = two_edge_graph()?;
+        let production = vec![
+            energy_map(
+                edgevec([1, -1]),
+                vec![
+                    LinearEnergyExpr::ose(EdgeIndex(0), 1),
+                    LinearEnergyExpr::ose(EdgeIndex(1), -1),
+                ],
+            ),
+            energy_map(
+                edgevec([-1, 1]),
+                vec![
+                    LinearEnergyExpr::ose(EdgeIndex(0), -1),
+                    LinearEnergyExpr::ose(EdgeIndex(1), 1),
+                ],
+            ),
+        ]
+        .into_iter()
+        .collect::<TiVec<OrientationID, _>>();
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let pattern = OrientationPattern::from_user_pattern("(1,-1)")?;
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern),
+        );
+        let cograph = graph.full_filter();
+        let source = Full4dCts::from_coefficient(&Atom::one(), &graph, &cograph);
+        let projected = localizer.project_4d(&source, &mut graph, true)?;
+
+        assert_eq!(
+            projected
+                .integrands()
+                .iter_orientations()
+                .map(|(id, _)| id)
+                .collect::<Vec<_>>(),
+            vec![OrientationID(0)]
+        );
+        assert!(
+            projected
+                .integrands()
+                .iter()
+                .any(|(_, atom)| !atom.is_zero())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn typed_4d_projection_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<()> {
+        // Share model initialization with the other graph-backed tests in this module.
+        let _ = two_edge_graph()?;
+        let mut graph: Graph = dot!(
+            digraph finite_ct_map {
+                edge [particle="scalar_1"];
+                node [num=1];
+                external [style=invis];
+                external -> A:0 [id=3];
+                C:1 -> external [id=4];
+                A -> B [id=0];
+                A -> B [id=1];
+                B -> C [id=2];
+            },
+            "scalars"
+        )?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let contracted = graph.tree_edges.subtract(&graph.initial_state_cut);
+        let contract_edges = graph.paired_edges(&contracted);
+        assert!(contract_edges.contains(&EdgeIndex(2)));
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph
+            .generate_3d_expression_for_integrand(
+                &contract_edges,
+                &canonization,
+                &options,
+                None,
+                false,
+            )?
+            .orientations;
+        let (orientation_id, finite_ct, mapped_finite_ct) = production
+            .iter_enumerated()
+            .flat_map(|(orientation_id, orientation)| {
+                orientation
+                    .edge_energy_map
+                    .iter()
+                    .enumerate()
+                    .filter(|(edge, energy)| {
+                        contract_edges.contains(&EdgeIndex(*edge))
+                            && !energy.external_terms.is_empty()
+                    })
+                    .map(move |(edge, _)| (orientation_id, orientation, EdgeIndex(edge)))
+            })
+            .find_map(|(orientation_id, orientation, edge)| {
+                let finite_ct = GS.emr_mom(edge, GS.cind(0));
+                let replacements = orientation.energy_replacements_gs(&graph);
+                let mapped_finite_ct = finite_ct.replace_multiple(&replacements);
+                (mapped_finite_ct != finite_ct).then_some((
+                    orientation_id,
+                    finite_ct,
+                    mapped_finite_ct,
+                ))
+            })
+            .ok_or_else(|| {
+                eyre!(
+                    "the finite-CT fixture must contain a contracted affine map that changes an edge energy"
+                )
+            })?;
+        let pattern =
+            OrientationPattern::from_orientation(&production[orientation_id].data.orientation);
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern),
+        );
+        let cograph = graph.full_filter().subtract(&graph.initial_state_cut);
+        let baseline_source = Full4dCts::from_coefficient(&Atom::one(), &graph, &cograph);
+        let localized_source = Full4dCts::from_coefficient(&finite_ct, &graph, &cograph);
+        let baseline = localizer.project_4d(&baseline_source, &mut graph, true)?;
+        let localized = localizer.project_4d(&localized_source, &mut graph, true)?;
+        let baseline = baseline
+            .integrands()
+            .iter_orientations()
+            .find_map(|(id, integrands)| (id == orientation_id).then_some(integrands))
+            .expect("the selected production map has a baseline branch");
+        let localized = localized
+            .integrands()
+            .iter_orientations()
+            .find_map(|(id, integrands)| (id == orientation_id).then_some(integrands))
+            .expect("the selected production map has a finite-CT branch");
+
+        assert_eq!(localized, &baseline.map(|atom| atom * &mapped_finite_ct));
+        assert_ne!(localized, &baseline.map(|atom| atom * &finite_ct));
+        Ok(())
+    }
+
+    #[test]
+    fn contracted_uv_source_directions_use_production_selectors() -> Result<()> {
+        let graph = two_edge_graph()?;
+        let production = vec![
+            energy_map(
+                edgevec([1, 1]),
+                vec![
+                    LinearEnergyExpr::ose(EdgeIndex(0), 1),
+                    LinearEnergyExpr::ose(EdgeIndex(1), 1),
+                ],
+            ),
+            energy_map(
+                edgevec([-1, -1]),
+                vec![
+                    LinearEnergyExpr::ose(EdgeIndex(0), -1),
+                    LinearEnergyExpr::ose(EdgeIndex(1), -1),
+                ],
+            ),
+        ]
+        .into_iter()
+        .collect::<TiVec<OrientationID, _>>();
+        let reduced = energy_map(
+            edgevec([-1, 1]),
+            vec![
+                LinearEnergyExpr::ose(EdgeIndex(0), -1),
+                LinearEnergyExpr::ose(EdgeIndex(1), 1),
+            ],
+        );
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern),
+        );
+        let contract = graph.full_filter();
+        let localized = localizer.localized_orientation_terms(
+            &graph,
+            &reduced,
+            &Atom::one(),
+            &contract,
+            &[EdgeIndex(0), EdgeIndex(1)],
+            false,
+        )?;
+
+        assert_eq!(localized.len(), 2);
+        assert_eq!(
+            localized[0].1,
+            GS.sign_theta(GS.sign(EdgeIndex(0))) * GS.sign_theta(GS.sign(EdgeIndex(1)))
+        );
+        assert_eq!(
+            localized[1].1,
+            GS.sign_theta(-GS.sign(EdgeIndex(0))) * GS.sign_theta(-GS.sign(EdgeIndex(1)))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn typed_4d_projection_retains_external_tree_denominators() -> Result<()> {
+        let _ = two_edge_graph()?;
+        let mut graph: Graph = dot!(digraph external_tree {
+            edge [particle="scalar_1"]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> a [id=4]
+            a -> b [id=0 lmb_id=0]
+            b -> c [id=1]
+            c -> a [id=2]
+            c -> d [id=3]
+            d -> outgoing [id=5]
+        }, "scalars")?;
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
+        let cograph = graph.full_filter().subtract(&graph.initial_state_cut);
+        let source = Full4dCts::with_cograph(&Local4dCts::root(), &graph, &cograph);
+
+        let projected = localizer.project_4d(&source, &mut graph, false)?;
+        assert!(
+            projected
+                .integrands()
+                .iter()
+                .any(|(_, atom)| !atom.is_zero())
+        );
+        assert!(
+            projected
+                .integrands()
+                .iter()
+                .all(|(_, atom)| !atom.contains_symbol(GS.den)),
+            "tree propagators must remain exact scalar factors, not 4D wrapper atoms"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn typed_4d_projection_supports_pure_trees() -> Result<()> {
+        let _ = two_edge_graph()?;
+        let mut graph: Graph = dot!(digraph pure_tree {
+            edge [particle="scalar_1"]
+            node [num=1]
+
+            a -> b [id=0]
+            b -> c [id=1]
+        }, "scalars")?;
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
+        let cograph = graph.full_filter();
+        let source = Full4dCts::with_cograph(&Local4dCts::root(), &graph, &cograph);
+
+        let projected = localizer.project_4d(&source, &mut graph, false)?;
+        let terms = projected.integrands().iter().collect::<Vec<_>>();
+        assert_eq!(terms.len(), 1);
+        assert!(!terms[0].1.is_zero());
+        assert!(!terms[0].1.contains_symbol(GS.den));
         Ok(())
     }
 }

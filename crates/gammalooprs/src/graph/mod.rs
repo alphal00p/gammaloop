@@ -647,7 +647,7 @@ pub use edge::Edge;
 pub mod hedge_data;
 pub use hedge_data::HedgeData;
 pub(crate) mod three_d_source;
-pub(crate) use three_d_source::GraphThreeDSource;
+pub(crate) use three_d_source::{FourDDenominator, GraphThreeDSource};
 pub mod vertex;
 pub use vertex::Vertex;
 

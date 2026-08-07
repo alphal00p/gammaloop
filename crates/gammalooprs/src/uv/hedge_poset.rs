@@ -597,7 +597,7 @@ impl OperationNode {
 
     // Four-dimensional and per-cut local terms are composed by `Forests` from typed
     // dependency-frontier values. Empty frontiers start from the typed roots, and
-    // `Local3DApproximation::run` applies the local subtraction signs directly.
+    // `Local3DApproximation::run` applies the direct-3D subtraction signs.
 }
 
 #[derive(Default)]
@@ -1147,6 +1147,51 @@ impl Forests {
         })
     }
 
+    fn local_3d_from_4d_for_node(
+        &self,
+        node: NodeIndex,
+        graph: &mut Graph,
+        localizer: Localizer<'_>,
+        settings: &UVgenerationSettings,
+    ) -> Result<CutComputation> {
+        let operation = &self.graph[node];
+        // The typed 4D value is now the sequential accumulator. It already encodes that an
+        // empty dependency frontier starts at the typed root, that other prefixes enter through
+        // their reduced branch, and that both local subtraction signs are applied without a raw
+        // Foata-level product. Disconnected values likewise retain their factorized local and
+        // integrated-prefix cross terms, so no separate active/frozen root-path replay is needed.
+        let cograph = graph
+            .full_filter()
+            .subtract(self.source_spinney(node).filter())
+            .subtract(&graph.initial_state_cut);
+        let source = Full4dCts::with_cograph(
+            self.compute_store.require(operation)?.local_4d(operation)?,
+            graph,
+            &cograph,
+        );
+        let local_3d = localizer.project_4d(&source, graph, true)?;
+
+        let integrated = self
+            .compute_store
+            .require(operation)?
+            .integrated(operation)?;
+        let forest_node = ForestNode {
+            spinney: self.source_spinney(node),
+            topo_order: operation.key.op_count(),
+        };
+        let final_integrands = FinalIntegrandBuilder::new(localizer, settings).build_3d(
+            graph,
+            &forest_node,
+            &local_3d,
+            integrated,
+        )?;
+
+        Ok(CutComputation {
+            local_3d,
+            final_integrands,
+        })
+    }
+
     pub fn integrate(
         &mut self,
         graph: &Graph,
@@ -1201,8 +1246,11 @@ impl Forests {
             {
                 debug!(order, nidx=%nidx, key=%self.graph[nidx], "Computing hedge-poset per-cut term");
                 let operation = self.graph[nidx].clone();
-                let cut_computation =
-                    self.local_3d_for_node(nidx, graph, &cutset, localizer, settings)?;
+                let cut_computation = if settings.local_uv_cts_from_expanded_4d_integrands {
+                    self.local_3d_from_4d_for_node(nidx, graph, localizer, settings)?
+                } else {
+                    self.local_3d_for_node(nidx, graph, &cutset, localizer, settings)?
+                };
                 self.compute_store
                     .entry(operation)
                     .or_default()
@@ -1596,6 +1644,80 @@ mod tests {
     }
 
     #[test]
+    fn union_terms_project_factorized_typed_4d_values() -> Result<()> {
+        test_initialise().unwrap();
+        let mut graph: Graph = dot!(
+            digraph G{
+                edge [particle="scalar_1"];
+                v1 -> v2;
+                v2 -> v2;
+                v1 -> v1;v1 -> v1;
+            },"scalars"
+        )?;
+        // Disable integrated terms so each union equality isolates factorized
+        // local 4D composition.
+        let settings = UVgenerationSettings {
+            generate_integrated: false,
+            local_uv_cts_from_expanded_4d_integrands: true,
+            ..Default::default()
+        };
+        let cut_structure = CutStructure::empty(&graph);
+        let cutset = cut_structure
+            .cuts
+            .first()
+            .expect("empty cut structure has one cut")
+            .clone();
+        let mut forests = Wood::new(cut_structure, &graph, &settings).unfold();
+        forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
+
+        let unions = forests
+            .graph
+            .iter_nodes()
+            .filter_map(|(node, _, operation)| {
+                (forests.graph.is_disjoint_union(node) && !operation.key.is_empty()).then_some(node)
+            })
+            .collect::<Vec<_>>();
+        assert!(!unions.is_empty());
+
+        let orientation_pattern = crate::settings::global::OrientationPattern::default();
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::new(&[], &orientation_pattern),
+        );
+        for union in unions {
+            let components = forests.disconnected_component_nodes(union)?;
+            let expected = Local4dCts::from_full_product(
+                components
+                    .into_iter()
+                    .map(|component| forests.recursion_input_4d(component))
+                    .collect::<Result<Vec<_>>>()?,
+            );
+            let operation = &forests.graph[union];
+            let local = forests
+                .compute_store
+                .require(operation)?
+                .local_4d(operation)?;
+
+            // Compare the stored union directly, then project that typed value;
+            // no per-cut parent cache or component-path replay participates.
+            assert_eq!(local, &expected);
+            let cograph = graph
+                .full_filter()
+                .subtract(forests.source_spinney(union).filter())
+                .subtract(&graph.initial_state_cut);
+            let source = Full4dCts::with_cograph(local, &graph, &cograph);
+            let projected = localizer.project_4d(&source, &mut graph, false)?;
+            assert!(
+                projected
+                    .integrands()
+                    .iter()
+                    .any(|(_, integrand)| !integrand.is_zero())
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn union_terms_replay_component_paths_from_typed_roots() -> Result<()> {
         test_initialise().unwrap();
         let mut graph: Graph = dot!(
@@ -1933,6 +2055,10 @@ mod tests {
                 .then_some(node)
             })
             .expect("triple tadpole should contain a three-component union");
+        assert_eq!(
+            f.disconnected_component_nodes(three_component_union)?.len(),
+            3
+        );
         let replay_states = f.union_replay_states(three_component_union)?;
         assert_eq!(replay_states.len(), 8);
         assert_eq!(
@@ -2362,6 +2488,95 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(child_active.len(), 4);
         assert_eq!(child_active, expected_active);
+
+        Ok(())
+    }
+
+    #[test]
+    fn spectacles_typed_4d_projects_after_local_construction() -> Result<()> {
+        test_initialise().unwrap();
+
+        let mut spectacles: Graph = dot!(
+            digraph G{
+                edge [particle="scalar_1"];
+                v1 -> v2;
+                v1 -> v2;
+
+                v3 -> v4;
+                v3 -> v4;
+
+                v2 -> v3;
+                v1 -> v4;
+            },"scalars"
+        )?;
+
+        // let spinneys = spectacles.spinneys(&spectacles.full_filter());
+        let settings = UVgenerationSettings {
+            generate_integrated: false,
+            local_uv_cts_from_expanded_4d_integrands: true,
+            ..Default::default()
+        };
+        let cut_structure = CutStructure::empty(&spectacles);
+        let cutset = cut_structure
+            .cuts
+            .first()
+            .expect("empty cut structure has one cut")
+            .clone();
+        let f = Wood::new(cut_structure, &spectacles, &settings);
+        println!("{}", f);
+        insta::assert_snapshot!(
+        f.graph.n_nodes(),
+        @"5",
+        );
+        let mut f = f.unfold();
+        println!("{}", f);
+        insta::assert_snapshot!(
+        f.graph.n_nodes(),
+        @"8",
+         );
+
+        let (union, child, edge) = f
+            .graph
+            .iter_nodes()
+            .find_map(|(child, _, _)| {
+                let (parent, edge) = f.graph.unique_parent(child)?;
+                (!f.graph.is_disjoint_union(child) && f.graph.is_disjoint_union(parent))
+                    .then_some((parent, child, edge))
+            })
+            .expect("spectacles has a connected child above its disconnected union");
+        f.integrate(&spectacles, crate::utils::vakint()?, &settings)?;
+
+        let step_order = f.graph[union].key.op_count();
+        let (current, given) = f.wood.current_given_pair(edge, step_order);
+        let expected = local_4d::uv_limit(
+            &f.recursion_input_4d(union)?,
+            &UVCtx::new(&spectacles, &settings),
+            &current,
+            &given,
+            &current,
+            &given,
+        )?;
+        let operation = &f.graph[child];
+        let local = f.compute_store.require(operation)?.local_4d(operation)?;
+        assert_eq!(local, &expected);
+
+        let orientation_pattern = crate::settings::global::OrientationPattern::default();
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::new(&[], &orientation_pattern),
+        );
+        let cograph = spectacles
+            .full_filter()
+            .subtract(f.source_spinney(child).filter())
+            .subtract(&spectacles.initial_state_cut);
+        let source = Full4dCts::with_cograph(local, &spectacles, &cograph);
+        let projected = localizer.project_4d(&source, &mut spectacles, false)?;
+        assert!(
+            projected
+                .integrands()
+                .iter()
+                .any(|(_, integrand)| !integrand.is_zero())
+        );
 
         Ok(())
     }
