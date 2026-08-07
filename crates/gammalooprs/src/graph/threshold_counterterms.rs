@@ -405,7 +405,7 @@ edges = [4, 2]
     subspace = [7]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "eta(effective, 7, 8)"
+      expression = "eta(effective, eset(7, 8))"
       symmetrize = true
 "#,
         )

@@ -129,6 +129,22 @@ fn contribution_lmb_sample_ids(point: &JsonValue) -> std::collections::BTreeSet<
 }
 
 fn plot_fixture(process: &str, kind: &str, scale: f64) -> JsonValue {
+    let cut_group_id = (kind != "amplitude").then_some(0usize);
+    let cut_edges = if kind == "amplitude" {
+        Vec::new()
+    } else {
+        vec![1usize, 2]
+    };
+    let left_side = if kind == "amplitude" {
+        "amplitude"
+    } else {
+        "left"
+    };
+    let right_side = if kind == "amplitude" {
+        "amplitude"
+    } else {
+        "right"
+    };
     let mut points = Vec::new();
     let mut index = 0usize;
     for axis_index in 0..2 {
@@ -147,7 +163,7 @@ fn plot_fixture(process: &str, kind: &str, scale: f64) -> JsonValue {
                     "parameterization_jacobian": 2.0,
                     "integrator_weight": 1.0,
                     "total_weight": {"re": 2.0 * value, "im": 0.2 * value},
-                    "event_weight_sum": {"re": sign * value, "im": 0.0},
+                    "event_weight_sum": {"re": sign * value, "im": 0.2 * sign * value},
                     "additional_weight_sums": {
                         "original": {"re": value, "im": 0.0},
                         "full_multiplicative_factor": {"re": 1.0, "im": 0.0},
@@ -168,12 +184,18 @@ fn plot_fixture(process: &str, kind: &str, scale: f64) -> JsonValue {
                     "events": [{
                         "graph_id": axis_index,
                         "threshold_counterterms": {
-                            "original": {"re": 1.2 * value, "im": 0.0},
-                            "components": [{
-                                "component_id": 0,
-                                "weighted": {"re": -0.2 * value, "im": 0.0},
-                                "evaluation_skipped": false
-                            }]
+                            "original": {"re": 1.2 * sign * value, "im": 0.3 * sign * value},
+                            "components": (0..14).map(|component_id| {
+                                let coefficient = if component_id < 6 { -0.01 } else { -0.0175 };
+                                json!({
+                                    "component_id": component_id,
+                                    "weighted": {
+                                        "re": coefficient * sign * value,
+                                        "im": 0.5 * coefficient * sign * value
+                                    },
+                                    "evaluation_skipped": false
+                                })
+                            }).collect::<Vec<_>>()
                         }
                     }],
                     "metadata": {
@@ -210,12 +232,65 @@ fn plot_fixture(process: &str, kind: &str, scale: f64) -> JsonValue {
                 "graph_id": 0,
                 "registry": {
                     "graph_name": "GL0",
-                    "variants": [{"variant_id": 0, "name": "forced"}],
+                    "variants": [{
+                        "variant_id": 0,
+                        "name": "forced_1l",
+                        "cut_group_id": cut_group_id,
+                        "associations": [{
+                            "cut_edges": cut_edges,
+                            "threshold_edges": [3, 4]
+                        }],
+                        "side": left_side,
+                        "resolved_subspace": [3]
+                    }, {
+                        "variant_id": 1,
+                        "name": "default",
+                        "cut_group_id": cut_group_id,
+                        "associations": [{
+                            "cut_edges": cut_edges,
+                            "threshold_edges": [5, 6]
+                        }],
+                        "side": right_side,
+                        "resolved_subspace": [5]
+                    }, {
+                        "variant_id": 2,
+                        "name": "alternate",
+                        "cut_group_id": cut_group_id,
+                        "associations": [{
+                            "cut_edges": cut_edges,
+                            "threshold_edges": [7, 8]
+                        }],
+                        "side": right_side,
+                        "resolved_subspace": [7]
+                    }],
                     "components": [{
-                        "component_id": 0,
-                        "cut_group_id": 0,
-                        "kind": "local",
-                        "variant_ids": [0]
+                        "component_id": 0, "cut_group_id": cut_group_id, "kind": "local", "variant_ids": [0]
+                    }, {
+                        "component_id": 1, "cut_group_id": cut_group_id, "kind": "integrated", "variant_ids": [0]
+                    }, {
+                        "component_id": 2, "cut_group_id": cut_group_id, "kind": "local", "variant_ids": [1]
+                    }, {
+                        "component_id": 3, "cut_group_id": cut_group_id, "kind": "integrated", "variant_ids": [1]
+                    }, {
+                        "component_id": 4, "cut_group_id": cut_group_id, "kind": "local", "variant_ids": [2]
+                    }, {
+                        "component_id": 5, "cut_group_id": cut_group_id, "kind": "integrated", "variant_ids": [2]
+                    }, {
+                        "component_id": 6, "cut_group_id": cut_group_id, "kind": "local_local", "variant_ids": [0, 1]
+                    }, {
+                        "component_id": 7, "cut_group_id": cut_group_id, "kind": "local_integrated", "variant_ids": [0, 1]
+                    }, {
+                        "component_id": 8, "cut_group_id": cut_group_id, "kind": "integrated_local", "variant_ids": [0, 1]
+                    }, {
+                        "component_id": 9, "cut_group_id": cut_group_id, "kind": "integrated_integrated", "variant_ids": [0, 1]
+                    }, {
+                        "component_id": 10, "cut_group_id": cut_group_id, "kind": "local_local", "variant_ids": [0, 2]
+                    }, {
+                        "component_id": 11, "cut_group_id": cut_group_id, "kind": "local_integrated", "variant_ids": [0, 2]
+                    }, {
+                        "component_id": 12, "cut_group_id": cut_group_id, "kind": "integrated_local", "variant_ids": [0, 2]
+                    }, {
+                        "component_id": 13, "cut_group_id": cut_group_id, "kind": "integrated_integrated", "variant_ids": [0, 2]
                     }]
                 }
             }]
@@ -558,7 +633,10 @@ fn plot_approach_result_script_smoke() -> Result<()> {
         eprintln!("skipping plot smoke test because python3/matplotlib is unavailable");
         return Ok(());
     }
-    if !command_succeeds("pdfinfo", &["-v"]) || !command_succeeds("pdftoppm", &["-v"]) {
+    if !command_succeeds("pdfinfo", &["-v"])
+        || !command_succeeds("pdftoppm", &["-v"])
+        || !command_succeeds("pdftotext", &["-v"])
+    {
         eprintln!("skipping plot smoke test because Poppler tools are unavailable");
         return Ok(());
     }
@@ -570,11 +648,14 @@ fn plot_approach_result_script_smoke() -> Result<()> {
 
     let xs_path = output_dir.join("approach_xs.json");
     let amp_path = output_dir.join("approach_amp.json");
+    let amp_threshold_path = output_dir.join("approach_amp_threshold.json");
     std::fs::write(
         &xs_path,
         serde_json::to_vec_pretty(&plot_fixture("smoke_xs", "cross_section", 1.0))?,
     )?;
-    let mut legacy_amplitude = plot_fixture("smoke_amp", "amplitude", 0.7);
+    let amplitude = plot_fixture("smoke_amp", "amplitude", 0.7);
+    std::fs::write(&amp_threshold_path, serde_json::to_vec_pretty(&amplitude)?)?;
+    let mut legacy_amplitude = amplitude;
     legacy_amplitude["schema_version"] = json!(1);
     legacy_amplitude["command"]
         .as_object_mut()
@@ -584,6 +665,14 @@ fn plot_approach_result_script_smoke() -> Result<()> {
         .as_object_mut()
         .unwrap()
         .remove("threshold_counterterms");
+    for point in legacy_amplitude["points"].as_array_mut().unwrap() {
+        for event in point["evaluation"]["events"].as_array_mut().unwrap() {
+            event
+                .as_object_mut()
+                .unwrap()
+                .remove("threshold_counterterms");
+        }
+    }
     std::fs::write(&amp_path, serde_json::to_vec_pretty(&legacy_amplitude)?)?;
 
     let workspace_root = gammaloop_integration_tests::workspace_root();
@@ -629,6 +718,15 @@ fn plot_approach_result_script_smoke() -> Result<()> {
         .arg("--y-log-scale")
         .arg("--component")
         .arg("real")
+        .arg("--t-branch")
+        .arg("both")
+        .arg("--x-log-scale")
+        .arg("--branch-layout")
+        .arg("split")
+        .arg("--result-label")
+        .arg("threshold CT on")
+        .arg("--result-label")
+        .arg("threshold CT off")
         .arg("--include-contribution")
         .arg("event_weight|total_weight|ct_8_3")
         .arg("--exclude-contribution")
@@ -661,6 +759,103 @@ fn plot_approach_result_script_smoke() -> Result<()> {
         "threshold decomposition plot should succeed"
     );
     assert!(threshold_pdf_path.metadata()?.len() > 0);
+
+    let threshold_report_path = output_dir.join("approach_threshold_report.pdf");
+    let threshold_report_status = std::process::Command::new("python3")
+        .arg(&script)
+        .arg(&xs_path)
+        .arg("--output")
+        .arg(&threshold_report_path)
+        .arg("--threshold-report")
+        .arg("--axis-id")
+        .arg("1")
+        .arg("--t-branch")
+        .arg("both")
+        .arg("--x-log-scale")
+        .arg("--branch-layout")
+        .arg("split")
+        .arg("--result-label")
+        .arg("synthetic threshold report")
+        .arg("--hide-info-box")
+        .status()?;
+    assert!(
+        threshold_report_status.success(),
+        "threshold report plot should succeed"
+    );
+    let threshold_report_pdfinfo = std::process::Command::new("pdfinfo")
+        .arg(&threshold_report_path)
+        .output()?;
+    assert!(threshold_report_pdfinfo.status.success());
+    let threshold_report_pdfinfo = String::from_utf8_lossy(&threshold_report_pdfinfo.stdout);
+    let threshold_report_page_count = threshold_report_pdfinfo
+        .lines()
+        .find_map(|line| line.strip_prefix("Pages:"))
+        .and_then(|value| value.trim().parse::<usize>().ok());
+    assert_eq!(
+        threshold_report_page_count,
+        Some(3),
+        "threshold report should contain closure, single-variant, and pair pages: {threshold_report_pdfinfo}",
+    );
+
+    let amplitude_threshold_report_path = output_dir.join("approach_amp_threshold_report.pdf");
+    let amplitude_threshold_report_status = std::process::Command::new("python3")
+        .arg(&script)
+        .arg(&amp_threshold_path)
+        .arg("--output")
+        .arg(&amplitude_threshold_report_path)
+        .arg("--threshold-report")
+        .arg("--component")
+        .arg("imag")
+        .arg("--axis-id")
+        .arg("1")
+        .status()?;
+    assert!(
+        amplitude_threshold_report_status.success(),
+        "threshold reports should accept amplitude registries with null cut-group IDs",
+    );
+    let amplitude_threshold_report_text = std::process::Command::new("pdftotext")
+        .arg(&amplitude_threshold_report_path)
+        .arg("-")
+        .output()?;
+    assert!(amplitude_threshold_report_text.status.success());
+    let amplitude_threshold_report_text =
+        String::from_utf8_lossy(&amplitude_threshold_report_text.stdout);
+    assert!(
+        amplitude_threshold_report_text.contains("imag weight"),
+        "--component imag should apply to every threshold-report section: {amplitude_threshold_report_text}",
+    );
+
+    let amplitude_threshold_decomposition_path =
+        output_dir.join("approach_amp_threshold_decomposition.pdf");
+    let amplitude_threshold_decomposition_status = std::process::Command::new("python3")
+        .arg(&script)
+        .arg(&amp_threshold_path)
+        .arg("--output")
+        .arg(&amplitude_threshold_decomposition_path)
+        .arg("--threshold-decomposition")
+        .arg("all")
+        .arg("--include-contribution")
+        .arg("^threshold:")
+        .status()?;
+    assert!(
+        amplitude_threshold_decomposition_status.success(),
+        "threshold decompositions should accept amplitude registries with null cut-group IDs",
+    );
+
+    let empty_threshold_report_path = output_dir.join("approach_empty_threshold_report.pdf");
+    let empty_threshold_report_output = std::process::Command::new("python3")
+        .arg(&script)
+        .arg(&amp_path)
+        .arg("--output")
+        .arg(&empty_threshold_report_path)
+        .arg("--threshold-report")
+        .output()?;
+    assert!(!empty_threshold_report_output.status.success());
+    assert!(
+        String::from_utf8_lossy(&empty_threshold_report_output.stderr)
+            .contains("No observed threshold-counterterm report sections were found."),
+        "threshold reports without decomposition data should fail clearly",
+    );
 
     let pdfinfo_output = std::process::Command::new("pdfinfo")
         .arg(&pdf_path)

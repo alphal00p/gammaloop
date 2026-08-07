@@ -2089,7 +2089,7 @@ mod test {
                 resolved_parent_lmb: vec![3],
                 subspace_loop_count: 1,
                 multiplier: Some(ThresholdCountertermMultiplierMetadata {
-                    expression: "eta(effective, 3, 4)^2".to_string(),
+                    expression: "eta(effective, eset(3, 4))^2".to_string(),
                     symmetrize: false,
                     opaque_derivatives: true,
                 }),
@@ -2144,7 +2144,7 @@ mod test {
                             requested_parent_lmb: None,
                             disabled: false,
                             multiplier: Some(ThresholdCountertermMultiplierMetadata {
-                                expression: "eta(effective, 3, 4)^2".to_string(),
+                                expression: "eta(effective, eset(3, 4))^2".to_string(),
                                 symmetrize: false,
                                 opaque_derivatives: true,
                             }),
@@ -2203,7 +2203,7 @@ mod test {
         );
 
         let expanded = render_threshold_counterterm_directives(&[&group], true).unwrap();
-        assert!(expanded.contains("eta(effective, 3, 4)^2 [s=0,o=1]"));
+        assert!(expanded.contains("eta(effective, eset(3, 4))^2 [s=0,o=1]"));
     }
 
     #[test]

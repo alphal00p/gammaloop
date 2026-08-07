@@ -178,7 +178,7 @@ edges = [2, 4, 12]
     subspace = [7]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "1 / (1 + (eta(effective, 7, 8) / UFO::MT)^2)"
+      expression = "eta(effective, eset(7, 8))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
 
     [[cuts.thresholds.counterterms]]
     name = "embedded_2l"
@@ -187,7 +187,7 @@ edges = [2, 4, 12]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "(eta(effective, 7, 8) / UFO::MT)^2 / (1 + (eta(effective, 7, 8) / UFO::MT)^2)"
+      expression = "eta(effective, eset(8, 12, 14))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
 "#;
 
 const GL638_FULL_DIRECTIVES: &str = r#"
@@ -205,7 +205,7 @@ edges = [2, 6, 12, 13]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "1 / (1 + (eta(effective, 7, 8) / UFO::MT)^2)"
+      expression = "eta(effective, eset(7, 8))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
 
     [[cuts.thresholds.counterterms]]
     name = "embedded_2l"
@@ -213,10 +213,18 @@ edges = [2, 6, 12, 13]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "(eta(effective, 7, 8) / UFO::MT)^2 / (1 + (eta(effective, 7, 8) / UFO::MT)^2)"
+      expression = "eta(effective, eset(8, 12, 14))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
 
 [[cuts]]
 edges = [2, 6, 10]
+
+  [[cuts.thresholds]]
+  edges = [8, 12, 14]
+
+    [[cuts.thresholds.counterterms]]
+    name = "shared_1l"
+    subspace = [7]
+    parent_lmb = [3, 4, 7, 10]
 
   [[cuts.thresholds]]
   edges = [7, 8]
@@ -227,7 +235,7 @@ edges = [2, 6, 10]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "1 / (1 + (eta(effective, 7, 8) / UFO::MT)^2)"
+      expression = "eta(effective, eset(7, 8))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
 
     [[cuts.thresholds.counterterms]]
     name = "embedded_2l"
@@ -235,7 +243,7 @@ edges = [2, 6, 10]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "(eta(effective, 7, 8) / UFO::MT)^2 / (1 + (eta(effective, 7, 8) / UFO::MT)^2)"
+      expression = "eta(effective, eset(8, 12, 14))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
 
 [[cuts]]
 edges = [2, 4, 12]
@@ -249,7 +257,7 @@ edges = [2, 4, 12]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "1 / (1 + (eta(effective, 7, 8) / UFO::MT)^2)"
+      expression = "eta(effective, eset(7, 8))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
 
     [[cuts.thresholds.counterterms]]
     name = "embedded_2l"
@@ -257,7 +265,7 @@ edges = [2, 4, 12]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "(eta(effective, 7, 8) / UFO::MT)^2 / (1 + (eta(effective, 7, 8) / UFO::MT)^2)"
+      expression = "eta(effective, eset(8, 12, 14))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(8, 12, 14))^2)"
 
 [[cuts]]
 edges = [2, 4, 10, 13]
@@ -271,7 +279,7 @@ edges = [2, 4, 10, 13]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "1 / (1 + (eta(effective, 7, 8) / UFO::MT)^2)"
+      expression = "eta(effective, eset(7, 8))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(2, 4, 10, 13))^2)"
 
     [[cuts.thresholds.counterterms]]
     name = "embedded_2l"
@@ -279,7 +287,7 @@ edges = [2, 4, 10, 13]
     parent_lmb = [3, 4, 7, 10]
 
       [cuts.thresholds.counterterms.multiplier]
-      expression = "(eta(effective, 7, 8) / UFO::MT)^2 / (1 + (eta(effective, 7, 8) / UFO::MT)^2)"
+      expression = "eta(effective, eset(2, 4, 10, 13))^2 / (eta(effective, eset(7, 8))^2 + eta(effective, eset(2, 4, 10, 13))^2)"
 "#;
 
 fn runtime_settings() -> RuntimeSettings {
@@ -584,6 +592,159 @@ fn gl297_correlated_approach_fits(top_mass: f64) -> Gl297ApproachFits {
                 (fit.slope.0, fit.r_squared.0)
             });
             (direction, fits)
+        })
+        .collect()
+}
+
+fn gl638_correlated_soft_threshold_loop_momenta(
+    lambda: f64,
+    top_mass: f64,
+) -> Vec<ThreeMomentum<F<f64>>> {
+    let momentum = |px, py, pz| ThreeMomentum::new(F(px), F(py), F(pz));
+    let threshold_magnitude = ((500.0_f64).powi(2) - top_mass.powi(2)).sqrt();
+    let threshold_momentum = momentum(
+        threshold_magnitude * 3.0 / 13.0,
+        -threshold_magnitude * 4.0 / 13.0,
+        threshold_magnitude * 12.0 / 13.0,
+    );
+    let k0_displacement = momentum(47.0 * lambda, 29.0 * lambda, -31.0 * lambda);
+    let k3_displacement = momentum(258.0 * lambda, -128.0 * lambda, 162.0 * lambda);
+    vec![
+        threshold_momentum + k0_displacement,
+        momentum(-59.0, 101.0, -73.0),
+        momentum(127.0, 41.0, -109.0),
+        threshold_momentum + k3_displacement,
+    ]
+}
+
+type Gl638ApproachFits = BTreeMap<&'static str, BTreeMap<&'static str, (f64, f64)>>;
+
+fn gl638_correlated_approach_fits(
+    integrand: &mut CrossSectionIntegrand,
+    model: &Model,
+    top_mass: f64,
+) -> Gl638ApproachFits {
+    let lambdas = constant_dropped_fit_points(&F(1.0e-2), &F(1.0e-6), 7).unwrap();
+    let energy =
+        |momentum: &ThreeMomentum<F<f64>>| (momentum.norm_squared() + F(top_mass.powi(2))).sqrt();
+
+    [("negative", -1.0), ("positive", 1.0)]
+        .into_iter()
+        .map(|(branch, sign)| {
+            let mut magnitudes = [
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ];
+            for lambda in &lambdas {
+                let loop_momenta = gl638_correlated_soft_threshold_loop_momenta(
+                    sign * lambda.0,
+                    top_mass,
+                );
+                let q13 = loop_momenta[0] - loop_momenta[3];
+                magnitudes[0].push(q13.norm_squared().sqrt());
+                magnitudes[1]
+                    .push((F(2.0) * energy(&loop_momenta[3]) - F(1000.0)).abs());
+                magnitudes[2].push(
+                    (energy(&loop_momenta[0])
+                        + energy(&loop_momenta[3])
+                        + q13.norm_squared().sqrt()
+                        - F(1000.0))
+                    .abs(),
+                );
+
+                let result = evaluate_profile_momentum_point(
+                    integrand,
+                    model,
+                    0,
+                    Some(0),
+                    loop_momenta,
+                    true,
+                )
+                .unwrap();
+                assert!(
+                    !result.evaluation_metadata.is_nan
+                        && result.integrand_result.re.0.is_finite()
+                        && result.integrand_result.im.0.is_finite(),
+                    "GL638 {branch} branch at |lambda|={} produced a non-finite result",
+                    lambda.0,
+                );
+
+                let mut original = Complex::new(F(0.0), F(0.0));
+                let mut counterterms = Complex::new(F(0.0), F(0.0));
+                let mut event_sum = Complex::new(F(0.0), F(0.0));
+                let mut event_scale = 0.0_f64;
+                let mut event_count = 0;
+                for event_group in result.event_groups.iter() {
+                    for event in event_group.iter() {
+                        event_count += 1;
+                        let decomposition = event
+                            .additional_weights
+                            .threshold_counterterms
+                            .as_ref()
+                            .expect("the cured GL638 profile must record its CT decomposition");
+                        assert_eq!(event.weight, decomposition.total());
+                        original += &decomposition.original;
+                        event_sum += &event.weight;
+                        event_scale += event.weight.norm_squared().sqrt().0;
+                        for component in &decomposition.components {
+                            assert!(
+                                component
+                                    .multiplier_values
+                                    .iter()
+                                    .all(|value| value.0.is_finite())
+                                    && component.effective_multiplier.0.is_finite()
+                                    && component.weighted.re.0.is_finite()
+                                    && component.weighted.im.0.is_finite(),
+                                "GL638 {branch} branch at |lambda|={} recorded a non-finite component",
+                                lambda.0,
+                            );
+                            counterterms += &component.weighted;
+                        }
+                    }
+                }
+                assert!(event_count > 0, "the GL638 profile must generate events");
+                let closure = (event_sum - result.integrand_result)
+                    .norm_squared()
+                    .sqrt()
+                    .0;
+                let scale = event_scale.max(f64::MIN_POSITIVE);
+                assert!(
+                    closure / scale < 1.0e-12,
+                    "GL638 {branch} branch event sum does not close at |lambda|={}: relative residual {}",
+                    lambda.0,
+                    closure / scale,
+                );
+                magnitudes[3].push(original.norm_squared().sqrt());
+                magnitudes[4].push(counterterms.norm_squared().sqrt());
+                magnitudes[5].push(result.integrand_result.norm_squared().sqrt());
+            }
+
+            let fits = [
+                "q13",
+                "eta_5_10",
+                "eta_5_12_13",
+                "original",
+                "counterterms",
+                "total",
+            ]
+            .into_iter()
+            .zip(magnitudes)
+            .enumerate()
+            .map(|(quantity_index, (quantity, values))| {
+                let (fit_lambdas, fit_values) = if quantity_index < 3 {
+                    (&lambdas[..], &values[..])
+                } else {
+                    (&lambdas[3..], &values[3..])
+                };
+                let fit = log_log_slope_constant_dropped(fit_lambdas, fit_values).unwrap();
+                (quantity, (fit.slope.0, fit.r_squared.0))
+            })
+            .collect();
+            (branch, fits)
         })
         .collect()
 }
@@ -1289,6 +1450,32 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
                     expected_variant_cuts,
                 );
             }
+            let shared_variant = resolved
+                .variants
+                .iter()
+                .find(|variant| variant.name == "shared_1l")
+                .expect("the shared (8,12,14) surface must be forced into its one-loop subspace");
+            assert_eq!(shared_variant.subspace_loop_count, 1);
+            assert_eq!(
+                shared_variant
+                    .subspace
+                    .iter_basis_edges(graph.derived_data.lmbs.as_ref().unwrap())
+                    .map(usize::from)
+                    .collect::<Vec<_>>(),
+                vec![7],
+            );
+            assert!(shared_variant.associations.iter().any(|association| {
+                association
+                    .cut_edges
+                    .iter()
+                    .map(|edge| edge.0)
+                    .eq([2, 6, 10])
+                    && association
+                        .threshold_edges
+                        .iter()
+                        .map(|edge| edge.0)
+                        .eq([8, 12, 14])
+            }));
             let target_left_variant_ids = resolved
                 .variants
                 .iter_enumerated()
@@ -1438,6 +1625,32 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
                 ]),
             );
             integrand.warm_up(&model).unwrap();
+            let top_mass = model.get_parameter("MT").value.as_ref().unwrap().re.0;
+            let ProcessIntegrand::CrossSection(cross_section_integrand) = &mut *integrand else {
+                unreachable!("GL638 is a cross-section fixture")
+            };
+            let correlated_fits = gl638_correlated_approach_fits(
+                cross_section_integrand,
+                &model,
+                top_mass,
+            );
+            for branch in ["negative", "positive"] {
+                let fits = &correlated_fits[branch];
+                for quantity in ["q13", "eta_5_10", "eta_5_12_13"] {
+                    let (slope, r_squared) = fits[quantity];
+                    assert!(
+                        (slope - 1.0).abs() < 0.002 && r_squared > 0.9999,
+                        "GL638 {branch} {quantity} does not vanish linearly: {fits:?}",
+                    );
+                }
+                for quantity in ["original", "counterterms", "total"] {
+                    let (slope, r_squared) = fits[quantity];
+                    assert!(
+                        (slope + 1.0).abs() < 0.003 && r_squared > 0.99999,
+                        "GL638 {branch} cured {quantity} has the wrong correlated IR scaling: {fits:?}",
+                    );
+                }
+            }
             let before_save = integrand
                 .evaluate_samples_raw(
                     &model,

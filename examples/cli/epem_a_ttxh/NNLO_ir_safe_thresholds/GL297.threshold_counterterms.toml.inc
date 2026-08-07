@@ -1,6 +1,6 @@
-# Verified current GL297 cure document, matching the dressed graph attribute. Only the four
-# associations whose legacy CTs are genuinely two-loop are overridden; every other threshold
-# remains an implicit legacy/default association.
+# Verified current GL297 cure document, matching the dressed graph attribute. The forced one-loop
+# subspaces cure the selected-orientation correlated e12 and e13 soft/threshold limits. Only the
+# four genuinely two-loop legacy CTs are overridden; every other threshold remains implicit.
 schema_version = 1
 
 [[cuts]]
