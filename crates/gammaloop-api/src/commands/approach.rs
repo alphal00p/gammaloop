@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     env, fs,
     io::{self, IsTerminal},
     path::{Path, PathBuf},
@@ -34,7 +34,22 @@ use crate::{
     CLISettings,
 };
 
-#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
+const DEFAULT_MIN_ABS_T: f64 = 1.0e-6;
+const DEFAULT_MAX_ABS_T: f64 = 1.0;
+
+fn default_min_abs_t() -> f64 {
+    DEFAULT_MIN_ABS_T
+}
+
+fn default_max_abs_t() -> f64 {
+    DEFAULT_MAX_ABS_T
+}
+
+fn default_parameter_name() -> String {
+    "t".to_string()
+}
+
+#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Approach {
     /// Process reference: #<id>, name:<name>, or <id>/<name>
     #[arg(
@@ -74,6 +89,11 @@ pub struct Approach {
     )]
     pub approach_axes: Vec<String>,
 
+    /// Human-readable label for each approach axis, in axis order
+    #[arg(long = "axis-label", value_name = "LABEL")]
+    #[serde(default)]
+    pub axis_labels: Vec<String>,
+
     /// Number of points on each side of the midpoint
     #[arg(long = "n-points", value_name = "N")]
     pub n_points: usize,
@@ -94,10 +114,25 @@ pub struct Approach {
     /// Smallest non-zero |t| for logarithmic spacing
     #[arg(
         long = "min-abs-t",
-        default_value_t = 1.0e-6,
+        default_value_t = DEFAULT_MIN_ABS_T,
         allow_negative_numbers = true
     )]
+    #[serde(default = "default_min_abs_t")]
     pub min_abs_t: f64,
+
+    /// Largest |t| evaluated on either side of the midpoint
+    #[arg(
+        long = "max-abs-t",
+        default_value_t = DEFAULT_MAX_ABS_T,
+        allow_negative_numbers = true
+    )]
+    #[serde(default = "default_max_abs_t")]
+    pub max_abs_t: f64,
+
+    /// Name of the physical parameter t in point(t) = midpoint + t * axis
+    #[arg(long = "parameter-name", default_value = "t", value_name = "NAME")]
+    #[serde(default = "default_parameter_name")]
+    pub parameter_name: String,
 
     /// Number of worker threads for approach evaluations
     #[arg(long = "n-cores", value_name = "N")]
@@ -140,6 +175,32 @@ pub struct Approach {
     pub output_results: Option<PathBuf>,
 }
 
+impl Default for Approach {
+    fn default() -> Self {
+        Self {
+            process: None,
+            integrand_name: None,
+            point: Vec::new(),
+            approach_axes: Vec::new(),
+            axis_labels: Vec::new(),
+            n_points: 0,
+            skip_midpoint: false,
+            linear: false,
+            logarithmic: false,
+            min_abs_t: DEFAULT_MIN_ABS_T,
+            max_abs_t: DEFAULT_MAX_ABS_T,
+            parameter_name: default_parameter_name(),
+            n_cores: None,
+            use_arb_prec: false,
+            momentum_space: false,
+            discrete_dim: Vec::new(),
+            graph_id: None,
+            orientation_id: None,
+            output_results: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum ApproachSpacing {
@@ -165,7 +226,8 @@ struct ApproachOutput {
     integrand: ApproachIntegrandJson,
     space: String,
     base_point: Vec<f64>,
-    axes: Vec<Vec<f64>>,
+    parameter_name: String,
+    axes: Vec<ApproachAxisJson>,
     spacing: ApproachSpacingJson,
     n_cores: usize,
     points_per_axis: usize,
@@ -180,6 +242,7 @@ struct ApproachCommandJson {
     use_arb_prec: bool,
     skip_midpoint: bool,
     graph_id: Option<usize>,
+    graph_name: Option<String>,
     orientation_id: Option<usize>,
     discrete_dim: Vec<usize>,
 }
@@ -209,7 +272,14 @@ struct ApproachSpacingJson {
     kind: ApproachSpacing,
     n_points: usize,
     min_abs_t: Option<f64>,
+    max_abs_t: f64,
     t_values: Vec<f64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ApproachAxisJson {
+    label: String,
+    vector: Vec<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -233,7 +303,9 @@ struct ApproachEvaluationRecord {
     integrator_weight: f64,
     total_weight: ComplexJson,
     event_weight_sum: ComplexJson,
-    additional_weight_sums: BTreeMap<String, ComplexJson>,
+    additional_contribution_sums: BTreeMap<String, ComplexJson>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    threshold_counterterm_summary: Option<ApproachThresholdCountertermSummaryJson>,
     contributions: Vec<ContributionRecord>,
     events: Vec<EventRecord>,
     metadata: EvaluationMetadataJson,
@@ -264,9 +336,116 @@ struct EventRecord {
     lmb_channel_id: Option<usize>,
     lmb_sample_id: Option<usize>,
     weight: ComplexJson,
-    additional_weights: BTreeMap<String, ComplexJson>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    full_multiplicative_factor: Option<ComplexJson>,
+    display_only_weights: BTreeMap<String, ComplexJson>,
     #[serde(skip_serializing_if = "Option::is_none")]
     threshold_counterterms: Option<GenericThresholdCountertermEventInfo<f64>>,
+}
+
+#[derive(Debug, Serialize)]
+struct ApproachThresholdCountertermSummaryJson {
+    original: ComplexJson,
+    counterterm_sum: ComplexJson,
+    reconstructed_total: ComplexJson,
+    decomposed_event_sum: ComplexJson,
+    closure: ComplexJson,
+    components: Vec<ApproachThresholdCountertermComponentSumJson>,
+}
+
+#[derive(Debug, Serialize)]
+struct ApproachThresholdCountertermComponentSumJson {
+    graph_id: usize,
+    component_id: usize,
+    weighted: ComplexJson,
+    occurrence_count: usize,
+    skipped_count: usize,
+}
+
+#[derive(Debug)]
+struct ThresholdCountertermComponentAccumulator {
+    weighted: Complex<F<f64>>,
+    occurrence_count: usize,
+    skipped_count: usize,
+}
+
+#[derive(Debug)]
+struct ThresholdCountertermSummaryAccumulator {
+    decomposed_event_count: usize,
+    original: Complex<F<f64>>,
+    decomposed_event_sum: Complex<F<f64>>,
+    components: BTreeMap<(usize, usize), ThresholdCountertermComponentAccumulator>,
+}
+
+impl Default for ThresholdCountertermSummaryAccumulator {
+    fn default() -> Self {
+        Self {
+            decomposed_event_count: 0,
+            original: zero_complex(),
+            decomposed_event_sum: zero_complex(),
+            components: BTreeMap::new(),
+        }
+    }
+}
+
+impl ThresholdCountertermSummaryAccumulator {
+    fn add(
+        &mut self,
+        graph_id: usize,
+        event_weight: &Complex<F<f64>>,
+        decomposition: &GenericThresholdCountertermEventInfo<f64>,
+    ) {
+        self.decomposed_event_count += 1;
+        self.decomposed_event_sum += *event_weight;
+        self.original += decomposition.original;
+        for component in &decomposition.components {
+            let accumulator = self
+                .components
+                .entry((graph_id, component.component_id))
+                .or_insert_with(|| ThresholdCountertermComponentAccumulator {
+                    weighted: zero_complex(),
+                    occurrence_count: 0,
+                    skipped_count: 0,
+                });
+            accumulator.weighted += component.weighted;
+            accumulator.occurrence_count += 1;
+            accumulator.skipped_count += usize::from(component.evaluation_skipped);
+        }
+    }
+
+    fn into_json(self) -> Option<ApproachThresholdCountertermSummaryJson> {
+        if self.decomposed_event_count == 0 {
+            return None;
+        }
+        let counterterm_sum = self
+            .components
+            .values()
+            .fold(zero_complex(), |total, component| {
+                total + component.weighted
+            });
+        let reconstructed_total = self.original + counterterm_sum;
+        let closure = self.decomposed_event_sum - reconstructed_total;
+        Some(ApproachThresholdCountertermSummaryJson {
+            original: complex_json(self.original),
+            counterterm_sum: complex_json(counterterm_sum),
+            reconstructed_total: complex_json(reconstructed_total),
+            decomposed_event_sum: complex_json(self.decomposed_event_sum),
+            closure: complex_json(closure),
+            components: self
+                .components
+                .into_iter()
+                .map(|((graph_id, component_id), component)| {
+                    ApproachThresholdCountertermComponentSumJson {
+                        graph_id,
+                        component_id,
+                        weighted: complex_json(component.weighted),
+                        occurrence_count: component.occurrence_count,
+                        skipped_count: component.skipped_count,
+                    }
+                })
+                .collect(),
+        })
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -446,12 +625,13 @@ impl Approach {
             .count();
         let skipped_points = point_records.len() - evaluated_points;
         let output = ApproachOutput {
-            schema_version: 2,
+            schema_version: 3,
             command: ApproachCommandJson {
                 name: "approach",
                 use_arb_prec: self.use_arb_prec,
                 skip_midpoint: self.skip_midpoint,
                 graph_id: self.graph_id,
+                graph_name: graph_name.clone(),
                 orientation_id: self.orientation_id,
                 discrete_dim: self.discrete_dim.clone(),
             },
@@ -462,7 +642,10 @@ impl Approach {
             integrand: ApproachIntegrandJson {
                 name: integrand_name,
                 kind: base_integrand.kind_name().to_string(),
-                threshold_counterterms: threshold_counterterm_registries(&base_integrand),
+                threshold_counterterms: threshold_counterterm_registries(
+                    &base_integrand,
+                    self.graph_id,
+                ),
             },
             space: if self.momentum_space {
                 "momentum".to_string()
@@ -470,12 +653,14 @@ impl Approach {
                 "coordinate".to_string()
             },
             base_point: self.point.clone(),
+            parameter_name: self.parameter_name.trim().to_string(),
             axes,
             spacing: ApproachSpacingJson {
                 kind: spacing,
                 n_points: self.n_points,
                 min_abs_t: matches!(spacing, ApproachSpacing::Logarithmic)
                     .then_some(self.min_abs_t),
+                max_abs_t: self.max_abs_t,
                 t_values,
             },
             n_cores,
@@ -543,17 +728,53 @@ impl Approach {
         if self.point.is_empty() {
             return Err(eyre!("approach requires a midpoint supplied with --point."));
         }
+        if let Some((index, value)) = self
+            .point
+            .iter()
+            .enumerate()
+            .find(|(_, value)| !value.is_finite())
+        {
+            return Err(eyre!(
+                "Approach midpoint component {index} must be finite, got {value}."
+            ));
+        }
         if self.approach_axes.is_empty() {
             return Err(eyre!(
                 "approach requires at least one --approach-axis value."
             ));
         }
+        if !self.axis_labels.is_empty() && self.axis_labels.len() != self.approach_axes.len() {
+            return Err(eyre!(
+                "Expected either no --axis-label values or one per approach axis ({}), got {}.",
+                self.approach_axes.len(),
+                self.axis_labels.len(),
+            ));
+        }
+        let mut labels = BTreeSet::new();
+        for label in &self.axis_labels {
+            let label = label.trim();
+            if label.is_empty() {
+                return Err(eyre!("Approach axis labels must not be blank."));
+            }
+            if !labels.insert(label) {
+                return Err(eyre!("Approach axis label '{label}' is duplicated."));
+            }
+        }
+        if self.parameter_name.trim().is_empty() {
+            return Err(eyre!("--parameter-name must not be blank."));
+        }
         if self.n_points == 0 {
             return Err(eyre!("--n-points must be at least 1."));
         }
-        if self.logarithmic && !(self.min_abs_t > 0.0 && self.min_abs_t <= 1.0) {
+        if !self.max_abs_t.is_finite() || self.max_abs_t <= 0.0 {
+            return Err(eyre!("--max-abs-t must be finite and greater than 0."));
+        }
+        if !self.min_abs_t.is_finite() || self.min_abs_t <= 0.0 {
+            return Err(eyre!("--min-abs-t must be finite and greater than 0."));
+        }
+        if self.logarithmic && self.min_abs_t > self.max_abs_t {
             return Err(eyre!(
-                "--min-abs-t must be greater than 0 and at most 1 for logarithmic spacing."
+                "--min-abs-t must be at most --max-abs-t for logarithmic spacing."
             ));
         }
         if self.n_cores == Some(0) {
@@ -573,10 +794,20 @@ impl Approach {
         })
     }
 
-    fn parse_axes(&self) -> Result<Vec<Vec<f64>>> {
+    fn parse_axes(&self) -> Result<Vec<ApproachAxisJson>> {
         self.approach_axes
             .iter()
-            .map(|raw_axis| parse_axis(raw_axis, self.point.len()))
+            .enumerate()
+            .map(|(axis_index, raw_axis)| {
+                Ok(ApproachAxisJson {
+                    label: self
+                        .axis_labels
+                        .get(axis_index)
+                        .map(|label| label.trim().to_string())
+                        .unwrap_or_else(|| format!("axis {}", axis_index + 1)),
+                    vector: parse_axis(raw_axis, self.point.len())?,
+                })
+            })
             .collect()
     }
 
@@ -602,16 +833,17 @@ impl Approach {
     fn t_values(&self, spacing: ApproachSpacing) -> Result<Vec<f64>> {
         let magnitudes = match spacing {
             ApproachSpacing::Linear => (1..=self.n_points)
-                .map(|index| index as f64 / self.n_points as f64)
+                .map(|index| self.max_abs_t * index as f64 / self.n_points as f64)
                 .collect::<Vec<_>>(),
             ApproachSpacing::Logarithmic => {
                 if self.n_points == 1 {
-                    vec![1.0]
+                    vec![self.max_abs_t]
                 } else {
                     let log_min = self.min_abs_t.ln();
+                    let log_max = self.max_abs_t.ln();
                     let denom = (self.n_points - 1) as f64;
                     (0..self.n_points)
-                        .map(|index| (log_min * (1.0 - index as f64 / denom)).exp())
+                        .map(|index| (log_min + (log_max - log_min) * index as f64 / denom).exp())
                         .collect()
                 }
             }
@@ -628,14 +860,14 @@ impl Approach {
         Ok(t_values)
     }
 
-    fn build_jobs(&self, axes: &[Vec<f64>], t_values: &[f64]) -> Vec<ApproachJob> {
+    fn build_jobs(&self, axes: &[ApproachAxisJson], t_values: &[f64]) -> Vec<ApproachJob> {
         let mut jobs = Vec::with_capacity(axes.len() * t_values.len());
         for (axis_index, axis) in axes.iter().enumerate() {
             for (axis_point_index, t) in t_values.iter().copied().enumerate() {
                 let point = self
                     .point
                     .iter()
-                    .zip(axis)
+                    .zip(&axis.vector)
                     .map(|(center, direction)| center + t * direction)
                     .collect::<Vec<_>>();
                 let skip_reason = (!self.momentum_space)
@@ -743,6 +975,15 @@ fn parse_axis(raw_axis: &str, expected_dimension: usize) -> Result<Vec<f64>> {
             expected_dimension
         ));
     }
+    if let Some((index, value)) = axis
+        .iter()
+        .enumerate()
+        .find(|(_, value)| !value.is_finite())
+    {
+        return Err(eyre!(
+            "Approach axis component {index} must be finite, got {value}."
+        ));
+    }
     if axis.iter().all(|component| *component == 0.0) {
         return Err(eyre!("Approach axis must not be the zero vector."));
     }
@@ -772,11 +1013,13 @@ fn force_event_output(integrand: &mut ProcessIntegrand) {
 
 fn threshold_counterterm_registries(
     integrand: &ProcessIntegrand,
+    selected_graph_id: Option<usize>,
 ) -> Vec<ApproachThresholdCountertermRegistryJson> {
     let collect = |registries: Vec<Option<&ThresholdCountertermMetadataRegistry>>| {
         registries
             .into_iter()
             .enumerate()
+            .filter(|(graph_id, _)| selected_graph_id.is_none_or(|selected| selected == *graph_id))
             .filter_map(|(graph_id, registry)| {
                 registry
                     .cloned()
@@ -816,9 +1059,10 @@ fn approach_evaluation_record(
         F(evaluation.integrand_result.im.0 * total_scale),
     );
 
-    let mut event_weight_sum = Complex::new(F(0.0), F(0.0));
-    let mut additional_weight_sums = BTreeMap::<String, Complex<F<f64>>>::new();
+    let mut event_weight_sum = zero_complex();
+    let mut additional_contribution_sums = BTreeMap::<String, Complex<F<f64>>>::new();
     let mut contribution_sums = BTreeMap::<ContributionKey, Complex<F<f64>>>::new();
+    let mut threshold_counterterm_summary = ThresholdCountertermSummaryAccumulator::default();
     let mut events = Vec::new();
     let parameterization_settings = integrand
         .get_settings()
@@ -860,13 +1104,37 @@ fn approach_evaluation_record(
             };
             add_contribution(&mut contribution_sums, event_key, event.weight);
 
-            let mut additional_weights = BTreeMap::new();
+            let full_multiplicative_factor = event
+                .additional_weights
+                .weights
+                .get(&AdditionalWeightKey::FullMultiplicativeFactor)
+                .cloned();
+            let has_display_only_weights = event
+                .additional_weights
+                .weights
+                .keys()
+                .any(|key| *key != AdditionalWeightKey::FullMultiplicativeFactor);
+            if has_display_only_weights && full_multiplicative_factor.is_none() {
+                return Err(eyre!(
+                    "Approach event for graph {} cut {} has display-only weights but no full multiplicative factor.",
+                    graph_id,
+                    cut_id,
+                ));
+            }
+
+            let mut display_only_weights = BTreeMap::new();
             for (key, value) in &event.additional_weights.weights {
-                let label = additional_weight_key_label(*key);
-                *additional_weight_sums
+                let Some(label) = additional_weight_key_label(*key) else {
+                    continue;
+                };
+                let normalized = *value
+                    * *full_multiplicative_factor
+                        .as_ref()
+                        .expect("display-only weights require a full multiplicative factor");
+                *additional_contribution_sums
                     .entry(label.clone())
-                    .or_insert_with(zero_complex) += *value;
-                additional_weights.insert(label.clone(), complex_json(*value));
+                    .or_insert_with(zero_complex) += normalized;
+                display_only_weights.insert(label.clone(), complex_json(*value));
                 let contribution_key = ContributionKey {
                     contribution: label,
                     graph_id,
@@ -877,7 +1145,11 @@ fn approach_evaluation_record(
                     cut_edges: cut_edges.clone(),
                     lmb_sample_id,
                 };
-                add_contribution(&mut contribution_sums, contribution_key, *value);
+                add_contribution(&mut contribution_sums, contribution_key, normalized);
+            }
+
+            if let Some(decomposition) = &event.additional_weights.threshold_counterterms {
+                threshold_counterterm_summary.add(graph_id, &event.weight, decomposition);
             }
 
             events.push(EventRecord {
@@ -892,11 +1164,13 @@ fn approach_evaluation_record(
                 lmb_channel_id,
                 lmb_sample_id,
                 weight: complex_json(event.weight),
-                additional_weights,
+                full_multiplicative_factor: full_multiplicative_factor.map(complex_json),
+                display_only_weights,
                 threshold_counterterms: event.additional_weights.threshold_counterterms.clone(),
             });
         }
     }
+    let threshold_counterterm_summary = threshold_counterterm_summary.into_json();
 
     Ok(ApproachEvaluationRecord {
         integrand_result: complex_json(evaluation.integrand_result),
@@ -904,10 +1178,11 @@ fn approach_evaluation_record(
         integrator_weight,
         total_weight: complex_json(total_weight),
         event_weight_sum: complex_json(event_weight_sum),
-        additional_weight_sums: additional_weight_sums
+        additional_contribution_sums: additional_contribution_sums
             .into_iter()
             .map(|(key, value)| (key, complex_json(value)))
             .collect(),
+        threshold_counterterm_summary,
         contributions: contribution_sums
             .into_iter()
             .map(|(key, weight)| contribution_record(key, weight))
@@ -993,22 +1268,24 @@ fn contribution_label(key: &ContributionKey) -> String {
     parts.join(" ")
 }
 
-fn additional_weight_key_label(key: AdditionalWeightKey) -> String {
+fn additional_weight_key_label(key: AdditionalWeightKey) -> Option<String> {
     match key {
-        AdditionalWeightKey::FullMultiplicativeFactor => "full_multiplicative_factor".to_string(),
-        AdditionalWeightKey::Original => "original".to_string(),
+        AdditionalWeightKey::FullMultiplicativeFactor => None,
+        AdditionalWeightKey::Original => Some("original".to_string()),
         AdditionalWeightKey::ThresholdCounterterm { subset_index } => {
-            format!("threshold_counterterm_{subset_index}")
+            Some(format!("threshold_counterterm_{subset_index}"))
         }
         AdditionalWeightKey::AmplitudeThresholdCounterterm {
             esurface_id,
             overlap_group,
-        } => format!("ct_{esurface_id}_{overlap_group}"),
+        } => Some(format!("ct_{esurface_id}_{overlap_group}")),
         AdditionalWeightKey::AmplitudeThresholdCountertermVariant {
             variant_id,
             esurface_id,
             overlap_group,
-        } => format!("ct_variant_{variant_id}_{esurface_id}_{overlap_group}"),
+        } => Some(format!(
+            "ct_variant_{variant_id}_{esurface_id}_{overlap_group}"
+        )),
     }
 }
 
@@ -1105,6 +1382,18 @@ mod tests {
     }
 
     #[test]
+    fn linear_t_values_use_physical_maximum() {
+        let command = Approach {
+            max_abs_t: 0.2,
+            ..command_with_spacing(2, false, 1.0e-6)
+        };
+        assert_eq!(
+            command.t_values(ApproachSpacing::Linear).unwrap(),
+            vec![-0.2, -0.1, 0.0, 0.1, 0.2]
+        );
+    }
+
+    #[test]
     fn logarithmic_t_values_use_min_abs_t() {
         let command = command_with_spacing(3, true, 1.0e-4);
         let t_values = command.t_values(ApproachSpacing::Logarithmic).unwrap();
@@ -1114,6 +1403,22 @@ mod tests {
         assert_eq!(t_values[3], 0.0);
         assert!((t_values[4] - 1.0e-4).abs() < 1.0e-14);
         assert!((t_values[6] - 1.0).abs() < 1.0e-14);
+    }
+
+    #[test]
+    fn logarithmic_t_values_span_physical_bounds() {
+        let command = Approach {
+            max_abs_t: 1.0e-2,
+            ..command_with_spacing(3, true, 1.0e-6)
+        };
+        let t_values = command.t_values(ApproachSpacing::Logarithmic).unwrap();
+        assert!((t_values[0] + 1.0e-2).abs() < 1.0e-14);
+        assert!((t_values[1] + 1.0e-4).abs() < 1.0e-14);
+        assert!((t_values[2] + 1.0e-6).abs() < 1.0e-14);
+        assert_eq!(t_values[3], 0.0);
+        assert!((t_values[4] - 1.0e-6).abs() < 1.0e-14);
+        assert!((t_values[5] - 1.0e-4).abs() < 1.0e-14);
+        assert!((t_values[6] - 1.0e-2).abs() < 1.0e-14);
     }
 
     #[test]
@@ -1137,9 +1442,63 @@ mod tests {
     }
 
     #[test]
+    fn new_path_metadata_uses_coherent_serde_defaults() {
+        let mut serialized = serde_json::to_value(command_with_spacing(2, false, 1.0e-6)).unwrap();
+        let object = serialized.as_object_mut().unwrap();
+        object.remove("axis_labels");
+        object.remove("max_abs_t");
+        object.remove("parameter_name");
+        let command: Approach = serde_json::from_value(serialized).unwrap();
+        assert!(command.axis_labels.is_empty());
+        assert_eq!(command.max_abs_t, DEFAULT_MAX_ABS_T);
+        assert_eq!(command.parameter_name, "t");
+    }
+
+    #[test]
     fn parse_axis_rejects_dimension_mismatch() {
         let err = parse_axis("1.0,0.0,2.0", 2).unwrap_err();
         assert!(format!("{err:#}").contains("Approach axis has 3 components"));
+    }
+
+    #[test]
+    fn parse_axis_rejects_non_finite_components() {
+        let err = parse_axis("NaN,0.0", 2).unwrap_err();
+        assert!(format!("{err:#}").contains("component 0 must be finite"));
+    }
+
+    #[test]
+    fn axes_receive_trimmed_user_labels() {
+        let command = Approach {
+            point: vec![0.5, 0.5],
+            approach_axes: vec!["0.1,0.0".to_string(), "0.0,0.2".to_string()],
+            axis_labels: vec![" soft ".to_string(), "threshold".to_string()],
+            n_points: 1,
+            ..Default::default()
+        };
+        command.validate_cli().unwrap();
+        let axes = command.parse_axes().unwrap();
+        assert_eq!(axes[0].label, "soft");
+        assert_eq!(axes[0].vector, vec![0.1, 0.0]);
+        assert_eq!(axes[1].label, "threshold");
+        assert_eq!(axes[1].vector, vec![0.0, 0.2]);
+    }
+
+    #[test]
+    fn axis_labels_must_be_complete_nonblank_and_unique() {
+        for labels in [
+            vec!["one".to_string()],
+            vec!["one".to_string(), " ".to_string()],
+            vec!["one".to_string(), "one".to_string()],
+        ] {
+            let command = Approach {
+                point: vec![0.5, 0.5],
+                approach_axes: vec!["0.1,0.0".to_string(), "0.0,0.2".to_string()],
+                axis_labels: labels,
+                n_points: 1,
+                ..Default::default()
+            };
+            assert!(command.validate_cli().is_err());
+        }
     }
 
     #[test]
@@ -1181,7 +1540,119 @@ mod tests {
             ..Default::default()
         };
         let err = command.validate_cli().unwrap_err();
-        assert!(format!("{err:#}").contains("--min-abs-t must be greater than 0"));
+        assert!(format!("{err:#}").contains("--min-abs-t must be finite and greater than 0"));
+    }
+
+    #[test]
+    fn invalid_physical_parameter_bounds_are_rejected() {
+        for (min_abs_t, max_abs_t, logarithmic) in [(1.0e-2, 1.0e-3, true), (1.0e-3, 0.0, false)] {
+            let command = Approach {
+                point: vec![0.5, 0.5],
+                approach_axes: vec!["0.1,0.0".to_string()],
+                n_points: 1,
+                min_abs_t,
+                max_abs_t,
+                logarithmic,
+                ..Default::default()
+            };
+            assert!(command.validate_cli().is_err());
+        }
+    }
+
+    #[test]
+    fn non_finite_midpoint_and_blank_parameter_name_are_rejected() {
+        let non_finite = Approach {
+            point: vec![f64::INFINITY, 0.5],
+            approach_axes: vec!["0.1,0.0".to_string()],
+            n_points: 1,
+            ..Default::default()
+        };
+        assert!(format!("{:#}", non_finite.validate_cli().unwrap_err()).contains("must be finite"));
+
+        let blank_parameter = Approach {
+            point: vec![0.5, 0.5],
+            approach_axes: vec!["0.1,0.0".to_string()],
+            n_points: 1,
+            parameter_name: " ".to_string(),
+            ..Default::default()
+        };
+        assert!(format!("{:#}", blank_parameter.validate_cli().unwrap_err())
+            .contains("--parameter-name must not be blank"));
+    }
+
+    #[test]
+    fn threshold_summary_is_scoped_and_grouped_by_graph_component() {
+        use gammalooprs::observables::events::{
+            GenericThresholdCountertermComponentWeight, ThresholdCountertermComponentOccurrence,
+        };
+
+        let component = |component_id, weighted, evaluation_skipped| {
+            GenericThresholdCountertermComponentWeight {
+                component_id,
+                occurrence: ThresholdCountertermComponentOccurrence::Amplitude {
+                    raised_esurface_id: component_id,
+                    overlap_group: 0,
+                },
+                multiplier_values: Default::default(),
+                effective_multiplier: F(1.0),
+                bare: None,
+                weighted: Complex::new_re(F(weighted)),
+                evaluation_skipped,
+            }
+        };
+        let mut accumulator = ThresholdCountertermSummaryAccumulator::default();
+        let first = GenericThresholdCountertermEventInfo {
+            original: Complex::new_re(F(10.0)),
+            components: vec![component(2, 1.0, false), component(2, 2.0, true)],
+        };
+        let second = GenericThresholdCountertermEventInfo {
+            original: Complex::new_re(F(20.0)),
+            components: vec![component(3, -4.0, false)],
+        };
+        let third = GenericThresholdCountertermEventInfo {
+            original: Complex::new_re(F(5.0)),
+            components: vec![component(2, 1.0, false)],
+        };
+        accumulator.add(1, &Complex::new_re(F(13.0)), &first);
+        accumulator.add(1, &Complex::new_re(F(16.0)), &second);
+        accumulator.add(2, &Complex::new_re(F(6.0)), &third);
+
+        let summary = accumulator.into_json().unwrap();
+        assert_eq!(summary.original.re, 35.0);
+        assert_eq!(summary.counterterm_sum.re, 0.0);
+        assert_eq!(summary.reconstructed_total.re, 35.0);
+        assert_eq!(summary.decomposed_event_sum.re, 35.0);
+        assert_eq!(summary.closure.re, 0.0);
+        assert_eq!(summary.components.len(), 3);
+        assert_eq!(
+            (
+                summary.components[0].graph_id,
+                summary.components[0].component_id,
+                summary.components[0].weighted.re,
+                summary.components[0].occurrence_count,
+                summary.components[0].skipped_count,
+            ),
+            (1, 2, 3.0, 2, 1),
+        );
+        assert_eq!(
+            (
+                summary.components[2].graph_id,
+                summary.components[2].component_id,
+            ),
+            (2, 2),
+        );
+    }
+
+    #[test]
+    fn multiplicative_factor_is_not_an_additive_weight_label() {
+        assert_eq!(
+            additional_weight_key_label(AdditionalWeightKey::FullMultiplicativeFactor),
+            None,
+        );
+        assert_eq!(
+            additional_weight_key_label(AdditionalWeightKey::Original).as_deref(),
+            Some("original"),
+        );
     }
 
     #[test]

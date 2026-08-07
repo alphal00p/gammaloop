@@ -389,7 +389,7 @@ mod tests {
 
     #[test]
     fn approach_command_parses_axes_spacing_and_output() {
-        let command: Commands = "approach -p #0 -i default -x 0.5 0.25 --approach-axis 1.0,0.0 --approach-axis 0.0,1.0 --n-points 3 --skip-midpoint --logarithmic --min-abs-t 1e-4 --n-cores 2 --output-results approach.json"
+        let command: Commands = "approach -p #0 -i default -x 0.5 0.25 --approach-axis 1.0,0.0 --axis-label soft --approach-axis 0.0,1.0 --axis-label threshold --n-points 3 --skip-midpoint --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2 --parameter-name lambda --n-cores 2 --output-results approach.json"
             .parse()
             .unwrap();
         match command {
@@ -401,11 +401,14 @@ mod tests {
                     approach.approach_axes,
                     vec!["1.0,0.0".to_string(), "0.0,1.0".to_string()]
                 );
+                assert_eq!(approach.axis_labels, vec!["soft", "threshold"]);
                 assert_eq!(approach.n_points, 3);
                 assert!(approach.skip_midpoint);
                 assert!(approach.logarithmic);
                 assert!(!approach.linear);
-                assert_eq!(approach.min_abs_t, 1.0e-4);
+                assert_eq!(approach.min_abs_t, 1.0e-6);
+                assert_eq!(approach.max_abs_t, 1.0e-2);
+                assert_eq!(approach.parameter_name, "lambda");
                 assert_eq!(approach.n_cores, Some(2));
                 assert_eq!(
                     approach.output_results.as_deref(),

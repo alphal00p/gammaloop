@@ -1,0 +1,111 @@
+[cli_settings]
+
+[cli_settings.state]
+folder = "./examples/cli/epem_a_ttxh/NNLO/analyses/gl638_multiplier_decomposition/gammaloop_state"
+name = "gl638_multiplier_decomposition"
+
+[[command_blocks]]
+name = "setup_model"
+commands = [
+  "import model sm-default.json",
+  "set model MT=173.0",
+  "set model MH=125.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set model aS=0.118",
+  "set model aEWM1=132.507",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+]
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "run setup_model",
+  "remove processes",
+  "import graphs ./examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot -p gl638_ir_safe -i GL638_ir_safe -o",
+  "generate existing -p gl638_ir_safe -i GL638_ir_safe",
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "runtime_events"
+commands = [
+  "set process -p gl638_ir_safe -i GL638_ir_safe kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "approach"
+commands = [
+  "run runtime_events",
+  """approach -p gl638_ir_safe -i GL638_ir_safe
+      --momentum-space --graph-id 0 --orientation-id 0
+      --point 31,-47,83,-59,101,-73,127,41,-109,67,-89,53
+      --approach-axis 0.03,-0.02,0.01,-0.01,0.04,0.02,0.02,0.01,-0.03,-0.04,0.02,0.01
+      --axis-label 'generic finite multiplier deformation'
+      --parameter-name delta
+      --n-points 5 --linear --max-abs-t 1
+      --n-cores 1
+      --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl638_multiplier_decomposition/finite_multiplier_path.json""",
+]
+
+[[command_blocks]]
+name = "all"
+commands = ["run generate", "run approach"]
+
+[default_runtime_settings.kinematics]
+e_cm = 1000.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]
+helicities = ["summed_averaged", "summed_averaged"]
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+enable_cache = false
+generate_events = true
+store_additional_weights_in_event = true
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+esurface_existence_threshold = 1.0e-7
+
+[cli_settings.global.generation]
+force_cuts = [
+  ["e2", "e6", "e12", "e13"],
+  ["e2", "e6", "e10"],
+  ["e2", "e6", "e7", "e13", "e14"],
+  ["e2", "e4", "e12"],
+  ["e2", "e4", "e10", "e13"],
+  ["e2", "e4", "e7", "e14"],
+]
+
+[cli_settings.global.generation.orientation_pattern]
+pat = "(+,+,+,+,-,-,-,+,-,0,+,0,+,-,+)"
+
+[cli_settings.global.generation.evaluator]
+do_algebra = false
+store_atom = true
+compile = false
+summed = false
+summed_function_map = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = true
+esurface_existence_threshold = 1.0e-7
+skip_thresholds_that_are_cuts = true
+
+[cli_settings.global.generation.uv]
+softct = true
+inner_products = true
+generate_integrated = false
+subtract_uv = true
+
+[cli_settings.global.n_cores]
+generate = 4
+compile = 4
+integrate = 1
