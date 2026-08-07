@@ -44,7 +44,8 @@ commands = [
       --approach-axis 0.03,-0.02,0.01,-0.01,0.04,0.02,0.02,0.01,-0.03,-0.04,0.02,0.01
       --axis-label 'generic finite multiplier deformation'
       --parameter-name delta
-      --n-points 5 --linear --max-abs-t 1
+      --n-points 50 --logarithmic --min-abs-t 1e-4 --max-abs-t 1
+      --skip-midpoint
       --n-cores 1
       --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl638_multiplier_decomposition/finite_multiplier_path.json""",
 ]

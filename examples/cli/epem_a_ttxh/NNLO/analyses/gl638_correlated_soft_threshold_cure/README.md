@@ -15,8 +15,9 @@ K3(lambda) = K* + lambda (258,-128,162)
 
 while `K1` and `K2` remain fixed.  Thus `q13 = K0-K3`, `eta(5,10)`, and
 `eta(5,12,13)` approach their common soft/threshold point with the same
-physical `lambda`.  Seven logarithmic samples on each signed branch span
-`10^-6 <= |lambda| <= 10^-2`; the singular midpoint is deliberately skipped.
+physical `lambda`. Fifty logarithmic samples on each signed branch span
+`10^-6 <= |lambda| <= 10^-2` (100 evaluated points per result); the singular
+midpoint is deliberately skipped.
 
 From the repository root, generate all three real CLI outputs with:
 
@@ -33,17 +34,40 @@ Create the curated PDF with:
 python3 examples/cli/epem_a_ttxh/NNLO/analyses/gl638_correlated_soft_threshold_cure/plot.py
 ```
 
-`correlated_soft_threshold_cure.pdf` starts with the three kinematic distances
-and a threshold-off/legacy/IR-safe comparison.  Further pages show the
-weighted and unmultiplied single and iterated components of cut `(2,4,12)`,
-followed by occurrence-resolved multiplier contexts.  All pages are rendered
-by `assets/plot_approach_result.py`; the local script only computes the
-graph-specific diagnostic series and merges plotter-produced PDFs.
+`correlated_soft_threshold_cure.pdf` shows, on one signed symmetric-log axis:
 
-The distances scale as `|lambda|^1`.  The original, counterterm sum, and cured
-total scale as `|lambda|^-1`; the cure is visible in the leading-coefficient
-cancellation and exact event/decomposition closure, not as an artificial
-change of this common physical power.
+1. the three kinematic distances;
+2. the threshold-off/legacy/IR-safe totals;
+3. the three leading Local-Unitarity cut contributions and their sum;
+4. the corresponding per-cut threshold-counterterm contributions and their
+   sum; and
+5. the shared one-loop `(8,12,14)` threshold components across those cuts;
+6. the unmultiplied local/integrated pieces of both duplicated `(7,8)`
+   variants; and
+7. their unmultiplied `LL`, `LI`, `IL`, and `II` Cartesian products with the
+   `(5,10)` right threshold.
+
+All pages are rendered by `assets/plot_approach_result.py`; the local script
+only computes the graph-specific diagnostic series and merges plotter-produced
+PDFs.
+
+The distances scale as `|lambda|^1`. Each leading cut and per-cut threshold CT
+scales as `|lambda|^-3`, while its cross-cut sum scales as `|lambda|^-1`. The
+threshold-off, legacy, and IR-safe total powers are approximately `-1`, `-3`,
+and `-1`, respectively.
+
+This trajectory approaches the right thresholds `(5,10)` and `(5,12,13)`, not
+the duplicated left threshold `(7,8)` in effective coordinates. The latter is
+reached only in each counterterm's `star` sample. Consequently, the current
+own-surface `eta(star, ...)` ratio gives `intrinsic_1l = 0` and
+`embedded_2l = 1` there. Those variants remain useful for structural/runtime
+coverage, but their weighted intrinsic contribution is exact-zero skipped or
+root-residual noise rather than useful soft-cure evidence. The report therefore
+keeps the cure evidence (pages 1--5) separate from the unmultiplied variant
+anatomy (pages 6--7), where skipped evaluations appear as gaps. Before
+weighting, the intrinsic single pieces scale as `|lambda|^-3` and the embedded
+single pieces are approximately constant. The cancellation on pages 2--5 is
+supplied by the shared `(8,12,14)` one-loop associations.
 
 As in the finite analysis, direct-import integrated-UV generation is disabled
 for GL638 because of the independent Vakint reconstruction limitation.  Local

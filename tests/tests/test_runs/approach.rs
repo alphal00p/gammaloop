@@ -905,6 +905,16 @@ fn plot_approach_result_script_smoke() -> Result<()> {
 
     let workspace_root = gammaloop_integration_tests::workspace_root();
     let script = workspace_root.join("assets/plot_approach_result.py");
+    let help_output = std::process::Command::new("python3")
+        .arg(&script)
+        .arg("--help")
+        .output()?;
+    assert!(help_output.status.success());
+    let help_text = String::from_utf8_lossy(&help_output.stdout);
+    assert!(help_text.contains("{auto,signed,overlay,split}"));
+    assert!(help_text.contains("signed symmetric-log axis"));
+    assert!(help_text.contains("--x-symlog-linthresh"));
+
     let outdated_output = std::process::Command::new("python3")
         .arg(&script)
         .arg(&outdated_path)
@@ -985,7 +995,9 @@ fn plot_approach_result_script_smoke() -> Result<()> {
         .arg("both")
         .arg("--x-log-scale")
         .arg("--branch-layout")
-        .arg("split")
+        .arg("signed")
+        .args(["--x-range", "-0.1", "0.1"])
+        .args(["--x-symlog-linthresh", "0.001"])
         .arg("--result-label")
         .arg("threshold CT on")
         .arg("--result-label")
@@ -1073,6 +1085,7 @@ fn plot_approach_result_script_smoke() -> Result<()> {
     assert!(supplemental_text.contains("soft-threshold direction"));
     assert!(supplemental_text.contains("kinematic distance [GeV]"));
     assert!(supplemental_text.contains("lambda < 0"));
+    assert!(supplemental_text.contains("lambda > 0"));
     assert!(supplemental_text.contains("p=+2.00"));
     assert!(supplemental_text.contains("R^2=1.000"));
 
@@ -1163,7 +1176,36 @@ fn plot_approach_result_script_smoke() -> Result<()> {
     let filtered_report_text = String::from_utf8_lossy(&filtered_report_text.stdout);
     assert!(filtered_report_text.contains("forced_1l"));
     assert!(filtered_report_text.contains("unmultiplied CT"));
+    assert!(filtered_report_text.contains("lambda<0"));
+    assert!(filtered_report_text.contains("lambda>0"));
     assert!(!filtered_report_text.contains("alternate"));
+
+    let invalid_signed_layout = std::process::Command::new("python3")
+        .arg(&script)
+        .arg(&xs_path)
+        .arg("--output")
+        .arg(output_dir.join("invalid_signed_layout.pdf"))
+        .arg("--branch-layout")
+        .arg("signed")
+        .output()?;
+    assert!(!invalid_signed_layout.status.success());
+    assert!(
+        String::from_utf8_lossy(&invalid_signed_layout.stderr)
+            .contains("--branch-layout signed requires --x-log-scale --t-branch both")
+    );
+
+    let invalid_signed_range = std::process::Command::new("python3")
+        .arg(&script)
+        .arg(&xs_path)
+        .arg("--output")
+        .arg(output_dir.join("invalid_signed_range.pdf"))
+        .args(["--x-log-scale", "--x-range", "0.001", "0.1"])
+        .output()?;
+    assert!(!invalid_signed_range.status.success());
+    assert!(
+        String::from_utf8_lossy(&invalid_signed_range.stderr)
+            .contains("signed symmetric-log --x-range must straddle zero")
+    );
 
     let multiplier_report_path = output_dir.join("approach_multiplier_report.pdf");
     let multiplier_report_output = std::process::Command::new("python3")

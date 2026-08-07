@@ -48,7 +48,7 @@ commands = [
       --approach-axis 47,29,-31,0,0,0,0,0,0,258,-128,162
       --axis-label 'q13 correlated soft + both thresholds'
       --parameter-name lambda
-      --n-points 7 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 1
       --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl638_correlated_soft_threshold_cure/threshold_off.json""",
   """approach -p gl638_legacy -i GL638_legacy
@@ -57,7 +57,7 @@ commands = [
       --approach-axis 47,29,-31,0,0,0,0,0,0,258,-128,162
       --axis-label 'q13 correlated soft + both thresholds'
       --parameter-name lambda
-      --n-points 7 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 1
       --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl638_correlated_soft_threshold_cure/legacy.json""",
   "set process -p gl638_ir_safe -i GL638_ir_safe kv subtraction.disable_threshold_subtraction=false",
@@ -67,7 +67,7 @@ commands = [
       --approach-axis 47,29,-31,0,0,0,0,0,0,258,-128,162
       --axis-label 'q13 correlated soft + both thresholds'
       --parameter-name lambda
-      --n-points 7 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 1
       --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl638_correlated_soft_threshold_cure/ir_safe.json""",
 ]
