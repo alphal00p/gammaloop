@@ -37,9 +37,10 @@ use crate::observables::{EventGroupList, ObservableAccumulatorBundle, Observable
 use crate::settings::IntegratorSettings;
 use crate::settings::RuntimeSettings;
 use crate::settings::runtime::{
-    ComponentDiscreteBreakdown, DiscreteBreakdown, DiscreteBreakdownEntry, DiscreteCoordinate,
-    DiscreteGraphSamplingType, IntegralEstimate, IntegratedPhase, IntegrationResult,
-    IntegrationTableComponentResult, MaxWeightInfoEntry, SamplingSettings, SlotIntegrationResult,
+    AbsoluteIntegrationResult, ComponentDiscreteBreakdown, DiscreteBreakdown,
+    DiscreteBreakdownEntry, DiscreteCoordinate, DiscreteGraphSamplingType, IntegralEstimate,
+    IntegratedPhase, IntegrationResult, IntegrationTableComponentResult, MaxWeightInfoEntry,
+    SamplingSettings, SlotIntegrationResult,
 };
 use crate::utils;
 use crate::utils::F;
@@ -189,16 +190,16 @@ impl SamplingCorrelationMode {
 }
 
 #[derive(Serialize, Deserialize, Encode, Decode, Clone)]
-struct DiscreteGridAccumulatorSummary {
+pub(crate) struct DiscreteGridAccumulatorSummary {
     #[bincode(with_serde)]
-    bins: Vec<DiscreteGridBinAccumulatorSummary>,
+    pub(crate) bins: Vec<DiscreteGridBinAccumulatorSummary>,
 }
 
 #[derive(Serialize, Deserialize, Encode, Decode, Clone)]
-struct DiscreteGridBinAccumulatorSummary {
+pub(crate) struct DiscreteGridBinAccumulatorSummary {
     #[bincode(with_serde)]
-    accumulator: StatisticsAccumulator<F<f64>>,
-    sub_summary: Option<Box<DiscreteGridAccumulatorSummary>>,
+    pub(crate) accumulator: StatisticsAccumulator<F<f64>>,
+    pub(crate) sub_summary: Option<Box<DiscreteGridAccumulatorSummary>>,
 }
 
 #[derive(Serialize, Deserialize, Encode, Decode, Clone, Default)]
@@ -270,6 +271,10 @@ pub struct ComplexAccumulator {
     pub re: StatisticsAccumulator<F<f64>>,
     #[bincode(with_serde)]
     pub im: StatisticsAccumulator<F<f64>>,
+    #[bincode(with_serde)]
+    pub absolute_re: StatisticsAccumulator<F<f64>>,
+    #[bincode(with_serde)]
+    pub absolute_im: StatisticsAccumulator<F<f64>>,
 }
 
 impl ComplexAccumulator {
@@ -277,6 +282,8 @@ impl ComplexAccumulator {
         Self {
             re: StatisticsAccumulator::new(),
             im: StatisticsAccumulator::new(),
+            absolute_re: StatisticsAccumulator::new(),
+            absolute_im: StatisticsAccumulator::new(),
         }
     }
 
@@ -301,18 +308,26 @@ impl ComplexAccumulator {
         sample_weight: F<f64>,
         sample: Option<&Sample<F<f64>>>,
     ) {
-        self.re.add_sample(result.re * sample_weight, sample);
-        self.im.add_sample(result.im * sample_weight, sample);
+        let weighted_re = result.re * sample_weight;
+        let weighted_im = result.im * sample_weight;
+        self.re.add_sample(weighted_re, sample);
+        self.im.add_sample(weighted_im, sample);
+        self.absolute_re.add_sample(weighted_re.abs(), sample);
+        self.absolute_im.add_sample(weighted_im.abs(), sample);
     }
 
     pub(crate) fn merge(&mut self, other: &Self) {
         self.re.merge_samples_no_reset(&other.re);
         self.im.merge_samples_no_reset(&other.im);
+        self.absolute_re.merge_samples_no_reset(&other.absolute_re);
+        self.absolute_im.merge_samples_no_reset(&other.absolute_im);
     }
 
     pub(crate) fn update_iter(&mut self, use_weighted_average: bool) {
         self.re.update_iter(use_weighted_average);
         self.im.update_iter(use_weighted_average);
+        self.absolute_re.update_iter(use_weighted_average);
+        self.absolute_im.update_iter(use_weighted_average);
     }
 
     pub(crate) fn max_weight_rows(
@@ -402,6 +417,36 @@ impl DiscreteGridAccumulatorSummary {
             {
                 sub_summary.merge_iteration_grid(sub_grid);
             }
+        }
+    }
+
+    fn from_shallow_grid(grid: &DiscreteGrid<F<f64>>) -> Self {
+        Self {
+            bins: grid
+                .bins
+                .iter()
+                .map(|_| DiscreteGridBinAccumulatorSummary {
+                    accumulator: StatisticsAccumulator::new(),
+                    sub_summary: None,
+                })
+                .collect(),
+        }
+    }
+
+    fn merge_shallow_iteration_grid(&mut self, grid: &DiscreteGrid<F<f64>>) {
+        assert_eq!(
+            self.bins.len(),
+            grid.bins.len(),
+            "absolute monitor grid shape changed unexpectedly"
+        );
+        for (summary_bin, grid_bin) in self.bins.iter_mut().zip(&grid.bins) {
+            assert!(
+                summary_bin.sub_summary.is_none() && grid_bin.sub_grid.is_none(),
+                "absolute monitor grids must not contain descendants"
+            );
+            summary_bin
+                .accumulator
+                .merge_samples_no_reset(&grid_bin.accumulator);
         }
     }
 
@@ -647,6 +692,85 @@ fn discrete_grid_at_path<'a>(
             .and_then(|sub_grid| discrete_grid_at_path(sub_grid, rest)),
         _ => None,
     }
+}
+
+fn shallow_discrete_monitor_grid(
+    grid: &Grid<F<f64>>,
+    path: &[usize],
+) -> Result<DiscreteGrid<F<f64>>> {
+    let source = discrete_grid_at_path(grid, path).ok_or_else(|| {
+        Report::msg(format!(
+            "monitored discrete path {path:?} does not match the sampling grid"
+        ))
+    })?;
+    if source.bins.is_empty() {
+        return Err(Report::msg(format!(
+            "monitored discrete path {path:?} resolves to an empty grid"
+        )));
+    }
+
+    let mut monitor = DiscreteGrid::new(vec![None; source.bins.len()], F(1.0), false);
+    for (monitor_bin, source_bin) in monitor.bins.iter_mut().zip(&source.bins) {
+        monitor_bin.pdf = source_bin.pdf;
+    }
+    Ok(monitor)
+}
+
+fn discrete_sample_at_path<'a>(
+    sample: &'a Sample<F<f64>>,
+    path: &[usize],
+) -> Result<&'a Sample<F<f64>>> {
+    let mut local_sample = sample;
+    for (depth, expected_index) in path.iter().copied().enumerate() {
+        let Sample::Discrete(_, sampled_index, sub_sample) = local_sample else {
+            return Err(Report::msg(format!(
+                "sample does not contain the discrete monitor path {path:?} at depth {depth}"
+            )));
+        };
+        if *sampled_index != expected_index {
+            return Err(Report::msg(format!(
+                "sample index {sampled_index} does not match monitored path index {expected_index} at depth {depth}"
+            )));
+        }
+        local_sample = sub_sample.as_deref().ok_or_else(|| {
+            Report::msg(format!(
+                "sample ends before the discrete monitor path {path:?} at depth {depth}"
+            ))
+        })?;
+    }
+    Ok(local_sample)
+}
+
+fn add_shallow_monitor_sample(
+    monitor: Option<&mut DiscreteGrid<F<f64>>>,
+    monitored_path: Option<&[usize]>,
+    sample: &Sample<F<f64>>,
+    evaluation: F<f64>,
+) -> Result<()> {
+    let (monitor, path) = match (monitor, monitored_path) {
+        (Some(monitor), Some(path)) => (monitor, path),
+        (None, None) => return Ok(()),
+        _ => {
+            return Err(Report::msg(
+                "absolute monitor grid and monitored path are inconsistent",
+            ));
+        }
+    };
+    let local_sample = discrete_sample_at_path(sample, path)?;
+    let Sample::Discrete(_, bin_index, _) = local_sample else {
+        return Err(Report::msg(format!(
+            "sample at monitored discrete path {path:?} is not discrete"
+        )));
+    };
+    if *bin_index >= monitor.bins.len() {
+        return Err(Report::msg(format!(
+            "sample bin {bin_index} is out of bounds for absolute monitor with {} bins at path {path:?}",
+            monitor.bins.len()
+        )));
+    }
+    monitor
+        .add_training_sample(local_sample, evaluation.abs())
+        .map_err(Report::msg)
 }
 
 fn summary_at_path<'a>(
@@ -1370,6 +1494,48 @@ fn max_weight_impact(itg: &StatisticsAccumulator<F<f64>>) -> F<f64> {
         / (itg.avg.abs() * F::<f64>::new_from_usize(itg.processed_samples))
 }
 
+fn build_table_component_result(
+    slot_meta: &SlotMeta,
+    iter: usize,
+    component: &str,
+    accumulator: &StatisticsAccumulator<F<f64>>,
+    target_component: Option<F<f64>>,
+) -> IntegrationTableComponentResult {
+    let cells =
+        build_integral_result_cells(accumulator, slot_meta, iter, component, target_component);
+    IntegrationTableComponentResult {
+        component: component.to_string(),
+        value: accumulator.avg,
+        error: accumulator.err,
+        relative_error_percent: accumulator
+            .avg
+            .is_non_zero()
+            .then(|| (accumulator.err / accumulator.avg).abs().0 * 100.0),
+        chi_sq_per_dof: if iter > 0 {
+            accumulator.chi_sq.0 / (iter as f64)
+        } else {
+            0.0
+        },
+        target_delta_sigma: cells.delta_sigma.as_ref().map(|_| {
+            if accumulator.err.is_zero() {
+                0.0
+            } else if let Some(target_value) = target_component {
+                (target_value - accumulator.avg).abs().0 / accumulator.err.0
+            } else {
+                0.0
+            }
+        }),
+        target_delta_percent: target_component.map(|target_value| {
+            if target_value.is_zero() {
+                0.0
+            } else {
+                (target_value - accumulator.avg).abs().0 / target_value.abs().0 * 100.0
+            }
+        }),
+        max_weight_impact: max_weight_impact(accumulator).0,
+    }
+}
+
 fn build_table_result_summary(
     slot_meta: &SlotMeta,
     accumulator: &ComplexAccumulator,
@@ -1382,39 +1548,23 @@ fn build_table_result_summary(
     ]
     .into_iter()
     .map(|(component, accumulator, target_component)| {
-        let cells =
-            build_integral_result_cells(accumulator, slot_meta, iter, component, target_component);
-        IntegrationTableComponentResult {
-            component: component.to_string(),
-            value: accumulator.avg,
-            error: accumulator.err,
-            relative_error_percent: accumulator
-                .avg
-                .is_non_zero()
-                .then(|| (accumulator.err / accumulator.avg).abs().0 * 100.0),
-            chi_sq_per_dof: if iter > 0 {
-                accumulator.chi_sq.0 / (iter as f64)
-            } else {
-                0.0
-            },
-            target_delta_sigma: cells.delta_sigma.as_ref().map(|_| {
-                if accumulator.err.is_zero() {
-                    0.0
-                } else if let Some(target_value) = target_component {
-                    (target_value - accumulator.avg).abs().0 / accumulator.err.0
-                } else {
-                    0.0
-                }
-            }),
-            target_delta_percent: target_component.map(|target_value| {
-                if target_value.is_zero() {
-                    0.0
-                } else {
-                    (target_value - accumulator.avg).abs().0 / target_value.abs().0 * 100.0
-                }
-            }),
-            max_weight_impact: max_weight_impact(accumulator).0,
-        }
+        build_table_component_result(slot_meta, iter, component, accumulator, target_component)
+    })
+    .collect()
+}
+
+fn build_absolute_table_result_summary(
+    slot_meta: &SlotMeta,
+    accumulator: &ComplexAccumulator,
+    iter: usize,
+) -> Vec<IntegrationTableComponentResult> {
+    [
+        ("|re|", &accumulator.absolute_re),
+        ("|im|", &accumulator.absolute_im),
+    ]
+    .into_iter()
+    .map(|(component, accumulator)| {
+        build_table_component_result(slot_meta, iter, component, accumulator, None)
     })
     .collect()
 }
@@ -1460,6 +1610,32 @@ fn build_max_weight_info_summary(
             sign: sign.to_string(),
             max_eval,
             coordinates: sample
+                .map(|sample| format_max_eval_sample(sample, discrete_axis_labels, &[])),
+        })
+    })
+    .collect()
+}
+
+fn build_absolute_max_weight_info_summary(
+    discrete_axis_labels: &[String],
+    accumulator: &ComplexAccumulator,
+) -> Vec<MaxWeightInfoEntry> {
+    [
+        ("re", &accumulator.absolute_re),
+        ("im", &accumulator.absolute_im),
+    ]
+    .into_iter()
+    .filter_map(|(component, accumulator)| {
+        if accumulator.max_eval_positive.is_zero() {
+            return None;
+        }
+        Some(MaxWeightInfoEntry {
+            component: component.to_string(),
+            sign: "+".to_string(),
+            max_eval: accumulator.max_eval_positive,
+            coordinates: accumulator
+                .max_eval_positive_xs
+                .as_ref()
                 .map(|sample| format_max_eval_sample(sample, discrete_axis_labels, &[])),
         })
     })
@@ -1615,6 +1791,10 @@ pub struct IntegrationState {
     slot_re_summaries: Vec<Option<DiscreteGridAccumulatorSummary>>,
     #[bincode(with_serde)]
     slot_im_summaries: Vec<Option<DiscreteGridAccumulatorSummary>>,
+    #[bincode(with_serde)]
+    pub(crate) slot_absolute_re_summaries: Vec<Option<DiscreteGridAccumulatorSummary>>,
+    #[bincode(with_serde)]
+    pub(crate) slot_absolute_im_summaries: Vec<Option<DiscreteGridAccumulatorSummary>>,
     pub stats: StatisticsCounter,
     pub slot_stats: Vec<StatisticsCounter>,
     pub slot_metas: Vec<SlotMeta>,
@@ -1659,6 +1839,20 @@ impl IntegrationState {
                 )
             })
             .collect();
+        let absolute_summary_for_slot = |slot_index| {
+            monitored_discrete_path.as_deref().map(|path| {
+                let grid = &sampling_states[sampling_correlation_mode.state_index(slot_index)].grid;
+                let discrete_grid = discrete_grid_at_path(grid, path)
+                    .expect("validated monitored discrete path must match every sampling grid");
+                DiscreteGridAccumulatorSummary::from_shallow_grid(discrete_grid)
+            })
+        };
+        let slot_absolute_re_summaries = (0..slot_metas.len())
+            .map(&absolute_summary_for_slot)
+            .collect();
+        let slot_absolute_im_summaries = (0..slot_metas.len())
+            .map(absolute_summary_for_slot)
+            .collect();
         let stats = StatisticsCounter::new_empty();
         let slot_stats = vec![StatisticsCounter::new_empty(); slot_metas.len()];
 
@@ -1667,6 +1861,8 @@ impl IntegrationState {
             all_integrals,
             slot_re_summaries,
             slot_im_summaries,
+            slot_absolute_re_summaries,
+            slot_absolute_im_summaries,
             stats,
             slot_stats,
             slot_metas,
@@ -1724,6 +1920,9 @@ struct CoreIterationState {
     sampling_states: Vec<CoreSamplingSlotState>,
     slot_re_grids: Vec<Grid<F<f64>>>,
     slot_im_grids: Vec<Grid<F<f64>>>,
+    monitored_discrete_path: Option<Vec<usize>>,
+    slot_absolute_re_grids: Vec<Option<DiscreteGrid<F<f64>>>>,
+    slot_absolute_im_grids: Vec<Option<DiscreteGrid<F<f64>>>>,
     remaining_points: usize,
     completed_points: usize,
 }
@@ -1738,6 +1937,7 @@ impl CoreIterationState {
         slot_integrands: Vec<Integrand>,
         sampling_correlation_mode: SamplingCorrelationMode,
         sampling_grid_templates: &[Grid<F<f64>>],
+        monitored_discrete_path: Option<&[usize]>,
         seed: u64,
         sample_skip: usize,
         remaining_points: usize,
@@ -1761,6 +1961,15 @@ impl CoreIterationState {
                 CoreSamplingSlotState { sampling_grid, rng }
             })
             .collect_vec();
+        let absolute_monitor_for_slot = |slot_index| {
+            monitored_discrete_path.map(|path| {
+                shallow_discrete_monitor_grid(
+                    &sampling_grid_templates[sampling_correlation_mode.state_index(slot_index)],
+                    path,
+                )
+                .expect("validated monitored discrete path must match every sampling grid")
+            })
+        };
 
         Self {
             slot_integrands,
@@ -1781,6 +1990,9 @@ impl CoreIterationState {
                         .clone_without_samples()
                 })
                 .collect(),
+            monitored_discrete_path: monitored_discrete_path.map(|path| path.to_vec()),
+            slot_absolute_re_grids: (0..n_slots).map(&absolute_monitor_for_slot).collect(),
+            slot_absolute_im_grids: (0..n_slots).map(absolute_monitor_for_slot).collect(),
             remaining_points,
             completed_points: 0,
         }
@@ -1804,6 +2016,7 @@ impl CoreIterationState {
         let mut batch_stats = StatisticsCounter::new_empty();
         let mut processed_points = 0;
         let mut total_sample_evaluations = 0;
+        let monitored_discrete_path = self.monitored_discrete_path.clone();
 
         match self.sampling_correlation_mode {
             SamplingCorrelationMode::Correlated => {
@@ -1850,13 +2063,25 @@ impl CoreIterationState {
                 }
 
                 for (sample_index, sample) in samples.iter().enumerate() {
-                    for (slot_index, (((core_accumulator, re_grid), im_grid), results)) in self
-                        .integrals
-                        .iter_mut()
-                        .zip(self.slot_re_grids.iter_mut())
-                        .zip(self.slot_im_grids.iter_mut())
-                        .zip(slot_results.iter())
-                        .enumerate()
+                    for (
+                        slot_index,
+                        (
+                            core_accumulator,
+                            re_grid,
+                            im_grid,
+                            absolute_re_grid,
+                            absolute_im_grid,
+                            results,
+                        ),
+                    ) in izip!(
+                        self.integrals.iter_mut(),
+                        self.slot_re_grids.iter_mut(),
+                        self.slot_im_grids.iter_mut(),
+                        self.slot_absolute_re_grids.iter_mut(),
+                        self.slot_absolute_im_grids.iter_mut(),
+                        slot_results.iter(),
+                    )
+                    .enumerate()
                     {
                         let result = &results[sample_index];
                         let jacobian = result.parameterization_jacobian.unwrap_or(F(1.0));
@@ -1874,6 +2099,18 @@ impl CoreIterationState {
                         im_grid
                             .add_training_sample(sample, effective_integrand_result.im)
                             .map_err(Report::msg)?;
+                        add_shallow_monitor_sample(
+                            absolute_re_grid.as_mut(),
+                            monitored_discrete_path.as_deref(),
+                            sample,
+                            effective_integrand_result.re,
+                        )?;
+                        add_shallow_monitor_sample(
+                            absolute_im_grid.as_mut(),
+                            monitored_discrete_path.as_deref(),
+                            sample,
+                            effective_integrand_result.im,
+                        )?;
 
                         if slot_index == 0 {
                             let training_eval = match slot_settings[0].integrator.integrated_phase {
@@ -1952,6 +2189,18 @@ impl CoreIterationState {
                         self.slot_im_grids[slot_index]
                             .add_training_sample(sample, effective_integrand_result.im)
                             .map_err(Report::msg)?;
+                        add_shallow_monitor_sample(
+                            self.slot_absolute_re_grids[slot_index].as_mut(),
+                            monitored_discrete_path.as_deref(),
+                            sample,
+                            effective_integrand_result.re,
+                        )?;
+                        add_shallow_monitor_sample(
+                            self.slot_absolute_im_grids[slot_index].as_mut(),
+                            monitored_discrete_path.as_deref(),
+                            sample,
+                            effective_integrand_result.im,
+                        )?;
 
                         let training_eval =
                             match slot_settings[slot_index].integrator.integrated_phase {
@@ -2074,6 +2323,21 @@ fn apply_iteration_core_states(
                 .clone_without_samples()
         })
         .collect_vec();
+    let mut merged_absolute_re_grids = (0..n_slots)
+        .map(|slot_index| {
+            integration_state
+                .monitored_discrete_path
+                .as_deref()
+                .map(|path| {
+                    shallow_discrete_monitor_grid(
+                        &integration_state.sampling_state_for_slot(slot_index).grid,
+                        path,
+                    )
+                    .expect("validated monitored discrete path must match every sampling grid")
+                })
+        })
+        .collect_vec();
+    let mut merged_absolute_im_grids = merged_absolute_re_grids.clone();
 
     for core_state in core_states {
         for (sampling_state, merged_grid) in core_state
@@ -2092,6 +2356,26 @@ fn apply_iteration_core_states(
             merged_im_grids[slot_index]
                 .merge(&core_state.slot_im_grids[slot_index])
                 .expect("could not merge imaginary accumulation grids");
+            match (
+                merged_absolute_re_grids[slot_index].as_mut(),
+                core_state.slot_absolute_re_grids[slot_index].as_ref(),
+            ) {
+                (Some(merged), Some(core)) => merged
+                    .merge(core)
+                    .expect("could not merge absolute real monitor grids"),
+                (None, None) => {}
+                _ => panic!("absolute real monitor grid presence is inconsistent"),
+            }
+            match (
+                merged_absolute_im_grids[slot_index].as_mut(),
+                core_state.slot_absolute_im_grids[slot_index].as_ref(),
+            ) {
+                (Some(merged), Some(core)) => merged
+                    .merge(core)
+                    .expect("could not merge absolute imaginary monitor grids"),
+                (None, None) => {}
+                _ => panic!("absolute imaginary monitor grid presence is inconsistent"),
+            }
         }
     }
 
@@ -2113,6 +2397,34 @@ fn apply_iteration_core_states(
         if let Some(summary) = summary.as_mut() {
             summary.merge_iteration_grid(grid);
             summary.update_iter();
+        }
+    }
+    for (summary, grid) in integration_state
+        .slot_absolute_re_summaries
+        .iter_mut()
+        .zip(&merged_absolute_re_grids)
+    {
+        match (summary.as_mut(), grid.as_ref()) {
+            (Some(summary), Some(grid)) => {
+                summary.merge_shallow_iteration_grid(grid);
+                summary.update_iter();
+            }
+            (None, None) => {}
+            _ => panic!("absolute real summary and monitor grid presence is inconsistent"),
+        }
+    }
+    for (summary, grid) in integration_state
+        .slot_absolute_im_summaries
+        .iter_mut()
+        .zip(&merged_absolute_im_grids)
+    {
+        match (summary.as_mut(), grid.as_ref()) {
+            (Some(summary), Some(grid)) => {
+                summary.merge_shallow_iteration_grid(grid);
+                summary.update_iter();
+            }
+            (None, None) => {}
+            _ => panic!("absolute imaginary summary and monitor grid presence is inconsistent"),
         }
     }
 
@@ -2271,6 +2583,51 @@ where
             "Saved integration state discrete breakdown metadata is inconsistent with the selected slots",
         ));
     }
+    if integration_state.slot_absolute_re_summaries.len() != slot_metas.len()
+        || integration_state.slot_absolute_im_summaries.len() != slot_metas.len()
+    {
+        return Err(Report::msg(
+            "Saved integration state absolute summaries are inconsistent with the selected slots",
+        ));
+    }
+    for slot_index in 0..slot_metas.len() {
+        let expected_bin_count = integration_state
+            .monitored_discrete_path
+            .as_deref()
+            .map(|path| {
+                discrete_grid_at_path(
+                    &integration_state.sampling_state_for_slot(slot_index).grid,
+                    path,
+                )
+                .map(|grid| grid.bins.len())
+                .ok_or_else(|| {
+                    Report::msg(format!(
+                        "Saved integration state monitor path does not match slot {} sampling grid",
+                        integration_state.slot_metas[slot_index].key()
+                    ))
+                })
+            })
+            .transpose()?;
+        for summary in [
+            &integration_state.slot_absolute_re_summaries[slot_index],
+            &integration_state.slot_absolute_im_summaries[slot_index],
+        ] {
+            let valid = match (summary, expected_bin_count) {
+                (None, None) => true,
+                (Some(summary), Some(bin_count)) => {
+                    summary.bins.len() == bin_count
+                        && summary.bins.iter().all(|bin| bin.sub_summary.is_none())
+                }
+                _ => false,
+            };
+            if !valid {
+                return Err(Report::msg(format!(
+                    "Saved integration state absolute summary does not match slot {} monitor grid",
+                    integration_state.slot_metas[slot_index].key()
+                )));
+            }
+        }
+    }
 
     let primary = &slots[0];
     let sampling_str = primary.settings.sampling.describe_settings();
@@ -2399,6 +2756,7 @@ where
                         .iter()
                         .map(|sampling_state| sampling_state.grid.clone())
                         .collect_vec(),
+                    integration_state.monitored_discrete_path.as_deref(),
                     integration_seed + integration_state.iter as u64,
                     target_points_per_core * core_id,
                     n_points,
@@ -3533,6 +3891,21 @@ pub fn render_status_update_tabled(
     render_tabled::render_status_update(update, tabled_options)
 }
 
+fn integral_estimate(
+    re: &StatisticsAccumulator<F<f64>>,
+    im: &StatisticsAccumulator<F<f64>>,
+) -> IntegralEstimate {
+    IntegralEstimate {
+        neval: re.processed_samples,
+        real_zero: re.num_zero_evaluations,
+        im_zero: im.num_zero_evaluations,
+        result: Complex::new(re.avg, im.avg),
+        error: Complex::new(re.err, im.err),
+        real_chisq: re.chi_sq,
+        im_chisq: im.chi_sq,
+    }
+}
+
 pub fn build_integration_result(
     integration_state: &IntegrationState,
     targets: &[Option<Complex<F<f64>>>],
@@ -3551,15 +3924,7 @@ pub fn build_integration_result(
                 process: slot_meta.process_name.clone(),
                 integrand: slot_meta.integrand_name.clone(),
                 target: targets[slot_index],
-                integral: IntegralEstimate {
-                    neval: accumulator.re.processed_samples,
-                    real_zero: accumulator.re.num_zero_evaluations,
-                    im_zero: accumulator.im.num_zero_evaluations,
-                    result: Complex::new(accumulator.re.avg, accumulator.im.avg),
-                    error: Complex::new(accumulator.re.err, accumulator.im.err),
-                    real_chisq: accumulator.re.chi_sq,
-                    im_chisq: accumulator.im.chi_sq,
-                },
+                integral: integral_estimate(&accumulator.re, &accumulator.im),
                 table_results: build_table_result_summary(
                     slot_meta,
                     accumulator,
@@ -3602,6 +3967,48 @@ pub fn build_integration_result(
                                 })
                             })
                     }),
+                },
+                absolute: AbsoluteIntegrationResult {
+                    integral: integral_estimate(&accumulator.absolute_re, &accumulator.absolute_im),
+                    table_results: build_absolute_table_result_summary(
+                        slot_meta,
+                        accumulator,
+                        integration_state.iter,
+                    ),
+                    max_weight_info: build_absolute_max_weight_info_summary(
+                        &integration_state
+                            .sampling_state_for_slot(slot_index)
+                            .discrete_axis_labels,
+                        accumulator,
+                    ),
+                    grid_breakdown: ComponentDiscreteBreakdown {
+                        re: discrete_context.as_ref().and_then(|context| {
+                            integration_state.slot_absolute_re_summaries[slot_index]
+                                .as_ref()
+                                .zip(
+                                    integration_state
+                                        .slot_first_non_trivial_discrete_breakdown_metadata
+                                        [slot_index]
+                                        .as_ref(),
+                                )
+                                .and_then(|(summary, metadata)| {
+                                    summary.first_non_trivial_breakdown(metadata, &context.pdfs)
+                                })
+                        }),
+                        im: discrete_context.as_ref().and_then(|context| {
+                            integration_state.slot_absolute_im_summaries[slot_index]
+                                .as_ref()
+                                .zip(
+                                    integration_state
+                                        .slot_first_non_trivial_discrete_breakdown_metadata
+                                        [slot_index]
+                                        .as_ref(),
+                                )
+                                .and_then(|(summary, metadata)| {
+                                    summary.first_non_trivial_breakdown(metadata, &context.pdfs)
+                                })
+                        }),
+                    },
                 },
             }
         })
@@ -3673,7 +4080,175 @@ mod tests {
         accumulator.im.chi_sq = F(im_chi_sq);
         accumulator.im.processed_samples = 100_000;
         accumulator.im.max_eval_positive = F(1.0);
+        accumulator.absolute_re.avg = F(re_avg.abs() * 2.0);
+        accumulator.absolute_re.err = F(re_err.abs());
+        accumulator.absolute_re.chi_sq = F(re_chi_sq);
+        accumulator.absolute_re.processed_samples = 100_000;
+        accumulator.absolute_re.max_eval_positive = F(2.0);
+        accumulator.absolute_im.avg = F(im_avg.abs() * 2.0);
+        accumulator.absolute_im.err = F(im_err.abs());
+        accumulator.absolute_im.chi_sq = F(im_chi_sq);
+        accumulator.absolute_im.processed_samples = 100_000;
+        accumulator.absolute_im.max_eval_positive = F(2.0);
         accumulator
+    }
+
+    #[test]
+    fn complex_accumulator_tracks_componentwise_absolute_weighted_samples_and_merges() {
+        let first_sample = Sample::Continuous(F(1.0), vec![F(0.25)]);
+        let second_sample = Sample::Continuous(F(1.0), vec![F(0.75)]);
+        let mut accumulator = ComplexAccumulator::new();
+        let mut other = ComplexAccumulator::new();
+
+        accumulator.add_sample(Complex::new(F(-2.0), F(3.0)), F(2.0), Some(&first_sample));
+        other.add_sample(Complex::new(F(1.0), F(-4.0)), F(2.0), Some(&second_sample));
+        accumulator.merge(&other);
+        accumulator.update_iter(false);
+
+        assert_eq!(accumulator.re.avg, F(-1.0));
+        assert_eq!(accumulator.im.avg, F(-1.0));
+        assert_eq!(accumulator.absolute_re.avg, F(3.0));
+        assert_eq!(accumulator.absolute_im.avg, F(7.0));
+        assert!((accumulator.absolute_re.err - F(1.0)).abs() < F(1.0e-12));
+        assert!((accumulator.absolute_im.err - F(1.0)).abs() < F(1.0e-12));
+        assert_eq!(accumulator.absolute_re.processed_samples, 2);
+        assert_eq!(accumulator.absolute_im.processed_samples, 2);
+        assert_eq!(accumulator.absolute_re.max_eval_positive, F(4.0));
+        assert_eq!(accumulator.absolute_im.max_eval_positive, F(8.0));
+        assert_eq!(
+            accumulator
+                .absolute_re
+                .max_eval_positive_xs
+                .as_ref()
+                .map(|sample| format!("{sample:?}")),
+            Some(format!("{first_sample:?}"))
+        );
+        assert_eq!(
+            accumulator
+                .absolute_im
+                .max_eval_positive_xs
+                .as_ref()
+                .map(|sample| format!("{sample:?}")),
+            Some(format!("{second_sample:?}"))
+        );
+    }
+
+    #[test]
+    fn shallow_absolute_monitor_uses_local_path_pdfs_and_has_no_descendants() {
+        let continuous_grid = || Grid::Continuous(ContinuousGrid::new(1, 8, 10, None, false));
+        let monitored_grid = Grid::Discrete(DiscreteGrid::new(
+            vec![Some(continuous_grid()), Some(continuous_grid())],
+            F(10.0),
+            false,
+        ));
+        let mut production_grid = Grid::Discrete(DiscreteGrid::new(
+            vec![Some(monitored_grid)],
+            F(10.0),
+            false,
+        ));
+        let Grid::Discrete(root) = &mut production_grid else {
+            unreachable!()
+        };
+        let Some(Grid::Discrete(monitored)) = root.bins[0].sub_grid.as_mut() else {
+            unreachable!()
+        };
+        monitored.bins[0].pdf = F(0.25);
+        monitored.bins[1].pdf = F(0.75);
+
+        let mut monitor = shallow_discrete_monitor_grid(&production_grid, &[0])
+            .expect("nested discrete path should produce a shallow monitor");
+        assert_eq!(monitor.bins[0].pdf, F(0.25));
+        assert_eq!(monitor.bins[1].pdf, F(0.75));
+        assert!(monitor.bins.iter().all(|bin| bin.sub_grid.is_none()));
+
+        let sample = |bin_index, local_weight, x| {
+            Sample::Discrete(
+                F(local_weight),
+                0,
+                Some(Box::new(Sample::Discrete(
+                    F(local_weight),
+                    bin_index,
+                    Some(Box::new(Sample::Continuous(F(1.0), vec![F(x)]))),
+                ))),
+            )
+        };
+        for (sample, evaluation) in [
+            (sample(0, 4.0, 0.1), F(-3.0)),
+            (sample(0, 4.0, 0.2), F(5.0)),
+            (sample(1, 4.0 / 3.0, 0.3), F(-6.0)),
+            (sample(1, 4.0 / 3.0, 0.4), F(10.0)),
+        ] {
+            add_shallow_monitor_sample(Some(&mut monitor), Some(&[0]), &sample, evaluation)
+                .expect("valid local discrete sample should be accumulated");
+        }
+
+        let mut summary = DiscreteGridAccumulatorSummary::from_shallow_grid(&monitor);
+        summary.merge_shallow_iteration_grid(&monitor);
+        summary.update_iter();
+        assert!(summary.bins.iter().all(|bin| bin.sub_summary.is_none()));
+        assert_eq!(summary.bins[0].accumulator.avg, F(4.0));
+        assert_eq!(summary.bins[1].accumulator.avg, F(8.0));
+        assert_eq!(summary.bins[0].accumulator.processed_samples, 2);
+        assert_eq!(summary.bins[1].accumulator.processed_samples, 2);
+
+        let mismatched_sample =
+            Sample::Discrete(F(1.0), 1, Some(Box::new(Sample::Discrete(F(1.0), 0, None))));
+        assert!(
+            add_shallow_monitor_sample(Some(&mut monitor), Some(&[0]), &mismatched_sample, F(1.0),)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn shallow_monitor_creation_does_not_change_production_sampling_sequence() {
+        let continuous_grid = || Grid::Continuous(ContinuousGrid::new(1, 8, 10, None, false));
+        let monitored_grid = Grid::Discrete(DiscreteGrid::new(
+            vec![Some(continuous_grid()), Some(continuous_grid())],
+            F(10.0),
+            false,
+        ));
+        let sampling_grid = Grid::Discrete(DiscreteGrid::new(
+            vec![Some(monitored_grid)],
+            F(10.0),
+            false,
+        ));
+        let settings = RuntimeSettings::default();
+        let integrand = Integrand::UnitVolume(UnitVolumeIntegrand::new(
+            settings,
+            UnitVolumeSettings { n_3d_momenta: 1 },
+        ));
+        let mut without_monitor = CoreIterationState::new(
+            vec![integrand.clone()],
+            SamplingCorrelationMode::Correlated,
+            std::slice::from_ref(&sampling_grid),
+            None,
+            37,
+            11,
+            0,
+        );
+        let mut with_monitor = CoreIterationState::new(
+            vec![integrand],
+            SamplingCorrelationMode::Correlated,
+            std::slice::from_ref(&sampling_grid),
+            Some(&[0]),
+            37,
+            11,
+            0,
+        );
+
+        for _ in 0..16 {
+            let mut without_sample = Sample::new();
+            let mut with_sample = Sample::new();
+            let without_state = &mut without_monitor.sampling_states[0];
+            without_state
+                .sampling_grid
+                .sample(&mut without_state.rng, &mut without_sample);
+            let with_state = &mut with_monitor.sampling_states[0];
+            with_state
+                .sampling_grid
+                .sample(&mut with_state.rng, &mut with_sample);
+            assert_eq!(format!("{without_sample:?}"), format!("{with_sample:?}"));
+        }
     }
 
     struct StatisticsFixture {
@@ -3825,6 +4400,9 @@ mod tests {
             slot_im_grids: (0..state.slot_metas.len())
                 .map(|_| grid_template.clone())
                 .collect(),
+            monitored_discrete_path: None,
+            slot_absolute_re_grids: vec![None; state.slot_metas.len()],
+            slot_absolute_im_grids: vec![None; state.slot_metas.len()],
             remaining_points: 0,
             completed_points: 12,
         }
@@ -3928,6 +4506,29 @@ mod tests {
                     Some(Sample::Continuous(F(1.0), vec![F(0.75)]));
             }
         }
+        for (summaries, component_scale) in [
+            (&mut state.slot_absolute_re_summaries, 4.0),
+            (&mut state.slot_absolute_im_summaries, 3.0),
+        ] {
+            for (slot_index, summary) in summaries.iter_mut().enumerate() {
+                let summary = summary.as_mut().expect("shallow absolute summary expected");
+                let slot_scale = slot_index as f64 + 1.0;
+                summary.bins[0].accumulator.avg = F(component_scale * 1.0e-5 * slot_scale);
+                summary.bins[0].accumulator.err = F(3.0e-6);
+                summary.bins[0].accumulator.chi_sq = F(0.3);
+                summary.bins[0].accumulator.processed_samples = 150;
+                summary.bins[0].accumulator.max_eval_positive = F(1.25);
+                summary.bins[0].accumulator.max_eval_positive_xs =
+                    Some(Sample::Continuous(F(1.0), vec![F(0.35)]));
+                summary.bins[1].accumulator.avg = F(component_scale * 0.5e-5 * slot_scale);
+                summary.bins[1].accumulator.err = F(1.5e-6);
+                summary.bins[1].accumulator.chi_sq = F(0.15);
+                summary.bins[1].accumulator.processed_samples = 50;
+                summary.bins[1].accumulator.max_eval_positive = F(0.5);
+                summary.bins[1].accumulator.max_eval_positive_xs =
+                    Some(Sample::Continuous(F(1.0), vec![F(0.85)]));
+            }
+        }
 
         state
     }
@@ -3939,7 +4540,12 @@ mod tests {
         };
         grid.bins.truncate(1);
         grid.bins[0].pdf = F(1.0);
-        for summaries in [&mut state.slot_re_summaries, &mut state.slot_im_summaries] {
+        for summaries in [
+            &mut state.slot_re_summaries,
+            &mut state.slot_im_summaries,
+            &mut state.slot_absolute_re_summaries,
+            &mut state.slot_absolute_im_summaries,
+        ] {
             for summary in summaries.iter_mut().flatten() {
                 summary.bins.truncate(1);
             }
@@ -4011,6 +4617,7 @@ mod tests {
             vec![integrand_a, integrand_b],
             SamplingCorrelationMode::Correlated,
             &[sampling_grid_template],
+            None,
             1337,
             0,
             8,
@@ -4225,6 +4832,170 @@ mod tests {
         assert!(!rendered.contains("Δ ="), "{rendered}");
         assert!(rendered.contains("Integration statistics"), "{rendered}");
         assert!(rendered.contains("mwi"), "{rendered}");
+    }
+
+    #[test]
+    fn tabled_all_rows_insert_value_only_absolute_continuations_and_filter_phases() {
+        let state = make_discrete_integration_state();
+        let targets = [Some(Complex::new(F(1.0e-4), F(2.0e-5))), None];
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: true,
+            show_max_weight_details: true,
+            show_top_discrete_grid: false,
+            show_discrete_contributions_sum: false,
+            ..default_view_options()
+        };
+        let update = build_status_update(StatusUpdateBuildRequest::new(
+            IntegrationStatusKind::Iteration,
+            &state,
+            &targets,
+            &view_options,
+        ));
+        let rendered = render_update(StatusUpdateBuildRequest::new(
+            IntegrationStatusKind::Iteration,
+            &state,
+            &targets,
+            &view_options,
+        ));
+        let lines = rendered.lines().collect_vec();
+
+        let row_text = |component, view| {
+            update
+                .main_results
+                .find_row(status_update::ContributionKind::All, component)
+                .and_then(|row| row.slot_cell(0))
+                .and_then(|cell| cell.statistics(view).value.as_ref())
+                .map(|value| value.display.to_plain_string())
+                .expect("All row value should exist")
+        };
+        let signed_re = row_text(
+            status_update::ComponentKind::Real,
+            status_update::IntegralView::Signed,
+        );
+        let absolute_re = row_text(
+            status_update::ComponentKind::Real,
+            status_update::IntegralView::Absolute,
+        );
+        let signed_im = row_text(
+            status_update::ComponentKind::Imag,
+            status_update::IntegralView::Signed,
+        );
+        let absolute_im = row_text(
+            status_update::ComponentKind::Imag,
+            status_update::IntegralView::Absolute,
+        );
+        let line_index = |needle: &str| {
+            lines
+                .iter()
+                .position(|line| line.contains(needle))
+                .unwrap_or_else(|| panic!("missing {needle:?} in:\n{rendered}"))
+        };
+        let signed_re_line = line_index(&signed_re);
+        let absolute_re_line = line_index(&absolute_re);
+        let signed_im_line = line_index(&signed_im);
+        let absolute_im_line = line_index(&absolute_im);
+        assert!(signed_re_line < absolute_re_line);
+        assert!(absolute_re_line < signed_im_line);
+        assert!(signed_im_line < absolute_im_line);
+        assert!(lines[absolute_re_line].contains("|re|"));
+        assert!(lines[absolute_im_line].contains("|im|"));
+
+        for (component, absolute_line) in [
+            (status_update::ComponentKind::Real, absolute_re_line),
+            (status_update::ComponentKind::Imag, absolute_im_line),
+        ] {
+            let row = update
+                .main_results
+                .find_row(status_update::ContributionKind::All, component)
+                .expect("All row should exist");
+            let statistics = row
+                .slot_cell(0)
+                .expect("slot cells should exist")
+                .statistics(status_update::IntegralView::Absolute);
+            for metadata in [
+                statistics.relative_error.as_ref(),
+                statistics.chi_sq.as_ref(),
+                statistics.max_weight_impact.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                let metadata = metadata.display.to_plain_string();
+                assert!(
+                    !lines[absolute_line].contains(&metadata),
+                    "absolute continuation unexpectedly contains {metadata:?}: {}",
+                    lines[absolute_line]
+                );
+            }
+            let (delta_sigma, delta_percent) =
+                update.target_deltas_for_row_slot(row, 0, status_update::IntegralView::Absolute);
+            assert!(delta_sigma.is_none());
+            assert!(delta_percent.is_none());
+        }
+        assert_eq!(rendered.matches("Maximum weight details").count(), 1);
+        assert_eq!(
+            rendered.matches("Integration statistics [global]").count(),
+            1
+        );
+
+        for (phase, included, excluded) in [
+            (IntegrationStatusPhaseDisplay::Real, "|re|", "|im|"),
+            (IntegrationStatusPhaseDisplay::Imag, "|im|", "|re|"),
+        ] {
+            let phase_options = IntegrationStatusViewOptions {
+                phase_display: phase,
+                show_statistics: false,
+                show_max_weight_details: false,
+                ..default_view_options()
+            };
+            let phase_rendered = render_update(StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Iteration,
+                &state,
+                &targets,
+                &phase_options,
+            ));
+            assert!(phase_rendered.contains(included), "{phase_rendered}");
+            assert!(!phase_rendered.contains(excluded), "{phase_rendered}");
+        }
+    }
+
+    #[test]
+    fn absolute_sum_status_adds_shallow_means_and_combines_errors_in_quadrature() {
+        let state = make_discrete_integration_state();
+        let targets = [Some(Complex::new(F(1.0e-4), F(2.0e-5))), None];
+        let view_options = IntegrationStatusViewOptions {
+            show_discrete_contributions_sum: true,
+            ..default_view_options()
+        };
+        let update = build_status_update(StatusUpdateBuildRequest::new(
+            IntegrationStatusKind::Iteration,
+            &state,
+            &targets,
+            &view_options,
+        ));
+        let row = update
+            .main_results
+            .find_row(
+                status_update::ContributionKind::Sum,
+                status_update::ComponentKind::Real,
+            )
+            .expect("absolute Sum row should exist");
+        let value = row
+            .slot_cell(0)
+            .expect("slot cells should exist")
+            .statistics(status_update::IntegralView::Absolute)
+            .value
+            .as_ref()
+            .expect("absolute Sum estimate should exist")
+            .raw;
+
+        assert!((value.0 - F(6.0e-5)).abs() < F(1.0e-18));
+        let expected_error = (F(3.0e-6) * F(3.0e-6) + F(1.5e-6) * F(1.5e-6)).sqrt();
+        assert!((value.1 - expected_error).abs() < F(1.0e-18));
+        let (delta_sigma, delta_percent) =
+            update.target_deltas_for_row_slot(row, 0, status_update::IntegralView::Absolute);
+        assert!(delta_sigma.is_none());
+        assert!(delta_percent.is_none());
     }
 
     #[test]
@@ -4466,6 +5237,133 @@ mod tests {
         assert_eq!(breakdown.entries[1].bin_label.as_deref(), Some("GL1"));
         assert_eq!(breakdown.entries[1].pdf, F(0.25));
         assert_eq!(breakdown.entries[1].processed_samples, 50);
+    }
+
+    #[test]
+    fn integration_result_persists_absolute_bundle_and_shallow_breakdown() {
+        let mut state = make_discrete_integration_state();
+        let accumulator = &mut state.all_integrals[0];
+        accumulator.absolute_re.avg = F(3.5e-4);
+        accumulator.absolute_re.err = F(2.5e-5);
+        accumulator.absolute_re.chi_sq = F(0.42);
+        accumulator.absolute_re.processed_samples = 200;
+        accumulator.absolute_re.max_eval_positive = F(8.0);
+        accumulator.absolute_re.max_eval_positive_xs = Some(Sample::Discrete(
+            F(4.0),
+            0,
+            Some(Box::new(Sample::Continuous(F(1.0), vec![F(0.25)]))),
+        ));
+        accumulator.absolute_im.avg = F(1.25e-4);
+        accumulator.absolute_im.err = F(1.0e-5);
+        accumulator.absolute_im.chi_sq = F(0.24);
+        accumulator.absolute_im.processed_samples = 200;
+        accumulator.absolute_im.max_eval_positive = F(5.0);
+
+        let re_summary = state.slot_absolute_re_summaries[0]
+            .as_mut()
+            .expect("absolute real summary should exist");
+        re_summary.bins[0].accumulator.avg = F(2.0e-4);
+        re_summary.bins[0].accumulator.err = F(2.0e-5);
+        re_summary.bins[0].accumulator.processed_samples = 150;
+        re_summary.bins[1].accumulator.avg = F(1.5e-4);
+        re_summary.bins[1].accumulator.err = F(1.5e-5);
+        re_summary.bins[1].accumulator.processed_samples = 50;
+        let im_summary = state.slot_absolute_im_summaries[0]
+            .as_mut()
+            .expect("absolute imaginary summary should exist");
+        im_summary.bins[0].accumulator.avg = F(7.5e-5);
+        im_summary.bins[0].accumulator.processed_samples = 150;
+        im_summary.bins[1].accumulator.avg = F(5.0e-5);
+        im_summary.bins[1].accumulator.processed_samples = 50;
+
+        let result =
+            build_integration_result(&state, &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None]);
+        let absolute = &result
+            .slot("proc_a@itg_a")
+            .expect("absolute result slot should be present")
+            .absolute;
+
+        assert_eq!(absolute.integral.result.re, F(3.5e-4));
+        assert_eq!(absolute.integral.result.im, F(1.25e-4));
+        assert_eq!(absolute.integral.neval, 200);
+        assert_eq!(absolute.table_results[0].component, "|re|");
+        assert_eq!(absolute.table_results[1].component, "|im|");
+        assert!(
+            absolute
+                .table_results
+                .iter()
+                .all(|row| row.target_delta_sigma.is_none() && row.target_delta_percent.is_none())
+        );
+        assert_eq!(absolute.max_weight_info.len(), 2);
+        assert!(
+            absolute
+                .max_weight_info
+                .iter()
+                .all(|entry| entry.sign == "+" && entry.max_eval > F(0.0))
+        );
+        let breakdown = absolute
+            .grid_breakdown
+            .re
+            .as_ref()
+            .expect("absolute shallow breakdown should be persisted");
+        assert_eq!(breakdown.entries.len(), 2);
+        assert_eq!(breakdown.entries[0].pdf, F(0.75));
+        assert_eq!(breakdown.entries[0].value, F(2.0e-4));
+        assert_eq!(breakdown.entries[1].pdf, F(0.25));
+        assert_eq!(breakdown.entries[1].value, F(1.5e-4));
+
+        let json = serde_json::to_string(&result).expect("integration result should serialize");
+        assert!(json.contains("\"absolute\""));
+        let decoded: IntegrationResult =
+            serde_json::from_str(&json).expect("integration result should deserialize");
+        assert_eq!(
+            decoded
+                .slot("proc_a@itg_a")
+                .expect("round-tripped slot should exist")
+                .absolute
+                .integral
+                .result
+                .re,
+            F(3.5e-4)
+        );
+    }
+
+    #[test]
+    fn integration_state_roundtrip_preserves_absolute_accumulators_and_summaries() {
+        let mut state = make_discrete_integration_state();
+        state.all_integrals[0].absolute_re.avg = F(4.5);
+        state.slot_absolute_re_summaries[0]
+            .as_mut()
+            .expect("absolute summary should exist")
+            .bins[1]
+            .accumulator
+            .avg = F(2.25);
+
+        let encoded = bincode::encode_to_vec(&state, bincode::config::standard())
+            .expect("integration state should serialize");
+        let (decoded, consumed): (IntegrationState, usize) =
+            bincode::decode_from_slice(&encoded, bincode::config::standard())
+                .expect("integration state should deserialize");
+
+        assert_eq!(consumed, encoded.len());
+        assert_eq!(decoded.all_integrals[0].absolute_re.avg, F(4.5));
+        assert_eq!(
+            decoded.slot_absolute_re_summaries[0]
+                .as_ref()
+                .expect("round-tripped absolute summary should exist")
+                .bins[1]
+                .accumulator
+                .avg,
+            F(2.25)
+        );
+        assert!(
+            decoded.slot_absolute_re_summaries[0]
+                .as_ref()
+                .expect("round-tripped absolute summary should exist")
+                .bins
+                .iter()
+                .all(|bin| bin.sub_summary.is_none())
+        );
     }
 
     #[test]
@@ -4800,6 +5698,38 @@ mod tests {
     }
 
     #[test]
+    fn live_preview_merges_and_finalizes_absolute_accumulators_without_mutating_saved_state() {
+        let mut state = make_integration_state();
+        state.all_integrals = vec![ComplexAccumulator::new(); state.slot_metas.len()];
+        let slots = make_preview_test_slots(&state.slot_metas);
+        let mut core_state = make_preview_test_core_state(&state);
+        core_state.integrals[0].add_sample(Complex::new(F(-2.0), F(3.0)), F(2.0), None);
+        core_state.integrals[0].add_sample(Complex::new(F(1.0), F(-4.0)), F(2.0), None);
+
+        let preview_state = build_preview_integration_state(
+            &state,
+            &slots,
+            4,
+            core_state.completed_points,
+            1.5,
+            &[core_state],
+        );
+
+        assert_eq!(state.all_integrals[0].absolute_re.processed_samples, 0);
+        assert_eq!(state.all_integrals[0].absolute_im.processed_samples, 0);
+        assert_eq!(preview_state.all_integrals[0].absolute_re.avg, F(3.0));
+        assert_eq!(preview_state.all_integrals[0].absolute_im.avg, F(7.0));
+        assert_eq!(
+            preview_state.all_integrals[0].absolute_re.processed_samples,
+            2
+        );
+        assert_eq!(
+            preview_state.all_integrals[0].absolute_im.processed_samples,
+            2
+        );
+    }
+
+    #[test]
     fn live_status_updates_use_current_batch_statistics_in_bottom_panels() {
         let state = make_integration_state();
         let slots = make_preview_test_slots(&state.slot_metas);
@@ -5046,7 +5976,7 @@ mod tests {
         );
 
         assert!(
-            rendered.contains("Convergence : imag (not selected for training)"),
+            rendered.contains("Convergence ⟨I⟩ : im (not selected for training)"),
             "{rendered}"
         );
     }
@@ -5125,7 +6055,7 @@ mod tests {
             |_| {},
         );
 
-        assert!(rendered.contains("ETA to target"), "{rendered}");
+        assert!(rendered.contains("ETA to ⟨I⟩ target"), "{rendered}");
         assert!(rendered.contains("(% err <= 5%)"), "{rendered}");
     }
 
@@ -5389,7 +6319,7 @@ mod tests {
             |_| {},
         );
 
-        assert!(rendered.contains("ETA to target"), "{rendered}");
+        assert!(rendered.contains("ETA to ⟨I⟩ target"), "{rendered}");
         assert!(rendered.contains("∞"), "{rendered}");
     }
 
@@ -5425,7 +6355,7 @@ mod tests {
             |_| {},
         );
 
-        assert!(rendered.contains("ETA to target"), "{rendered}");
+        assert!(rendered.contains("ETA to ⟨I⟩ target"), "{rendered}");
         assert!(!rendered.contains("∞"), "{rendered}");
     }
 
@@ -5622,7 +6552,7 @@ mod tests {
 
         assert!(rendered.contains("Selected bin"), "{rendered}");
         assert!(
-            rendered.contains("Discrete bins for focused integrand"),
+            rendered.contains("Discrete bins ⟨I⟩ for focused integrand"),
             "{rendered}"
         );
         assert!(rendered.contains("sample %"), "{rendered}");
@@ -5652,7 +6582,7 @@ mod tests {
         );
 
         assert!(
-            rendered.contains("Discrete bins for focused integrand"),
+            rendered.contains("Discrete bins ⟨I⟩ for focused integrand"),
             "{rendered}"
         );
         assert!(rendered.contains("GL22"), "{rendered}");

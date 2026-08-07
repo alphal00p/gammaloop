@@ -17,7 +17,7 @@ use crate::utils::normalize_tabled_separator_rows;
 use super::{
     display::{StyledText, TextColor},
     status_update::{
-        DiscreteMaxWeightDetailsSection, MainResultsRowGroupKind, MainResultsSection,
+        DiscreteMaxWeightDetailsSection, IntegralView, MainResultsRowGroupKind, MainResultsSection,
         MaxWeightDetailsSection, StatisticsScope, StatisticsSection, StatusUpdate,
     },
 };
@@ -301,21 +301,58 @@ fn build_main_results_table(
                 render_styled_text(&row.component.display),
             ];
             for slot_cells in &row.slot_cells {
-                record.push(maybe_render(&slot_cells.value));
-                record.push(maybe_render(&slot_cells.relative_error));
+                let statistics = slot_cells.statistics(IntegralView::Signed);
+                record.push(maybe_render(&statistics.value));
+                record.push(maybe_render(&statistics.relative_error));
                 if show_discrete_columns {
                     record.push(maybe_render(&slot_cells.sample_fraction));
                     record.push(maybe_render(&slot_cells.sample_count));
                     record.push(maybe_render(&slot_cells.target_pdf));
                 }
             }
-            record.push(maybe_render(&row.chi_sq));
-            record.push(maybe_render(&row.max_weight_impact));
+            let slot0_statistics = row
+                .slot_cells
+                .first()
+                .map(|cell| cell.statistics(IntegralView::Signed));
+            record.push(
+                slot0_statistics
+                    .and_then(|statistics| statistics.chi_sq.as_ref())
+                    .map(|field| render_styled_text(&field.display))
+                    .unwrap_or_default(),
+            );
+            record.push(
+                slot0_statistics
+                    .and_then(|statistics| statistics.max_weight_impact.as_ref())
+                    .map(|field| render_styled_text(&field.display))
+                    .unwrap_or_default(),
+            );
             if section.has_target_columns {
                 record.push(maybe_render(&row.delta_sigma));
                 record.push(maybe_render(&row.delta_percent));
             }
             builder.push_record(record);
+
+            if group.kind == MainResultsRowGroupKind::All {
+                let mut continuation = vec![
+                    String::new(),
+                    render_styled_text(
+                        &row.component
+                            .raw
+                            .label_display_for_view(IntegralView::Absolute),
+                    ),
+                ];
+                for slot_cells in &row.slot_cells {
+                    continuation.push(maybe_render(
+                        &slot_cells.statistics(IntegralView::Absolute).value,
+                    ));
+                    continuation.push(String::new());
+                    if show_discrete_columns {
+                        continuation.extend(std::iter::repeat_n(String::new(), 3));
+                    }
+                }
+                continuation.extend(std::iter::repeat_n(String::new(), metadata_columns));
+                builder.push_record(continuation);
+            }
         }
     }
 
@@ -336,7 +373,12 @@ fn build_main_results_table(
     let mut separator_rows = vec![1usize, 2usize];
     let mut row_offset = 2usize;
     for (group_index, group) in visible_row_groups.iter().enumerate() {
-        row_offset += group.rows.len();
+        row_offset += group.rows.len()
+            * if group.kind == MainResultsRowGroupKind::All {
+                2
+            } else {
+                1
+            };
         if group_index + 1 < visible_row_groups.len() {
             separator_rows.push(row_offset);
         }
@@ -549,13 +591,13 @@ fn build_statistics_table(section: &StatisticsSection) -> StatusTable {
 pub(crate) fn render_status_update(update: &StatusUpdate, options: &TabledRenderOptions) -> String {
     let mut tables = vec![build_main_results_table(&update.main_results, options)];
     if options.show_max_weight_details
-        && let Some(section) = update.max_weight_details.as_ref()
+        && let Some(section) = update.max_weight_details(IntegralView::Signed)
     {
         tables.push(build_max_weight_details_table(section));
     }
     if options.show_max_weight_details
         && options.show_max_weight_info_for_discrete_bins
-        && let Some(section) = update.discrete_max_weight_details.as_ref()
+        && let Some(section) = update.discrete_max_weight_details(IntegralView::Signed)
     {
         tables.push(build_discrete_max_weight_details_table(section));
     }

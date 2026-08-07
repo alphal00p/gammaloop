@@ -182,6 +182,13 @@ pub(crate) enum ComponentKind {
     Imag,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum IntegralView {
+    #[default]
+    Signed,
+    Absolute,
+}
+
 impl ComponentKind {
     pub(crate) fn from_training_phase_display(
         display: IntegrationStatusPhaseDisplay,
@@ -205,9 +212,15 @@ impl ComponentKind {
     }
 
     pub(crate) fn tag(self) -> &'static str {
-        match self {
-            Self::Real => "re",
-            Self::Imag => "im",
+        self.tag_for_view(IntegralView::Signed)
+    }
+
+    pub(crate) fn tag_for_view(self, view: IntegralView) -> &'static str {
+        match (self, view) {
+            (Self::Real, IntegralView::Signed) => "re",
+            (Self::Imag, IntegralView::Signed) => "im",
+            (Self::Real, IntegralView::Absolute) => "|re|",
+            (Self::Imag, IntegralView::Absolute) => "|im|",
         }
     }
 
@@ -226,7 +239,11 @@ impl ComponentKind {
     }
 
     pub(crate) fn label_display(self) -> StyledText {
-        StyledText::styled(self.tag(), self.text_style())
+        self.label_display_for_view(IntegralView::Signed)
+    }
+
+    pub(crate) fn label_display_for_view(self, view: IntegralView) -> StyledText {
+        StyledText::styled(self.tag_for_view(view), self.text_style())
     }
 
     fn display_field(self) -> DisplayField<Self> {
@@ -250,7 +267,9 @@ pub struct StatusUpdate {
     pub(crate) per_slot_training_phase: bool,
     pub(crate) main_results: MainResultsSection,
     pub(crate) max_weight_details: Option<MaxWeightDetailsSection>,
+    pub(crate) absolute_max_weight_details: Option<MaxWeightDetailsSection>,
     pub(crate) discrete_max_weight_details: Option<DiscreteMaxWeightDetailsSection>,
+    pub(crate) absolute_discrete_max_weight_details: Option<DiscreteMaxWeightDetailsSection>,
     pub(crate) statistics: Option<StatisticsSection>,
 }
 
@@ -342,15 +361,39 @@ impl StatusUpdate {
         &self,
         row: &MainResultsRow,
         slot_index: usize,
+        view: IntegralView,
     ) -> (Option<DisplayField<f64>>, Option<DisplayField<f64>>) {
+        if view == IntegralView::Absolute {
+            return (None, None);
+        }
         let Some(cell) = row.slot_cell(slot_index) else {
             return (None, None);
         };
-        let Some(value) = cell.value.as_ref() else {
+        let Some(value) = cell.statistics(view).value.as_ref() else {
             return (None, None);
         };
         let target = self.target_for_slot_component(slot_index, row.component.raw);
         format_delta_fields_from_estimate(value.raw.0, value.raw.1, target)
+    }
+
+    pub(crate) fn max_weight_details(
+        &self,
+        view: IntegralView,
+    ) -> Option<&MaxWeightDetailsSection> {
+        match view {
+            IntegralView::Signed => self.max_weight_details.as_ref(),
+            IntegralView::Absolute => self.absolute_max_weight_details.as_ref(),
+        }
+    }
+
+    pub(crate) fn discrete_max_weight_details(
+        &self,
+        view: IntegralView,
+    ) -> Option<&DiscreteMaxWeightDetailsSection> {
+        match view {
+            IntegralView::Signed => self.discrete_max_weight_details.as_ref(),
+            IntegralView::Absolute => self.absolute_discrete_max_weight_details.as_ref(),
+        }
     }
 }
 
@@ -919,21 +962,34 @@ pub(crate) struct MainResultsRow {
     pub(crate) contribution: DisplayField<ContributionKind>,
     pub(crate) component: DisplayField<ComponentKind>,
     pub(crate) slot_cells: Vec<MainTableSlotCells>,
-    pub(crate) chi_sq: Option<DisplayField<f64>>,
     pub(crate) delta_sigma: Option<DisplayField<f64>>,
     pub(crate) delta_percent: Option<DisplayField<f64>>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct IntegralStatisticsCells {
+    pub(crate) value: Option<DisplayField<(F<f64>, F<f64>)>>,
+    pub(crate) relative_error: Option<DisplayField<f64>>,
+    pub(crate) chi_sq: Option<DisplayField<f64>>,
     pub(crate) max_weight_impact: Option<DisplayField<f64>>,
 }
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct MainTableSlotCells {
-    pub(crate) value: Option<DisplayField<(F<f64>, F<f64>)>>,
-    pub(crate) relative_error: Option<DisplayField<f64>>,
-    pub(crate) chi_sq: Option<DisplayField<f64>>,
-    pub(crate) max_weight_impact: Option<DisplayField<f64>>,
+    pub(crate) signed: IntegralStatisticsCells,
+    pub(crate) absolute: IntegralStatisticsCells,
     pub(crate) sample_fraction: Option<DisplayField<f64>>,
     pub(crate) sample_count: Option<DisplayField<usize>>,
     pub(crate) target_pdf: Option<DisplayField<f64>>,
+}
+
+impl MainTableSlotCells {
+    pub(crate) fn statistics(&self, view: IntegralView) -> &IntegralStatisticsCells {
+        match view {
+            IntegralView::Signed => &self.signed,
+            IntegralView::Absolute => &self.absolute,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -998,21 +1054,38 @@ pub(crate) struct StatisticsMixSegment {
 fn component_accumulator(
     accumulator: &ComplexAccumulator,
     component: ComponentKind,
+    view: IntegralView,
 ) -> &StatisticsAccumulator<F<f64>> {
-    match component {
-        ComponentKind::Real => &accumulator.re,
-        ComponentKind::Imag => &accumulator.im,
+    match (component, view) {
+        (ComponentKind::Real, IntegralView::Signed) => &accumulator.re,
+        (ComponentKind::Imag, IntegralView::Signed) => &accumulator.im,
+        (ComponentKind::Real, IntegralView::Absolute) => &accumulator.absolute_re,
+        (ComponentKind::Imag, IntegralView::Absolute) => &accumulator.absolute_im,
     }
 }
 
-fn slot_component_summary(
-    integration_state: &IntegrationState,
+fn slot_component_summary<'a>(
+    integration_state: &'a IntegrationState,
     slot_index: usize,
     component: ComponentKind,
-) -> Option<&DiscreteGridAccumulatorSummary> {
-    match component {
-        ComponentKind::Real => integration_state.slot_re_summaries[slot_index].as_ref(),
-        ComponentKind::Imag => integration_state.slot_im_summaries[slot_index].as_ref(),
+    view: IntegralView,
+    monitored_path: &[usize],
+) -> Option<&'a DiscreteGridAccumulatorSummary> {
+    match (component, view) {
+        (ComponentKind::Real, IntegralView::Signed) => integration_state.slot_re_summaries
+            [slot_index]
+            .as_ref()
+            .and_then(|summary| summary_at_path(summary, monitored_path)),
+        (ComponentKind::Imag, IntegralView::Signed) => integration_state.slot_im_summaries
+            [slot_index]
+            .as_ref()
+            .and_then(|summary| summary_at_path(summary, monitored_path)),
+        (ComponentKind::Real, IntegralView::Absolute) => {
+            integration_state.slot_absolute_re_summaries[slot_index].as_ref()
+        }
+        (ComponentKind::Imag, IntegralView::Absolute) => {
+            integration_state.slot_absolute_im_summaries[slot_index].as_ref()
+        }
     }
 }
 
@@ -1344,13 +1417,6 @@ fn format_delta_fields_from_estimate(
     )
 }
 
-fn format_delta_fields(
-    itg: &StatisticsAccumulator<F<f64>>,
-    target: Option<F<f64>>,
-) -> (Option<DisplayField<f64>>, Option<DisplayField<f64>>) {
-    format_delta_fields_from_estimate(itg.avg, itg.err, target)
-}
-
 fn format_mwi_field(itg: &StatisticsAccumulator<F<f64>>) -> Option<DisplayField<f64>> {
     let raw = max_weight_impact(itg).0;
     let style = if raw > 1.0 {
@@ -1521,29 +1587,63 @@ fn main_results_row(
         .enumerate()
         .map(|(slot_index, _)| match contribution {
             ContributionKind::All => {
-                let accumulator =
-                    component_accumulator(&integration_state.all_integrals[slot_index], component);
+                let integral = &integration_state.all_integrals[slot_index];
+                let signed = component_accumulator(integral, component, IntegralView::Signed);
+                let absolute = component_accumulator(integral, component, IntegralView::Absolute);
                 Some(MainTableSlotCells {
-                    value: Some(format_value_field(accumulator.avg, accumulator.err)),
-                    relative_error: format_relative_error_field(accumulator),
-                    chi_sq: format_chi_sq_field(accumulator, integration_state.iter),
-                    max_weight_impact: format_mwi_field(accumulator),
+                    signed: IntegralStatisticsCells {
+                        value: Some(format_value_field(signed.avg, signed.err)),
+                        relative_error: format_relative_error_field(signed),
+                        chi_sq: format_chi_sq_field(signed, integration_state.iter),
+                        max_weight_impact: format_mwi_field(signed),
+                    },
+                    absolute: IntegralStatisticsCells {
+                        value: Some(format_value_field(absolute.avg, absolute.err)),
+                        relative_error: format_relative_error_field(absolute),
+                        chi_sq: format_chi_sq_field(absolute, integration_state.iter),
+                        max_weight_impact: format_mwi_field(absolute),
+                    },
                     sample_fraction: None,
                     sample_count: None,
                     target_pdf: None,
                 })
             }
             ContributionKind::Sum => {
-                let summary = slot_component_summary(integration_state, slot_index, component)
-                    .and_then(|summary| {
-                        monitored_path.and_then(|path| summary_at_path(summary, path))
-                    })?;
-                let (avg, err) = sum_estimate_error(summary);
+                let monitored_path = monitored_path?;
+                let signed_summary = slot_component_summary(
+                    integration_state,
+                    slot_index,
+                    component,
+                    IntegralView::Signed,
+                    monitored_path,
+                )?;
+                let absolute_summary = slot_component_summary(
+                    integration_state,
+                    slot_index,
+                    component,
+                    IntegralView::Absolute,
+                    monitored_path,
+                )?;
+                let (signed_avg, signed_err) = sum_estimate_error(signed_summary);
+                let (absolute_avg, absolute_err) = sum_estimate_error(absolute_summary);
                 Some(MainTableSlotCells {
-                    value: Some(format_value_field(avg, err)),
-                    relative_error: format_relative_error_field_from_estimate(avg, err),
-                    chi_sq: None,
-                    max_weight_impact: None,
+                    signed: IntegralStatisticsCells {
+                        value: Some(format_value_field(signed_avg, signed_err)),
+                        relative_error: format_relative_error_field_from_estimate(
+                            signed_avg, signed_err,
+                        ),
+                        chi_sq: None,
+                        max_weight_impact: None,
+                    },
+                    absolute: IntegralStatisticsCells {
+                        value: Some(format_value_field(absolute_avg, absolute_err)),
+                        relative_error: format_relative_error_field_from_estimate(
+                            absolute_avg,
+                            absolute_err,
+                        ),
+                        chi_sq: None,
+                        max_weight_impact: None,
+                    },
                     sample_fraction: None,
                     sample_count: None,
                     target_pdf: None,
@@ -1552,15 +1652,28 @@ fn main_results_row(
             ContributionKind::Bin(bin_index) => {
                 let slot_context =
                     integration_state.monitored_discrete_context_for_slot(slot_index);
-                let summary = slot_component_summary(integration_state, slot_index, component)
-                    .and_then(|summary| {
-                        monitored_path.and_then(|path| summary_at_path(summary, path))
-                    })?;
-                let bin = summary.bins.get(bin_index)?;
-                let total_samples = total_processed_samples(summary);
+                let monitored_path = monitored_path?;
+                let signed_summary = slot_component_summary(
+                    integration_state,
+                    slot_index,
+                    component,
+                    IntegralView::Signed,
+                    monitored_path,
+                )?;
+                let absolute_summary = slot_component_summary(
+                    integration_state,
+                    slot_index,
+                    component,
+                    IntegralView::Absolute,
+                    monitored_path,
+                )?;
+                let signed_bin = signed_summary.bins.get(bin_index)?;
+                let absolute_bin = absolute_summary.bins.get(bin_index)?;
+                let total_samples = total_processed_samples(signed_summary);
                 let sample_fraction = if has_discrete_columns && total_samples > 0 {
-                    let raw =
-                        bin.accumulator.processed_samples as f64 / total_samples as f64 * 100.0;
+                    let raw = signed_bin.accumulator.processed_samples as f64
+                        / total_samples as f64
+                        * 100.0;
                     Some(DisplayField::new(
                         raw,
                         styled_colored(
@@ -1573,9 +1686,9 @@ fn main_results_row(
                 };
                 let sample_count = if has_discrete_columns {
                     Some(DisplayField::new(
-                        bin.accumulator.processed_samples,
+                        signed_bin.accumulator.processed_samples,
                         styled_colored(
-                            format_abbreviated_count(bin.accumulator.processed_samples),
+                            format_abbreviated_count(signed_bin.accumulator.processed_samples),
                             TextStyle::blue(),
                         ),
                     ))
@@ -1596,10 +1709,30 @@ fn main_results_row(
                     None
                 };
                 Some(MainTableSlotCells {
-                    value: Some(format_value_field(bin.accumulator.avg, bin.accumulator.err)),
-                    relative_error: format_relative_error_field(&bin.accumulator),
-                    chi_sq: format_chi_sq_field(&bin.accumulator, integration_state.iter),
-                    max_weight_impact: format_mwi_field(&bin.accumulator),
+                    signed: IntegralStatisticsCells {
+                        value: Some(format_value_field(
+                            signed_bin.accumulator.avg,
+                            signed_bin.accumulator.err,
+                        )),
+                        relative_error: format_relative_error_field(&signed_bin.accumulator),
+                        chi_sq: format_chi_sq_field(
+                            &signed_bin.accumulator,
+                            integration_state.iter,
+                        ),
+                        max_weight_impact: format_mwi_field(&signed_bin.accumulator),
+                    },
+                    absolute: IntegralStatisticsCells {
+                        value: Some(format_value_field(
+                            absolute_bin.accumulator.avg,
+                            absolute_bin.accumulator.err,
+                        )),
+                        relative_error: format_relative_error_field(&absolute_bin.accumulator),
+                        chi_sq: format_chi_sq_field(
+                            &absolute_bin.accumulator,
+                            integration_state.iter,
+                        ),
+                        max_weight_impact: format_mwi_field(&absolute_bin.accumulator),
+                    },
                     sample_fraction,
                     sample_count,
                     target_pdf,
@@ -1615,50 +1748,21 @@ fn main_results_row(
             ComponentKind::Real => target.re,
             ComponentKind::Imag => target.im,
         });
-    let (chi_sq, delta_sigma, delta_percent, max_weight_impact) = match contribution {
-        ContributionKind::All => {
-            let accumulator = component_accumulator(&integration_state.all_integrals[0], component);
-            let (delta_sigma, delta_percent) = format_delta_fields(accumulator, slot0_target);
-            (
-                format_chi_sq_field(accumulator, integration_state.iter),
-                delta_sigma,
-                delta_percent,
-                format_mwi_field(accumulator),
-            )
-        }
-        ContributionKind::Sum => {
-            let summary =
-                slot_component_summary(integration_state, 0, component).and_then(|summary| {
-                    monitored_path.and_then(|path| summary_at_path(summary, path))
-                })?;
-            let (avg, err) = sum_estimate_error(summary);
-            let (delta_sigma, delta_percent) =
-                format_delta_fields_from_estimate(avg, err, slot0_target);
-            (None, delta_sigma, delta_percent, None)
-        }
-        ContributionKind::Bin(bin_index) => {
-            let summary =
-                slot_component_summary(integration_state, 0, component).and_then(|summary| {
-                    monitored_path.and_then(|path| summary_at_path(summary, path))
-                })?;
-            let bin = summary.bins.get(bin_index)?;
-            (
-                format_chi_sq_field(&bin.accumulator, integration_state.iter),
-                None,
-                None,
-                format_mwi_field(&bin.accumulator),
-            )
-        }
+    let (delta_sigma, delta_percent) = match contribution {
+        ContributionKind::All | ContributionKind::Sum => slot_cells
+            .first()
+            .and_then(|cell| cell.statistics(IntegralView::Signed).value.as_ref())
+            .map(|value| format_delta_fields_from_estimate(value.raw.0, value.raw.1, slot0_target))
+            .unwrap_or((None, None)),
+        ContributionKind::Bin(_) => (None, None),
     };
 
     Some(MainResultsRow {
         contribution: contribution_display_field(contribution, integration_state),
         component: component.display_field(),
         slot_cells,
-        chi_sq,
         delta_sigma,
         delta_percent,
-        max_weight_impact,
     })
 }
 
@@ -1669,9 +1773,13 @@ fn discrete_sort_key(
     bin_index: usize,
     sort_mode: ContributionSortMode,
 ) -> f64 {
-    let Some(summary) = slot_component_summary(integration_state, 0, component)
-        .and_then(|summary| summary_at_path(summary, monitored_path))
-    else {
+    let Some(summary) = slot_component_summary(
+        integration_state,
+        0,
+        component,
+        IntegralView::Signed,
+        monitored_path,
+    ) else {
         return 0.0;
     };
     let Some(bin) = summary.bins.get(bin_index) else {
@@ -1829,35 +1937,50 @@ fn build_main_results_section(request: &StatusUpdateBuildRequest<'_>) -> MainRes
 
 fn max_weight_row_descriptors(
     phase_display: IntegrationStatusPhaseDisplay,
-) -> Vec<(ComponentKind, &'static str, bool)> {
+    view: IntegralView,
+) -> Vec<(ComponentKind, Option<&'static str>, bool)> {
     let mut rows = Vec::new();
     if phase_display.shows_real() {
-        rows.push((ComponentKind::Real, "+", true));
-        rows.push((ComponentKind::Real, "-", false));
+        match view {
+            IntegralView::Signed => {
+                rows.push((ComponentKind::Real, Some("+"), true));
+                rows.push((ComponentKind::Real, Some("-"), false));
+            }
+            IntegralView::Absolute => rows.push((ComponentKind::Real, None, true)),
+        }
     }
     if phase_display.shows_imag() {
-        rows.push((ComponentKind::Imag, "+", true));
-        rows.push((ComponentKind::Imag, "-", false));
+        match view {
+            IntegralView::Signed => {
+                rows.push((ComponentKind::Imag, Some("+"), true));
+                rows.push((ComponentKind::Imag, Some("-"), false));
+            }
+            IntegralView::Absolute => rows.push((ComponentKind::Imag, None, true)),
+        }
     }
     rows
 }
 
 fn styled_component_sign(
     component: ComponentKind,
-    sign: &'static str,
+    sign: Option<&'static str>,
     positive: bool,
+    view: IntegralView,
 ) -> DisplayField<(ComponentKind, bool)> {
     let mut display = StyledText::new();
-    display.append(component.label_display());
-    display.push_text(" [", TextStyle::PLAIN);
-    display.push_text(sign, TextStyle::blue());
-    display.push_text("]", TextStyle::PLAIN);
+    display.append(component.label_display_for_view(view));
+    if let Some(sign) = sign {
+        display.push_text(" [", TextStyle::PLAIN);
+        display.push_text(sign, TextStyle::blue());
+        display.push_text("]", TextStyle::PLAIN);
+    }
     DisplayField::new((component, positive), display)
 }
 
 fn build_max_weight_details_section(
     integration_state: &IntegrationState,
     render_options: &IntegrationStatusViewOptions,
+    view: IntegralView,
 ) -> Option<MaxWeightDetailsSection> {
     let rows_by_slot = integration_state
         .slot_metas
@@ -1865,49 +1988,38 @@ fn build_max_weight_details_section(
         .enumerate()
         .zip(integration_state.all_integrals.iter())
         .filter_map(|((slot_index, slot_meta), integral)| {
-            let rows = max_weight_row_descriptors(render_options.phase_display)
+            let rows = max_weight_row_descriptors(render_options.phase_display, view)
                 .into_iter()
                 .filter_map(|(component, sign, positive)| {
-                    let accumulator = match component {
-                        ComponentKind::Real => &integral.re,
-                        ComponentKind::Imag => &integral.im,
-                    };
+                    let accumulator = component_accumulator(integral, component, view);
                     let (value, coordinates) = max_eval_entry(accumulator, positive)?;
+                    let coordinates = coordinates
+                        .map(|sample| {
+                            format_max_eval_sample(
+                                sample,
+                                &integration_state
+                                    .sampling_state_for_slot(slot_index)
+                                    .discrete_axis_labels,
+                                &[],
+                            )
+                        })
+                        .unwrap_or_else(|| "N/A".to_string());
                     Some(MaxWeightDetailsRow {
                         slot: DisplayField::new(
                             slot_meta.key(),
                             styled_colored(slot_meta.key(), TextStyle::green()),
                         ),
-                        component_sign: styled_component_sign(component, sign, positive),
+                        component_sign: styled_component_sign(component, sign, positive, view),
                         max_eval: DisplayField::new(
                             value,
-                            styled_plain(format!("{:+.16e}", value)),
+                            styled_plain(match view {
+                                IntegralView::Signed => format!("{:+.16e}", value),
+                                IntegralView::Absolute => format!("{:.16e}", value),
+                            }),
                         ),
                         coordinates: DisplayField::new(
-                            coordinates
-                                .map(|sample| {
-                                    format_max_eval_sample(
-                                        sample,
-                                        &integration_state
-                                            .sampling_state_for_slot(slot_index)
-                                            .discrete_axis_labels,
-                                        &[],
-                                    )
-                                })
-                                .unwrap_or_else(|| "N/A".to_string()),
-                            styled_plain(
-                                coordinates
-                                    .map(|sample| {
-                                        format_max_eval_sample(
-                                            sample,
-                                            &integration_state
-                                                .sampling_state_for_slot(slot_index)
-                                                .discrete_axis_labels,
-                                            &[],
-                                        )
-                                    })
-                                    .unwrap_or_else(|| "N/A".to_string()),
-                            ),
+                            coordinates.clone(),
+                            styled_plain(coordinates),
                         ),
                     })
                 })
@@ -1926,6 +2038,7 @@ fn build_max_weight_details_section(
 fn build_discrete_max_weight_details_section(
     integration_state: &IntegrationState,
     render_options: &IntegrationStatusViewOptions,
+    view: IntegralView,
 ) -> Option<DiscreteMaxWeightDetailsSection> {
     let discrete_context = integration_state.monitored_discrete_context()?;
     let contributions = std::iter::once(ContributionKind::All)
@@ -1935,7 +2048,8 @@ fn build_discrete_max_weight_details_section(
     let mut row_groups = Vec::new();
     for contribution in contributions {
         let mut rows = Vec::new();
-        for (component, sign, positive) in max_weight_row_descriptors(render_options.phase_display)
+        for (component, sign, positive) in
+            max_weight_row_descriptors(render_options.phase_display, view)
         {
             let slot_values = integration_state
                 .slot_metas
@@ -1943,25 +2057,31 @@ fn build_discrete_max_weight_details_section(
                 .enumerate()
                 .map(|(slot_index, _)| {
                     let accumulator = match contribution {
-                        ContributionKind::All => {
-                            let integral = &integration_state.all_integrals[slot_index];
-                            match component {
-                                ComponentKind::Real => &integral.re,
-                                ComponentKind::Imag => &integral.im,
-                            }
-                        }
+                        ContributionKind::All => component_accumulator(
+                            &integration_state.all_integrals[slot_index],
+                            component,
+                            view,
+                        ),
                         ContributionKind::Bin(bin_index) => {
-                            let summary =
-                                slot_component_summary(integration_state, slot_index, component)
-                                    .and_then(|summary| {
-                                        summary_at_path(summary, &discrete_context.path)
-                                    })?;
+                            let summary = slot_component_summary(
+                                integration_state,
+                                slot_index,
+                                component,
+                                view,
+                                &discrete_context.path,
+                            )?;
                             &summary.bins.get(bin_index)?.accumulator
                         }
                         ContributionKind::Sum => return None,
                     };
                     Some(max_eval_entry(accumulator, positive).map(|(value, _)| {
-                        DisplayField::new(value, styled_plain(format!("{:+.16e}", value)))
+                        DisplayField::new(
+                            value,
+                            styled_plain(match view {
+                                IntegralView::Signed => format!("{:+.16e}", value),
+                                IntegralView::Absolute => format!("{:.16e}", value),
+                            }),
+                        )
                     }))
                 })
                 .collect::<Option<Vec<_>>>()?;
@@ -1973,14 +2093,11 @@ fn build_discrete_max_weight_details_section(
                 .filter_map(|(slot_index, slot_meta)| {
                     let coordinates = match contribution {
                         ContributionKind::All => {
-                            let accumulator = match component {
-                                ComponentKind::Real => {
-                                    &integration_state.all_integrals[slot_index].re
-                                }
-                                ComponentKind::Imag => {
-                                    &integration_state.all_integrals[slot_index].im
-                                }
-                            };
+                            let accumulator = component_accumulator(
+                                &integration_state.all_integrals[slot_index],
+                                component,
+                                view,
+                            );
                             max_eval_entry(accumulator, positive)
                                 .and_then(|(_, sample)| sample)
                                 .map(|sample| {
@@ -1996,11 +2113,13 @@ fn build_discrete_max_weight_details_section(
                         ContributionKind::Bin(bin_index) => {
                             let slot_context = integration_state
                                 .monitored_discrete_context_for_slot(slot_index)?;
-                            let summary =
-                                slot_component_summary(integration_state, slot_index, component)
-                                    .and_then(|summary| {
-                                        summary_at_path(summary, &slot_context.path)
-                                    })?;
+                            let summary = slot_component_summary(
+                                integration_state,
+                                slot_index,
+                                component,
+                                view,
+                                &slot_context.path,
+                            )?;
                             max_eval_entry(&summary.bins.get(bin_index)?.accumulator, positive)
                                 .and_then(|(_, sample)| sample)
                                 .map(|sample| {
@@ -2035,7 +2154,7 @@ fn build_discrete_max_weight_details_section(
 
             rows.push(DiscreteMaxWeightRow {
                 contribution: contribution_display_field(contribution, integration_state),
-                component_sign: styled_component_sign(component, sign, positive),
+                component_sign: styled_component_sign(component, sign, positive, view),
                 slot_values,
                 slot_coordinates,
             });
@@ -2098,10 +2217,22 @@ pub(crate) fn build_status_update(request: StatusUpdateBuildRequest<'_>) -> Stat
         max_weight_details: build_max_weight_details_section(
             request.integration_state,
             request.render_options,
+            IntegralView::Signed,
+        ),
+        absolute_max_weight_details: build_max_weight_details_section(
+            request.integration_state,
+            request.render_options,
+            IntegralView::Absolute,
         ),
         discrete_max_weight_details: build_discrete_max_weight_details_section(
             request.integration_state,
             request.render_options,
+            IntegralView::Signed,
+        ),
+        absolute_discrete_max_weight_details: build_discrete_max_weight_details_section(
+            request.integration_state,
+            request.render_options,
+            IntegralView::Absolute,
         ),
         statistics: Some(StatisticsSection {
             global: request.integration_state.stats,
