@@ -34,11 +34,22 @@ THRESHOLD_KIND_LABELS = {
 THRESHOLD_KIND_ORDER = {kind: index for index, kind in enumerate(THRESHOLD_KIND_LABELS)}
 
 
+def compact_edge_sets(
+    edge_sets: Iterable[tuple[int, ...]], head: str, *, limit: int = 2
+) -> str:
+    unique = sorted(set(edge_sets))
+    labels = [f"{head}({','.join(map(str, edges))})" for edges in unique[:limit]]
+    if len(unique) > limit:
+        labels.append(f"…(+{len(unique) - limit})")
+    return "/".join(labels) or f"{head}(?)"
+
+
 @dataclass
 class ResultFile:
     path: Path
     data: dict[str, Any]
     label: str | None = None
+    supplemental_series: list[SupplementalSeries] | None = None
 
 
 @dataclass
@@ -46,6 +57,20 @@ class Series:
     label: str
     t_values: list[float]
     values: list[float]
+
+
+@dataclass(frozen=True)
+class SupplementalSeries:
+    label: str
+    axis_index: int
+    values: dict[int, Any]
+
+
+@dataclass(frozen=True)
+class LogFit:
+    slope: float
+    r_squared: float
+    point_count: int
 
 
 @dataclass(frozen=True)
@@ -69,9 +94,20 @@ class ThresholdVariant:
             "/".join(f"η({','.join(map(str, threshold))})" for threshold in thresholds)
             or "η(?)"
         )
-        side = self.side[:1].upper() or "?"
+        side = {"left": "left", "right": "right", "amplitude": "amp"}.get(
+            self.side, self.side or "?"
+        )
         subspace = ",".join(map(str, self.subspace)) or "max"
         return f"v{self.variant_id} {self.name} · {side} {eta} · S[{subspace}]"
+
+    def panel_label(self) -> str:
+        thresholds = (threshold for _, threshold in self.associations)
+        eta = compact_edge_sets(thresholds, "η")
+        side = {"left": "L", "right": "R", "amplitude": "A"}.get(
+            self.side, self.side[:1].upper() or "?"
+        )
+        subspace = ",".join(map(str, self.subspace)) or "max"
+        return f"v{self.variant_id}:{self.name} {side} {eta} S[{subspace}]"
 
 
 @dataclass(frozen=True)
@@ -212,6 +248,17 @@ class ThresholdRegistry:
             ):
                 continue
             evaluation = point.get("evaluation", {})
+            summary = evaluation.get("threshold_counterterm_summary", {})
+            if isinstance(summary, dict):
+                for raw_component in summary.get("components", []):
+                    if not isinstance(raw_component, dict):
+                        continue
+                    key = (
+                        int(raw_component.get("graph_id", -1)),
+                        int(raw_component.get("component_id", -1)),
+                    )
+                    if key in self.components:
+                        observed.add(key)
             for event in evaluation.get("events", []):
                 if not isinstance(event, dict):
                     continue
@@ -251,30 +298,80 @@ class ThresholdRegistry:
                 item[0][1] if item[0][1] is not None else -1,
             ),
         ):
-            entries = []
             for variant_id, component_keys in sorted(variants.items()):
                 keys_by_kind: dict[str, list[tuple[int, int]]] = defaultdict(list)
                 for component_key in component_keys:
                     keys_by_kind[self.components[component_key].kind].append(
                         component_key
                     )
-                for kind, kind_component_keys in sorted(
-                    keys_by_kind.items(),
-                    key=lambda item: THRESHOLD_KIND_ORDER.get(item[0], 99),
-                ):
-                    entries.append(
-                        (
-                            f"{self.variant(graph_id, variant_id).compact_label()} · {kind}",
-                            tuple(sorted(kind_component_keys)),
-                        )
+                component_groups = OrderedDict(
+                    (
+                        THRESHOLD_KIND_LABELS.get(kind, kind),
+                        tuple(sorted(kind_component_keys)),
                     )
-            chunks = [entries[index : index + 8] for index in range(0, len(entries), 8)]
-            for chunk_index, chunk in enumerate(chunks):
-                title = self.cut_group_label(graph_id, cut_group_id)
-                if len(chunks) > 1:
-                    title += f" · {chunk_index + 1}/{len(chunks)}"
-                facets.append(ReportFacet(title, OrderedDict(chunk)))
+                    for kind, kind_component_keys in sorted(
+                        keys_by_kind.items(),
+                        key=lambda item: THRESHOLD_KIND_ORDER.get(item[0], 99),
+                    )
+                )
+                facets.append(
+                    ReportFacet(
+                        "\n".join(
+                            [
+                                self.cut_group_label(graph_id, cut_group_id),
+                                self.variant(graph_id, variant_id).compact_label(),
+                            ]
+                        ),
+                        component_groups,
+                    )
+                )
         return facets
+
+    def multiplier_facets(self, observed: set[tuple[int, int]]) -> list[ReportFacet]:
+        facets = []
+        for key in sorted(observed):
+            component = self.components[key]
+            variants = [
+                self.variant(component.graph_id, variant_id)
+                for variant_id in component.variant_ids
+            ]
+            graph_name = (
+                variants[0].graph_name if variants else f"#{component.graph_id}"
+            )
+            cut_group = (
+                "cg–"
+                if component.cut_group_id is None
+                else f"cg{component.cut_group_id}"
+            )
+            kind = THRESHOLD_KIND_LABELS.get(component.kind, component.kind)
+            facets.append(
+                ReportFacet(
+                    "\n".join(
+                        [
+                            f"{graph_name} · {cut_group} · c{component.component_id} {kind}",
+                            " × ".join(variant.panel_label() for variant in variants),
+                        ]
+                    ),
+                    OrderedDict((("multipliers", (key,)),)),
+                )
+            )
+        return facets
+
+    def filter_components(
+        self,
+        observed: set[tuple[int, int]],
+        include_patterns: list[re.Pattern[str]],
+        exclude_patterns: list[re.Pattern[str]],
+    ) -> set[tuple[int, int]]:
+        return {
+            key
+            for key in observed
+            if label_is_selected(
+                self.component_label(self.components[key]),
+                include_patterns,
+                exclude_patterns,
+            )
+        }
 
     def pair_facets(self, observed: set[tuple[int, int]]) -> list[ReportFacet]:
         groups: dict[
@@ -333,6 +430,7 @@ class ReportFacet:
     title: str
     component_groups: OrderedDict[str, tuple[tuple[int, int], ...]]
     summary_labels: tuple[str, ...] = ()
+    y_label: str | None = None
 
 
 class NonFiniteWarnings:
@@ -376,7 +474,7 @@ class NonFiniteWarnings:
             coordinate = pretty_exact_vector(point.get("point", []))
             print("plot_approach_result.py: warning", file=sys.stderr)
             print(
-                "  Replaced non-finite/null value(s) with 0.0 for plotting.",
+                "  Rendered non-finite/null value(s) as gaps instead of numerical zeros.",
                 file=sys.stderr,
             )
             print(f"  Source: {display_path(result.path)}", file=sys.stderr)
@@ -445,7 +543,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--fit-log-slope",
         action="store_true",
-        help="Append the fitted log-log power over the visible x-range to each legend label",
+        help=(
+            "Append a log-log power fit over the smallest visible approach "
+            "parameters on each signed branch"
+        ),
+    )
+    parser.add_argument(
+        "--fit-points",
+        type=int,
+        help="Number of smallest visible points to use per log-log fit (default: 4)",
     )
     y_scale_group = parser.add_mutually_exclusive_group()
     y_scale_group.add_argument(
@@ -504,9 +610,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--threshold-report-section",
         action="append",
-        choices=("summary", "singles", "pairs"),
+        choices=("summary", "singles", "pairs", "multipliers"),
         default=[],
-        help="Threshold report section to emit; can be repeated (default: all)",
+        help=(
+            "Threshold report section to emit; can be repeated "
+            "(default: summary, singles, and pairs)"
+        ),
+    )
+    parser.add_argument(
+        "--threshold-quantity",
+        action="append",
+        choices=("weighted", "bare"),
+        default=[],
+        help=(
+            "Counterterm quantity for variant and pair report pages; repeat to "
+            "show both (default: weighted)"
+        ),
+    )
+    parser.add_argument(
+        "--multiplier-log-scale",
+        action="store_true",
+        help="Use a logarithmic y-axis for the multiplier report section",
     )
     parser.add_argument(
         "--facets-per-page",
@@ -517,6 +641,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--title",
         help="Replace the generated plot title",
+    )
+    parser.add_argument(
+        "--y-label",
+        help="Replace the generated y-axis label",
     )
     parser.add_argument(
         "--hide-info-box",
@@ -544,6 +672,16 @@ def parse_args() -> argparse.Namespace:
         metavar="ID[,ID...]",
         help="Only plot the displayed approach axis ID(s); can be repeated or comma-separated",
     )
+    parser.add_argument(
+        "--series-json",
+        action="append",
+        default=[],
+        type=Path,
+        help=(
+            "Supplemental scalar-series JSON keyed by approach point index; can "
+            "be repeated and currently requires exactly one approach result"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -566,16 +704,43 @@ def validate_range_option(
 
 
 def validate_args(args: argparse.Namespace) -> None:
+    requested_report_sections = set(
+        args.threshold_report_section or ("summary", "singles", "pairs")
+    )
+    report_uses_weight_scale = bool(
+        requested_report_sections.intersection(("summary", "singles", "pairs"))
+    )
+    report_uses_multiplier_scale = "multipliers" in requested_report_sections
+    y_range_uses_log_scale = (
+        args.y_log_scale
+        if not args.threshold_report
+        else (
+            (report_uses_weight_scale and args.y_log_scale)
+            or (report_uses_multiplier_scale and args.multiplier_log_scale)
+        )
+    )
     validate_range_option("--x-range", args.x_range, log_scale=args.x_log_scale)
-    validate_range_option("--y-range", args.y_range, log_scale=args.y_log_scale)
+    validate_range_option("--y-range", args.y_range, log_scale=y_range_uses_log_scale)
     if args.branch_layout == "split" and not (
         args.x_log_scale and args.t_branch == "both"
     ):
         raise ValueError(
             "--branch-layout split requires --x-log-scale --t-branch both."
         )
-    if args.fit_log_slope and not (args.x_log_scale and args.y_log_scale):
+    fit_has_log_y_axis = (
+        args.y_log_scale
+        if not args.threshold_report
+        else (
+            (report_uses_weight_scale and args.y_log_scale)
+            or (report_uses_multiplier_scale and args.multiplier_log_scale)
+        )
+    )
+    if args.fit_log_slope and not (args.x_log_scale and fit_has_log_y_axis):
         raise ValueError("--fit-log-slope requires logarithmic x and y axes.")
+    if args.fit_points is not None and not args.fit_log_slope:
+        raise ValueError("--fit-points requires --fit-log-slope.")
+    if args.fit_points is not None and args.fit_points < 2:
+        raise ValueError("--fit-points must be at least 2.")
     if args.result_label and len(args.result_label) != len(args.results):
         raise ValueError(
             "--result-label must be repeated exactly once per input result file "
@@ -589,8 +754,18 @@ def validate_args(args: argparse.Namespace) -> None:
         )
     if args.threshold_report_section and not args.threshold_report:
         raise ValueError("--threshold-report-section requires --threshold-report.")
+    if args.threshold_quantity and not args.threshold_report:
+        raise ValueError("--threshold-quantity requires --threshold-report.")
+    if args.multiplier_log_scale and not args.threshold_report:
+        raise ValueError("--multiplier-log-scale requires --threshold-report.")
     if args.facets_per_page < 1:
         raise ValueError("--facets-per-page must be a positive integer.")
+    if args.series_json and len(args.results) != 1:
+        raise ValueError(
+            "--series-json currently requires exactly one approach result."
+        )
+    if args.series_json and args.threshold_report:
+        raise ValueError("--series-json is only available for ordinary approach plots.")
     args.split_branches = (
         args.x_log_scale
         and args.t_branch == "both"
@@ -599,6 +774,10 @@ def validate_args(args: argparse.Namespace) -> None:
     args.threshold_report_sections = list(
         dict.fromkeys(args.threshold_report_section or ("summary", "singles", "pairs"))
     )
+    args.threshold_quantities = list(
+        dict.fromkeys(args.threshold_quantity or ("weighted",))
+    )
+    args.fit_points = args.fit_points or 4
     args.selected_axis_indices = parse_selected_axis_indices(args.axis_id)
 
 
@@ -630,11 +809,173 @@ def parse_selected_axis_indices(raw_axis_ids: list[str]) -> set[int] | None:
 def load_result(path: Path, label: str | None = None) -> ResultFile:
     with path.open("r", encoding="utf-8") as handle:
         data = json.load(handle)
-    if "points" not in data:
+    if data.get("schema_version") != 3:
         raise ValueError(
-            f"{path} is not an approach result JSON file: missing 'points'"
+            f"{path} uses approach schema_version {data.get('schema_version')!r}; "
+            "plot_approach_result.py requires schema_version 3"
         )
-    return ResultFile(path=path, data=data, label=label)
+    parameter_name = data.get("parameter_name")
+    if not isinstance(parameter_name, str) or not parameter_name.strip():
+        raise ValueError(f"{path} has an invalid or missing 'parameter_name'.")
+    axes = data.get("axes")
+    if not isinstance(axes, list) or not axes:
+        raise ValueError(f"{path} has an invalid or empty 'axes' list.")
+    for axis_index, axis in enumerate(axes):
+        if not isinstance(axis, dict):
+            raise ValueError(f"{path} axis {axis_index + 1} is not an object.")
+        axis_name = axis.get("label")
+        vector = axis.get("vector")
+        if not isinstance(axis_name, str) or not axis_name.strip():
+            raise ValueError(f"{path} axis {axis_index + 1} has an invalid label.")
+        if (
+            not isinstance(vector, list)
+            or not vector
+            or any(
+                not isinstance(component, (int, float))
+                or not math.isfinite(float(component))
+                for component in vector
+            )
+        ):
+            raise ValueError(f"{path} axis {axis_index + 1} has an invalid vector.")
+    spacing = data.get("spacing")
+    if not isinstance(spacing, dict) or "max_abs_t" not in spacing:
+        raise ValueError(f"{path} has no schema-v3 spacing.max_abs_t value.")
+    try:
+        max_abs_t = float(spacing["max_abs_t"])
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{path} has an invalid spacing.max_abs_t value.") from error
+    if not math.isfinite(max_abs_t) or max_abs_t <= 0.0:
+        raise ValueError(f"{path} has an invalid spacing.max_abs_t value.")
+    if not isinstance(data.get("points"), list):
+        raise ValueError(
+            f"{path} is not an approach result JSON file: missing 'points'."
+        )
+    point_indices = set()
+    for point_index, point in enumerate(data["points"]):
+        if not isinstance(point, dict):
+            raise ValueError(f"{path} point {point_index + 1} is not an object.")
+        stored_point_index = point.get("index")
+        if (
+            not isinstance(stored_point_index, int)
+            or stored_point_index in point_indices
+        ):
+            raise ValueError(
+                f"{path} point {point_index + 1} has an invalid or duplicate index."
+            )
+        point_indices.add(stored_point_index)
+        axis_index = point.get("axis_index")
+        if not isinstance(axis_index, int) or not 0 <= axis_index < len(axes):
+            raise ValueError(
+                f"{path} point {point_index + 1} has an invalid axis_index."
+            )
+        if point.get("status") != "evaluated":
+            continue
+        evaluation = point.get("evaluation")
+        if not isinstance(evaluation, dict):
+            raise ValueError(
+                f"{path} evaluated point {point_index + 1} has no evaluation."
+            )
+        if not isinstance(evaluation.get("additional_contribution_sums"), dict):
+            raise ValueError(
+                f"{path} evaluated point {point_index + 1} has no "
+                "additional_contribution_sums map."
+            )
+        events = evaluation.get("events")
+        if not isinstance(events, list):
+            raise ValueError(
+                f"{path} evaluated point {point_index + 1} has no events list."
+            )
+        for event_index, event in enumerate(events):
+            if not isinstance(event, dict) or not isinstance(
+                event.get("display_only_weights"), dict
+            ):
+                raise ValueError(
+                    f"{path} point {point_index + 1} event {event_index + 1} has no "
+                    "schema-v3 display_only_weights map."
+                )
+        summary = evaluation.get("threshold_counterterm_summary")
+        if summary is None:
+            continue
+        if not isinstance(summary, dict) or not all(
+            field in summary
+            for field in (
+                "original",
+                "counterterm_sum",
+                "reconstructed_total",
+                "decomposed_event_sum",
+                "closure",
+                "components",
+            )
+        ):
+            raise ValueError(
+                f"{path} point {point_index + 1} has an invalid "
+                "threshold_counterterm_summary."
+            )
+    return ResultFile(path=path, data=data, label=label, supplemental_series=[])
+
+
+def load_supplemental_series(paths: list[Path], result: ResultFile) -> None:
+    known_points = {
+        int(point["index"]): point for point in result.data.get("points", [])
+    }
+    known_axes = set(axis_indices(result))
+    seen = set()
+    for path in paths:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        if data.get("schema_version") != 1 or not isinstance(data.get("series"), list):
+            raise ValueError(
+                f"{path} must use supplemental-series schema_version 1 with a 'series' list."
+            )
+        for series_index, raw_series in enumerate(data["series"]):
+            if not isinstance(raw_series, dict):
+                raise ValueError(f"{path} series {series_index + 1} is not an object.")
+            label = raw_series.get("label")
+            axis_index = raw_series.get("axis_index")
+            raw_values = raw_series.get("values")
+            if not isinstance(label, str) or not label.strip():
+                raise ValueError(
+                    f"{path} series {series_index + 1} has an invalid label."
+                )
+            if not isinstance(axis_index, int) or axis_index not in known_axes:
+                raise ValueError(
+                    f"{path} series {series_index + 1} has unknown axis_index {axis_index!r}."
+                )
+            if not isinstance(raw_values, list):
+                raise ValueError(
+                    f"{path} series {series_index + 1} has no values list."
+                )
+            key = axis_index, label
+            if key in seen:
+                raise ValueError(
+                    f"duplicate supplemental series label {label!r} for axis {axis_index + 1}."
+                )
+            seen.add(key)
+            values = {}
+            for value_index, raw_value in enumerate(raw_values):
+                if not isinstance(raw_value, dict):
+                    raise ValueError(
+                        f"{path} series {series_index + 1} value {value_index + 1} is not an object."
+                    )
+                point_index = raw_value.get("point_index")
+                if not isinstance(point_index, int) or point_index not in known_points:
+                    raise ValueError(
+                        f"{path} series {series_index + 1} references unknown point_index "
+                        f"{point_index!r}."
+                    )
+                if int(known_points[point_index].get("axis_index", -1)) != axis_index:
+                    raise ValueError(
+                        f"{path} series {series_index + 1} point {point_index} belongs to "
+                        f"a different approach axis."
+                    )
+                if point_index in values:
+                    raise ValueError(
+                        f"{path} series {series_index + 1} repeats point_index {point_index}."
+                    )
+                values[point_index] = raw_value.get("value")
+            result.supplemental_series.append(
+                SupplementalSeries(f"series:{label}", axis_index, values)
+            )
 
 
 def compile_patterns(patterns: Iterable[str]) -> list[re.Pattern[str]]:
@@ -667,9 +1008,20 @@ def axis_indices(
 def axis_label(result: ResultFile, axis_index: int) -> str:
     axes = result.data.get("axes", [])
     if 0 <= axis_index < len(axes):
-        vector = ", ".join(f"{float(component):.4g}" for component in axes[axis_index])
-        return f"axis {axis_index + 1}: [{vector}]"
+        axis = axes[axis_index]
+        return str(axis["label"])
     return f"axis {axis_index + 1}"
+
+
+def axis_vector(result: ResultFile, axis_index: int) -> list[Any]:
+    axes = result.data.get("axes", [])
+    if 0 <= axis_index < len(axes):
+        return axes[axis_index]["vector"]
+    return []
+
+
+def parameter_name(result: ResultFile) -> str:
+    return str(result.data["parameter_name"])
 
 
 def display_path(path: Path) -> str:
@@ -733,10 +1085,10 @@ def sanitized_float(
         number = float(value)
     except (TypeError, ValueError):
         warnings.add(result, point, label, component, value)
-        return 0.0
+        return math.nan
     if not math.isfinite(number):
         warnings.add(result, point, label, component, value)
-        return 0.0
+        return math.nan
     return number
 
 
@@ -748,12 +1100,8 @@ def sanitized_complex_component(
     point: dict[str, Any],
     label: str,
 ) -> float:
-    re_value = sanitized_float(
-        value.get("re", 0.0), warnings, result, point, label, "re"
-    )
-    im_value = sanitized_float(
-        value.get("im", 0.0), warnings, result, point, label, "im"
-    )
+    re_value = sanitized_float(value.get("re"), warnings, result, point, label, "re")
+    im_value = sanitized_float(value.get("im"), warnings, result, point, label, "im")
     if component == "real":
         return re_value
     if component == "imag":
@@ -854,10 +1202,11 @@ def complex_value(
     label: str,
 ) -> complex:
     if not isinstance(value, dict):
-        return 0j
+        warnings.add(result, point, label, "value", value)
+        return complex(math.nan, math.nan)
     return complex(
-        sanitized_float(value.get("re", 0.0), warnings, result, point, label, "re"),
-        sanitized_float(value.get("im", 0.0), warnings, result, point, label, "im"),
+        sanitized_float(value.get("re"), warnings, result, point, label, "re"),
+        sanitized_float(value.get("im"), warnings, result, point, label, "im"),
     )
 
 
@@ -876,25 +1225,50 @@ def threshold_decomposition_values(
     warnings: NonFiniteWarnings,
 ) -> list[tuple[str, complex]]:
     catalog = threshold_component_catalog(result)
-    found, original, components_by_id = threshold_point_values(
-        result, point, warnings, catalog
-    )
-    if not found:
+    summary = threshold_summary(point)
+    if summary is None:
         return []
-
+    original = complex_value(
+        summary.get("original"), warnings, result, point, "threshold:original"
+    )
+    counterterms = complex_value(
+        summary.get("counterterm_sum"),
+        warnings,
+        result,
+        point,
+        "threshold:counterterm_sum",
+    )
+    reconstructed = complex_value(
+        summary.get("reconstructed_total"),
+        warnings,
+        result,
+        point,
+        "threshold:decomposition_total",
+    )
     components: dict[str, complex] = defaultdict(complex)
-    for key, value in components_by_id.items():
+    for raw_component in summary.get("components", []):
+        if not isinstance(raw_component, dict):
+            continue
+        key = (
+            int(raw_component.get("graph_id", -1)),
+            int(raw_component.get("component_id", -1)),
+        )
         components[
             catalog.get(key, f"threshold:component c{key[1]} [graph#{key[0]}]")
-        ] += value
-    counterterms = sum(components_by_id.values(), 0j)
+        ] += complex_value(
+            raw_component.get("weighted"),
+            warnings,
+            result,
+            point,
+            catalog.get(key, f"threshold:component c{key[1]} [graph#{key[0]}]"),
+        )
     values: list[tuple[str, complex]] = []
     if mode in ("summary", "all"):
         values.extend(
             [
                 ("threshold:original", original),
                 ("threshold:counterterm_sum", counterterms),
-                ("threshold:decomposition_total", original + counterterms),
+                ("threshold:decomposition_total", reconstructed),
             ]
         )
     if mode in ("components", "all"):
@@ -902,42 +1276,129 @@ def threshold_decomposition_values(
     return values
 
 
-def threshold_point_values(
+def threshold_summary(point: dict[str, Any]) -> dict[str, Any] | None:
+    evaluation = point.get("evaluation")
+    if not isinstance(evaluation, dict):
+        return None
+    summary = evaluation.get("threshold_counterterm_summary")
+    return summary if isinstance(summary, dict) else None
+
+
+def axis_has_threshold_summary(result: ResultFile, axis_index: int) -> bool:
+    return any(
+        int(point.get("axis_index", -1)) == axis_index
+        and point.get("status") == "evaluated"
+        and threshold_summary(point) is not None
+        for point in result.data.get("points", [])
+    )
+
+
+def threshold_component_values(
     result: ResultFile,
     point: dict[str, Any],
+    quantity: str,
     warnings: NonFiniteWarnings,
     catalog: dict[tuple[int, int], str],
-) -> tuple[bool, complex, dict[tuple[int, int], complex]]:
+    selected_keys: set[tuple[int, int]],
+) -> dict[tuple[int, int], complex]:
+    if quantity == "weighted":
+        summary = threshold_summary(point)
+        if summary is None:
+            return {}
+        components: dict[tuple[int, int], complex] = defaultdict(complex)
+        for raw_component in summary.get("components", []):
+            if not isinstance(raw_component, dict):
+                continue
+            key = (
+                int(raw_component.get("graph_id", -1)),
+                int(raw_component.get("component_id", -1)),
+            )
+            if key not in selected_keys:
+                continue
+            components[key] += complex_value(
+                raw_component.get("weighted"),
+                warnings,
+                result,
+                point,
+                catalog.get(
+                    key,
+                    f"threshold:component c{key[1]} [graph#{key[0]}]",
+                ),
+            )
+        return components
+
     evaluation = point.get("evaluation", {})
     events = evaluation.get("events", []) if isinstance(evaluation, dict) else []
-    original = 0j
     components: dict[tuple[int, int], complex] = defaultdict(complex)
-    found = False
+    missing_bare: set[tuple[int, int]] = set()
+    observed_counts: dict[tuple[int, int], int] = defaultdict(int)
     for event in events:
         if not isinstance(event, dict):
             continue
         decomposition = event.get("threshold_counterterms")
         if not isinstance(decomposition, dict):
             continue
-        found = True
-        original += complex_value(
-            decomposition.get("original"), warnings, result, point, "threshold:original"
-        )
         graph_id = int(event.get("graph_id", -1))
         for component in decomposition.get("components", []):
             if not isinstance(component, dict):
                 continue
             component_id = int(component.get("component_id", -1))
             key = graph_id, component_id
+            if key not in selected_keys:
+                continue
+            observed_counts[key] += 1
             label = catalog.get(
                 key,
                 f"threshold:component c{component_id} [graph#{graph_id}]",
             )
-            weighted = complex_value(
-                component.get("weighted"), warnings, result, point, label
+            bare = component.get("bare")
+            if component.get("evaluation_skipped") is True or not isinstance(
+                bare, dict
+            ):
+                missing_bare.add(key)
+                warnings.add(
+                    result,
+                    point,
+                    label,
+                    "bare",
+                    "missing because the component evaluation was skipped",
+                )
+                continue
+            components[key] += complex_value(bare, warnings, result, point, label)
+    summary = threshold_summary(point)
+    if summary is not None:
+        for raw_component in summary.get("components", []):
+            if not isinstance(raw_component, dict):
+                continue
+            key = (
+                int(raw_component.get("graph_id", -1)),
+                int(raw_component.get("component_id", -1)),
             )
-            components[key] += weighted
-    return found, original, components
+            if key not in selected_keys:
+                continue
+            expected_count = int(raw_component.get("occurrence_count", 0))
+            skipped_count = int(raw_component.get("skipped_count", 0))
+            if skipped_count == 0 and observed_counts[key] >= expected_count:
+                continue
+            missing_bare.add(key)
+            label = catalog.get(
+                key,
+                f"threshold:component c{key[1]} [graph#{key[0]}]",
+            )
+            warnings.add(
+                result,
+                point,
+                label,
+                "bare",
+                (
+                    "missing because the component evaluation was skipped"
+                    if skipped_count
+                    else "missing detailed runtime occurrence"
+                ),
+            )
+    for key in missing_bare:
+        components[key] = complex(math.nan, math.nan)
+    return components
 
 
 def selected_t_value(
@@ -949,6 +1410,26 @@ def selected_t_value(
     if branch == "negative" and value >= 0.0:
         return None
     return abs(value) if x_log_scale else value
+
+
+def selected_evaluated_points(
+    result: ResultFile,
+    axis_index: int,
+    branch: str,
+    x_log_scale: bool,
+) -> list[tuple[dict[str, Any], float]]:
+    points = []
+    for point in result.data.get("points", []):
+        if (
+            int(point.get("axis_index", -1)) != axis_index
+            or point.get("status") != "evaluated"
+        ):
+            continue
+        t_value = selected_t_value(point, branch, x_log_scale)
+        if t_value is not None:
+            points.append((point, t_value))
+    points.sort(key=lambda item: item[1])
+    return points
 
 
 def displayed_component(value: complex, component: str) -> float:
@@ -967,45 +1448,68 @@ def collect_threshold_summary_series(
     warnings: NonFiniteWarnings,
     selected_labels: tuple[str, ...],
 ) -> list[Series]:
-    labels = ("event sum", "original O", "Σ CT", "reconstructed O+ΣCT", "closure Δ")
+    labels = (
+        "decomposed event sum",
+        "original O",
+        "Σ weighted CT",
+        "reconstructed O+ΣCT",
+        "relative closure |Δ|/scale",
+    )
     values: OrderedDict[str, list[tuple[float, float]]] = OrderedDict(
         (label, []) for label in labels
     )
-    catalog = threshold_component_catalog(result)
-    for point in result.data.get("points", []):
-        if (
-            int(point.get("axis_index", -1)) != axis_index
-            or point.get("status") != "evaluated"
-        ):
+    for point, t_value in selected_evaluated_points(
+        result, axis_index, branch, args.x_log_scale
+    ):
+        summary = threshold_summary(point)
+        if summary is None:
+            for label in labels:
+                values[label].append((t_value, math.nan))
             continue
-        t_value = selected_t_value(point, branch, args.x_log_scale)
-        if t_value is None:
-            continue
-        found, original, components = threshold_point_values(
-            result, point, warnings, catalog
-        )
-        if not found:
-            continue
-        counterterms = sum(components.values(), 0j)
-        reconstructed = original + counterterms
         event_sum = complex_value(
-            point.get("evaluation", {}).get("event_weight_sum"),
+            summary.get("decomposed_event_sum"),
             warnings,
             result,
             point,
-            "event_weight_sum",
+            "threshold:decomposed_event_sum",
         )
-        for label, value in zip(
-            labels,
-            (
-                event_sum,
-                original,
-                counterterms,
-                reconstructed,
-                event_sum - reconstructed,
-            ),
-        ):
-            values[label].append((t_value, displayed_component(value, args.component)))
+        original = complex_value(
+            summary.get("original"), warnings, result, point, "threshold:original"
+        )
+        counterterms = complex_value(
+            summary.get("counterterm_sum"),
+            warnings,
+            result,
+            point,
+            "threshold:counterterm_sum",
+        )
+        reconstructed = complex_value(
+            summary.get("reconstructed_total"),
+            warnings,
+            result,
+            point,
+            "threshold:reconstructed_total",
+        )
+        closure = complex_value(
+            summary.get("closure"),
+            warnings,
+            result,
+            point,
+            "threshold:closure",
+        )
+        displayed = tuple(
+            displayed_component(value, args.component)
+            for value in (event_sum, original, counterterms, reconstructed)
+        )
+        closure_component = displayed_component(closure, args.component)
+        scale = max(
+            abs(displayed[0]),
+            abs(displayed[1]) + abs(displayed[2]),
+            sys.float_info.min,
+        )
+        relative_closure = abs(closure_component) / scale
+        for label, value in zip(labels, (*displayed, relative_closure)):
+            values[label].append((t_value, value))
     return [
         Series(
             label,
@@ -1023,25 +1527,33 @@ def collect_threshold_facet_series(
     branch: str,
     facet: ReportFacet,
     component: str,
+    quantity: str,
     args: argparse.Namespace,
     warnings: NonFiniteWarnings,
 ) -> list[Series]:
+    selected_keys = {
+        key
+        for component_keys in facet.component_groups.values()
+        for key in component_keys
+    }
     values: OrderedDict[str, list[tuple[float, float]]] = OrderedDict(
         (label, []) for label in facet.component_groups
     )
     catalog = threshold_component_catalog(result)
-    for point in result.data.get("points", []):
-        if (
-            int(point.get("axis_index", -1)) != axis_index
-            or point.get("status") != "evaluated"
-        ):
-            continue
-        t_value = selected_t_value(point, branch, args.x_log_scale)
-        if t_value is None:
-            continue
-        _, _, components = threshold_point_values(result, point, warnings, catalog)
+    for point, t_value in selected_evaluated_points(
+        result, axis_index, branch, args.x_log_scale
+    ):
+        components = threshold_component_values(
+            result, point, quantity, warnings, catalog, selected_keys
+        )
         for label, component_keys in facet.component_groups.items():
-            value = sum((components.get(key, 0j) for key in component_keys), 0j)
+            component_values = [components.get(key) for key in component_keys]
+            if any(value is None for value in component_values):
+                value = complex(math.nan, math.nan)
+            else:
+                value = sum(
+                    (value for value in component_values if value is not None), 0j
+                )
             values[label].append((t_value, displayed_component(value, component)))
     return [
         Series(
@@ -1052,6 +1564,179 @@ def collect_threshold_facet_series(
         for label, samples in values.items()
         if samples
     ]
+
+
+def runtime_occurrence_label(event: dict[str, Any], component: dict[str, Any]) -> str:
+    occurrence = component.get("occurrence", {})
+    occurrence_kind = occurrence.get("kind", "?")
+    event_bits = [
+        f"eg{event.get('event_group_index', '?')}/e{event.get('event_index', '?')}",
+        f"c{event.get('cut_id', '?')}",
+    ]
+    if event.get("orientation_id") is not None:
+        event_bits.append(f"o{event['orientation_id']}")
+    if event.get("lmb_sample_id") is not None:
+        event_bits.append(f"b{event['lmb_sample_id']}")
+    if occurrence_kind == "local_unitarity":
+        overlap_groups = ",".join(
+            str(value) for value in occurrence.get("overlap_groups", [])
+        )
+        event_bits.extend(
+            [
+                f"og[{overlap_groups}]",
+                f"L{occurrence.get('left_threshold_order', '-')}",
+                f"R{occurrence.get('right_threshold_order', '-')}",
+                f"u{occurrence.get('lu_cut_order', '-')}",
+            ]
+        )
+    elif occurrence_kind == "amplitude":
+        event_bits.extend(
+            [
+                f"es{occurrence.get('raised_esurface_id', '?')}",
+                f"og{occurrence.get('overlap_group', '?')}",
+            ]
+        )
+    else:
+        event_bits.append(str(occurrence_kind))
+    return " ".join(event_bits)
+
+
+def collect_multiplier_facet_series(
+    result: ResultFile,
+    axis_index: int,
+    branch: str,
+    facet: ReportFacet,
+    args: argparse.Namespace,
+    warnings: NonFiniteWarnings,
+    registry: ThresholdRegistry,
+) -> list[Series]:
+    component_keys = {key for keys in facet.component_groups.values() for key in keys}
+    points = selected_evaluated_points(result, axis_index, branch, args.x_log_scale)
+    values: OrderedDict[str, dict[int, float]] = OrderedDict()
+    for point, _ in points:
+        point_index = int(point["index"])
+        for event in point.get("evaluation", {}).get("events", []):
+            if not isinstance(event, dict):
+                continue
+            graph_id = int(event.get("graph_id", -1))
+            decomposition = event.get("threshold_counterterms")
+            if not isinstance(decomposition, dict):
+                continue
+            for raw_component in decomposition.get("components", []):
+                if not isinstance(raw_component, dict):
+                    continue
+                component_id = int(raw_component.get("component_id", -1))
+                key = graph_id, component_id
+                if key not in component_keys:
+                    continue
+                metadata = registry.components[key]
+                occurrence = runtime_occurrence_label(event, raw_component)
+                multiplier_values = raw_component.get("multiplier_values", [])
+                if not isinstance(multiplier_values, list):
+                    multiplier_values = []
+                for index, raw_value in enumerate(multiplier_values):
+                    variant_id = (
+                        metadata.variant_ids[index]
+                        if index < len(metadata.variant_ids)
+                        else -1
+                    )
+                    variant = registry.variant(graph_id, variant_id)
+                    label = f"m{index}:f(v{variant_id} {variant.name}) · {occurrence}"
+                    value = sanitized_float(
+                        raw_value,
+                        warnings,
+                        result,
+                        point,
+                        label,
+                        "value",
+                    )
+                    if point_index in values.setdefault(label, {}):
+                        raise ValueError(
+                            "multiplier runtime identity collision for "
+                            f"{label!r} at point {point_index}"
+                        )
+                    values[label][point_index] = value
+                effective_label = f"f_eff · {occurrence}"
+                effective = sanitized_float(
+                    raw_component.get("effective_multiplier"),
+                    warnings,
+                    result,
+                    point,
+                    effective_label,
+                    "value",
+                )
+                if point_index in values.setdefault(effective_label, {}):
+                    raise ValueError(
+                        "effective-multiplier runtime identity collision for "
+                        f"{effective_label!r} at point {point_index}"
+                    )
+                values[effective_label][point_index] = effective
+    series = []
+    for label, samples in values.items():
+        y_values = []
+        for point, _ in points:
+            point_index = int(point["index"])
+            if point_index not in samples:
+                warnings.add(
+                    result,
+                    point,
+                    label,
+                    "value",
+                    "missing runtime occurrence",
+                )
+            y_values.append(samples.get(point_index, math.nan))
+        series.append(
+            Series(
+                label,
+                [t_value for _, t_value in points],
+                y_values,
+            )
+        )
+    return series
+
+
+def collect_supplemental_series(
+    result: ResultFile,
+    axis_index: int,
+    branch: str,
+    x_log_scale: bool,
+    include_patterns: list[re.Pattern[str]],
+    exclude_patterns: list[re.Pattern[str]],
+    warnings: NonFiniteWarnings,
+) -> list[Series]:
+    supplemental = result.supplemental_series or []
+    points = selected_evaluated_points(result, axis_index, branch, x_log_scale)
+    collected = []
+    for external in supplemental:
+        if external.axis_index != axis_index or not label_is_selected(
+            external.label, include_patterns, exclude_patterns
+        ):
+            continue
+        samples = []
+        for point, t_value in points:
+            point_index = int(point["index"])
+            raw_value = external.values.get(point_index)
+            samples.append(
+                (
+                    t_value,
+                    sanitized_float(
+                        raw_value,
+                        warnings,
+                        result,
+                        point,
+                        external.label,
+                        "value",
+                    ),
+                )
+            )
+        collected.append(
+            Series(
+                external.label,
+                [t_value for t_value, _ in samples],
+                [value for _, value in samples],
+            )
+        )
+    return collected
 
 
 def collect_series(
@@ -1092,7 +1777,7 @@ def collect_series(
             ("event_weight_sum", evaluation.get("event_weight_sum", {})),
         ]
         for weight_name, weight_value in sorted(
-            evaluation.get("additional_weight_sums", {}).items()
+            evaluation.get("additional_contribution_sums", {}).items()
         ):
             base_values.append((f"additional:{weight_name}", weight_value))
 
@@ -1102,7 +1787,7 @@ def collect_series(
             y_value = value_or_none(
                 serialized_value, component, warnings, result, point, label
             )
-            if y_value is not None and math.isfinite(y_value):
+            if y_value is not None:
                 series_values.setdefault(f"{label_prefix}{label}", []).append(
                     (t_value, y_value)
                 )
@@ -1119,10 +1804,9 @@ def collect_series(
                     y_value = value.imag
                 else:
                     y_value = abs(value)
-                if math.isfinite(y_value):
-                    series_values.setdefault(f"{label_prefix}{label}", []).append(
-                        (t_value, y_value)
-                    )
+                series_values.setdefault(f"{label_prefix}{label}", []).append(
+                    (t_value, y_value)
+                )
 
         contribution_accumulator: dict[str, complex] = defaultdict(complex)
         for contribution in evaluation.get("contributions", []):
@@ -1150,8 +1834,7 @@ def collect_series(
                 y_value = value.imag
             else:
                 y_value = abs(value)
-            if math.isfinite(y_value):
-                series_values.setdefault(full_label, []).append((t_value, y_value))
+            series_values.setdefault(full_label, []).append((t_value, y_value))
 
     series = []
     for label, values in series_values.items():
@@ -1163,16 +1846,27 @@ def collect_series(
                 values=[item[1] for item in values],
             )
         )
+    for supplemental in collect_supplemental_series(
+        result,
+        axis_index,
+        t_branch,
+        x_log_scale,
+        include_patterns,
+        exclude_patterns,
+        warnings,
+    ):
+        supplemental.label = f"{label_prefix}{supplemental.label}"
+        series.append(supplemental)
     return series
 
 
 def finite_abs(value: float) -> float:
-    if value == 0.0:
-        return math.nan
     return abs(value)
 
 
-def log_slope(series: Series, x_range: list[float] | None = None) -> float | None:
+def log_fit(
+    series: Series, fit_points: int, x_range: list[float] | None = None
+) -> LogFit | None:
     points = [
         (math.log(x), math.log(abs(y)))
         for x, y in zip(series.t_values, series.values)
@@ -1182,6 +1876,8 @@ def log_slope(series: Series, x_range: list[float] | None = None) -> float | Non
         and math.isfinite(y)
         and (x_range is None or x_range[0] <= x <= x_range[1])
     ]
+    points.sort(key=lambda point: point[0])
+    points = points[:fit_points]
     if len(points) < 2:
         return None
     mean_x = sum(x for x, _ in points) / len(points)
@@ -1189,7 +1885,12 @@ def log_slope(series: Series, x_range: list[float] | None = None) -> float | Non
     denominator = sum((x - mean_x) ** 2 for x, _ in points)
     if denominator == 0.0:
         return None
-    return sum((x - mean_x) * (y - mean_y) for x, y in points) / denominator
+    slope = sum((x - mean_x) * (y - mean_y) for x, y in points) / denominator
+    intercept = mean_y - slope * mean_x
+    residual_sum = sum((y - (intercept + slope * x)) ** 2 for x, y in points)
+    total_sum = sum((y - mean_y) ** 2 for _, y in points)
+    r_squared = 1.0 if total_sum == 0.0 else 1.0 - residual_sum / total_sum
+    return LogFit(slope, r_squared, len(points))
 
 
 def plot_series(
@@ -1198,18 +1899,29 @@ def plot_series(
     component: str,
     y_log_scale: bool,
     fit_log_slope: bool,
+    fit_points: int,
     x_range: list[float] | None,
 ) -> bool:
     if not series.t_values:
         return False
     label = series.label
-    if fit_log_slope and (slope := log_slope(series, x_range)) is not None:
-        label = f"{label} (p={slope:+.2f})"
+    if fit_log_slope and (fit := log_fit(series, fit_points, x_range)) is not None:
+        label = (
+            f"{label} (p={fit.slope:+.2f}, R^2={fit.r_squared:.3f}, "
+            f"n={fit.point_count})"
+        )
     if not y_log_scale or component == "abs":
         y_values = [
             finite_abs(value) if y_log_scale else value for value in series.values
         ]
-        ax.plot(series.t_values, y_values, linewidth=1.4, label=label)
+        ax.plot(
+            series.t_values,
+            y_values,
+            linewidth=1.4,
+            marker="o",
+            markersize=2.5,
+            label=label,
+        )
         return False
 
     positive = [
@@ -1224,6 +1936,8 @@ def plot_series(
             series.t_values,
             positive,
             linewidth=1.4,
+            marker="o",
+            markersize=2.5,
             label=label,
         )
     if any(math.isfinite(value) for value in negative):
@@ -1233,6 +1947,8 @@ def plot_series(
             negative,
             linewidth=1.4,
             linestyle="--",
+            marker="o",
+            markersize=2.5,
             color=color,
             label="_nolegend_" if positive_line is not None else label,
         )
@@ -1257,7 +1973,10 @@ def info_box_text(result: ResultFile) -> str:
             f"integrand: {integrand.get('name', '?')} ({integrand.get('kind', '?')})",
             f"space: {result.data.get('space', '?')}",
             f"base: {compact_vector(result.data.get('base_point', []))}",
-            f"spacing: {spacing.get('kind', '?')} n={spacing.get('n_points', '?')}",
+            (
+                f"spacing: {spacing.get('kind', '?')} n={spacing.get('n_points', '?')} "
+                f"|{parameter_name(result)}|≤{float(spacing.get('max_abs_t')):.4g}"
+            ),
             f"source: {result.path.name}",
         ]
     )
@@ -1270,23 +1989,35 @@ def decorate_axis(
     y_log_scale: bool,
     x_log_scale: bool,
     hide_info_box: bool,
+    y_label: str | None = None,
     branch: str | None = None,
     show_ylabel: bool = True,
     show_xlabel: bool = True,
 ) -> None:
+    parameter = parameter_name(result)
     if show_xlabel:
         if x_log_scale and branch in ("negative", "positive"):
             sign = "< 0" if branch == "negative" else "> 0"
-            ax.set_xlabel(f"|approach parameter t|  (t {sign})")
+            ax.set_xlabel(f"|{parameter}|  ({parameter} {sign})")
         else:
-            ax.set_xlabel(
-                "|approach parameter t|" if x_log_scale else "approach parameter t"
-            )
-    if x_log_scale:
+            ax.set_xlabel(f"|{parameter}|" if x_log_scale else parameter)
+    else:
+        ax.tick_params(axis="x", labelbottom=False)
+    if x_log_scale and any(
+        math.isfinite(float(value)) and float(value) > 0.0
+        for line in ax.lines
+        for value in line.get_xdata()
+    ):
         ax.set_xscale("log")
-    ylabel = "weight magnitude" if component == "abs" else f"{component} weight"
-    if y_log_scale:
-        if component != "abs":
+    ylabel = y_label or (
+        "weight magnitude" if component == "abs" else f"{component} weight"
+    )
+    if y_log_scale and any(
+        math.isfinite(float(value)) and float(value) > 0.0
+        for line in ax.lines
+        for value in line.get_ydata()
+    ):
+        if component != "abs" and y_label is None:
             ylabel = f"|{ylabel}|"
         ax.set_yscale("log")
     if show_ylabel:
@@ -1325,12 +2056,46 @@ def apply_axis_ranges(
         ax.set_ylim(args.y_range[0], args.y_range[1])
 
 
-def branches_on_axis(args: argparse.Namespace) -> list[tuple[str, str]]:
+def branches_on_axis(
+    args: argparse.Namespace, result: ResultFile
+) -> list[tuple[str, str]]:
     if args.t_branch != "both":
         return [(args.t_branch, "")]
     if args.x_log_scale:
-        return [("negative", "t<0"), ("positive", "t>0")]
+        parameter = parameter_name(result)
+        return [("negative", f"{parameter}<0"), ("positive", f"{parameter}>0")]
     return [("both", "")]
+
+
+def add_figure_footer(fig: plt.Figure, result: ResultFile, axis_index: int) -> None:
+    fig.text(
+        0.01,
+        0.006,
+        (
+            f"source: {result.path.name}  ·  axis {axis_index + 1}: "
+            f"{axis_label(result, axis_index)}"
+        ),
+        ha="left",
+        va="bottom",
+        fontsize=6.2,
+        color="0.35",
+    )
+
+
+def wrap_display_text(value: str, width: int) -> str:
+    return "\n".join(
+        wrapped
+        for line in value.splitlines() or [value]
+        for wrapped in (
+            textwrap.wrap(
+                line,
+                width=width,
+                break_long_words=True,
+                break_on_hyphens=False,
+            )
+            or [""]
+        )
+    )
 
 
 def shared_figure_legend(
@@ -1348,18 +2113,37 @@ def shared_figure_legend(
         )
     if not entries:
         return 0.08
-    columns = min(5, max(1, len(entries)))
+    font_size = 6.0 if len(entries) > 8 else 6.8
+    label_width = 42 if len(entries) > 8 else 48
+    wrapped_entries = OrderedDict(
+        (wrap_display_text(label, label_width), handle)
+        for label, handle in entries.items()
+    )
+    widest_line = max(
+        len(line) for label in wrapped_entries for line in label.splitlines()
+    )
+    figure_width = float(fig.get_size_inches()[0])
+    approximate_character_capacity = figure_width * 72.0 / (font_size * 0.58)
+    columns = min(
+        len(wrapped_entries),
+        4,
+        max(1, int(approximate_character_capacity / (widest_line + 8))),
+    )
     rows = math.ceil(len(entries) / columns)
+    wrapped_lines = max(label.count("\n") + 1 for label in wrapped_entries)
     fig.legend(
-        list(entries.values()),
-        list(entries),
+        list(wrapped_entries.values()),
+        list(wrapped_entries),
         loc="lower center",
-        bbox_to_anchor=(0.5, 0.018),
-        fontsize=6.2 if len(entries) > 8 else 7.0,
+        bbox_to_anchor=(0.5, 0.022),
+        fontsize=font_size,
         frameon=True,
         ncols=columns,
+        columnspacing=0.8,
+        handletextpad=0.45,
+        borderaxespad=0.2,
     )
-    return min(0.34, 0.1 + 0.045 * rows)
+    return min(0.48, 0.085 + 0.031 * rows * wrapped_lines)
 
 
 def result_label_prefix(
@@ -1373,7 +2157,7 @@ def result_label_prefix(
     if result.label is not None or multi_result:
         parts.append(result.label or result.path.stem)
     if multi_axis:
-        parts.append(f"axis {axis_index + 1}")
+        parts.append(f"axis {axis_index + 1}: {axis_label(result, axis_index)}")
     return (" / ".join(parts) + " / ") if parts else ""
 
 
@@ -1396,6 +2180,7 @@ def draw_page(
     axes = list(raw_axes[0])
     has_series = False
     has_negative_values = False
+    has_nonzero_values = False
     multi_result = len({pair[0].path for pair in result_axis_pairs}) > 1
     multi_axis = len({pair[1] for pair in result_axis_pairs}) > 1
 
@@ -1403,7 +2188,7 @@ def draw_page(
         branch_specs = (
             ([("negative", "")] if column == 0 else [("positive", "")])
             if args.split_branches
-            else branches_on_axis(args)
+            else branches_on_axis(args, result_axis_pairs[0][0])
         )
         axis_has_series = False
         for branch, branch_suffix in branch_specs:
@@ -1431,12 +2216,16 @@ def draw_page(
                     if branch_suffix:
                         item.label = f"{item.label} · {branch_suffix}"
                     has_series = axis_has_series = True
+                    has_nonzero_values |= any(
+                        math.isfinite(value) and value != 0.0 for value in item.values
+                    )
                     has_negative_values |= plot_series(
                         ax,
                         item,
                         args.component,
                         args.y_log_scale,
                         args.fit_log_slope,
+                        args.fit_points,
                         args.x_range,
                     )
         if not axis_has_series:
@@ -1452,6 +2241,7 @@ def draw_page(
             )
 
     first_result, first_axis = result_axis_pairs[0]
+    effective_y_log_scale = args.y_log_scale and has_nonzero_values
     title = args.title or axis_label(first_result, first_axis)
     if args.title is None and len(result_axis_pairs) > 1:
         title = "combined approach curves"
@@ -1459,14 +2249,19 @@ def draw_page(
     for column, ax in enumerate(axes):
         branch = ("negative", "positive")[column] if args.split_branches else None
         if args.split_branches:
-            ax.set_title("t < 0" if branch == "negative" else "t > 0", fontsize=9)
+            parameter = parameter_name(first_result)
+            ax.set_title(
+                f"{parameter} < 0" if branch == "negative" else f"{parameter} > 0",
+                fontsize=9,
+            )
         decorate_axis(
             ax,
             first_result,
             args.component,
-            args.y_log_scale,
+            effective_y_log_scale,
             args.x_log_scale,
             args.hide_info_box or column > 0,
+            y_label=args.y_label,
             branch=branch,
             show_ylabel=column == 0,
         )
@@ -1481,7 +2276,8 @@ def draw_page(
         bottom=bottom,
         wspace=0.06 if args.split_branches else 0.2,
     )
-    pdf.savefig(fig, bbox_inches="tight")
+    add_figure_footer(fig, first_result, first_axis)
+    pdf.savefig(fig)
     plt.close(fig)
 
 
@@ -1496,6 +2292,8 @@ def draw_threshold_report_page(
     title: str,
     component: str,
     summary: bool = False,
+    quantity: str = "weighted",
+    multiplier: bool = False,
 ) -> None:
     row_count = len(facets)
     column_count = 2 if args.split_branches else 1
@@ -1507,14 +2305,21 @@ def draw_threshold_report_page(
         squeeze=False,
     )
     has_negative_values = False
+    rows_with_nonzero_values = [False] * row_count
+    y_log_scale = args.multiplier_log_scale if multiplier else args.y_log_scale
+    registry = ThresholdRegistry.from_result(result)
     flat_axes = [ax for row in axes for ax in row]
+    panel_title_width = 50 if column_count == 2 else 96
+    panel_titles = [
+        wrap_display_text(facet.title, panel_title_width) for facet in facets
+    ]
     for row, facet in enumerate(facets):
         for column in range(column_count):
             ax = axes[row][column]
             branch_specs = (
                 ([("negative", "")] if column == 0 else [("positive", "")])
                 if args.split_branches
-                else branches_on_axis(args)
+                else branches_on_axis(args, result)
             )
             has_series = False
             for branch, branch_suffix in branch_specs:
@@ -1528,12 +2333,23 @@ def draw_threshold_report_page(
                         facet.summary_labels,
                     )
                     if summary
+                    else collect_multiplier_facet_series(
+                        result,
+                        axis_index,
+                        branch,
+                        facet,
+                        args,
+                        warnings,
+                        registry,
+                    )
+                    if multiplier
                     else collect_threshold_facet_series(
                         result,
                         axis_index,
                         branch,
                         facet,
                         component,
+                        quantity,
                         args,
                         warnings,
                     )
@@ -1542,12 +2358,16 @@ def draw_threshold_report_page(
                     if branch_suffix:
                         item.label = f"{item.label} · {branch_suffix}"
                     has_series = True
+                    rows_with_nonzero_values[row] |= any(
+                        math.isfinite(value) and value != 0.0 for value in item.values
+                    )
                     has_negative_values |= plot_series(
                         ax,
                         item,
                         component,
-                        args.y_log_scale,
-                        args.fit_log_slope,
+                        y_log_scale,
+                        args.fit_log_slope and y_log_scale and args.x_log_scale,
+                        args.fit_points,
                         args.x_range,
                     )
             if not has_series:
@@ -1561,12 +2381,15 @@ def draw_threshold_report_page(
                     color="0.35",
                 )
             branch = ("negative", "positive")[column] if args.split_branches else None
-            axis_title = facet.title
+            axis_title = panel_titles[row]
             if args.split_branches:
-                axis_title += "\n" + ("t < 0" if branch == "negative" else "t > 0")
+                parameter = parameter_name(result)
+                axis_title += "\n" + (
+                    f"{parameter} < 0" if branch == "negative" else f"{parameter} > 0"
+                )
             ax.set_title(
                 axis_title,
-                fontsize=8.2,
+                fontsize=7.6 if axis_title.count("\n") >= 3 else 8.2,
                 fontweight="semibold",
                 linespacing=1.12,
             )
@@ -1574,30 +2397,51 @@ def draw_threshold_report_page(
                 ax,
                 result,
                 component,
-                args.y_log_scale,
+                y_log_scale,
                 args.x_log_scale,
                 args.hide_info_box or row > 0 or column > 0,
+                y_label=(
+                    args.y_label
+                    or facet.y_label
+                    or ("multiplier value" if multiplier else None)
+                    or ("unmultiplied CT" if quantity == "bare" else None)
+                ),
                 branch=branch,
                 show_ylabel=column == 0,
                 show_xlabel=row + 1 == row_count,
             )
             apply_axis_ranges(ax, args, reverse_x=branch == "negative")
 
-    fig.suptitle(title, fontsize=12, fontweight="bold")
+    if y_log_scale:
+        for row, has_nonzero_values in enumerate(rows_with_nonzero_values):
+            if has_nonzero_values:
+                continue
+            for column in range(column_count):
+                axes[row][column].set_yscale("linear")
+
+    fig.suptitle(
+        wrap_display_text(title, 112),
+        fontsize=12,
+        fontweight="bold",
+    )
     bottom = shared_figure_legend(fig, flat_axes, has_negative_values)
-    panel_title_lines = max(facet.title.count("\n") + 1 for facet in facets)
+    panel_title_lines = max(panel_title.count("\n") + 1 for panel_title in panel_titles)
     if args.split_branches:
         panel_title_lines += 1
     extra_title_lines = max(0, panel_title_lines - 2)
+    top = max(bottom + 0.2, 0.89 - 0.02 * extra_title_lines)
     fig.subplots_adjust(
-        left=0.08,
+        # Leave room for long scientific-notation tick labels together with the
+        # shared quantity label on component pages.
+        left=0.1,
         right=0.98,
-        top=0.88 - 0.018 * extra_title_lines,
+        top=top,
         bottom=bottom,
-        hspace=0.52 + 0.12 * extra_title_lines,
+        hspace=0.5 + 0.18 * extra_title_lines,
         wspace=0.06 if args.split_branches else 0.2,
     )
-    pdf.savefig(fig, bbox_inches="tight")
+    add_figure_footer(fig, result, axis_index)
+    pdf.savefig(fig)
     plt.close(fig)
 
 
@@ -1615,25 +2459,42 @@ def draw_threshold_report(
     results: list[ResultFile],
     args: argparse.Namespace,
     warnings: NonFiniteWarnings,
+    include_patterns: list[re.Pattern[str]],
+    exclude_patterns: list[re.Pattern[str]],
 ) -> int:
     page_count = 0
     for result in results:
         registry = ThresholdRegistry.from_result(result)
         for axis_index in axis_indices(result, args.selected_axis_indices):
-            observed = registry.observed_components(result, axis_index)
-            if not observed:
-                continue
-            if "summary" in args.threshold_report_sections:
+            all_observed = registry.observed_components(result, axis_index)
+            observed = registry.filter_components(
+                all_observed, include_patterns, exclude_patterns
+            )
+            if (
+                "summary" in args.threshold_report_sections
+                and axis_has_threshold_summary(result, axis_index)
+            ):
                 summary_facets = [
                     ReportFacet(
                         "event decomposition",
                         OrderedDict(),
-                        ("event sum", "original O", "Σ CT", "reconstructed O+ΣCT"),
+                        (
+                            "decomposed event sum",
+                            "original O",
+                            "Σ weighted CT",
+                            "reconstructed O+ΣCT",
+                        ),
+                        (
+                            "weight magnitude"
+                            if args.component == "abs"
+                            else f"{args.component} weight"
+                        ),
                     ),
                     ReportFacet(
-                        "closure residual",
+                        "relative closure residual",
                         OrderedDict(),
-                        ("closure Δ",),
+                        ("relative closure |Δ|/scale",),
+                        "relative residual",
                     ),
                 ]
                 draw_threshold_report_page(
@@ -1649,38 +2510,79 @@ def draw_threshold_report(
                 )
                 page_count += 1
 
-            if "singles" in args.threshold_report_sections:
+            if "singles" in args.threshold_report_sections and observed:
                 single_facets = registry.single_facets(observed)
-                chunks = [
-                    single_facets[index : index + args.facets_per_page]
-                    for index in range(0, len(single_facets), args.facets_per_page)
-                ]
-                for chunk_index, facets in enumerate(chunks):
-                    suffix = (
-                        f" {chunk_index + 1}/{len(chunks)}" if len(chunks) > 1 else ""
-                    )
-                    draw_threshold_report_page(
-                        pdf,
-                        result,
-                        axis_index,
-                        facets,
-                        args,
-                        warnings,
-                        title=threshold_report_title(
+                for quantity in args.threshold_quantities:
+                    chunks = [
+                        single_facets[index : index + args.facets_per_page]
+                        for index in range(0, len(single_facets), args.facets_per_page)
+                    ]
+                    for chunk_index, facets in enumerate(chunks):
+                        suffix = (
+                            f" {chunk_index + 1}/{len(chunks)}"
+                            if len(chunks) > 1
+                            else ""
+                        )
+                        quantity_label = (
+                            "weighted" if quantity == "weighted" else "unmultiplied CT"
+                        )
+                        draw_threshold_report_page(
+                            pdf,
                             result,
                             axis_index,
+                            facets,
                             args,
-                            f"variants{suffix}",
-                        ),
-                        component=args.component,
-                    )
-                    page_count += 1
+                            warnings,
+                            title=threshold_report_title(
+                                result,
+                                axis_index,
+                                args,
+                                f"variants · {quantity_label}{suffix}",
+                            ),
+                            component=args.component,
+                            quantity=quantity,
+                        )
+                        page_count += 1
 
-            if "pairs" in args.threshold_report_sections:
+            if "pairs" in args.threshold_report_sections and observed:
                 pair_facets = registry.pair_facets(observed)
+                for quantity in args.threshold_quantities:
+                    chunks = [
+                        pair_facets[index : index + 2]
+                        for index in range(0, len(pair_facets), 2)
+                    ]
+                    for chunk_index, facets in enumerate(chunks):
+                        suffix = (
+                            f" {chunk_index + 1}/{len(chunks)}"
+                            if len(chunks) > 1
+                            else ""
+                        )
+                        quantity_label = (
+                            "weighted" if quantity == "weighted" else "unmultiplied CT"
+                        )
+                        draw_threshold_report_page(
+                            pdf,
+                            result,
+                            axis_index,
+                            facets,
+                            args,
+                            warnings,
+                            title=threshold_report_title(
+                                result,
+                                axis_index,
+                                args,
+                                f"pairs · {quantity_label}{suffix}",
+                            ),
+                            component=args.component,
+                            quantity=quantity,
+                        )
+                        page_count += 1
+
+            if "multipliers" in args.threshold_report_sections and observed:
+                multiplier_facets = registry.multiplier_facets(observed)
                 chunks = [
-                    pair_facets[index : index + 2]
-                    for index in range(0, len(pair_facets), 2)
+                    multiplier_facets[index : index + 2]
+                    for index in range(0, len(multiplier_facets), 2)
                 ]
                 for chunk_index, facets in enumerate(chunks):
                     suffix = (
@@ -1697,9 +2599,10 @@ def draw_threshold_report(
                             result,
                             axis_index,
                             args,
-                            f"pairs{suffix}",
+                            f"multipliers{suffix}",
                         ),
-                        component=args.component,
+                        component="real",
+                        multiplier=True,
                     )
                     page_count += 1
     return page_count
@@ -1758,6 +2661,8 @@ def main() -> int:
         results = [
             load_result(path, label) for path, label in zip(args.results, labels)
         ]
+        if args.series_json:
+            load_supplemental_series(args.series_json, results[0])
         warnings = NonFiniteWarnings()
         include_contributions = list(args.include_contribution)
         if not include_contributions:
@@ -1766,6 +2671,7 @@ def main() -> int:
                 include_contributions.append(r"^threshold:")
         include_patterns = compile_patterns(include_contributions)
         exclude_patterns = compile_patterns(args.exclude_contribution)
+        report_include_patterns = compile_patterns(args.include_contribution)
         groups = page_groups(results, args)
         if not groups:
             raise ValueError(
@@ -1774,9 +2680,22 @@ def main() -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with PdfPages(args.output) as pdf:
             if args.threshold_report:
-                if draw_threshold_report(pdf, results, args, warnings) == 0:
+                if (
+                    draw_threshold_report(
+                        pdf,
+                        results,
+                        args,
+                        warnings,
+                        report_include_patterns,
+                        exclude_patterns,
+                    )
+                    == 0
+                ):
                     raise ValueError(
-                        "No observed threshold-counterterm report sections were found."
+                        "No requested threshold-counterterm data was found. Summary "
+                        "pages require evaluation.threshold_counterterm_summary; "
+                        "component pages require observed registry components matching "
+                        "the requested filters."
                     )
             else:
                 for group in groups:

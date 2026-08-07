@@ -1,0 +1,134 @@
+[cli_settings]
+
+[cli_settings.state]
+folder = "./examples/cli/epem_a_ttxh/NNLO/analyses/gl638_correlated_soft_threshold_cure/gammaloop_state"
+name = "gl638_correlated_soft_threshold_cure"
+
+[[command_blocks]]
+name = "setup_model"
+commands = [
+  "import model sm-default.json",
+  "set model MT=173.0",
+  "set model MH=125.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set model aS=0.118",
+  "set model aEWM1=132.507",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+]
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "run setup_model",
+  "remove processes",
+  "import graphs ./examples/cli/epem_a_ttxh/NNLO/analyses/gl638_correlated_soft_threshold_cure/GL638_legacy.dot -p gl638_legacy -i GL638_legacy -o",
+  "import graphs ./examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot -p gl638_ir_safe -i GL638_ir_safe -o",
+  "generate existing -p gl638_legacy -i GL638_legacy",
+  "generate existing -p gl638_ir_safe -i GL638_ir_safe",
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "runtime_events"
+commands = [
+  "set process -p gl638_legacy -i GL638_legacy kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
+  "set process -p gl638_ir_safe -i GL638_ir_safe kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "approach"
+commands = [
+  "run runtime_events",
+  "set process -p gl638_ir_safe -i GL638_ir_safe kv subtraction.disable_threshold_subtraction=true",
+  """approach -p gl638_ir_safe -i GL638_ir_safe
+      --momentum-space --graph-id 0 --orientation-id 0
+      --point 108.257828337953,-144.343771117271,433.031313351812,-59,101,-73,127,41,-109,108.257828337953,-144.343771117271,433.031313351812
+      --approach-axis 47,29,-31,0,0,0,0,0,0,258,-128,162
+      --axis-label 'q13 correlated soft + both thresholds'
+      --parameter-name lambda
+      --n-points 7 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 1
+      --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl638_correlated_soft_threshold_cure/threshold_off.json""",
+  """approach -p gl638_legacy -i GL638_legacy
+      --momentum-space --graph-id 0 --orientation-id 0
+      --point 108.257828337953,-144.343771117271,433.031313351812,-59,101,-73,127,41,-109,108.257828337953,-144.343771117271,433.031313351812
+      --approach-axis 47,29,-31,0,0,0,0,0,0,258,-128,162
+      --axis-label 'q13 correlated soft + both thresholds'
+      --parameter-name lambda
+      --n-points 7 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 1
+      --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl638_correlated_soft_threshold_cure/legacy.json""",
+  "set process -p gl638_ir_safe -i GL638_ir_safe kv subtraction.disable_threshold_subtraction=false",
+  """approach -p gl638_ir_safe -i GL638_ir_safe
+      --momentum-space --graph-id 0 --orientation-id 0
+      --point 108.257828337953,-144.343771117271,433.031313351812,-59,101,-73,127,41,-109,108.257828337953,-144.343771117271,433.031313351812
+      --approach-axis 47,29,-31,0,0,0,0,0,0,258,-128,162
+      --axis-label 'q13 correlated soft + both thresholds'
+      --parameter-name lambda
+      --n-points 7 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 1
+      --output-results ./examples/cli/epem_a_ttxh/NNLO/analyses/gl638_correlated_soft_threshold_cure/ir_safe.json""",
+]
+
+[[command_blocks]]
+name = "all"
+commands = ["run generate", "run approach"]
+
+[default_runtime_settings.kinematics]
+e_cm = 1000.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]
+helicities = ["summed_averaged", "summed_averaged"]
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+enable_cache = false
+generate_events = true
+store_additional_weights_in_event = true
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+esurface_existence_threshold = 1.0e-7
+
+[cli_settings.global.generation]
+force_cuts = [
+  ["e2", "e6", "e12", "e13"],
+  ["e2", "e6", "e10"],
+  ["e2", "e6", "e7", "e13", "e14"],
+  ["e2", "e4", "e12"],
+  ["e2", "e4", "e10", "e13"],
+  ["e2", "e4", "e7", "e14"],
+]
+
+[cli_settings.global.generation.orientation_pattern]
+pat = "(+,+,+,+,-,-,-,+,-,0,+,0,+,-,+)"
+
+[cli_settings.global.generation.evaluator]
+do_algebra = false
+store_atom = true
+compile = false
+summed = false
+summed_function_map = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = true
+esurface_existence_threshold = 1.0e-7
+skip_thresholds_that_are_cuts = true
+
+[cli_settings.global.generation.uv]
+softct = true
+inner_products = true
+generate_integrated = false
+subtract_uv = true
+
+[cli_settings.global.n_cores]
+generate = 4
+compile = 4
+integrate = 1
