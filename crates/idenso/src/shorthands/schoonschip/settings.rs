@@ -1,3 +1,4 @@
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SchoonschipSettings {
     pub depth_limit: Option<usize>,
     pub mode: SchoonschipMode,

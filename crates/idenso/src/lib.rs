@@ -266,8 +266,11 @@ impl IndexTooling for Atom {
 
 #[cfg(test)]
 mod syntax_macro_tests {
+    use crate::IndexTooling;
     #[allow(unused_imports)]
     use crate::{bis, coad, coaf, cof, color_d, f, t};
+    use spenso::{mink, network::tags::SPENSO_TAG, structure::abstract_index::AbstractIndex};
+    use symbolica::{function, symbol};
     use symbolica_utils::AtomPrintExt;
 
     #[test]
@@ -291,6 +294,15 @@ mod syntax_macro_tests {
         insta::assert_snapshot!(t!(a.clone()).to_bare_ordered_string(), @"t(coad(Na,a),in,out)");
         insta::assert_snapshot!(f!(a.clone(), b.clone(), c.clone()).to_bare_ordered_string(), @"f(coad(Na,a),coad(Na,b),coad(Na,c))");
         insta::assert_snapshot!(color_d!(coad!(Na), a, b, c).to_bare_ordered_string(), @"d(coad(Na),coad(Na,a),coad(Na,b),coad(Na,c))");
+    }
+
+    #[test]
+    fn dirac_adjoint_propagates_network_parse_errors() {
+        crate::representations::initialize();
+        let invalid_dot = function!(SPENSO_TAG.dot, mink!(4), symbol!("p"), symbol!("q"));
+        let error = invalid_dot.dirac_adjoint::<AbstractIndex>().unwrap_err();
+
+        assert!(error.to_string().contains("Invalid dot function"));
     }
 }
 
@@ -377,7 +389,7 @@ impl IndexTooling for AtomView<'_> {
                 take_first_term_from_sum: true,
                 ..Default::default()
             })
-            .unwrap();
+            .map_err(|error| eyre!(error))?;
 
         let bis_dangling: Vec<_> = net
             .graph

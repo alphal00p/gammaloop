@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
+use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet, SpinFundamental};
 use itertools::Itertools;
 
 #[cfg(not(feature = "python_stubgen"))]
@@ -10,7 +10,7 @@ use pyo3::{
     exceptions::{self, PyIndexError, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
     pybacked::PyBackedStr,
-    types::{PyList, PyTuple},
+    types::PyTuple,
 };
 
 use idenso::tensor::SymbolicTensor;
@@ -34,7 +34,7 @@ use spenso::{
         dimension::Dimension,
         permuted::Perm,
         representation::{
-            Euclidean, ExtendibleReps, LibraryRep, Minkowski, RepName, Representation,
+            Euclidean, ExtendibleReps, LibraryRep, Lorentz, Minkowski, RepName, Representation,
         },
         slot::{IsAbstractSlot, Slot},
     },
@@ -56,7 +56,11 @@ use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
 use thiserror::Error;
 
 use idenso::{
-    Cookable, color::CS, dirac::AGS, representations::Bispinor,
+    Cookable,
+    color::CS,
+    dirac::{AGS, PS},
+    epsilon::EPSILON_SYMBOL,
+    representations::Bispinor,
     shorthands::metric::PermuteWithMetric,
 };
 
@@ -126,7 +130,9 @@ impl<'a, 'py> FromPyObject<'a, 'py> for SpensoSlotOrArgOrRep {
 #[cfg(feature = "python_stubgen")]
 impl PyStubType for SpensoSlotOrArgOrRep {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
-        SpensoIndices::type_output() | <Vec<SpensoSlot>>::type_output()
+        SpensoSlot::type_output()
+            | SpensoRepresentation::type_output()
+            | ConvertibleToExpression::type_output()
     }
 }
 
@@ -435,6 +441,26 @@ impl SpensoName {
         SpensoName { name: AGS.gamma5 }
     }
 
+    /// Predefined gamma0 matrix name.
+    #[staticmethod]
+    fn gamma0() -> SpensoName {
+        SpensoName { name: AGS.gamma0 }
+    }
+
+    /// Predefined complex-conjugated gamma matrix name.
+    #[staticmethod]
+    fn gammaconj() -> SpensoName {
+        SpensoName {
+            name: AGS.gammaconj,
+        }
+    }
+
+    /// Predefined Hermitian-adjoint gamma matrix name.
+    #[staticmethod]
+    fn gammaadj() -> SpensoName {
+        SpensoName { name: AGS.gammaadj }
+    }
+
     /// Predefined left chiral projector name.
     #[staticmethod]
     fn projm() -> SpensoName {
@@ -453,6 +479,50 @@ impl SpensoName {
         SpensoName { name: AGS.sigma }
     }
 
+    /// Predefined Levi-Civita tensor name.
+    #[staticmethod]
+    fn epsilon() -> SpensoName {
+        SpensoName {
+            name: *EPSILON_SYMBOL,
+        }
+    }
+
+    /// Predefined incoming vector-polarization name.
+    #[staticmethod]
+    fn eps() -> SpensoName {
+        SpensoName { name: PS.eps }
+    }
+
+    /// Predefined outgoing vector-polarization name.
+    #[staticmethod]
+    fn ebar() -> SpensoName {
+        SpensoName { name: PS.ebar }
+    }
+
+    /// Predefined Dirac u-spinor name.
+    #[staticmethod]
+    fn u() -> SpensoName {
+        SpensoName { name: PS.u }
+    }
+
+    /// Predefined conjugate Dirac u-spinor name.
+    #[staticmethod]
+    fn ubar() -> SpensoName {
+        SpensoName { name: PS.ubar }
+    }
+
+    /// Predefined Dirac v-spinor name.
+    #[staticmethod]
+    fn v() -> SpensoName {
+        SpensoName { name: PS.v }
+    }
+
+    /// Predefined conjugate Dirac v-spinor name.
+    #[staticmethod]
+    fn vbar() -> SpensoName {
+        SpensoName { name: PS.vbar }
+    }
+
     /// Predefined color structure constant name.
     #[staticmethod]
     fn f() -> SpensoName {
@@ -463,6 +533,167 @@ impl SpensoName {
     #[staticmethod]
     fn t() -> SpensoName {
         SpensoName { name: CS.t }
+    }
+
+    /// Predefined symmetric color-invariant tensor name.
+    #[staticmethod]
+    fn d() -> SpensoName {
+        SpensoName { name: CS.d }
+    }
+
+    /// Predefined Gram-invariant function name.
+    ///
+    /// Call the returned name with `(degree, left_representation, right_representation)`
+    /// and convert the resulting structure to an expression.
+    #[staticmethod]
+    fn gram() -> SpensoName {
+        SpensoName { name: CS.gram }
+    }
+
+    /// Predefined Casimir-invariant function name.
+    ///
+    /// Call the returned name with `(degree, representation)` and convert the
+    /// resulting structure to an expression.
+    #[staticmethod]
+    fn cas() -> SpensoName {
+        SpensoName { name: CS.cas }
+    }
+
+    /// Predefined Dynkin-index function name.
+    ///
+    /// Call the returned name with `(degree, representation)` and convert the
+    /// resulting structure to an expression.
+    #[staticmethod]
+    fn idx() -> SpensoName {
+        SpensoName { name: CS.idx }
+    }
+
+    /// Build the degree-k Gram invariant `gram(k, left, right)` as a scalar expression.
+    #[staticmethod]
+    fn color_gram(
+        degree: ConvertibleToExpression,
+        left: &SpensoRepresentation,
+        right: &SpensoRepresentation,
+    ) -> PythonExpression {
+        CS.gram(
+            degree.to_expression().expr,
+            left.representation.to_symbolic([]),
+            right.representation.to_symbolic([]),
+        )
+        .into()
+    }
+
+    /// Build the degree-k Casimir eigenvalue `cas(k, representation)` as a scalar expression.
+    #[staticmethod]
+    fn color_cas(
+        degree: ConvertibleToExpression,
+        representation: &SpensoRepresentation,
+    ) -> PythonExpression {
+        CS.cas(
+            degree.to_expression().expr,
+            representation.representation.to_symbolic([]),
+        )
+        .into()
+    }
+
+    /// Build the degree-k Dynkin index `idx(k, representation)` as a scalar expression.
+    #[staticmethod]
+    fn color_idx(
+        degree: ConvertibleToExpression,
+        representation: &SpensoRepresentation,
+    ) -> PythonExpression {
+        CS.idx(
+            degree.to_expression().expr,
+            representation.representation.to_symbolic([]),
+        )
+        .into()
+    }
+
+    /// Build the symmetric color tensor `d(representation, a, b, ...)`.
+    #[staticmethod]
+    #[pyo3(signature = (representation, *adjoint_indices))]
+    fn color_d(
+        representation: &SpensoRepresentation,
+        #[gen_stub(override_type(type_repr = "Slot"))] adjoint_indices: &Bound<'_, PyTuple>,
+    ) -> PyResult<PythonExpression> {
+        let indices = adjoint_indices
+            .iter()
+            .map(|index| {
+                index
+                    .extract::<SpensoSlot>()
+                    .map(|index| index.slot.to_atom())
+                    .map_err(PyErr::from)
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        if indices.is_empty() {
+            return Err(PyValueError::new_err(
+                "color_d requires at least one adjoint index",
+            ));
+        }
+        Ok(CS
+            .symmetric_d(representation.representation.to_symbolic([]), indices)
+            .into())
+    }
+
+    /// Build `trace(rep, sym(T(a), T(b), ...))`.
+    #[staticmethod]
+    #[pyo3(signature = (representation, *adjoint_indices))]
+    fn symmetric_generator_trace(
+        representation: &SpensoRepresentation,
+        #[gen_stub(override_type(type_repr = "Slot"))] adjoint_indices: &Bound<'_, PyTuple>,
+    ) -> PyResult<PythonExpression> {
+        let indices = adjoint_indices
+            .iter()
+            .map(|index| {
+                index
+                    .extract::<SpensoSlot>()
+                    .map(|index| index.slot.to_atom())
+                    .map_err(PyErr::from)
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        if indices.is_empty() {
+            return Err(PyValueError::new_err(
+                "symmetric_generator_trace requires at least one adjoint index",
+            ));
+        }
+        Ok(CS
+            .symmetric_generator_trace(representation.representation.to_symbolic([]), indices)
+            .into())
+    }
+
+    /// Number of colors in the fundamental representation.
+    #[staticmethod]
+    #[pyo3(name = "Nc")]
+    fn nc() -> PythonExpression {
+        PythonExpression::from(Atom::var(CS.nc))
+    }
+
+    /// Dimension of the color adjoint representation.
+    #[staticmethod]
+    #[pyo3(name = "NA")]
+    fn na() -> PythonExpression {
+        PythonExpression::from(Atom::var(CS.na))
+    }
+
+    /// Quadratic Casimir of the color adjoint representation.
+    #[staticmethod]
+    #[pyo3(name = "CA")]
+    fn ca() -> PythonExpression {
+        PythonExpression::from(Atom::var(CS.ca))
+    }
+
+    /// Quadratic Casimir of the color fundamental representation.
+    #[staticmethod]
+    #[pyo3(name = "CF")]
+    fn cf() -> PythonExpression {
+        PythonExpression::from(Atom::var(CS.cf))
+    }
+
+    /// Generator trace-normalization constant.
+    #[staticmethod]
+    #[pyo3(name = "TR")]
+    fn tr() -> PythonExpression {
+        PythonExpression::from(Atom::var(CS.tr))
     }
 }
 
@@ -516,6 +747,264 @@ mod tensor_name_tests {
 
             assert!(!default.name.is_linear());
             assert!(!explicitly_nonlinear.name.is_linear());
+        });
+    }
+
+    #[test]
+    fn predefined_tensor_name_catalog_uses_idenso_symbols() {
+        assert_eq!(SpensoName::gamma0().name, AGS.gamma0);
+        assert_eq!(SpensoName::gammaconj().name, AGS.gammaconj);
+        assert_eq!(SpensoName::gammaadj().name, AGS.gammaadj);
+        assert_eq!(SpensoName::epsilon().name, *EPSILON_SYMBOL);
+        assert_eq!(SpensoName::eps().name, PS.eps);
+        assert_eq!(SpensoName::ebar().name, PS.ebar);
+        assert_eq!(SpensoName::u().name, PS.u);
+        assert_eq!(SpensoName::ubar().name, PS.ubar);
+        assert_eq!(SpensoName::v().name, PS.v);
+        assert_eq!(SpensoName::vbar().name, PS.vbar);
+        assert_eq!(SpensoName::d().name, CS.d);
+        assert_eq!(SpensoName::gram().name, CS.gram);
+        assert_eq!(SpensoName::cas().name, CS.cas);
+        assert_eq!(SpensoName::idx().name, CS.idx);
+
+        for (actual, expected) in [
+            (SpensoName::nc().expr, CS.nc),
+            (SpensoName::na().expr, CS.na),
+            (SpensoName::ca().expr, CS.ca),
+            (SpensoName::cf().expr, CS.cf),
+            (SpensoName::tr().expr, CS.tr),
+        ] {
+            assert_eq!(actual, Atom::var(expected));
+        }
+    }
+
+    #[test]
+    fn predefined_catalog_is_registered_on_python_classes() {
+        Python::initialize();
+
+        Python::attach(|py| {
+            let tensor_type = py.get_type::<SpensoName>();
+            for method in [
+                "gamma0",
+                "gammaconj",
+                "gammaadj",
+                "epsilon",
+                "eps",
+                "ebar",
+                "u",
+                "ubar",
+                "v",
+                "vbar",
+                "d",
+                "gram",
+                "cas",
+                "idx",
+            ] {
+                tensor_type
+                    .call_method0(method)
+                    .unwrap()
+                    .extract::<SpensoName>()
+                    .unwrap();
+            }
+            for method in ["Nc", "NA", "CA", "CF", "TR"] {
+                tensor_type
+                    .call_method0(method)
+                    .unwrap()
+                    .extract::<PythonExpression>()
+                    .unwrap();
+            }
+
+            let representation_type = py.get_type::<SpensoRepresentation>();
+            let lorentz = representation_type
+                .call_method1("lor", (4,))
+                .unwrap()
+                .extract::<SpensoRepresentation>()
+                .unwrap();
+            let spin = representation_type
+                .call_method1("spf", (2,))
+                .unwrap()
+                .extract::<SpensoRepresentation>()
+                .unwrap();
+
+            assert_eq!(
+                lorentz.representation,
+                Lorentz {}.new_rep(4).cast::<LibraryRep>()
+            );
+            assert_eq!(
+                spin.representation,
+                SpinFundamental {}.new_rep(2).cast::<LibraryRep>()
+            );
+        });
+    }
+
+    #[test]
+    fn color_invariant_builders_accept_typed_representations_and_slots() {
+        Python::initialize();
+
+        Python::attach(|py| {
+            let tensor_type = py.get_type::<SpensoName>();
+            let representation_type = py.get_type::<SpensoRepresentation>();
+            let fundamental = representation_type.call_method1("cof", (3,)).unwrap();
+            let adjoint = representation_type.call_method1("coad", (8,)).unwrap();
+            let a = adjoint.call1(("a",)).unwrap();
+            let b = adjoint.call1(("b",)).unwrap();
+
+            let fundamental_representation = fundamental
+                .extract::<SpensoRepresentation>()
+                .unwrap()
+                .representation;
+            let adjoint_representation = adjoint
+                .extract::<SpensoRepresentation>()
+                .unwrap()
+                .representation;
+            let a_slot = a.extract::<SpensoSlot>().unwrap().slot;
+            let b_slot = b.extract::<SpensoSlot>().unwrap().slot;
+
+            let named_gram = tensor_type
+                .call_method0("gram")
+                .unwrap()
+                .call1((3, &fundamental, &adjoint))
+                .unwrap();
+            assert_eq!(
+                named_gram.repr().unwrap().to_str().unwrap(),
+                CS.gram(
+                    3,
+                    fundamental_representation.to_symbolic([]),
+                    adjoint_representation.to_symbolic([]),
+                )
+                .to_string()
+            );
+
+            let unnamed = py
+                .get_type::<SpensoStructure>()
+                .call1((&fundamental, &adjoint))
+                .unwrap();
+            let unnamed_repr = unnamed.repr().unwrap();
+            let unnamed_repr = unnamed_repr.to_str().unwrap();
+            assert!(unnamed_repr.contains("cof(3)"));
+            assert!(unnamed_repr.contains("coad(8)"));
+
+            let cases = [
+                (
+                    tensor_type
+                        .call_method0("cas")
+                        .unwrap()
+                        .call1((2, &fundamental))
+                        .unwrap()
+                        .call_method0("to_expression")
+                        .unwrap()
+                        .extract::<PythonExpression>()
+                        .unwrap()
+                        .expr,
+                    CS.cas(2, fundamental_representation.to_symbolic([])),
+                ),
+                (
+                    tensor_type
+                        .call_method0("idx")
+                        .unwrap()
+                        .call1((2, &fundamental))
+                        .unwrap()
+                        .call_method0("to_expression")
+                        .unwrap()
+                        .extract::<PythonExpression>()
+                        .unwrap()
+                        .expr,
+                    CS.idx(2, fundamental_representation.to_symbolic([])),
+                ),
+                (
+                    tensor_type
+                        .call_method0("gram")
+                        .unwrap()
+                        .call1((3, &fundamental, &fundamental))
+                        .unwrap()
+                        .call_method0("to_expression")
+                        .unwrap()
+                        .extract::<PythonExpression>()
+                        .unwrap()
+                        .expr,
+                    CS.gram(
+                        3,
+                        fundamental_representation.to_symbolic([]),
+                        fundamental_representation.to_symbolic([]),
+                    ),
+                ),
+                (
+                    tensor_type
+                        .call_method0("gram")
+                        .unwrap()
+                        .call1((3, &fundamental, &adjoint))
+                        .unwrap()
+                        .call_method0("to_expression")
+                        .unwrap()
+                        .extract::<PythonExpression>()
+                        .unwrap()
+                        .expr,
+                    CS.gram(
+                        3,
+                        fundamental_representation.to_symbolic([]),
+                        adjoint_representation.to_symbolic([]),
+                    ),
+                ),
+                (
+                    tensor_type
+                        .call_method1("color_cas", (2, &fundamental))
+                        .unwrap()
+                        .extract::<PythonExpression>()
+                        .unwrap()
+                        .expr,
+                    CS.cas(2, fundamental_representation.to_symbolic([])),
+                ),
+                (
+                    tensor_type
+                        .call_method1("color_idx", (2, &fundamental))
+                        .unwrap()
+                        .extract::<PythonExpression>()
+                        .unwrap()
+                        .expr,
+                    CS.idx(2, fundamental_representation.to_symbolic([])),
+                ),
+                (
+                    tensor_type
+                        .call_method1("color_gram", (3, &fundamental, &adjoint))
+                        .unwrap()
+                        .extract::<PythonExpression>()
+                        .unwrap()
+                        .expr,
+                    CS.gram(
+                        3,
+                        fundamental_representation.to_symbolic([]),
+                        adjoint_representation.to_symbolic([]),
+                    ),
+                ),
+                (
+                    tensor_type
+                        .call_method1("color_d", (&fundamental, &a, &b))
+                        .unwrap()
+                        .extract::<PythonExpression>()
+                        .unwrap()
+                        .expr,
+                    CS.symmetric_d(
+                        fundamental_representation.to_symbolic([]),
+                        vec![a_slot.to_atom(), b_slot.to_atom()],
+                    ),
+                ),
+                (
+                    tensor_type
+                        .call_method1("symmetric_generator_trace", (&fundamental, &a, &b))
+                        .unwrap()
+                        .extract::<PythonExpression>()
+                        .unwrap()
+                        .expr,
+                    CS.symmetric_generator_trace(
+                        fundamental_representation.to_symbolic([]),
+                        [a_slot.to_atom(), b_slot.to_atom()],
+                    ),
+                ),
+            ];
+
+            for (actual, expected) in cases {
+                assert_eq!(actual, expected);
+            }
         });
     }
 
@@ -1247,36 +1736,52 @@ impl SpensoStructure {
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "{}",
-            self.to_symbolic(Some(self.structure.rep_permutation.clone()))
-                .unwrap()
-        )
+        self.to_expression()
+            .map(|expression| expression.expr.to_string())
+            .unwrap_or_else(|_| self.__str__())
     }
 
     fn __str__(&self) -> String {
         let slot = self
             .external_reps()
             .into_iter()
-            .map(|r| r.to_symbolic([]))
+            .map(|r| r.to_symbolic([]).to_plain_string())
             .join(",");
 
         match (self.name(), self.args()) {
             (Some(name), Some(args)) => {
-                let args = args.iter().join(",");
+                let args = args.iter().map(|arg| arg.to_plain_string()).join(",");
                 format!("{}({})[{}]", name, args, slot)
             }
             (Some(name), None) => {
                 format!("{}[{}]", name, slot)
             }
             (None, Some(args)) => {
-                let args = args.iter().join(",");
+                let args = args.iter().map(|arg| arg.to_plain_string()).join(",");
                 format!("({})[{}]", args, slot)
             }
             (None, None) => {
                 format!("[{}]", slot)
             }
         }
+    }
+
+    /// Convert a named representation-level tensor structure to an expression.
+    ///
+    /// This is also the scalar construction path for representation-valued
+    /// invariants such as `TensorName.cas()(2, Representation.cof(3))`.
+    fn to_expression(&self) -> PyResult<PythonExpression> {
+        let name = self
+            .name()
+            .ok_or_else(|| PyValueError::new_err("cannot convert an unnamed tensor structure"))?;
+        let args = self.args().unwrap_or_default();
+
+        Ok(self
+            .structure
+            .structure
+            .structure
+            .to_symbolic_with(name, &args, Some(self.structure.rep_permutation.inverse()))
+            .into())
     }
 
     fn __len__(&self) -> usize {
@@ -1362,7 +1867,7 @@ impl SpensoStructure {
         &self,
         // #[gen_stub(override_type(type_repr = "int | float | complex | str |"))]
         args: &Bound<'_, PyTuple>,
-        extra_args: Option<&Bound<'_, PyList>>,
+        extra_args: Option<Vec<PythonExpression>>,
     ) -> PyResult<PythonExpression> {
         // Directly delegate to symbolic, passing relevant arguments through
         self.symbolic(args, extra_args)
@@ -1402,7 +1907,7 @@ impl SpensoStructure {
     fn symbolic(
         &self,
         args: &Bound<'_, PyTuple>,
-        extra_args: Option<&Bound<'_, PyList>>,
+        extra_args: Option<Vec<PythonExpression>>,
     ) -> PyResult<PythonExpression> {
         // Use helper to parse arguments
         let (final_additional_args, potential_indices) =
@@ -1479,7 +1984,7 @@ impl SpensoStructure {
     fn index(
         &self,
         args: &Bound<'_, PyTuple>,
-        extra_args: Option<&Bound<'_, PyList>>,
+        extra_args: Option<Vec<PythonExpression>>,
         cook_indices: bool,
     ) -> PyResult<SpensoIndices> {
         // Use helper to parse arguments
@@ -1541,7 +2046,7 @@ impl SpensoStructure {
     fn parse_args_for_indexing(
         &self,
         args: &Bound<'_, PyTuple>,
-        extra_args_opt: Option<&Bound<'_, PyList>>,
+        extra_args_opt: Option<Vec<PythonExpression>>,
     ) -> PyResult<(Vec<Atom>, Vec<ConvertibleToAbstractIndex>)> {
         let mut pre_separator_args: Vec<ConvertibleToAbstractIndex> = Vec::new();
         let mut post_separator_args: Vec<ConvertibleToAbstractIndex> = Vec::new();
@@ -1578,8 +2083,7 @@ impl SpensoStructure {
             }
         }
         if let Some(extra_args_list) = extra_args_opt {
-            for item_bound in extra_args_list.iter() {
-                let expr = item_bound.extract::<PythonExpression>()?;
+            for expr in extra_args_list {
                 final_additional_args.push(expr.expr);
             }
         }
@@ -1630,6 +2134,8 @@ impl PyStubType for PossiblyIndexed {
 /// Predefined representations are available as class methods:
 /// - `Representation.euc(d)`: Euclidean space (self-dual)
 /// - `Representation.mink(d)`: Minkowski space (self-dual)
+/// - `Representation.lor(d)`: Lorentz representation (dualizable)
+/// - `Representation.spf(d)`: Spin fundamental (dualizable)
 /// - `Representation.bis(d)`: Bispinor (self-dual)
 /// - `Representation.cof(d)`: Color fundamental (dualizable)
 /// - `Representation.coad(d)`: Color adjoint (self-dual)
@@ -1641,7 +2147,10 @@ impl PyStubType for PossiblyIndexed {
 ///
 /// # Standard representations
 /// euclidean = Representation.euc(4)      # 4D Euclidean
-/// lorentz = Representation.mink(4)       # 4D Minkowski
+/// minkowski = Representation.mink(4)     # Self-dual Minkowski vectors
+/// lorentz = Representation.lor(4)        # Lorentz vectors; dual via dual()
+/// spin_fundamental = Representation.spf(2)  # Weyl spinors; dual via dual()
+/// bispinor = Representation.bis(4)       # Self-dual Dirac bispinors
 /// color = Representation.cof(3)          # SU(3) fundamental
 /// adjoint = Representation.coad(8)       # SU(3) adjoint
 ///
@@ -1982,6 +2491,36 @@ impl SpensoRepresentation {
         }
     }
 
+    /// Create a Lorentz representation.
+    ///
+    /// Its dual is available through `dual()`.
+    ///
+    /// # Parameters:
+    /// - dimension: The dimension of the Lorentz representation
+    #[staticmethod]
+    fn lor(dimension: ConvertibleToDimension) -> Self {
+        let dim = dimension.0;
+        let rep = Lorentz {}.new_rep(dim).cast();
+        Self {
+            representation: rep,
+        }
+    }
+
+    /// Create a spin-fundamental representation.
+    ///
+    /// Its spin-antifundamental dual is available through `dual()`.
+    ///
+    /// # Parameters:
+    /// - dimension: The dimension of the spin representation
+    #[staticmethod]
+    fn spf(dimension: ConvertibleToDimension) -> Self {
+        let dim = dimension.0;
+        let rep = SpinFundamental {}.new_rep(dim).cast();
+        Self {
+            representation: rep,
+        }
+    }
+
     /// Create a color fundamental representation.
     ///
     /// # Parameters:
@@ -2144,9 +2683,6 @@ impl SpensoSlot {
 }
 
 #[cfg(feature = "python_stubgen")]
-static EMPTY: fn() -> String = || "[]".into();
-
-#[cfg(feature = "python_stubgen")]
 static FALSE: fn() -> String = || "False".to_string();
 
 #[cfg(feature = "python_stubgen")]
@@ -2174,12 +2710,12 @@ submit! {
                 r#return: SpensoIndices::type_output,
                 doc:r##"Call the tensor name with arguments to create tensor structures.
 
-Accepts a mix of slots and symbolic expressions (for additional arguments).
+Accepts a mix of slots and expression-compatible scalar arguments.
 
 Parameters
 ----------
-*args : Slot or Expression
-    Slot objects and Expressions for additional arguments
+*args : Slot, Expression, int, float, complex, or str
+    Slot objects and expression-compatible values for additional arguments
 
 Returns
 -------
@@ -2208,19 +2744,19 @@ Examples
                         name: "args",//: Representation | Expression",
                         kind:ParameterKind::VarPositional,
                         default:ParameterDefault::None,
-                        type_info: || SpensoRepresentation::type_input()| PythonExpression::type_input(),
+                        type_info: || SpensoRepresentation::type_input()| ConvertibleToExpression::type_input(),
                     },
                 ],
                 r#type: MethodType::Instance,
                 r#return: SpensoStructure::type_output,
                 doc:r##"Call the tensor name with arguments to create a TensorStructure.
 
-Accepts a mix of representations and symbolic expressions (for additional arguments).
+Accepts a mix of representations and expression-compatible scalar arguments.
 
 Parameters
 ----------
-*args : Representation or Expression
-    Representation objects and Expressions for additional arguments
+*args : Representation, Expression, int, float, complex, or str
+    Representation objects and expression-compatible values for additional arguments
 
 Returns
 -------
@@ -2263,7 +2799,7 @@ PyMethodsInfo {
             parameters:&[
                 ParameterInfo{
                     name:"slots",//: Slot | Expression | int | str | float | complex",
-                    type_info:ConvertibleToStructure::type_input,
+                    type_info:||SpensoSlot::type_input() | PythonExpression::type_input(),
                     kind:ParameterKind::VarPositional,
                     default:ParameterDefault::None,
                 },
@@ -2320,7 +2856,7 @@ Examples
                 },
             ],
             r#type: MethodType::Instance,
-            r#return: Vec::<crate::TensorElements>::type_output,
+            r#return: Vec::<Vec<usize>>::type_output,
             doc:r##"Get expanded indices at the specified range of flattened indices.
 
 Parameters
@@ -2349,7 +2885,7 @@ list of list of int
                 },
             ],
             r#type: MethodType::Instance,
-            r#return: crate::TensorElements::type_output,
+            r#return: usize::type_output,
             doc:r##"Get flattened index associated to this expanded index.
 
 Parameters
@@ -2378,7 +2914,7 @@ int
                 },
             ],
             r#type: MethodType::Instance,
-            r#return: crate::TensorElements::type_output,
+            r#return: Vec::<usize>::type_output,
             doc:r##"Get expanded index associated to this flat index.
 
 Parameters
@@ -2416,7 +2952,7 @@ submit! {
                 parameters:&[
                     ParameterInfo{
                         name:"reps_and_additional_args",//: Representation |  Expression | int | str | float | complex",
-                        type_info:ConvertibleToStructure::type_input,
+                        type_info:||SpensoRepresentation::type_input() | PythonExpression::type_input(),
                         kind:ParameterKind::VarPositional
                         ,default:ParameterDefault::None,
                     },
@@ -2471,7 +3007,7 @@ Examples
                     },
                 ],
                 r#type: MethodType::Instance,
-                r#return: Vec::<crate::TensorElements>::type_output,
+                r#return: Vec::<Vec<usize>>::type_output,
                 doc:r##"Get expanded indices at the specified range of flattened indices.
 
 Parameters
@@ -2500,7 +3036,7 @@ list of list of int
                     },
                 ],
                 r#type: MethodType::Instance,
-                r#return: crate::TensorElements::type_output,
+                r#return: usize::type_output,
                 doc:r##"Get flattened index associated to this expanded index.
 
 Parameters
@@ -2528,7 +3064,7 @@ int
                     },
                 ],
                 r#type: MethodType::Instance,
-                r#return: crate::TensorElements::type_output,
+                r#return: Vec::<usize>::type_output,
                 doc:r##"Get expanded index associated to this flat index.
 
 Parameters
@@ -2558,8 +3094,8 @@ list of int
                     ParameterInfo {
                         name: "extra_args",
                         kind:ParameterKind::KeywordOnly,
-                        default:ParameterDefault::Expr(EMPTY),
-                        type_info: Vec::<ConvertibleToExpression>::type_input,
+                        default:ParameterDefault::Expr(NONE_ARG),
+                        type_info: Option::<Vec<PythonExpression>>::type_input,
                     },
                 ],
                 r#type: MethodType::Instance,
@@ -2605,8 +3141,8 @@ Examples
 
                         name: "extra_args",
                         kind:ParameterKind::KeywordOnly,
-                        default:ParameterDefault::Expr(EMPTY),
-                        type_info: Vec::<ConvertibleToExpression>::type_input,
+                        default:ParameterDefault::Expr(NONE_ARG),
+                        type_info: Option::<Vec<PythonExpression>>::type_input,
                     },
                 ],
                 r#type: MethodType::Instance,
@@ -2659,8 +3195,8 @@ Examples
                     ParameterInfo {
                         name: "extra_args",
                         kind:ParameterKind::KeywordOnly,
-                        default:ParameterDefault::Expr(EMPTY),
-                        type_info: std::vec::Vec::<PythonExpression>::type_input,
+                        default:ParameterDefault::Expr(NONE_ARG),
+                        type_info: Option::<Vec<PythonExpression>>::type_input,
                     },
                     ParameterInfo {
                         name: "cook_indices",

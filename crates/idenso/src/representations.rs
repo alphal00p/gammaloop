@@ -14,6 +14,7 @@ use super::{color::CS, dirac::AGS, rep_symbols::RS, shorthands::metric::MS};
 use pyo3::pyfunction;
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
+
 #[rustfmt::skip]
 #[derive(SimpleRepresentation)]
 #[derive(
@@ -126,7 +127,7 @@ pub struct ColorAdjoint {}
 
 #[cfg_attr(
     feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.spenso")
+    gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[cfg_attr(feature = "python", pyfunction)]
 pub fn initialize() {

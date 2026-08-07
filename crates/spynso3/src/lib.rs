@@ -953,7 +953,7 @@ submit! {
                         name: "aind",
                         kind: ParameterKind::PositionalOrKeyword,
                         default: ParameterDefault::None,
-                        type_info: structure::ConvertibleToAbstractIndex::type_input,
+                        type_info: || isize::type_input() | String::type_input(),
                     },
                 ],
                 r#type: MethodType::Instance,
@@ -962,8 +962,8 @@ submit! {
 
 Parameters
 ----------
-aind : int, str, or Symbol
-    The index specification
+aind : int or str
+    The concrete index specification
 
 Returns
 -------
