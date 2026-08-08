@@ -111,13 +111,17 @@ mod tests {
         },
         slot,
         structure::{
+            YoungTableau,
             abstract_index::{AIND_SYMBOLS, AbstractIndex},
-            slot::IsAbstractSlot,
+            slot::{DualSlotTo, IsAbstractSlot},
         },
         sym, tensor_symbol,
     };
     use symbolica::{
-        atom::{Atom, AtomCore, FunctionBuilder, NamespacedSymbol, SymbolAttribute, SymbolBuilder},
+        atom::{
+            Atom, AtomCore, FunctionBuilder, NamespacedSymbol, Symbol, SymbolAttribute,
+            SymbolBuilder,
+        },
         domains::rational::Rational,
         function, symbol,
     };
@@ -129,6 +133,23 @@ mod tests {
         let rep = test_initialize().mink4;
         let tensor = tensor_symbol!(canonical_policy_power_tensor);
         function!(tensor, slot!(rep, canonical_policy_power_index).to_atom())
+    }
+
+    fn young_tensor_symbol(name: &str, tableau: &YoungTableau) -> Symbol {
+        let tags = [SPENSO_TAG.tensor.as_str().to_owned(), tableau.to_tag()];
+        SymbolBuilder::new(NamespacedSymbol::parse(name))
+            .with_attributes(tableau.symbol_attribute().into_iter().collect::<Vec<_>>())
+            .with_tags(&tags)
+            .build()
+            .unwrap()
+    }
+
+    fn canonize(expression: Atom) -> Atom {
+        CanonicalPolicyNet::<AbstractIndex>::parse(expression)
+            .unwrap()
+            .canonize(AbstractIndex::Dummy)
+            .unwrap()
+            .into_atom()
     }
 
     #[test]
@@ -467,6 +488,210 @@ mod tests {
             super::super::SymmetryKind::of(tensor),
             Some(super::super::SymmetryKind::Antisymmetric)
         );
+    }
+
+    #[test]
+    fn young_rows_and_columns_reuse_intrinsic_signed_canonicalization() {
+        let rep = test_initialize().mink4;
+        let first = slot!(rep, canonical_policy_young_parity_first);
+        let second = slot!(rep, canonical_policy_young_parity_second);
+        // For a complete row or column, the filling remains declaration
+        // metadata: Symbolica's intrinsic attribute owns the argument frame.
+        let row = young_tensor_symbol(
+            "idenso::canonical_policy_young_row",
+            &YoungTableau::new(vec![2], vec![1, 0]).unwrap(),
+        );
+        let column = young_tensor_symbol(
+            "idenso::canonical_policy_young_column",
+            &YoungTableau::new(vec![1, 1], vec![1, 0]).unwrap(),
+        );
+
+        let row_forward = canonize(function!(row, first.to_atom(), second.to_atom()));
+        let row_reverse = canonize(function!(row, second.to_atom(), first.to_atom()));
+        assert_eq!(row_forward, row_reverse);
+
+        let column_forward = canonize(function!(column, first.to_atom(), second.to_atom()));
+        let column_reverse = canonize(function!(column, second.to_atom(), first.to_atom()));
+        assert_eq!(column_forward, -column_reverse);
+    }
+
+    #[test]
+    fn young_tags_drive_signed_canonicalization_without_symbolica_attributes() {
+        let rep = test_initialize().mink4;
+        let first = slot!(rep, canonical_policy_young_tag_first);
+        let second = slot!(rep, canonical_policy_young_tag_second);
+        let build = |name: &str, tableau: YoungTableau| {
+            SymbolBuilder::new(NamespacedSymbol::parse(name))
+                .with_tags(&[SPENSO_TAG.tensor.as_str().to_owned(), tableau.to_tag()])
+                .build()
+                .unwrap()
+        };
+        let row = build(
+            "idenso::canonical_policy_young_tag_row",
+            YoungTableau::canonical(vec![2]).unwrap(),
+        );
+        let column = build(
+            "idenso::canonical_policy_young_tag_column",
+            YoungTableau::canonical(vec![1, 1]).unwrap(),
+        );
+        assert!(!row.is_symmetric());
+        assert!(!column.is_antisymmetric());
+
+        let row_forward = canonize(function!(row, first.to_atom(), second.to_atom()));
+        let row_reverse = canonize(function!(row, second.to_atom(), first.to_atom()));
+        assert_eq!(row_forward, row_reverse);
+
+        let column_forward = canonize(function!(column, first.to_atom(), second.to_atom()));
+        let column_reverse = canonize(function!(column, second.to_atom(), first.to_atom()));
+        assert_eq!(column_forward, -column_reverse);
+    }
+
+    #[test]
+    fn young_declarations_reject_rank_arguments_and_full_representation_mismatches() {
+        let reps = test_initialize();
+        let tableau = YoungTableau::canonical(vec![2]).unwrap();
+        let tensor = young_tensor_symbol("idenso::canonical_policy_young_invalid_layout", &tableau);
+        let first = slot!(reps.cof_nc, canonical_policy_young_layout_first);
+
+        let wrong_rank = function!(tensor, first.to_atom());
+        assert!(matches!(
+            CanonicalPolicyNet::<AbstractIndex>::parse(wrong_rank.clone()),
+            Err(CanonicalizationError::InvalidYoungTableauArity {
+                head,
+                expected: 2,
+                actual: 1,
+                expression,
+            }) if head == tensor && expression == wrong_rank
+        ));
+
+        let non_slot = function!(tensor, first.to_atom(), Atom::num(1));
+        assert!(matches!(
+            CanonicalPolicyNet::<AbstractIndex>::parse(non_slot.clone()),
+            Err(CanonicalizationError::InvalidYoungTableauArgument {
+                head,
+                expression,
+                ..
+            }) if head == tensor && expression == non_slot
+        ));
+
+        let opposite_orientation = slot!(reps.cof_nc, canonical_policy_young_layout_second).dual();
+        let incompatible = function!(tensor, first.to_atom(), opposite_orientation.to_atom());
+        assert!(matches!(
+            CanonicalPolicyNet::<AbstractIndex>::parse(incompatible.clone()),
+            Err(CanonicalizationError::IncompatibleYoungTableauRepresentation {
+                head,
+                argument: 1,
+                expression,
+            }) if head == tensor && expression == incompatible
+        ));
+    }
+
+    #[test]
+    fn general_young_shapes_report_missing_straightening() {
+        let rep = test_initialize().mink4;
+        let tableau = YoungTableau::new(vec![2, 1], vec![2, 0, 1]).unwrap();
+        let tensor = young_tensor_symbol("idenso::canonical_policy_young_general", &tableau);
+        let expression = function!(
+            tensor,
+            slot!(rep, canonical_policy_young_general_first).to_atom(),
+            slot!(rep, canonical_policy_young_general_second).to_atom(),
+            slot!(rep, canonical_policy_young_general_third).to_atom()
+        );
+
+        assert!(matches!(
+            CanonicalPolicyNet::<AbstractIndex>::parse(expression.clone()),
+            Err(CanonicalizationError::YoungStraighteningUnavailable {
+                head,
+                shape,
+                slot_order,
+                expression: rejected,
+            }) if head == tensor
+                && shape == vec![2, 1]
+                && slot_order == vec![2, 0, 1]
+                && rejected == expression
+        ));
+    }
+
+    #[test]
+    fn general_young_validation_respects_explicit_opaque_boundaries() {
+        let rep = test_initialize().mink4;
+        let tableau = YoungTableau::canonical(vec![2, 1]).unwrap();
+        let tensor = young_tensor_symbol("idenso::canonical_policy_young_opaque", &tableau);
+        let exposed = function!(
+            tensor,
+            slot!(rep, canonical_policy_young_opaque_first).to_atom(),
+            slot!(rep, canonical_policy_young_opaque_second).to_atom(),
+            slot!(rep, canonical_policy_young_opaque_third).to_atom()
+        );
+
+        assert!(matches!(
+            CanonicalPolicyNet::<AbstractIndex>::parse(exposed.clone()),
+            Err(CanonicalizationError::YoungStraighteningUnavailable { .. })
+        ));
+        assert!(matches!(
+            CanonicalPolicyNet::<AbstractIndex>::parse(bracket!(exposed.clone())),
+            Err(CanonicalizationError::YoungStraighteningUnavailable { .. })
+        ));
+
+        let wrapper = symbol!("canonical_policy_young_opaque_wrapper");
+        let opaque = function!(wrapper, bracket!(exposed));
+        assert_eq!(canonize(opaque.clone()), opaque);
+    }
+
+    #[test]
+    fn young_metadata_rejects_malformed_duplicate_and_conflicting_declarations() {
+        let rep = test_initialize().mink4;
+        let first = slot!(rep, canonical_policy_young_metadata_first);
+        let second = slot!(rep, canonical_policy_young_metadata_second);
+        let expression_for = |head| function!(head, first.to_atom(), second.to_atom());
+        let build = |name: &str, tags: &[String], attributes: Vec<SymbolAttribute>| {
+            SymbolBuilder::new(NamespacedSymbol::parse(name))
+                .with_attributes(attributes)
+                .with_tags(tags)
+                .build()
+                .unwrap()
+        };
+
+        let malformed = build(
+            "idenso::canonical_policy_young_malformed",
+            &[
+                SPENSO_TAG.tensor.as_str().to_owned(),
+                "spenso::young_tableau:v2:2:0.1".to_owned(),
+            ],
+            vec![],
+        );
+        assert!(matches!(
+            CanonicalPolicyNet::<AbstractIndex>::parse(expression_for(malformed)),
+            Err(CanonicalizationError::InvalidYoungTableauMetadata { head, reason })
+                if head == malformed && reason.contains("unsupported Young-tableau tag version")
+        ));
+
+        let duplicate = build(
+            "idenso::canonical_policy_young_duplicate",
+            &[
+                SPENSO_TAG.tensor.as_str().to_owned(),
+                YoungTableau::canonical(vec![2]).unwrap().to_tag(),
+                YoungTableau::canonical(vec![1, 1]).unwrap().to_tag(),
+            ],
+            vec![],
+        );
+        assert!(matches!(
+            CanonicalPolicyNet::<AbstractIndex>::parse(expression_for(duplicate)),
+            Err(CanonicalizationError::InvalidYoungTableauMetadata { head, reason })
+                if head == duplicate && reason.contains("2 Young-tableau metadata tags")
+        ));
+
+        let row = YoungTableau::canonical(vec![2]).unwrap();
+        let conflicting = build(
+            "idenso::canonical_policy_young_conflicting",
+            &[SPENSO_TAG.tensor.as_str().to_owned(), row.to_tag()],
+            vec![SymbolAttribute::Antisymmetric],
+        );
+        assert!(matches!(
+            CanonicalPolicyNet::<AbstractIndex>::parse(expression_for(conflicting)),
+            Err(CanonicalizationError::InvalidYoungTableauMetadata { head, reason })
+                if head == conflicting && reason.contains("conflicts with intrinsic attributes")
+        ));
     }
 
     #[test]

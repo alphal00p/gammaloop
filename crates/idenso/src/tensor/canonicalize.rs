@@ -21,14 +21,14 @@ use spenso::{
     },
     shadowing::{ANTISYM, CYCLIC, SYM},
     structure::{
-        OrderedStructure, TensorStructure,
+        OrderedStructure, TensorStructure, YoungTableau, YoungTableauClass,
         abstract_index::AIND_SYMBOLS,
         representation::{LibraryRep, LibrarySlot},
         slot::{AbsInd, IsAbstractSlot, ParseableAind, Slot},
     },
 };
 use symbolica::{
-    atom::{Atom, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomView, FunctionBuilder, Symbol, representation::FunView},
     domains::rational::Rational,
 };
 use thiserror::Error;
@@ -136,6 +136,42 @@ pub enum CanonicalizationError {
     },
     #[error("failed to reversibly encode a structured index: {0}")]
     StructuredIndex(String),
+    #[error("invalid Young-tableau metadata on tensor {head}: {reason}")]
+    InvalidYoungTableauMetadata { head: Symbol, reason: String },
+    #[error(
+        "Young tableau on tensor {head} has arity {expected}, but the tensor has {actual} arguments: {expression}"
+    )]
+    InvalidYoungTableauArity {
+        head: Symbol,
+        expected: usize,
+        actual: usize,
+        expression: Atom,
+    },
+    #[error(
+        "Young tableau on tensor {head} requires a direct slot at argument {argument}: {expression}"
+    )]
+    InvalidYoungTableauArgument {
+        head: Symbol,
+        argument: usize,
+        expression: Atom,
+    },
+    #[error(
+        "Young tableau on tensor {head} requires argument {argument} to have the same representation, dimension, and orientation as argument 0: {expression}"
+    )]
+    IncompatibleYoungTableauRepresentation {
+        head: Symbol,
+        argument: usize,
+        expression: Atom,
+    },
+    #[error(
+        "Young straightening is unavailable for tensor {head} with shape {shape:?} and slot order {slot_order:?}: {expression}"
+    )]
+    YoungStraighteningUnavailable {
+        head: Symbol,
+        shape: Vec<usize>,
+        slot_order: Vec<usize>,
+        expression: Atom,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -216,6 +252,7 @@ struct TensorColor {
 }
 
 type PartialGroup<Aind> = (Symbol, SymmetryKind, Atom, Vec<LibrarySlot<Aind>>);
+type YoungDeclaration<Aind> = (Option<SymmetryKind>, Vec<LibrarySlot<Aind>>);
 
 impl TensorLayout {
     fn scan<Aind: AbsInd + ParseableAind>(
@@ -228,15 +265,31 @@ impl TensorLayout {
         };
         let head = function.get_symbol();
         let tagged = head.has_tag(&SPENSO_TAG.tensor);
-        let intrinsic = tagged.then(|| SymmetryKind::of(head)).flatten();
+        let young_declaration = if tagged {
+            Self::young_declaration::<Aind>(head, function, &tensor.expression)?
+        } else {
+            None
+        };
+        let attribute_intrinsic = tagged.then(|| SymmetryKind::of(head)).flatten();
+        let intrinsic = young_declaration
+            .as_ref()
+            .map(|(kind, _)| *kind)
+            .unwrap_or(attribute_intrinsic);
         let root_group = SymmetryKind::structural(head);
 
         let mut arguments = Vec::with_capacity(function.get_nargs());
         let mut colors = Vec::with_capacity(function.get_nargs());
-        let mut expression_slots = Vec::new();
+        let mut expression_slots = Vec::<LibrarySlot<Aind>>::new();
         let mut slot_count = 0;
 
-        if intrinsic.is_some() || root_group.is_some() {
+        if let Some((_, slots)) = young_declaration {
+            for slot in slots {
+                arguments.push(LayoutArgument::DirectSlot(slot_count));
+                colors.push(LayoutColorArgument::DirectSlot);
+                expression_slots.push(slot);
+                slot_count += 1;
+            }
+        } else if intrinsic.is_some() || root_group.is_some() {
             for (argument, value) in function.iter().enumerate() {
                 let Ok(slot) = Slot::<LibraryRep, Aind>::try_from(value) else {
                     return Err(CanonicalizationError::InvalidIntrinsicArgument {
@@ -356,6 +409,92 @@ impl TensorLayout {
             intrinsic: intrinsic.or(root_group),
             outer_linear: head.is_linear(),
         })
+    }
+
+    fn young_declaration<Aind: AbsInd + ParseableAind>(
+        head: Symbol,
+        function: FunView<'_>,
+        expression: &Atom,
+    ) -> Result<Option<YoungDeclaration<Aind>>, CanonicalizationError> {
+        let Some(tableau) = YoungTableau::from_symbol(head).map_err(|error| {
+            CanonicalizationError::InvalidYoungTableauMetadata {
+                head,
+                reason: error.to_string(),
+            }
+        })?
+        else {
+            return Ok(None);
+        };
+        let class = tableau.class();
+        let expected = match class {
+            YoungTableauClass::Symmetric => Some(SymmetryKind::Symmetric),
+            YoungTableauClass::Antisymmetric => Some(SymmetryKind::Antisymmetric),
+            YoungTableauClass::General => None,
+        };
+        let attributes = [
+            (head.is_symmetric(), SymmetryKind::Symmetric),
+            (head.is_antisymmetric(), SymmetryKind::Antisymmetric),
+            (head.is_cyclesymmetric(), SymmetryKind::Cyclic),
+        ]
+        .into_iter()
+        .filter_map(|(present, kind)| present.then_some(kind))
+        .collect::<Vec<_>>();
+        if expected.is_none_or(|expected| {
+            attributes.iter().any(|attribute| *attribute != expected) || attributes.len() > 1
+        }) && !attributes.is_empty()
+        {
+            return Err(CanonicalizationError::InvalidYoungTableauMetadata {
+                head,
+                reason: format!(
+                    "tableau class {class:?} conflicts with intrinsic attributes {attributes:?}"
+                ),
+            });
+        }
+        if function.get_nargs() != tableau.rank() {
+            return Err(CanonicalizationError::InvalidYoungTableauArity {
+                head,
+                expected: tableau.rank(),
+                actual: function.get_nargs(),
+                expression: expression.clone(),
+            });
+        }
+
+        let mut slots = Vec::<LibrarySlot<Aind>>::with_capacity(tableau.rank());
+        for (argument, value) in function.iter().enumerate() {
+            let slot = Slot::<LibraryRep, Aind>::try_from(value).map_err(|_| {
+                CanonicalizationError::InvalidYoungTableauArgument {
+                    head,
+                    argument,
+                    expression: expression.clone(),
+                }
+            })?;
+            if let Some(first) = slots.first()
+                && slot.rep() != first.rep()
+            {
+                return Err(
+                    CanonicalizationError::IncompatibleYoungTableauRepresentation {
+                        head,
+                        argument,
+                        expression: expression.clone(),
+                    },
+                );
+            }
+            slots.push(slot);
+        }
+        if class == YoungTableauClass::General {
+            return Err(CanonicalizationError::YoungStraighteningUnavailable {
+                head,
+                shape: tableau.shape().to_vec(),
+                slot_order: tableau.slot_order().to_vec(),
+                expression: expression.clone(),
+            });
+        }
+
+        // Complete rows and columns are full permutation groups. Their
+        // Symbolica attribute therefore acts on expression-order arguments;
+        // the tableau filling becomes operational only once general-shape
+        // straightening is implemented.
+        Ok(Some((expected.filter(|_| tableau.rank() > 1), slots)))
     }
 
     fn partial_group<Aind: AbsInd + ParseableAind>(
@@ -566,31 +705,38 @@ fn validate_tensor_symmetry<Aind: AbsInd + ParseableAind>(
         match value {
             AtomView::Fun(function) => {
                 let head = function.get_symbol();
-                if head.has_tag(&SPENSO_TAG.tensor) && SymmetryKind::of(head).is_some() {
-                    for (argument, value) in function.iter().enumerate() {
-                        if Slot::<LibraryRep, Aind>::try_from(value).is_err() {
-                            return Err(CanonicalizationError::InvalidIntrinsicArgument {
-                                head,
-                                argument,
-                                expression: function.as_view().to_owned(),
-                            });
-                        }
-                    }
-                } else if head.has_tag(&SPENSO_TAG.tensor) {
-                    for (argument, value) in function.iter().enumerate() {
-                        let partial_group = TensorLayout::partial_group::<Aind>(
-                            value,
-                            &function.as_view().to_owned(),
-                        )?;
-                        if function.get_nargs() != 1
-                            && partial_group.is_none()
-                            && value.contains_exposed_tensor_topology(StrictTensorFilter::Tagged)
-                        {
-                            return Err(CanonicalizationError::HiddenTensorTopology {
-                                head,
-                                argument,
-                                expression: function.as_view().to_owned(),
-                            });
+                if head.has_tag(&SPENSO_TAG.tensor) {
+                    let expression = function.as_view().to_owned();
+                    if TensorLayout::young_declaration::<Aind>(head, function, &expression)?
+                        .is_none()
+                    {
+                        if SymmetryKind::of(head).is_some() {
+                            for (argument, value) in function.iter().enumerate() {
+                                if Slot::<LibraryRep, Aind>::try_from(value).is_err() {
+                                    return Err(CanonicalizationError::InvalidIntrinsicArgument {
+                                        head,
+                                        argument,
+                                        expression,
+                                    });
+                                }
+                            }
+                        } else {
+                            for (argument, value) in function.iter().enumerate() {
+                                let partial_group =
+                                    TensorLayout::partial_group::<Aind>(value, &expression)?;
+                                if function.get_nargs() != 1
+                                    && partial_group.is_none()
+                                    && value.contains_exposed_tensor_topology(
+                                        StrictTensorFilter::Tagged,
+                                    )
+                                {
+                                    return Err(CanonicalizationError::HiddenTensorTopology {
+                                        head,
+                                        argument,
+                                        expression,
+                                    });
+                                }
+                            }
                         }
                     }
                 } else if function.get_nargs() > 1
@@ -612,7 +758,13 @@ fn validate_tensor_symmetry<Aind: AbsInd + ParseableAind>(
                         }
                     }
                 }
-                stack.extend(function.iter());
+                if head == SPENSO_TAG.bracket
+                    || function
+                        .as_view()
+                        .contains_exposed_tensor_topology(StrictTensorFilter::Tagged)
+                {
+                    stack.extend(function.iter());
+                }
             }
             AtomView::Add(add) => stack.extend(add.iter()),
             AtomView::Mul(product) => stack.extend(product.iter()),

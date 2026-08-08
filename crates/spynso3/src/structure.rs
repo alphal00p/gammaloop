@@ -37,6 +37,7 @@ use spenso::{
             Euclidean, ExtendibleReps, LibraryRep, Lorentz, Minkowski, RepName, Representation,
         },
         slot::{IsAbstractSlot, Slot},
+        symmetry::YoungTableau,
     },
 };
 use symbolica::{
@@ -79,7 +80,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSpensoName {
             Ok(ConvertibleToSpensoName(structure))
         } else if let Ok(s) = structure.extract::<String>() {
             Ok(ConvertibleToSpensoName(SpensoName::symbol_shorthand(
-                s, None, None, None, None, None,
+                s, None, None, None, None, None, None,
             )?))
         } else if let Ok(s) = structure.extract::<PythonExpression>() {
             if let AtomView::Var(a) = s.as_view() {
@@ -136,6 +137,71 @@ impl PyStubType for SpensoSlotOrArgOrRep {
     }
 }
 
+/// A Young tableau describing an irreducible permutation symmetry of tensor slots.
+///
+/// The shape is a partition in non-increasing row order. ``slot_order`` fills
+/// those rows from left to right and must be a permutation of ``range(rank)``.
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[pyclass(
+    frozen,
+    from_py_object,
+    name = "YoungTableau",
+    module = "symbolica.community.spenso"
+)]
+#[derive(Clone)]
+pub struct SpensoYoungTableau {
+    tableau: YoungTableau,
+}
+
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[pymethods]
+impl SpensoYoungTableau {
+    #[new]
+    #[pyo3(signature = (shape, *, slot_order=None))]
+    fn new(shape: Vec<usize>, slot_order: Option<Vec<usize>>) -> PyResult<Self> {
+        let tableau = match slot_order {
+            Some(slot_order) => YoungTableau::new(shape, slot_order),
+            None => YoungTableau::canonical(shape),
+        }
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+
+        Ok(Self { tableau })
+    }
+
+    #[getter]
+    fn shape(&self) -> Vec<usize> {
+        self.tableau.shape().to_vec()
+    }
+
+    #[getter]
+    fn slot_order(&self) -> Vec<usize> {
+        self.tableau.slot_order().to_vec()
+    }
+
+    #[getter]
+    fn rank(&self) -> usize {
+        self.tableau.rank()
+    }
+
+    #[getter]
+    fn rows(&self) -> Vec<Vec<usize>> {
+        self.tableau.rows().map(<[usize]>::to_vec).collect()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "YoungTableau(shape={:?}, slot_order={:?})",
+            self.tableau.shape(),
+            self.tableau.slot_order()
+        )
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.tableau == other.tableau
+    }
+}
+
 /// A symbolic name for tensor functions and structures.
 ///
 /// TensorName represents named tensor functions that can be called with indices and arguments
@@ -164,12 +230,58 @@ pub struct SpensoName {
     // pub args: Vec<Atom>,
 }
 
+impl SpensoName {
+    fn young_tableau_metadata(&self) -> PyResult<Option<YoungTableau>> {
+        YoungTableau::from_symbol(self.name)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
+    fn validate_tensor_arguments(
+        &self,
+        representations: impl IntoIterator<Item = Representation<LibraryRep>>,
+        has_additional_arguments: bool,
+    ) -> PyResult<()> {
+        let young_tableau = self.young_tableau_metadata()?;
+        let has_intrinsic_symmetry = (self.name.has_tag(&SPENSO_TAG.tensor)
+            && (self.name.is_symmetric()
+                || self.name.is_antisymmetric()
+                || self.name.is_cyclesymmetric()))
+            || young_tableau.is_some();
+
+        if has_intrinsic_symmetry && has_additional_arguments {
+            return Err(PyValueError::new_err(
+                "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments",
+            ));
+        }
+
+        let Some(young_tableau) = young_tableau else {
+            return Ok(());
+        };
+        let representations = representations.into_iter().collect::<Vec<_>>();
+        if representations.len() != young_tableau.rank() {
+            return Err(PyValueError::new_err(format!(
+                "Young tableau rank {} requires exactly {} slots, but the tensor rank is {}",
+                young_tableau.rank(),
+                young_tableau.rank(),
+                representations.len()
+            )));
+        }
+        if representations.windows(2).any(|pair| pair[0] != pair[1]) {
+            return Err(PyValueError::new_err(
+                "Young tableau slots must all have the same representation, dimension, and orientation",
+            ));
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
 impl SpensoName {
     #[new]
-    #[pyo3(signature = (name,is_symmetric=None,is_antisymmetric=None,is_cyclesymmetric=None,is_linear=None,custom_normalization=None))]
+    #[pyo3(signature = (name,is_symmetric=None,is_antisymmetric=None,is_cyclesymmetric=None,is_linear=None,custom_normalization=None,*,young_tableau=None))]
     /// Create a new tensor name with optional mathematical properties.
     ///
     /// Parameters
@@ -186,6 +298,10 @@ impl SpensoName {
     ///     If True, tensor is linear in its arguments
     /// custom_normalization : Transformer, optional
     ///     Custom normalization function (advanced)
+    /// young_tableau : YoungTableau, optional
+    ///     Irreducible slot symmetry. Cannot be combined with the symmetric,
+    ///     antisymmetric, or cyclesymmetric flags. Calls must provide exactly
+    ///     its rank in slots of the same representation, dimension, and orientation.
     ///
     /// Returns
     /// -------
@@ -206,6 +322,7 @@ impl SpensoName {
         is_cyclesymmetric: Option<bool>,
         is_linear: Option<bool>,
         custom_normalization: Option<PythonTransformer>,
+        young_tableau: Option<SpensoYoungTableau>,
         // custom_print: Option<PyObject>,
     ) -> PyResult<Self> {
         let namespace = DefaultNamespace {
@@ -219,6 +336,7 @@ impl SpensoName {
             && is_cyclesymmetric.is_none()
             && is_linear.is_none()
             && custom_normalization.is_none()
+            && young_tableau.is_none()
         // && custom_print.is_none()
         {
             let id = SymbolBuilder::new(namespace.attach_namespace(&name))
@@ -242,6 +360,12 @@ impl SpensoName {
             ))?;
         }
 
+        if count != 0 && young_tableau.is_some() {
+            return Err(PyValueError::new_err(
+                "young_tableau cannot be combined with is_symmetric, is_antisymmetric, or is_cyclesymmetric",
+            ));
+        }
+
         let mut opts = vec![];
 
         if let Some(true) = is_symmetric {
@@ -260,11 +384,22 @@ impl SpensoName {
             opts.push(SymbolAttribute::Linear);
         }
 
+        if let Some(attribute) = young_tableau
+            .as_ref()
+            .and_then(|tableau| tableau.tableau.symbol_attribute())
+        {
+            opts.push(attribute);
+        }
+
         let name = namespace.attach_namespace(&name);
 
+        let mut tags = vec![SPENSO_TAG.tensor.as_str().to_owned()];
+        if let Some(young_tableau) = &young_tableau {
+            tags.push(young_tableau.tableau.to_tag());
+        }
         let mut symbol = SymbolBuilder::new(name)
             .with_attributes(opts)
-            .with_tags(std::slice::from_ref(&SPENSO_TAG.tensor));
+            .with_tags(&tags);
 
         if let Some(f) = custom_normalization {
             symbol = symbol.with_normalization_function(Box::new(
@@ -356,16 +491,13 @@ impl SpensoName {
             }
         }
 
-        if self.name.has_tag(&SPENSO_TAG.tensor)
-            && (self.name.is_symmetric()
-                || self.name.is_antisymmetric()
-                || self.name.is_cyclesymmetric())
-            && !add_args.is_empty()
-        {
-            return Err(exceptions::PyValueError::new_err(
-                "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments",
-            ));
-        }
+        self.validate_tensor_arguments(
+            slots
+                .iter()
+                .map(|slot| slot.rep())
+                .chain(reps.iter().copied()),
+            !add_args.is_empty(),
+        )?;
 
         let add_args = if add_args.is_empty() {
             None
@@ -415,6 +547,14 @@ impl SpensoName {
     /// >>> expr = T.to_expression()
     fn to_expression(&self) -> PythonExpression {
         PythonExpression::from(Atom::var(self.name))
+    }
+
+    /// Return the Young-tableau metadata attached to this tensor name.
+    #[getter]
+    fn young_tableau(&self) -> PyResult<Option<SpensoYoungTableau>> {
+        Ok(self
+            .young_tableau_metadata()?
+            .map(|tableau| SpensoYoungTableau { tableau }))
     }
 
     /// Predefined metric tensor name.
@@ -1119,6 +1259,177 @@ mod tensor_name_tests {
             }
         });
     }
+
+    #[test]
+    fn young_tableau_python_api_validates_and_exposes_layout() {
+        Python::initialize();
+
+        Python::attach(|py| {
+            let tableau_type = py.get_type::<SpensoYoungTableau>();
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("slot_order", vec![2, 0, 1]).unwrap();
+            let tableau = tableau_type.call((vec![2, 1],), Some(&kwargs)).unwrap();
+
+            assert_eq!(
+                tableau
+                    .getattr("shape")
+                    .unwrap()
+                    .extract::<Vec<usize>>()
+                    .unwrap(),
+                vec![2, 1]
+            );
+            assert_eq!(
+                tableau
+                    .getattr("slot_order")
+                    .unwrap()
+                    .extract::<Vec<usize>>()
+                    .unwrap(),
+                vec![2, 0, 1]
+            );
+            assert_eq!(
+                tableau.getattr("rank").unwrap().extract::<usize>().unwrap(),
+                3
+            );
+            assert_eq!(
+                tableau
+                    .getattr("rows")
+                    .unwrap()
+                    .extract::<Vec<Vec<usize>>>()
+                    .unwrap(),
+                vec![vec![2, 0], vec![1]]
+            );
+            assert_eq!(
+                tableau.repr().unwrap().to_str().unwrap(),
+                "YoungTableau(shape=[2, 1], slot_order=[2, 0, 1])"
+            );
+
+            let same = tableau_type.call((vec![2, 1],), Some(&kwargs)).unwrap();
+            assert!(tableau.eq(&same).unwrap());
+
+            let invalid = tableau_type.call1((vec![1, 2],)).unwrap_err();
+            assert!(invalid.is_instance_of::<PyValueError>(py));
+            let frozen = tableau.setattr("extra", 1).unwrap_err();
+            assert!(frozen.is_instance_of::<exceptions::PyAttributeError>(py));
+        });
+    }
+
+    #[test]
+    fn tensor_name_roundtrips_young_tableau_metadata_and_rejects_conflicts() {
+        Python::initialize();
+
+        Python::attach(|py| {
+            let tableau = Py::new(
+                py,
+                SpensoYoungTableau {
+                    tableau: YoungTableau::new(vec![2, 1], vec![2, 0, 1]).unwrap(),
+                },
+            )
+            .unwrap();
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("young_tableau", tableau.bind(py)).unwrap();
+            let name = py
+                .get_type::<SpensoName>()
+                .call(("__spynso3_test_general_young_tensor",), Some(&kwargs))
+                .unwrap()
+                .extract::<SpensoName>()
+                .unwrap();
+
+            let metadata = name.young_tableau().unwrap().unwrap();
+            assert_eq!(metadata.tableau.shape(), [2, 1]);
+            assert_eq!(metadata.tableau.slot_order(), [2, 0, 1]);
+            assert_eq!(
+                SpensoName { name: name.name }
+                    .young_tableau()
+                    .unwrap()
+                    .unwrap()
+                    .tableau,
+                metadata.tableau
+            );
+
+            kwargs.set_item("is_symmetric", true).unwrap();
+            let error = py
+                .get_type::<SpensoName>()
+                .call(("__spynso3_test_conflicting_young_tensor",), Some(&kwargs))
+                .unwrap_err();
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert_eq!(
+                error.value(py).to_string(),
+                "young_tableau cannot be combined with is_symmetric, is_antisymmetric, or is_cyclesymmetric"
+            );
+        });
+    }
+
+    #[test]
+    fn young_tableau_names_validate_rank_and_full_representation_on_every_route() {
+        Python::initialize();
+
+        Python::attach(|py| {
+            let tableau = Py::new(
+                py,
+                SpensoYoungTableau {
+                    tableau: YoungTableau::canonical(vec![2]).unwrap(),
+                },
+            )
+            .unwrap();
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("young_tableau", tableau.bind(py)).unwrap();
+            let name = py
+                .get_type::<SpensoName>()
+                .call(("__spynso3_test_rank_two_young_tensor",), Some(&kwargs))
+                .unwrap();
+
+            let representation_type = py.get_type::<SpensoRepresentation>();
+            let euc3 = representation_type.call_method1("euc", (3,)).unwrap();
+            let euc4 = representation_type.call_method1("euc", (4,)).unwrap();
+            let i = euc3.call1(("i",)).unwrap();
+            let j = euc3.call1(("j",)).unwrap();
+            let k = euc4.call1(("k",)).unwrap();
+
+            name.call1((&euc3, &euc3)).unwrap();
+            name.call1((&i, &j)).unwrap();
+
+            let wrong_rank = name.call1((&euc3,)).unwrap_err();
+            let mixed_representations = name.call1((&euc3, &euc4)).unwrap_err();
+
+            let indexed_type = py.get_type::<SpensoIndices>();
+            let named = PyDict::new(py);
+            named.set_item("name", &name).unwrap();
+            let indexed_constructor = indexed_type.call((&i,), Some(&named)).unwrap_err();
+            let indexed = indexed_type.call1((&i,)).unwrap();
+            let indexed_set_name = indexed.call_method1("set_name", (&name,)).unwrap_err();
+            let indexed_representations = indexed_type.call((&i, &k), Some(&named)).unwrap_err();
+
+            let structure_type = py.get_type::<SpensoStructure>();
+            let structure_constructor = structure_type.call((&euc3,), Some(&named)).unwrap_err();
+            let structure = structure_type.call1((&euc3,)).unwrap();
+            let structure_set_name = structure.call_method1("set_name", (&name,)).unwrap_err();
+            let structure_representations = structure_type
+                .call((&euc3, &euc4), Some(&named))
+                .unwrap_err();
+
+            for error in [
+                &wrong_rank,
+                &indexed_constructor,
+                &indexed_set_name,
+                &structure_constructor,
+                &structure_set_name,
+            ] {
+                assert!(error.is_instance_of::<PyValueError>(py));
+                assert!(error.value(py).to_string().contains("rank 2"));
+            }
+            for error in [
+                &mixed_representations,
+                &indexed_representations,
+                &structure_representations,
+            ] {
+                assert!(error.is_instance_of::<PyValueError>(py));
+                assert_eq!(
+                    error.value(py).to_string(),
+                    "Young tableau slots must all have the same representation, dimension, and orientation"
+                );
+            }
+        });
+    }
 }
 
 /// A tensor structure with abstract indices for symbolic tensor operations.
@@ -1167,6 +1478,7 @@ impl From<ShadowedStructure<AbstractIndex>> for SpensoIndices {
 impl ModuleInit for SpensoIndices {
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_class::<SpensoIndices>()?;
+        m.add_class::<SpensoYoungTableau>()?;
         m.add_class::<SpensoName>()?;
         m.add_class::<SpensoSlot>()?;
         m.add_class::<SpensoStructure>()?;
@@ -1300,16 +1612,11 @@ impl SpensoIndices {
             }
         }
 
-        if name.as_ref().is_some_and(|name| {
-            name.0.name.has_tag(&SPENSO_TAG.tensor)
-                && (name.0.name.is_symmetric()
-                    || name.0.name.is_antisymmetric()
-                    || name.0.name.is_cyclesymmetric())
-        }) && !args.is_empty()
-        {
-            return Err(exceptions::PyValueError::new_err(
-                "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments",
-            ));
+        if let Some(name) = &name {
+            name.0.validate_tensor_arguments(
+                true_slots.iter().map(|slot| slot.rep()),
+                !args.is_empty(),
+            )?;
         }
 
         let args = if args.is_empty() { None } else { Some(args) };
@@ -1338,21 +1645,17 @@ impl SpensoIndices {
     /// >>> T = TensorName("T")
     /// >>> structure.set_name(T)
     fn set_name(&mut self, name: ConvertibleToSpensoName) -> PyResult<()> {
-        if name.0.name.has_tag(&SPENSO_TAG.tensor)
-            && (name.0.name.is_symmetric()
-                || name.0.name.is_antisymmetric()
-                || name.0.name.is_cyclesymmetric())
-            && self
+        name.0.validate_tensor_arguments(
+            self.structure
                 .structure
+                .external_structure_iter()
+                .map(|slot| slot.rep()),
+            self.structure
                 .structure
                 .additional_args
                 .as_ref()
-                .is_some_and(|args| !args.is_empty())
-        {
-            return Err(exceptions::PyValueError::new_err(
-                "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments",
-            ));
-        }
+                .is_some_and(|args| !args.is_empty()),
+        )?;
         self.structure.structure.set_name(name.0.name);
         Ok(())
     }
@@ -1684,16 +1987,9 @@ impl SpensoStructure {
             }
         }
 
-        if name.as_ref().is_some_and(|name| {
-            name.0.name.has_tag(&SPENSO_TAG.tensor)
-                && (name.0.name.is_symmetric()
-                    || name.0.name.is_antisymmetric()
-                    || name.0.name.is_cyclesymmetric())
-        }) && !args.is_empty()
-        {
-            return Err(exceptions::PyValueError::new_err(
-                "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments",
-            ));
+        if let Some(name) = &name {
+            name.0
+                .validate_tensor_arguments(actual_slots.iter().copied(), !args.is_empty())?;
         }
 
         let args = if args.is_empty() { None } else { Some(args) };
@@ -1709,21 +2005,14 @@ impl SpensoStructure {
     }
 
     fn set_name(&mut self, name: ConvertibleToSpensoName) -> PyResult<()> {
-        if name.0.name.has_tag(&SPENSO_TAG.tensor)
-            && (name.0.name.is_symmetric()
-                || name.0.name.is_antisymmetric()
-                || name.0.name.is_cyclesymmetric())
-            && self
-                .structure
+        name.0.validate_tensor_arguments(
+            self.structure.structure.external_reps_iter(),
+            self.structure
                 .structure
                 .additional_args
                 .as_ref()
-                .is_some_and(|args| !args.is_empty())
-        {
-            return Err(exceptions::PyValueError::new_err(
-                "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments",
-            ));
-        }
+                .is_some_and(|args| !args.is_empty()),
+        )?;
         self.structure.structure.set_name(name.0.name);
         Ok(())
     }
@@ -2088,14 +2377,11 @@ impl SpensoStructure {
             }
         }
 
-        if self.name().is_some_and(|name| {
-            name.has_tag(&SPENSO_TAG.tensor)
-                && (name.is_symmetric() || name.is_antisymmetric() || name.is_cyclesymmetric())
-        }) && !final_additional_args.is_empty()
-        {
-            return Err(exceptions::PyValueError::new_err(
-                "A TensorName with intrinsic symmetry accepts only Slot or Representation arguments",
-            ));
+        if let Some(name) = self.name() {
+            SpensoName { name }.validate_tensor_arguments(
+                self.structure.structure.external_reps_iter(),
+                !final_additional_args.is_empty(),
+            )?;
         }
 
         Ok((final_additional_args, post_separator_args))

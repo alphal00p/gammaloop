@@ -151,12 +151,73 @@ define_numbered_tag_macros!($;
     dualizable_dual_ => dualizable_dual_;
 );
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __tensor_symbol_young_apply_settings {
+    ($builder:ident;) => {};
+    ($builder:ident; tag = $value:expr $(, $rest:ident = $rest_value:expr)*) => {
+        compile_error!("tensor_symbol! owns the Spenso tensor tag; do not pass tag = ...")
+    };
+    ($builder:ident; tags = $value:expr $(, $rest:ident = $rest_value:expr)*) => {
+        compile_error!("tensor_symbol! owns the Spenso tensor tag; do not pass tags = ...")
+    };
+    ($builder:ident; young_tableau = $value:expr $(, $rest:ident = $rest_value:expr)*) => {
+        compile_error!("tensor_symbol! accepts exactly one young_tableau setting")
+    };
+    ($builder:ident; $setting:ident = $value:expr $(, $rest:ident = $rest_value:expr)*) => {
+        $builder = symbolica::symbol_set_attr!($builder, $setting = $value);
+        $crate::__tensor_symbol_young_apply_settings!(
+            $builder;
+            $($rest = $rest_value),*
+        );
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __tensor_symbol_with_young_tableau {
+    (($id:expr); [$($attribute:ident),*]; $young_tableau:expr; $($setting:ident = $value:expr),*) => {{
+        let __young_tableau = &$young_tableau;
+        let mut __attributes = vec![$(symbolica::atom::SymbolAttribute::$attribute),*];
+        if __attributes.iter().any(|attribute| {
+            matches!(
+                attribute,
+                symbolica::atom::SymbolAttribute::Symmetric
+                    | symbolica::atom::SymbolAttribute::Antisymmetric
+                    | symbolica::atom::SymbolAttribute::Cyclesymmetric
+            )
+        }) {
+            panic!("young_tableau owns intrinsic tensor symmetry attributes");
+        }
+        if let Some(__attribute) = __young_tableau.symbol_attribute() {
+            __attributes.push(__attribute);
+        }
+
+        let __tags = vec![
+            $crate::network::tags::SPENSO_TAG.tensor.as_str().to_owned(),
+            __young_tableau.to_tag(),
+        ];
+        let mut __builder = symbolica::atom::SymbolBuilder::new(symbolica::wrap_symbol!($id))
+            .with_attributes(__attributes)
+            .with_tags(&__tags);
+        $crate::__tensor_symbol_young_apply_settings!(
+            __builder;
+            $($setting = $value),*
+        );
+        __builder.build().unwrap_or_else(|error| panic!("{error}"))
+    }};
+}
+
 /// Creates a tensor-head symbol tagged with Spenso's generic tensor tag.
 ///
 /// This expands `symbolica::symbol!` at the call site, so the symbol keeps the
 /// caller's crate namespace while automatically receiving the Spenso tag. Any
 /// Symbolica attributes and settings such as `print = ...` are forwarded, while
 /// `tag`/`tags` remain owned by this macro so the tensor tag cannot be skipped.
+/// Passing `young_tableau = ...` as the first setting adds versioned symmetry
+/// metadata. A single row or column also supplies the matching intrinsic
+/// Symbolica attribute; callers must not specify an intrinsic symmetry
+/// attribute alongside a tableau.
 #[macro_export]
 macro_rules! tensor_symbol {
     ($name:ident) => {
@@ -164,6 +225,26 @@ macro_rules! tensor_symbol {
     };
     ($name:ident; $($attr:ident),*) => {
         $crate::tensor_symbol!(stringify!($name); $($attr),*)
+    };
+    ($name:ident, young_tableau = $young_tableau:expr $(, $setting:ident = $value:expr)*) => {
+        $crate::tensor_symbol!(
+            stringify!($name),
+            young_tableau = $young_tableau
+            $(, $setting = $value)*
+        )
+    };
+    (
+        $name:ident;
+        $($attr:ident),+;
+        young_tableau = $young_tableau:expr
+        $(, $setting:ident = $value:expr)*
+    ) => {
+        $crate::tensor_symbol!(
+            stringify!($name);
+            $($attr),+;
+            young_tableau = $young_tableau
+            $(, $setting = $value)*
+        )
     };
     ($name:ident, $($setting:ident = $value:expr),*) => {
         $crate::tensor_symbol!(stringify!($name), $($setting = $value),*)
@@ -180,6 +261,14 @@ macro_rules! tensor_symbol {
     ($id:expr, tags = $tags:expr $(, $($rest:tt)*)?) => {
         compile_error!("tensor_symbol! owns the Spenso tensor tag; do not pass tags = ...")
     };
+    ($id:expr, young_tableau = $young_tableau:expr $(, $setting:ident = $value:expr)*) => {
+        $crate::__tensor_symbol_with_young_tableau!(
+            ($id);
+            [];
+            $young_tableau;
+            $($setting = $value),*
+        )
+    };
     ($id:expr, $($setting:ident = $value:expr),*) => {
         symbolica::symbol!(
             $id,
@@ -195,6 +284,19 @@ macro_rules! tensor_symbol {
     };
     ($id:expr; $($attr:ident),+; tags = $tags:expr $(, $($rest:tt)*)?) => {
         compile_error!("tensor_symbol! owns the Spenso tensor tag; do not pass tags = ...")
+    };
+    (
+        $id:expr;
+        $($attr:ident),+;
+        young_tableau = $young_tableau:expr
+        $(, $setting:ident = $value:expr)*
+    ) => {
+        $crate::__tensor_symbol_with_young_tableau!(
+            ($id);
+            [$($attr),+];
+            $young_tableau;
+            $($setting = $value),*
+        )
     };
     ($id:expr; $($attr:ident),+; $($setting:ident = $value:expr),*) => {
         symbolica::symbol!(
@@ -633,7 +735,7 @@ mod tests {
         symbol,
     };
 
-    use crate::{cyclic, shadowing::symbolica_utils::SpensoPrintSettings};
+    use crate::{cyclic, shadowing::symbolica_utils::SpensoPrintSettings, structure::YoungTableau};
 
     use super::{SPENSO_TAG, SymbolAtomExt};
 
@@ -700,6 +802,42 @@ mod tests {
             tensor_!(0; Atom::var(symbol!("a___"))).as_view(),
             AtomView::Fun(_)
         ));
+    }
+
+    #[test]
+    fn tensor_symbol_adds_young_metadata_and_intrinsic_row_or_column_attributes() {
+        let row = YoungTableau::canonical(vec![3]).unwrap();
+        let row_symbol = tensor_symbol!(young_row, young_tableau = row);
+        assert!(row_symbol.is_symmetric());
+        assert_eq!(YoungTableau::from_symbol(row_symbol).unwrap(), Some(row));
+
+        let column = YoungTableau::canonical(vec![1, 1, 1]).unwrap();
+        let column_symbol = tensor_symbol!(young_column, young_tableau = column);
+        assert!(column_symbol.is_antisymmetric());
+        assert_eq!(
+            YoungTableau::from_symbol(column_symbol).unwrap(),
+            Some(column)
+        );
+    }
+
+    #[test]
+    fn tensor_symbol_preserves_nonintrinsic_attributes_settings_and_namespace() {
+        let tableau = YoungTableau::new(vec![2, 1], vec![2, 0, 1]).unwrap();
+        let symbol = tensor_symbol!(
+            young_general;
+            Linear, Real;
+            young_tableau = tableau,
+            aliases = ["young_general_alias"]
+        );
+
+        assert!(symbol.is_linear());
+        assert!(symbol.is_real());
+        assert!(!symbol.is_symmetric());
+        assert!(!symbol.is_antisymmetric());
+        assert_eq!(symbol.get_aliases(), ["spenso::young_general_alias"]);
+        assert!(symbol.get_name().ends_with("::young_general"));
+        assert_eq!(YoungTableau::from_symbol(symbol).unwrap(), Some(tableau));
+        assert!(symbol.has_tag(&SPENSO_TAG.tensor));
     }
 
     #[test]

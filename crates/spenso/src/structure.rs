@@ -49,6 +49,8 @@ pub mod ordered;
 pub mod representation;
 pub mod slot;
 pub use ordered::OrderedStructure;
+pub mod symmetry;
+pub use symmetry::{YoungTableau, YoungTableauClass, YoungTableauError};
 
 pub mod smart_shadow;
 pub use smart_shadow::SmartShadowStructure;
