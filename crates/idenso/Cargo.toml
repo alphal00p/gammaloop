@@ -35,6 +35,16 @@ name = "schoonschip_modes"
 harness = false
 
 [[bench]]
+name = "gamma_algebra"
+harness = false
+required-features = ["reference-cases"]
+
+[[bench]]
+name = "gamma_algebra_time"
+harness = false
+required-features = ["reference-cases"]
+
+[[bench]]
 name = "schoonschip_modes_time"
 harness = false
 
