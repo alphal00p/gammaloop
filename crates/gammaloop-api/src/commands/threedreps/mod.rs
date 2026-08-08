@@ -19,8 +19,9 @@ use serde::{Deserialize, Serialize};
 use symbolica::atom::AtomCore;
 use three_dimensional_reps::{
     generate_3d_expression, graph_info, render_expression_summary, validate_parsed_graph,
-    DisplayOptions, EnergyPowerSupport, GraphInfo, GraphValidation, NumeratorDisplay,
-    NumeratorSamplingScaleMode, OrientationID, ThreeDExpression, ThreeDGraphSource,
+    DisplayOptions, EnergyPowerSupport, GenerationError, GraphInfo, GraphValidation,
+    NumeratorDisplay, NumeratorSamplingScaleMode, OrientationID, RepresentationMode,
+    ThreeDExpression, ThreeDGraphSource,
 };
 
 use crate::{
@@ -112,10 +113,34 @@ impl CliNumeratorSamplesNormalization {
     }
 }
 
+#[derive(
+    Debug, Clone, Copy, ValueEnum, Serialize, Deserialize, JsonSchema, PartialEq, Eq, Default,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum CliRepresentationMode {
+    #[default]
+    Cff,
+    Ltd,
+}
+
+impl From<CliRepresentationMode> for RepresentationMode {
+    fn from(value: CliRepresentationMode) -> Self {
+        match value {
+            CliRepresentationMode::Cff => Self::Cff,
+            CliRepresentationMode::Ltd => Self::Ltd,
+        }
+    }
+}
+
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Build {
     #[command(flatten)]
     pub selection: GraphSelectorArgs,
+
+    /// Three-dimensional representation to build. LTD is reserved but not implemented yet.
+    #[serde(default)]
+    #[arg(long, alias = "family", value_enum, default_value = "cff")]
+    pub representation: CliRepresentationMode,
 
     /// Override the global numerator sampling normalization for this build.
     #[arg(
@@ -315,6 +340,13 @@ impl Validate {
 
 impl Build {
     fn run(&self, state: &State, global_cli_settings: &CLISettings) -> Result<()> {
+        let representation = RepresentationMode::from(self.representation);
+        if representation != RepresentationMode::Cff {
+            return Err(GenerationError::NotImplemented {
+                mode: representation,
+            }
+            .into());
+        }
         let selected = select_graph(state, &self.selection)?;
         let parsed = selected.graph.to_three_d_parsed_graph()?;
         let numerator_sampling_scale_mode = CliNumeratorSamplesNormalization::resolve(
@@ -324,9 +356,10 @@ impl Build {
                 .generation
                 .uniform_numerator_sampling_scale,
         );
-        let options = selected
+        let mut options = selected
             .graph
             .cff_3d_expression_options(numerator_sampling_scale_mode)?;
+        options.representation = representation;
         let numerator_energy_support = options.numerator_energy_support.clone();
         let expression = generate_3d_expression(selected.graph, &options)?;
         let output = BuildOutput {

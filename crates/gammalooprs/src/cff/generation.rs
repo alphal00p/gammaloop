@@ -18,7 +18,8 @@ use linnet::half_edge::involution::EdgeIndex;
 use linnet::num_traits::SignOrZero;
 use symbolica::atom::{Atom, AtomCore};
 use three_dimensional_reps::{
-    Generate3DExpressionOptions, NumeratorSamplingScaleMode, ThreeDGraphSource,
+    Generate3DExpressionOptions, NumeratorSamplingScaleMode, RepresentationMode,
+    ThreeDGraphSource,
     tree::{NodeId, Tree},
 };
 
@@ -261,6 +262,7 @@ impl Graph {
             "using production CFF source-edge numerator energy-degree bounds"
         );
         Ok(Generate3DExpressionOptions {
+            representation: RepresentationMode::Cff,
             energy_degree_bounds: Some(energy_degree_bounds),
             numerator_sampling_scale,
             include_cff_duplicate_signature_excess_sign: true,
@@ -269,6 +271,7 @@ impl Graph {
 
     pub(crate) fn denominator_only_cff_3d_expression_options(&self) -> Generate3DExpressionOptions {
         Generate3DExpressionOptions {
+            representation: RepresentationMode::Cff,
             energy_degree_bounds: Some(Vec::new()),
             numerator_sampling_scale: NumeratorSamplingScaleMode::None,
             include_cff_duplicate_signature_excess_sign: false,

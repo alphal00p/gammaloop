@@ -34,6 +34,14 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RepresentationMode {
+    #[default]
+    Cff,
+    Ltd,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum NumeratorSamplingScaleMode {
     #[default]
     None,
@@ -53,6 +61,8 @@ impl NumeratorSamplingScaleMode {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Generate3DExpressionOptions {
+    #[serde(default)]
+    pub representation: RepresentationMode,
     /// `None` keeps the legacy numerator class, which is affine in every EMR
     /// edge energy. `Some` selects an explicit bounded class; omitted edges
     /// then have degree zero, including when the vector itself is empty.
@@ -70,6 +80,7 @@ const fn default_true() -> bool {
 impl Default for Generate3DExpressionOptions {
     fn default() -> Self {
         Self {
+            representation: RepresentationMode::Cff,
             energy_degree_bounds: None,
             numerator_sampling_scale: NumeratorSamplingScaleMode::None,
             include_cff_duplicate_signature_excess_sign: true,
@@ -79,6 +90,10 @@ impl Default for Generate3DExpressionOptions {
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
+    #[error(
+        "three-dimensional representation mode {mode:?} is not implemented; only CFF is currently supported"
+    )]
+    NotImplemented { mode: RepresentationMode },
     #[error(
         "this generalized CFF higher energy-numerator sector is not supported by the current Rust port"
     )]
@@ -117,6 +132,11 @@ pub fn generate_3d_expression<G: ThreeDGraphSource + ?Sized>(
     graph: &G,
     options: &Generate3DExpressionOptions,
 ) -> Result<ThreeDExpression<OrientationID>> {
+    if options.representation != RepresentationMode::Cff {
+        return Err(GenerationError::NotImplemented {
+            mode: options.representation,
+        });
+    }
     let parsed = graph.to_three_d_parsed_graph()?;
     let Some(edge_map) = graph.energy_edge_index_map(&parsed) else {
         return generate_3d_expression_from_parsed(&parsed, options);
@@ -167,6 +187,11 @@ pub fn generate_3d_expression_from_parsed(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
 ) -> Result<ThreeDExpression<OrientationID>> {
+    if options.representation != RepresentationMode::Cff {
+        return Err(GenerationError::NotImplemented {
+            mode: options.representation,
+        });
+    }
     if let Some(bounds) = options.energy_degree_bounds.as_deref() {
         let signatures = parsed
             .internal_edges
@@ -457,6 +482,7 @@ fn project_component_options(
         })
         .transpose()?;
     Ok(Generate3DExpressionOptions {
+        representation: options.representation,
         energy_degree_bounds: local_bounds,
         numerator_sampling_scale: options.numerator_sampling_scale,
         include_cff_duplicate_signature_excess_sign: options
@@ -1950,6 +1976,7 @@ impl<'a> BoundedCffBuilder<'a> {
             && self.bounds.iter().all(|degree| *degree <= 2);
         if use_confluent_duplicate_channels && !confluent_all_quadratic {
             let options = Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
                 energy_degree_bounds: self.bounds_are_explicit.then(|| {
                     self.bounds
                         .iter()
@@ -2068,6 +2095,7 @@ impl<'a> BoundedCffBuilder<'a> {
     fn lower_sector_base_expression(&self) -> Result<ThreeDExpression<OrientationID>> {
         if self.confluent_duplicate_channels && !repeated_groups(self.parsed).is_empty() {
             let options = Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
                 energy_degree_bounds: self.bounds_are_explicit.then(|| {
                     self.bounds
                         .iter()
@@ -5425,6 +5453,7 @@ impl<'a> RepeatedResidueBuilder<'a> {
                 .map(|orig_id| bounds[*orig_id])
                 .collect::<Vec<_>>();
             let sub_options = Generate3DExpressionOptions {
+                representation: self.options.representation,
                 energy_degree_bounds: Some(
                     sub_bounds
                         .iter()
@@ -5476,6 +5505,7 @@ impl<'a> RepeatedResidueBuilder<'a> {
         let mut remainder_bounds = bounds.to_vec();
         remainder_bounds[active_edge] = 1;
         let remainder_options = Generate3DExpressionOptions {
+            representation: self.options.representation,
             energy_degree_bounds: Some(
                 remainder_bounds
                     .iter()
@@ -5497,6 +5527,7 @@ impl<'a> RepeatedResidueBuilder<'a> {
                 .map(|orig_id| bounds[*orig_id])
                 .collect::<Vec<_>>();
             let sub_options = Generate3DExpressionOptions {
+                representation: self.options.representation,
                 energy_degree_bounds: Some(
                     sub_bounds
                         .iter()
@@ -6709,6 +6740,30 @@ fn cff_bounds_need_generalized_expression(bounds: &[usize]) -> bool {
 }
 
 #[cfg(test)]
+mod representation_tests {
+    use super::*;
+
+    #[test]
+    fn ltd_setting_returns_explicit_not_implemented_error() {
+        let error = generate_3d_expression_from_parsed(
+            &crate::graph_io::test_graphs::box_graph(),
+            &Generate3DExpressionOptions {
+                representation: RepresentationMode::Ltd,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            GenerationError::NotImplemented {
+                mode: RepresentationMode::Ltd
+            }
+        ));
+    }
+}
+
+#[cfg(test)]
 mod lower_sector_regression_tests {
     use super::*;
 
@@ -6826,6 +6881,7 @@ mod lower_sector_regression_tests {
         );
         let expression = projection
             .build_confluent(&Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
                 energy_degree_bounds: None,
                 numerator_sampling_scale: NumeratorSamplingScaleMode::None,
                 include_cff_duplicate_signature_excess_sign: false,
@@ -7603,6 +7659,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
                 energy_degree_bounds: Some(vec![(0, 1), (1, 1), (3, 4)]),
                 ..Default::default()
             },
@@ -7632,6 +7689,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
                 energy_degree_bounds: Some(vec![(0, 1), (1, 1), (3, 4)]),
                 numerator_sampling_scale: NumeratorSamplingScaleMode::All,
                 include_cff_duplicate_signature_excess_sign: true,
@@ -7707,6 +7765,7 @@ mod cff_tests {
         let beyond_quadratic = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
                 energy_degree_bounds: Some(vec![(3, 2)]),
                 numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
                 include_cff_duplicate_signature_excess_sign: true,
@@ -7716,6 +7775,7 @@ mod cff_tests {
         let all = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
                 energy_degree_bounds: Some(vec![(3, 2)]),
                 numerator_sampling_scale: NumeratorSamplingScaleMode::All,
                 include_cff_duplicate_signature_excess_sign: true,

@@ -68,6 +68,17 @@ fn cff_cli_validate_and_build_use_gammaloop_graph_state() -> Result<()> {
         gammalooprs::settings::global::UniformNumeratorSamplingScale::None
     );
 
+    let ltd_error = cli
+        .run_command(
+            "3Drep build -p threedreps_box_build -i default -g 0 --representation ltd --no-save-json --no-pretty",
+        )
+        .unwrap_err();
+    assert!(
+        format!("{ltd_error:?}").contains(
+            "three-dimensional representation mode Ltd is not implemented; only CFF is currently supported"
+        )
+    );
+
     clean_test(test_root);
     Ok(())
 }
