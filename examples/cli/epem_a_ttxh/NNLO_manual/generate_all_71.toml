@@ -1,0 +1,28 @@
+[cli_settings]
+
+[cli_settings.state]
+folder = "./examples/cli/epem_a_ttxh/NNLO_manual/states/state_all_71"
+name = "epem_a_ttxh_NNLO_manual_all_71"
+
+[[command_blocks]]
+name = "generate_diagrams"
+commands = [
+  "import model sm-default.json",
+  "set global kv global.n_cores.feyngen=10",
+  "remove processes",
+  """generate xs e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]
+      --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+      --symmetrize-left-right-states true
+      -p epem_a_tth -i NNLO
+      --global-prefactor-num "1𝑖"
+      --only-diagrams""",
+  "select -p epem_a_tth -i NNLO --amplitude-graphs --without-raised-propagator-signatures ANY_RAISING --without-raised-cuts-signatures ANY_RAISING",
+  "save dot",
+  "save state -o",
+]
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 4
+compile = 0
+integrate = 3

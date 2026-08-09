@@ -1,0 +1,472 @@
+[cli_settings]
+
+[cli_settings.state]
+folder = "./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534"
+name = "NNLO_manual_GL534"
+
+[[command_blocks]]
+name = "setup"
+commands = [
+  "import model sm-default.json",
+  "set model MT=173.0",
+  "set model MH=125.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set model aS=0.118",
+  "set model aEWM1=132.507",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+  "remove processes",
+  "import graphs ./examples/cli/epem_a_ttxh/NNLO_manual/graphs/GL534.dot --process-spec 'e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]' -p epem_a_tth -i NNLO -o",
+]
+
+[[command_blocks]]
+name = "generate_full"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=true",
+  "generate existing -p epem_a_tth -i NNLO",
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "generate_local_only"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "display_generation"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category generation",
+]
+
+[[command_blocks]]
+name = "display_structure"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category orientation cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
+name = "runtime_approach"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "runtime_threshold_off_diagnostic"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=true",
+]
+
+# q12=K3.
+[[command_blocks]]
+name = "approach_soft_e12"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,74,-52,137,0,0,0
+      --approach-axis 0,0,0,0,0,0,0,0,0,211,-157,193
+      --axis-label 'e12 soft' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_soft_e12.json""",
+]
+
+# q13=K1-K2-K3 in spatial momentum.
+[[command_blocks]]
+name = "approach_soft_e13"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,-122,111,24,31,-47,59
+      --approach-axis 0,0,0,0,0,0,211,-157,193,0,0,0
+      --axis-label 'e13 soft' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_soft_e13.json""",
+]
+
+# q14=-K1+K2 in spatial momentum.
+[[command_blocks]]
+name = "approach_soft_e14"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,-91,64,83,31,-47,59
+      --approach-axis 0,0,0,0,0,0,211,-157,193,0,0,0
+      --axis-label 'e14 soft' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_soft_e14.json""",
+]
+
+# Since q12+q13+q14=0, any two soft gluons force the third soft. The two
+# independent soft momenta approach along independent three-vectors.
+[[command_blocks]]
+name = "approach_double_soft"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,-91,64,83,0,0,0
+      --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'independent double soft (all e12 e13 e14 soft)' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_double_soft.json""",
+]
+
+# Hard nonzero collinear sectors at V_36. In each path only the two independent
+# relative transverse components vanish; the third gluon carries the recoil.
+[[command_blocks]]
+name = "approach_collinear_e12_e13"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,-91,64,-117,0,0,120
+      --approach-axis 0,0,0,0,0,0,-47,-29,0,47,29,0
+      --axis-label 'hard e12 e13 collinear (e14 opposite)' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_collinear_e12_e13.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e12_e14"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,-91,64,163,0,0,120
+      --approach-axis 0,0,0,0,0,0,0,0,0,47,29,0
+      --axis-label 'hard e12 e14 collinear (e13 opposite)' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_collinear_e12_e14.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e13_e14"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,-91,64,163,0,0,-200
+      --approach-axis 0,0,0,0,0,0,47,29,0,0,0,0
+      --axis-label 'hard e13 e14 collinear (e12 opposite)' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_collinear_e13_e14.json""",
+]
+
+[[command_blocks]]
+name = "all_approaches"
+commands = [
+  "run base_ir_approaches",
+  "run GL534_correlated_ir_approaches",
+]
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+  """set process -p epem_a_tth -i NNLO string '
+    [integrator]
+    n_start = 100
+    n_increase = 0
+    n_max = 10000000000
+    seed = 1337
+
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = true
+    lmb_channels = "monte_carlo"
+    lmb_channel_weight = "ose"
+
+    [stability]
+    escalate_if_exact_zero = false
+    loop_momenta_norm_escalation_factor = -1.0
+    rotation_axis = [{ type = "z" }]
+
+    [[stability.levels]]
+    precision = "Double"
+    required_precision_for_re = 1.0e-5
+    required_precision_for_im = 1.0e-5
+    escalate_for_large_weight_threshold = 1.0e99
+    '""",
+  """integrate -p epem_a_tth -i NNLO --n-cores 3
+      --renderer tabled --batch-size 10 --show-phase both
+      --show-max-weight-info --show-top-discrete-grid
+      --show-discrete-contributions-sum --write-results-for-each-iteration
+      --restart""",
+]
+
+[[command_blocks]]
+name = "base_ir_approaches"
+commands = [
+  "run approach_soft_e12",
+  "run approach_soft_e13",
+  "run approach_soft_e14",
+  "run approach_double_soft",
+  "run approach_collinear_e12_e13",
+  "run approach_collinear_e12_e14",
+  "run approach_collinear_e13_e14",
+]
+
+# GL534-specific correlated families. At q12=0, E15/E57 and
+# E24/E31/E60/E62 share the m+sqrt(m^2+x^2)+x root.
+[[command_blocks]]
+name = "approach_GL534_correlated_soft_e12_bridges"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 0,0,0,0,0,0,0,0,395.4050785973398,0,0,0
+      --approach-axis 0,0,0,0,0,0,3,5,-7,47,29,-31
+      --axis-label 'e12 soft with E15/E57 and E24/E31/E60/E62 thresholds' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_correlated_soft_e12_bridges.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL534_correlated_soft_e12_E25_E32"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,0,0,469.11725613113,0,0,0
+      --approach-axis 0,0,0,0,0,0,0,0,47,211,-157,193
+      --axis-label 'e12 soft with common E25/E32 two-top threshold' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_correlated_soft_e12_E25_E32.json""",
+]
+
+# At q13=0, e5/e10 collapse onto e3 and E14/E57 share the K0 two-top root.
+[[command_blocks]]
+name = "approach_GL534_correlated_soft_e13_E14_E57"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 0,0,469.11725613113,105,-99,196,31,-47,59,74,-52,137
+      --approach-axis 0,0,47,211,-157,193,0,0,0,0,0,0
+      --axis-label 'e13 soft with common E14/E57 two-top threshold' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_correlated_soft_e13_E14_E57.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL534_correlated_soft_e13_bridges"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,0,0,395.4050785973398,0,0,0,0,0,395.4050785973398
+      --approach-axis 0,0,0,47,29,-31,0,0,0,3,5,-7
+      --axis-label 'e13 soft with common E25/E31/E62/E72 threshold' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_correlated_soft_e13_bridges.json""",
+]
+
+# q14=0 has a common bridge root for E15/E57 and E24/E25/E60/E72.
+[[command_blocks]]
+name = "approach_GL534_correlated_soft_e14_bridges"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 0,0,0,0,0,0,0,0,0,0,0,395.4050785973398
+      --approach-axis 0,0,47,0,0,0,47,29,-31,3,5,-7
+      --axis-label 'e14 soft with E15/E57 and E24/E25/E60/E72 thresholds' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_correlated_soft_e14_bridges.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL534_correlated_soft_e14_E31_E32"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,0,0,469.11725613113,0,0,469.11725613113,31,-47,59
+      --approach-axis 0,0,0,0,0,0,47,29,-31,0,0,0
+      --axis-label 'e14 soft with common E31/E32 two-top threshold' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_correlated_soft_e14_E31_E32.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL534_correlated_double_soft_all_thresholds"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 0,0,469.11725613113,0,0,469.11725613113,0,0,469.11725613113,0,0,0
+      --approach-axis 0,0,47,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'double soft with K0 and K1 two-top threshold families' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_correlated_double_soft_all_thresholds.json""",
+]
+
+[[command_blocks]]
+name = "GL534_correlated_ir_approaches"
+commands = [
+  "run approach_GL534_correlated_soft_e12_bridges",
+  "run approach_GL534_correlated_soft_e12_E25_E32",
+  "run approach_GL534_correlated_soft_e13_E14_E57",
+  "run approach_GL534_correlated_soft_e13_bridges",
+  "run approach_GL534_correlated_soft_e14_bridges",
+  "run approach_GL534_correlated_soft_e14_E31_E32",
+  "run approach_GL534_correlated_double_soft_all_thresholds",
+]
+
+[[command_blocks]]
+name = "approach_GL534_collinear_e13_e14_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-91,64,163,0,0,-200
+      --approach-axis 0,0,0,0,0,0,47,29,0,0,0,0
+      --axis-label 'hard e13 e14 collinear Arb precision adjudicator' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/approach_collinear_e13_e14_arb.json""",
+]
+
+[[command_blocks]]
+name = "diagnostic_GL534_collinear_e13_e14_threshold_off"
+commands = [
+  "run runtime_threshold_off_diagnostic",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,-91,64,163,0,0,-200
+      --approach-axis 0,0,0,0,0,0,47,29,0,0,0,0
+      --axis-label 'diagnostic hard e13/e14 collinear with threshold subtraction off' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/diagnostic_collinear_e13_e14_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "GL534_remaining_correlated_ir_approaches"
+commands = [
+  "run approach_GL534_correlated_soft_e12_E25_E32",
+  "run approach_GL534_correlated_soft_e13_E14_E57",
+  "run approach_GL534_correlated_soft_e13_bridges",
+  "run approach_GL534_correlated_soft_e14_bridges",
+  "run approach_GL534_correlated_soft_e14_E31_E32",
+  "run approach_GL534_correlated_double_soft_all_thresholds",
+]
+
+[[command_blocks]]
+name = "GL534_q14_and_double_correlated_ir_approaches"
+commands = [
+  "run approach_GL534_correlated_soft_e14_bridges",
+  "run approach_GL534_correlated_soft_e14_E31_E32",
+  "run approach_GL534_correlated_double_soft_all_thresholds",
+]
+
+[[command_blocks]]
+name = "GL534_two_top_and_double_correlated_ir_approaches"
+commands = [
+  "run approach_GL534_correlated_soft_e14_E31_E32",
+  "run approach_GL534_correlated_double_soft_all_thresholds",
+]
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+enable_cache = false
+generate_events = true
+store_additional_weights_in_event = true
+integral_unit = "picobarn"
+mu_r = 91.188
+m_uv = 91.188
+
+[default_runtime_settings.kinematics]
+e_cm = 1000.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]
+helicities = ["summed_averaged", "summed_averaged"]
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+esurface_existence_threshold = 1.0e-7
+
+[default_runtime_settings.integrator]
+n_start = 100
+n_increase = 0
+n_max = 10000000000
+seed = 1337
+
+[default_runtime_settings.integrator.observables_output]
+format = ["hwu", "json"]
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+lmb_channel_weight = "ose"
+
+[default_runtime_settings.stability]
+escalate_if_exact_zero = false
+loop_momenta_norm_escalation_factor = -1.0
+
+[[default_runtime_settings.stability.rotation_axis]]
+type = "z"
+
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 1.0e-5
+required_precision_for_im = 1.0e-5
+escalate_for_large_weight_threshold = 1.0e99
+
+[cli_settings.global.generation.evaluator]
+do_algebra = false
+iterative_orientation_optimization = false
+store_atom = true
+compile = false
+summed = false
+summed_function_map = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = true
+esurface_existence_threshold = 1.0e-7
+skip_thresholds_that_are_cuts = true
+
+[cli_settings.global.generation.uv]
+softct = true
+inner_products = true
+generate_integrated = true
+subtract_uv = true
+
+[cli_settings.global.n_cores]
+feyngen = 1
+generate = 4
+compile = 0
+integrate = 3
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false

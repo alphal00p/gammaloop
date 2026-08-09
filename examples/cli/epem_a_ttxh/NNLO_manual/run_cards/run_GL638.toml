@@ -1,0 +1,344 @@
+[cli_settings]
+
+[cli_settings.state]
+folder = "./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638"
+name = "epem_a_ttxh_NNLO_manual_GL638"
+
+[[command_blocks]]
+name = "setup"
+commands = [
+  "import model sm-default.json",
+  "set model MT=173.0",
+  "set model MH=125.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set model aS=0.118",
+  "set model aEWM1=132.507",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+  "remove processes",
+  "import graphs ./examples/cli/epem_a_ttxh/NNLO_manual/graphs/GL638.dot --process-spec 'e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]' -p epem_a_tth -i NNLO -o",
+]
+
+[[command_blocks]]
+name = "generate_full_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=true",
+  "generate existing -p epem_a_tth -i NNLO",
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "generate_local_uv_fallback"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "display_generation"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category generation",
+]
+
+[[command_blocks]]
+name = "display_structure"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category orientation cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
+name = "runtime_events"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "approach_soft_q13"
+commands = [
+  "run runtime_events",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 31,-47,83,-59,101,-73,127,41,-109,31,-47,83
+      --approach-axis 47,29,-31,0,0,0,0,0,0,258,-128,162
+      --axis-label 'q13 single soft, thresholds away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/approaches/soft_q13.json""",
+]
+
+[[command_blocks]]
+name = "approach_soft_q14"
+commands = [
+  "run runtime_events",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 31,-47,83,-59,101,-73,31,-47,83,67,-89,53
+      --approach-axis 47,29,-31,0,0,0,-73,61,37,0,0,0
+      --axis-label 'q14 single soft, thresholds away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/approaches/soft_q14.json""",
+]
+
+[[command_blocks]]
+name = "approach_double_soft"
+commands = [
+  "run runtime_events",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 31,-47,83,-59,101,-73,31,-47,83,31,-47,83
+      --approach-axis 47,29,-31,0,0,0,-73,61,37,258,-128,162
+      --axis-label 'independent q13 and q14 double soft, thresholds away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/approaches/double_soft.json""",
+]
+
+[[command_blocks]]
+name = "approach_q13_thresholds"
+commands = [
+  "run runtime_events",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 108.257828337953,-144.343771117271,433.031313351812,-59,101,-73,127,41,-109,108.257828337953,-144.343771117271,433.031313351812
+      --approach-axis 47,29,-31,0,0,0,0,0,0,258,-128,162
+      --axis-label 'q13 soft with E11/E17 and E10/E43 thresholds' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/approaches/q13_thresholds.json""",
+]
+
+[[command_blocks]]
+name = "approach_q14_edited_thresholds"
+commands = [
+  "run runtime_events",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 108.257828337953,-144.343771117271,433.031313351812,-59,101,-73,108.257828337953,-144.343771117271,433.031313351812,67,-89,53
+      --approach-axis 47,29,-31,0,0,0,-73,61,37,0,0,0
+      --axis-label 'q14 soft with edited E30 and E29/E47 thresholds' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/approaches/q14_edited_thresholds.json""",
+]
+
+[[command_blocks]]
+name = "approach_q13_E29_family"
+commands = [
+  "run runtime_events",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 0,0,220.071,-59,101,-73,0,0,-220.071,0,0,220.071
+      --approach-axis 47,29,-31,0,0,0,11,-7,5,258,-128,162
+      --axis-label 'q13 soft with E29/E28/E47/E52 threshold family' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/approaches/q13_E29_family.json""",
+]
+
+[[command_blocks]]
+name = "approach_q13_edited_E30"
+commands = [
+  "run runtime_events",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 31,-47,83,-59,101,-73,108.257828337953,-144.343771117271,433.031313351812,31,-47,83
+      --approach-axis 47,29,-31,0,0,0,-73,61,37,258,-128,162
+      --axis-label 'q13 soft with edited E30 threshold' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/approaches/q13_edited_E30.json""",
+]
+
+[[command_blocks]]
+name = "approach_q14_E28_family"
+commands = [
+  "run runtime_events",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 0,0,220.071,-59,101,-73,0,0,220.071,0,0,-220.071
+      --approach-axis 47,29,-31,0,0,0,-73,61,37,258,-128,162
+      --axis-label 'q14 soft with E28/E10/E43/E52 threshold family' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/approaches/q14_E28_family.json""",
+]
+
+[[command_blocks]]
+name = "approach_double_soft_all_thresholds"
+commands = [
+  "run runtime_events",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 108.257828337953,-144.343771117271,433.031313351812,-59,101,-73,108.257828337953,-144.343771117271,433.031313351812,108.257828337953,-144.343771117271,433.031313351812
+      --approach-axis 47,29,-31,0,0,0,-73,61,37,258,-128,162
+      --axis-label 'double soft at common threshold intersection' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/approaches/double_soft_all_thresholds.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E30"
+commands = [
+  "run runtime_events",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 31,-47,83,-59,101,-73,108.257828337953,-144.343771117271,433.031313351812,67,-89,53
+      --approach-axis 0,0,0,0,0,0,-73,61,37,0,0,0
+      --axis-label 'edited E30 threshold, IR away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/approaches/threshold_only_E30.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E29"
+commands = [
+  "run runtime_events",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 0,0,220.071,-59,101,-73,0,0,-220.071,67,-89,53
+      --approach-axis 0,0,0,0,0,0,11,-7,5,0,0,0
+      --axis-label 'shared E29/E47 threshold, IR away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/approaches/threshold_only_E29.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_c4_partition"
+commands = [
+  "run runtime_events",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 0,0,0,0,0,316.052997992700,108.257828337953,-144.343771117271,433.031313351812,0,0,100
+      --approach-axis 0,0,0,0,0,19,-73,61,37,0,0,0
+      --axis-label 'cut4 E30/physical-E14 partition intersection, IR away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/approaches/threshold_only_c4_partition.json""",
+]
+
+[[command_blocks]]
+name = "diagnostic_soft_q13_threshold_off"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=true",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 31,-47,83,-59,101,-73,127,41,-109,31,-47,83
+      --approach-axis 47,29,-31,0,0,0,0,0,0,258,-128,162
+      --axis-label 'diagnostic q13 soft with threshold subtraction disabled' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/approaches/diagnostic_soft_q13_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "all_approaches"
+commands = [
+  "run approach_soft_q13",
+  "run approach_soft_q14",
+  "run approach_double_soft",
+  "run approach_q13_thresholds",
+  "run approach_q14_edited_thresholds",
+  "run approach_q13_E29_family",
+  "run approach_q13_edited_E30",
+  "run approach_q14_E28_family",
+  "run approach_double_soft_all_thresholds",
+  "run approach_threshold_only_E30",
+  "run approach_threshold_only_E29",
+  "run approach_threshold_only_c4_partition",
+]
+
+[[command_blocks]]
+name = "integration"
+commands = [
+  """set process -p epem_a_tth -i NNLO string '
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = true
+    lmb_channels = "monte_carlo"
+    lmb_channel_weight = "ose"
+    '""",
+  """set process -p epem_a_tth -i NNLO kv
+      general.m_uv=91.188
+      general.evaluator_method=SingleParametric
+      general.generate_events=false
+      general.store_additional_weights_in_event=false
+      subtraction.disable_threshold_subtraction=false
+      integrator.n_start=100
+      integrator.n_increase=0
+      integrator.n_max=10000000000
+      integrator.seed=1337
+      integrator.discrete_dim_learning_rate=0.0
+      integrator.continuous_dim_learning_rate=0.25
+      integrator.n_bins=16""",
+  """integrate -p epem_a_tth -i NNLO --n-cores 3
+      --renderer tabled --batch-size 10 --show-phase both
+      --show-max-weight-info --show-top-discrete-grid
+      --show-discrete-contributions-sum --write-results-for-each-iteration --restart""",
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 1000.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]
+helicities = ["summed_averaged", "summed_averaged"]
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "picobarn"
+mu_r = 91.188
+m_uv = 91.188
+
+[default_runtime_settings.integrator.observables_output]
+format = ["hwu", "json"]
+
+[default_runtime_settings.subtraction]
+esurface_existence_threshold = 1.0e-7
+disable_threshold_subtraction = false
+
+[default_runtime_settings.stability]
+check_on_norm = true
+escalate_if_exact_zero = false
+loop_momenta_norm_escalation_factor = -1.0
+
+[[default_runtime_settings.stability.rotation_axis]]
+type = "z"
+
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 1.0e-5
+required_precision_for_im = 1.0e-5
+escalate_for_large_weight_threshold = 1.0e99
+
+[cli_settings.global.generation.evaluator]
+do_algebra = false
+iterative_orientation_optimization = false
+store_atom = true
+compile = false
+summed = false
+summed_function_map = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = true
+esurface_existence_threshold = 1.0e-7
+skip_thresholds_that_are_cuts = true
+
+[cli_settings.global.generation.uv]
+softct = false
+inner_products = true
+generate_integrated = true
+subtract_uv = true
+
+[cli_settings.global.n_cores]
+feyngen = 1
+generate = 4
+compile = 0
+integrate = 3
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false
