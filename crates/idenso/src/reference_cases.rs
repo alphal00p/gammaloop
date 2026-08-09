@@ -14,6 +14,8 @@ use crate::{
     representations::{Bispinor, ColorAdjoint, ColorFundamental, initialize},
 };
 
+pub mod young;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReferenceDomain {
     Dirac4,

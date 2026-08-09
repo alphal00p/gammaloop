@@ -45,6 +45,16 @@ harness = false
 required-features = ["reference-cases"]
 
 [[bench]]
+name = "young_projectors"
+harness = false
+required-features = ["reference-cases"]
+
+[[bench]]
+name = "young_projectors_time"
+harness = false
+required-features = ["reference-cases"]
+
+[[bench]]
 name = "schoonschip_modes_time"
 harness = false
 
