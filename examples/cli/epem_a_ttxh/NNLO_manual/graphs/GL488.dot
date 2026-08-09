@@ -1,0 +1,38 @@
+digraph GL488{
+    num = "1𝑖";
+    overall_factor = "NumeratorDependentGrouping(488,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))+NumeratorDependentGrouping(489,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))";
+    overall_factor_evaluated = "-4";
+    projector = "u(1,spenso::bis(4,hedge(1)))*ubar(1,spenso::bis(4,hedge(29)))*v(0,spenso::bis(4,hedge(28)))*vbar(0,spenso::bis(4,hedge(0)))";
+
+	0 [int_id="V_141"];
+	1 [int_id="V_141"];
+	2 [int_id="V_134"];
+	3 [int_id="V_134"];
+	4 [int_id="V_137"];
+	5 [int_id="V_137"];
+	6 [int_id="V_137"];
+	7 [int_id="V_36"];
+	8 [int_id="V_98"];
+	9 [int_id="V_98"];
+	exte0	[style=invis];
+	exte0	-> 9:0	[id=0 is_cut="28" particle="e+" ];
+	exte1	[style=invis];
+	exte1	-> 9:1	[id=1 is_cut="29" particle="e-" ];
+	0:2	-> 1:3	[id=2 particle="H"];
+	0:4	-> 5:5	[id=3 lmb_id="0" particle="t"];
+	6:6	-> 0:7	[id=4 lmb_id="1" particle="t"];
+	1:8	-> 3:9	[id=5 particle="t"];
+	4:10	-> 1:11	[id=6 particle="t"];
+	3:12	-> 2:13	[id=7 lmb_id="2" particle="t"];
+	2:14	-> 6:15	[id=8 particle="t"];
+	2:16	-> 9:17	[id=9 particle="a"];
+	3:18	-> 8:19	[id=10 particle="a"];
+	5:20	-> 4:21	[id=11 particle="t"];
+	4:22	-> 7:23	[id=12 lmb_id="3" particle="g"];
+	5:24	-> 7:25	[id=13 particle="g"];
+	6:26	-> 7:27	[id=14 particle="g"];
+	exte15	[style=invis];
+	8:28	-> exte15	[id=15 is_cut="28" particle="e+" ];
+	exte16	[style=invis];
+	8:29	-> exte16	[id=16 is_cut="29" particle="e-" ];
+}

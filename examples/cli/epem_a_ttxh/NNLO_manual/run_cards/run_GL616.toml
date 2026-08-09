@@ -1,0 +1,458 @@
+[cli_settings]
+
+[cli_settings.state]
+folder = "./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616"
+name = "NNLO_manual_GL616"
+
+[[command_blocks]]
+name = "setup"
+commands = [
+  "import model sm-default.json",
+  "set model MT=173.0",
+  "set model MH=125.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set model aS=0.118",
+  "set model aEWM1=132.507",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+  "remove processes",
+  "import graphs ./examples/cli/epem_a_ttxh/NNLO_manual/graphs/GL616.dot --process-spec 'e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]' -p epem_a_tth -i NNLO -o",
+]
+
+[[command_blocks]]
+name = "generate_full"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=true",
+  "generate existing -p epem_a_tth -i NNLO",
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "generate_local_only"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "display_structure"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category orientation cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
+name = "runtime_approach"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "runtime_approach_threshold_off"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=true",
+]
+
+[[command_blocks]]
+name = "approach_soft_e13"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-185.500280,318.773744,-167.785976,-344.171325,79.901667,-175.303598,-344.171325,79.901667,-175.303598,-150.398968,-276.000415,7.816602
+      --approach-axis 0,0,0,211,-157,193,0,0,0,0,0,0
+      --axis-label 'e13 gluon soft, candidate thresholds away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_soft_e13.json""",
+]
+
+[[command_blocks]]
+name = "approach_soft_e14"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 963.811959,24.576104,249.517245,387.133235,183.430452,142.583966,-228.256197,84.832043,79.054016,348.422527,-74.022305,185.987296
+      --approach-axis 98,-86,342,0,0,0,0,0,0,0,0,0
+      --axis-label 'e14 gluon soft, candidate thresholds away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_soft_e14.json""",
+]
+
+[[command_blocks]]
+name = "approach_double_soft_e13_e14"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-29.333670,-399.407814,18.644369,-364.609928,235.194085,374.831021,-364.609928,235.194085,374.831021,-29.333670,-399.407814,18.644369
+      --approach-axis 113,-71,-149,211,-157,193,0,0,0,0,0,0
+      --axis-label 'independent e13 e14 double soft, candidate thresholds away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_double_soft_e13_e14.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e13_E5_E57"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 131.492941348,-153.067279092,127.874008797,146.205153600,110.557891973,349.373391851,146.205153600,110.557891973,349.373391851,354.582419913,-285.928381899,112.192994049
+      --approach-axis=-17.659279,48.207159,33.170644,60.825478,443.106654,57.009082,111.088815,285.476967,54.277971,-163.980522,125.877879,-113.098217
+      --axis-label 'e13 soft at active E5 E57' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_e13_E5_E57.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e13_E25_E62"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-64.653569254,-57.194560720,73.250581317,88.067772495,31.249837779,-145.825100993,88.067772495,31.249837779,-145.825100993,-105.003815711,137.277797068,-142.146953002
+      --approach-axis=-221.807286,-160.860965,-114.875754,-47.113762,-381.470622,-525.002869,-54.987113,-280.074753,-275.435535,-262.045148,-73.090416,-296.298351
+      --axis-label 'e13 soft at active E25 E62' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_e13_E25_E62.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e13_E28_E66"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 0.881244498,371.794283478,-341.388770071,-187.735715339,327.165524980,-278.906831129,-187.735715339,327.165524980,-278.906831129,352.047385013,-327.853744448,-202.403944835
+      --approach-axis=-42.064409,-194.833180,-38.434567,289.761455,-216.069905,347.247143,172.531654,-133.612617,126.046739,-167.706112,-52.150214,-92.308719
+      --axis-label 'e13 soft at active E28 E66' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_e13_E28_E66.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e13_E13_E52"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 10.429416527,-110.714621950,-68.839176314,-51.269969598,110.117005900,132.233141170,-51.269969598,110.117005900,132.233141170,-80.224951218,103.609720596,-125.426845571
+      --approach-axis 298.103558,-146.219472,-199.506002,27.087265,24.240392,-137.191870,123.410648,-11.435963,-79.440713,114.449066,115.291863,-210.795371
+      --axis-label 'e13 soft at distinct active E13 E52 instances' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_e13_E13_E52.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e13_E23"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-123.168763502,-116.527848858,61.227846259,-150.619859686,-137.940183931,56.446739131,-150.619859686,-137.940183931,56.446739131,144.191300884,107.338920998,-15.650880841
+      --approach-axis=-37.267958,-82.728671,147.243270,280.730025,-36.976840,205.580341,12.573344,175.810313,284.652260,-246.395111,-248.502717,211.590507
+      --axis-label 'e13 soft at active E23 and structural inactive E20 E22 E63 E64' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_e13_E23.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e13_E58"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-104.190314451,-92.028320741,-178.810750087,-221.245333805,-219.730802926,149.296518704,-221.245333805,-219.730802926,149.296518704,-144.712024527,250.090518562,-24.968486540
+      --approach-axis 195.718183,213.791403,-96.662636,211.919964,280.323988,377.630848,279.530863,6.601401,131.997555,44.347833,31.271288,8.169807
+      --axis-label 'e13 soft at active E58' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_e13_E58.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e14_E25_E28"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 293.130608122,-804.917020745,-194.314132988,-43.087139890,-208.080023657,233.632186068,-334.362565871,299.857014848,135.493340024,1.855182141,-296.979982241,-292.452979032
+      --approach-axis=-71.577214,-789.132902,353.614959,288.936437,-270.256089,137.067041,50.818674,232.613793,-172.186137,-135.116261,-63.725973,185.472858
+      --axis-label 'e14 soft at active E25 E28' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_e14_E25_E28.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e14_E57_E58"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-244.117743275,-155.647949696,239.966461174,-169.881227893,-89.107304058,225.256275757,-0.353132481,173.821588525,123.469321322,-74.589647863,107.280942887,138.179506738
+      --approach-axis 58.761295,-363.271134,-467.186883,115.687474,-131.695601,-49.101972,103.496540,19.528217,103.401128,160.847595,-210.251728,-264.789581
+      --axis-label 'e14 soft at active E57 E58' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_e14_E57_E58.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e14_E62_E66"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 210.722302959,-393.079871624,-237.989840412,120.967459354,-166.335981061,43.142324856,-136.475662825,162.193237214,127.700075847,-46.720819220,-64.550653350,-153.432089421
+      --approach-axis 122.583284,107.937437,-88.270499,30.154619,-253.198174,176.568988,-20.239870,-84.114003,244.496841,-10.785447,117.757860,245.654367
+      --axis-label 'e14 soft at active E62 E66' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_e14_E62_E66.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e14_E13_E52"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-26.192937934,-297.428810677,-59.061167909,-22.951258256,-108.274050277,4.676526175,41.143885024,73.180028597,118.416337984,37.902205345,-115.974731803,54.678643900
+      --approach-axis=-384.061814,226.518314,567.683421,66.105719,113.083730,-63.764445,-6.428407,89.176478,-103.918896,-176.613787,177.920551,251.391516
+      --axis-label 'e14 soft at active E13 E52 and structural inactive E15 E20 E50 E75' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_e14_E13_E52.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e14_E5"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 142.555006096,121.138408951,-46.211849597,99.052406278,-324.636320068,-134.717684184,-455.895099186,-565.789077271,100.173742151,-412.392499368,-120.014348253,188.679576739
+      --approach-axis 360.843148,780.812741,344.542135,50.108548,176.264124,76.874447,-288.440734,-25.827875,-74.389885,-62.620843,297.471526,119.950096
+      --axis-label 'e14 soft at active E5' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_e14_E5.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e14_E23"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 55.904503953,132.152480216,192.552685394,-19.516484478,120.517058812,76.550861509,27.685169166,-76.540540484,-71.249307089,103.106157598,-64.905119079,44.752516797
+      --approach-axis 349.663822,75.655700,-36.663111,54.053733,-230.487058,-138.345547,-143.054473,250.696884,-90.483858,230.674227,275.249814,77.070199
+      --axis-label 'e14 soft at active E23' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_e14_E23.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_double_E5_E57_E58"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 50.416892578,-175.288888430,-432.207059794,514.890439091,13.792066569,586.507237026,514.890439091,13.792066569,586.507237026,50.416892578,-175.288888430,-432.207059794
+      --approach-axis 416.285275,-120.855582,23.889000,-142.342457,-486.077640,204.302798,-285.143226,-268.133646,68.140697,-2.016252,-32.125111,-45.969617
+      --axis-label 'double soft at active E5 E57 E58' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_double_E5_E57_E58.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_double_E25_E28_E62_E66"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-190.872995260,246.585952952,-235.945408825,-272.338094113,183.785811316,334.851815067,-272.338094113,183.785811316,334.851815067,-190.872995260,246.585952952,-235.945408825
+      --approach-axis 65.648695,118.539140,22.520515,-517.062859,44.515579,402.003289,-276.396124,-10.930964,170.133953,218.860912,106.082695,-221.945737
+      --axis-label 'double soft at active E25 E28 E62 E66' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_double_E25_E28_E62_E66.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_double_E13_E23_E52"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-20.735476994,2.032770978,65.942476332,-116.778424851,193.337242489,132.120327881,-116.778424851,193.337242489,132.120327881,-20.735476994,2.032770978,65.942476332
+      --approach-axis 409.002135,-415.802179,-199.744583,319.811126,-131.045436,-57.961945,78.515454,-4.125616,-114.923236,76.599063,-288.034457,20.606889
+      --axis-label 'double soft at active E13 E23 E52 and structural inactive E15 E20 E22 E50 E63 E64 E75' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL616/approach_correlated_double_E13_E23_E52.json""",
+]
+
+[[command_blocks]]
+name = "all_approaches"
+commands = [
+  "run approach_soft_e13",
+  "run approach_soft_e14",
+  "run approach_double_soft_e13_e14",
+  "run approach_correlated_e13_E5_E57",
+  "run approach_correlated_e13_E25_E62",
+  "run approach_correlated_e13_E28_E66",
+  "run approach_correlated_e13_E13_E52",
+  "run approach_correlated_e13_E23",
+  "run approach_correlated_e13_E58",
+  "run approach_correlated_e14_E25_E28",
+  "run approach_correlated_e14_E57_E58",
+  "run approach_correlated_e14_E62_E66",
+  "run approach_correlated_e14_E13_E52",
+  "run approach_correlated_e14_E5",
+  "run approach_correlated_e14_E23",
+  "run approach_correlated_double_E5_E57_E58",
+  "run approach_correlated_double_E25_E28_E62_E66",
+  "run approach_correlated_double_E13_E23_E52",
+]
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+  """set process -p epem_a_tth -i NNLO string '
+    [general]
+    m_uv = 91.188
+    evaluator_method = "SingleParametric"
+    generate_events = false
+    store_additional_weights_in_event = false
+
+    [integrator]
+    n_start = 100
+    n_increase = 0
+    n_max = 10000000000
+    seed = 616
+
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = true
+    lmb_channels = "monte_carlo"
+    lmb_channel_weight = "ose"
+
+    [subtraction]
+    disable_threshold_subtraction = false
+
+    [stability]
+    escalate_if_exact_zero = false
+    loop_momenta_norm_escalation_factor = -1.0
+    rotation_axis = [{ type = "z" }]
+
+    [[stability.levels]]
+    precision = "Double"
+    required_precision_for_re = 1.0e-5
+    required_precision_for_im = 1.0e-5
+    escalate_for_large_weight_threshold = 1.0e99
+    '""",
+  """integrate -p epem_a_tth -i NNLO --n-cores 3
+      --renderer tabled --batch-size 10 --show-phase both
+      --show-max-weight-info --show-top-discrete-grid
+      --show-discrete-contributions-sum --write-results-for-each-iteration
+      --restart""",
+]
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+enable_cache = false
+generate_events = true
+store_additional_weights_in_event = true
+integral_unit = "picobarn"
+mu_r = 91.188
+m_uv = 91.188
+
+[default_runtime_settings.kinematics]
+e_cm = 1000.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]
+helicities = ["summed_averaged", "summed_averaged"]
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+esurface_existence_threshold = 1.0e-7
+
+[default_runtime_settings.integrator]
+n_start = 100
+n_increase = 0
+n_max = 10000000000
+seed = 616
+
+[default_runtime_settings.integrator.observables_output]
+format = ["hwu", "json"]
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+lmb_channel_weight = "ose"
+
+[default_runtime_settings.stability]
+escalate_if_exact_zero = false
+loop_momenta_norm_escalation_factor = -1.0
+
+[[default_runtime_settings.stability.rotation_axis]]
+type = "z"
+
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 1.0e-5
+required_precision_for_im = 1.0e-5
+escalate_for_large_weight_threshold = 1.0e99
+
+[cli_settings.global.generation.evaluator]
+do_algebra = false
+iterative_orientation_optimization = false
+store_atom = true
+compile = false
+summed = false
+summed_function_map = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = true
+esurface_existence_threshold = 1.0e-7
+skip_thresholds_that_are_cuts = true
+
+[cli_settings.global.generation.uv]
+softct = false
+inner_products = true
+generate_integrated = true
+subtract_uv = true
+
+[cli_settings.global.n_cores]
+feyngen = 1
+generate = 4
+compile = 0
+integrate = 3
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false

@@ -1,0 +1,21 @@
+[cli_settings]
+
+[cli_settings.state]
+folder = "./examples/cli/epem_a_ttxh/NNLO_manual/states/state_validate_all_71"
+name = "epem_a_ttxh_NNLO_manual_validate_all_71"
+
+[[command_blocks]]
+name = "roundtrip"
+commands = [
+  "import model sm-default.json",
+  "remove processes",
+  "import graphs ./examples/cli/epem_a_ttxh/NNLO_manual/graphs --process-spec 'e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]' -p epem_a_tth -i NNLO -o",
+  "save dot",
+  "save state -o",
+]
+
+[cli_settings.global.n_cores]
+feyngen = 1
+generate = 1
+compile = 0
+integrate = 1
