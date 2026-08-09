@@ -1,4 +1,5 @@
 [cli_settings]
+override_state = true
 
 [cli_settings.state]
 folder = "./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL362"
@@ -38,6 +39,60 @@ commands = [
   "save state -o",
 ]
 
+# Structural-only parent probe after the mandatory UV-bearing generation attempts.
+# This does not produce an acceptable campaign state or numerical result.
+[[command_blocks]]
+name = "probe_threshold_structure"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "display integrand --process epem_a_tth --integrand-name NNLO --category generation orientation cuts --show-threshold-functions",
+]
+
+# Numerical threshold-structure probe only: UV subtraction is absent, so these
+# results cannot replace the mandatory UV-bearing state or its final regressions.
+[[command_blocks]]
+name = "probe_projected_approaches_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run all_approaches",
+  "run approach_corr_e13_E7_E51_E61_threshold_off",
+  "run threshold_only_approaches",
+]
+
+[[command_blocks]]
+name = "probe_projected_arb_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_corr_e13_E7_E51_E61_arb",
+]
+
+[[command_blocks]]
+name = "probe_threshold_only_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run threshold_only_approaches",
+]
+
+# Candidate triage: the known-bad q13 threshold overlap is checked first, then
+# the e12/E8-E21 regression gate, before spending time on the complete suite.
+[[command_blocks]]
+name = "probe_candidate_quick_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_corr_e13_E7_E51_E61",
+  "run approach_corr_e12_E8_E21",
+]
+
 [[command_blocks]]
 name = "display_generation"
 commands = [
@@ -48,6 +103,46 @@ commands = [
 name = "display_structure"
 commands = [
   "display integrand --process epem_a_tth --integrand-name NNLO --category orientation cuts --show-threshold-functions",
+]
+
+# Mandatory remediation UV audit: every visible LMB subset and orientation.
+# The fixed seed and scale range make the JSON directly reproducible.
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "uv_profile"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 36220260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL362/uv_profiles/base_exp8_12_seed36220260809""",
+]
+
+# Adaptive fallbacks, run only if the baseline tail is incomplete, adverse, or
+# fails the overlapping-window drift gate.
+[[command_blocks]]
+name = "uv_profile_high_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 10 --max-scaling 14 --use_f128
+      --per-orientation --seed 36220260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL362/uv_profiles/high_f128_exp10_14_seed36220260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_low_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 6 --max-scaling 10 --use_f128
+      --per-orientation --seed 36220260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL362/uv_profiles/low_f128_exp6_10_seed36220260809""",
 ]
 
 [[command_blocks]]
@@ -244,6 +339,94 @@ commands = [
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL362/approach_corr_double_E8_E21.json""",
+]
+
+# IR-away threshold crossing for the edited E7/E61 associations.  Here
+# q12=(s,0,0), q13=(0,s,0), s=216.9910059143789, and d eta/d K1x=1.59255.
+[[command_blocks]]
+name = "approach_threshold_only_E7_E61"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 50,-70,90,266.9910059143789,146.9910059143789,90,0,0,100,0,-216.9910059143789,100
+      --approach-axis 0,0,0,1,0,0,0,0,0,0,0,0
+      --axis-label 'threshold-only E7/E61; q12 and q13 hard' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL362/approach_threshold_only_E7_E61.json""",
+]
+
+# Independent IR-away crossing for edited E51: q12=(s,0,0),
+# q13=(0,80,0), s=362.8611310506459, and d eta/d K1x=1.86007.
+[[command_blocks]]
+name = "approach_threshold_only_E51"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 50,-70,90,412.8611310506459,10,90,0,0,100,0,-80,100
+      --approach-axis 0,0,0,1,0,0,0,0,0,0,0,0
+      --axis-label 'threshold-only E51; q12 and q13 hard' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL362/approach_threshold_only_E51.json""",
+]
+
+# IR-away E9 crossing: K2=(0,0,a), K3=(0,0,-a),
+# a=(500^2-173^2)/1000=220.071 and d eta/d K2z=1.78617.
+[[command_blocks]]
+name = "approach_threshold_only_E9"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 50,-70,90,10,20,30,0,0,220.071,0,0,-220.071
+      --approach-axis 0,0,0,0,0,0,0,0,1,0,0,0
+      --axis-label 'threshold-only E9; q12 and q13 hard' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL362/approach_threshold_only_E9.json""",
+]
+
+# IR-away E8 crossing with a=150.27649813325309 and d eta/d K0x=1.13662.
+[[command_blocks]]
+name = "approach_threshold_only_E8"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 150.27649813325309,0,0,30,-40,50,0,150.27649813325309,0,0,0,150.27649813325309
+      --approach-axis 1,0,0,0,0,0,0,0,0,0,0,0
+      --axis-label 'threshold-only E8; q12 and q13 hard' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL362/approach_threshold_only_E8.json""",
+]
+
+# IR-away E21 crossing with a=128.69688423353216 and d eta/d K1x=1.05297.
+[[command_blocks]]
+name = "approach_threshold_only_E21"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 0,128.69688423353216,0,128.69688423353216,0,0,0,0,128.69688423353216,128.69688423353216,128.69688423353216,0
+      --approach-axis 0,0,0,1,0,0,0,0,0,0,0,0
+      --axis-label 'threshold-only E21; q12 and q13 hard' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL362/approach_threshold_only_E21.json""",
+]
+
+[[command_blocks]]
+name = "threshold_only_approaches"
+commands = [
+  "run approach_threshold_only_E7_E61",
+  "run approach_threshold_only_E51",
+  "run approach_threshold_only_E9",
+  "run approach_threshold_only_E8",
+  "run approach_threshold_only_E21",
 ]
 
 [[command_blocks]]

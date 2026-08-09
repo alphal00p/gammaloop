@@ -278,6 +278,147 @@ commands = [
       --restart""",
 ]
 
+[[command_blocks]]
+name = "remediation_runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+# In LMB 0=(e3,e4,e7,e11), q12=K2-K3 is carried by mask 12 and q13
+# depends on all four coordinates, so mask 15 supplies the overall cross-check.
+[[command_blocks]]
+name = "remediation_uv_random_masks12_15"
+commands = [
+  "run remediation_runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 49420260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 12,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL494/remediation_uv_random_g0_lmb0_masks12_15_n5_exp6_10_seed49420260809""",
+]
+
+[[command_blocks]]
+name = "remediation_integrate_lean"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+  """set process -p epem_a_tth -i NNLO string '
+    [integrator]
+    n_start = 20
+    n_increase = 0
+    n_max = 10000000000
+    seed = 49420260809
+
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = true
+    lmb_channels = "monte_carlo"
+    lmb_channel_weight = "ose"
+
+    [stability]
+    escalate_if_exact_zero = false
+    loop_momenta_norm_escalation_factor = -1.0
+    rotation_axis = [{ type = "z" }]
+
+    [[stability.levels]]
+    precision = "Double"
+    required_precision_for_re = 1.0e-5
+    required_precision_for_im = 1.0e-5
+    escalate_for_large_weight_threshold = 1.0e99
+    '""",
+  """integrate -p epem_a_tth -i NNLO --n-cores 3
+      --workspace-path ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL494/remediation_integration_workspace
+      --renderer tabled --batch-size 10 --show-phase both
+      --show-max-weight-info --show-top-discrete-grid
+      --show-discrete-contributions-sum --write-results-for-each-iteration
+      --restart""",
+]
+
+[[command_blocks]]
+name = "remediation_integrate_lean_single_core"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+  """set process -p epem_a_tth -i NNLO string '
+    [integrator]
+    n_start = 10
+    n_increase = 0
+    n_max = 10000000000
+    seed = 49420260810
+
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = true
+    lmb_channels = "monte_carlo"
+    lmb_channel_weight = "ose"
+
+    [stability]
+    escalate_if_exact_zero = false
+    loop_momenta_norm_escalation_factor = -1.0
+    rotation_axis = [{ type = "z" }]
+
+    [[stability.levels]]
+    precision = "Double"
+    required_precision_for_re = 1.0e-5
+    required_precision_for_im = 1.0e-5
+    escalate_for_large_weight_threshold = 1.0e99
+    '""",
+  """integrate -p epem_a_tth -i NNLO --n-cores 1
+      --workspace-path ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL494/remediation_integration_workspace_single_core
+      --renderer tabled --batch-size 5 --show-phase both
+      --show-max-weight-info --show-top-discrete-grid
+      --show-discrete-contributions-sum --write-results-for-each-iteration
+      --restart""",
+]
+
+[[command_blocks]]
+name = "remediation_integrate_stable_single_core"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+  """set process -p epem_a_tth -i NNLO string '
+    [integrator]
+    n_start = 10
+    n_increase = 0
+    n_max = 10000000000
+    seed = 49420260811
+
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = true
+    lmb_channels = "monte_carlo"
+    lmb_channel_weight = "ose"
+
+    [stability]
+    escalate_if_exact_zero = false
+    loop_momenta_norm_escalation_factor = -1.0
+    rotation_axis = [{ type = "z" }]
+
+    [[stability.levels]]
+    precision = "Double"
+    required_precision_for_re = 1.0e-5
+    required_precision_for_im = 1.0e-5
+    escalate_for_large_weight_threshold = 1.0e99
+
+    [[stability.levels]]
+    precision = "Quad"
+    required_precision_for_re = 1.0e-5
+    required_precision_for_im = 1.0e-5
+    escalate_for_large_weight_threshold = -1.0
+
+    [[stability.levels]]
+    precision = "Arb"
+    required_precision_for_re = 1.0e-5
+    required_precision_for_im = 1.0e-5
+    escalate_for_large_weight_threshold = -1.0
+    '""",
+  """integrate -p epem_a_tth -i NNLO --n-cores 1
+      --workspace-path ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL494/remediation_integration_workspace_stable_single_core
+      --renderer tabled --batch-size 5 --show-phase both
+      --show-max-weight-info --show-top-discrete-grid
+      --show-discrete-contributions-sum --write-results-for-each-iteration
+      --restart""",
+]
+
 [default_runtime_settings.general]
 evaluator_method = "SingleParametric"
 enable_cache = false

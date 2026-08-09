@@ -51,6 +51,55 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "display_lmb"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis cuts --show-threshold-functions",
+]
+
+# Mandatory remediation UV audit: every visible LMB subset and orientation.
+# The fixed seed and scale range make baseline and final profiles comparable.
+[[command_blocks]]
+name = "uv_profile_baseline"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 8620260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086_baseline/uv_profiles/baseline_exp8_12_seed8620260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 8620260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/uv_profiles/final_exp8_12_seed8620260809""",
+]
+
+# In pristine generated LMB 0=(e2,e4,e6,e12), mask 8 is q12=K3,
+# mask 14 is the K1/K2/K3 sector entering q13, and mask 15 is the complete
+# four-loop scaling. Random rays replace the old incomplete exhaustive run.
+[[command_blocks]]
+name = "remediation_pristine_uv_random_masks8_14_15"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 8620260810
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 8 --subset-cardinality 1
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/trials/remediation/uv_random_g0_lmb0_mask8_n5_exp6_10_seed8620260810""",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 8620260811
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 14 --subset-cardinality 3
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/trials/remediation/uv_random_g0_lmb0_mask14_n5_exp6_10_seed8620260811""",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 8620260812
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 15 --subset-cardinality 4
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/trials/remediation/uv_random_g0_lmb0_mask15_n5_exp6_10_seed8620260812""",
+]
+
+[[command_blocks]]
 name = "runtime_approach"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
@@ -84,7 +133,7 @@ commands = [
   "run runtime_approach",
   """approach -p epem_a_tth -i NNLO
       --momentum-space --graph-id 0
-      --point 37,126,-109,130,-90,770,0,0,700,130,-90,70
+      --point 37,126,-109,105,-99,196,74,-52,137,31,-47,59
       --approach-axis 0,0,0,211,-157,193,0,0,0,0,0,0
       --axis-label 'e13 soft (q13=K1-K2-K3)' --parameter-name lambda
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
@@ -98,7 +147,7 @@ commands = [
   "run runtime_approach",
   """approach -p epem_a_tth -i NNLO
       --momentum-space --graph-id 0
-      --point 37,126,-109,0,0,700,0,0,700,0,0,0
+      --point 37,126,-109,50,-35,80,50,-35,80,0,0,0
       --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
       --axis-label 'independent e12 e13 double soft' --parameter-name lambda
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
@@ -143,6 +192,74 @@ commands = [
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/approach_correlated_soft_e12_E31_E32_E36_E42.json""",
+]
+
+# Threshold-only checks use exact E-surface roots. E31/E32/E42 use common
+# radial scaling; E36 uses a generic one-coordinate crossing. Both gluon norms
+# stay above 140 GeV, so every path remains IR-away.
+[[command_blocks]]
+name = "approach_threshold_only_E31"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,61.433943742509,-153.58485935627,215.01880309878,-184.30183122753,92.150915613764,30.716971871255,122.86788748502,61.433943742509,-92.150915613764
+      --approach-axis 0,0,0,61.433943742509,-153.58485935627,215.01880309878,-184.30183122753,92.150915613764,30.716971871255,122.86788748502,61.433943742509,-92.150915613764
+      --axis-label 'threshold-only E31 with hard q12 q13' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/approach_threshold_only_E31.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E32"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,206.72175284406,37.585773244374,-56.378659866561,-75.171546488748,169.13597959968,18.792886622187,56.378659866561,-37.585773244374,131.55020635531
+      --approach-axis 0,0,0,206.72175284406,37.585773244374,-56.378659866561,-75.171546488748,169.13597959968,18.792886622187,56.378659866561,-37.585773244374,131.55020635531
+      --axis-label 'threshold-only E32 with hard q12 q13' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/approach_threshold_only_E32.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E36"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,168.64647067053642,47,-163,-137,83,56,74,-119,91
+      --approach-axis 0,0,0,1,0,0,0,0,0,0,0,0
+      --axis-label 'threshold-only E36 at a generic hard point' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/approach_threshold_only_E36.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E42"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,197.01613090123,35.821114709314,-53.731672063971,-71.642229418628,161.19501619191,17.910557354657,53.731672063971,-35.821114709314,125.3739014826
+      --approach-axis 0,0,0,197.01613090123,35.821114709314,-53.731672063971,-71.642229418628,161.19501619191,17.910557354657,53.731672063971,-35.821114709314,125.3739014826
+      --axis-label 'threshold-only E42 with hard q12 q13' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/approach_threshold_only_E42.json""",
+]
+
+[[command_blocks]]
+name = "threshold_only_GL086"
+commands = [
+  "run approach_threshold_only_E31",
+  "run approach_threshold_only_E32",
+  "run approach_threshold_only_E36",
+  "run approach_threshold_only_E42",
 ]
 
 # E33 is the four-top E_cm threshold; keep q13 hard while q12=0.
@@ -270,7 +387,7 @@ commands = [
   "run runtime_approach_threshold_off",
   """approach -p epem_a_tth -i NNLO
       --momentum-space --graph-id 0
-      --point 37,126,-109,130,-90,770,0,0,700,130,-90,70
+      --point 37,126,-109,105,-99,196,74,-52,137,31,-47,59
       --approach-axis 0,0,0,211,-157,193,0,0,0,0,0,0
       --axis-label 'e13 soft hard complement, threshold-off diagnostic' --parameter-name lambda
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
@@ -284,7 +401,7 @@ commands = [
   "run runtime_approach_threshold_off",
   """approach -p epem_a_tth -i NNLO
       --momentum-space --graph-id 0
-      --point 37,126,-109,0,0,700,0,0,700,0,0,0
+      --point 37,126,-109,50,-35,80,50,-35,80,0,0,0
       --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
       --axis-label 'independent double soft hard complement, threshold-off diagnostic' --parameter-name lambda
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2

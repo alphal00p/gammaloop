@@ -149,6 +149,60 @@ commands = [
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL148/approaches/collinear_e13_e14.json""",
 ]
 
+# Reduced-range Arb adjudicators retain the same generic midpoint and axis while
+# moving the fit window deeper into the asymptotic region.
+[[command_blocks]]
+name = "approach_double_soft_arb_reduced"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-91,64,83,0,0,0
+      --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'independent e12 e14 double soft (e13 also soft), reduced Arb' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-8 --max-abs-t 1e-4
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL148/approaches/double_soft_arb_reduced.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e12_e13_arb_reduced"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-157,152,-181,30,-40,120
+      --approach-axis 0,0,0,0,0,0,-31,53,0,47,29,0
+      --axis-label 'hard e12 e13 collinear (e14 opposite), reduced Arb' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-8 --max-abs-t 1e-4
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL148/approaches/collinear_e12_e13_arb_reduced.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e12_e14_arb_reduced"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-61,24,203,30,-40,120
+      --approach-axis 0,0,0,0,0,0,-31,53,0,47,29,0
+      --axis-label 'hard e12 e14 collinear (e13 opposite), reduced Arb' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-8 --max-abs-t 1e-4
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL148/approaches/collinear_e12_e14_arb_reduced.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e13_e14_arb_reduced"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-61,24,203,-66,88,-264
+      --approach-axis 0,0,0,0,0,0,-31,53,0,47,29,0
+      --axis-label 'hard e13 e14 collinear (e12 opposite), reduced Arb' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-8 --max-abs-t 1e-4
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL148/approaches/collinear_e13_e14_arb_reduced.json""",
+]
+
 # At e12 soft, E33/E21 and E40/E29 coalesce.  Setting |K2| so that
 # 2*sqrt(|K2|^2+MT^2)=1000 puts all four surfaces on shell.
 [[command_blocks]]
@@ -230,6 +284,15 @@ commands = [
   "run approach_collinear_e12_e13",
   "run approach_collinear_e12_e14",
   "run approach_collinear_e13_e14",
+]
+
+[[command_blocks]]
+name = "recheck_inconclusive_ir_arb_reduced"
+commands = [
+  "run approach_double_soft_arb_reduced",
+  "run approach_collinear_e12_e13_arb_reduced",
+  "run approach_collinear_e12_e14_arb_reduced",
+  "run approach_collinear_e13_e14_arb_reduced",
 ]
 
 [[command_blocks]]

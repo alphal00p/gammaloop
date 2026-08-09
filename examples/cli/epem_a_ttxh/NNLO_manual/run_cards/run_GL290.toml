@@ -51,6 +51,12 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "display_lmbs"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis",
+]
+
+[[command_blocks]]
 name = "runtime_approach"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
@@ -222,6 +228,49 @@ commands = [
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/approach_correlated_soft_e13_bridge_arb.json""",
 ]
 
+# Reduced identical geometry for the decisive precision and subtraction gate.
+[[command_blocks]]
+name = "approach_correlated_soft_e13_bridge_adaptive_f64"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,0,0,0,0,0,0,0,0,395.40507859734
+      --approach-axis 0,0,0,0,0,47,13,17,-11,0,0,0
+      --axis-label 'e13 soft bridge, adaptive f64' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-4
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/approach_correlated_soft_e13_bridge_adaptive_f64.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_soft_e13_bridge_adaptive_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,0,0,0,0,0,0,0,0,395.40507859734
+      --approach-axis 0,0,0,0,0,47,13,17,-11,0,0,0
+      --axis-label 'e13 soft bridge, adaptive Arb' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-4
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/approach_correlated_soft_e13_bridge_adaptive_arb.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_soft_e13_bridge_threshold_off_adaptive_arb"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,0,0,0,0,0,0,0,0,395.40507859734
+      --approach-axis 0,0,0,0,0,47,13,17,-11,0,0,0
+      --axis-label 'e13 soft bridge, threshold-off adaptive Arb' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-4
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/approach_correlated_soft_e13_bridge_threshold_off_adaptive_arb.json""",
+]
+
 # Three nonzero collinear gluons, with e12 and e13 on the same ray.
 [[command_blocks]]
 name = "approach_collinear_e12_e13"
@@ -285,6 +334,145 @@ commands = [
   "run approach_collinear_e12_e13",
   "run approach_collinear_e12_e14",
   "run approach_collinear_e13_e14",
+]
+
+# IR-away checks for every threshold projected on cut [2,4,9]. The midpoint
+# target eta vanishes while all three gluon norms and every other distinct
+# active eta stay nonzero.
+[[command_blocks]]
+name = "approach_threshold_E32_cut7_shared5"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,109,202,409.1283417217634,-295,-146,-319,-313,-347,350
+      --approach-axis 0,0,0,0,0,1,0,0,0,0,0,0
+      --axis-label 'IR-away cut7 E32 eta(5,7)' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/approach_threshold_E32_cut7_shared5.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_E48_cut7_shared5"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,-60,-35,109,142,132,-235.8414416687919,-307,315,-339
+      --approach-axis 0,0,0,0,0,0,0,0,1,0,0,0
+      --axis-label 'IR-away cut7 E48 eta(5,11,13)' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/approach_threshold_E48_cut7_shared5.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_E64_cut7_shared5"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,80,-50,30,-40,70,-20,25,-35,404.83128147559614
+      --approach-axis 0,0,0,0,0,0,0,0,0,0,0,1
+      --axis-label 'IR-away cut7 E64 eta(5,9,14)' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/approach_threshold_E64_cut7_shared5.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_E41_cut7_shared5"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,80,-50,30,-40,70,-20,25,-35,294.19491423256966
+      --approach-axis 0,0,0,0,0,0,0,0,0,0,0,1
+      --axis-label 'IR-away cut7 E41 eta(5,9,12,13)' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/approach_threshold_E41_cut7_shared5.json""",
+]
+
+[[command_blocks]]
+name = "threshold_only_cut7_shared5_approaches"
+commands = [
+  "run approach_threshold_E32_cut7_shared5",
+  "run approach_threshold_E48_cut7_shared5",
+  "run approach_threshold_E64_cut7_shared5",
+  "run approach_threshold_E41_cut7_shared5",
+]
+
+# In LMB 0=(4,5,11,12), q13=K2-K1. Split the two single-coordinate
+# limits and their joint scaling into independent five-point batches so every
+# completed batch serializes before broader UV work is considered.
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_g0_lmb0_mask2_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 29020260809
+      --uv-ray-directions 37,126,-109,3,5,-7,-11,13,17,47,29,-31
+      --uv-ray-norms 1000,1100,1300,1700
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 2 --subset-cardinality 1
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_g0_lmb0_mask2_per_orientation_n5_exp6_10_seed29020260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_g0_lmb0_mask4_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 29020260809
+      --uv-ray-directions 37,126,-109,3,5,-7,-11,13,17,47,29,-31
+      --uv-ray-norms 1000,1100,1300,1700
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 4 --subset-cardinality 1
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_g0_lmb0_mask4_per_orientation_n5_exp6_10_seed29020260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_g0_lmb0_mask6_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 29020260809
+      --uv-ray-directions 37,126,-109,3,5,-7,-11,13,17,47,29,-31
+      --uv-ray-norms 1000,1100,1300,1700
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 6 --subset-cardinality 2
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_g0_lmb0_mask6_per_orientation_n5_exp6_10_seed29020260809""",
+]
+
+# Lower scales distinguish the four steep cancellation-limited mask-2 fits
+# from a genuine UV slope without changing the selected fixed ray.
+[[command_blocks]]
+name = "uv_profile_retry_g0_lmb0_mask2_n5_exp4_8"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 4 --max-scaling 8 --per-orientation --seed 29020260809
+      --uv-ray-directions 37,126,-109,3,5,-7,-11,13,17,47,29,-31
+      --uv-ray-norms 1000,1100,1300,1700
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 2 --subset-cardinality 1
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/retry_g0_lmb0_mask2_per_orientation_n5_exp4_8_seed29020260809""",
+]
+
+# Certification profile: omit fixed-ray arguments so the seeded random ray is
+# independent of the three deterministic diagnostic screens above.
+[[command_blocks]]
+name = "uv_profile_final_seeded_random_g0_lmb0_mask6_n5_exp4_8"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 4 --max-scaling 8 --per-orientation --seed 29020260810
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 6 --subset-cardinality 2
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_seeded_random_g0_lmb0_mask6_per_orientation_n5_exp4_8_seed29020260810""",
 ]
 
 [[command_blocks]]

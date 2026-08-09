@@ -3,6 +3,9 @@ digraph GL076{
     overall_factor = "NumeratorDependentGrouping(76,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))+NumeratorDependentGrouping(77,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))";
     overall_factor_evaluated = "-4";
     projector = "u(1,spenso::bis(4,hedge(1)))*ubar(1,spenso::bis(4,hedge(29)))*v(0,spenso::bis(4,hedge(28)))*vbar(0,spenso::bis(4,hedge(0)))";
+    // Projected one-loop candidates cure the q12-soft family, but either
+    // regress another IR family, fail an IR-away threshold root, or require
+    // incompatible parents. Retain the default threshold subtraction.
 	0 [int_id="V_141"];
 	1 [int_id="V_141"];
 	2 [int_id="V_134"];

@@ -51,6 +51,44 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "display_lmb"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis cuts --show-threshold-functions",
+]
+
+# Mandatory remediation UV audit: every visible LMB subset and orientation.
+# The fixed seed and scale range make the JSON directly reproducible.
+[[command_blocks]]
+name = "uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 55420260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL554/uv_profiles/base_exp8_12_seed55420260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_retry"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 55420260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL554/uv_profiles/base_retry_exp8_12_seed55420260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12
+      --per-orientation --use_f128 --seed 55420260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL554/uv_profiles/final_f128_exp8_12_seed55420260809""",
+]
+
+[[command_blocks]]
 name = "runtime_approach"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
@@ -227,6 +265,98 @@ commands = [
   "run approach_correlated_soft_e12_bridge",
   "run approach_correlated_soft_e13_bridge",
   "run approach_correlated_soft_e14_bridge",
+]
+
+# IR-away checks of every edited threshold surface. E38/E50 and E66/E17 are
+# geometrically identical raised residues, but are kept as separate reproducible
+# commands because their counterterms occur in different cuts.
+[[command_blocks]]
+name = "approach_threshold_only_E5"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 39.8528492757552,-60.4220618051772,106.702789996377,-59,101,-73,163.268124452287,52.708607106644,-140.127760356688,86.1335774669548,-114.41624469491,68.1355165037105
+      --approach-axis 0,0,0,0,0,0,-73,61,37,0,0,0
+      --axis-label 'edited E5 threshold, IR away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL554/approach_threshold_only_E5.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E60"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 43.5934739672985,-66.0933314988075,116.718010944703,-59,101,-73,178.592619156352,57.6558849244916,-153.280279433405,94.2181534131936,-125.155457519018,74.5307780731233
+      --approach-axis 0,0,0,0,0,0,-73,61,37,0,0,0
+      --axis-label 'edited E60 threshold, IR away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL554/approach_threshold_only_E60.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E38"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 55.596802973981,-84.2919270895842,148.855956349691,-59,101,-73,227.7675476676,73.531255546233,-195.485533037546,120.160832234088,-159.616627893042,95.0525986329353
+      --approach-axis 0,0,0,0,0,0,-73,61,37,0,0,0
+      --axis-label 'edited E38 threshold, IR away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL554/approach_threshold_only_E38.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E50"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 55.596802973981,-84.2919270895842,148.855956349691,-59,101,-73,227.7675476676,73.531255546233,-195.485533037546,120.160832234088,-159.616627893042,95.0525986329353
+      --approach-axis 0,0,0,0,0,0,-73,61,37,0,0,0
+      --axis-label 'edited E50 raised-residue threshold, IR away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL554/approach_threshold_only_E50.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E66"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 28.8600844111319,-43.7556118491355,77.2705485846435,-59,101,-73,118.233249039153,38.1697890598841,-101.475780671399,62.3750211466399,-82.8563713738948,49.3414346383868
+      --approach-axis 0,0,0,0,0,0,-73,61,37,0,0,0
+      --axis-label 'edited E66 threshold, IR away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL554/approach_threshold_only_E66.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E17"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 28.8600844111319,-43.7556118491355,77.2705485846435,-59,101,-73,118.233249039153,38.1697890598841,-101.475780671399,62.3750211466399,-82.8563713738948,49.3414346383868
+      --approach-axis 0,0,0,0,0,0,-73,61,37,0,0,0
+      --axis-label 'edited E17 raised-residue threshold, IR away' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL554/approach_threshold_only_E17.json""",
+]
+
+[[command_blocks]]
+name = "threshold_only_approaches"
+commands = [
+  "run approach_threshold_only_E5",
+  "run approach_threshold_only_E60",
+  "run approach_threshold_only_E38",
+  "run approach_threshold_only_E50",
+  "run approach_threshold_only_E66",
+  "run approach_threshold_only_E17",
 ]
 
 [[command_blocks]]

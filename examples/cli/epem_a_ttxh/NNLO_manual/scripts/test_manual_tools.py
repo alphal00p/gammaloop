@@ -119,6 +119,14 @@ class ApproachFitTests(unittest.TestCase):
         }
         self.assertTrue(analyze_approach.has_active_threshold_counterterm(document, 0))
 
+    def test_threshold_activity_uses_current_additional_contribution_schema(self):
+        document = approach_document(0.0)
+        document["points"][0]["evaluation"]["additional_contribution_sums"] = {
+            "original": {"re": 1.0, "im": 0.0},
+            "threshold_counterterm_0": {"re": 0.0, "im": 2.0},
+        }
+        self.assertTrue(analyze_approach.has_active_threshold_counterterm(document, 0))
+
 
 class CollectionTests(unittest.TestCase):
     def test_summary_contains_every_graph_and_live_progress(self):

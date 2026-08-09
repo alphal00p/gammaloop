@@ -51,6 +51,12 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "display_lmb"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
 name = "runtime_events"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
@@ -270,6 +276,55 @@ commands = [
       --renderer tabled --batch-size 10 --show-phase both
       --show-max-weight-info --show-top-discrete-grid
       --show-discrete-contributions-sum --write-results-for-each-iteration --restart""",
+]
+
+# Mandatory remediation UV audit: every visible LMB subset and orientation.
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "uv_profile_final"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 63820260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/uv_profiles/final_exp8_12_seed63820260809""",
+]
+
+# Adaptive precision/range fallbacks, used only when the baseline windows
+# lose coverage, fit quality, or slope stability.
+[[command_blocks]]
+name = "uv_profile_final_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12 --use_f128
+      --per-orientation --seed 63820260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/uv_profiles/final_f128_exp8_12_seed63820260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_low_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 6 --max-scaling 10 --use_f128
+      --per-orientation --seed 63820260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/uv_profiles/final_f128_exp6_10_seed63820260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_high_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 10 --max-scaling 14 --use_f128
+      --per-orientation --seed 63820260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL638/uv_profiles/final_f128_exp10_14_seed63820260809""",
 ]
 
 [default_runtime_settings.kinematics]

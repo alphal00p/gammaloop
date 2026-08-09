@@ -51,9 +51,27 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "display_lmb"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
 name = "runtime_approach"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "runtime_approach_threshold_off"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=true",
+]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
 ]
 
 # q12=K3.
@@ -355,6 +373,459 @@ name = "outer_and_double_correlated_approaches"
 commands = [
   "run approach_correlated_soft_e14_E22_E45",
   "run approach_correlated_double_soft_all_thresholds",
+]
+
+# Remediation paths use 16 points per signed branch.  Their midpoints keep
+# every non-target massive momentum and threshold family nondegenerate.
+[[command_blocks]]
+name = "remediation_collinear_e12_e13_f64"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=37,126,-109,-91,64,83,-157,152,-181,30,-40,120
+      --approach-axis=0,0,0,0,0,0,-47,-29,0,47,29,0
+      --axis-label 'nondegenerate hard e12/e13 collinear f64 causal path' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/collinear_e12_e13_f64.json""",
+]
+
+[[command_blocks]]
+name = "remediation_collinear_e12_e13_f64_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=37,126,-109,-91,64,83,-157,152,-181,30,-40,120
+      --approach-axis=0,0,0,0,0,0,-47,-29,0,47,29,0
+      --axis-label 'nondegenerate hard e12/e13 collinear f64 threshold-off path' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/collinear_e12_e13_f64_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "remediation_collinear_e12_e13_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-157,152,-181,30,-40,120
+      --approach-axis=0,0,0,0,0,0,-47,-29,0,47,29,0
+      --axis-label 'nondegenerate hard e12/e13 collinear Arb causal path' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/collinear_e12_e13_arb.json""",
+]
+
+[[command_blocks]]
+name = "remediation_collinear_e12_e13_arb_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-157,152,-181,30,-40,120
+      --approach-axis=0,0,0,0,0,0,-47,-29,0,47,29,0
+      --axis-label 'nondegenerate hard e12/e13 collinear Arb threshold-off path' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/collinear_e12_e13_arb_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "remediation_collinear_e12_e14_f64"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=37,126,-109,-91,64,83,-55,16,227,30,-40,120
+      --approach-axis=0,0,0,0,0,0,0,0,0,47,29,0
+      --axis-label 'nondegenerate hard e12/e14 collinear f64 causal path' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/collinear_e12_e14_f64.json""",
+]
+
+[[command_blocks]]
+name = "remediation_collinear_e12_e14_f64_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=37,126,-109,-91,64,83,-55,16,227,30,-40,120
+      --approach-axis=0,0,0,0,0,0,0,0,0,47,29,0
+      --axis-label 'nondegenerate hard e12/e14 collinear f64 threshold-off path' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/collinear_e12_e14_f64_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "remediation_collinear_e12_e14_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-55,16,227,30,-40,120
+      --approach-axis=0,0,0,0,0,0,0,0,0,47,29,0
+      --axis-label 'nondegenerate hard e12/e14 collinear Arb causal path' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/collinear_e12_e14_arb.json""",
+]
+
+[[command_blocks]]
+name = "remediation_collinear_e12_e14_arb_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-55,16,227,30,-40,120
+      --approach-axis=0,0,0,0,0,0,0,0,0,47,29,0
+      --axis-label 'nondegenerate hard e12/e14 collinear Arb threshold-off path' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/collinear_e12_e14_arb_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "remediation_collinear_e13_e14_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-91,64,163,0,0,-200
+      --approach-axis=0,0,0,0,0,0,47,29,0,0,0,0
+      --axis-label 'hard e13/e14 collinear Arb adjudicator' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/collinear_e13_e14_arb.json""",
+]
+
+# Reduced exact repeats retain one full nearest-eight fit on each signed branch
+# while keeping the final adjudication inside a single guarded slot lease.
+[[command_blocks]]
+name = "remediation_collinear_e12_e14_arb8"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-55,16,227,30,-40,120
+      --approach-axis=0,0,0,0,0,0,0,0,0,47,29,0
+      --axis-label 'nondegenerate hard e12/e14 collinear reduced Arb causal path' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/collinear_e12_e14_arb8.json""",
+]
+
+[[command_blocks]]
+name = "remediation_collinear_e12_e14_arb8_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-55,16,227,30,-40,120
+      --approach-axis=0,0,0,0,0,0,0,0,0,47,29,0
+      --axis-label 'nondegenerate hard e12/e14 collinear reduced Arb threshold-off path' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/collinear_e12_e14_arb8_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "remediation_collinear_e13_e14_arb8"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-91,64,163,0,0,-200
+      --approach-axis=0,0,0,0,0,0,47,29,0,0,0,0
+      --axis-label 'hard e13/e14 collinear reduced Arb adjudicator' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/collinear_e13_e14_arb8.json""",
+]
+
+# At q12=0, isolate the E43/E39/E27/E45/E51/E22 bridge family from
+# the E40/E28 two-top root and the unrelated E54 surface.
+[[command_blocks]]
+name = "remediation_soft_e12_isolated_bridges_f64"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=87.30312770628831,-129.11329621695927,-85.10591404019297,-219.41553991704276,127.08878771140036,-96.899697586943,-358.38254878458554,-65.59121861664246,-157.4220107669131,0,0,0
+      --approach-axis=0,0,0,0,0,0,3,5,-7,211,-157,193
+      --axis-label 'q12 soft with isolated complete bridge family' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/soft_e12_isolated_bridges_f64.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e12_isolated_bridges_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=87.30312770628831,-129.11329621695927,-85.10591404019297,-219.41553991704276,127.08878771140036,-96.899697586943,-358.38254878458554,-65.59121861664246,-157.4220107669131,0,0,0
+      --approach-axis=0,0,0,0,0,0,3,5,-7,211,-157,193
+      --axis-label 'q12 soft isolated bridges with threshold subtraction off' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/soft_e12_isolated_bridges_threshold_off.json""",
+]
+
+# Reduced Arb repeats distinguish cancellation loss from a causal threshold-CT
+# defect on the only isolated family whose f64 on/off totals differ visibly.
+[[command_blocks]]
+name = "remediation_soft_e12_isolated_bridges_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=87.30312770628831,-129.11329621695927,-85.10591404019297,-219.41553991704276,127.08878771140036,-96.899697586943,-358.38254878458554,-65.59121861664246,-157.4220107669131,0,0,0
+      --approach-axis=0,0,0,0,0,0,3,5,-7,211,-157,193
+      --axis-label 'q12 soft isolated complete bridge family reduced Arb' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/soft_e12_isolated_bridges_arb.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e12_isolated_bridges_arb_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=87.30312770628831,-129.11329621695927,-85.10591404019297,-219.41553991704276,127.08878771140036,-96.899697586943,-358.38254878458554,-65.59121861664246,-157.4220107669131,0,0,0
+      --approach-axis=0,0,0,0,0,0,3,5,-7,211,-157,193
+      --axis-label 'q12 soft isolated bridges reduced Arb threshold-off' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/soft_e12_isolated_bridges_arb_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e12_isolated_bridges_arb_pair"
+commands = [
+  "run remediation_soft_e12_isolated_bridges_arb",
+  "run remediation_soft_e12_isolated_bridges_arb_threshold_off",
+]
+
+# The other q12 family is the isolated E28/E40 two-top root.  Its historical
+# f64 sum was cancellation-limited, so use the same reduced Arb causal pair.
+[[command_blocks]]
+name = "remediation_soft_e12_two_top_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,0,0,469.11725613113,0,0,0
+      --approach-axis=0,0,0,0,0,0,0,0,47,211,-157,193
+      --axis-label 'q12 soft isolated E28/E40 two-top reduced Arb' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/soft_e12_two_top_arb.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e12_two_top_arb_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,0,0,469.11725613113,0,0,0
+      --approach-axis=0,0,0,0,0,0,0,0,47,211,-157,193
+      --axis-label 'q12 soft isolated E28/E40 two-top reduced Arb threshold-off' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/soft_e12_two_top_arb_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e12_two_top_arb_pair"
+commands = [
+  "run remediation_soft_e12_two_top_arb",
+  "run remediation_soft_e12_two_top_arb_threshold_off",
+]
+
+# At q13=0, isolate E54/E40/E27/E45/E51/E22 at a generic nonzero
+# K1=K2+K3 solution; the two-top and E39 roots remain away.
+[[command_blocks]]
+name = "remediation_soft_e13_isolated_bridges_f64"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=-194.5513309645238,230.38914775933728,113.33400603508301,-413.83565972137444,-80.96662393516857,-12.315871389057861,-379.01086802337534,-157.77435577777703,35.821244485992736,-34.82479169799913,76.80773184260846,-48.1371158750506
+      --approach-axis=0,0,0,0,0,0,211,-157,193,0,0,0
+      --axis-label 'q13 soft with isolated complete bridge family' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/soft_e13_isolated_bridges_f64.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e13_isolated_bridges_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=-194.5513309645238,230.38914775933728,113.33400603508301,-413.83565972137444,-80.96662393516857,-12.315871389057861,-379.01086802337534,-157.77435577777703,35.821244485992736,-34.82479169799913,76.80773184260846,-48.1371158750506
+      --approach-axis=0,0,0,0,0,0,211,-157,193,0,0,0
+      --axis-label 'q13 soft isolated bridges with threshold subtraction off' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/soft_e13_isolated_bridges_threshold_off.json""",
+]
+
+# At q14=0, the E54/E40/E43/E39 bridge and E22/E45 regions have
+# different roots.  Test them separately at generic nonzero momenta.
+[[command_blocks]]
+name = "remediation_soft_e14_isolated_main_f64"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=-188.74565029993056,-66.91744562745322,99.49195732584451,-337.9089677921046,-91.19026202798526,103.5034753015388,-337.9089677921046,-91.19026202798526,103.5034753015388,137.41942506057495,-146.6858407823412,-129.62613700124336
+      --approach-axis=0,0,0,0,0,0,211,-157,193,0,0,0
+      --axis-label 'q14 soft with isolated E54/E40/E43/E39 bridge family' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/soft_e14_isolated_main_f64.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e14_isolated_main_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=-188.74565029993056,-66.91744562745322,99.49195732584451,-337.9089677921046,-91.19026202798526,103.5034753015388,-337.9089677921046,-91.19026202798526,103.5034753015388,137.41942506057495,-146.6858407823412,-129.62613700124336
+      --approach-axis=0,0,0,0,0,0,211,-157,193,0,0,0
+      --axis-label 'q14 soft isolated main bridge with threshold subtraction off' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/soft_e14_isolated_main_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e14_isolated_E22_E45_f64"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=37,126,-109,100,70,-50,100,70,-50,107.36340434824416,-162.7767743344347,204.33680182407758
+      --approach-axis=0,0,0,0,0,0,47,29,-31,3,5,-7
+      --axis-label 'q14 soft with isolated E22/E45 threshold family' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/soft_e14_isolated_E22_E45_f64.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e14_isolated_E22_E45_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=37,126,-109,100,70,-50,100,70,-50,107.36340434824416,-162.7767743344347,204.33680182407758
+      --approach-axis=0,0,0,0,0,0,47,29,-31,3,5,-7
+      --axis-label 'q14 soft isolated E22/E45 with threshold subtraction off' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/soft_e14_isolated_E22_E45_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e12_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,74,-52,137,0,0,0
+      --approach-axis=0,0,0,0,0,0,0,0,0,211,-157,193
+      --axis-label 'generic q12 soft Arb adjudicator' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/soft_e12_arb.json""",
+]
+
+[[command_blocks]]
+name = "remediation_double_soft_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,178.31982462884153,-270.3558631469533,339.38289203553717,178.31982462884153,-270.3558631469533,339.38289203553717,0,0,0
+      --approach-axis=0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'generic all-gluon double soft all-threshold Arb path' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/double_soft_arb.json""",
+]
+
+# The seeded random ray is the certification profile.  q13 depends on the
+# exact K1/K2/K3 subset (mask 14) in LMB 0=(2,4,7,12).
+[[command_blocks]]
+name = "remediation_uv_random_g0_lmb0_mask14_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 43820260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 14 --subset-cardinality 3
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL438/trials/remediation/uv_random_g0_lmb0_mask14_n5_exp6_10_seed43820260809""",
+]
+
+# Aggregate blocks retain one evaluator load while keeping every paired output
+# separate for causal threshold-on/off and Arb comparisons.
+[[command_blocks]]
+name = "remediation_collinear_e12_e14_all"
+commands = [
+  "run remediation_collinear_e12_e14_f64",
+  "run remediation_collinear_e12_e14_f64_threshold_off",
+  "run remediation_collinear_e12_e14_arb",
+  "run remediation_collinear_e12_e14_arb_threshold_off",
+]
+
+[[command_blocks]]
+name = "remediation_collinear_e12_e14_f64_pair"
+commands = [
+  "run remediation_collinear_e12_e14_f64",
+  "run remediation_collinear_e12_e14_f64_threshold_off",
+]
+
+[[command_blocks]]
+name = "remediation_collinear_e12_e14_arb_pair"
+commands = [
+  "run remediation_collinear_e12_e14_arb",
+  "run remediation_collinear_e12_e14_arb_threshold_off",
+]
+
+[[command_blocks]]
+name = "remediation_isolated_surface_pairs"
+commands = [
+  "run remediation_soft_e12_isolated_bridges_f64",
+  "run remediation_soft_e12_isolated_bridges_threshold_off",
+  "run remediation_soft_e13_isolated_bridges_f64",
+  "run remediation_soft_e13_isolated_bridges_threshold_off",
+  "run remediation_soft_e14_isolated_main_f64",
+  "run remediation_soft_e14_isolated_main_threshold_off",
+  "run remediation_soft_e14_isolated_E22_E45_f64",
+  "run remediation_soft_e14_isolated_E22_E45_threshold_off",
+]
+
+[[command_blocks]]
+name = "remediation_remaining_isolated_surface_pairs"
+commands = [
+  "run remediation_soft_e13_isolated_bridges_threshold_off",
+  "run remediation_soft_e14_isolated_main_f64",
+  "run remediation_soft_e14_isolated_main_threshold_off",
+  "run remediation_soft_e14_isolated_E22_E45_f64",
+  "run remediation_soft_e14_isolated_E22_E45_threshold_off",
+]
+
+[[command_blocks]]
+name = "remediation_soft_arb_adjudicators"
+commands = [
+  "run remediation_soft_e12_arb",
+  "run remediation_double_soft_arb",
+]
+
+[[command_blocks]]
+name = "remediation_final_arb_adjudicators"
+commands = [
+  "run remediation_soft_e12_arb",
+  "run remediation_soft_e12_two_top_arb",
+  "run remediation_soft_e12_two_top_arb_threshold_off",
+  "run remediation_double_soft_arb",
+  "run remediation_collinear_e12_e14_arb",
+  "run remediation_collinear_e12_e14_arb_threshold_off",
+  "run remediation_collinear_e13_e14_arb",
+]
+
+[[command_blocks]]
+name = "remediation_remaining_collinear_arb8"
+commands = [
+  "run remediation_collinear_e12_e14_arb8",
+  "run remediation_collinear_e12_e14_arb8_threshold_off",
+  "run remediation_collinear_e13_e14_arb8",
 ]
 
 [default_runtime_settings.general]

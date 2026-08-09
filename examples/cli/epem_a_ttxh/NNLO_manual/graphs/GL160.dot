@@ -3,6 +3,32 @@ digraph GL160{
     overall_factor = "NumeratorDependentGrouping(160,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))+NumeratorDependentGrouping(161,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))";
     overall_factor_evaluated = "-4";
     projector = "u(1,spenso::bis(4,hedge(1)))*ubar(1,spenso::bis(4,hedge(29)))*v(0,spenso::bis(4,hedge(28)))*vbar(0,spenso::bis(4,hedge(0)))";
+    // On cut (2,3,6,14), E27=(9,10) and E19=(6,9,12) meet the q14-soft
+    // cancellation through the same K3 motion. Project both counterterms onto
+    // edge 9 in the original topology-valid parent basis (2,4,6,9), thereby
+    // retaining threshold subtraction while excluding the q14 soft coordinate.
+    threshold_counterterms = "
+schema_version = 1
+
+[[cuts]]
+edges = [2, 3, 6, 14]
+
+  [[cuts.thresholds]]
+  edges = [9, 10]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_cut1_1l\"
+    subspace = [9]
+    parent_lmb = [2, 4, 6, 9]
+
+  [[cuts.thresholds]]
+  edges = [6, 9, 12]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_cut1_1l\"
+    subspace = [9]
+    parent_lmb = [2, 4, 6, 9]
+";
 
 	0 [int_id="V_141"];
 	1 [int_id="V_141"];
