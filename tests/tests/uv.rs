@@ -1073,6 +1073,20 @@ fn run_single_integrated_uv_case(case: &IntegratedUvCase<'_>) {
 }
 
 #[test]
+fn epem_a_ddx_nlo_raised_cff_generation() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("uv/epem_a_ddx_xs_nlo.toml".into()),
+        get_tests_workspace_path().join("epem_a_ddx_nlo_raised_cff_generation"),
+        None,
+        true,
+    )?;
+    cli.cli_settings.global.generation.orientation_pattern = Default::default();
+    cli.run_command("run generate")?;
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
 fn scalar_spectacles_integrated_uv_factorizes_over_bridge() -> Result<()> {
     let mut cli = get_test_cli(
         Some("uv/scalar_spectacles_self_energy.toml".into()),

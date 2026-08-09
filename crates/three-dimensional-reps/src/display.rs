@@ -27,7 +27,7 @@ pub struct NumeratorDisplay<'a> {
 pub fn render_expression_summary(
     expression: &ThreeDExpression<OrientationID>,
     graph: &GraphInfo,
-    energy_degree_bounds: &[(usize, usize)],
+    energy_degree_bounds: Option<&[(usize, usize)]>,
     numerator: NumeratorDisplay<'_>,
     sampling_scale: NumeratorSamplingScaleMode,
     options: &DisplayOptions,
@@ -58,7 +58,7 @@ pub fn render_expression_summary(
 fn summary_table(
     expression: &ThreeDExpression<OrientationID>,
     graph: &GraphInfo,
-    energy_degree_bounds: &[(usize, usize)],
+    energy_degree_bounds: Option<&[(usize, usize)]>,
     numerator: NumeratorDisplay<'_>,
     sampling_scale: NumeratorSamplingScaleMode,
     use_color: bool,
@@ -84,6 +84,18 @@ fn summary_table(
     table.push_record(vec![
         "linear surfaces".to_string(),
         expression.surfaces.linear_surface_cache.len().to_string(),
+    ]);
+    table.push_record(vec![
+        "residual 4D denominators".to_string(),
+        if expression.residual_denominators.is_empty() {
+            "-".to_string()
+        } else {
+            expression
+                .residual_denominators
+                .iter()
+                .map(|denominator| format!("e{}^{}", denominator.edge_id.0, denominator.power))
+                .join(" ")
+        },
     ]);
     table.push_record(vec![
         "orientations".to_string(),
@@ -284,6 +296,19 @@ fn orientation_details(
 
     let mut sections = Vec::new();
     sections.push(title("Details", use_color));
+    sections.push(format!(
+        "{} {}",
+        c("Residual 4D denominators:", Color::Blue, use_color),
+        if expression.residual_denominators.is_empty() {
+            "-".to_string()
+        } else {
+            expression
+                .residual_denominators
+                .iter()
+                .map(|denominator| format!("e{}^{}", denominator.edge_id.0, denominator.power))
+                .join(" ")
+        }
+    ));
     for entry in matching {
         sections.push(format!(
             "{} {}:{}",
@@ -466,11 +491,11 @@ fn sampling_scale_label(mode: NumeratorSamplingScaleMode) -> &'static str {
     }
 }
 
-fn format_energy_degree_bounds(bounds: &[(usize, usize)], use_color: bool) -> String {
-    if bounds.is_empty() {
-        "-".to_string()
-    } else {
-        bounds
+fn format_energy_degree_bounds(bounds: Option<&[(usize, usize)]>, use_color: bool) -> String {
+    match bounds {
+        None => "legacy affine".to_string(),
+        Some([]) => "explicit constant".to_string(),
+        Some(bounds) => bounds
             .iter()
             .map(|(edge, degree)| {
                 format!(
@@ -483,7 +508,7 @@ fn format_energy_degree_bounds(bounds: &[(usize, usize)], use_color: bool) -> St
                     )
                 )
             })
-            .join(" ")
+            .join(" "),
     }
 }
 
@@ -1006,7 +1031,7 @@ mod tests {
         let rendered = render_expression_summary(
             &expression,
             &graph_info(&parsed),
-            &[],
+            None,
             NumeratorDisplay::default(),
             NumeratorSamplingScaleMode::None,
             &DisplayOptions {
@@ -1018,13 +1043,27 @@ mod tests {
         assert!(rendered.contains("CFF structure"));
         assert!(rendered.contains("Surfaces"));
         assert!(rendered.contains("Orientations"));
+        assert!(rendered.contains("legacy affine"));
         assert!(rendered.contains("0: 1 → ["));
         assert!(!rendered.contains("1 → [S"));
+
+        let explicit_constant = render_expression_summary(
+            &expression,
+            &graph_info(&parsed),
+            Some(&[]),
+            NumeratorDisplay::default(),
+            NumeratorSamplingScaleMode::None,
+            &DisplayOptions {
+                use_color: false,
+                details_for_orientation: None,
+            },
+        );
+        assert!(explicit_constant.contains("explicit constant"));
 
         let rendered = render_expression_summary(
             &expression,
             &graph_info(&parsed),
-            &[],
+            None,
             NumeratorDisplay::default(),
             NumeratorSamplingScaleMode::None,
             &DisplayOptions {
@@ -1056,7 +1095,7 @@ mod tests {
         let rendered = render_expression_summary(
             &expression,
             &graph_info(&parsed),
-            &[],
+            Some(&[]),
             NumeratorDisplay::default(),
             NumeratorSamplingScaleMode::None,
             &DisplayOptions {

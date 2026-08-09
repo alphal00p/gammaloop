@@ -293,6 +293,44 @@ pub(crate) mod test_graphs {
         parsed
     }
 
+    pub(crate) fn triangle_with_external_tree_graph() -> ParsedGraph {
+        ParsedGraph {
+            internal_edges: vec![
+                internal(0, 0, 1, "q0", [1], [0, 0], "m1"),
+                internal(1, 1, 2, "q1", [1], [1, 0], "m2"),
+                internal(2, 2, 0, "q2", [1], [1, 1], "m3"),
+                internal(3, 1, 3, "t0", [0], [0, 1], "mt"),
+            ],
+            external_edges: vec![
+                external(10_000_000, None, Some(0), "p1", [1, 0]),
+                external(10_000_001, Some(2), None, "-p1", [-1, 0]),
+                external(10_000_002, Some(3), None, "-p2", [0, -1]),
+            ],
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["k1".to_string()],
+            external_names: vec!["p1".to_string(), "p2".to_string()],
+            node_name_to_internal: node_map(4),
+        }
+    }
+
+    pub(crate) fn pure_tree_graph() -> ParsedGraph {
+        ParsedGraph {
+            internal_edges: vec![
+                internal(0, 0, 1, "t0", [], [1, 0], "m1"),
+                internal(1, 1, 2, "t1", [], [1, 1], "m2"),
+            ],
+            external_edges: vec![
+                external(10_000_000, None, Some(0), "p1", [1, 0]),
+                external(10_000_001, Some(2), None, "-p1-p2", [-1, -1]),
+                external(10_000_002, None, Some(1), "p2", [0, 1]),
+            ],
+            initial_state_cut_edges: Vec::new(),
+            loop_names: Vec::new(),
+            external_names: vec!["p1".to_string(), "p2".to_string()],
+            node_name_to_internal: node_map(3),
+        }
+    }
+
     pub(crate) fn initial_state_cut_line_graph(external_sign: i32) -> ParsedGraph {
         ParsedGraph {
             internal_edges: vec![

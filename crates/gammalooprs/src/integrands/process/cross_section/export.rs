@@ -73,6 +73,7 @@ fn export_evaluator_stack<T: ExportAtomTo>(
     stack: &crate::integrands::process::evaluators::EvaluatorStack,
 ) -> Result<StandaloneEvaluatorStackArchive<T>> {
     Ok(StandaloneEvaluatorStackArchive {
+        explicit_orientation_sum_only: stack.explicit_orientation_sum_only,
         single_parametric: export_generic_evaluator(&stack.single_parametric)?,
         iterative: stack
             .iterative

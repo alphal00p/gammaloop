@@ -33,7 +33,7 @@ use symbolica::{
 
 use crate::processes::StandaloneNumericTarget;
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 5;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 6;
 pub const STANDALONE_MODE_RUST: u8 = 0;
 
 #[derive(
@@ -161,6 +161,9 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
             }
 
             let original_integrand = LoadedStandaloneEvaluatorStack {
+                explicit_orientation_sum_only: graph
+                    .original_integrand
+                    .explicit_orientation_sum_only,
                 parametric: (exprs, all_reps, single, result),
                 orientation_start: graph.original_integrand.start,
                 mult_offset: graph.original_integrand.mult_offset,
@@ -218,6 +221,7 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                             Ok((
                                 cut_cff_index,
                                 LoadedStandaloneEvaluatorStack {
+                                    explicit_orientation_sum_only: ct.explicit_orientation_sum_only,
                                     orientation_start: ct.start,
                                     mult_offset: ct.mult_offset,
                                     representative_input: ct
@@ -285,6 +289,7 @@ pub struct StandaloneIndexedEvaluatorStackArchive<A = Vec<u8>> {
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
+    pub(crate) explicit_orientation_sum_only: bool,
     pub(crate) single_parametric: StandaloneGenericEvaluatorArchive<A>,
     pub(crate) iterative: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) summed_function_map: Option<StandaloneGenericEvaluatorArchive<A>>,
@@ -727,6 +732,7 @@ pub struct LoadedStandaloneGraphTerm {
 
 #[allow(clippy::type_complexity)]
 pub struct LoadedStandaloneEvaluatorStack {
+    pub(crate) explicit_orientation_sum_only: bool,
     pub(crate) representative_input: Vec<Complex<f64>>,
     pub(crate) orientation_start: usize,
     pub(crate) mult_offset: usize,
@@ -1001,6 +1007,15 @@ impl LoadedStandaloneEvaluatorStack {
         &mut self,
         request: StandaloneEvaluationRequest<'_>,
     ) -> Result<Vec<Complex<f64>>> {
+        if self.explicit_orientation_sum_only
+            && request.method == StandaloneMethod::SingleParametric
+            && request.orientation_index.is_some()
+        {
+            return Err(eyre!(
+                "`--orientation-index` is invalid for an explicit orientation-sum evaluator because its single-parametric expression already contains the complete orientation sum"
+            ));
+        }
+
         let inputs = if let Some(custom_input) = request.custom_input {
             if custom_input.len() != self.representative_input.len() {
                 return Err(eyre!(
@@ -1012,6 +1027,9 @@ impl LoadedStandaloneEvaluatorStack {
             vec![custom_input.to_vec()]
         } else {
             match request.method {
+                StandaloneMethod::SingleParametric if self.explicit_orientation_sum_only => {
+                    vec![self.representative_input.clone()]
+                }
                 StandaloneMethod::SingleParametric => {
                     if let Some(index) = request.orientation_index {
                         let orientation = request.orientations.get(index).ok_or_else(|| {
@@ -1388,6 +1406,15 @@ fn main() -> Result<()> {
     let stack_label = options.stack.label();
     let stack = graph.stack_mut(&options.stack)?;
 
+    if stack.explicit_orientation_sum_only
+        && options.method == StandaloneMethod::SingleParametric
+        && options.orientation_index.is_some()
+    {
+        return Err(eyre!(
+            "`--orientation-index` is invalid for an explicit orientation-sum evaluator because its single-parametric expression already contains the complete orientation sum"
+        ));
+    }
+
     println!(
         "graph={} stack={} method={} orientation={} artifact_dir={}",
         graph_name,
@@ -1402,6 +1429,15 @@ fn main() -> Result<()> {
 
     if options.print_input {
         match options.method {
+            StandaloneMethod::SingleParametric if stack.explicit_orientation_sum_only => {
+                println!(
+                    "input={:?}",
+                    custom_input
+                        .as_ref()
+                        .cloned()
+                        .unwrap_or_else(|| stack.representative_input.clone())
+                );
+            }
             StandaloneMethod::SingleParametric => {
                 if let Some(custom_input) = custom_input.as_ref() {
                     println!("input={custom_input:?}");

@@ -11,11 +11,11 @@ use thiserror::Error;
 use crate::{
     OrientationData, OrientationExpression, OrientationID, ParsedGraph, ThreeDExpression,
     cff_recursion::enumerate_cff_surface_chains,
-    cut_structure::{ContourClosure, EnergyResidue, energy_residues},
+    cut_structure::{ContourClosure, energy_residues},
     energy_bounds::{
         EnergyDivergenceReport, energy_divergence_report, normalize_energy_degree_bounds,
     },
-    expression::assign_numerator_map_labels,
+    expression::{ResidualDenominator, assign_numerator_map_labels},
     graph_io::{
         ParsedGraphExternalEdge, ParsedGraphInitialStateCutEdge, ParsedGraphInternalEdge,
         ThreeDGraphSource, repeated_groups,
@@ -28,8 +28,8 @@ use crate::{
     },
     tree::{NodeId, Tree},
     utils::{
-        Rational, RationalExt, binomial, determinant_i32_is_nonzero, factorial, multi_factorial,
-        multiindices_leq, rank_i64, rank_rational, rational_pow_i64, rising, solve_rational_system,
+        Rational, RationalExt, binomial, determinant_i32_is_nonzero, rank_i64, rank_rational,
+        rational_pow_i64, solve_rational_system,
     },
 };
 
@@ -69,12 +69,11 @@ pub struct Generate3DExpressionOptions {
     #[serde(default)]
     pub energy_degree_bounds: Option<Vec<(usize, usize)>>,
     pub numerator_sampling_scale: NumeratorSamplingScaleMode,
-    #[serde(default = "default_true")]
-    pub include_cff_duplicate_signature_excess_sign: bool,
-}
-
-const fn default_true() -> bool {
-    true
+    /// Internal edge IDs whose unintegrated four-dimensional denominators stay
+    /// outside the causal CFF graph. Their affine energy maps and typed
+    /// residual factors remain in the generated result.
+    #[serde(default)]
+    pub preserve_internal_edges_as_four_d_denominators: Vec<usize>,
 }
 
 impl Default for Generate3DExpressionOptions {
@@ -83,9 +82,21 @@ impl Default for Generate3DExpressionOptions {
             representation: RepresentationMode::Cff,
             energy_degree_bounds: None,
             numerator_sampling_scale: NumeratorSamplingScaleMode::None,
-            include_cff_duplicate_signature_excess_sign: true,
+            preserve_internal_edges_as_four_d_denominators: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CffEnergyFactorOwnership {
+    GlobalSourceProduct,
+    VariantLocal,
+}
+
+#[derive(Debug, Clone)]
+pub struct GeneratedThreeDExpression<E = (), H = ()> {
+    pub expression: ThreeDExpression<OrientationID, E, H>,
+    pub energy_factor_ownership: CffEnergyFactorOwnership,
 }
 
 #[derive(Debug, Error)]
@@ -106,8 +117,6 @@ pub enum GenerationError {
     NonIntegralEnergyMap,
     #[error("rational coefficient is outside the supported i64 storage range")]
     CoefficientOutOfRange,
-    #[error("physical numerator sample orbit is not affine-complete")]
-    NumeratorSampleOrbitIncomplete,
     #[error("{0}")]
     EnergyBounds(#[from] crate::energy_bounds::EnergyBoundsError),
     #[error("{0}")]
@@ -116,6 +125,21 @@ pub enum GenerationError {
         "energy-degree bound was requested for edge {edge_id}, but this is not an internal edge of the selected graph"
     )]
     UnknownEnergyDegreeBoundEdge { edge_id: usize },
+    #[error(
+        "CFF preservation was requested for edge {edge_id}, but this is not an internal edge of the selected graph"
+    )]
+    UnknownCffPreservedInternalEdge { edge_id: usize },
+    #[error(
+        "initial-state cut edge {edge_id} is an external alias and cannot be preserved as a residual four-dimensional denominator"
+    )]
+    CffPreservedInitialStateCutEdge { edge_id: usize },
+    #[error(
+        "preserved four-dimensional denominator edge {edge_id} retains loop-energy coefficients {loop_signature:?}; a CFF-external tree edge must have purely external momentum"
+    )]
+    CffPreservedEdgeCarriesLoopEnergy {
+        edge_id: usize,
+        loop_signature: Vec<i32>,
+    },
     #[error(
         "contracting the last denominator carrying loop-energy variable {variable} leaves an unlocalized quotient of power {power}"
     )]
@@ -131,7 +155,7 @@ pub type Result<T> = std::result::Result<T, GenerationError>;
 pub fn generate_3d_expression<G: ThreeDGraphSource + ?Sized>(
     graph: &G,
     options: &Generate3DExpressionOptions,
-) -> Result<ThreeDExpression<OrientationID>> {
+) -> Result<GeneratedThreeDExpression> {
     if options.representation != RepresentationMode::Cff {
         return Err(GenerationError::NotImplemented {
             mode: options.representation,
@@ -139,7 +163,7 @@ pub fn generate_3d_expression<G: ThreeDGraphSource + ?Sized>(
     }
     let parsed = graph.to_three_d_parsed_graph()?;
     let Some(edge_map) = graph.energy_edge_index_map(&parsed) else {
-        return generate_3d_expression_from_parsed(&parsed, options);
+        return generate_3d_expression_from_parsed_generated(&parsed, options);
     };
     let mut local_options = options.clone();
     local_options.energy_degree_bounds = options
@@ -151,75 +175,88 @@ pub fn generate_3d_expression<G: ThreeDGraphSource + ?Sized>(
                 .map_err(|edge_id| GenerationError::UnknownEnergyDegreeBoundEdge { edge_id })
         })
         .transpose()?;
-    let mut expression = generate_3d_expression_from_parsed(&parsed, &local_options)?
-        .remap_energy_edge_indices(&edge_map)
-        .fuse_compatible_variants();
-    assign_numerator_map_labels(&mut expression.orientations);
-    Ok(expression)
-}
-
-pub fn generate_confluent_cff_expression<G: ThreeDGraphSource + ?Sized>(
-    graph: &G,
-    options: &Generate3DExpressionOptions,
-) -> Result<ThreeDExpression<OrientationID>> {
-    let parsed = graph.to_three_d_parsed_graph()?;
-    let Some(edge_map) = graph.energy_edge_index_map(&parsed) else {
-        return generate_confluent_cff_expression_from_parsed(&parsed, options);
-    };
-    let mut local_options = options.clone();
-    local_options.energy_degree_bounds = options
-        .energy_degree_bounds
-        .as_deref()
-        .map(|bounds| {
-            edge_map
-                .remap_bounds_to_local(bounds)
-                .map_err(|edge_id| GenerationError::UnknownEnergyDegreeBoundEdge { edge_id })
+    let reverse_internal = edge_map.internal_to_local();
+    local_options.preserve_internal_edges_as_four_d_denominators = options
+        .preserve_internal_edges_as_four_d_denominators
+        .iter()
+        .map(|edge_id| {
+            reverse_internal
+                .get(edge_id)
+                .copied()
+                .ok_or(GenerationError::UnknownCffPreservedInternalEdge { edge_id: *edge_id })
         })
-        .transpose()?;
-    let mut expression = generate_confluent_cff_expression_from_parsed(&parsed, &local_options)?
+        .collect::<Result<Vec<_>>>()?;
+    let mut generated = generate_3d_expression_from_parsed_generated(&parsed, &local_options)?;
+    generated.expression = generated
+        .expression
         .remap_energy_edge_indices(&edge_map)
         .fuse_compatible_variants();
-    assign_numerator_map_labels(&mut expression.orientations);
-    Ok(expression)
+    assign_numerator_map_labels(&mut generated.expression.orientations);
+    Ok(generated)
 }
 
-pub fn generate_3d_expression_from_parsed(
+#[cfg(test)]
+pub(crate) fn generate_3d_expression_from_parsed(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
 ) -> Result<ThreeDExpression<OrientationID>> {
+    Ok(generate_3d_expression_from_parsed_generated(parsed, options)?.expression)
+}
+
+fn generate_3d_expression_from_parsed_generated(
+    parsed: &ParsedGraph,
+    options: &Generate3DExpressionOptions,
+) -> Result<GeneratedThreeDExpression> {
     if options.representation != RepresentationMode::Cff {
         return Err(GenerationError::NotImplemented {
             mode: options.representation,
         });
     }
+    if !options
+        .preserve_internal_edges_as_four_d_denominators
+        .is_empty()
+    {
+        return build_expression_preserving_internal_edges(parsed, options);
+    }
     if let Some(bounds) = options.energy_degree_bounds.as_deref() {
-        let signatures = parsed
+        let mut signatures = parsed
             .internal_edges
             .iter()
             .map(|edge| edge.signature.clone())
             .collect::<Vec<_>>();
-        let report = energy_divergence_report(&signatures, bounds)?;
+        for cut_edge in &parsed.initial_state_cut_edges {
+            signatures[cut_edge.edge_id].loop_signature.fill(0);
+        }
+        let report =
+            energy_divergence_report(&signatures, &parsed.denominator_internal_edge_ids(), bounds)?;
         if !report.convergent {
             return Err(GenerationError::EnergyUvNotCertified { report });
         }
     }
-    if let Some(expression) = generate_disconnected_component_product(parsed, options)? {
-        let mut expression = expression.fuse_compatible_variants();
-        assign_numerator_map_labels(&mut expression.orientations);
-        return Ok(expression);
+    if let Some(mut generated) = generate_disconnected_component_product(parsed, options)? {
+        generated.expression = generated.expression.fuse_compatible_variants();
+        assign_numerator_map_labels(&mut generated.expression.orientations);
+        return Ok(generated);
     }
 
-    let expression = if cff_bounds_need_generalized_expression_from_options(parsed, options)? {
-        BoundedCffBuilder::new(parsed, options)?.build()
-    } else {
-        generate_pure_cff_expression_from_parsed_with_duplicate_sign(
-            parsed,
-            options.include_cff_duplicate_signature_excess_sign,
-        )
-    }?;
+    let (expression, energy_factor_ownership) =
+        if cff_bounds_need_generalized_expression_from_options(parsed, options)? {
+            (
+                BoundedCffBuilder::new(parsed, options)?.build()?,
+                CffEnergyFactorOwnership::VariantLocal,
+            )
+        } else {
+            (
+                generate_pure_cff_expression_from_parsed(parsed)?,
+                CffEnergyFactorOwnership::GlobalSourceProduct,
+            )
+        };
     let mut expression = expression.fuse_compatible_variants();
     assign_numerator_map_labels(&mut expression.orientations);
-    Ok(expression)
+    Ok(GeneratedThreeDExpression {
+        expression,
+        energy_factor_ownership,
+    })
 }
 
 fn generate_pure_cff_expression_from_parsed(
@@ -228,24 +265,363 @@ fn generate_pure_cff_expression_from_parsed(
     generate_pure_cff_expression_from_parsed_with_duplicate_sign(parsed, true)
 }
 
-pub fn generate_confluent_cff_expression_from_parsed(
+fn build_expression_preserving_internal_edges(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
-) -> Result<ThreeDExpression<OrientationID>> {
-    if let Some(bounds) = options.energy_degree_bounds.as_deref() {
-        let signatures = parsed
-            .internal_edges
+) -> Result<GeneratedThreeDExpression> {
+    let preserved = options
+        .preserve_internal_edges_as_four_d_denominators
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    for edge_id in &preserved {
+        let Some(edge) = parsed.internal_edges.get(*edge_id) else {
+            return Err(GenerationError::UnknownCffPreservedInternalEdge { edge_id: *edge_id });
+        };
+        if parsed.is_initial_state_cut_edge(*edge_id) {
+            return Err(GenerationError::CffPreservedInitialStateCutEdge { edge_id: *edge_id });
+        }
+        if edge
+            .signature
+            .loop_signature
             .iter()
-            .map(|edge| edge.signature.clone())
-            .collect::<Vec<_>>();
-        let report = energy_divergence_report(&signatures, bounds)?;
-        if !report.convergent {
-            return Err(GenerationError::EnergyUvNotCertified { report });
+            .any(|coefficient| *coefficient != 0)
+        {
+            return Err(GenerationError::CffPreservedEdgeCarriesLoopEnergy {
+                edge_id: *edge_id,
+                loop_signature: edge.signature.loop_signature.clone(),
+            });
         }
     }
-    BoundedCffBuilder::new(parsed, options)?
-        .with_confluent_duplicate_channels(true)
-        .build()
+
+    let (active_parsed, active_to_orig) = contract_preserved_parsed_edges(parsed, &preserved);
+    if active_parsed.denominator_internal_edge_ids().is_empty() {
+        return expression_with_only_preserved_edges(parsed, &preserved);
+    }
+
+    let orig_to_active = active_to_orig
+        .iter()
+        .enumerate()
+        .map(|(active_id, orig_id)| (*orig_id, active_id))
+        .collect::<BTreeMap<_, _>>();
+    let mut active_options = options.clone();
+    active_options
+        .preserve_internal_edges_as_four_d_denominators
+        .clear();
+    active_options.energy_degree_bounds = options
+        .energy_degree_bounds
+        .as_ref()
+        .map(|bounds| {
+            bounds
+                .iter()
+                .filter_map(|(edge_id, degree)| {
+                    if *edge_id >= parsed.internal_edges.len() {
+                        return Some(Err(GenerationError::UnknownEnergyDegreeBoundEdge {
+                            edge_id: *edge_id,
+                        }));
+                    }
+                    if preserved.contains(edge_id) {
+                        return None;
+                    }
+                    Some(
+                        orig_to_active
+                            .get(edge_id)
+                            .copied()
+                            .map(|active_id| (active_id, *degree))
+                            .ok_or(GenerationError::UnknownEnergyDegreeBoundEdge {
+                                edge_id: *edge_id,
+                            }),
+                    )
+                })
+                .collect::<Result<Vec<_>>>()
+        })
+        .transpose()?;
+
+    let generated = generate_3d_expression_from_parsed_generated(&active_parsed, &active_options)?;
+    Ok(GeneratedThreeDExpression {
+        expression: lift_expression_to_preserved_graph(
+            parsed,
+            &generated.expression,
+            &active_to_orig,
+            &preserved,
+        )?,
+        energy_factor_ownership: generated.energy_factor_ownership,
+    })
+}
+
+fn expression_with_only_preserved_edges(
+    parsed: &ParsedGraph,
+    preserved: &BTreeSet<usize>,
+) -> Result<GeneratedThreeDExpression> {
+    if !parsed.loop_names.is_empty() {
+        return Err(GenerationError::SingularBasis);
+    }
+
+    let signatures = parsed
+        .internal_edges
+        .iter()
+        .map(|edge| edge.signature.clone())
+        .collect::<Vec<_>>();
+    let mut edge_energy_map = edge_q0_from_loop_exprs(&signatures, &[]);
+    apply_initial_state_cut_edge_energy_exprs(parsed, &mut edge_energy_map);
+    let orientation =
+        EdgeVec::from_iter((0..parsed.internal_edges.len()).map(|_| Orientation::Undirected));
+    let mut data = OrientationData::new(orientation);
+    data.label = Some("preserved_tree".to_string());
+
+    let mut expression = ThreeDExpression::<OrientationID>::new_empty();
+    expression.orientations.push(OrientationExpression {
+        data,
+        loop_energy_map: Vec::new(),
+        edge_energy_map,
+        variants: vec![crate::expression::CFFVariant {
+            origin: Some("preserved_tree".to_string()),
+            prefactor: rational_coeff_one(),
+            half_edges: Vec::new(),
+            denominator_edges: Vec::new(),
+            denominator_surface_signs: BTreeMap::new(),
+            denominator_edge_support_signs: BTreeMap::new(),
+            uniform_scale_power: 0,
+            numerator_surfaces: Vec::new(),
+            denominator: Tree::from_root(HybridSurfaceID::Unit),
+        }],
+    });
+    expression.residual_denominators = preserved
+        .iter()
+        .map(|edge_id| {
+            ResidualDenominator::new(
+                EdgeIndex(*edge_id),
+                Some(parsed.internal_edges[*edge_id].label.clone()),
+            )
+        })
+        .collect();
+    assign_numerator_map_labels(&mut expression.orientations);
+    Ok(GeneratedThreeDExpression {
+        expression,
+        energy_factor_ownership: CffEnergyFactorOwnership::GlobalSourceProduct,
+    })
+}
+
+fn contract_preserved_parsed_edges(
+    parsed: &ParsedGraph,
+    preserved: &BTreeSet<usize>,
+) -> (ParsedGraph, Vec<usize>) {
+    let mut parent = parsed
+        .node_name_to_internal
+        .values()
+        .copied()
+        .map(|node| (node, node))
+        .collect::<BTreeMap<_, _>>();
+
+    for (edge_index, edge) in parsed.internal_edges.iter().enumerate() {
+        if preserved.contains(&edge_index) {
+            union_nodes(&mut parent, edge.tail, edge.head);
+        }
+    }
+
+    let parent_keys = parent.keys().copied().collect::<Vec<_>>();
+    let roots = parent_keys
+        .iter()
+        .map(|node| find_node_root(&mut parent, *node))
+        .collect::<BTreeSet<_>>();
+    let root_to_new = roots
+        .into_iter()
+        .enumerate()
+        .map(|(new_id, root)| (root, new_id))
+        .collect::<BTreeMap<_, _>>();
+    let old_to_new = parent_keys
+        .iter()
+        .map(|node| {
+            let root = find_node_root(&mut parent, *node);
+            (*node, root_to_new[&root])
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    let mut active_to_orig = Vec::new();
+    let mut internal_edges = Vec::new();
+    for (edge_index, edge) in parsed.internal_edges.iter().enumerate() {
+        if preserved.contains(&edge_index) {
+            continue;
+        }
+        let active_id = internal_edges.len();
+        active_to_orig.push(edge_index);
+        internal_edges.push(ParsedGraphInternalEdge {
+            edge_id: active_id,
+            tail: old_to_new[&edge.tail],
+            head: old_to_new[&edge.head],
+            label: edge.label.clone(),
+            mass_key: edge.mass_key.clone(),
+            signature: edge.signature.clone(),
+            had_pow: edge.had_pow,
+        });
+    }
+
+    let external_edges = parsed
+        .external_edges
+        .iter()
+        .map(|edge| ParsedGraphExternalEdge {
+            edge_id: edge.edge_id,
+            source: edge.source.map(|source| old_to_new[&source]),
+            destination: edge.destination.map(|destination| old_to_new[&destination]),
+            label: edge.label.clone(),
+            external_coefficients: edge.external_coefficients.clone(),
+        })
+        .collect::<Vec<_>>();
+    let orig_to_active = active_to_orig
+        .iter()
+        .enumerate()
+        .map(|(active_id, orig_id)| (*orig_id, active_id))
+        .collect::<BTreeMap<_, _>>();
+    let initial_state_cut_edges = parsed
+        .initial_state_cut_edges
+        .iter()
+        .filter_map(|cut_edge| {
+            orig_to_active
+                .get(&cut_edge.edge_id)
+                .copied()
+                .map(|edge_id| ParsedGraphInitialStateCutEdge {
+                    edge_id,
+                    external_id: cut_edge.external_id,
+                    external_sign: cut_edge.external_sign,
+                })
+        })
+        .collect::<Vec<_>>();
+    let node_name_to_internal = old_to_new
+        .values()
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .map(|node| (format!("p{node}"), node))
+        .collect();
+
+    (
+        ParsedGraph {
+            internal_edges,
+            external_edges,
+            initial_state_cut_edges,
+            loop_names: parsed.loop_names.clone(),
+            external_names: parsed.external_names.clone(),
+            node_name_to_internal,
+        },
+        active_to_orig,
+    )
+}
+
+fn lift_expression_to_preserved_graph(
+    parsed: &ParsedGraph,
+    source: &ThreeDExpression<OrientationID>,
+    active_to_orig: &[usize],
+    preserved: &BTreeSet<usize>,
+) -> Result<ThreeDExpression<OrientationID>> {
+    let active_edge_map = active_to_orig
+        .iter()
+        .enumerate()
+        .map(|(active_id, orig_id)| (active_id, *orig_id))
+        .collect::<BTreeMap<_, _>>();
+    let signatures = parsed
+        .internal_edges
+        .iter()
+        .map(|edge| edge.signature.clone())
+        .collect::<Vec<_>>();
+
+    let mut expression = ThreeDExpression::<OrientationID>::new_empty();
+    expression.residual_denominators = preserved
+        .iter()
+        .map(|edge_id| {
+            ResidualDenominator::new(
+                EdgeIndex(*edge_id),
+                Some(parsed.internal_edges[*edge_id].label.clone()),
+            )
+        })
+        .collect();
+    let surface_map = {
+        let mut interner = LinearSurfaceInterner::new(&mut expression);
+        source
+            .surfaces
+            .linear_surface_cache
+            .iter_enumerated()
+            .map(|(id, surface)| {
+                (
+                    HybridSurfaceID::Linear(id),
+                    interner.intern_with_origin(
+                        surface
+                            .expression
+                            .clone()
+                            .remap_internal_edges(&active_edge_map),
+                        surface.origin,
+                        surface.numerator_only,
+                    ),
+                )
+            })
+            .collect::<HashMap<_, _>>()
+    };
+
+    for orientation in &source.orientations {
+        let loop_energy_map = orientation
+            .loop_energy_map
+            .iter()
+            .cloned()
+            .map(|expr| expr.remap_internal_edges(&active_edge_map))
+            .collect::<Vec<_>>();
+        let mut edge_energy_map = edge_q0_from_loop_exprs(&signatures, &loop_energy_map);
+        apply_initial_state_cut_edge_energy_exprs(parsed, &mut edge_energy_map);
+        for (active_id, orig_id) in active_to_orig.iter().enumerate() {
+            edge_energy_map[*orig_id] = orientation.edge_energy_map[active_id]
+                .clone()
+                .remap_internal_edges(&active_edge_map);
+        }
+
+        let (orientation_data, base_label) = orientation_from_edge_exprs(&edge_energy_map);
+        let mut data = OrientationData::new(orientation_data);
+        data.label = Some(base_label);
+        let variants = orientation
+            .variants
+            .iter()
+            .map(|variant| crate::expression::CFFVariant {
+                origin: variant.origin.clone(),
+                prefactor: variant.prefactor.clone(),
+                half_edges: variant
+                    .half_edges
+                    .iter()
+                    .map(|edge_id| EdgeIndex(active_edge_map[&edge_id.0]))
+                    .collect(),
+                denominator_edges: variant
+                    .denominator_edges
+                    .iter()
+                    .map(|edge_id| EdgeIndex(active_edge_map[&edge_id.0]))
+                    .collect(),
+                denominator_surface_signs: variant
+                    .denominator_surface_signs
+                    .iter()
+                    .map(|(surface_id, sign)| (map_surface_id(*surface_id, &surface_map), *sign))
+                    .collect(),
+                denominator_edge_support_signs: map_edge_support_signs(
+                    &variant.denominator_edge_support_signs,
+                    &active_edge_map,
+                ),
+                uniform_scale_power: variant.uniform_scale_power,
+                numerator_surfaces: variant
+                    .numerator_surfaces
+                    .iter()
+                    .map(|surface_id| map_surface_id(*surface_id, &surface_map))
+                    .collect(),
+                denominator: variant
+                    .denominator
+                    .clone()
+                    .map(|surface_id| map_surface_id(surface_id, &surface_map)),
+            })
+            .collect::<Vec<_>>();
+
+        expression.orientations.push(OrientationExpression {
+            data,
+            loop_energy_map,
+            edge_energy_map,
+            variants,
+        });
+    }
+
+    assign_numerator_map_labels(&mut expression.orientations);
+    Ok(expression.fuse_compatible_variants())
 }
 
 #[derive(Debug, Clone)]
@@ -257,7 +633,7 @@ struct ParsedComponentEmbedding {
 fn generate_disconnected_component_product(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
-) -> Result<Option<ThreeDExpression<OrientationID>>> {
+) -> Result<Option<GeneratedThreeDExpression>> {
     let components = denominator_connected_components(parsed);
     if components.len() <= 1 {
         return Ok(None);
@@ -269,15 +645,27 @@ fn generate_disconnected_component_product(
             let (component, embedding) = project_denominator_component(parsed, &component_edges)?;
             let component_options =
                 project_component_options(options, parsed.internal_edges.len(), &embedding)?;
-            let expression = generate_3d_expression_from_parsed(&component, &component_options)?;
-            Ok((expression, embedding))
+            let generated =
+                generate_3d_expression_from_parsed_generated(&component, &component_options)?;
+            Ok((generated, embedding))
         })
         .collect::<Result<Vec<_>>>()?;
 
-    Ok(Some(lift_component_expression_product(
-        parsed,
-        &component_expressions,
-    )?))
+    let energy_factor_ownership = if component_expressions.iter().any(|(generated, _)| {
+        generated.energy_factor_ownership == CffEnergyFactorOwnership::VariantLocal
+    }) {
+        CffEnergyFactorOwnership::VariantLocal
+    } else {
+        CffEnergyFactorOwnership::GlobalSourceProduct
+    };
+    let expressions = component_expressions
+        .iter()
+        .map(|(generated, embedding)| (&generated.expression, embedding))
+        .collect::<Vec<_>>();
+    Ok(Some(GeneratedThreeDExpression {
+        expression: lift_component_expression_product(parsed, &expressions)?,
+        energy_factor_ownership,
+    }))
 }
 
 fn denominator_connected_components(parsed: &ParsedGraph) -> Vec<Vec<usize>> {
@@ -462,37 +850,36 @@ fn project_denominator_component(
 
 fn project_component_options(
     options: &Generate3DExpressionOptions,
-    n_original_edges: usize,
+    source_edge_count: usize,
     embedding: &ParsedComponentEmbedding,
 ) -> Result<Generate3DExpressionOptions> {
-    let local_bounds = options
+    let energy_degree_bounds = options
         .energy_degree_bounds
         .as_deref()
         .map(|bounds| -> Result<Vec<(usize, usize)>> {
-            let bounds = normalize_energy_degree_bounds(bounds, n_original_edges)?;
+            let bounds = normalize_energy_degree_bounds(bounds, source_edge_count)?;
             Ok(embedding
                 .local_to_orig_edge
                 .iter()
                 .enumerate()
-                .filter_map(|(local_id, orig_id)| {
-                    let degree = bounds[*orig_id];
-                    (degree != 0).then_some((local_id, degree))
+                .filter_map(|(local_edge, source_edge)| {
+                    let degree = bounds[*source_edge];
+                    (degree != 0).then_some((local_edge, degree))
                 })
-                .collect::<Vec<_>>())
+                .collect())
         })
         .transpose()?;
     Ok(Generate3DExpressionOptions {
         representation: options.representation,
-        energy_degree_bounds: local_bounds,
+        energy_degree_bounds,
         numerator_sampling_scale: options.numerator_sampling_scale,
-        include_cff_duplicate_signature_excess_sign: options
-            .include_cff_duplicate_signature_excess_sign,
+        preserve_internal_edges_as_four_d_denominators: Vec::new(),
     })
 }
 
 fn lift_component_expression_product(
     parsed: &ParsedGraph,
-    components: &[(ThreeDExpression<OrientationID>, ParsedComponentEmbedding)],
+    components: &[(&ThreeDExpression<OrientationID>, &ParsedComponentEmbedding)],
 ) -> Result<ThreeDExpression<OrientationID>> {
     let mut expression = ThreeDExpression::<OrientationID>::new_empty();
     let mut partials = vec![OrientationExpression {
@@ -700,11 +1087,11 @@ fn generate_pure_cff_expression_from_parsed_with_duplicate_excess(
         .collect::<Vec<_>>();
     let n_internal = signatures.len();
     let denominator_edge_ids = parsed.denominator_internal_edge_ids();
-    let basis = choose_basis_indices_from_edges(&signatures, &denominator_edge_ids)?;
-    let n_loops = signatures
-        .first()
-        .map(|signature| signature.loop_signature.len())
-        .unwrap_or(0);
+    let basis = LowerSectorCffBuilder::component_basis_edges(&signatures, &denominator_edge_ids);
+    let n_loops = parsed.loop_names.len();
+    if basis.len() != n_loops {
+        return Err(GenerationError::SingularBasis);
+    }
     let overall_sign = if (n_loops.saturating_sub(1) + duplicate_excess).is_multiple_of(2) {
         1
     } else {
@@ -794,16 +1181,6 @@ fn generate_pure_cff_expression_from_parsed_with_duplicate_excess(
     }
 
     Ok(expression)
-}
-
-fn generate_residue_basis_expression_from_parsed(
-    parsed: &ParsedGraph,
-    options: &Generate3DExpressionOptions,
-) -> Result<ThreeDExpression<OrientationID>> {
-    if !repeated_groups(parsed).is_empty() {
-        return RepeatedResidueBuilder::new(parsed, options).build();
-    }
-    generate_simple_residue_basis_expression_from_parsed(parsed)
 }
 
 fn generate_simple_residue_basis_expression_from_parsed(
@@ -916,70 +1293,18 @@ fn generate_simple_residue_basis_expression_from_parsed(
 }
 
 #[derive(Debug, Clone)]
-struct LogicalChannel {
-    rep_edge: usize,
-    members: Vec<usize>,
-    relative_signs: Vec<i32>,
-    power: usize,
-}
-
-#[derive(Debug, Clone)]
-struct PhysicalGroupOption {
-    tau: Vec<i32>,
-    chain_sign: i32,
-    label: String,
-}
-
-#[derive(Debug, Clone)]
-struct PhysicalSample {
-    loop_exprs: Vec<LinearEnergyExpr>,
-    edge_exprs: Vec<LinearEnergyExpr>,
-    label: String,
-}
-
-#[derive(Debug, Clone)]
-struct NumeratorSample {
-    coeff: Rational,
-    extra_half_edges: Vec<usize>,
-    loop_exprs: Vec<LinearEnergyExpr>,
-    edge_exprs: Vec<LinearEnergyExpr>,
-    label: String,
-    uniform_scale_power: usize,
-}
-
-#[derive(Debug, Clone)]
-enum DenominatorFactor {
-    Cut {
-        edge: usize,
-        support_edges: Vec<usize>,
-        power: usize,
-        derivs: Vec<Rational>,
-    },
-    Surface {
-        surface: HybridSurfaceID,
-        edge: usize,
-        power: usize,
-        derivs: Vec<Rational>,
-    },
-}
-
-#[derive(Debug, Clone)]
-struct DenominatorTerm {
-    coeff: Rational,
-    half_edges: Vec<usize>,
-    denominator_edges: Vec<usize>,
-    chain: Vec<HybridSurfaceID>,
-}
-
-type DenominatorTermKey = (Vec<usize>, Vec<usize>, Vec<HybridSurfaceID>);
-type DenominatorTermAccumulator = BTreeMap<DenominatorTermKey, Rational>;
-
-#[derive(Debug, Clone)]
 struct ContactComponent {
     sample: i32,
     prefactor: Rational,
     half_edges: Vec<usize>,
     numerator_surfaces: Vec<HybridSurfaceID>,
+}
+
+#[derive(Debug, Clone)]
+struct LogicalChannel {
+    rep_edge: usize,
+    members: Vec<usize>,
+    power: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -1571,55 +1896,6 @@ impl<'a> KnownPolynomialNormalForm<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
-struct AccumulatedVariant {
-    prefactor: symbolica::atom::Atom,
-    half_edges: Vec<usize>,
-    denominator_edges: Vec<usize>,
-    chains: Vec<Vec<HybridSurfaceID>>,
-}
-
-#[derive(Debug, Default)]
-struct VariantAccumulator {
-    variants: Vec<AccumulatedVariant>,
-}
-
-impl VariantAccumulator {
-    fn add(
-        &mut self,
-        prefactor: symbolica::atom::Atom,
-        half_edges: Vec<usize>,
-        denominator_edges: Vec<usize>,
-        chain: Vec<HybridSurfaceID>,
-    ) {
-        if let Some(existing) = self.variants.iter_mut().find(|variant| {
-            variant.prefactor == prefactor
-                && variant.half_edges == half_edges
-                && variant.denominator_edges == denominator_edges
-        }) {
-            existing.chains.push(chain);
-            return;
-        }
-        self.variants.push(AccumulatedVariant {
-            prefactor,
-            half_edges,
-            denominator_edges,
-            chains: vec![chain],
-        });
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum CoeffSymbol {
-    Constant,
-    Internal(usize),
-    External(usize),
-    UniformScale,
-}
-
-type CoeffMap = BTreeMap<CoeffSymbol, Rational>;
-type RationalMatrix = Vec<Vec<Rational>>;
-
 struct LinearSurfaceInterner<'a> {
     expression: &'a mut ThreeDExpression<OrientationID>,
     index: HashMap<(LinearSurfaceKind, LinearEnergyExpr), HybridSurfaceID>,
@@ -1631,10 +1907,6 @@ impl<'a> LinearSurfaceInterner<'a> {
             expression,
             index: HashMap::new(),
         }
-    }
-
-    fn intern(&mut self, surface_expr: LinearEnergyExpr, numerator_only: bool) -> HybridSurfaceID {
-        self.intern_with_origin(surface_expr, SurfaceOrigin::Physical, numerator_only)
     }
 
     fn intern_with_origin(
@@ -1670,343 +1942,53 @@ impl<'a> LinearSurfaceInterner<'a> {
     }
 }
 
-struct EnergySolver<'a> {
-    signatures: &'a [MomentumSignature],
-}
-
-impl<'a> EnergySolver<'a> {
-    fn new(signatures: &'a [MomentumSignature]) -> Self {
-        Self { signatures }
-    }
-
-    fn solve_from_target_edges(
-        &self,
-        basis: &[usize],
-        target_edge_exprs: &[LinearEnergyExpr],
-    ) -> Result<Vec<LinearEnergyExpr>> {
-        solve_loop_energy_from_target_edge_exprs(self.signatures, basis, target_edge_exprs)
-    }
-
-    fn edge_q0_from_loop_exprs(&self, loop_exprs: &[LinearEnergyExpr]) -> Vec<LinearEnergyExpr> {
-        edge_q0_from_loop_exprs(self.signatures, loop_exprs)
-    }
-
-    fn derivative_matrices(&self, basis: &[usize]) -> Result<(RationalMatrix, RationalMatrix)> {
-        let n_loops = self
-            .signatures
-            .first()
-            .map(|signature| signature.loop_signature.len())
-            .unwrap_or(0);
-        let n_basis = basis.len();
-        let matrix = basis
-            .iter()
-            .map(|edge| {
-                self.signatures[*edge]
-                    .loop_signature
-                    .iter()
-                    .map(|value| Rational::from(*value))
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        let mut loop_by_basis = vec![vec![Rational::zero(); n_basis]; n_loops];
-
-        for (basis_position, _) in basis.iter().enumerate() {
-            let rhs = (0..n_basis)
-                .map(|row| {
-                    if row == basis_position {
-                        Rational::one()
-                    } else {
-                        Rational::zero()
-                    }
-                })
-                .collect::<Vec<_>>();
-            let solution =
-                solve_rational_system(matrix.clone(), rhs).ok_or(GenerationError::SingularBasis)?;
-            for (loop_id, value) in solution.into_iter().enumerate() {
-                loop_by_basis[loop_id][basis_position] = value;
-            }
-        }
-
-        let edge_by_basis = self
-            .signatures
-            .iter()
-            .map(|signature| {
-                (0..n_basis)
-                    .map(|basis_position| {
-                        signature.loop_signature.iter().enumerate().fold(
-                            Rational::zero(),
-                            |acc, (loop_id, coeff)| {
-                                acc + Rational::from(*coeff)
-                                    * loop_by_basis[loop_id][basis_position].clone()
-                            },
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-
-        Ok((loop_by_basis, edge_by_basis))
-    }
-}
-
-struct DenominatorDerivativeExpander<'a> {
-    factors: &'a [DenominatorFactor],
-}
-
-impl<'a> DenominatorDerivativeExpander<'a> {
-    fn new(factors: &'a [DenominatorFactor]) -> Self {
-        Self { factors }
-    }
-
-    fn terms(&self, gamma: &[usize]) -> Vec<DenominatorTerm> {
-        if self.factors.is_empty() {
-            return if gamma.iter().all(|order| *order == 0) {
-                vec![DenominatorTerm {
-                    coeff: Rational::one(),
-                    half_edges: Vec::new(),
-                    denominator_edges: Vec::new(),
-                    chain: Vec::new(),
-                }]
-            } else {
-                Vec::new()
-            };
-        }
-
-        let total_factor = multi_factorial(gamma);
-        let mut accum = DenominatorTermAccumulator::new();
-        self.accumulate_terms(
-            0,
-            gamma.to_vec(),
-            Rational::one(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Rational::one(),
-            total_factor,
-            &mut accum,
-        );
-        accum
-            .into_iter()
-            .filter_map(|((half_edges, denominator_edges, chain), coeff)| {
-                (!coeff.is_zero()).then_some(DenominatorTerm {
-                    coeff,
-                    half_edges,
-                    denominator_edges,
-                    chain,
-                })
-            })
-            .collect()
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn accumulate_terms(
-        &self,
-        factor_index: usize,
-        remaining: Vec<usize>,
-        coeff: Rational,
-        half_edges: Vec<usize>,
-        denominator_edges: Vec<usize>,
-        chain: Vec<HybridSurfaceID>,
-        denom_factorial: Rational,
-        total_factor: Rational,
-        accum: &mut DenominatorTermAccumulator,
-    ) {
-        if factor_index == self.factors.len() {
-            if remaining.iter().any(|order| *order != 0) {
-                return;
-            }
-            let final_coeff = coeff * total_factor / denom_factorial;
-            if final_coeff.is_zero() {
-                return;
-            }
-            let mut half_edges = half_edges;
-            half_edges.sort_unstable();
-            let mut denominator_edges = denominator_edges;
-            denominator_edges.sort_unstable();
-            denominator_edges.dedup();
-            let entry = accum
-                .entry((half_edges, denominator_edges, chain))
-                .or_insert(Rational::zero());
-            *entry = entry.clone() + final_coeff;
-            return;
-        }
-
-        for delta in multiindices_leq(&remaining) {
-            let Some(piece) = self.factors[factor_index].derivative_piece(&delta) else {
-                continue;
-            };
-            let next_remaining = remaining
-                .iter()
-                .zip(&delta)
-                .map(|(a, b)| a - b)
-                .collect::<Vec<_>>();
-            let mut next_half_edges = half_edges.clone();
-            next_half_edges.extend(piece.half_edges);
-            let mut next_denominator_edges = denominator_edges.clone();
-            next_denominator_edges.extend(piece.denominator_edges);
-            let mut next_chain = chain.clone();
-            next_chain.extend(piece.chain);
-            self.accumulate_terms(
-                factor_index + 1,
-                next_remaining,
-                coeff.clone() * piece.coeff,
-                next_half_edges,
-                next_denominator_edges,
-                next_chain,
-                denom_factorial.clone() * multi_factorial(&delta),
-                total_factor.clone(),
-                accum,
-            );
-        }
-    }
-}
-
-struct DenominatorFactorDerivativePiece {
-    coeff: Rational,
-    half_edges: Vec<usize>,
-    denominator_edges: Vec<usize>,
-    chain: Vec<HybridSurfaceID>,
-}
-
-impl DenominatorFactor {
-    fn derivative_piece(&self, delta: &[usize]) -> Option<DenominatorFactorDerivativePiece> {
-        let order = delta.iter().sum::<usize>();
-        let (power, derivs) = match self {
-            Self::Cut { power, derivs, .. } | Self::Surface { power, derivs, .. } => {
-                (*power, derivs)
-            }
-        };
-        let mut coeff = if order == 0 {
-            Rational::one()
-        } else {
-            let sign = if order % 2 == 0 { 1 } else { -1 };
-            let coeff = rising(power, order);
-            if sign < 0 { -coeff } else { coeff }
-        };
-        for (derivative_order, derivative_coeff) in delta.iter().zip(derivs) {
-            if *derivative_order != 0 && derivative_coeff.is_zero() {
-                return None;
-            }
-            coeff *= derivative_coeff.pow_usize(*derivative_order);
-        }
-        let effective_power = power + order;
-        match self {
-            Self::Cut {
-                edge,
-                support_edges,
-                ..
-            } => Some(DenominatorFactorDerivativePiece {
-                coeff,
-                half_edges: vec![*edge; effective_power],
-                denominator_edges: support_edges.clone(),
-                chain: Vec::new(),
-            }),
-            Self::Surface { surface, edge, .. } => Some(DenominatorFactorDerivativePiece {
-                coeff,
-                half_edges: Vec::new(),
-                denominator_edges: vec![*edge],
-                chain: vec![*surface; effective_power],
-            }),
-        }
-    }
-}
-
 struct BoundedCffBuilder<'a> {
     parsed: &'a ParsedGraph,
     bounds: Vec<usize>,
-    bounds_are_explicit: bool,
     sampling_scale_mode: NumeratorSamplingScaleMode,
-    include_duplicate_signature_excess_sign: bool,
-    confluent_duplicate_channels: bool,
     expression: ThreeDExpression<OrientationID>,
     surface_index: HashMap<(LinearSurfaceKind, LinearEnergyExpr), HybridSurfaceID>,
 }
 
 impl<'a> BoundedCffBuilder<'a> {
-    fn new(parsed: &'a ParsedGraph, options: &'a Generate3DExpressionOptions) -> Result<Self> {
+    fn new(parsed: &'a ParsedGraph, options: &Generate3DExpressionOptions) -> Result<Self> {
         let bounds = normalize_energy_degree_bounds(
             options.energy_degree_bounds.as_deref().unwrap_or(&[]),
             parsed.internal_edges.len(),
         )?;
-        Ok(Self {
-            parsed,
-            bounds,
-            bounds_are_explicit: options.energy_degree_bounds.is_some(),
-            sampling_scale_mode: options.numerator_sampling_scale,
-            include_duplicate_signature_excess_sign: options
-                .include_cff_duplicate_signature_excess_sign,
-            confluent_duplicate_channels: false,
-            expression: ThreeDExpression::new_empty(),
-            surface_index: HashMap::new(),
-        })
+        Ok(Self::for_bounds(parsed, bounds).with_options(options))
     }
 
     fn for_bounds(parsed: &'a ParsedGraph, bounds: Vec<usize>) -> Self {
         Self {
             parsed,
             bounds,
-            bounds_are_explicit: true,
             sampling_scale_mode: NumeratorSamplingScaleMode::None,
-            include_duplicate_signature_excess_sign: true,
-            confluent_duplicate_channels: false,
             expression: ThreeDExpression::new_empty(),
             surface_index: HashMap::new(),
         }
     }
 
-    fn with_duplicate_signature_excess_sign(mut self, include: bool) -> Self {
-        self.include_duplicate_signature_excess_sign = include;
-        self
-    }
-
-    fn with_confluent_duplicate_channels(mut self, use_confluent: bool) -> Self {
-        self.confluent_duplicate_channels = use_confluent;
+    fn with_options(mut self, options: &Generate3DExpressionOptions) -> Self {
+        self.sampling_scale_mode = options.numerator_sampling_scale;
         self
     }
 
     fn build(mut self) -> Result<ThreeDExpression<OrientationID>> {
         let needs_generalized_expression = cff_bounds_need_generalized_expression(&self.bounds);
-        let has_duplicate_energy_channel = self.has_duplicate_signature_ignoring_mass();
-        let use_confluent_duplicate_channels =
-            self.confluent_duplicate_channels && has_duplicate_energy_channel;
-        // Initial-state cut energies are fixed external aliases. They remain
-        // inside the same causal builder and never select a residue backend.
-        let confluent_all_quadratic = use_confluent_duplicate_channels
-            && needs_generalized_expression
-            && self.bounds.iter().all(|degree| *degree <= 2);
-        if use_confluent_duplicate_channels && !confluent_all_quadratic {
-            let options = Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: self.bounds_are_explicit.then(|| {
-                    self.bounds
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(edge_id, degree)| {
-                            (*degree != 0).then_some((edge_id, *degree))
-                        })
-                        .collect()
-                }),
-                numerator_sampling_scale: self.sampling_scale_mode,
-                include_cff_duplicate_signature_excess_sign: self
-                    .include_duplicate_signature_excess_sign,
-            };
-            return RepeatedResidueBuilder::new(self.parsed, &options).build();
-        }
         if !needs_generalized_expression {
-            return generate_pure_cff_expression_from_parsed_with_duplicate_sign(
-                self.parsed,
-                self.include_duplicate_signature_excess_sign,
-            );
+            return generate_pure_cff_expression_from_parsed(self.parsed);
         }
-        let uniform_sampling_for_repeated_quadratic = has_duplicate_energy_channel
-            && self.sampling_scale_mode == NumeratorSamplingScaleMode::All
-            && self.bounds.iter().any(|degree| *degree > 1);
-        if !uniform_sampling_for_repeated_quadratic && self.supports_quadratic_e_surface_only() {
+        let uniform_sampling_for_nonlinear_degree = self
+            .bounds
+            .iter()
+            .any(|degree| *degree > 1 && self.sampling_scale_mode.is_active_for_degree(*degree));
+        if !uniform_sampling_for_nonlinear_degree && self.supports_quadratic_e_surface_only() {
             self.build_quadratic_e_surface_only()?;
             self.finalize_numerator_map_labels();
             return Ok(self.expression);
         }
-        if !uniform_sampling_for_repeated_quadratic && self.supports_quadratic_recursive() {
+        if !uniform_sampling_for_nonlinear_degree && self.supports_quadratic_recursive() {
             return self.build_quadratic_recursive(false);
         }
         if self.supports_known_factor_recursive() {
@@ -2026,10 +2008,22 @@ impl<'a> BoundedCffBuilder<'a> {
     fn supports_quadratic_recursive(&self) -> bool {
         self.bounds.iter().any(|degree| *degree > 1)
             && self.bounds.iter().all(|degree| *degree <= 2)
+            && (self.parsed.loop_names.len() == 1
+                || self.bounds.iter().filter(|degree| **degree > 1).count() == 1)
     }
 
     fn supports_known_factor_recursive(&self) -> bool {
         self.bounds.iter().any(|degree| *degree > 1)
+            || KnownFactorCffBuilder::logical_channels(self.parsed)
+                .iter()
+                .any(|channel| {
+                    channel
+                        .members
+                        .iter()
+                        .map(|edge_id| self.bounds[*edge_id])
+                        .sum::<usize>()
+                        > 2
+                })
     }
 
     fn has_duplicate_signature_ignoring_mass(&self) -> bool {
@@ -2060,59 +2054,35 @@ impl<'a> BoundedCffBuilder<'a> {
             return if lower_sector_base {
                 self.lower_sector_base_expression()
             } else {
-                generate_pure_cff_expression_from_parsed_with_duplicate_sign(
-                    self.parsed,
-                    self.include_duplicate_signature_excess_sign,
-                )
+                generate_pure_cff_expression_from_parsed(self.parsed)
             };
         };
 
         let mut remainder_bounds = self.bounds.clone();
         remainder_bounds[active_edge] = 1;
-        let include_remainder_duplicate_sign = self.include_duplicate_signature_excess_sign;
         let remainder_expression = BoundedCffBuilder::for_bounds(self.parsed, remainder_bounds)
-            .with_duplicate_signature_excess_sign(include_remainder_duplicate_sign)
-            .with_confluent_duplicate_channels(self.confluent_duplicate_channels)
             .build_quadratic_recursive(lower_sector_base)?;
         self.append_recursive_remainder_terms(active_edge, &remainder_expression)?;
 
-        let (subparsed, sub_to_orig) = self.contract_parsed_edges(&[active_edge]);
-        if !subparsed.internal_edges.is_empty() {
-            let sub_bounds = sub_to_orig
-                .iter()
-                .map(|orig_id| self.bounds[*orig_id])
-                .collect::<Vec<_>>();
-            let contact_expression = BoundedCffBuilder::for_bounds(&subparsed, sub_bounds)
-                .with_confluent_duplicate_channels(self.confluent_duplicate_channels)
-                .build_quadratic_recursive(true)?;
-            self.append_recursive_contact_terms(active_edge, &contact_expression, &sub_to_orig)?;
-        }
+        let (subparsed, sub_to_orig) = self.project_parsed_edges(&[active_edge]);
+        let sub_bounds = sub_to_orig
+            .iter()
+            .map(|orig_id| self.bounds[*orig_id])
+            .collect::<Vec<_>>();
+        let contact_expression = BoundedCffBuilder::for_bounds(&subparsed, sub_bounds)
+            .build_quadratic_recursive(true)?;
+        self.append_recursive_contact_terms(
+            active_edge,
+            &contact_expression,
+            &sub_to_orig,
+            &contact_weight_polys(self.bounds[active_edge]),
+        )?;
 
         self.finalize_numerator_map_labels();
         Ok(self.expression)
     }
 
     fn lower_sector_base_expression(&self) -> Result<ThreeDExpression<OrientationID>> {
-        if self.confluent_duplicate_channels && !repeated_groups(self.parsed).is_empty() {
-            let options = Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: self.bounds_are_explicit.then(|| {
-                    self.bounds
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(edge_id, degree)| {
-                            (*degree != 0).then_some((edge_id, *degree))
-                        })
-                        .collect()
-                }),
-                numerator_sampling_scale: self.sampling_scale_mode,
-                // Lower-sector component CFFs do not own the full-graph
-                // duplicate-sign convention. The projected residue builder
-                // must retain that same boundary.
-                include_cff_duplicate_signature_excess_sign: false,
-            };
-            return LowerSectorRankProjection::new(self.parsed)?.build_confluent(&options);
-        }
         LowerSectorCffBuilder::new(self.parsed).build()
     }
 
@@ -2191,6 +2161,7 @@ impl<'a> BoundedCffBuilder<'a> {
         edge_id: usize,
         source: &ThreeDExpression<OrientationID>,
         sub_to_orig: &[usize],
+        weight_polys: &BTreeMap<i32, Vec<Rational>>,
     ) -> Result<()> {
         let edge_map = sub_to_orig
             .iter()
@@ -2220,10 +2191,9 @@ impl<'a> BoundedCffBuilder<'a> {
                     .clone()
                     .remap_internal_edges(&edge_map);
             }
-
-            let components = self.finite_pole_contact_components(
+            let components = self.finite_pole_contact_components_from_weights(
                 edge_id,
-                self.bounds[edge_id],
+                weight_polys,
                 current_edge_exprs[edge_id].clone(),
             );
             for variant in &orientation.variants {
@@ -2298,12 +2268,23 @@ impl<'a> BoundedCffBuilder<'a> {
     }
 
     fn lift_contracted_cff_terms(&mut self, pinched_edges: &[usize]) -> Result<()> {
-        let (subparsed, sub_to_orig) = self.contract_parsed_edges(pinched_edges);
+        let (subparsed, sub_to_orig) = self.project_parsed_edges(pinched_edges);
+        if subparsed.internal_edges.is_empty() {
+            let &[edge_id] = pinched_edges else {
+                return Err(GenerationError::CffHigherEnergyPowerNotImplemented);
+            };
+            let scalar = LowerSectorCffBuilder::new(&subparsed).build()?;
+            return self.append_recursive_contact_terms(
+                edge_id,
+                &scalar,
+                &sub_to_orig,
+                &contact_weight_polys(self.bounds[edge_id]),
+            );
+        }
+
         let use_terminal_residue_basis =
             subparsed.internal_edges.len() == self.parsed.loop_names.len();
-        let sub_expression = if subparsed.internal_edges.is_empty() {
-            LowerSectorCffBuilder::new(&subparsed).build()?
-        } else if use_terminal_residue_basis {
+        let sub_expression = if use_terminal_residue_basis {
             generate_simple_residue_basis_expression_from_parsed(&subparsed)?
         } else {
             generate_pure_cff_expression_from_parsed(&subparsed)?
@@ -2406,6 +2387,9 @@ impl<'a> BoundedCffBuilder<'a> {
                             ));
                         }
                     }
+                    // A residue-basis lower sector already carries the contact
+                    // quotient's algebraic sign; only a pure-CFF recursive
+                    // pinch needs the extra residue-orientation sign.
                     if !pinched_edges.is_empty()
                         && !use_terminal_residue_basis
                         && pinched_edges.len() % 2 == 1
@@ -2458,20 +2442,33 @@ impl<'a> BoundedCffBuilder<'a> {
         bound: usize,
         current_expr: LinearEnergyExpr,
     ) -> Vec<ContactComponent> {
+        self.finite_pole_contact_components_from_weights(
+            edge_id,
+            &contact_weight_polys(bound),
+            current_expr,
+        )
+    }
+
+    fn finite_pole_contact_components_from_weights(
+        &mut self,
+        edge_id: usize,
+        weight_polys: &BTreeMap<i32, Vec<Rational>>,
+        current_expr: LinearEnergyExpr,
+    ) -> Vec<ContactComponent> {
         let q_surface = (!current_expr.is_zero())
             .then(|| self.intern_surface(current_expr, SurfaceOrigin::Helper, true));
         let mut components = Vec::new();
-        for (sample, poly) in contact_weight_polys(bound) {
-            for (power, coeff) in poly.into_iter().enumerate() {
+        for (sample, poly) in weight_polys {
+            for (power, coeff) in poly.iter().enumerate() {
                 if coeff.is_zero() || (power > 0 && q_surface.is_none()) {
                     continue;
                 }
-                let prefactor = coeff * rational_pow_i64(2, power + 2);
+                let prefactor = coeff.clone() * rational_pow_i64(2, power + 2);
                 if prefactor.is_zero() {
                     continue;
                 }
                 components.push(ContactComponent {
-                    sample,
+                    sample: *sample,
                     prefactor,
                     half_edges: std::iter::repeat_n(edge_id, power + 2).collect(),
                     numerator_surfaces: q_surface
@@ -2603,8 +2600,8 @@ impl<'a> BoundedCffBuilder<'a> {
         assign_numerator_map_labels(&mut self.expression.orientations);
     }
 
-    fn contract_parsed_edges(&self, pinched_edges: &[usize]) -> (ParsedGraph, Vec<usize>) {
-        let pinched = pinched_edges.iter().copied().collect::<BTreeSet<_>>();
+    fn project_parsed_edges(&self, removed_edges: &[usize]) -> (ParsedGraph, Vec<usize>) {
+        let removed = removed_edges.iter().copied().collect::<BTreeSet<_>>();
         let mut parent = self
             .parsed
             .node_name_to_internal
@@ -2614,7 +2611,7 @@ impl<'a> BoundedCffBuilder<'a> {
             .collect::<BTreeMap<_, _>>();
 
         for edge in &self.parsed.internal_edges {
-            if pinched.contains(&edge.edge_id) {
+            if removed.contains(&edge.edge_id) {
                 union_nodes(&mut parent, edge.tail, edge.head);
             }
         }
@@ -2640,7 +2637,7 @@ impl<'a> BoundedCffBuilder<'a> {
         let mut sub_to_orig = Vec::new();
         let mut internal_edges = Vec::new();
         for edge in &self.parsed.internal_edges {
-            if pinched.contains(&edge.edge_id) {
+            if removed.contains(&edge.edge_id) {
                 continue;
             }
             let sub_id = internal_edges.len();
@@ -2737,7 +2734,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
     fn recursion_budget(&self) -> usize {
         2 * self.original.internal_edges.len()
             + self.bounds.iter().copied().sum::<usize>()
-            + RepeatedResidueBuilder::logical_channels(self.original)
+            + Self::logical_channels(self.original)
                 .iter()
                 .map(|channel| channel.members.len() * channel.power)
                 .sum::<usize>()
@@ -2808,32 +2805,9 @@ impl<'a> KnownFactorCffBuilder<'a> {
                     .collect::<Vec<_>>();
                 let (subparsed, sub_to_local) =
                     BoundedCffBuilder::for_bounds(parsed, vec![0; parsed.internal_edges.len()])
-                        .contract_parsed_edges(&delete);
-                let free_q_power = term.parity + 2 * term.cancelled_power;
-                let unlocalized_variable = (0..parsed.loop_names.len()).find(|variable| {
-                    rep_signature.loop_signature.iter().enumerate().all(
-                        |(candidate, coefficient)| {
-                            if candidate == *variable {
-                                coefficient.abs() == 1
-                            } else {
-                                *coefficient == 0
-                            }
-                        },
-                    ) && subparsed
-                        .internal_edges
-                        .iter()
-                        .all(|edge| edge.signature.loop_signature[*variable] == 0)
-                });
-                if free_q_power > 0
-                    && let Some(variable) = unlocalized_variable
-                {
-                    return Err(GenerationError::UnlocalizedEnergyContact {
-                        variable,
-                        power: free_q_power,
-                    });
-                }
-                if free_q_power > 0 && subparsed.internal_edges.is_empty() {
-                    return Err(GenerationError::CffHigherEnergyPowerNotImplemented);
+                        .project_parsed_edges(&delete);
+                if subparsed.internal_edges.is_empty() {
+                    continue;
                 }
                 let sub_local_to_orig = sub_to_local
                     .iter()
@@ -2843,7 +2817,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 let mut sub_replacements = replacements.clone();
                 for local_id in &channel.members {
                     let orig_id = local_to_orig[*local_id];
-                    let rel_sign = Self::relative_signature_sign(
+                    let relative_sign = Self::relative_signature_sign(
                         &rep_signature,
                         &parsed.internal_edges[*local_id].signature,
                     )?;
@@ -2852,7 +2826,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                         Self::channel_replacement_expr(
                             orig_id,
                             *sample,
-                            rel_sign,
+                            relative_sign,
                             use_uniform_scale,
                         ),
                     );
@@ -3014,7 +2988,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
 
         let (subparsed, sub_to_local) =
             BoundedCffBuilder::for_bounds(parsed, vec![0; parsed.internal_edges.len()])
-                .contract_parsed_edges(&[active]);
+                .project_parsed_edges(&[active]);
         let active_signature = &parsed.internal_edges[active].signature.loop_signature;
         let unlocalized_variable = (0..parsed.loop_names.len()).find(|variable| {
             active_signature
@@ -3164,7 +3138,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
             .collect::<Vec<_>>();
         let (branch_parsed, branch_to_local) =
             BoundedCffBuilder::for_bounds(parsed, vec![0; parsed.internal_edges.len()])
-                .contract_parsed_edges(&delete);
+                .project_parsed_edges(&delete);
         if branch_parsed.internal_edges.is_empty() {
             return Ok(());
         }
@@ -3185,7 +3159,6 @@ impl<'a> KnownFactorCffBuilder<'a> {
             .iter()
             .map(|edge| edge.signature.clone())
             .collect::<Vec<_>>();
-
         for orientation in &base_expression.orientations {
             let loop_exprs = orientation
                 .loop_energy_map
@@ -3289,7 +3262,8 @@ impl<'a> KnownFactorCffBuilder<'a> {
             .iter()
             .map(|edge| edge.signature.clone())
             .collect::<Vec<_>>();
-        let basis_edges = lower_sector.component_basis_edges(&signatures, denominator_edges);
+        let basis_edges =
+            LowerSectorCffBuilder::component_basis_edges(&signatures, denominator_edges);
         let basis_rows = basis_edges
             .iter()
             .map(|edge_id| signatures[*edge_id].loop_signature.clone())
@@ -3454,16 +3428,26 @@ impl<'a> KnownFactorCffBuilder<'a> {
             .collect()
     }
 
+    fn logical_channels(parsed: &ParsedGraph) -> Vec<LogicalChannel> {
+        repeated_groups(parsed)
+            .into_iter()
+            .map(|group| LogicalChannel {
+                rep_edge: group.edge_ids[0],
+                power: group.edge_ids.len(),
+                members: group.edge_ids,
+            })
+            .collect()
+    }
+
     fn active_repeated_channel(
         &self,
         parsed: &ParsedGraph,
         local_to_orig: &[usize],
         replacements: &BTreeMap<usize, LinearEnergyExpr>,
     ) -> Option<(LogicalChannel, usize)> {
-        RepeatedResidueBuilder::logical_channels(parsed)
+        Self::logical_channels(parsed)
             .into_iter()
-            .filter(|channel| channel.power > 1)
-            .filter_map(|channel| {
+            .find_map(|channel| {
                 let degree = channel
                     .members
                     .iter()
@@ -3479,16 +3463,15 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 (degree > 2 || self.sampling_scale_mode.is_active_for_degree(degree))
                     .then_some((channel, degree))
             })
-            .next()
     }
 
     fn channel_replacement_expr(
         edge_id: usize,
         sample: i32,
-        rel_sign: i32,
+        relative_sign: i32,
         use_uniform_scale: bool,
     ) -> LinearEnergyExpr {
-        let sample = sample * rel_sign;
+        let sample = sample * relative_sign;
         if sample == 0 {
             LinearEnergyExpr::zero()
         } else if use_uniform_scale {
@@ -3539,25 +3522,29 @@ impl<'a> KnownFactorCffBuilder<'a> {
         nodes
     }
 
+    // Divide the sampled numerator polynomial by the powered physical
+    // denominator before contracting any occurrence. This keeps cancellations
+    // between repeated-pole orders visible to the causal completion.
     fn channel_normal_form_terms(
-        poly: &[Rational],
+        polynomial: &[Rational],
         channel_power: usize,
     ) -> Vec<ChannelNormalFormTerm> {
         let mut combined = BTreeMap::<(usize, usize, usize, usize), Rational>::new();
-        for (power, coeff) in poly.iter().cloned().enumerate() {
-            if coeff.is_zero() {
+        for (power, coefficient) in polynomial.iter().cloned().enumerate() {
+            if coefficient.is_zero() {
                 continue;
             }
             let quotient_power = power / 2;
             let parity = power % 2;
-            for z_power in 0..=quotient_power {
-                let term_coeff = coeff.clone() * binomial(quotient_power, z_power);
-                let remaining = channel_power.saturating_sub(z_power);
-                let cancelled = z_power.saturating_sub(channel_power);
-                let inverse_power = 2 * z_power + parity;
-                let key = (remaining, parity, cancelled, inverse_power);
-                let entry = combined.entry(key).or_insert(Rational::zero());
-                *entry = entry.clone() + term_coeff;
+            for denominator_power in 0..=quotient_power {
+                let coefficient = coefficient.clone() * binomial(quotient_power, denominator_power);
+                let remaining = channel_power.saturating_sub(denominator_power);
+                let cancelled = denominator_power.saturating_sub(channel_power);
+                let inverse_power = 2 * denominator_power + parity;
+                let entry = combined
+                    .entry((remaining, parity, cancelled, inverse_power))
+                    .or_insert_with(Rational::zero);
+                *entry = entry.clone() + coefficient;
             }
         }
         combined
@@ -3578,31 +3565,25 @@ impl<'a> KnownFactorCffBuilder<'a> {
     }
 
     fn channel_uniform_normal_form_terms(
-        poly: &[Rational],
+        polynomial: &[Rational],
         channel_power: usize,
     ) -> Vec<ChannelNormalFormTerm> {
         let mut combined = BTreeMap::<(usize, usize, usize, usize, usize), Rational>::new();
-        for (power, coeff) in poly.iter().cloned().enumerate() {
-            if coeff.is_zero() {
+        for (power, coefficient) in polynomial.iter().cloned().enumerate() {
+            if coefficient.is_zero() {
                 continue;
             }
             let quotient_power = power / 2;
             let parity = power % 2;
-            for d_power in 0..=quotient_power {
-                let term_coeff = coeff.clone() * binomial(quotient_power, d_power);
-                let remaining = channel_power.saturating_sub(d_power);
-                let cancelled = d_power.saturating_sub(channel_power);
-                let inverse_scale_power = power;
-                let positive_ose_power = 2 * (quotient_power - d_power);
-                let key = (
-                    remaining,
-                    parity,
-                    cancelled,
-                    inverse_scale_power,
-                    positive_ose_power,
-                );
-                let entry = combined.entry(key).or_insert(Rational::zero());
-                *entry = entry.clone() + term_coeff;
+            for denominator_power in 0..=quotient_power {
+                let coefficient = coefficient.clone() * binomial(quotient_power, denominator_power);
+                let remaining = channel_power.saturating_sub(denominator_power);
+                let cancelled = denominator_power.saturating_sub(channel_power);
+                let positive_ose_power = 2 * (quotient_power - denominator_power);
+                let entry = combined
+                    .entry((remaining, parity, cancelled, power, positive_ose_power))
+                    .or_insert_with(Rational::zero);
+                *entry = entry.clone() + coefficient;
             }
         }
         combined
@@ -3658,7 +3639,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
             .collect::<Vec<_>>();
         let edges = (0..signatures.len()).collect::<Vec<_>>();
         let lower_sector = LowerSectorCffBuilder::new(parsed);
-        let basis = lower_sector.component_basis_edges(&signatures, &edges);
+        let basis = LowerSectorCffBuilder::component_basis_edges(&signatures, &edges);
         let basis_rows = basis
             .iter()
             .map(|edge_id| signatures[*edge_id].loop_signature.clone())
@@ -3971,75 +3952,6 @@ struct LowerSectorPartial {
     edge_exprs: BTreeMap<usize, LinearEnergyExpr>,
 }
 
-/// Full-rank coordinates for a denominator arrangement that supplies a
-/// deterministic diagnostic loop-energy lift without replacing the
-/// authoritative EMR edge-energy samples used for numerator evaluation.
-struct LowerSectorRankProjection {
-    source_signatures: Vec<MomentumSignature>,
-    parsed: ParsedGraph,
-    basis_edges: Vec<usize>,
-}
-
-impl LowerSectorRankProjection {
-    fn new(parsed: &ParsedGraph) -> Result<Self> {
-        let lower_sector = LowerSectorCffBuilder::new(parsed);
-        let source_signatures = lower_sector.signatures();
-        let basis_edges = lower_sector
-            .vector_matroid_components(&source_signatures)
-            .into_iter()
-            .flat_map(|edges| lower_sector.component_basis_edges(&source_signatures, &edges))
-            .collect::<Vec<_>>();
-        if basis_edges.is_empty() {
-            return Err(GenerationError::CffHigherEnergyPowerNotImplemented);
-        }
-        let basis_rows = basis_edges
-            .iter()
-            .map(|edge_id| source_signatures[*edge_id].loop_signature.clone())
-            .collect::<Vec<_>>();
-
-        let mut projected = parsed.clone();
-        projected.loop_names = (0..basis_edges.len())
-            .map(|variable| format!("ell{variable}"))
-            .collect();
-        for (edge, signature) in projected.internal_edges.iter_mut().zip(&source_signatures) {
-            edge.signature.loop_signature = if parsed.is_initial_state_cut_edge(edge.edge_id) {
-                // Initial-state cuts are fixed external-energy aliases and do
-                // not participate in the residue rank.
-                vec![0; basis_edges.len()]
-            } else {
-                lower_sector.row_coordinates_in_basis(&basis_rows, &signature.loop_signature)?
-            };
-        }
-
-        Ok(Self {
-            source_signatures,
-            parsed: projected,
-            basis_edges,
-        })
-    }
-
-    fn build_confluent(
-        &self,
-        options: &Generate3DExpressionOptions,
-    ) -> Result<ThreeDExpression<OrientationID>> {
-        let mut expression = RepeatedResidueBuilder::new(&self.parsed, options).build()?;
-        for orientation in &mut expression.orientations {
-            // Generalized contact and repeated-copy samples need not be the
-            // image of one global loop-energy assignment. Keep their edge map
-            // unchanged and compute only a deterministic particular lift for
-            // diagnostics and the standalone no-carrier loop fallback.
-            let loop_energy_map = solve_loop_energy_particular_from_target_edge_exprs(
-                &self.source_signatures,
-                &self.basis_edges,
-                &orientation.edge_energy_map,
-            )?;
-            orientation.loop_energy_map = loop_energy_map;
-        }
-        assign_numerator_map_labels(&mut expression.orientations);
-        Ok(expression)
-    }
-}
-
 struct LowerSectorCffBuilder<'a> {
     parsed: &'a ParsedGraph,
     expression: ThreeDExpression<OrientationID>,
@@ -4061,8 +3973,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
             // whose denominator is the multiplicative identity.
             let mut data = OrientationData::new(EdgeVec::new());
             data.label = Some("lower_sector_unit".to_string());
-            let mut orientation =
-                OrientationExpression::pure_cff(data, Tree::from_root(HybridSurfaceID::Unit));
+            let mut orientation = OrientationExpression::lower_sector_unit(data);
             orientation.loop_energy_map =
                 vec![LinearEnergyExpr::zero(); self.parsed.loop_names.len()];
             self.expression.orientations.push(orientation);
@@ -4247,7 +4158,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
         if rank == 0 {
             return Err(GenerationError::CffHigherEnergyPowerNotImplemented);
         }
-        let basis_edges = self.component_basis_edges(signatures, &edges);
+        let basis_edges = Self::component_basis_edges(signatures, &edges);
         let (component_parsed, local_to_sub) =
             self.project_component_parsed(signatures, &edges, &basis_edges)?;
         let expression = if component_parsed.internal_edges.len() == rank {
@@ -4477,11 +4388,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
         components
     }
 
-    fn component_basis_edges(
-        &self,
-        signatures: &[MomentumSignature],
-        edges: &[usize],
-    ) -> Vec<usize> {
+    fn component_basis_edges(signatures: &[MomentumSignature], edges: &[usize]) -> Vec<usize> {
         let mut selected = Vec::new();
         let mut selected_rows = Vec::<Vec<i32>>::new();
         let mut current_rank = 0usize;
@@ -4659,1535 +4566,6 @@ impl<'a> LowerSectorCffBuilder<'a> {
     }
 }
 
-struct RepeatedResidueBuilder<'a> {
-    parsed: &'a ParsedGraph,
-    options: &'a Generate3DExpressionOptions,
-    signatures: Vec<MomentumSignature>,
-    channels: Vec<LogicalChannel>,
-    expression: ThreeDExpression<OrientationID>,
-    surface_index: HashMap<(LinearSurfaceKind, LinearEnergyExpr), HybridSurfaceID>,
-}
-
-#[derive(Clone, Copy)]
-enum RepeatedChannelSampleTarget {
-    NonUniform(i64),
-    Uniform { cut_sign: i32, offset: i32 },
-}
-
-impl<'a> RepeatedResidueBuilder<'a> {
-    fn new(parsed: &'a ParsedGraph, options: &'a Generate3DExpressionOptions) -> Self {
-        let signatures = parsed
-            .internal_edges
-            .iter()
-            .map(|edge| edge.signature.clone())
-            .collect::<Vec<_>>();
-        let channels = Self::logical_channels(parsed);
-        Self {
-            parsed,
-            options,
-            signatures,
-            channels,
-            expression: ThreeDExpression::new_empty(),
-            surface_index: HashMap::new(),
-        }
-    }
-
-    fn build(mut self) -> Result<ThreeDExpression<OrientationID>> {
-        let n_loops = self
-            .signatures
-            .first()
-            .map(|signature| signature.loop_signature.len())
-            .unwrap_or(0);
-        let collapsed_signatures = self
-            .channels
-            .iter()
-            .map(|channel| self.signatures[channel.rep_edge].loop_signature.clone())
-            .collect::<Vec<_>>();
-        let residues =
-            energy_residues(&collapsed_signatures, &vec![ContourClosure::Below; n_loops])?;
-        let bounds = self
-            .options
-            .energy_degree_bounds
-            .as_deref()
-            .map(|bounds| {
-                crate::energy_bounds::normalize_energy_degree_bounds(bounds, self.signatures.len())
-            })
-            .transpose()?;
-        let has_repeated_channel = self
-            .channels
-            .iter()
-            .any(|channel| channel.members.len() > 1);
-        if let Some(bounds) = bounds.as_deref()
-            && self.finite_pole_recursive_active_edge(bounds).is_some()
-        {
-            self.build_simple_bounded_finite_pole_residue_basis(bounds)?;
-            self.finalize_numerator_map_labels();
-            return Ok(self.expression);
-        }
-
-        for residue in residues {
-            self.add_residue(&residue, bounds.as_deref())?;
-        }
-        if has_repeated_channel && let Some(bounds) = bounds.as_deref() {
-            self.append_finite_pole_contact_completions(bounds)?;
-        }
-        self.finalize_numerator_map_labels();
-        Ok(self.expression)
-    }
-
-    fn add_residue(&mut self, residue: &EnergyResidue, bounds: Option<&[usize]>) -> Result<()> {
-        let basis_logical = residue.basis.clone();
-        let cut_signs = residue.sigmas.clone();
-        let basis_orig = basis_logical
-            .iter()
-            .map(|logical_idx| self.channels[*logical_idx].rep_edge)
-            .collect::<Vec<_>>();
-        let powers = basis_logical
-            .iter()
-            .map(|logical_idx| self.channels[*logical_idx].power)
-            .collect::<Vec<_>>();
-        let alpha = powers
-            .iter()
-            .map(|power| power.saturating_sub(1))
-            .collect::<Vec<_>>();
-
-        let solver = EnergySolver::new(&self.signatures);
-        let mut targets = vec![LinearEnergyExpr::zero(); self.signatures.len()];
-        for (edge, sigma) in basis_orig.iter().zip(&cut_signs) {
-            targets[*edge] = LinearEnergyExpr::ose(EdgeIndex(*edge), i64::from(*sigma));
-        }
-        let loop_exprs = solver.solve_from_target_edges(&basis_orig, &targets)?;
-        let mut edge_exprs = solver.edge_q0_from_loop_exprs(&loop_exprs);
-        self.impose_repeated_channel_sample_targets(
-            &mut edge_exprs,
-            &basis_logical,
-            &cut_signs
-                .iter()
-                .map(|sigma| RepeatedChannelSampleTarget::NonUniform(i64::from(*sigma)))
-                .collect::<Vec<_>>(),
-        );
-        apply_initial_state_cut_edge_energy_exprs(self.parsed, &mut edge_exprs);
-        let (loop_derivs, edge_derivs) = solver.derivative_matrices(&basis_orig)?;
-        let basis_set = basis_logical.iter().copied().collect::<BTreeSet<_>>();
-
-        let mut residue_sign = Rational::from(if residue.sign >= 0 { 1 } else { -1 });
-        // Collapsing repeated copies is a routing operation, not the old CFF
-        // duplicate-sign convention. Copies with opposite canonical routing
-        // contribute the corresponding channel orientation sign globally to
-        // the collapsed confluent-residue expression.
-        let repeated_channel_edge_support_signs = self.repeated_channel_edge_support_signs();
-        let repeated_channel_routing_sign = repeated_channel_edge_support_signs
-            .values()
-            .product::<i64>();
-        if repeated_channel_routing_sign < 0 {
-            residue_sign = -residue_sign;
-        }
-        if self.options.include_cff_duplicate_signature_excess_sign
-            && cff_same_routing_duplicate_signature_excess(self.parsed) % 2 == 1
-        {
-            residue_sign = -residue_sign;
-        }
-        for (sigma, order) in cut_signs.iter().zip(&alpha) {
-            if order % 2 == 1 {
-                residue_sign *= Rational::from(*sigma);
-            }
-        }
-        let residue_norm = Rational::one() / multi_factorial(&alpha);
-        let beta_candidates = if bounds.is_some() {
-            multiindices_leq(&alpha)
-        } else {
-            multiindices_leq(&alpha)
-                .into_iter()
-                .filter(|beta| beta.iter().sum::<usize>() <= 1)
-                .collect()
-        };
-
-        let mut surface_interner = LinearSurfaceInterner::new(&mut self.expression);
-        let mut factors = Vec::new();
-        for (basis_position, ((logical_idx, sigma), power)) in basis_logical
-            .iter()
-            .zip(&cut_signs)
-            .zip(&powers)
-            .enumerate()
-        {
-            let mut derivs = vec![Rational::zero(); basis_logical.len()];
-            derivs[basis_position] = Rational::from(*sigma);
-            factors.push(DenominatorFactor::Cut {
-                edge: self.channels[*logical_idx].rep_edge,
-                support_edges: self.channels[*logical_idx].members.clone(),
-                power: *power,
-                derivs,
-            });
-        }
-
-        for (logical_idx, channel) in self.channels.iter().enumerate() {
-            if basis_set.contains(&logical_idx) {
-                continue;
-            }
-            let rep_edge = channel.rep_edge;
-            let q = edge_exprs[rep_edge].clone();
-            let edge_id = EdgeIndex(rep_edge);
-            let minus =
-                surface_interner.intern(q.clone() - LinearEnergyExpr::ose(edge_id, 1), false);
-            let plus = surface_interner.intern(q + LinearEnergyExpr::ose(edge_id, 1), false);
-            factors.push(DenominatorFactor::Surface {
-                surface: minus,
-                edge: rep_edge,
-                power: channel.power,
-                derivs: edge_derivs[rep_edge].clone(),
-            });
-            factors.push(DenominatorFactor::Surface {
-                surface: plus,
-                edge: rep_edge,
-                power: channel.power,
-                derivs: edge_derivs[rep_edge].clone(),
-            });
-        }
-        drop(surface_interner);
-
-        for beta in &beta_candidates {
-            let gamma = alpha
-                .iter()
-                .zip(beta)
-                .map(|(a, b)| a - b)
-                .collect::<Vec<_>>();
-            let leibniz = alpha
-                .iter()
-                .zip(beta)
-                .fold(Rational::one(), |acc, (a, b)| acc * binomial(*a, *b));
-            let numerator_samples = if let Some(bounds) = bounds {
-                self.bounded_numerator_samples(
-                    beta,
-                    bounds,
-                    &basis_logical,
-                    &cut_signs,
-                    &edge_derivs,
-                )?
-            } else {
-                self.affine_numerator_samples(
-                    beta,
-                    &basis_logical,
-                    &cut_signs,
-                    &alpha,
-                    &loop_exprs,
-                    &edge_exprs,
-                    &loop_derivs,
-                    &edge_derivs,
-                )?
-            };
-            if numerator_samples.is_empty() {
-                continue;
-            }
-            let denominator_terms = DenominatorDerivativeExpander::new(&factors).terms(&gamma);
-            if denominator_terms.is_empty() {
-                continue;
-            }
-
-            for numerator_sample in &numerator_samples {
-                let mut accumulated = VariantAccumulator::default();
-                for denominator_term in &denominator_terms {
-                    let coeff = residue_sign.clone()
-                        * residue_norm.clone()
-                        * leibniz.clone()
-                        * numerator_sample.coeff.clone()
-                        * denominator_term.coeff.clone();
-                    if coeff.is_zero() {
-                        continue;
-                    }
-                    let mut half_edges = denominator_term.half_edges.clone();
-                    half_edges.extend(numerator_sample.extra_half_edges.iter().copied());
-                    half_edges.sort_unstable();
-                    accumulated.add(
-                        rational_to_coefficient(coeff)?,
-                        half_edges,
-                        denominator_term.denominator_edges.clone(),
-                        denominator_term.chain.clone(),
-                    );
-                }
-
-                for item in accumulated.variants {
-                    let variant = crate::expression::CFFVariant {
-                        origin: Some(format!(
-                            "confluent_residue:{}:beta={}:gamma={}",
-                            numerator_sample.label,
-                            beta.iter().map(usize::to_string).join(","),
-                            gamma.iter().map(usize::to_string).join(",")
-                        )),
-                        prefactor: item.prefactor,
-                        half_edges: item.half_edges.into_iter().map(EdgeIndex).collect(),
-                        denominator_edges: item
-                            .denominator_edges
-                            .into_iter()
-                            .map(EdgeIndex)
-                            .collect(),
-                        denominator_surface_signs: BTreeMap::new(),
-                        denominator_edge_support_signs: repeated_channel_edge_support_signs.clone(),
-                        uniform_scale_power: numerator_sample.uniform_scale_power,
-                        numerator_surfaces: Vec::new(),
-                        denominator: denominator_tree_from_chains(&item.chains),
-                    };
-                    self.push_variant_for_numerator_sample(numerator_sample, variant);
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn repeated_channel_edge_support_signs(&self) -> BTreeMap<Vec<EdgeIndex>, i64> {
-        self.channels
-            .iter()
-            .filter_map(|channel| {
-                if channel.members.len() <= 1 {
-                    return None;
-                }
-                let sign = channel.relative_signs.iter().product::<i32>();
-                if sign >= 0 {
-                    return None;
-                }
-                let mut support_edges = channel
-                    .members
-                    .iter()
-                    .copied()
-                    .map(EdgeIndex)
-                    .collect::<Vec<_>>();
-                support_edges.sort_unstable();
-                support_edges.dedup();
-                Some((support_edges, i64::from(sign)))
-            })
-            .collect()
-    }
-
-    fn logical_channels(parsed: &ParsedGraph) -> Vec<LogicalChannel> {
-        let repeated = repeated_groups(parsed);
-        let group_by_member = repeated
-            .iter()
-            .flat_map(|group| group.edge_ids.iter().map(move |edge_id| (*edge_id, group)))
-            .collect::<HashMap<_, _>>();
-        let mut seen_groups = BTreeSet::new();
-        let mut channels = Vec::new();
-        for edge in &parsed.internal_edges {
-            if parsed.is_initial_state_cut_edge(edge.edge_id) {
-                continue;
-            }
-            let Some(group) = group_by_member.get(&edge.edge_id) else {
-                channels.push(LogicalChannel {
-                    rep_edge: edge.edge_id,
-                    members: vec![edge.edge_id],
-                    relative_signs: vec![1],
-                    power: 1,
-                });
-                continue;
-            };
-            if !seen_groups.insert(group.edge_ids.clone()) {
-                continue;
-            }
-            channels.push(LogicalChannel {
-                rep_edge: group.edge_ids[0],
-                members: group.edge_ids.clone(),
-                relative_signs: group
-                    .relative_signs
-                    .iter()
-                    .map(|sign| sign * group.relative_signs[0])
-                    .collect(),
-                power: group.edge_ids.len(),
-            });
-        }
-        channels
-    }
-
-    fn push_variant_for_numerator_sample(
-        &mut self,
-        sample: &NumeratorSample,
-        variant: crate::expression::CFFVariant,
-    ) {
-        let (orientation, base_label) = orientation_from_edge_exprs(&sample.edge_exprs);
-        if let Some(existing) = self
-            .expression
-            .orientations
-            .iter_mut()
-            .find(|orientation_expr| {
-                orientation_expr.data.label.as_deref() == Some(base_label.as_str())
-                    && orientation_expr.loop_energy_map == sample.loop_exprs
-                    && orientation_expr.edge_energy_map == sample.edge_exprs
-            })
-        {
-            existing.variants.push(variant);
-            return;
-        }
-        let mut data = OrientationData::new(orientation);
-        data.label = Some(base_label);
-        self.expression.orientations.push(OrientationExpression {
-            data,
-            loop_energy_map: sample.loop_exprs.clone(),
-            edge_energy_map: sample.edge_exprs.clone(),
-            variants: vec![variant],
-        });
-    }
-
-    fn push_variant_for_maps(
-        &mut self,
-        loop_energy_map: Vec<LinearEnergyExpr>,
-        edge_energy_map: Vec<LinearEnergyExpr>,
-        variant: crate::expression::CFFVariant,
-    ) {
-        let (orientation, base_label) = orientation_from_edge_exprs(&edge_energy_map);
-        if let Some(existing) = self
-            .expression
-            .orientations
-            .iter_mut()
-            .find(|orientation_expr| {
-                orientation_expr.data.label.as_deref() == Some(base_label.as_str())
-                    && orientation_expr.loop_energy_map == loop_energy_map
-                    && orientation_expr.edge_energy_map == edge_energy_map
-            })
-        {
-            existing.variants.push(variant);
-            return;
-        }
-        let mut data = OrientationData::new(orientation);
-        data.label = Some(base_label);
-        self.expression.orientations.push(OrientationExpression {
-            data,
-            loop_energy_map,
-            edge_energy_map,
-            variants: vec![variant],
-        });
-    }
-
-    fn finalize_numerator_map_labels(&mut self) {
-        assign_numerator_map_labels(&mut self.expression.orientations);
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn affine_numerator_samples(
-        &self,
-        beta: &[usize],
-        basis_logical: &[usize],
-        cut_signs: &[i32],
-        alpha: &[usize],
-        base_loop_exprs: &[LinearEnergyExpr],
-        base_edge_exprs: &[LinearEnergyExpr],
-        loop_derivs: &[Vec<Rational>],
-        edge_derivs: &[Vec<Rational>],
-    ) -> Result<Vec<NumeratorSample>> {
-        if beta.iter().any(|order| *order > 1) || beta.iter().sum::<usize>() > 1 {
-            return Ok(Vec::new());
-        }
-        let samples = self.physical_sample_orbit(basis_logical, cut_signs, alpha)?;
-        if samples.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let internal_alias = self.internal_alias();
-        let sample_component_maps = samples
-            .iter()
-            .map(|sample| {
-                component_coeff_maps(&sample.loop_exprs, &sample.edge_exprs, &internal_alias)
-            })
-            .collect::<Vec<_>>();
-        let n_components = sample_component_maps[0].len();
-        let (constant_target, target_maps, extra_half_edges, sample_label) = if beta
-            .iter()
-            .all(|order| *order == 0)
-        {
-            (
-                Rational::one(),
-                component_coeff_maps(base_loop_exprs, base_edge_exprs, &internal_alias),
-                Vec::new(),
-                "n0".to_string(),
-            )
-        } else {
-            let Some(basis_position) = beta.iter().position(|order| *order == 1) else {
-                return Ok(Vec::new());
-            };
-            let logical_idx = basis_logical[basis_position];
-            let rep_edge = self.channels[logical_idx].rep_edge;
-            let aliased_rep = *internal_alias.get(&rep_edge).unwrap_or(&rep_edge);
-            let mut target_maps = Vec::new();
-            for row in loop_derivs {
-                let val = row[basis_position].clone();
-                target_maps.push(if val.is_zero() {
-                    BTreeMap::new()
-                } else {
-                    BTreeMap::from([(CoeffSymbol::Internal(aliased_rep), val * Rational::from(2))])
-                });
-            }
-            for row in edge_derivs {
-                let val = row[basis_position].clone();
-                target_maps.push(if val.is_zero() {
-                    BTreeMap::new()
-                } else {
-                    BTreeMap::from([(CoeffSymbol::Internal(aliased_rep), val * Rational::from(2))])
-                });
-            }
-            (
-                Rational::zero(),
-                target_maps,
-                vec![rep_edge],
-                format!("nD{basis_position}phys"),
-            )
-        };
-
-        if target_maps.len() != n_components {
-            return Err(GenerationError::NumeratorSampleOrbitIncomplete);
-        }
-        let weights =
-            AffineWeightSystem::new(&sample_component_maps, &target_maps, constant_target)
-                .solve()?;
-        Ok(weights
-            .into_iter()
-            .zip(samples)
-            .filter_map(|(coeff, sample)| {
-                (!coeff.is_zero()).then_some(NumeratorSample {
-                    coeff,
-                    extra_half_edges: extra_half_edges.clone(),
-                    loop_exprs: sample.loop_exprs,
-                    edge_exprs: sample.edge_exprs,
-                    label: format!("{sample_label}:{}", sample.label),
-                    uniform_scale_power: 0,
-                })
-            })
-            .collect())
-    }
-
-    fn bounded_numerator_samples(
-        &self,
-        beta: &[usize],
-        bounds: &[usize],
-        basis_logical: &[usize],
-        cut_signs: &[i32],
-        edge_derivs: &[Vec<Rational>],
-    ) -> Result<Vec<NumeratorSample>> {
-        let basis_orig = basis_logical
-            .iter()
-            .map(|logical_idx| self.channels[*logical_idx].rep_edge)
-            .collect::<Vec<_>>();
-        let degree_by_basis = self.basis_variable_degree_bounds(bounds, edge_derivs);
-        let channel_degree_by_basis = basis_logical
-            .iter()
-            .map(|logical_idx| {
-                self.channels[*logical_idx]
-                    .members
-                    .iter()
-                    .map(|member| bounds[*member])
-                    .sum::<usize>()
-            })
-            .collect::<Vec<_>>();
-        let mut per_axis = Vec::new();
-        for (basis_position, order) in beta.iter().enumerate() {
-            if *order == 0 {
-                continue;
-            }
-            let degree = degree_by_basis[basis_position];
-            if *order > degree {
-                return Ok(Vec::new());
-            }
-            let nodes = derivative_nodes(degree);
-            let weights = finite_difference_weights(&nodes, *order, degree)?;
-            let active = self
-                .options
-                .numerator_sampling_scale
-                .is_active_for_degree(channel_degree_by_basis[basis_position]);
-            let choices = nodes
-                .into_iter()
-                .zip(weights)
-                .filter(|(_, weight)| !weight.is_zero())
-                .collect::<Vec<_>>();
-            per_axis.push((basis_position, active, choices));
-        }
-
-        let mut out = Vec::new();
-        let choices = per_axis
-            .iter()
-            .map(|(_, _, choices)| choices.clone())
-            .multi_cartesian_product();
-        for axis_choices in choices {
-            let mut coeff = Rational::one();
-            let mut offsets = BTreeMap::new();
-            let mut axis_uniform = BTreeMap::new();
-            for ((basis_position, use_uniform, _), (node, weight)) in
-                per_axis.iter().zip(axis_choices)
-            {
-                coeff *= weight;
-                offsets.insert(*basis_position, node);
-                axis_uniform.insert(*basis_position, *use_uniform);
-            }
-            if coeff.is_zero() {
-                continue;
-            }
-
-            let solver = EnergySolver::new(&self.signatures);
-            let mut targets = vec![LinearEnergyExpr::zero(); self.signatures.len()];
-            let mut labels = Vec::new();
-            let mut basis_sample_targets = Vec::with_capacity(basis_logical.len());
-            for (basis_position, (edge, sigma)) in basis_orig.iter().zip(cut_signs).enumerate() {
-                let offset = *offsets.get(&basis_position).unwrap_or(&0);
-                if *axis_uniform.get(&basis_position).unwrap_or(&false) {
-                    targets[*edge] = LinearEnergyExpr::ose(EdgeIndex(*edge), i64::from(*sigma))
-                        + LinearEnergyExpr::uniform_scale(i64::from(offset));
-                    labels.push(format!("b{basis_position}{sigma:+}{offset:+}M"));
-                    basis_sample_targets.push(RepeatedChannelSampleTarget::Uniform {
-                        cut_sign: *sigma,
-                        offset,
-                    });
-                } else {
-                    let sample_coeff = *sigma + offset;
-                    targets[*edge] =
-                        LinearEnergyExpr::ose(EdgeIndex(*edge), i64::from(sample_coeff));
-                    labels.push(format!("b{basis_position}{sample_coeff:+}"));
-                    basis_sample_targets.push(RepeatedChannelSampleTarget::NonUniform(i64::from(
-                        sample_coeff,
-                    )));
-                }
-            }
-            let loop_exprs = solver.solve_from_target_edges(&basis_orig, &targets)?;
-            let mut edge_exprs = solver.edge_q0_from_loop_exprs(&loop_exprs);
-            self.impose_repeated_channel_sample_targets(
-                &mut edge_exprs,
-                basis_logical,
-                &basis_sample_targets,
-            );
-            apply_initial_state_cut_edge_energy_exprs(self.parsed, &mut edge_exprs);
-            let mut extra_half_edges = Vec::new();
-            let mut uniform_scale_power = 0usize;
-            let mut nonuniform_order_sum = 0usize;
-            for (basis_position, order) in beta.iter().enumerate() {
-                if *axis_uniform.get(&basis_position).unwrap_or(&false) {
-                    uniform_scale_power += *order;
-                    continue;
-                }
-                let rep_edge = self.channels[basis_logical[basis_position]].rep_edge;
-                extra_half_edges.extend(std::iter::repeat_n(rep_edge, *order));
-                nonuniform_order_sum += *order;
-            }
-            coeff *= rational_pow_i64(2, nonuniform_order_sum);
-            out.push(NumeratorSample {
-                coeff,
-                extra_half_edges,
-                loop_exprs,
-                edge_exprs,
-                label: format!(
-                    "nD{}:fd{}",
-                    beta.iter().map(usize::to_string).join(""),
-                    labels.join(",")
-                ),
-                uniform_scale_power,
-            });
-        }
-        Ok(out)
-    }
-
-    fn impose_repeated_channel_sample_targets(
-        &self,
-        edge_exprs: &mut [LinearEnergyExpr],
-        basis_logical: &[usize],
-        sample_targets: &[RepeatedChannelSampleTarget],
-    ) {
-        for (logical_idx, sample_target) in basis_logical.iter().zip(sample_targets) {
-            let channel = &self.channels[*logical_idx];
-            if channel.members.len() <= 1 {
-                continue;
-            }
-            for (member, relative_sign) in channel.members.iter().zip(&channel.relative_signs) {
-                edge_exprs[*member] = match sample_target {
-                    RepeatedChannelSampleTarget::NonUniform(coeff) => LinearEnergyExpr::ose(
-                        EdgeIndex(*member),
-                        i64::from(*relative_sign) * *coeff,
-                    ),
-                    RepeatedChannelSampleTarget::Uniform { cut_sign, offset } => {
-                        LinearEnergyExpr::ose(
-                            EdgeIndex(*member),
-                            i64::from(*relative_sign) * i64::from(*cut_sign),
-                        ) + LinearEnergyExpr::uniform_scale(
-                            i64::from(*relative_sign) * i64::from(*offset),
-                        )
-                    }
-                };
-            }
-        }
-    }
-
-    fn physical_sample_orbit(
-        &self,
-        basis_logical: &[usize],
-        cut_signs: &[i32],
-        alpha: &[usize],
-    ) -> Result<Vec<PhysicalSample>> {
-        let active_positions = alpha
-            .iter()
-            .enumerate()
-            .filter_map(|(basis_position, order)| (*order > 0).then_some(basis_position))
-            .collect::<Vec<_>>();
-        let mut base_by_position = BTreeMap::new();
-        let mut options_by_position = BTreeMap::new();
-        for basis_position in &active_positions {
-            let channel = &self.channels[basis_logical[*basis_position]];
-            let sigma = cut_signs[*basis_position];
-            let options = physical_group_options(channel);
-            let base_tau = channel
-                .relative_signs
-                .iter()
-                .map(|relative_sign| relative_sign * sigma)
-                .collect::<Vec<_>>();
-            let base = options
-                .iter()
-                .find(|option| option.tau == base_tau && option.chain_sign == sigma)
-                .expect("base physical option must exist")
-                .clone();
-            base_by_position.insert(*basis_position, base);
-            options_by_position.insert(*basis_position, options);
-        }
-
-        let mut specs = vec![base_by_position.clone()];
-        for basis_position in &active_positions {
-            for option in options_by_position
-                .get(basis_position)
-                .into_iter()
-                .flatten()
-            {
-                let mut spec = base_by_position.clone();
-                spec.insert(*basis_position, option.clone());
-                specs.push(spec);
-            }
-        }
-
-        let mut seen = BTreeSet::new();
-        let mut samples = Vec::new();
-        for spec in specs {
-            let key = active_positions
-                .iter()
-                .filter_map(|basis_position| {
-                    spec.get(basis_position)
-                        .map(|option| (*basis_position, option.tau.clone(), option.chain_sign))
-                })
-                .collect::<Vec<_>>();
-            if !seen.insert(key) {
-                continue;
-            }
-
-            let basis_orig = basis_logical
-                .iter()
-                .map(|logical_idx| self.channels[*logical_idx].rep_edge)
-                .collect::<Vec<_>>();
-            let mut targets = vec![LinearEnergyExpr::zero(); self.signatures.len()];
-            for (basis_position, (logical_idx, sigma)) in
-                basis_logical.iter().zip(cut_signs).enumerate()
-            {
-                let channel = &self.channels[*logical_idx];
-                let chain_sign = spec
-                    .get(&basis_position)
-                    .map(|option| option.chain_sign)
-                    .unwrap_or(*sigma);
-                targets[channel.rep_edge] =
-                    LinearEnergyExpr::ose(EdgeIndex(channel.rep_edge), i64::from(chain_sign));
-            }
-            let solver = EnergySolver::new(&self.signatures);
-            let loop_exprs = solver.solve_from_target_edges(&basis_orig, &targets)?;
-            let mut edge_exprs = solver.edge_q0_from_loop_exprs(&loop_exprs);
-            let mut labels = Vec::new();
-            for (basis_position, logical_idx) in basis_logical.iter().enumerate() {
-                let channel = &self.channels[*logical_idx];
-                if let Some(option) = spec.get(&basis_position) {
-                    labels.push(format!("G{}{}", channel.rep_edge, option.label));
-                    for (member, sign) in channel.members.iter().zip(&option.tau) {
-                        edge_exprs[*member] =
-                            LinearEnergyExpr::ose(EdgeIndex(*member), i64::from(*sign));
-                    }
-                }
-            }
-            apply_initial_state_cut_edge_energy_exprs(self.parsed, &mut edge_exprs);
-            samples.push(PhysicalSample {
-                loop_exprs,
-                edge_exprs,
-                label: if labels.is_empty() {
-                    "phys0".to_string()
-                } else {
-                    format!("phys{}", labels.join("_"))
-                },
-            });
-        }
-        Ok(samples)
-    }
-
-    fn internal_alias(&self) -> BTreeMap<usize, usize> {
-        self.channels
-            .iter()
-            .flat_map(|channel| {
-                channel
-                    .members
-                    .iter()
-                    .map(move |member| (*member, channel.rep_edge))
-            })
-            .collect()
-    }
-
-    fn basis_variable_degree_bounds(
-        &self,
-        bounds: &[usize],
-        edge_derivs: &[Vec<Rational>],
-    ) -> Vec<usize> {
-        let n_basis = edge_derivs.first().map(Vec::len).unwrap_or(0);
-        (0..n_basis)
-            .map(|basis_position| {
-                edge_derivs
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(edge_id, row)| {
-                        (!row[basis_position].is_zero()).then_some(bounds[edge_id])
-                    })
-                    .sum()
-            })
-            .collect()
-    }
-
-    fn append_finite_pole_contact_completions(&mut self, bounds: &[usize]) -> Result<()> {
-        let Some(active_edge) = bounds.iter().position(|degree| *degree > 1) else {
-            return Ok(());
-        };
-
-        let (subparsed, sub_to_orig) = self.contract_parsed_edges(&[active_edge]);
-        if !subparsed.internal_edges.is_empty() {
-            let sub_bounds = sub_to_orig
-                .iter()
-                .map(|orig_id| bounds[*orig_id])
-                .collect::<Vec<_>>();
-            let sub_options = Generate3DExpressionOptions {
-                representation: self.options.representation,
-                energy_degree_bounds: Some(
-                    sub_bounds
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(edge_id, degree)| {
-                            (*degree != 0).then_some((edge_id, *degree))
-                        })
-                        .collect(),
-                ),
-                numerator_sampling_scale: self.options.numerator_sampling_scale,
-                include_cff_duplicate_signature_excess_sign: false,
-            };
-            let contact_source =
-                generate_residue_basis_expression_from_parsed(&subparsed, &sub_options)?;
-            self.append_finite_pole_contact_terms(
-                active_edge,
-                bounds[active_edge],
-                &contact_source,
-                &sub_to_orig,
-            )?;
-        }
-
-        let mut remainder_bounds = bounds.to_vec();
-        remainder_bounds[active_edge] = 1;
-        self.append_finite_pole_contact_completions(&remainder_bounds)
-    }
-
-    fn build_simple_bounded_finite_pole_residue_basis(&mut self, bounds: &[usize]) -> Result<()> {
-        let Some(active_edge) = self.finite_pole_recursive_active_edge(bounds) else {
-            for residue in energy_residues(
-                &self
-                    .channels
-                    .iter()
-                    .map(|channel| self.signatures[channel.rep_edge].loop_signature.clone())
-                    .collect::<Vec<_>>(),
-                &vec![
-                    ContourClosure::Below;
-                    self.signatures
-                        .first()
-                        .map(|signature| signature.loop_signature.len())
-                        .unwrap_or(0)
-                ],
-            )? {
-                self.add_residue(&residue, Some(bounds))?;
-            }
-            return Ok(());
-        };
-
-        let mut remainder_bounds = bounds.to_vec();
-        remainder_bounds[active_edge] = 1;
-        let remainder_options = Generate3DExpressionOptions {
-            representation: self.options.representation,
-            energy_degree_bounds: Some(
-                remainder_bounds
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(edge_id, degree)| (*degree != 0).then_some((edge_id, *degree)))
-                    .collect(),
-            ),
-            numerator_sampling_scale: self.options.numerator_sampling_scale,
-            include_cff_duplicate_signature_excess_sign: false,
-        };
-        let remainder_source =
-            generate_residue_basis_expression_from_parsed(self.parsed, &remainder_options)?;
-        self.append_finite_pole_remainder_terms(active_edge, &remainder_source)?;
-
-        let (subparsed, sub_to_orig) = self.contract_parsed_edges(&[active_edge]);
-        if !subparsed.internal_edges.is_empty() {
-            let sub_bounds = sub_to_orig
-                .iter()
-                .map(|orig_id| bounds[*orig_id])
-                .collect::<Vec<_>>();
-            let sub_options = Generate3DExpressionOptions {
-                representation: self.options.representation,
-                energy_degree_bounds: Some(
-                    sub_bounds
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(edge_id, degree)| {
-                            (*degree != 0).then_some((edge_id, *degree))
-                        })
-                        .collect(),
-                ),
-                numerator_sampling_scale: self.options.numerator_sampling_scale,
-                include_cff_duplicate_signature_excess_sign: false,
-            };
-            let contact_source =
-                generate_residue_basis_expression_from_parsed(&subparsed, &sub_options)?;
-            self.append_finite_pole_contact_terms(
-                active_edge,
-                bounds[active_edge],
-                &contact_source,
-                &sub_to_orig,
-            )?;
-        }
-
-        Ok(())
-    }
-
-    fn finite_pole_recursive_active_edge(&self, bounds: &[usize]) -> Option<usize> {
-        bounds.iter().enumerate().find_map(|(edge_id, degree)| {
-            if *degree <= 1 {
-                return None;
-            }
-            let channel = self
-                .channels
-                .iter()
-                .find(|channel| channel.members.contains(&edge_id))?;
-            (channel.members.len() == 1).then_some(edge_id)
-        })
-    }
-
-    fn append_finite_pole_remainder_terms(
-        &mut self,
-        edge_id: usize,
-        source: &ThreeDExpression<OrientationID>,
-    ) -> Result<()> {
-        let edge_map = (0..self.parsed.internal_edges.len())
-            .map(|id| (id, id))
-            .collect::<BTreeMap<_, _>>();
-        let surface_map = self.copy_expression_surfaces(source, &edge_map);
-
-        for orientation in &source.orientations {
-            for variant in &orientation.variants {
-                let denominator = variant
-                    .denominator
-                    .clone()
-                    .map(|surface_id| map_surface_id(surface_id, &surface_map));
-                let base_half_edges = variant
-                    .half_edges
-                    .iter()
-                    .map(|edge| edge.0)
-                    .collect::<Vec<_>>();
-                let base_num_surfaces = variant
-                    .numerator_surfaces
-                    .iter()
-                    .map(|surface_id| map_surface_id(*surface_id, &surface_map))
-                    .collect::<Vec<_>>();
-
-                for component in self.finite_pole_remainder_components(
-                    edge_id,
-                    orientation.edge_energy_map[edge_id].clone(),
-                ) {
-                    let mut edge_exprs = orientation.edge_energy_map.clone();
-                    edge_exprs[edge_id] =
-                        LinearEnergyExpr::ose(EdgeIndex(edge_id), i64::from(component.sample));
-                    let mut half_edges = base_half_edges.clone();
-                    half_edges.extend(component.half_edges);
-                    half_edges.sort_unstable();
-                    let mut numerator_surfaces = base_num_surfaces.clone();
-                    numerator_surfaces.extend(component.numerator_surfaces);
-                    let prefactor =
-                        rational_from_coefficient(&variant.prefactor) * component.prefactor;
-                    if prefactor.is_zero() {
-                        continue;
-                    }
-                    self.push_variant_for_maps(
-                        orientation.loop_energy_map.clone(),
-                        edge_exprs,
-                        crate::expression::CFFVariant {
-                            origin: Some(format!(
-                                "bounded_degree_residue_finite_pole_remainder:e{edge_id}={}",
-                                if component.sample > 0 { "+" } else { "-" }
-                            )),
-                            prefactor: rational_to_coefficient(prefactor)?,
-                            half_edges: half_edges.into_iter().map(EdgeIndex).collect(),
-                            denominator_edges: variant.denominator_edges.clone(),
-                            denominator_surface_signs: variant.denominator_surface_signs.clone(),
-                            denominator_edge_support_signs: variant
-                                .denominator_edge_support_signs
-                                .clone(),
-                            uniform_scale_power: variant.uniform_scale_power,
-                            numerator_surfaces,
-                            denominator: denominator.clone(),
-                        },
-                    );
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn append_finite_pole_contact_terms(
-        &mut self,
-        edge_id: usize,
-        bound: usize,
-        source: &ThreeDExpression<OrientationID>,
-        sub_to_orig: &[usize],
-    ) -> Result<()> {
-        let edge_map = sub_to_orig
-            .iter()
-            .enumerate()
-            .map(|(sub_id, orig_id)| (sub_id, *orig_id))
-            .collect::<BTreeMap<_, _>>();
-        let surface_map = self.copy_expression_surfaces(source, &edge_map);
-        let signatures = self
-            .parsed
-            .internal_edges
-            .iter()
-            .map(|edge| edge.signature.clone())
-            .collect::<Vec<_>>();
-
-        for orientation in &source.orientations {
-            let full_loop_exprs = orientation
-                .loop_energy_map
-                .iter()
-                .cloned()
-                .map(|expr| expr.remap_internal_edges(&edge_map))
-                .collect::<Vec<_>>();
-            let current_edge_exprs = edge_q0_from_loop_exprs(&signatures, &full_loop_exprs);
-            let mut base_edge_exprs =
-                vec![LinearEnergyExpr::zero(); self.parsed.internal_edges.len()];
-            for (sub_id, orig_id) in sub_to_orig.iter().enumerate() {
-                base_edge_exprs[*orig_id] = orientation.edge_energy_map[sub_id]
-                    .clone()
-                    .remap_internal_edges(&edge_map);
-            }
-
-            let components = self.finite_pole_contact_components(
-                edge_id,
-                bound,
-                current_edge_exprs[edge_id].clone(),
-            );
-            for variant in &orientation.variants {
-                let denominator = variant
-                    .denominator
-                    .clone()
-                    .map(|surface_id| map_surface_id(surface_id, &surface_map));
-                let base_half_edges = variant
-                    .half_edges
-                    .iter()
-                    .map(|edge| edge_map.get(&edge.0).copied().unwrap_or(edge.0))
-                    .collect::<Vec<_>>();
-                let base_num_surfaces = variant
-                    .numerator_surfaces
-                    .iter()
-                    .map(|surface_id| map_surface_id(*surface_id, &surface_map))
-                    .collect::<Vec<_>>();
-                let base_denominator_edges = variant
-                    .denominator_edges
-                    .iter()
-                    .map(|edge| EdgeIndex(edge_map.get(&edge.0).copied().unwrap_or(edge.0)))
-                    .chain(std::iter::once(EdgeIndex(edge_id)))
-                    .sorted()
-                    .dedup()
-                    .collect::<Vec<_>>();
-
-                for component in &components {
-                    let mut edge_exprs = base_edge_exprs.clone();
-                    edge_exprs[edge_id] = if component.sample == 0 {
-                        LinearEnergyExpr::zero()
-                    } else {
-                        LinearEnergyExpr::ose(EdgeIndex(edge_id), i64::from(component.sample))
-                    };
-                    let mut half_edges = base_half_edges.clone();
-                    half_edges.extend(component.half_edges.iter().copied());
-                    half_edges.sort_unstable();
-                    let mut numerator_surfaces = base_num_surfaces.clone();
-                    numerator_surfaces.extend(component.numerator_surfaces.iter().copied());
-                    // This finite-pole branch lifts a residue-basis lower-sector
-                    // expression, so the contact quotient enters with its
-                    // algebraic sign. The one-edge pure-CFF pinch orientation
-                    // sign is already specific to the CFF recursive branch.
-                    let prefactor =
-                        rational_from_coefficient(&variant.prefactor) * component.prefactor.clone();
-                    if prefactor.is_zero() {
-                        continue;
-                    }
-                    self.push_variant_for_maps(
-                        full_loop_exprs.clone(),
-                        edge_exprs,
-                        crate::expression::CFFVariant {
-                            origin: Some(format!(
-                                "bounded_degree_residue_finite_pole_contact:e{edge_id}={}",
-                                match component.sample {
-                                    0 => "0",
-                                    value if value > 0 => "+",
-                                    _ => "-",
-                                }
-                            )),
-                            prefactor: rational_to_coefficient(prefactor)?,
-                            half_edges: half_edges.into_iter().map(EdgeIndex).collect(),
-                            denominator_edges: base_denominator_edges.clone(),
-                            denominator_surface_signs: variant.denominator_surface_signs.clone(),
-                            denominator_edge_support_signs: variant
-                                .denominator_edge_support_signs
-                                .clone(),
-                            uniform_scale_power: variant.uniform_scale_power,
-                            numerator_surfaces,
-                            denominator: denominator.clone(),
-                        },
-                    );
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn finite_pole_contact_components(
-        &mut self,
-        edge_id: usize,
-        bound: usize,
-        current_expr: LinearEnergyExpr,
-    ) -> Vec<ContactComponent> {
-        let q_surface = (!current_expr.is_zero())
-            .then(|| self.intern_surface(current_expr, SurfaceOrigin::Helper, true));
-        let mut components = Vec::new();
-        for (sample, poly) in contact_weight_polys(bound) {
-            for (power, coeff) in poly.into_iter().enumerate() {
-                if coeff.is_zero() || (power > 0 && q_surface.is_none()) {
-                    continue;
-                }
-                let prefactor = coeff * rational_pow_i64(2, power + 2);
-                if prefactor.is_zero() {
-                    continue;
-                }
-                components.push(ContactComponent {
-                    sample,
-                    prefactor,
-                    half_edges: std::iter::repeat_n(edge_id, power + 2).collect(),
-                    numerator_surfaces: q_surface
-                        .into_iter()
-                        .cycle()
-                        .take(power)
-                        .collect::<Vec<_>>(),
-                });
-            }
-        }
-        components
-    }
-
-    fn finite_pole_remainder_components(
-        &mut self,
-        edge_id: usize,
-        current_expr: LinearEnergyExpr,
-    ) -> Vec<ContactComponent> {
-        let mut components = Vec::new();
-        let plus_expr = current_expr.clone() + LinearEnergyExpr::ose(EdgeIndex(edge_id), 1);
-        if !plus_expr.is_zero() {
-            let plus = self.intern_surface(plus_expr, SurfaceOrigin::Helper, true);
-            components.push(ContactComponent {
-                sample: 1,
-                prefactor: Rational::one(),
-                half_edges: vec![edge_id],
-                numerator_surfaces: vec![plus],
-            });
-        }
-
-        let minus_expr = LinearEnergyExpr::ose(EdgeIndex(edge_id), 1) - current_expr;
-        if !minus_expr.is_zero() {
-            let minus = self.intern_surface(minus_expr, SurfaceOrigin::Helper, true);
-            components.push(ContactComponent {
-                sample: -1,
-                prefactor: Rational::one(),
-                half_edges: vec![edge_id],
-                numerator_surfaces: vec![minus],
-            });
-        }
-        components
-    }
-
-    fn copy_expression_surfaces(
-        &mut self,
-        source: &ThreeDExpression<OrientationID>,
-        edge_map: &BTreeMap<usize, usize>,
-    ) -> HashMap<HybridSurfaceID, HybridSurfaceID> {
-        source
-            .surfaces
-            .linear_surface_cache
-            .iter_enumerated()
-            .map(|(id, surface)| {
-                (
-                    HybridSurfaceID::Linear(id),
-                    self.intern_surface(
-                        surface.expression.clone().remap_internal_edges(edge_map),
-                        surface.origin,
-                        surface.numerator_only,
-                    ),
-                )
-            })
-            .collect()
-    }
-
-    fn intern_surface(
-        &mut self,
-        surface_expr: LinearEnergyExpr,
-        origin: SurfaceOrigin,
-        numerator_only: bool,
-    ) -> HybridSurfaceID {
-        let surface_expr = surface_expr.canonical();
-        let kind = classify_surface_kind(&surface_expr);
-        let key = (kind, surface_expr.clone());
-        if let Some(surface_id) = self.surface_index.get(&key) {
-            if !numerator_only && let HybridSurfaceID::Linear(id) = *surface_id {
-                self.expression.surfaces.linear_surface_cache[id].origin = SurfaceOrigin::Physical;
-                self.expression.surfaces.linear_surface_cache[id].numerator_only = false;
-            }
-            return *surface_id;
-        }
-
-        let id = LinearSurfaceID(self.expression.surfaces.linear_surface_cache.len());
-        let surface_id = HybridSurfaceID::Linear(id);
-        self.expression
-            .surfaces
-            .linear_surface_cache
-            .push(LinearSurface {
-                kind,
-                expression: surface_expr,
-                origin,
-                numerator_only,
-            });
-        self.surface_index.insert(key, surface_id);
-        surface_id
-    }
-
-    fn contract_parsed_edges(&self, pinched_edges: &[usize]) -> (ParsedGraph, Vec<usize>) {
-        let pinched = pinched_edges.iter().copied().collect::<BTreeSet<_>>();
-        let mut parent = self
-            .parsed
-            .node_name_to_internal
-            .values()
-            .copied()
-            .map(|node| (node, node))
-            .collect::<BTreeMap<_, _>>();
-
-        for edge in &self.parsed.internal_edges {
-            if pinched.contains(&edge.edge_id) {
-                union_nodes(&mut parent, edge.tail, edge.head);
-            }
-        }
-
-        let parent_keys = parent.keys().copied().collect::<Vec<_>>();
-        let roots = parent_keys
-            .iter()
-            .map(|node| find_node_root(&mut parent.clone(), *node))
-            .collect::<BTreeSet<_>>();
-        let root_to_new = roots
-            .into_iter()
-            .enumerate()
-            .map(|(new_id, root)| (root, new_id))
-            .collect::<BTreeMap<_, _>>();
-        let old_to_new = parent_keys
-            .iter()
-            .map(|node| {
-                let root = find_node_root(&mut parent, *node);
-                (*node, root_to_new[&root])
-            })
-            .collect::<BTreeMap<_, _>>();
-
-        let mut sub_to_orig = Vec::new();
-        let mut internal_edges = Vec::new();
-        for edge in &self.parsed.internal_edges {
-            if pinched.contains(&edge.edge_id) {
-                continue;
-            }
-            let sub_id = internal_edges.len();
-            sub_to_orig.push(edge.edge_id);
-            internal_edges.push(ParsedGraphInternalEdge {
-                edge_id: sub_id,
-                tail: old_to_new[&edge.tail],
-                head: old_to_new[&edge.head],
-                label: edge.label.clone(),
-                mass_key: edge.mass_key.clone(),
-                signature: edge.signature.clone(),
-                had_pow: edge.had_pow,
-            });
-        }
-
-        let external_edges = self
-            .parsed
-            .external_edges
-            .iter()
-            .map(|edge| ParsedGraphExternalEdge {
-                edge_id: edge.edge_id,
-                source: edge.source.map(|source| old_to_new[&source]),
-                destination: edge.destination.map(|destination| old_to_new[&destination]),
-                label: edge.label.clone(),
-                external_coefficients: edge.external_coefficients.clone(),
-            })
-            .collect::<Vec<_>>();
-        let node_name_to_internal = old_to_new
-            .values()
-            .copied()
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .map(|node| (format!("c{node}"), node))
-            .collect();
-
-        (
-            ParsedGraph {
-                internal_edges,
-                external_edges,
-                initial_state_cut_edges: remap_initial_state_cut_edges(self.parsed, &sub_to_orig),
-                loop_names: self.parsed.loop_names.clone(),
-                external_names: self.parsed.external_names.clone(),
-                node_name_to_internal,
-            },
-            sub_to_orig,
-        )
-    }
-}
-
-struct AffineWeightSystem<'a> {
-    sample_component_maps: &'a [Vec<CoeffMap>],
-    target_maps: &'a [CoeffMap],
-    constant_target: Rational,
-}
-
-impl<'a> AffineWeightSystem<'a> {
-    fn new(
-        sample_component_maps: &'a [Vec<CoeffMap>],
-        target_maps: &'a [CoeffMap],
-        constant_target: Rational,
-    ) -> Self {
-        Self {
-            sample_component_maps,
-            target_maps,
-            constant_target,
-        }
-    }
-
-    fn solve(&self) -> Result<Vec<Rational>> {
-        let Some(first_sample) = self.sample_component_maps.first() else {
-            return Ok(Vec::new());
-        };
-        let n_samples = self.sample_component_maps.len();
-        let mut ordered_symbols = BTreeSet::new();
-        for component_maps in self.sample_component_maps {
-            for coeff_map in component_maps {
-                ordered_symbols.extend(coeff_map.keys().copied());
-            }
-        }
-        for coeff_map in self.target_maps {
-            ordered_symbols.extend(coeff_map.keys().copied());
-        }
-
-        let mut rows = vec![vec![Rational::one(); n_samples]];
-        let mut targets = vec![self.constant_target.clone()];
-        for component_index in 0..first_sample.len() {
-            for symbol in &ordered_symbols {
-                let row = self
-                    .sample_component_maps
-                    .iter()
-                    .map(|component_maps| {
-                        component_maps[component_index]
-                            .get(symbol)
-                            .cloned()
-                            .unwrap_or_else(Rational::zero)
-                    })
-                    .collect::<Vec<_>>();
-                let target = self.target_maps[component_index]
-                    .get(symbol)
-                    .cloned()
-                    .unwrap_or_else(Rational::zero);
-                if row.iter().any(|value| !value.is_zero()) || !target.is_zero() {
-                    rows.push(row);
-                    targets.push(target);
-                }
-            }
-        }
-        Self::minimum_norm_affine_weights(&rows, &targets)
-    }
-
-    fn minimum_norm_affine_weights(
-        rows: &[Vec<Rational>],
-        targets: &[Rational],
-    ) -> Result<Vec<Rational>> {
-        if rows.is_empty() {
-            return Ok(Vec::new());
-        }
-        let n_cols = rows[0].len();
-        if n_cols == 0 {
-            return Ok(Vec::new());
-        }
-        for (row, target) in rows.iter().zip(targets) {
-            if row.iter().all(|value| value.is_zero()) && !target.is_zero() {
-                return Err(GenerationError::NumeratorSampleOrbitIncomplete);
-            }
-        }
-
-        let mut keep = Vec::new();
-        let mut current = Vec::<Vec<Rational>>::new();
-        let mut current_rank = 0;
-        for (index, row) in rows.iter().enumerate() {
-            if row.iter().all(|value| value.is_zero()) {
-                continue;
-            }
-            let trial = current
-                .iter()
-                .cloned()
-                .chain(std::iter::once(row.clone()))
-                .collect::<Vec<_>>();
-            let trial_rank = rank_rational(&trial);
-            if trial_rank > current_rank {
-                keep.push(index);
-                current = trial;
-                current_rank = trial_rank;
-            }
-        }
-        if keep.is_empty() {
-            return if targets.iter().all(|target| target.is_zero()) {
-                Ok(vec![Rational::zero(); n_cols])
-            } else {
-                Err(GenerationError::NumeratorSampleOrbitIncomplete)
-            };
-        }
-        let basis_rows = keep
-            .iter()
-            .map(|index| rows[*index].clone())
-            .collect::<Vec<_>>();
-        let basis_targets = keep
-            .iter()
-            .map(|index| targets[*index].clone())
-            .collect::<Vec<_>>();
-        let gram = basis_rows
-            .iter()
-            .map(|row_i| {
-                basis_rows
-                    .iter()
-                    .map(|row_j| {
-                        row_i
-                            .iter()
-                            .zip(row_j)
-                            .fold(Rational::zero(), |acc, (a, b)| acc + a.clone() * b.clone())
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        let dual =
-            solve_rational_system(gram, basis_targets).ok_or(GenerationError::SingularBasis)?;
-        let coeffs = (0..n_cols)
-            .map(|column| {
-                basis_rows
-                    .iter()
-                    .zip(&dual)
-                    .fold(Rational::zero(), |acc, (row, dual_coeff)| {
-                        acc + row[column].clone() * dual_coeff.clone()
-                    })
-            })
-            .collect::<Vec<_>>();
-        for (row, target) in rows.iter().zip(targets) {
-            let got = row
-                .iter()
-                .zip(&coeffs)
-                .fold(Rational::zero(), |acc, (a, b)| acc + a.clone() * b.clone());
-            if got != target.clone() {
-                return Err(GenerationError::NumeratorSampleOrbitIncomplete);
-            }
-        }
-        Ok(coeffs)
-    }
-}
-
-fn physical_group_options(channel: &LogicalChannel) -> Vec<PhysicalGroupOption> {
-    (0..channel.power)
-        .map(|_| [-1, 1])
-        .multi_cartesian_product()
-        .flat_map(|tau| {
-            let relative_tau = tau
-                .iter()
-                .zip(&channel.relative_signs)
-                .map(|(tau, relative_sign)| tau * relative_sign)
-                .collect::<Vec<_>>();
-            let chain_signs = if relative_tau.iter().all(|sign| *sign > 0) {
-                vec![1]
-            } else if relative_tau.iter().all(|sign| *sign < 0) {
-                vec![-1]
-            } else {
-                vec![-1, 1]
-            };
-            let tau_label = relative_tau
-                .iter()
-                .map(|sign| if *sign > 0 { "p" } else { "m" })
-                .join("");
-            chain_signs
-                .into_iter()
-                .map(move |chain_sign| PhysicalGroupOption {
-                    tau: tau.clone(),
-                    chain_sign,
-                    label: format!("t{}c{}", tau_label, if chain_sign > 0 { "p" } else { "m" }),
-                })
-        })
-        .collect()
-}
-
-fn component_coeff_maps(
-    loop_exprs: &[LinearEnergyExpr],
-    edge_exprs: &[LinearEnergyExpr],
-    internal_alias: &BTreeMap<usize, usize>,
-) -> Vec<CoeffMap> {
-    loop_exprs
-        .iter()
-        .chain(edge_exprs)
-        .map(|expr| coeff_map(expr, internal_alias))
-        .collect()
-}
-
-fn coeff_map(expr: &LinearEnergyExpr, internal_alias: &BTreeMap<usize, usize>) -> CoeffMap {
-    let mut out = BTreeMap::new();
-    let constant = expr.constant.rational_coeff();
-    if !constant.is_zero() {
-        out.insert(CoeffSymbol::Constant, constant);
-    }
-    for (edge_id, coeff) in &expr.internal_terms {
-        let aliased = internal_alias.get(&edge_id.0).copied().unwrap_or(edge_id.0);
-        add_coeff(
-            &mut out,
-            CoeffSymbol::Internal(aliased),
-            coeff.rational_coeff(),
-        );
-    }
-    for (edge_id, coeff) in &expr.external_terms {
-        add_coeff(
-            &mut out,
-            CoeffSymbol::External(edge_id.0),
-            coeff.rational_coeff(),
-        );
-    }
-    if !expr.uniform_scale_coeff.is_zero_coeff() {
-        add_coeff(
-            &mut out,
-            CoeffSymbol::UniformScale,
-            expr.uniform_scale_coeff.rational_coeff(),
-        );
-    }
-    out.retain(|_, value| !value.is_zero());
-    out
-}
-
-fn add_coeff(map: &mut CoeffMap, key: CoeffSymbol, value: Rational) {
-    let entry = map.entry(key).or_insert(Rational::zero());
-    *entry = entry.clone() + value;
-}
-
 fn orientation_from_edge_exprs(edge_exprs: &[LinearEnergyExpr]) -> (EdgeVec<Orientation>, String) {
     let mut label = String::new();
     let orientation = EdgeVec::from_iter(edge_exprs.iter().enumerate().map(|(edge, expr)| {
@@ -6210,48 +4588,6 @@ fn orientation_from_edge_exprs(edge_exprs: &[LinearEnergyExpr]) -> (EdgeVec<Orie
 
 fn rational_to_coefficient(value: Rational) -> Result<symbolica::atom::Atom> {
     Ok(rational_coeff_atom(value))
-}
-
-fn derivative_nodes(degree: usize) -> Vec<i32> {
-    let mut nodes = vec![0];
-    let mut step = 1;
-    while nodes.len() < degree + 1 {
-        nodes.push(step);
-        if nodes.len() == degree + 1 {
-            break;
-        }
-        nodes.push(-step);
-        step += 1;
-    }
-    nodes
-}
-
-fn finite_difference_weights(
-    nodes: &[i32],
-    derivative_order: usize,
-    degree: usize,
-) -> Result<Vec<Rational>> {
-    if derivative_order > degree {
-        return Ok(vec![Rational::zero(); nodes.len()]);
-    }
-    let matrix = (0..=degree)
-        .map(|power| {
-            nodes
-                .iter()
-                .map(|node| Rational::from(*node).pow_usize(power))
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
-    let rhs = (0..=degree)
-        .map(|power| {
-            if power == derivative_order {
-                factorial(derivative_order)
-            } else {
-                Rational::zero()
-            }
-        })
-        .collect::<Vec<_>>();
-    solve_rational_system(matrix, rhs).ok_or(GenerationError::SingularBasis)
 }
 
 fn intern_linear_surface(
@@ -6483,31 +4819,6 @@ fn solve_loop_energy_particular_from_target_edge_exprs(
     Err(GenerationError::SingularBasis)
 }
 
-fn choose_basis_indices_from_edges(
-    signatures: &[MomentumSignature],
-    edge_ids: &[usize],
-) -> Result<Vec<usize>> {
-    let n_loops = signatures
-        .first()
-        .map(|signature| signature.loop_signature.len())
-        .unwrap_or(0);
-    if n_loops == 0 {
-        return Ok(Vec::new());
-    }
-    edge_ids
-        .iter()
-        .copied()
-        .combinations(n_loops)
-        .find(|basis| {
-            let matrix = basis
-                .iter()
-                .map(|edge_index| signatures[*edge_index].loop_signature.clone())
-                .collect::<Vec<_>>();
-            determinant_i32_is_nonzero(&matrix)
-        })
-        .ok_or(GenerationError::SingularBasis)
-}
-
 fn solve_loop_energy_from_target_edge_exprs(
     signatures: &[MomentumSignature],
     basis: &[usize],
@@ -6602,22 +4913,6 @@ fn cff_duplicate_signature_excess(parsed: &ParsedGraph) -> usize {
             .or_default() += 1;
     }
     counts.values().map(|count| count.saturating_sub(1)).sum()
-}
-
-fn cff_same_routing_duplicate_signature_excess(parsed: &ParsedGraph) -> usize {
-    repeated_groups(parsed)
-        .into_iter()
-        .map(|group| {
-            let mut counts = BTreeMap::<i32, usize>::new();
-            for relative_sign in group.relative_signs {
-                *counts.entry(relative_sign).or_default() += 1;
-            }
-            counts
-                .values()
-                .map(|count| count.saturating_sub(1))
-                .sum::<usize>()
-        })
-        .sum()
 }
 
 fn has_duplicate_signature_ignoring_mass(parsed: &ParsedGraph) -> bool {
@@ -6764,11 +5059,61 @@ mod representation_tests {
 }
 
 #[cfg(test)]
-mod lower_sector_regression_tests {
+mod causal_generation_tests {
     use super::*;
 
     #[test]
-    fn vector_matroid_components_join_rationally_dependent_rows() {
+    fn finite_pole_sampling_changes_only_the_selected_edge_map() {
+        let parsed = crate::graph_io::test_graphs::box_pow3_graph();
+        let source = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(0, 1), (1, 1), (2, 1), (3, 2)]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let expression = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(0, 2), (1, 1), (2, 1), (3, 2)]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let remainder_orientations = expression
+            .orientations
+            .iter()
+            .filter(|orientation| {
+                orientation.variants.iter().any(|variant| {
+                    variant.origin.as_deref().is_some_and(|origin| {
+                        origin.starts_with("bounded_degree_quadratic_recursive_remainder:e0=")
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+        assert!(!remainder_orientations.is_empty());
+
+        for orientation in remainder_orientations {
+            assert!(
+                orientation.edge_energy_map[0] == LinearEnergyExpr::ose(EdgeIndex(0), 1)
+                    || orientation.edge_energy_map[0] == LinearEnergyExpr::ose(EdgeIndex(0), -1)
+            );
+            assert!(source.orientations.iter().any(|source_orientation| {
+                source_orientation.loop_energy_map == orientation.loop_energy_map
+                    && source_orientation
+                        .edge_energy_map
+                        .iter()
+                        .zip(&orientation.edge_energy_map)
+                        .enumerate()
+                        .all(|(edge_id, (source, sampled))| edge_id == 0 || source == sampled)
+            }));
+        }
+    }
+
+    #[test]
+    fn lower_sector_joins_rationally_dependent_rows_but_rejects_nonintegral_projection() {
         let parsed = ParsedGraph {
             internal_edges: vec![
                 ParsedGraphInternalEdge {
@@ -6810,160 +5155,128 @@ mod lower_sector_regression_tests {
         );
         // Component connectivity is a rational-vector-matroid property, while
         // production signatures still require an integral projected lattice.
-        let rational = lower_sector
-            .rational_row_coordinates_in_basis(&[vec![2, 0]], &[1, 0])
-            .unwrap();
-        assert_eq!(rational[0].to_i64_pair(), Some((1, 2)));
         assert!(matches!(
-            lower_sector.row_coordinates_in_basis(&[vec![2, 0]], &[1, 0]),
+            lower_sector.build(),
             Err(GenerationError::NonIntegralEnergyMap)
         ));
     }
 
     #[test]
-    fn rank_projection_keeps_initial_cut_outside_denominator_span_external() {
-        let parsed = ParsedGraph {
-            internal_edges: vec![
-                ParsedGraphInternalEdge {
-                    edge_id: 0,
-                    tail: 0,
-                    head: 1,
-                    label: "p_cut".to_string(),
-                    mass_key: Some("mp".to_string()),
-                    signature: MomentumSignature {
-                        // This stored row is deliberately outside the active
-                        // denominator span and must not add residue rank.
-                        loop_signature: vec![0, 1],
-                        external_signature: vec![-1],
-                    },
-                    had_pow: false,
-                },
-                ParsedGraphInternalEdge {
-                    edge_id: 1,
-                    tail: 0,
-                    head: 1,
-                    label: "q1".to_string(),
-                    mass_key: Some("mq".to_string()),
-                    signature: MomentumSignature {
-                        loop_signature: vec![1, 0],
-                        external_signature: vec![0],
-                    },
-                    had_pow: false,
-                },
-                ParsedGraphInternalEdge {
-                    edge_id: 2,
-                    tail: 1,
-                    head: 0,
-                    label: "q2".to_string(),
-                    mass_key: Some("mq".to_string()),
-                    signature: MomentumSignature {
-                        loop_signature: vec![1, 0],
-                        external_signature: vec![0],
-                    },
-                    had_pow: false,
-                },
-            ],
-            external_edges: Vec::new(),
-            initial_state_cut_edges: vec![ParsedGraphInitialStateCutEdge {
-                edge_id: 0,
+    fn top_level_cff_rejects_rank_deficiency_even_when_cut_rows_span_it() {
+        let mut parsed = crate::graph_io::test_graphs::box_graph();
+        parsed.loop_names.push("k_cut".to_string());
+        for edge in &mut parsed.internal_edges {
+            edge.signature.loop_signature.push(0);
+        }
+        let cut_edge_id = parsed.internal_edges.len();
+        parsed.internal_edges.push(ParsedGraphInternalEdge {
+            edge_id: cut_edge_id,
+            tail: 0,
+            head: 1,
+            label: "p_cut_0".to_string(),
+            mass_key: Some("m_cut_0".to_string()),
+            signature: MomentumSignature {
+                // These stored rows are deliberately outside the active
+                // denominator span and must not add residue rank.
+                loop_signature: vec![0, 1],
+                external_signature: vec![1, 0, 0],
+            },
+            had_pow: false,
+        });
+        parsed.internal_edges.push(ParsedGraphInternalEdge {
+            edge_id: cut_edge_id + 1,
+            tail: 1,
+            head: 0,
+            label: "p_cut_1".to_string(),
+            mass_key: Some("m_cut_1".to_string()),
+            signature: MomentumSignature {
+                loop_signature: vec![0, 1],
+                external_signature: vec![0, 1, 0],
+            },
+            had_pow: false,
+        });
+        parsed.initial_state_cut_edges.extend([
+            ParsedGraphInitialStateCutEdge {
+                edge_id: cut_edge_id,
                 external_id: 0,
-                external_sign: -1,
-            }],
-            loop_names: vec!["k0".to_string(), "k1".to_string()],
-            external_names: vec!["p0".to_string()],
-            node_name_to_internal: BTreeMap::from([("n0".to_string(), 0), ("n1".to_string(), 1)]),
-        };
-        let projection = LowerSectorRankProjection::new(&parsed).unwrap();
+                external_sign: 1,
+            },
+            ParsedGraphInitialStateCutEdge {
+                edge_id: cut_edge_id + 1,
+                external_id: 1,
+                external_sign: 1,
+            },
+        ]);
 
-        assert_eq!(
-            projection.parsed.internal_edges[0].signature.loop_signature,
-            vec![0]
-        );
-        let expression = projection
-            .build_confluent(&Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
-                energy_degree_bounds: None,
-                numerator_sampling_scale: NumeratorSamplingScaleMode::None,
-                include_cff_duplicate_signature_excess_sign: false,
-            })
-            .unwrap();
-        assert!(!expression.orientations.is_empty());
-        assert!(expression.orientations.iter().all(|orientation| {
-            orientation.edge_energy_map[0] == LinearEnergyExpr::external(EdgeIndex(0), -1)
-        }));
+        assert!(crate::validate_parsed_graph(&parsed).ok);
+        let error = generate_3d_expression(
+            &parsed,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(Vec::new()),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(error, GenerationError::SingularBasis));
     }
 
     #[test]
-    fn final_denominator_contact_keeps_only_the_representable_scalar_quotient() {
-        let parsed = ParsedGraph {
-            internal_edges: vec![ParsedGraphInternalEdge {
-                edge_id: 0,
-                tail: 0,
-                head: 0,
-                label: "q0".to_string(),
-                mass_key: Some("m0".to_string()),
-                signature: MomentumSignature {
-                    loop_signature: vec![1],
-                    external_signature: Vec::new(),
-                },
-                had_pow: false,
-            }],
-            external_edges: Vec::new(),
-            initial_state_cut_edges: Vec::new(),
-            loop_names: vec!["k0".to_string()],
-            external_names: Vec::new(),
-            node_name_to_internal: BTreeMap::from([("n0".to_string(), 0)]),
-        };
-
-        for numerator_sampling_scale in [
-            NumeratorSamplingScaleMode::None,
-            NumeratorSamplingScaleMode::All,
-        ] {
-            let expression = generate_3d_expression_from_parsed(
-                &parsed,
-                &Generate3DExpressionOptions {
-                    energy_degree_bounds: Some(vec![(0, 2)]),
-                    numerator_sampling_scale,
-                    ..Default::default()
-                },
-            )
-            .unwrap();
-            assert!(
-                expression
-                    .orientations
-                    .iter()
-                    .flat_map(|orientation| &orientation.variants)
-                    .any(|variant| {
-                        variant.denominator.get_num_nodes() == 1
-                            && variant.denominator.get_node(NodeId::root()).data
-                                == HybridSurfaceID::Unit
-                    })
-            );
+    fn lower_sector_particular_lift_keeps_initial_cut_external() {
+        let mut parsed = crate::graph_io::test_graphs::box_graph();
+        parsed.loop_names.push("k_cut".to_string());
+        for edge in &mut parsed.internal_edges {
+            edge.signature.loop_signature.push(0);
         }
+        let cut_edge_id = parsed.internal_edges.len();
+        parsed.internal_edges.push(ParsedGraphInternalEdge {
+            edge_id: cut_edge_id,
+            tail: 0,
+            head: 1,
+            label: "p_cut_0".to_string(),
+            mass_key: Some("m_cut_0".to_string()),
+            signature: MomentumSignature {
+                // These stored rows are deliberately outside the active
+                // denominator span and must not add residue rank.
+                loop_signature: vec![0, 1],
+                external_signature: vec![1, 0, 0],
+            },
+            had_pow: false,
+        });
+        parsed.internal_edges.push(ParsedGraphInternalEdge {
+            edge_id: cut_edge_id + 1,
+            tail: 1,
+            head: 0,
+            label: "p_cut_1".to_string(),
+            mass_key: Some("m_cut_1".to_string()),
+            signature: MomentumSignature {
+                loop_signature: vec![0, 1],
+                external_signature: vec![0, 1, 0],
+            },
+            had_pow: false,
+        });
+        parsed.initial_state_cut_edges.extend([
+            ParsedGraphInitialStateCutEdge {
+                edge_id: cut_edge_id,
+                external_id: 0,
+                external_sign: 1,
+            },
+            ParsedGraphInitialStateCutEdge {
+                edge_id: cut_edge_id + 1,
+                external_id: 1,
+                external_sign: 1,
+            },
+        ]);
 
-        for degree in [3, 4] {
-            for numerator_sampling_scale in [
-                NumeratorSamplingScaleMode::None,
-                NumeratorSamplingScaleMode::All,
-            ] {
-                let error = generate_3d_expression_from_parsed(
-                    &parsed,
-                    &Generate3DExpressionOptions {
-                        energy_degree_bounds: Some(vec![(0, degree)]),
-                        numerator_sampling_scale,
-                        ..Default::default()
-                    },
-                )
-                .unwrap_err();
-                assert!(matches!(
-                    error,
-                    GenerationError::UnlocalizedEnergyContact {
-                        variable: 0,
-                        power
-                    } if power == degree - 2
-                ));
-            }
-        }
+        assert!(crate::validate_parsed_graph(&parsed).ok);
+        let expression = LowerSectorCffBuilder::new(&parsed).build().unwrap();
+        assert!(!expression.orientations.is_empty());
+        assert!(expression.orientations.iter().all(|orientation| {
+            orientation.loop_energy_map[1] == LinearEnergyExpr::zero()
+                && orientation.edge_energy_map[cut_edge_id]
+                    == LinearEnergyExpr::external(EdgeIndex(0), 1)
+                && orientation.edge_energy_map[cut_edge_id + 1]
+                    == LinearEnergyExpr::external(EdgeIndex(1), 1)
+        }));
     }
 }
 
@@ -6992,29 +5305,6 @@ mod graph_source_tests {
     }
 
     #[test]
-    fn component_projection_preserves_explicit_zero_bound_mode() {
-        let embedding = ParsedComponentEmbedding {
-            local_to_orig_edge: vec![1],
-            local_to_orig_loop: vec![0],
-        };
-        let explicit = project_component_options(
-            &Generate3DExpressionOptions {
-                energy_degree_bounds: Some(vec![(0, 2)]),
-                ..Default::default()
-            },
-            2,
-            &embedding,
-        )
-        .unwrap();
-        assert_eq!(explicit.energy_degree_bounds, Some(Vec::new()));
-
-        let legacy =
-            project_component_options(&Generate3DExpressionOptions::default(), 2, &embedding)
-                .unwrap();
-        assert_eq!(legacy.energy_degree_bounds, None);
-    }
-
-    #[test]
     fn rich_graph_source_remaps_compact_energy_ids_back_to_source_edge_ids() {
         let parsed = crate::graph_io::test_graphs::box_graph();
         let source = RemappedSource {
@@ -7033,7 +5323,8 @@ mod graph_source_tests {
                 ..Default::default()
             },
         )
-        .unwrap();
+        .unwrap()
+        .expression;
 
         let half_edges = expression
             .orientations
@@ -7077,7 +5368,7 @@ mod initial_state_cut_tests {
         generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                energy_degree_bounds: None,
+                energy_degree_bounds: Some(Vec::new()),
                 ..Default::default()
             },
         )
@@ -7167,6 +5458,104 @@ mod cff_tests {
             "sunrise_pow4.dot" => crate::graph_io::test_graphs::sunrise_pow4_graph(),
             other => panic!("unknown parsed fixture {other}"),
         }
+    }
+
+    #[test]
+    fn cff_generation_preserves_external_tree_edges() {
+        let parsed = crate::graph_io::test_graphs::triangle_with_external_tree_graph();
+        let expression = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
+                preserve_internal_edges_as_four_d_denominators: vec![3],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert!(!expression.orientations.is_empty());
+        assert!(expression.orientations.iter().all(|orientation| {
+            orientation.data.orientation[EdgeIndex(3)] == Orientation::Undirected
+                && orientation.edge_energy_map.len() == 4
+                && orientation.edge_energy_map[3] == LinearEnergyExpr::external(EdgeIndex(1), 1)
+        }));
+        assert_eq!(expression.residual_denominators.len(), 1);
+        assert_eq!(expression.residual_denominators[0].edge_id, EdgeIndex(3));
+        assert_eq!(expression.residual_denominators[0].power, 1);
+        assert!(
+            expression
+                .orientations
+                .iter()
+                .flat_map(|orientation| &orientation.edge_energy_map[3].internal_terms)
+                .next()
+                .is_none()
+        );
+        assert!(
+            expression
+                .orientations
+                .iter()
+                .flat_map(|orientation| &orientation.variants)
+                .flat_map(|variant| &variant.half_edges)
+                .all(|edge_id| edge_id.0 != 3)
+        );
+        assert!(
+            expression
+                .surfaces
+                .linear_surface_cache
+                .iter()
+                .flat_map(|surface| &surface.expression.internal_terms)
+                .all(|(edge_id, _)| edge_id.0 != 3)
+        );
+    }
+
+    #[test]
+    fn cff_generation_leaves_pure_trees_untouched() {
+        let parsed = crate::graph_io::test_graphs::pure_tree_graph();
+        let expression = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
+                preserve_internal_edges_as_four_d_denominators: vec![0, 1],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(expression.orientations.len(), 1);
+        assert!(expression.surfaces.linear_surface_cache.is_empty());
+        assert_eq!(
+            expression
+                .residual_denominators
+                .iter()
+                .map(|denominator| denominator.edge_id)
+                .collect_vec(),
+            vec![EdgeIndex(0), EdgeIndex(1)]
+        );
+        let orientation = &expression.orientations[OrientationID(0)];
+        assert!(
+            orientation
+                .data
+                .orientation
+                .iter()
+                .all(|(_, value)| *value == Orientation::Undirected)
+        );
+        assert_eq!(
+            orientation.edge_energy_map,
+            vec![
+                LinearEnergyExpr::external(EdgeIndex(0), 1),
+                LinearEnergyExpr::external(EdgeIndex(0), 1)
+                    + LinearEnergyExpr::external(EdgeIndex(1), 1),
+            ]
+        );
+        assert_eq!(orientation.variants.len(), 1);
+        assert!(orientation.variants[0].half_edges.is_empty());
+        assert_eq!(
+            orientation.variants[0]
+                .denominator
+                .get_node(NodeId::root())
+                .data,
+            HybridSurfaceID::Unit
+        );
     }
 
     fn penta_contact_graph() -> ParsedGraph {
@@ -7263,8 +5652,8 @@ mod cff_tests {
                 },
                 ParsedGraphInternalEdge {
                     edge_id: 1,
-                    tail: 1,
-                    head: 2,
+                    tail: 2,
+                    head: 1,
                     label: "q1".to_string(),
                     mass_key: Some("m".to_string()),
                     signature: MomentumSignature {
@@ -7287,12 +5676,93 @@ mod cff_tests {
     }
 
     #[test]
+    fn disconnected_mixed_energy_factor_ownership_keeps_both_component_factors() {
+        let edge =
+            |edge_id, tail, head, loop_signature: [i32; 2], external_signature, mass: &str| {
+                ParsedGraphInternalEdge {
+                    edge_id,
+                    tail,
+                    head,
+                    label: format!("q{edge_id}"),
+                    mass_key: Some(mass.to_string()),
+                    signature: MomentumSignature {
+                        loop_signature: loop_signature.to_vec(),
+                        external_signature,
+                    },
+                    had_pow: false,
+                }
+            };
+        let parsed = ParsedGraph {
+            internal_edges: vec![
+                edge(0, 0, 1, [1, 0], vec![0], "mr"),
+                edge(1, 1, 0, [-1, 0], vec![0], "mr"),
+                edge(2, 2, 3, [0, 1], vec![0], "m2"),
+                edge(3, 3, 2, [0, 1], vec![1], "m3"),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["ka".to_string(), "kb".to_string()],
+            external_names: vec!["p".to_string()],
+            node_name_to_internal: BTreeMap::from([
+                ("a0".to_string(), 0),
+                ("a1".to_string(), 1),
+                ("b0".to_string(), 2),
+                ("b1".to_string(), 3),
+            ]),
+        };
+        let options = Generate3DExpressionOptions::default();
+        let component_ownerships = denominator_connected_components(&parsed)
+            .into_iter()
+            .map(|component_edges| {
+                let (component, _) = project_denominator_component(&parsed, &component_edges)?;
+                Ok(
+                    generate_3d_expression_from_parsed_generated(&component, &options)?
+                        .energy_factor_ownership,
+                )
+            })
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+
+        assert_eq!(
+            component_ownerships,
+            vec![
+                CffEnergyFactorOwnership::VariantLocal,
+                CffEnergyFactorOwnership::GlobalSourceProduct,
+            ]
+        );
+
+        let generated = generate_3d_expression_from_parsed_generated(&parsed, &options).unwrap();
+        assert_eq!(
+            generated.energy_factor_ownership,
+            CffEnergyFactorOwnership::VariantLocal
+        );
+        let variants = generated
+            .expression
+            .orientations
+            .iter()
+            .flat_map(|orientation| &orientation.variants)
+            .collect::<Vec<_>>();
+        assert!(!variants.is_empty());
+        let repeated_component = BTreeSet::from([0, 1]);
+        let ordinary_component = BTreeSet::from([2, 3]);
+        assert!(variants.into_iter().all(|variant| {
+            let half_edges = variant
+                .half_edges
+                .iter()
+                .map(|edge| edge.0)
+                .collect::<BTreeSet<_>>();
+            !half_edges.is_disjoint(&repeated_component)
+                && !half_edges.is_disjoint(&ordinary_component)
+        }));
+    }
+
+    #[test]
     fn cff_generation_builds_repeated_box_with_branching_denominator_trees() {
         let parsed = parsed_fixture("box_pow3.dot");
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                energy_degree_bounds: None,
+                energy_degree_bounds: Some(Vec::new()),
                 ..Default::default()
             },
         )
@@ -7322,17 +5792,22 @@ mod cff_tests {
     }
 
     #[test]
-    fn confluent_cff_generation_handles_repeated_bubble_source() {
+    fn causal_repeated_generation_handles_energy_dependent_bubble_source() {
         let parsed = isolated_vertex_repeated_bubble_source();
 
-        let expression = generate_confluent_cff_expression_from_parsed(
+        let generated = generate_3d_expression(
             &parsed,
             &Generate3DExpressionOptions {
-                energy_degree_bounds: None,
+                energy_degree_bounds: Some(vec![(0, 1)]),
                 ..Default::default()
             },
         )
         .unwrap();
+        assert_eq!(
+            generated.energy_factor_ownership,
+            CffEnergyFactorOwnership::VariantLocal
+        );
+        let expression = generated.expression;
 
         assert!(!expression.orientations.is_empty());
         assert!(
@@ -7340,7 +5815,10 @@ mod cff_tests {
                 .orientations
                 .iter()
                 .flat_map(|orientation| &orientation.variants)
-                .all(|variant| variant.origin.as_deref() != Some("pure_cff"))
+                .all(
+                    |variant| variant.denominator_edges == vec![EdgeIndex(0), EdgeIndex(1)]
+                        && !variant.half_edges.is_empty()
+                )
         );
         assert!(
             expression
@@ -7379,15 +5857,25 @@ mod cff_tests {
             expression.surfaces.linear_surface_cache[LinearSurfaceID(surface_id)].kind
                 == LinearSurfaceKind::Esurface
         }));
+        let variants = expression
+            .orientations
+            .iter()
+            .flat_map(|orientation| &orientation.variants)
+            .collect::<Vec<_>>();
+        assert!(variants.iter().any(|variant| {
+            variant.origin.as_deref().is_some_and(|origin| {
+                origin.starts_with("bounded_degree_quadratic_recursive_remainder")
+            })
+        }));
+        assert!(variants.iter().any(|variant| {
+            variant.origin.as_deref().is_some_and(|origin| {
+                origin.starts_with("bounded_degree_quadratic_recursive_contact")
+            })
+        }));
         assert!(
-            expression
-                .orientations
+            variants
                 .iter()
-                .flat_map(|orientation| &orientation.variants)
-                .any(|variant| {
-                    variant.origin.as_deref() == Some("bounded_degree_known_factor_cff")
-                        && !variant.numerator_surfaces.is_empty()
-                })
+                .any(|variant| !variant.numerator_surfaces.is_empty())
         );
     }
 
@@ -7397,7 +5885,7 @@ mod cff_tests {
         let ordinary = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                energy_degree_bounds: None,
+                energy_degree_bounds: Some(Vec::new()),
                 ..Default::default()
             },
         )
@@ -7496,6 +5984,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
                 energy_degree_bounds: Some(vec![(0, 1), (1, 1), (2, 1), (3, 3)]),
                 ..Default::default()
             },
@@ -7528,6 +6017,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
                 energy_degree_bounds: Some(vec![(0, 4), (1, 2)]),
                 ..Default::default()
             },
@@ -7559,6 +6049,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
                 energy_degree_bounds: Some(vec![(0, 1), (2, 3), (4, 3)]),
                 ..Default::default()
             },
@@ -7589,6 +6080,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
                 energy_degree_bounds: Some(vec![(0, 2), (1, 1), (2, 1), (3, 2)]),
                 ..Default::default()
             },
@@ -7659,7 +6151,6 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                representation: RepresentationMode::Cff,
                 energy_degree_bounds: Some(vec![(0, 1), (1, 1), (3, 4)]),
                 ..Default::default()
             },
@@ -7692,7 +6183,7 @@ mod cff_tests {
                 representation: RepresentationMode::Cff,
                 energy_degree_bounds: Some(vec![(0, 1), (1, 1), (3, 4)]),
                 numerator_sampling_scale: NumeratorSamplingScaleMode::All,
-                include_cff_duplicate_signature_excess_sign: true,
+                preserve_internal_edges_as_four_d_denominators: Vec::new(),
             },
         )
         .unwrap();
@@ -7721,6 +6212,55 @@ mod cff_tests {
     }
 
     #[test]
+    fn cff_generation_keeps_distinct_maps_for_the_same_coarse_orientation() {
+        let parsed = parsed_fixture("box_pow3.dot");
+        let expression = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
+                energy_degree_bounds: Some(vec![(0, 1), (1, 1), (3, 4)]),
+                numerator_sampling_scale: NumeratorSamplingScaleMode::All,
+                preserve_internal_edges_as_four_d_denominators: Vec::new(),
+            },
+        )
+        .unwrap();
+
+        let (lhs, rhs) = expression
+            .orientations
+            .iter()
+            .enumerate()
+            .find_map(|(lhs_index, lhs)| {
+                expression
+                    .orientations
+                    .iter()
+                    .skip(lhs_index + 1)
+                    .find(|rhs| {
+                        lhs.data.orientation == rhs.data.orientation
+                            && (lhs.loop_energy_map != rhs.loop_energy_map
+                                || lhs.edge_energy_map != rhs.edge_energy_map)
+                    })
+                    .map(|rhs| (lhs, rhs))
+            })
+            .expect("raised CFF generation should retain exact maps sharing an orientation");
+
+        assert_ne!(lhs.data.numerator_map_index, rhs.data.numerator_map_index);
+        assert!(lhs.data.numerator_map_index.is_some());
+        assert!(rhs.data.numerator_map_index.is_some());
+        assert_eq!(
+            lhs.data
+                .label
+                .as_deref()
+                .and_then(|label| label.split_once('|'))
+                .map(|(base, _)| base),
+            rhs.data
+                .label
+                .as_deref()
+                .and_then(|label| label.split_once('|'))
+                .map(|(base, _)| base),
+        );
+    }
+
+    #[test]
     fn cff_generation_builds_one_loop_high_power_with_repeated_spectators() {
         let parsed = parsed_fixture("box_pow3.dot");
         let expression = generate_3d_expression_from_parsed(
@@ -7740,14 +6280,25 @@ mod cff_tests {
                 .iter()
                 .all(|surface| surface.kind == LinearSurfaceKind::Esurface)
         );
+        let variants = expression
+            .orientations
+            .iter()
+            .flat_map(|orientation| &orientation.variants)
+            .collect::<Vec<_>>();
+        assert!(variants.iter().any(|variant| {
+            variant.origin.as_deref().is_some_and(|origin| {
+                origin.starts_with("bounded_degree_quadratic_recursive_remainder")
+            })
+        }));
+        assert!(variants.iter().any(|variant| {
+            variant.origin.as_deref().is_some_and(|origin| {
+                origin.starts_with("bounded_degree_quadratic_recursive_contact")
+            })
+        }));
         assert!(
-            expression
-                .orientations
+            variants
                 .iter()
-                .flat_map(|orientation| &orientation.variants)
-                .any(|variant| {
-                    variant.origin.as_deref() == Some("bounded_degree_known_factor_cff")
-                })
+                .any(|variant| !variant.numerator_surfaces.is_empty())
         );
     }
 
@@ -7768,7 +6319,7 @@ mod cff_tests {
                 representation: RepresentationMode::Cff,
                 energy_degree_bounds: Some(vec![(3, 2)]),
                 numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
-                include_cff_duplicate_signature_excess_sign: true,
+                preserve_internal_edges_as_four_d_denominators: Vec::new(),
             },
         )
         .unwrap();
@@ -7778,7 +6329,7 @@ mod cff_tests {
                 representation: RepresentationMode::Cff,
                 energy_degree_bounds: Some(vec![(3, 2)]),
                 numerator_sampling_scale: NumeratorSamplingScaleMode::All,
-                include_cff_duplicate_signature_excess_sign: true,
+                preserve_internal_edges_as_four_d_denominators: Vec::new(),
             },
         )
         .unwrap();

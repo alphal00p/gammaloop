@@ -1660,6 +1660,7 @@ name = "gammaloop-workspace-hack"
 version = "0.1.0"
 dependencies = [
  "ahash 0.8.12",
+ "aho-corasick",
  "anstream",
  "arrayvec",
  "bincode 2.0.1",
@@ -1695,6 +1696,7 @@ dependencies = [
  "regex-automata",
  "regex-syntax",
  "rug",
+ "rust-embed-utils",
  "rustix 1.1.4",
  "serde",
  "serde_core",

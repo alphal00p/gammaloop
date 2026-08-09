@@ -31,7 +31,7 @@ use symbolica::{
     state::StateMap,
 };
 
-const STANDALONE_EVALUATORS_VERSION: u32 = 5;
+const STANDALONE_EVALUATORS_VERSION: u32 = 6;
 const ARB_PRECISION_BITS: u32 = 1000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
@@ -90,6 +90,7 @@ struct StandaloneIndexedEvaluatorStackArchive<A = Vec<u8>> {
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
+    explicit_orientation_sum_only: bool,
     single_parametric: StandaloneGenericEvaluatorArchive<A>,
     iterative: Option<StandaloneGenericEvaluatorArchive<A>>,
     summed_function_map: Option<StandaloneGenericEvaluatorArchive<A>>,
@@ -696,7 +697,10 @@ fn evaluate_eager<T: StandaloneNumber>(
     evaluator: &mut ExpressionEvaluator<Complex<T>>,
     output_len: usize,
     inputs: &[Vec<Complex<T>>],
-) -> Vec<Complex<T>> {
+) -> Vec<Complex<T>>
+where
+    Complex<T>: EvaluationDomain,
+{
     let mut accumulated = vec![Complex::new(T::zero_value(), T::zero_value()); output_len];
 
     for input in inputs {
@@ -980,6 +984,15 @@ fn evaluate_double_archive<A: ImportWithMap, S>(
     let stack = graph.stack(&options.stack)?;
     let (payload, iterate) = stack.selected_payload(options.method)?;
 
+    if stack.explicit_orientation_sum_only
+        && options.method == StandaloneMethod::SingleParametric
+        && options.orientation_index.is_some()
+    {
+        return Err(eyre!(
+            "`--orientation-index` is invalid for an explicit orientation-sum evaluator because its single-parametric expression already contains the complete orientation sum"
+        ));
+    }
+
     let params = graph
         .param_builder_params
         .iter()
@@ -998,6 +1011,9 @@ fn evaluate_double_archive<A: ImportWithMap, S>(
         ]
     } else {
         match options.method {
+            StandaloneMethod::SingleParametric if stack.explicit_orientation_sum_only => {
+                vec![stack.representative_input::<f64>()?]
+            }
             StandaloneMethod::SingleParametric => {
                 if let Some(index) = options.orientation_index {
                     let orientation = graph.orientations.get(index).ok_or_else(|| {
@@ -1106,6 +1122,15 @@ where
     let graph = archive.graph_term(options.graph_index, options.graph_name.as_deref())?;
     let stack = graph.stack(&options.stack)?;
     let (payload, iterate) = stack.selected_payload(options.method)?;
+
+    if stack.explicit_orientation_sum_only
+        && options.method == StandaloneMethod::SingleParametric
+        && options.orientation_index.is_some()
+    {
+        return Err(eyre!(
+            "`--orientation-index` is invalid for an explicit orientation-sum evaluator because its single-parametric expression already contains the complete orientation sum"
+        ));
+    }
     let params = graph
         .param_builder_params
         .iter()
@@ -1124,6 +1149,9 @@ where
         ]
     } else {
         match options.method {
+            StandaloneMethod::SingleParametric if stack.explicit_orientation_sum_only => {
+                vec![stack.representative_input::<T>()?]
+            }
             StandaloneMethod::SingleParametric => {
                 if let Some(index) = options.orientation_index {
                     let orientation = graph.orientations.get(index).ok_or_else(|| {

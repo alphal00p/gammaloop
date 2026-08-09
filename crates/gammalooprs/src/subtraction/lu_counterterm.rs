@@ -63,6 +63,7 @@ use crate::{
         },
         newton_solver::{NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity},
     },
+    uv::forest::ParametricIntegrands,
 };
 
 fn zero_dual_or_not_complex<T: FloatLike>(order: usize, zero: &F<T>) -> DualOrNot<Complex<F<T>>> {
@@ -666,6 +667,56 @@ pub struct LUCounterTermEvaluators {
 }
 
 impl LUCounterTermEvaluators {
+    fn residue_evaluators(
+        parametric_integrands: &ParametricIntegrands,
+        param_builder: &ParamBuilder,
+        settings: &GlobalSettings,
+        orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+    ) -> (BTreeMap<CutCFFIndex, EvaluatorStack>, EvaluatorBuildTimings) {
+        let mut timings = EvaluatorBuildTimings::default();
+        let evaluators = parametric_integrands
+            .integrands
+            .iter()
+            .map(|(index, atom)| {
+                let dual_shape = shape_from_cut_cff_index(index);
+                let (evaluator, evaluator_timings) =
+                    if let Some(bodies) = parametric_integrands.integrands.deferred_terms(index) {
+                        assert!(
+                            settings.generation.explicit_orientation_sum_only,
+                            "deferred projected-CFF terms require an explicit orientation sum"
+                        );
+                        EvaluatorStack::new_deferred_explicit_sum_with_timings(
+                            atom,
+                            bodies,
+                            param_builder,
+                            dual_shape,
+                            &settings.generation.evaluator,
+                        )
+                    } else if settings.generation.explicit_orientation_sum_only {
+                        EvaluatorStack::new_explicit_sum_with_timings(
+                            std::slice::from_ref(atom),
+                            param_builder,
+                            dual_shape,
+                            &settings.generation.evaluator,
+                        )
+                    } else {
+                        EvaluatorStack::new_with_timings(
+                            std::slice::from_ref(atom),
+                            param_builder,
+                            &orientations.raw,
+                            dual_shape,
+                            &settings.generation.evaluator,
+                        )
+                    }
+                    .unwrap();
+                timings += evaluator_timings;
+                (*index, evaluator)
+            })
+            .collect();
+
+        (evaluators, timings)
+    }
+
     pub(crate) fn generic_compileable_evaluator_count(&self) -> usize {
         let left = self
             .left_thresholds_evaluator
@@ -703,34 +754,14 @@ impl LUCounterTermEvaluators {
             .left_atoms
             .iter()
             .map(|parametric_integrands| {
-                parametric_integrands
-                    .integrands
-                    .iter()
-                    .map(|(i, atom)| {
-                        let dual_shape = shape_from_cut_cff_index(i);
-
-                        let (evaluator, evaluator_timings) =
-                            if settings.generation.explicit_orientation_sum_only {
-                                EvaluatorStack::new_explicit_sum_with_timings(
-                                    std::slice::from_ref(atom),
-                                    param_builder,
-                                    dual_shape,
-                                    &settings.generation.evaluator,
-                                )
-                            } else {
-                                EvaluatorStack::new_with_timings(
-                                    std::slice::from_ref(atom),
-                                    param_builder,
-                                    &orientations.raw,
-                                    dual_shape,
-                                    &settings.generation.evaluator,
-                                )
-                            }
-                            .unwrap();
-                        timings += evaluator_timings;
-                        (*i, evaluator)
-                    })
-                    .collect()
+                let (evaluators, evaluator_timings) = Self::residue_evaluators(
+                    parametric_integrands,
+                    param_builder,
+                    settings,
+                    orientations,
+                );
+                timings += evaluator_timings;
+                evaluators
             })
             .collect();
 
@@ -738,69 +769,29 @@ impl LUCounterTermEvaluators {
             .right_atoms
             .iter()
             .map(|parametric_integrands| {
-                parametric_integrands
-                    .integrands
-                    .iter()
-                    .map(|(i, atom)| {
-                        let dual_shape = shape_from_cut_cff_index(i);
-
-                        let (evaluator, evaluator_timings) =
-                            if settings.generation.explicit_orientation_sum_only {
-                                EvaluatorStack::new_explicit_sum_with_timings(
-                                    std::slice::from_ref(atom),
-                                    param_builder,
-                                    dual_shape,
-                                    &settings.generation.evaluator,
-                                )
-                            } else {
-                                EvaluatorStack::new_with_timings(
-                                    std::slice::from_ref(atom),
-                                    param_builder,
-                                    &orientations.raw,
-                                    dual_shape,
-                                    &settings.generation.evaluator,
-                                )
-                            }
-                            .unwrap();
-                        timings += evaluator_timings;
-                        (*i, evaluator)
-                    })
-                    .collect()
+                let (evaluators, evaluator_timings) = Self::residue_evaluators(
+                    parametric_integrands,
+                    param_builder,
+                    settings,
+                    orientations,
+                );
+                timings += evaluator_timings;
+                evaluators
             })
             .collect();
 
         let iterated_timings = std::cell::Cell::new(EvaluatorBuildTimings::default());
         let iterated_evaluator = counterterm_data.iterated.map_ref(|parametric_integrands| {
-            parametric_integrands
-                .integrands
-                .iter()
-                .map(|(i, atom)| {
-                    let dual_shape = shape_from_cut_cff_index(i);
-
-                    let (evaluator, evaluator_timings) =
-                        if settings.generation.explicit_orientation_sum_only {
-                            EvaluatorStack::new_explicit_sum_with_timings(
-                                std::slice::from_ref(atom),
-                                param_builder,
-                                dual_shape,
-                                &settings.generation.evaluator,
-                            )
-                        } else {
-                            EvaluatorStack::new_with_timings(
-                                std::slice::from_ref(atom),
-                                param_builder,
-                                &orientations.raw,
-                                dual_shape,
-                                &settings.generation.evaluator,
-                            )
-                        }
-                        .unwrap();
-                    let mut timings = iterated_timings.get();
-                    timings += evaluator_timings;
-                    iterated_timings.set(timings);
-                    (*i, evaluator)
-                })
-                .collect()
+            let (evaluators, evaluator_timings) = Self::residue_evaluators(
+                parametric_integrands,
+                param_builder,
+                settings,
+                orientations,
+            );
+            let mut timings = iterated_timings.get();
+            timings += evaluator_timings;
+            iterated_timings.set(timings);
+            evaluators
         });
         timings += iterated_timings.get();
 

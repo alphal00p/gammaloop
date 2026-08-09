@@ -61,6 +61,12 @@ pub struct GenerationSettings {
 
 impl GenerationSettings {
     pub(crate) fn validate_explicit_orientation_sum_options(&self) -> EyreResult<()> {
+        if self.uv.local_uv_cts_from_expanded_4d_integrands && !self.explicit_orientation_sum_only {
+            return Err(eyre!(
+                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` requires `global.generation.explicit_orientation_sum_only = true` because projected 4D counterterms have term-local CFF orientation sums"
+            ));
+        }
+
         if self.explicit_orientation_sum_only && self.orientation_pattern.pat.is_some() {
             return Err(eyre!(
                 "`global.generation.explicit_orientation_sum_only = true` requires summing all generated orientations; `global.generation.orientation_pattern` must be unset"
@@ -68,6 +74,41 @@ impl GenerationSettings {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod generation_settings_tests {
+    use super::{GenerationSettings, OrientationPattern};
+
+    #[test]
+    fn projected_4d_cff_requires_an_unfiltered_explicit_orientation_sum() {
+        let mut settings = GenerationSettings::default();
+        settings.uv.local_uv_cts_from_expanded_4d_integrands = true;
+
+        let error = settings
+            .validate_explicit_orientation_sum_options()
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("requires `global.generation.explicit_orientation_sum_only = true`")
+        );
+
+        settings.explicit_orientation_sum_only = true;
+        settings
+            .validate_explicit_orientation_sum_options()
+            .unwrap();
+
+        settings.orientation_pattern = OrientationPattern::from_user_pattern("(+,-)").unwrap();
+        let error = settings
+            .validate_explicit_orientation_sum_options()
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("`global.generation.orientation_pattern` must be unset")
+        );
     }
 }
 

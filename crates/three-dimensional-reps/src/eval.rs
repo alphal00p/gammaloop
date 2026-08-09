@@ -36,6 +36,12 @@ pub enum EvaluationError {
     NumeratorParse(String),
     #[error("numerator evaluation error: {0}")]
     NumeratorEval(String),
+    #[error(
+        "residual four-dimensional denominator edge {edge_id} is outside the generated edge-energy map"
+    )]
+    ResidualDenominatorEdgeOutOfRange { edge_id: usize },
+    #[error("residual four-dimensional denominator power {power} is outside the supported range")]
+    ResidualDenominatorPowerOutOfRange { power: usize },
 }
 
 pub type Result<T> = std::result::Result<T, EvaluationError>;
@@ -254,8 +260,30 @@ impl<'a> ExpressionEvaluator<'a> {
         let mut numerator_cache = BTreeMap::<String, f64>::new();
         let mut numerator_calls = 0usize;
         for orientation in &self.expression.orientations {
+            let residual_denominator_factor =
+                self.expression.residual_denominators.iter().try_fold(
+                    1.0,
+                    |factor, denominator| {
+                        let edge_id = denominator.edge_id.0;
+                        let energy_map = orientation.edge_energy_map.get(edge_id).ok_or(
+                            EvaluationError::ResidualDenominatorEdgeOutOfRange { edge_id },
+                        )?;
+                        let on_shell_energy = self.internal_energies.get(edge_id).ok_or(
+                            EvaluationError::ResidualDenominatorEdgeOutOfRange { edge_id },
+                        )?;
+                        let power = i32::try_from(denominator.power).map_err(|_| {
+                            EvaluationError::ResidualDenominatorPowerOutOfRange {
+                                power: denominator.power,
+                            }
+                        })?;
+                        let q0 = self.linear_expr_value(energy_map)?;
+                        Ok::<_, EvaluationError>(
+                            factor / (q0 * q0 - on_shell_energy * on_shell_energy).powi(power),
+                        )
+                    },
+                )?;
             for variant in &orientation.variants {
-                let mut denom = rational_to_f64(&variant.prefactor);
+                let mut denom = residual_denominator_factor * rational_to_f64(&variant.prefactor);
                 for edge in &variant.half_edges {
                     denom /= 2.0 * self.internal_energies[edge.0];
                 }
@@ -980,10 +1008,42 @@ mod tests {
 
     use crate::{
         Generate3DExpressionOptions, NumeratorSamplingScaleMode,
-        generate_3d_expression_from_parsed, generate_confluent_cff_expression_from_parsed,
+        generation::generate_3d_expression_from_parsed,
     };
 
     use super::*;
+
+    #[test]
+    fn evaluator_includes_projected_residual_tree_denominators() {
+        let parsed = crate::graph_io::test_graphs::pure_tree_graph();
+        let expression = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                preserve_internal_edges_as_four_d_denominators: vec![0, 1],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let input = EvaluationInput {
+            external_momenta: vec![[3.0, 0.1, 0.2, 0.3], [2.0, -0.2, 0.1, 0.05]],
+            loop_spatial_momenta: Vec::new(),
+            masses: vec![0.7, 1.1],
+            uniform_scale: None,
+        };
+
+        let value = evaluate_expression(&parsed, &expression, "1", &input)
+            .unwrap()
+            .value;
+        let edge_0_energy_squared =
+            0.1_f64.powi(2) + 0.2_f64.powi(2) + 0.3_f64.powi(2) + 0.7_f64.powi(2);
+        let edge_1_energy_squared =
+            (-0.1_f64).powi(2) + 0.3_f64.powi(2) + 0.35_f64.powi(2) + 1.1_f64.powi(2);
+        let expected = 1.0
+            / ((3.0_f64.powi(2) - edge_0_energy_squared)
+                * (5.0_f64.powi(2) - edge_1_energy_squared));
+
+        assert!((value - expected).abs() < 1.0e-13);
+    }
 
     #[test]
     fn numerator_parser_evaluates_edge_energy_and_dot_products() {
@@ -1039,7 +1099,7 @@ mod tests {
             &Generate3DExpressionOptions {
                 energy_degree_bounds: Some(vec![(3, 4)]),
                 numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
-                include_cff_duplicate_signature_excess_sign: true,
+                ..Default::default()
             },
         )
         .unwrap();
@@ -1056,7 +1116,7 @@ mod tests {
     }
 
     #[test]
-    fn rank_projected_confluent_contact_reconstructs_numerator_derivatives() {
+    fn lower_sector_powered_pole_contact_reconstructs_numerator_derivatives() {
         let edge = |edge_id: usize,
                     tail: usize,
                     head: usize,
@@ -1108,7 +1168,7 @@ mod tests {
             expression
         };
         let contact = contact_terms(
-            generate_confluent_cff_expression_from_parsed(
+            generate_3d_expression_from_parsed(
                 &parsed,
                 &Generate3DExpressionOptions {
                     // z^2 is carried by edge 0, while k0*k1 is bounded by the
@@ -1120,7 +1180,7 @@ mod tests {
             .unwrap(),
         );
         let scalar_contact = contact_terms(
-            generate_confluent_cff_expression_from_parsed(
+            generate_3d_expression_from_parsed(
                 &parsed,
                 &Generate3DExpressionOptions {
                     energy_degree_bounds: Some(vec![(0, 2)]),
@@ -1199,10 +1259,10 @@ mod tests {
                 ("n2".to_string(), 2),
             ]),
         };
-        let residual_scalar_expression = generate_confluent_cff_expression_from_parsed(
+        let residual_scalar_expression = generate_3d_expression_from_parsed(
             &residual,
             &Generate3DExpressionOptions {
-                include_cff_duplicate_signature_excess_sign: false,
+                energy_degree_bounds: Some(Vec::new()),
                 ..Default::default()
             },
         )
@@ -1306,10 +1366,7 @@ mod tests {
                 .retain(|orientation| !orientation.variants.is_empty());
             expression
         };
-        let projected = contact_terms(
-            generate_confluent_cff_expression_from_parsed(&parent, &options).unwrap(),
-        );
-        let ordinary =
+        let projected =
             contact_terms(generate_3d_expression_from_parsed(&parent, &options).unwrap());
         let parent_input = EvaluationInput {
             external_momenta: Vec::new(),
@@ -1321,11 +1378,6 @@ mod tests {
             evaluate_expression(&parent, &projected, "edges[0][0]**2", &parent_input)
                 .unwrap()
                 .value;
-        let ordinary_value =
-            evaluate_expression(&parent, &ordinary, "edges[0][0]**2", &parent_input)
-                .unwrap()
-                .value;
-
         let residual = ParsedGraph {
             internal_edges: vec![
                 edge(0, 0, 1, "q1", vec![1], "mq"),
@@ -1337,11 +1389,9 @@ mod tests {
             external_names: Vec::new(),
             node_name_to_internal: BTreeMap::from([("n0".to_string(), 0), ("n1".to_string(), 1)]),
         };
-        let residual_expression = generate_confluent_cff_expression_from_parsed(
-            &residual,
-            &Generate3DExpressionOptions::default(),
-        )
-        .unwrap();
+        let residual_expression =
+            generate_3d_expression_from_parsed(&residual, &Generate3DExpressionOptions::default())
+                .unwrap();
         let residual_value = evaluate_expression(
             &residual,
             &residual_expression,
@@ -1357,7 +1407,6 @@ mod tests {
         .value;
 
         assert!(residual_value.abs() > 1.0e-12);
-        assert!((projected_value - ordinary_value).abs() < 1.0e-13);
         assert!((projected_value - residual_value).abs() < 1.0e-13);
     }
 }

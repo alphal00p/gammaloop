@@ -25,7 +25,7 @@ use crate::{
         CutCFFIndex,
         esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
         expression::{
-            CFFExpression, OrientationID,
+            CFFExpression, OrientationID, normalize_cut_edge_support_with_raised_edge_groups,
             normalize_three_d_expression_cut_support_with_raised_edge_groups,
         },
     },
@@ -33,7 +33,7 @@ use crate::{
     graph::{
         GraphGroup, GroupId, LMBext, LmbChannelFallback, LmbIndex, LoopMomentumBasis,
         ThresholdPinchStatus,
-        cuts::{CutSet, ResidueSelector},
+        cuts::{CutSet, LuCutSelection, ResidueSelector},
         edge::EdgeMass,
         parse::complete_group_parsing,
     },
@@ -1477,17 +1477,30 @@ impl CrossSectionGraph {
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
+        let contract_edges = self
+            .graph
+            .iter_edges_of(
+                &self
+                    .graph
+                    .tree_edges
+                    .subtract(&self.graph.initial_state_cut),
+            )
+            .map(|x| x.1)
+            .collect_vec();
+
         let options = self.graph.production_cff_3d_expression_options(settings)?;
         let analysis_numerator = self
             .graph
             .production_numerator_atom_for_full_3d_expression();
-        let mut global_cff = self.graph.generate_3d_expression_for_integrand(
-            &[],
-            &canonize_esurface,
-            &options,
-            Some(&analysis_numerator),
-            false,
-        )?;
+        let mut global_cff = self
+            .graph
+            .generate_3d_expression_for_integrand(
+                &contract_edges,
+                &canonize_esurface,
+                &options,
+                Some(&analysis_numerator),
+            )?
+            .expression;
         let raised_edge_groups = self.graph.get_raised_edge_groups();
         normalize_three_d_expression_cut_support_with_raised_edge_groups(
             &mut global_cff,
@@ -1729,7 +1742,7 @@ impl CrossSectionGraph {
             .iter()
             .map(|cuts| CutSet {
                 residue_selector: ResidueSelector {
-                    lu_cut: Some(cuts.related_esurface_group.clone()),
+                    lu: Some(cuts.lu_cut_selection(&self.graph, &self.cuts)),
                     left_th_cut: None,
                     right_th_cut: None,
                 },
@@ -2957,6 +2970,7 @@ impl CrossSectionGraph {
         {
             let left_thresholds = &left_cut_group_threshold_data[cut_group_id];
             let right_thresholds = &right_cut_group_threshold_data[cut_group_id];
+            let lu_cut_selection = cut_group.lu_cut_selection(&self.graph, &self.cuts);
 
             let cutkosky_cut_union = cut_group
                 .cuts
@@ -2983,7 +2997,7 @@ impl CrossSectionGraph {
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
-                        lu_cut: Some(cut_group.related_esurface_group.clone()),
+                        lu: Some(lu_cut_selection.clone()),
                         left_th_cut: Some(raised_esurface_group.clone()),
                         right_th_cut: None,
                     },
@@ -2998,7 +3012,7 @@ impl CrossSectionGraph {
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
-                        lu_cut: Some(cut_group.related_esurface_group.clone()),
+                        lu: Some(lu_cut_selection.clone()),
                         left_th_cut: None,
                         right_th_cut: Some(raised_esurface_group.clone()),
                     },
@@ -3021,7 +3035,7 @@ impl CrossSectionGraph {
 
                 cut_structure.push(CutSet {
                     residue_selector: ResidueSelector {
-                        lu_cut: Some(cut_group.related_esurface_group.clone()),
+                        lu: Some(lu_cut_selection.clone()),
                         left_th_cut: Some(left_raised_esurface_group.clone()),
                         right_th_cut: Some(right_raised_esurface_group.clone()),
                     },
@@ -3315,6 +3329,31 @@ pub struct CutGroupData {
 pub struct CutGroup {
     pub cuts: Vec<CutId>,
     pub related_esurface_group: RaisedEsurfaceGroup,
+}
+
+impl CutGroup {
+    pub(crate) fn lu_cut_selection(
+        &self,
+        graph: &Graph,
+        cuts: &TiVec<CutId, CrossSectionCut>,
+    ) -> LuCutSelection {
+        let raised_edge_groups = graph.get_raised_edge_groups();
+        let cut_edge_alternatives = self
+            .cuts
+            .iter()
+            .map(|cut_id| {
+                let cut_edges = graph
+                    .iter_edges_of(&cuts[*cut_id].cut.as_subgraph())
+                    .map(|(_, edge_id, _)| edge_id)
+                    .collect_vec();
+                normalize_cut_edge_support_with_raised_edge_groups(&cut_edges, &raised_edge_groups)
+            })
+            .collect();
+        LuCutSelection {
+            raised_group: self.related_esurface_group.clone(),
+            cut_edge_alternatives,
+        }
+    }
 }
 
 impl Default for CutGroupData {

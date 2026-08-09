@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 pub use three_dimensional_reps::expression::{
     AllOrientations, CFFVariant, OrientationData, OrientationExpression, OrientationID,
     OrientationSelector, RaisedEsurfaceData, RaisedEsurfaceDataView, RaisedEsurfaceGroup,
@@ -39,8 +41,26 @@ pub(crate) fn normalize_three_d_expression_cut_support_with_raised_edge_groups<O
                 &variant.denominator_edges,
                 raised_edge_groups,
             );
+            variant.denominator_edge_support_signs = normalize_cut_edge_support_signs(
+                std::mem::take(&mut variant.denominator_edge_support_signs),
+                raised_edge_groups,
+            );
         }
     }
+}
+
+fn normalize_cut_edge_support_signs(
+    support_signs: BTreeMap<Vec<EdgeIndex>, i64>,
+    raised_edge_groups: &[Vec<EdgeIndex>],
+) -> BTreeMap<Vec<EdgeIndex>, i64> {
+    support_signs
+        .into_iter()
+        .fold(BTreeMap::new(), |mut normalized, (support, sign)| {
+            let support =
+                normalize_cut_edge_support_with_raised_edge_groups(&support, raised_edge_groups);
+            *normalized.entry(support).or_insert(1) *= sign;
+            normalized
+        })
 }
 
 pub(crate) fn normalize_cut_edge_support_with_raised_edge_groups(
@@ -244,5 +264,18 @@ mod tests {
         let mixed = (mapped_energy.clone() + factor_a) * (mapped_energy + Atom::num(1) + factor_b);
         assert_ne!(mapped, mixed);
         Ok(())
+    }
+
+    #[test]
+    fn raised_alias_normalization_merges_cut_support_signs() {
+        let support_signs = BTreeMap::from([
+            (vec![EdgeIndex(2), EdgeIndex(3)], -1),
+            (vec![EdgeIndex(3), EdgeIndex(4)], -1),
+        ]);
+
+        assert_eq!(
+            normalize_cut_edge_support_signs(support_signs, &[vec![EdgeIndex(2), EdgeIndex(4)]],),
+            BTreeMap::from([(vec![EdgeIndex(2), EdgeIndex(3)], 1)])
+        );
     }
 }

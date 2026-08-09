@@ -72,8 +72,8 @@ impl Full4dCts {
 
     /// Complete one typed local term with the propagators outside its owning
     /// spinney. Numerator factors outside the spinney are deliberately not
-    /// attached here; final assembly grows those under the selected exact
-    /// production energy map.
+    /// attached here; final assembly grows those under each exact source-local
+    /// energy map after the complete 4D forest has been built.
     pub(crate) fn with_cograph<S: SubGraphLike>(
         local: &Local4dCts,
         graph: &Graph,

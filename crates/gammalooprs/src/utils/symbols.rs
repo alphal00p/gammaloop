@@ -113,6 +113,8 @@ pub struct WildCards {
 
 pub struct GammaloopSymbols {
     pub integrand: Symbol,
+    /// Evaluator-local function bodies for an explicit projected-CFF sum.
+    pub projected_cff_sum: Symbol,
     /// wrapper function for the 4d bridge denominators
     pub tree_denom_wrapper: Symbol,
 
@@ -514,6 +516,7 @@ spenso::symbolica_init_lazy_static! {
 pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     renormalization_localization_scale: symbol!("rls"),
     integrand: symbol!("integrand"),
+    projected_cff_sum: symbol!("projected_cff_sum"),
     tree_denom_wrapper: symbol!("tree_denoms"),
     dim_epsilon: symbol!("ε"),
     killing_func: symbol!(

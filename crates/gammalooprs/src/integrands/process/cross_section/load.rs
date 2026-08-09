@@ -32,7 +32,7 @@ type RationalExpressionTree = (
     ExpressionEvaluator<Complex<Fraction<IntegerRing>>>,
 );
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 8;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 9;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
@@ -93,6 +93,7 @@ pub struct StandaloneIndexedGenericEvaluatorArchive<A = Vec<u8>> {
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
+    pub(crate) explicit_orientation_sum_only: bool,
     pub(crate) single_parametric: StandaloneGenericEvaluatorArchive<A>,
     pub(crate) iterative: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) summed_function_map: Option<StandaloneGenericEvaluatorArchive<A>>,
@@ -331,6 +332,7 @@ fn build_stack<A: ImportWithMap>(
     };
 
     Ok(LoadedStandaloneEvaluatorStack {
+        explicit_orientation_sum_only: stack.explicit_orientation_sum_only,
         single_parametric: timed_build(stack.single_parametric, false, "single_parametric")?,
         iterative: stack
             .iterative
@@ -381,6 +383,7 @@ pub struct LoadedStandaloneIteratedCollection<T> {
 }
 
 pub struct LoadedStandaloneEvaluatorStack {
+    pub explicit_orientation_sum_only: bool,
     pub single_parametric: LoadedGenericEvaluator,
     pub iterative: Option<LoadedGenericEvaluator>,
     pub summed_function_map: Option<LoadedGenericEvaluator>,

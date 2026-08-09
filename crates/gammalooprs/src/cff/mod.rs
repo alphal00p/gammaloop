@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fmt::Display};
 
 use bincode_trait_derive::{Decode, Encode};
-use linnet::half_edge::subgraph::{Inclusion, SubGraphLike, SubSetLike, SubSetOps};
+use linnet::half_edge::subgraph::{SubGraphLike, SubSetLike, SubSetOps};
 use serde::{Deserialize, Serialize};
 use symbolica::atom::{Atom, AtomCore};
 
@@ -10,20 +10,21 @@ use crate::{
         expression::{
             GammaLoopOrientationExpression, OrientationExpression, OrientationID,
             OrientationSelector, ThreeDExpression,
+            normalize_three_d_expression_cut_support_with_raised_edge_groups,
         },
         orientations::GraphOrientation,
         surface::GammaLoopSurfaceCache,
     },
     graph::{
         FeynmanGraph, FourDDenominator, Graph, GraphThreeDSource, cuts::CutSet,
-        get_cff_inverse_energy_product_impl,
+        get_cff_inverse_energy_product_impl, three_d_source::ExactSourceEnergyMapper,
     },
     settings::global::OrientationPattern,
     utils::GS,
     uv::Integrands,
 };
 use color_eyre::Result;
-use three_dimensional_reps::{Generate3DExpressionOptions, ThreeDGraphSource};
+use three_dimensional_reps::{CffEnergyFactorOwnership, Generate3DExpressionOptions};
 
 pub mod orientations;
 //pub mod cut_expression;
@@ -42,12 +43,28 @@ pub(crate) struct CFFOrientationTerm {
 }
 
 pub struct CFFTerm {
-    // One denominator expression per reduced-graph energy map. Keep the map
-    // until the UV localizer can assign its full-graph OrientationID.
+    // Ordinary CFF maps retain production identity for direct-3D localization;
+    // exact 4D maps instead remain source-local and share their parent mapper.
     pub(crate) orientations: Vec<CFFOrientationTerm>,
+    exact_source_energy_mapper: Option<ExactSourceEnergyMapper>,
 }
 
 impl CFFTerm {
+    pub(crate) fn map_exact_source_numerator(
+        &self,
+        orientation: &OrientationExpression,
+        numerator: &Atom,
+    ) -> Result<Atom> {
+        self.exact_source_energy_mapper
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("ordinary CFF term has no exact-source energy mapper"))?
+            .map_numerator(
+                &orientation.loop_energy_map,
+                &orientation.edge_energy_map,
+                numerator,
+            )
+    }
+
     pub fn expression_with_selectors(&self) -> Atom {
         self.orientations
             .iter()
@@ -158,7 +175,15 @@ where
 fn select_indexed_cff_residues(
     cff: ThreeDExpression<OrientationID>,
     cutset: &CutSet,
-) -> Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)> {
+) -> Result<Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>> {
+    if let Some(lu) = cutset.residue_selector.lu.as_ref()
+        && (lu.cut_edge_alternatives.is_empty()
+            || lu.cut_edge_alternatives.iter().any(Vec::is_empty))
+    {
+        return Err(eyre::eyre!(
+            "LU residue selection requires at least one non-empty physical cut alternative"
+        ));
+    }
     let mut residues = vec![(CutCFFIndex::new_all_none(), cff)];
 
     if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
@@ -173,25 +198,27 @@ fn select_indexed_cff_residues(
         residues = apply_indexed_residue_selection(
             residues,
             CutCffResidueAxis::LeftThreshold,
+            // Powered poles are completed in the canonical causal basis, so
+            // left- and right-threshold selections use the same positive-
+            // energy Cutkosky convention as ordinary CFF terms.
             |expression| expression.select_esurface_residue(left_threshold),
         );
     }
 
-    if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
+    if let Some(lu) = cutset.residue_selector.lu.as_ref() {
         residues =
             apply_indexed_residue_selection(residues, CutCffResidueAxis::LuCut, |expression| {
-                // Threshold and LU residues stay in the canonical E-surface family. The removed
-                // generated-basis branches belonged to the distinct confluent/LTD
-                // representation: re-reading those generated repeated-channel coordinates would
-                // have put Laurent coefficients back on unresolved threshold surfaces and
-                // changed the selected-denominator sign convention. They also depended on
-                // lower-sector edge-set alternatives that main's selector does not expose.
-                // Residues here therefore use GammaLoop's positive-energy Cutkosky convention.
-                expression.select_esurface_residue(lu_cut)
+                // Physical support selection is independent of the 3D
+                // representation. CFF then consumes the selected surface in
+                // GammaLoop's positive-energy Cutkosky convention; future LTD
+                // signs and local-series coordinates remain LTD-owned.
+                expression
+                    .restrict_to_cut_alternatives(&lu.cut_edge_alternatives)
+                    .select_esurface_residue(&lu.raised_group)
             });
     }
 
-    residues
+    Ok(residues)
 }
 
 impl Graph {
@@ -204,20 +231,18 @@ impl Graph {
     ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
         let (
             generated,
-            use_generated_half_edges,
             physical_surfaces,
-            exact_ose_replacements,
+            physical_energy_edges,
+            exact_source_energy_mapper,
             inverse_energy_product,
-            physical_edge_map,
             cff_loop_number,
             contract_subgraph,
         ) = {
             let source = GraphThreeDSource::from_exact_denominators(self, denominators)?;
             let generated =
                 self.generate_3d_expression_for_4d_term(&source, options, analysis_numerator)?;
-            let use_generated_half_edges =
-                generation::generated_cff_expression_uses_variant_half_edges(&generated);
             let physical_surfaces = generated
+                .expression
                 .surfaces
                 .linear_surface_cache
                 .iter()
@@ -225,29 +250,75 @@ impl Graph {
                 .collect::<Vec<_>>();
             (
                 generated,
-                use_generated_half_edges,
                 physical_surfaces,
                 source
-                    .exact_ose_replacements()
-                    .expect("exact 4D source has occurrence-local energy replacements"),
+                    .physical_energy_edge_index_map()
+                    .expect("exact 4D source has a physical energy-edge projection"),
+                source
+                    .exact_source_energy_mapper()
+                    .expect("exact 4D source has an owned parent-energy mapper"),
                 source
                     .exact_inverse_energy_product()
                     .expect("exact 4D source has an occurrence-local energy product"),
-                source
-                    .physical_energy_edge_index_map()
-                    .expect("exact 4D source has a physical edge map"),
                 source.active_loop_count(),
                 source.contract_subgraph(),
             )
         };
-        let cff = self.convert_4d_expression_surfaces(
-            generated,
-            use_generated_half_edges,
-            &physical_surfaces,
-        )?;
-        let residues = select_indexed_cff_residues(cff, cutset);
+        let generated = self.convert_4d_expression_surfaces(generated, &physical_surfaces)?;
+        let energy_factor_ownership = generated.energy_factor_ownership;
+        let mut cff = generated.expression;
+        // Residue support belongs to physical Cutkosky alternatives even
+        // though exact numerator maps and half-edge energies remain
+        // occurrence-local. Project only that neutral provenance across the
+        // dual-ID boundary.
+        let physical_edge = |edge: linnet::half_edge::involution::EdgeIndex| {
+            let edge_id = usize::from(edge);
+            if edge_id < physical_energy_edges.orientation_edge_count {
+                return Ok(edge);
+            }
+            physical_energy_edges
+                .internal
+                .get(&edge_id)
+                .copied()
+                .map(linnet::half_edge::involution::EdgeIndex)
+                .ok_or_else(|| {
+                    eyre::eyre!("exact CFF cut support contains unmapped occurrence edge {edge_id}")
+                })
+        };
+        for orientation in cff.orientations.iter_mut() {
+            for variant in &mut orientation.variants {
+                variant.denominator_edges = variant
+                    .denominator_edges
+                    .iter()
+                    .copied()
+                    .map(&physical_edge)
+                    .collect::<Result<Vec<_>>>()?;
+                variant.denominator_edge_support_signs =
+                    std::mem::take(&mut variant.denominator_edge_support_signs)
+                        .into_iter()
+                        .try_fold(BTreeMap::new(), |mut mapped, (support, sign)| {
+                            let mut support = support
+                                .into_iter()
+                                .map(&physical_edge)
+                                .collect::<Result<Vec<_>>>()?;
+                            support.sort_unstable();
+                            support.dedup();
+                            *mapped.entry(support).or_insert(1) *= sign;
+                            Ok::<_, color_eyre::Report>(mapped)
+                        })?;
+            }
+        }
+        normalize_three_d_expression_cut_support_with_raised_edge_groups(
+            &mut cff,
+            &self.get_raised_edge_groups(),
+        );
+        let residues = select_indexed_cff_residues(cff, cutset)?;
         let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
         let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
+        let cff_energy_factor = match energy_factor_ownership {
+            CffEnergyFactorOwnership::GlobalSourceProduct => inverse_energy_product,
+            CffEnergyFactorOwnership::VariantLocal => Atom::one(),
+        };
 
         let mut terms = BTreeMap::new();
         for (cut_cff_index, expr) in residues {
@@ -259,48 +330,22 @@ impl Graph {
             };
             let mut cff_term = CFFTerm {
                 orientations: Vec::new(),
+                exact_source_energy_mapper: Some(exact_source_energy_mapper.clone()),
             };
             for orientation in expr.orientations {
                 let expression = orientation
                     .to_atom_gs()
                     .replace_multiple(&replacement_rules)
-                    .replace_multiple(&exact_ose_replacements)
-                    * if use_generated_half_edges {
-                        Atom::one()
-                    } else {
-                        inverse_energy_product.clone()
-                    }
+                    .replace_multiple(exact_source_energy_mapper.exact_ose_replacements())
+                    * &cff_energy_factor
                     * &cff_normalization;
-                let mut physical_energy_maps = BTreeMap::new();
-                for (local_edge, physical_edge) in &physical_edge_map.internal {
-                    let physical_edge_id = linnet::half_edge::involution::EdgeIndex(*physical_edge);
-                    if contract_subgraph.includes(&self[&physical_edge_id].1) {
-                        continue;
-                    }
-                    let Some(energy_map) = orientation.edge_energy_map.get(*local_edge) else {
-                        continue;
-                    };
-                    let energy_map = energy_map.clone().remap_energy_edges(
-                        &physical_edge_map.internal,
-                        &physical_edge_map.external,
-                    );
-                    if let Some(existing) =
-                        physical_energy_maps.insert(*physical_edge, energy_map.clone())
-                        && existing != energy_map
-                    {
-                        return Err(eyre::eyre!(
-                            "exact 4D denominator occurrences for physical edge {physical_edge} induce incompatible affine energy maps"
-                        ));
-                    }
-                }
-                // Distinct exact factors remain in `expression`; this remap is
-                // only the compatible physical representative used to attach
-                // their term to a production numerator energy map.
-                let mut physical_orientation = orientation;
-                physical_orientation.remap_energy_edge_indices(&physical_edge_map);
+                // Distinct exact factors remain in `expression`. The
+                // orientation is deliberately source-local: its affine map
+                // evaluates the complete parent numerator directly, rather
+                // than being remapped to a production OrientationID.
                 cff_term.orientations.push(CFFOrientationTerm {
                     expression,
-                    orientation: physical_orientation,
+                    orientation,
                 });
             }
             terms.insert(cut_cff_index, cff_term);
@@ -329,20 +374,23 @@ impl Graph {
         let canonize_esurface = self.get_esurface_canonization(&self.loop_momentum_basis);
 
         // Reduced UV graphs use the same CFF dispatcher and representation family as the
-        // production graph. The old repeated-channel branch switched only this side to a
-        // generated residue coordinate, so
-        // its surviving edge-energy maps could not be exact restrictions of production maps.
-        // Repeated thresholds are selected below in the canonical E-surface family; a distinct
-        // confluent/LTD representation remains deferred rather than being selected implicitly.
-        let cff = self.generate_3d_expression_for_integrand(
+        // production graph. Switching only this side to a residue coordinate would make its
+        // surviving edge-energy maps different numerator samples rather than exact restrictions
+        // of production maps. Proper LTD remains a separate deferred representation.
+        let generated = self.generate_3d_expression_for_integrand(
             &contract_edges,
             &canonize_esurface,
             options,
             analysis_numerator,
-            false,
         )?;
+        let energy_factor_ownership = generated.energy_factor_ownership;
+        let mut cff = generated.expression;
+        normalize_three_d_expression_cut_support_with_raised_edge_groups(
+            &mut cff,
+            &self.get_raised_edge_groups(),
+        );
 
-        let residues = select_indexed_cff_residues(cff, cutset);
+        let residues = select_indexed_cff_residues(cff, cutset)?;
 
         // println!("residue orders: {}", residue.len());
 
@@ -360,6 +408,12 @@ impl Graph {
             .saturating_sub(self.cyclotomatic_number(contract_subgraph));
         let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
         let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
+        let cff_energy_factor = match energy_factor_ownership {
+            CffEnergyFactorOwnership::GlobalSourceProduct => {
+                get_cff_inverse_energy_product_impl(self, &graph_without_is_cut, &contract_edges)
+            }
+            CffEnergyFactorOwnership::VariantLocal => Atom::one(),
+        };
         crate::debug_tags!(#cff, #trace;
             stage = "graph_cff_normalization",
             graph = %self.name,
@@ -371,12 +425,6 @@ impl Graph {
         let mut terms = BTreeMap::new();
 
         for (cut_cff_index, expr) in residues {
-            let use_generated_half_edges = expr.orientations.iter().any(|orientation| {
-                orientation
-                    .variants
-                    .iter()
-                    .any(|variant| !variant.half_edges.is_empty())
-            });
             let replacement_rules = if cutset.canonicalize_external_shifts {
                 expr.surfaces
                     .get_all_replacements_gs_in_lmb(&[], &self.loop_momentum_basis)
@@ -385,20 +433,14 @@ impl Graph {
             };
             let mut cff_term = CFFTerm {
                 orientations: vec![],
+                exact_source_energy_mapper: None,
             };
             for orientation in expr.orientations.iter().filter(|orientation| {
                 orientation_pattern.filter_orientation(&orientation.data.orientation)
             }) {
                 let eta_expr = orientation.to_atom_gs();
                 let mut ose_expr = eta_expr.replace_multiple(&replacement_rules);
-                if !use_generated_half_edges {
-                    ose_expr *= get_cff_inverse_energy_product_impl(
-                        self,
-                        &graph_without_is_cut,
-                        &contract_edges,
-                    );
-                }
-
+                ose_expr *= &cff_energy_factor;
                 ose_expr *= cff_normalization.clone();
 
                 crate::debug_tags!(#cff, #trace;
@@ -429,6 +471,20 @@ mod tests {
     use linnet::half_edge::involution::{EdgeIndex, Orientation};
     use linnet::half_edge::subgraph::SuBitGraph;
     use symbolica::atom::FunctionBuilder;
+
+    #[test]
+    fn lu_residue_selection_rejects_missing_physical_cut_support() {
+        let mut cutset = CutSet::empty(0);
+        cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            raised_group: crate::cff::esurface::RaisedEsurfaceGroup {
+                esurface_ids: Vec::new(),
+                max_occurence: 1,
+            },
+            cut_edge_alternatives: Vec::new(),
+        });
+
+        assert!(select_indexed_cff_residues(ThreeDExpression::new_empty(), &cutset).is_err());
+    }
 
     #[test]
     fn exact_cff_keeps_dotted_same_edge_occurrences() -> Result<()> {
@@ -468,31 +524,55 @@ mod tests {
 
         let (cff, _) =
             graph.cff_from_4d_denominators(&denominators, &cutset, &options, &Atom::one())?;
-        assert!(cff.terms.values().any(|term| !term.orientations.is_empty()));
+        assert_eq!(cff.terms.len(), 1);
         let on_shell_energy = (1..=3)
             .fold(mass_squared, |norm_squared, spatial_index| {
                 norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
             })
             .sqrt();
-        // The confluent residue owns its three half-edge factors, so the exact
-        // bridge must not append the pure-CFF global energy product.
-        let expected_expression =
-            -Atom::i() / (Atom::num(32) * Atom::var(GS.pi).pow(3) * on_shell_energy.pow(3));
-        for term in cff.terms.values().flat_map(|term| &term.orientations) {
+        // Ordinary CFF distributes the double-pole residue across orientations,
+        // so only the complete explicit sum has the contour normalization.
+        let expected_orientation_sum =
+            Atom::i() / (Atom::num(32) * Atom::var(GS.pi).pow(3) * on_shell_energy.pow(3));
+        let occurrence_offset = graph.underlying.n_edges();
+        let first_occurrence = EdgeIndex(occurrence_offset);
+        let second_occurrence = EdgeIndex(occurrence_offset + 1);
+        let terms = &cff
+            .terms
+            .values()
+            .next()
+            .expect("the empty cutset has one CFF term")
+            .orientations;
+        assert_eq!(terms.len(), 2);
+        for term in terms {
             let orientation = &term.orientation.data.orientation;
-            assert_ne!(orientation[edge], Orientation::Undirected);
-            assert_eq!(orientation[EdgeIndex::from(1)], Orientation::Undirected);
-            assert_eq!(
-                orientation[EdgeIndex::from(2)],
-                orientation[EdgeIndex::from(3)]
+            assert_ne!(orientation[first_occurrence], Orientation::Undirected);
+            assert_ne!(orientation[second_occurrence], Orientation::Undirected);
+            assert_ne!(
+                orientation[second_occurrence],
+                orientation[first_occurrence]
             );
-            assert_eq!(term.expression, expected_expression);
+            assert_eq!(orientation[edge], Orientation::Undirected);
         }
+        assert_ne!(
+            terms[0].orientation.data.orientation[first_occurrence],
+            terms[1].orientation.data.orientation[first_occurrence]
+        );
+        let orientation_sum = terms
+            .iter()
+            .fold(Atom::zero(), |sum, term| sum + &term.expression)
+            .replace(GS.ose(edge))
+            .with(on_shell_energy);
+        assert!(
+            (orientation_sum - expected_orientation_sum)
+                .together()
+                .is_zero()
+        );
         Ok(())
     }
 
     #[test]
-    fn exact_cff_bridges_opposite_repeated_channel_routing() -> Result<()> {
+    fn exact_cff_handles_opposite_repeated_routing_without_a_sign_bridge() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = dot!(digraph exact_opposite_routing {
             edge [num=1 mass=1]
@@ -522,24 +602,49 @@ mod tests {
 
         let (cff, _) =
             graph.cff_from_4d_denominators(&denominators, &cutset, &options, &Atom::one())?;
+        assert_eq!(cff.terms.len(), 1);
         let on_shell_energy = (1..=3)
             .fold(mass_squared, |norm_squared, spatial_index| {
                 norm_squared + GS.emr_mom(EdgeIndex(0), GS.cind(spatial_index)).pow(2)
             })
             .sqrt();
-        let expected_expression =
-            -Atom::i() / (Atom::num(32) * Atom::var(GS.pi).pow(3) * on_shell_energy.pow(3));
-        let terms = cff
+        let expected_orientation_sum =
+            Atom::i() / (Atom::num(32) * Atom::var(GS.pi).pow(3) * on_shell_energy.pow(3));
+        let terms = &cff
             .terms
             .values()
-            .flat_map(|term| &term.orientations)
-            .collect::<Vec<_>>();
+            .next()
+            .expect("the empty cutset has one CFF term")
+            .orientations;
 
-        assert!(!terms.is_empty());
+        assert_eq!(terms.len(), 2);
+        let occurrence_offset = graph.underlying.n_edges();
+        let first_occurrence = EdgeIndex(occurrence_offset);
+        let second_occurrence = EdgeIndex(occurrence_offset + 1);
+        for term in terms {
+            let orientation = &term.orientation.data.orientation;
+            assert_ne!(orientation[first_occurrence], Orientation::Undirected);
+            assert_ne!(orientation[second_occurrence], Orientation::Undirected);
+            assert_eq!(
+                orientation[second_occurrence],
+                orientation[first_occurrence]
+            );
+            assert_eq!(orientation[EdgeIndex(0)], Orientation::Undirected);
+            assert_eq!(orientation[EdgeIndex(1)], Orientation::Undirected);
+        }
+        assert_ne!(
+            terms[0].orientation.data.orientation[first_occurrence],
+            terms[1].orientation.data.orientation[first_occurrence]
+        );
+        let orientation_sum = terms
+            .iter()
+            .fold(Atom::zero(), |sum, term| sum + &term.expression)
+            .replace(GS.ose(EdgeIndex(0)))
+            .with(on_shell_energy);
         assert!(
-            terms
-                .into_iter()
-                .all(|term| term.expression == expected_expression)
+            (orientation_sum - expected_orientation_sum)
+                .together()
+                .is_zero()
         );
         Ok(())
     }
@@ -588,7 +693,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_original_source_preserves_production_affine_maps() -> Result<()> {
+    fn exact_original_source_matches_production_affine_maps_after_projection() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = dot!(digraph exact_root {
             edge [num=1 mass=1]
@@ -619,6 +724,10 @@ mod tests {
             mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
             full_expr: Atom::one(),
         });
+        let physical_energy_edges =
+            GraphThreeDSource::from_exact_denominators(&graph, &denominators)?
+                .physical_energy_edge_index_map()
+                .expect("exact source has a physical energy-edge projection");
         let (exact, _) =
             graph.cff_from_4d_denominators(&denominators, &cutset, &options, &Atom::one())?;
         let ordinary = ordinary
@@ -628,14 +737,16 @@ mod tests {
             .collect::<Vec<_>>();
 
         for exact in exact.terms.values().flat_map(|term| &term.orientations) {
+            let mut exact_orientation = exact.orientation.clone();
+            exact_orientation.remap_energy_edge_indices(&physical_energy_edges);
             assert!(
                 ordinary.iter().any(|ordinary| {
-                    ordinary.orientation.data.orientation == exact.orientation.data.orientation
-                        && ordinary.orientation.edge_energy_map == exact.orientation.edge_energy_map
+                    ordinary.orientation.data.orientation == exact_orientation.data.orientation
+                        && ordinary.orientation.edge_energy_map == exact_orientation.edge_energy_map
                 }),
                 "exact map {:?} with energies {:?} is absent from ordinary maps {:?}",
-                exact.orientation.data.orientation,
-                exact.orientation.edge_energy_map,
+                exact_orientation.data.orientation,
+                exact_orientation.edge_energy_map,
                 ordinary
                     .iter()
                     .map(|term| (

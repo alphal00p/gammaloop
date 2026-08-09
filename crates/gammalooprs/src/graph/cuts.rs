@@ -1,7 +1,10 @@
 use bincode_trait_derive::{Decode, Encode};
 use gammaloop_tracing_filter::LogMessage;
 use itertools::Itertools;
-use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+use linnet::half_edge::{
+    involution::EdgeIndex,
+    subgraph::{SuBitGraph, SubSetLike},
+};
 
 use crate::cff::{CutCFFIndex, esurface::RaisedEsurfaceGroup};
 
@@ -19,8 +22,18 @@ impl LogMessage for CutSet {
 }
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Hash, Eq, PartialOrd, Ord)]
+pub struct LuCutSelection {
+    pub raised_group: RaisedEsurfaceGroup,
+    /// Normalized physical edge support for each actual Cutkosky cut in this
+    /// raised group. Alternative order remains the physical-cut order so a
+    /// future LTD policy can attach representation-specific data without
+    /// reconstructing alternatives from the lossy union subgraph.
+    pub cut_edge_alternatives: Vec<Vec<EdgeIndex>>,
+}
+
+#[derive(Debug, Clone, Encode, Decode, PartialEq, Hash, Eq, PartialOrd, Ord)]
 pub struct ResidueSelector {
-    pub lu_cut: Option<RaisedEsurfaceGroup>,
+    pub lu: Option<LuCutSelection>,
     pub left_th_cut: Option<RaisedEsurfaceGroup>,
     pub right_th_cut: Option<RaisedEsurfaceGroup>,
 }
@@ -31,8 +44,8 @@ impl ResidueSelector {
         allowed_keys
             .into_iter()
             .flat_map(|index| {
-                if let Some(lu_cut) = &self.lu_cut {
-                    (1..=lu_cut.max_occurence)
+                if let Some(lu) = &self.lu {
+                    (1..=lu.raised_group.max_occurence)
                         .map(|lu_cut_index| {
                             let mut new_index = index;
                             new_index.lu_cut_order = Some(lu_cut_index);
@@ -77,7 +90,7 @@ impl CutSet {
     pub fn empty(size: usize) -> Self {
         CutSet {
             residue_selector: ResidueSelector {
-                lu_cut: None,
+                lu: None,
                 left_th_cut: None,
                 right_th_cut: None,
             },

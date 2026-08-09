@@ -263,11 +263,11 @@ pub struct CFFVariant {
     /// those absorbed signs without touching signs from spectator denominators.
     pub denominator_surface_signs: BTreeMap<HybridSurfaceID, i64>,
     /// Product of routing signs already absorbed in `prefactor`, keyed by the
-    /// denominator-edge support they belong to. Confluent residue channels can
-    /// contain repeated copies with opposite canonical routing. Global and local
-    /// evaluation keep the sign. A future cut-aware selector may drop a selected
+    /// denominator-edge support they belong to. Powered-pole channels can contain
+    /// repeated copies with opposite canonical routing. Global and local
+    /// evaluation keep the sign. Cut-aware residue selection drops a selected
     /// support's bookkeeping entry, but its routing sign remains in the prefactor;
-    /// spectator-support provenance must remain intact.
+    /// spectator-support provenance remains intact.
     pub denominator_edge_support_signs: BTreeMap<Vec<EdgeIndex>, i64>,
     pub uniform_scale_power: usize,
     pub numerator_surfaces: Vec<HybridSurfaceID>,
@@ -275,20 +275,6 @@ pub struct CFFVariant {
 }
 
 impl CFFVariant {
-    pub fn pure_cff(denominator: Tree<HybridSurfaceID>) -> Self {
-        Self {
-            origin: Some("cff".to_string()),
-            prefactor: rational_coeff_one(),
-            half_edges: Vec::new(),
-            denominator_edges: Vec::new(),
-            denominator_surface_signs: BTreeMap::new(),
-            denominator_edge_support_signs: BTreeMap::new(),
-            uniform_scale_power: 0,
-            numerator_surfaces: Vec::new(),
-            denominator,
-        }
-    }
-
     pub fn to_atom(&self) -> Atom {
         let half_edge_factor = self
             .half_edges
@@ -382,11 +368,61 @@ impl CFFVariant {
         }
     }
 
+    fn clear_selected_denominator_edge_support_sign(
+        &mut self,
+        cut_edge_alternatives: &[Vec<EdgeIndex>],
+    ) {
+        self.denominator_edge_support_signs.retain(|support, _| {
+            !cut_edge_alternatives.iter().any(|cut_edges| {
+                cut_edges
+                    .iter()
+                    .all(|cut_edge| support.binary_search(cut_edge).is_ok())
+            })
+        });
+    }
+
+    fn supports_any_cut(&self, cut_edge_alternatives: &[Vec<EdgeIndex>]) -> bool {
+        cut_edge_alternatives.iter().any(|cut_edges| {
+            !cut_edges.is_empty()
+                && cut_edges
+                    .iter()
+                    .all(|cut_edge| self.denominator_edges.contains(cut_edge))
+        })
+    }
+
     fn numerator_value_count(&self, value: &HybridSurfaceID) -> usize {
         self.numerator_surfaces
             .iter()
             .filter(|surface| *surface == value)
             .count()
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
+pub struct ResidualDenominator {
+    pub edge_id: EdgeIndex,
+    pub power: usize,
+    pub origin: Option<String>,
+}
+
+impl ResidualDenominator {
+    pub fn new(edge_id: EdgeIndex, origin: Option<String>) -> Self {
+        Self {
+            edge_id,
+            power: 1,
+            origin,
+        }
+    }
+
+    pub fn remap_energy_edge_indices(&mut self, edge_map: &EnergyEdgeIndexMap) {
+        self.edge_id = EdgeIndex(
+            edge_map
+                .internal
+                .get(&self.edge_id.0)
+                .copied()
+                .unwrap_or(self.edge_id.0),
+        );
     }
 }
 
@@ -429,7 +465,7 @@ pub struct OrientationExpression {
 }
 
 impl OrientationExpression {
-    pub fn pure_cff(data: OrientationData, denominator: Tree<HybridSurfaceID>) -> Self {
+    pub(crate) fn lower_sector_unit(data: OrientationData) -> Self {
         let edge_energy_map = data
             .orientation
             .iter()
@@ -444,7 +480,17 @@ impl OrientationExpression {
             data,
             loop_energy_map: Vec::new(),
             edge_energy_map,
-            variants: vec![CFFVariant::pure_cff(denominator)],
+            variants: vec![CFFVariant {
+                origin: Some("lower_sector_unit".to_string()),
+                prefactor: rational_coeff_one(),
+                half_edges: Vec::new(),
+                denominator_edges: Vec::new(),
+                denominator_surface_signs: BTreeMap::new(),
+                denominator_edge_support_signs: BTreeMap::new(),
+                uniform_scale_power: 0,
+                numerator_surfaces: Vec::new(),
+                denominator: Tree::from_root(HybridSurfaceID::Unit),
+            }],
         }
     }
 
@@ -820,6 +866,8 @@ where
 {
     pub orientations: TiVec<O, OrientationExpression>,
     pub surfaces: SurfaceCache<E, H>,
+    #[serde(default)]
+    pub residual_denominators: Vec<ResidualDenominator>,
 }
 
 pub type CFFExpression<O, E = (), H = ()> = ThreeDExpression<O, E, H>;
@@ -832,6 +880,7 @@ where
         Self {
             orientations: TiVec::new(),
             surfaces: SurfaceCache::new(),
+            residual_denominators: Vec::new(),
         }
     }
 
@@ -898,6 +947,9 @@ where
                 .clone()
                 .remap_energy_edges(&edge_map.internal, &edge_map.external);
         }
+        for denominator in &mut self.residual_denominators {
+            denominator.remap_energy_edge_indices(edge_map);
+        }
         self
     }
 
@@ -931,6 +983,27 @@ where
             .collect()
     }
 
+    /// Keep only terms supported by at least one physical Cutkosky alternative
+    /// immediately before consuming its residue. The physical support test is
+    /// representation-neutral; selected routing-sign provenance is consumed
+    /// here because its algebraic sign is already in the prefactor. A future
+    /// LTD implementation keeps any additional signs in its own sidecar.
+    pub fn restrict_to_cut_alternatives(
+        mut self,
+        cut_edge_alternatives: &[Vec<EdgeIndex>],
+    ) -> Self {
+        for orientation in self.orientations.iter_mut() {
+            orientation.variants.retain_mut(|variant| {
+                if !variant.supports_any_cut(cut_edge_alternatives) {
+                    return false;
+                }
+                variant.clear_selected_denominator_edge_support_sign(cut_edge_alternatives);
+                true
+            });
+        }
+        self
+    }
+
     pub fn select_esurface_residue(
         mut self,
         raised_esurface_group: &impl RaisedEsurfaceGroupView,
@@ -945,34 +1018,9 @@ where
         // denominator carries an overall sign, consuming it moves that sign
         // into the residue prefactor without touching spectator-denominator
         // signs.
-        self.select_esurface_residue_impl(raised_esurface_group, true)
-    }
-
-    pub fn select_esurface_residue_in_generated_basis(
-        mut self,
-        raised_esurface_group: &impl RaisedEsurfaceGroupView,
-    ) -> Vec<ThreeDExpression<O, E, H>>
-    where
-        E: Clone,
-        H: Clone,
-    {
-        // Generated-basis residues consume the denominator in its generated
-        // or local-series coordinate. Repeated/confluent channels retain that
-        // orientation here: any bridge to a canonical physical convention must
-        // be supplied by the caller as neutral residue metadata, not by moving
-        // the generated denominator sign into this local residue.
-        self.select_esurface_residue_impl(raised_esurface_group, false)
-    }
-
-    fn select_esurface_residue_impl(
-        &mut self,
-        raised_esurface_group: &impl RaisedEsurfaceGroupView,
-        clear_selected_denominator_surface_sign: bool,
-    ) -> Vec<ThreeDExpression<O, E, H>>
-    where
-        E: Clone,
-        H: Clone,
-    {
+        // Powered-pole generation is completed in this same causal basis.
+        // A future LTD or local-series coordinate remains a separate backend
+        // and must not change physical CFF residue selection here.
         self.normalize_single_raising(raised_esurface_group);
 
         let representative_esurface_id = raised_esurface_group.esurface_ids()[0];
@@ -991,9 +1039,7 @@ where
                         occurrence + numerator_count,
                     );
 
-                    if clear_selected_denominator_surface_sign {
-                        variant.clear_selected_denominator_surface_sign(raised_esurface_group);
-                    }
+                    variant.clear_selected_denominator_surface_sign(raised_esurface_group);
 
                     variant
                         .denominator
@@ -1108,8 +1154,24 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(
             f,
-            "id | orientation | variant | pref | M power | half edges | den surfaces | num surfaces"
+            "id | orientation | variant | pref | M power | half edges | den surfaces | num surfaces | residual denominators"
         )?;
+        let residual_denominators = self
+            .residual_denominators
+            .iter()
+            .map(|denominator| {
+                format!(
+                    "e{}^{}{}",
+                    denominator.edge_id.0,
+                    denominator.power,
+                    denominator
+                        .origin
+                        .as_ref()
+                        .map(|origin| format!(":{origin}"))
+                        .unwrap_or_default()
+                )
+            })
+            .join(", ");
         for (orientation_id, orientation) in self.orientations.iter_enumerated() {
             let id: usize = orientation_id.into();
             let label =
@@ -1136,7 +1198,7 @@ where
                     .join(", ");
                 writeln!(
                     f,
-                    "{} | {} | {} | {} | {} | [{}] | [{}] | [{}]",
+                    "{} | {} | {} | {} | {} | [{}] | [{}] | [{}] | [{}]",
                     id,
                     label,
                     variant
@@ -1147,7 +1209,8 @@ where
                     variant.uniform_scale_power,
                     half_edges,
                     denominator_surfaces,
-                    numerator_surfaces
+                    numerator_surfaces,
+                    residual_denominators
                 )?;
             }
         }
@@ -1201,5 +1264,68 @@ impl RaisedEsurfaceGroupView for RaisedEsurfaceGroup {
 
     fn max_occurrence(&self) -> usize {
         self.max_occurence
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cut_variant(denominator_edges: &[usize], support_signs: &[(&[usize], i64)]) -> CFFVariant {
+        CFFVariant {
+            origin: Some("cut_support_test".to_string()),
+            prefactor: rational_coeff_one(),
+            half_edges: Vec::new(),
+            denominator_edges: denominator_edges.iter().copied().map(EdgeIndex).collect(),
+            denominator_surface_signs: BTreeMap::new(),
+            denominator_edge_support_signs: support_signs
+                .iter()
+                .map(|(support, sign)| (support.iter().copied().map(EdgeIndex).collect(), *sign))
+                .collect(),
+            uniform_scale_power: 0,
+            numerator_surfaces: Vec::new(),
+            denominator: Tree::from_root(HybridSurfaceID::Unit),
+        }
+    }
+
+    #[test]
+    fn cut_alternatives_are_disjunctive_and_consume_only_selected_provenance() {
+        let mut expression = ThreeDExpression::<OrientationID>::new_empty();
+        let data = OrientationData::new(EdgeVec::from_iter([Orientation::Undirected; 5]));
+        let mut orientation = OrientationExpression::lower_sector_unit(data);
+        orientation.variants = vec![
+            cut_variant(&[0, 1, 4], &[(&[0, 1], -1), (&[4], -1)]),
+            cut_variant(&[2, 3], &[(&[2, 3], -1)]),
+            cut_variant(&[0, 4], &[(&[0, 4], -1)]),
+        ];
+        expression.orientations.push(orientation);
+
+        let restricted = expression.clone().restrict_to_cut_alternatives(&[
+            vec![EdgeIndex(0), EdgeIndex(1)],
+            vec![EdgeIndex(2), EdgeIndex(3)],
+        ]);
+        let variants = &restricted.orientations[OrientationID(0)].variants;
+        assert_eq!(variants.len(), 2);
+        assert_eq!(
+            variants[0].denominator_edge_support_signs,
+            BTreeMap::from([(vec![EdgeIndex(4)], -1)])
+        );
+        assert!(variants[1].denominator_edge_support_signs.is_empty());
+
+        assert!(
+            expression
+                .clone()
+                .restrict_to_cut_alternatives(&[])
+                .orientations[OrientationID(0)]
+            .variants
+            .is_empty()
+        );
+        assert!(
+            expression
+                .restrict_to_cut_alternatives(&[Vec::new()])
+                .orientations[OrientationID(0)]
+            .variants
+            .is_empty()
+        );
     }
 }

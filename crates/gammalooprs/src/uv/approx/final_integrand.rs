@@ -1,5 +1,6 @@
+#[cfg(test)]
+use crate::cff::CutCFFIndex;
 use crate::{
-    cff::CutCFFIndex,
     debug_tags,
     graph::Graph,
     utils::{GS, W_},
@@ -29,8 +30,27 @@ use symbolica::{
 pub(crate) struct FinalIntegrands(Integrands);
 
 impl FinalIntegrands {
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (&CutCFFIndex, &Atom)> {
-        self.0.iter()
+    /// Iterate over finalized semantic expressions for diagnostics. Deferred
+    /// evaluator calls are materialized before leaving this stage.
+    #[cfg(test)]
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (CutCFFIndex, Atom)> {
+        self.0.materialize().compact.into_iter()
+    }
+
+    pub(crate) fn map(&self, f: impl FnMut(&Atom) -> Atom) -> Self {
+        Self(self.0.map(f))
+    }
+
+    pub(crate) fn zip_add(self, other: Self) -> Result<Self> {
+        Ok(Self(self.0.zip_add(other.0)?))
+    }
+
+    pub(crate) fn materialize(&self) -> Integrands {
+        self.0.materialize()
+    }
+
+    pub(crate) fn into_integrands(self) -> Integrands {
+        self.0
     }
 }
 
@@ -73,17 +93,13 @@ impl<'a> FinalIntegrandBuilder<'a> {
         local_terms: &Local3DCts,
         integrated: &IntegratedCts,
     ) -> Result<FinalIntegrands> {
-        let global_num = graph.global_atom();
-        debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            global_num = %global_num.log_display(),
-            "Computed global numerator"
-        );
-
         let reduced = graph
             .full_filter()
             .subtract(current.subgraph())
             .subtract(&graph.initial_state_cut);
-        let localized_integrated = if self.project_from_4d {
+        let full_graph = graph.full_filter();
+
+        if self.project_from_4d {
             // Keep finite addbacks for nested multi-loop entries. Integrated
             // coefficients carry their forest-composition signs; projecting the
             // complete typed coefficient preserves the Tint(T(...)) terms. The
@@ -95,22 +111,68 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 &reduced,
             );
             let localizing_integrand = GS.localizing_integrand(current.lmb());
-            self.localizer
-                .project_4d(&integrated_source, graph, true)?
-                .integrands()
+            let projected_integrated =
+                self.localizer
+                    .project_4d(&integrated_source, graph, current.subgraph())?;
+            let localized_integrated = projected_integrated
+                .projected_integrands()?
                 .map(|atom| atom * &localizing_integrand)
-        } else {
-            self.localizer
-                .localize(
-                    &integrated.physical_finite_counterterm_atom(),
-                    graph,
-                    current,
-                )?
-                .combine()?
-        };
+                .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
+            let local_terms = local_terms
+                .projected_integrands()?
+                .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
+            let final_int = localized_integrated.zip_add(local_terms)?;
 
-        let full_graph = graph.full_filter();
-        let localized_integrated = localized_integrated
+            let result = final_int.fallible_map(|a| {
+                let mut a = a.clone();
+
+                for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {
+                    let eid = usize::from(eid) as i64;
+                    if p.is_paired() {
+                        a = a
+                            .replace(function!(GS.energy, eid))
+                            .with(function!(GS.ose, eid));
+                    }
+                }
+
+                a = a
+                    .replace(function!(GS.ose, W_.mass_, W_.prop_))
+                    .with(W_.prop_);
+
+                let color_simplify_input = a.replace(GS.dim).with(4);
+
+                a = color_simplify_input
+                    .collect_factors()
+                    .simplify_metrics()
+                    .simplify_color_with(
+                        ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                    );
+
+                a = a.expand_dots()?;
+
+                Ok(a.replace(GS.m_uv_expansion)
+                    .with(GS.m_uv_vacuum)
+                    .replace(GS.dim_epsilon)
+                    .with(0))
+            })?;
+
+            return Ok(FinalIntegrands(result));
+        }
+
+        let global_num = graph.global_atom();
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            global_num = %global_num.log_display(),
+            "Computed global numerator"
+        );
+
+        let localized_integrated = self
+            .localizer
+            .localize(
+                &integrated.physical_finite_counterterm_atom(),
+                graph,
+                current,
+            )?
+            .combine()?
             .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
         let local_terms = local_terms
             .integrands()
@@ -183,7 +245,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                     .with(0))
             })?;
             result = Some(match result {
-                Some(sum) => sum.zip_add(&mapped)?,
+                Some(sum) => sum.zip_add(mapped)?,
                 None => mapped,
             });
         }

@@ -274,7 +274,7 @@ impl Default for EvaluatorMethod {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct EvaluatorStack {
-    explicit_orientation_sum_only: bool,
+    pub(crate) explicit_orientation_sum_only: bool,
     pub single_parametric: GenericEvaluator,
     pub iterative: Option<(GenericEvaluator, usize)>,
     // pub iterative_function_map: Option<GenericEvaluator>,
@@ -473,6 +473,274 @@ impl EvaluatorStack {
         Ok((stack, timings))
     }
 
+    pub(crate) fn new_deferred_explicit_sum_with_timings(
+        compact_atom: &Atom,
+        bodies: &[Atom],
+        param_builder: &ParamBuilder,
+        dual_shape: Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+    ) -> Result<(Self, EvaluatorBuildTimings)> {
+        let setup_started = std::time::Instant::now();
+        let expected_compact = bodies
+            .iter()
+            .enumerate()
+            .map(|(tag, _)| function!(GS.projected_cff_sum, tag))
+            .fold(Atom::Zero, |sum, call| sum + call);
+        if compact_atom != &expected_compact {
+            return Err(eyre!(
+                "deferred projected-CFF compact expression does not match its {} function bodies",
+                bodies.len()
+            ));
+        }
+
+        let validation_time = setup_started.elapsed();
+        let spenso_started = std::time::Instant::now();
+        let bodies = bodies
+            .iter()
+            .enumerate()
+            .map(|(body_index, body)| Self::preprocess_atom(body, body_index, settings))
+            .collect::<Result<Vec<_>>>()?;
+        let spenso_time = spenso_started.elapsed();
+
+        let setup_started = std::time::Instant::now();
+        let mut param_builder = param_builder.clone();
+        for (tag, body) in bodies.iter().enumerate() {
+            param_builder
+                .add_tagged_function::<Symbol>(
+                    GS.projected_cff_sum,
+                    vec![Atom::num(tag)],
+                    format!("projected_cff_sum_{tag}"),
+                    Vec::new(),
+                    GS.collect_orientation_if(body.as_view()),
+                )
+                .map_err(|error| eyre!(error))?;
+        }
+
+        let setup_time = validation_time + setup_started.elapsed();
+        let (stack, mut timings) = Self::new_explicit_sum_with_timings(
+            std::slice::from_ref(compact_atom),
+            &param_builder,
+            dual_shape,
+            settings,
+        )?;
+        timings.spenso_time += spenso_time;
+        timings.symbolica_time += setup_time;
+        Ok((stack, timings))
+    }
+
+    fn preprocess_atom<A: AtomCore>(
+        a: &A,
+        atom_index: usize,
+        settings: &EvaluatorSettings,
+    ) -> Result<Atom> {
+        let atom_started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+            stage = "evaluator_stack_parse_atom_start",
+            atom_index,
+            do_algebra = settings.do_algebra,
+            "Evaluator timing milestone"
+        );
+        // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
+        let instant = std::time::Instant::now();
+        let network_input = if settings.do_algebra {
+            let color_simplified = a.as_atom_view().simplify_color_with(
+                ColorSimplifySettings::default().with_cof_dimension_invariants(),
+            );
+            let gamma_simplified = color_simplified.simplify_gamma();
+            crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
+                stage = "evaluator_stack_parse_atom_after_simplify_gamma",
+                atom_index,
+                log.after_gamma = gamma_simplified,
+                "Evaluator atom after gamma simplification"
+            );
+            let simplified = gamma_simplified.simplify_metrics().to_dots();
+            crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                stage = "evaluator_stack_parse_atom_simplify_done",
+                atom_index,
+                elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                "Evaluator timing milestone"
+            );
+            simplified
+        } else {
+            crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+                stage = "evaluator_stack_parse_atom_simplify_skipped",
+                atom_index,
+                elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+                "Evaluator timing milestone"
+            );
+            a.as_atom_view().to_cof_dimension_invariants()
+        };
+        crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
+            stage = "evaluator_stack_parse_atom_before_network_parse",
+            atom_index,
+            log.atom = network_input,
+            "Evaluator atom before network parsing"
+        );
+        if let Some(path) =
+            std::env::var_os(DUMP_EVALUATOR_PRE_NETWORK_PARSE_ENV).map(std::path::PathBuf::from)
+        {
+            std::fs::write(&path, network_input.to_plain_string()).with_context(|| {
+                format!(
+                    "failed to write evaluator pre-network atom to {}",
+                    path.display()
+                )
+            })?;
+        }
+        if std::env::var_os(STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE_ENV).is_some() {
+            return Err(eyre!(
+                "stopped after evaluator pre-network parse dump because {STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE_ENV} is set"
+            ));
+        }
+        let mut net = network_input.parse_into_net()?;
+        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+            stage = "evaluator_stack_parse_atom_net_done",
+            atom_index,
+            elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+            "Evaluator timing milestone"
+        );
+
+        // println!("Net: {}", net.dot_pretty());
+        let scalar_aliases = net.alias_scalar_refs(|_, scalar| {
+            scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
+        });
+        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+            stage = "evaluator_stack_parse_atom_scalar_aliases_done",
+            atom_index,
+            threshold_bytes = NETWORK_SCALAR_ALIAS_MIN_BYTES,
+            aliases_created = scalar_aliases.aliases_created(),
+            aliased_terms = scalar_aliases.aliased_terms(),
+            aliased_bytes = scalar_aliases.aliased_bytes(),
+            max_aliased_bytes = scalar_aliases.max_aliased_bytes(),
+            elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+            "Evaluator timing milestone"
+        );
+        crate::debug_tags!(#generation, #compile, #term, #dump;
+            stage = "evaluator_stack_parse_atom_network_dump",
+            atom_index,
+            file.atom = %a.as_atom_view().to_canonical_string(),
+            file.network = %net.dot_pretty(),
+            "Parsed evaluator network dump"
+        );
+
+        let parse_elapsed = instant.elapsed();
+        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+            stage = "evaluator_stack_parse_atom_parse_elapsed",
+            atom_index,
+            elapsed_ms = parse_elapsed.as_secs_f64() * 1000.0,
+            "Evaluator timing milestone"
+        );
+        let instant = std::time::Instant::now();
+
+        macro_rules! execute_min_result_rank {
+            ($execution_strategy:ty) => {
+                match settings.tensor_network_contraction_order {
+                    TensorNetworkContractionOrder::SparseAtomAware => net
+                        .execute::<$execution_strategy, MinResultRank, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
+                        ),
+                    TensorNetworkContractionOrder::AtomAware => {
+                        net.execute::<$execution_strategy, MinResultRankWith<
+                            { PAIR_SCORE_ATOM_AWARE },
+                            { DEFAULT_EXACT_JOIN_LIMIT },
+                        >, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(), FUN_LIB.deref()
+                        )
+                    }
+                    TensorNetworkContractionOrder::ResultRankOnly => net
+                        .execute::<$execution_strategy, MinResultRankWith<
+                            { PAIR_SCORE_RESULT_RANK_ONLY },
+                            { DEFAULT_EXACT_JOIN_LIMIT },
+                        >, _, _, _>(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref()),
+                    TensorNetworkContractionOrder::EntryAware => {
+                        net.execute::<$execution_strategy, MinResultRankWith<
+                            { PAIR_SCORE_ENTRY_AWARE },
+                            { DEFAULT_EXACT_JOIN_LIMIT },
+                        >, _, _, _>(
+                            TENSORLIB.read().unwrap().deref(), FUN_LIB.deref()
+                        )
+                    }
+                }
+            };
+        }
+
+        match settings.spenso_execution_mode {
+            (ExecutionMode::Sequential, ContractionMode::SmallestDegree) => {
+                net.execute::<Sequential, SmallestDegree, _, _, _>(
+                    TENSORLIB.read().unwrap().deref(),
+                    FUN_LIB.deref(),
+                )?;
+            }
+            (ExecutionMode::Sequential, ContractionMode::MinResultRank) => {
+                execute_min_result_rank!(Sequential)?;
+            }
+            (ExecutionMode::SequentialRef, ContractionMode::SmallestDegree) => {
+                net.execute::<SequentialRef, SmallestDegree, _, _, _>(
+                    TENSORLIB.read().unwrap().deref(),
+                    FUN_LIB.deref(),
+                )?;
+            }
+            (ExecutionMode::SequentialRef, ContractionMode::MinResultRank) => {
+                execute_min_result_rank!(SequentialRef)?;
+            }
+            (ExecutionMode::SequentialExtract, ContractionMode::SmallestDegree) => {
+                net.execute::<SequentialExtract, SmallestDegree, _, _, _>(
+                    TENSORLIB.read().unwrap().deref(),
+                    FUN_LIB.deref(),
+                )?;
+            }
+            (ExecutionMode::SequentialExtract, ContractionMode::MinResultRank) => {
+                execute_min_result_rank!(SequentialExtract)?;
+            }
+            _ => {
+                net.execute::<Sequential, SmallestDegree, _, _, _>(
+                    TENSORLIB.read().unwrap().deref(),
+                    FUN_LIB.deref(),
+                )?;
+            }
+        }
+
+        // println!("Executing ", net.dot_pretty());
+        net.execute::<SequentialRef, SmallestDegree, _, _, _>(
+            TENSORLIB.read().unwrap().deref(),
+            FUN_LIB.deref(),
+        )?;
+
+        let execute_elapsed = instant.elapsed();
+        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+            stage = "evaluator_stack_parse_atom_execute_elapsed",
+            atom_index,
+            elapsed_ms = execute_elapsed.as_secs_f64() * 1000.0,
+            "Evaluator timing milestone"
+        );
+        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+            stage = "evaluator_stack_parse_atom_execute_done",
+            atom_index,
+            elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+            "Evaluator timing milestone"
+        );
+
+        let result = net
+            .result_scalar()
+            .map(|a| match a {
+                ExecutionResult::One => Atom::num(1),
+                ExecutionResult::Zero => Atom::Zero,
+                ExecutionResult::Val(v) => v.into_owned(),
+            })
+            .map(|root| net.resolve_scalar_aliases(&scalar_aliases, root))
+            .map_err(|a| {
+                Report::from(a).with_note(|| format!("Network looks like: {}", net.dot_pretty()))
+            });
+        crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
+            stage = "evaluator_stack_parse_atom_done",
+            atom_index,
+            success = result.is_ok(),
+            elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+            "Evaluator timing milestone"
+        );
+        result
+    }
+
     #[instrument(skip_all, err)]
     pub fn new_with_timings<A: AtomCore>(
         atoms: &[A],
@@ -505,228 +773,7 @@ impl EvaluatorStack {
         let parsed_atoms = atoms
             .iter()
             .enumerate()
-            .map(|(atom_index, a)| {
-                let atom_started = std::time::Instant::now();
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_start",
-                    atom_index,
-                    do_algebra = settings.do_algebra,
-                    "Evaluator timing milestone"
-                );
-                // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
-                let instant = std::time::Instant::now();
-                let network_input = if settings.do_algebra {
-                    let color_simplified = a.as_atom_view().simplify_color_with(
-                        ColorSimplifySettings::default().with_cof_dimension_invariants(),
-                    );
-                    let gamma_simplified = color_simplified.simplify_gamma();
-                    crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
-                        stage = "evaluator_stack_parse_atom_after_simplify_gamma",
-                        atom_index,
-                        log.after_gamma = gamma_simplified,
-                        "Evaluator atom after gamma simplification"
-                    );
-                    let simplified = gamma_simplified.simplify_metrics().to_dots();
-                    crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                        stage = "evaluator_stack_parse_atom_simplify_done",
-                        atom_index,
-                        elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                        "Evaluator timing milestone"
-                    );
-                    simplified
-                } else {
-                    crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                        stage = "evaluator_stack_parse_atom_simplify_skipped",
-                        atom_index,
-                        elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                        "Evaluator timing milestone"
-                    );
-                    a.as_atom_view().to_cof_dimension_invariants()
-                };
-                crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
-                    stage = "evaluator_stack_parse_atom_before_network_parse",
-                    atom_index,
-                    log.atom = network_input,
-                    "Evaluator atom before network parsing"
-                );
-                if let Some(path) =
-                    std::env::var_os(DUMP_EVALUATOR_PRE_NETWORK_PARSE_ENV).map(std::path::PathBuf::from)
-                {
-                    std::fs::write(&path, network_input.to_plain_string()).with_context(|| {
-                        format!("failed to write evaluator pre-network atom to {}", path.display())
-                    })?;
-                }
-                if std::env::var_os(STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE_ENV).is_some() {
-                    return Err(eyre!(
-                        "stopped after evaluator pre-network parse dump because {STOP_AFTER_EVALUATOR_PRE_NETWORK_PARSE_ENV} is set"
-                    ));
-                }
-                let mut net = network_input.parse_into_net()?;
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_net_done",
-                    atom_index,
-                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-
-                // println!("Net: {}", net.dot_pretty());
-                let scalar_aliases = net.alias_scalar_refs(|_, scalar| {
-                    scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
-                });
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_scalar_aliases_done",
-                    atom_index,
-                    threshold_bytes = NETWORK_SCALAR_ALIAS_MIN_BYTES,
-                    aliases_created = scalar_aliases.aliases_created(),
-                    aliased_terms = scalar_aliases.aliased_terms(),
-                    aliased_bytes = scalar_aliases.aliased_bytes(),
-                    max_aliased_bytes = scalar_aliases.max_aliased_bytes(),
-                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-                crate::debug_tags!(#generation, #compile, #term, #dump;
-                    stage = "evaluator_stack_parse_atom_network_dump",
-                    atom_index,
-                    file.atom = %a.as_atom_view().to_canonical_string(),
-                    file.network = %net.dot_pretty(),
-                    "Parsed evaluator network dump"
-                );
-
-                let parse_elapsed = instant.elapsed();
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_parse_elapsed",
-                    atom_index,
-                    elapsed_ms = parse_elapsed.as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-                let instant = std::time::Instant::now();
-
-                macro_rules! execute_min_result_rank {
-                    ($execution_strategy:ty) => {
-                        match settings.tensor_network_contraction_order {
-                            TensorNetworkContractionOrder::SparseAtomAware => {
-                                net.execute::<$execution_strategy, MinResultRank, _, _, _>(
-                                    TENSORLIB.read().unwrap().deref(),
-                                    FUN_LIB.deref(),
-                                )
-                            }
-                            TensorNetworkContractionOrder::AtomAware => {
-                                net.execute::<
-                                    $execution_strategy,
-                                    MinResultRankWith<
-                                        { PAIR_SCORE_ATOM_AWARE },
-                                        { DEFAULT_EXACT_JOIN_LIMIT },
-                                    >,
-                                    _,
-                                    _,
-                                    _,
-                                >(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref())
-                            }
-                            TensorNetworkContractionOrder::ResultRankOnly => {
-                                net.execute::<
-                                    $execution_strategy,
-                                    MinResultRankWith<
-                                        { PAIR_SCORE_RESULT_RANK_ONLY },
-                                        { DEFAULT_EXACT_JOIN_LIMIT },
-                                    >,
-                                    _,
-                                    _,
-                                    _,
-                                >(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref())
-                            }
-                            TensorNetworkContractionOrder::EntryAware => {
-                                net.execute::<
-                                    $execution_strategy,
-                                    MinResultRankWith<
-                                        { PAIR_SCORE_ENTRY_AWARE },
-                                        { DEFAULT_EXACT_JOIN_LIMIT },
-                                    >,
-                                    _,
-                                    _,
-                                    _,
-                                >(TENSORLIB.read().unwrap().deref(), FUN_LIB.deref())
-                            }
-                        }
-                    };
-                }
-
-                match settings.spenso_execution_mode {
-                    (ExecutionMode::Sequential, ContractionMode::SmallestDegree) => {
-                        net.execute::<Sequential, SmallestDegree, _, _, _>(
-                            TENSORLIB.read().unwrap().deref(),
-                            FUN_LIB.deref(),
-                        )?;
-                    }
-                    (ExecutionMode::Sequential, ContractionMode::MinResultRank) => {
-                        execute_min_result_rank!(Sequential)?;
-                    }
-                    (ExecutionMode::SequentialRef, ContractionMode::SmallestDegree) => {
-                        net.execute::<SequentialRef, SmallestDegree, _, _, _>(
-                            TENSORLIB.read().unwrap().deref(),
-                            FUN_LIB.deref(),
-                        )?;
-                    }
-                    (ExecutionMode::SequentialRef, ContractionMode::MinResultRank) => {
-                        execute_min_result_rank!(SequentialRef)?;
-                    }
-                    (ExecutionMode::SequentialExtract, ContractionMode::SmallestDegree) => {
-                        net.execute::<SequentialExtract, SmallestDegree, _, _, _>(
-                            TENSORLIB.read().unwrap().deref(),
-                            FUN_LIB.deref(),
-                        )?;
-                    }
-                    (ExecutionMode::SequentialExtract, ContractionMode::MinResultRank) => {
-                        execute_min_result_rank!(SequentialExtract)?;
-                    }
-                    _ => {
-                        net.execute::<Sequential, SmallestDegree, _, _, _>(
-                            TENSORLIB.read().unwrap().deref(),
-                            FUN_LIB.deref(),
-                        )?;
-                    }
-                }
-
-                // println!("Executing ", net.dot_pretty());
-                net.execute::<SequentialRef, SmallestDegree, _, _, _>(
-                    TENSORLIB.read().unwrap().deref(),
-                    FUN_LIB.deref(),
-                )?;
-
-                let execute_elapsed = instant.elapsed();
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_execute_elapsed",
-                    atom_index,
-                    elapsed_ms = execute_elapsed.as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_execute_done",
-                    atom_index,
-                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-
-                let result = net
-                    .result_scalar()
-                    .map(|a| match a {
-                        ExecutionResult::One => Atom::num(1),
-                        ExecutionResult::Zero => Atom::Zero,
-                        ExecutionResult::Val(v) => v.into_owned(),
-                    })
-                    .map(|root| net.resolve_scalar_aliases(&scalar_aliases, root))
-                    .map_err(|a| {
-                        Report::from(a)
-                            .with_note(|| format!("Network looks like: {}", net.dot_pretty()))
-                    });
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_done",
-                    atom_index,
-                    success = result.is_ok(),
-                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-                result
-            })
+            .map(|(atom_index, atom)| Self::preprocess_atom(atom, atom_index, settings))
             .collect::<Result<Vec<_>>>()?;
         timings.spenso_time += spenso_started.elapsed();
         crate::debug_tags!(#generation, #profile, #compile, #summary;
@@ -1108,6 +1155,23 @@ impl EvaluatorStack {
     where
         usize: From<OID>,
     {
+        if self.explicit_orientation_sum_only {
+            if !orientations.is_all() {
+                return Err(eyre!(
+                    "An explicit orientation-sum evaluator already contains the complete orientation sum and cannot select an individual orientation"
+                ));
+            }
+
+            // The atom already contains the complete orientation sum, so
+            // applying orientation selection again would double count it.
+            return Ok(evaluate_evaluator(
+                &mut self.single_parametric,
+                input.as_slice(),
+                evaluation_metadata,
+                record_primary_timing,
+            ));
+        }
+
         if !orientations.is_all()
             && !matches!(
                 settings.general.evaluator_method,
@@ -1117,17 +1181,6 @@ impl EvaluatorStack {
             return Err(eyre!(
                 "Runtime evaluator_method={:?} cannot select individual orientations; use SingleParametric for Monte Carlo sampling or runtime filtering over orientations.",
                 settings.general.evaluator_method
-            ));
-        }
-
-        if self.explicit_orientation_sum_only {
-            // The atom already contains the complete orientation sum, so
-            // applying orientation selection again would double count it.
-            return Ok(evaluate_evaluator(
-                &mut self.single_parametric,
-                input.as_slice(),
-                evaluation_metadata,
-                record_primary_timing,
             ));
         }
 
@@ -1870,10 +1923,78 @@ impl GenericEvaluatorFloat for ArbPrec {
 
 #[cfg(test)]
 mod tests {
-    use idenso::color::CS;
+    use idenso::{color::CS, representations::Bispinor};
+    use spenso::structure::representation::RepName;
     use symbolica::atom::Symbol;
 
+    use crate::initialisation::test_initialise;
+
     use super::*;
+
+    #[test]
+    fn deferred_explicit_sum_lowering_is_local_and_matches_materialized_value() {
+        let builder = ParamBuilder::new_empty();
+        let settings = EvaluatorSettings::default();
+        let bodies = [Atom::num(2), Atom::num(3)];
+        let compact = function!(GS.projected_cff_sum, 0) + function!(GS.projected_cff_sum, 1);
+        let (mut deferred, _) = EvaluatorStack::new_deferred_explicit_sum_with_timings(
+            &compact, &bodies, &builder, None, &settings,
+        )
+        .unwrap();
+        assert!(builder.reps.is_empty());
+
+        let (mut materialized, _) = EvaluatorStack::new_explicit_sum_with_timings(
+            &[Atom::num(5)],
+            &builder,
+            None,
+            &settings,
+        )
+        .unwrap();
+        let actual = <f64 as GenericEvaluatorFloat>::get_evaluator_single(
+            &mut deferred.single_parametric,
+        )(&[]);
+        let expected = <f64 as GenericEvaluatorFloat>::get_evaluator_single(
+            &mut materialized.single_parametric,
+        )(&[]);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn deferred_explicit_sum_preprocesses_tensor_function_bodies() {
+        test_initialise().unwrap();
+        let builder = ParamBuilder::new_empty();
+        let settings = EvaluatorSettings {
+            do_algebra: true,
+            ..Default::default()
+        };
+        let body = Bispinor {}.new_rep(4).g(9, 9);
+        let compact = function!(GS.projected_cff_sum, 0);
+        let (mut deferred, _) = EvaluatorStack::new_deferred_explicit_sum_with_timings(
+            &compact,
+            &[body],
+            &builder,
+            None,
+            &settings,
+        )
+        .unwrap();
+        let (mut expected, _) = EvaluatorStack::new_explicit_sum_with_timings(
+            &[Atom::num(4)],
+            &builder,
+            None,
+            &settings,
+        )
+        .unwrap();
+
+        let actual = <f64 as GenericEvaluatorFloat>::get_evaluator_single(
+            &mut deferred.single_parametric,
+        )(&[]);
+        let expected = <f64 as GenericEvaluatorFloat>::get_evaluator_single(
+            &mut expected.single_parametric,
+        )(&[]);
+
+        assert_eq!(actual, expected);
+    }
 
     #[test]
     fn pi_eval() {

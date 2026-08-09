@@ -2544,9 +2544,26 @@ pub trait ProcessIntegrandImpl {
     // fn get_builder_cache(&self) -> &ParamBuilder<f64>;
 }
 
-pub(crate) fn validate_explicit_orientation_sum_runtime_settings(
+pub(crate) fn validate_process_runtime_settings(
     settings: &RuntimeSettings,
+    explicit_orientation_sum_only: bool,
 ) -> Result<()> {
+    if settings.general.use_ltd {
+        return Err(eyre!(
+            "`runtime.general.use_ltd = true` is reserved for deferred proper-LTD support; the current evaluation backend is CFF"
+        ));
+    }
+
+    if !explicit_orientation_sum_only {
+        return Ok(());
+    }
+
+    if settings.general.orientation_pat.pat.is_some() {
+        return Err(eyre!(
+            "`global.generation.explicit_orientation_sum_only = true` already contains the complete orientation sum; `runtime.general.orientation_pat` must be unset"
+        ));
+    }
+
     if let SamplingSettings::DiscreteGraphs(discrete_settings) = &settings.sampling
         && discrete_settings.sample_orientations
     {
@@ -4108,6 +4125,7 @@ mod tests {
     use super::{
         ChannelIndex, LmbChannelWeightingSettings, LmbMultiChannelingSetup, RuntimeCache,
         filtered_orientation_count, resolve_visible_orientation_id,
+        validate_process_runtime_settings,
     };
     use crate::cff::expression::OrientationID;
     use crate::{
@@ -4119,7 +4137,11 @@ mod tests {
             sample::{BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample},
             signature::LoopExtSignature,
         },
-        settings::runtime::{LmbChannelWeight, ParameterizationSettings},
+        settings::{
+            RuntimeSettings,
+            global::OrientationPattern,
+            runtime::{LmbChannelWeight, ParameterizationSettings},
+        },
         utils::{F, load_generic_model},
     };
     use linnet::half_edge::{
@@ -4128,6 +4150,21 @@ mod tests {
     };
     use std::sync::OnceLock;
     use typed_index_collections::TiVec;
+
+    #[test]
+    fn explicit_orientation_sum_rejects_runtime_filters_and_ltd() {
+        let mut settings = RuntimeSettings::default();
+        settings.general.orientation_pat = OrientationPattern::from_user_pattern("(+)").unwrap();
+        let error = validate_process_runtime_settings(&settings, true).unwrap_err();
+        assert!(error.to_string().contains("orientation_pat` must be unset"));
+
+        validate_process_runtime_settings(&settings, false).unwrap();
+
+        settings.general.orientation_pat = OrientationPattern::default();
+        settings.general.use_ltd = true;
+        let error = validate_process_runtime_settings(&settings, false).unwrap_err();
+        assert!(error.to_string().contains("deferred proper-LTD support"));
+    }
 
     #[test]
     fn runtime_cache_serializes_as_empty() {

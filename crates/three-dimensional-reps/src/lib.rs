@@ -23,12 +23,11 @@ pub use energy_bounds::{
 };
 pub use expression::{
     CFFExpression, GraphOrientation, OrientationData, OrientationExpression, OrientationID,
-    OrientationSelector, ThreeDExpression,
+    OrientationSelector, ResidualDenominator, ThreeDExpression,
 };
 pub use generation::{
-    Generate3DExpressionOptions, GenerationError, NumeratorSamplingScaleMode, RepresentationMode,
-    generate_3d_expression, generate_3d_expression_from_parsed, generate_confluent_cff_expression,
-    generate_confluent_cff_expression_from_parsed,
+    CffEnergyFactorOwnership, Generate3DExpressionOptions, GeneratedThreeDExpression,
+    GenerationError, NumeratorSamplingScaleMode, RepresentationMode, generate_3d_expression,
 };
 pub use graph_io::{
     EnergyEdgeIndexMap, GraphInfo, ParsedGraph, RepeatedGroup, ThreeDGraphSource, graph_info,

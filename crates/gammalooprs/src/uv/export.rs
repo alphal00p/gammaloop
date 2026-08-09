@@ -104,7 +104,7 @@ impl ProcessIntegrand {
                     .iter()
                     .map(|cuts| CutSet {
                         residue_selector: ResidueSelector {
-                            lu_cut: Some(cuts.related_esurface_group.clone()),
+                            lu: Some(cuts.lu_cut_selection(&term.graph, &term.cuts)),
                             left_th_cut: None,
                             right_th_cut: None,
                         },

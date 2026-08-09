@@ -19,7 +19,7 @@ use spenso::{
         representation::{Minkowski, RepName},
     },
 };
-use symbolica::atom::Atom;
+use symbolica::{atom::Atom, function};
 
 use linnet::half_edge::involution::HedgePair;
 
@@ -46,19 +46,73 @@ pub struct IntegrandExpr {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct Integrands(BTreeMap<CutCFFIndex, Atom>);
+pub struct Integrands {
+    compact: BTreeMap<CutCFFIndex, Atom>,
+    deferred: Option<DeferredIntegrands>,
+}
 
 impl Integrands {
     pub fn map<F: FnMut(&Atom) -> Atom>(&self, mut f: F) -> Self {
-        Integrands(self.0.iter().map(|(k, v)| (*k, f(v))).collect())
+        match &self.deferred {
+            Some(deferred) => Self::from_deferred(deferred.map(f)),
+            None => Self {
+                compact: self
+                    .compact
+                    .iter()
+                    .map(|(key, atom)| (*key, f(atom)))
+                    .collect(),
+                deferred: None,
+            },
+        }
     }
 
     pub fn fallible_map<F: FnMut(&Atom) -> Result<Atom>>(&self, mut f: F) -> Result<Self> {
-        self.0.iter().map(|(k, v)| Ok((*k, f(v)?))).collect()
+        match &self.deferred {
+            Some(deferred) => deferred.fallible_map(f).map(Self::from_deferred),
+            None => Ok(Self {
+                compact: self
+                    .compact
+                    .iter()
+                    .map(|(key, atom)| Ok((*key, f(atom)?)))
+                    .collect::<Result<_>>()?,
+                deferred: None,
+            }),
+        }
     }
 
+    /// Iterate over the compact expression passed to evaluators. Deferred
+    /// projected-CFF bodies remain available through [`Self::deferred_terms`].
     pub fn iter(&self) -> impl Iterator<Item = (&CutCFFIndex, &Atom)> {
-        self.0.iter()
+        self.compact.iter()
+    }
+
+    pub(crate) fn from_deferred(deferred: DeferredIntegrands) -> Self {
+        let compact = deferred.compact_calls();
+        Self {
+            compact,
+            deferred: Some(deferred),
+        }
+    }
+
+    pub(crate) fn deferred_terms(&self, index: &CutCFFIndex) -> Option<&[Atom]> {
+        self.deferred.as_ref()?.terms(index)
+    }
+
+    pub(crate) fn materialize(&self) -> Self {
+        self.deferred
+            .as_ref()
+            .map_or_else(|| self.clone(), DeferredIntegrands::materialize)
+    }
+
+    pub(crate) fn zero_like(&self) -> Self {
+        Self {
+            compact: self
+                .compact
+                .keys()
+                .map(|index| (*index, Atom::Zero))
+                .collect(),
+            deferred: None,
+        }
     }
 
     pub fn checked_zip(
@@ -66,9 +120,14 @@ impl Integrands {
         other: &Integrands,
         mut map: impl FnMut(&CutCFFIndex, &Atom, &Atom) -> Result<Atom>,
     ) -> Result<Integrands> {
-        self.0
+        if self.deferred.is_some() || other.deferred.is_some() {
+            return Err(eyre!(
+                "checked integrand zips require materialized deferred projected-CFF sums"
+            ));
+        }
+        self.compact
             .iter()
-            .merge_join_by(&other.0, |(left_key, _), (right_key, _)| {
+            .merge_join_by(&other.compact, |(left_key, _), (right_key, _)| {
                 left_key.cmp(right_key)
             })
             .map(|pair| match pair {
@@ -86,14 +145,26 @@ impl Integrands {
     pub fn zip_mul(&self, other: &Integrands) -> Result<Integrands> {
         self.checked_zip(other, |_, v1, v2| Ok(v1 * v2))
     }
-    pub fn zip_add(&self, other: &Integrands) -> Result<Integrands> {
-        self.checked_zip(other, |_, v1, v2| Ok(v1 + v2))
+    pub fn zip_add(mut self, mut other: Integrands) -> Result<Integrands> {
+        match (self.deferred.take(), other.deferred.take()) {
+            (None, None) => self.checked_zip(&other, |_, left, right| Ok(left + right)),
+            (Some(left), Some(right)) => left.zip_add(right).map(Self::from_deferred),
+            (Some(left), None) => left
+                .zip_add(DeferredIntegrands::from_compact(other.compact))
+                .map(Self::from_deferred),
+            (None, Some(right)) => DeferredIntegrands::from_compact(self.compact)
+                .zip_add(right)
+                .map(Self::from_deferred),
+        }
     }
 }
 
 impl FromIterator<(CutCFFIndex, Atom)> for Integrands {
     fn from_iter<I: IntoIterator<Item = (CutCFFIndex, Atom)>>(iter: I) -> Self {
-        Integrands(BTreeMap::from_iter(iter))
+        Self {
+            compact: BTreeMap::from_iter(iter),
+            deferred: None,
+        }
     }
 }
 
@@ -123,10 +194,120 @@ impl Mul<&Atom> for Integrands {
 
 impl Rooted for Integrands {
     fn root() -> Self {
-        Integrands(BTreeMap::from([(
-            CutCFFIndex::new_all_none(),
-            Atom::num(1),
-        )]))
+        Self {
+            compact: BTreeMap::from([(CutCFFIndex::new_all_none(), Atom::num(1))]),
+            deferred: None,
+        }
+    }
+}
+
+/// An additive integrand whose branches stay separate until evaluator
+/// construction. This keeps post-4D CFF orientation sums from being expanded
+/// while UV markers and final tensor replacements still need to see each body.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub(crate) struct DeferredIntegrands(BTreeMap<CutCFFIndex, Vec<Atom>>);
+
+impl DeferredIntegrands {
+    pub(crate) fn from_indices(indices: impl IntoIterator<Item = CutCFFIndex>) -> Self {
+        Self(
+            indices
+                .into_iter()
+                .map(|index| (index, Vec::new()))
+                .collect(),
+        )
+    }
+
+    fn from_compact(integrands: BTreeMap<CutCFFIndex, Atom>) -> Self {
+        Self(
+            integrands
+                .into_iter()
+                .map(|(index, atom)| (index, vec![atom]))
+                .collect(),
+        )
+    }
+
+    pub(crate) fn push(&mut self, index: CutCFFIndex, atom: Atom) -> Result<()> {
+        self.0
+            .get_mut(&index)
+            .ok_or_else(|| eyre!("deferred integrands are missing key {index:?}"))?
+            .push(atom);
+        Ok(())
+    }
+
+    pub(crate) fn map(&self, mut f: impl FnMut(&Atom) -> Atom) -> Self {
+        Self(
+            self.0
+                .iter()
+                .map(|(index, atoms)| (*index, atoms.iter().map(&mut f).collect::<Vec<_>>()))
+                .collect(),
+        )
+    }
+
+    pub(crate) fn fallible_map(&self, mut f: impl FnMut(&Atom) -> Result<Atom>) -> Result<Self> {
+        self.0
+            .iter()
+            .map(|(index, atoms)| {
+                Ok((
+                    *index,
+                    atoms.iter().map(&mut f).collect::<Result<Vec<_>>>()?,
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()
+            .map(Self)
+    }
+
+    pub(crate) fn zip_add(self, other: Self) -> Result<Self> {
+        self.0
+            .into_iter()
+            .merge_join_by(other.0, |(left, _), (right, _)| left.cmp(right))
+            .map(|pair| match pair {
+                EitherOrBoth::Both((index, mut left), (_, right)) => {
+                    left.extend(right);
+                    Ok((index, left))
+                }
+                EitherOrBoth::Left((index, _)) => {
+                    Err(eyre!("right deferred integrands are missing key {index:?}"))
+                }
+                EitherOrBoth::Right((index, _)) => {
+                    Err(eyre!("left deferred integrands are missing key {index:?}"))
+                }
+            })
+            .collect::<Result<BTreeMap<_, _>>>()
+            .map(Self)
+    }
+
+    pub(crate) fn materialize(&self) -> Integrands {
+        self.0
+            .iter()
+            .map(|(index, atoms)| {
+                (
+                    *index,
+                    atoms
+                        .iter()
+                        .cloned()
+                        .fold(Atom::Zero, |sum, atom| sum + atom),
+                )
+            })
+            .collect()
+    }
+
+    fn compact_calls(&self) -> BTreeMap<CutCFFIndex, Atom> {
+        self.0
+            .iter()
+            .map(|(index, atoms)| {
+                let calls = atoms
+                    .iter()
+                    .enumerate()
+                    .map(|(tag, _)| function!(GS.projected_cff_sum, tag))
+                    .fold(Atom::Zero, |sum, call| sum + call);
+                (*index, calls)
+            })
+            .collect()
+    }
+
+    pub(crate) fn terms(&self, index: &CutCFFIndex) -> Option<&[Atom]> {
+        self.0.get(index).map(Vec::as_slice)
     }
 }
 #[allow(dead_code)]
@@ -166,6 +347,64 @@ pub use forest::Forest;
 
 pub mod profile;
 pub use profile::{UVProfile, UVProfileAnalysis, UVProfilePassFail};
+
+#[cfg(test)]
+mod deferred_integrands_tests {
+    use super::*;
+
+    #[test]
+    fn deferred_zip_add_preserves_keys_and_branch_order() {
+        let root = CutCFFIndex::new_all_none();
+        let second = CutCFFIndex {
+            left_threshold_order: Some(1),
+            right_threshold_order: None,
+            lu_cut_order: None,
+        };
+        let mut left = DeferredIntegrands::from_indices([root, second]);
+        left.push(root, Atom::num(1)).unwrap();
+        left.push(root, Atom::num(2)).unwrap();
+        left.push(second, Atom::num(10)).unwrap();
+        let mut right = DeferredIntegrands::from_indices([root, second]);
+        right.push(root, Atom::num(3)).unwrap();
+        right.push(second, Atom::num(20)).unwrap();
+        right.push(second, Atom::num(30)).unwrap();
+
+        let sum = Integrands::from_deferred(left)
+            .zip_add(Integrands::from_deferred(right))
+            .unwrap();
+
+        assert_eq!(
+            sum.iter().map(|(index, _)| *index).collect::<Vec<_>>(),
+            vec![root, second]
+        );
+        assert_eq!(
+            sum.deferred_terms(&root).unwrap(),
+            [Atom::num(1), Atom::num(2), Atom::num(3)]
+        );
+        assert_eq!(
+            sum.deferred_terms(&second).unwrap(),
+            [Atom::num(10), Atom::num(20), Atom::num(30)]
+        );
+    }
+
+    #[test]
+    fn deferred_materialize_and_zero_like_return_direct_integrands() {
+        let index = CutCFFIndex::new_all_none();
+        let mut deferred = DeferredIntegrands::from_indices([index]);
+        deferred.push(index, Atom::num(2)).unwrap();
+        deferred.push(index, Atom::num(3)).unwrap();
+        let integrands = Integrands::from_deferred(deferred);
+
+        assert_eq!(
+            integrands.materialize(),
+            [(index, Atom::num(5))].into_iter().collect()
+        );
+        assert_eq!(
+            integrands.zero_like(),
+            [(index, Atom::Zero)].into_iter().collect()
+        );
+    }
+}
 
 #[cfg(test)]
 mod tests;

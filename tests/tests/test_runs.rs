@@ -61,6 +61,8 @@ mod profile_bulk;
 mod repeated_masses;
 #[path = "test_runs/runtime_graph_subset.rs"]
 mod runtime_graph_subset;
+#[path = "test_runs/scalar_3L_cross_section_inspects.rs"]
+mod scalar_3l_cross_section_inspects;
 #[path = "test_runs/smoke.rs"]
 mod smoke;
 #[path = "test_runs/spin_sums.rs"]

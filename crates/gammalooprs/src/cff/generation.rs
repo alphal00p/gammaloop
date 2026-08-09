@@ -18,8 +18,8 @@ use linnet::half_edge::involution::EdgeIndex;
 use linnet::num_traits::SignOrZero;
 use symbolica::atom::{Atom, AtomCore};
 use three_dimensional_reps::{
-    Generate3DExpressionOptions, NumeratorSamplingScaleMode, RepresentationMode,
-    ThreeDGraphSource,
+    CffEnergyFactorOwnership, Generate3DExpressionOptions, GeneratedThreeDExpression,
+    NumeratorSamplingScaleMode, RepresentationMode, ThreeDGraphSource,
     tree::{NodeId, Tree},
 };
 
@@ -27,7 +27,7 @@ use tracing::debug;
 
 use super::{
     esurface::{Esurface, EsurfaceID, ExternalShift},
-    expression::{CFFExpression, OrientationID},
+    expression::CFFExpression,
 };
 
 #[derive(Debug, Clone)]
@@ -54,24 +54,69 @@ impl Graph {
         source: &GraphThreeDSource<'_>,
         options: &Generate3DExpressionOptions,
         analysis_numerator: &Atom,
-    ) -> Result<three_dimensional_reps::ThreeDExpression<OrientationID>> {
+    ) -> Result<GeneratedThreeDExpression> {
         let mut source_options = options.clone();
-        source_options.numerator_energy_support =
-            source.numerator_energy_power_support(analysis_numerator)?;
+        let initial_state_cut_edges = self
+            .iter_edges_of(&self.initial_state_cut)
+            .map(|(_, edge_id, _)| edge_id)
+            .collect::<HashSet<_>>();
+        let bridge_edges = self
+            .iter_edges_of(&self.tree_edges)
+            .map(|(_, edge_id, _)| edge_id)
+            .filter(|edge_id| !initial_state_cut_edges.contains(edge_id))
+            .collect::<HashSet<_>>();
+        let contracted_source = source.contract_subgraph();
+        for (_, edge_id, _) in self.iter_edges_of(&contracted_source) {
+            if !bridge_edges.contains(&edge_id) {
+                continue;
+            }
+            let Some(coordinates) = source.reconstructible_outer_loop_coordinates(edge_id) else {
+                return Err(eyre::eyre!(
+                    "contracted bridge edge {} retains an inner-loop energy coordinate and cannot be projected independently of the exact CFF source",
+                    usize::from(edge_id),
+                ));
+            };
+            if coordinates.iter().any(|coordinate| *coordinate != 0) {
+                return Err(eyre::eyre!(
+                    "contracted bridge edge {} has nonzero outer-loop coordinates {:?}; a CFF-external tree edge must have a purely external affine energy",
+                    usize::from(edge_id),
+                    coordinates,
+                ));
+            }
+        }
+        let energy_degree_bounds = self
+            .automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
+                analysis_numerator,
+                initial_state_cut_edges.iter().chain(&bridge_edges).copied(),
+                1,
+            )
+            .map_err(|error| {
+                eyre::eyre!(
+                    "could not analyze numerator in the contracted-source loop basis: {error}"
+                )
+            })?;
+        if !energy_degree_bounds.is_empty() {
+            return Err(eyre::eyre!(
+                "exact 4D CFF generation for graph `{}` cannot soundly map nonconstant nonbridge numerator EMR energy-degree bounds {:?} to occurrence-local energies: an affine numerator-only EMR-to-occurrence contract is not implemented",
+                self.name,
+                energy_degree_bounds,
+            ));
+        }
+        // The exact source has occurrence-local denominator IDs. Until it can
+        // carry physical EMR numerator variables through an independent
+        // affine map, only the explicit energy-constant nonbridge numerator
+        // class is sound inside CFF. Bridge energies remain in the complete
+        // factorized numerator and are projected independently as external
+        // affine tree factors. This overrides production-wide bounds with the
+        // class of the numerator actually owned by this 4D term.
+        source_options.energy_degree_bounds = Some(energy_degree_bounds);
         let parsed = source.to_three_d_parsed_graph()?;
-        let generate_confluent = three_dimensional_reps::repeated_groups(&parsed)
-            .into_iter()
-            .any(|group| group.edge_ids.len() > 1);
-        let generated = if generate_confluent {
-            three_dimensional_reps::generate_confluent_cff_expression(source, &source_options)
-        } else {
-            three_dimensional_reps::generate_3d_expression(source, &source_options)
-        };
+        let generated = three_dimensional_reps::generate_3d_expression(source, &source_options);
         generated.map_err(|error| {
             eyre::eyre!(
-                "generalized CFF expression generation failed for exact 4D source in graph `{}` with numerator energy-power support {:?}: {error}\n{}",
+                "generalized CFF expression generation failed for exact 4D source in graph `{}` with source-edge numerator energy-degree bounds {:?}: {error}\n{}",
                 self.name,
-                source_options.numerator_energy_support,
+                source_options.energy_degree_bounds,
                 three_d_source_summary(&parsed),
             )
         })
@@ -83,8 +128,7 @@ impl Graph {
         canonize_esurface: &Option<ShiftRewrite>,
         options: &Generate3DExpressionOptions,
         analysis_numerator: Option<&Atom>,
-        use_confluent_cff: bool,
-    ) -> Result<CFFExpression<OrientationID>> {
+    ) -> Result<GeneratedThreeDExpression<Esurface, Hsurface>> {
         let initial_state_cut_edges = self
             .iter_edges_of(&self.initial_state_cut)
             .map(|(_, edge_id, _)| edge_id)
@@ -98,12 +142,35 @@ impl Graph {
             );
         }
         let source = GraphThreeDSource::new(self, &source_contract_edges)?;
+        let bridge_edges = self
+            .iter_edges_of(&self.tree_edges)
+            .map(|(_, edge_id, _)| edge_id)
+            .filter(|edge_id| !initial_state_cut_edges.contains(edge_id))
+            .collect::<HashSet<_>>();
+        for edge_id in source_contract_edges
+            .iter()
+            .filter(|edge_id| bridge_edges.contains(edge_id))
+        {
+            let Some(coordinates) = source.reconstructible_outer_loop_coordinates(*edge_id) else {
+                return Err(eyre::eyre!(
+                    "contracted bridge edge {} retains an inner-loop energy coordinate and cannot be projected independently of the CFF source",
+                    usize::from(*edge_id),
+                ));
+            };
+            if coordinates.iter().any(|coordinate| *coordinate != 0) {
+                return Err(eyre::eyre!(
+                    "contracted bridge edge {} has nonzero outer-loop coordinates {:?}; a CFF-external tree edge must have a purely external affine energy",
+                    usize::from(*edge_id),
+                    coordinates,
+                ));
+            }
+        }
         let mut source_options = options.clone();
         if let Some(numerator) = analysis_numerator {
             source_options.energy_degree_bounds = Some(
                 self.automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
                     numerator,
-                    initial_state_cut_edges.iter().copied(),
+                    initial_state_cut_edges.iter().chain(&bridge_edges).copied(),
                     1,
                 )?,
             );
@@ -112,6 +179,17 @@ impl Graph {
                 bounds = ?source_options.energy_degree_bounds,
                 "using source-edge numerator energy-degree bounds"
             );
+        }
+        if let Some(bounds) = &mut source_options.energy_degree_bounds {
+            // Cut aliases and tree denominators are external to the CFF graph,
+            // but their energies remain in the complete numerator. Removing
+            // their EMR bounds here therefore changes only CFF capacity; in
+            // particular, an explicitly bounded numerator class remains
+            // `Some([])` when every bound belongs to this external sector.
+            bounds.retain(|(edge_id, _)| {
+                let edge_id = EdgeIndex(*edge_id);
+                !initial_state_cut_edges.contains(&edge_id) && !bridge_edges.contains(&edge_id)
+            });
         }
         for &(edge_id, degree) in source_options
             .energy_degree_bounds
@@ -136,22 +214,9 @@ impl Graph {
                 usize::from(edge_id),
             ));
         }
-        let generate_confluent = use_confluent_cff
-            && source_options
-                .energy_degree_bounds
-                .as_deref()
-                .is_some_and(|bounds| !bounds.is_empty())
-            && three_dimensional_reps::repeated_groups(&source.to_three_d_parsed_graph()?)
-                .into_iter()
-                .any(|group| group.edge_ids.len() > 1);
-
-        let mut expression = {
-            let generated = if generate_confluent {
-                three_dimensional_reps::generate_confluent_cff_expression(&source, &source_options)
-            } else {
-                three_dimensional_reps::generate_3d_expression(&source, &source_options)
-            };
-            generated.map_err(|error| {
+        let mut generated = {
+            let result = three_dimensional_reps::generate_3d_expression(&source, &source_options);
+            result.map_err(|error| {
                     let source_summary = source
                         .to_three_d_parsed_graph()
                         .map(|parsed| three_d_source_summary(&parsed))
@@ -176,7 +241,7 @@ impl Graph {
                 continue;
             };
             let signature = &self.loop_momentum_basis.edge_signatures[*edge_id];
-            for orientation in expression.orientations.iter_mut() {
+            for orientation in generated.expression.orientations.iter_mut() {
                 if coordinates.len() != orientation.loop_energy_map.len() {
                     return Err(eyre::eyre!(
                         "contracted edge {} has {} outer coordinates for {} generated loop-energy maps",
@@ -218,12 +283,8 @@ impl Graph {
             }
         }
 
-        let use_generated_cff_half_edges =
-            generated_cff_expression_uses_variant_half_edges(&expression);
-
         self.convert_generated_expression_surfaces(
-            expression,
-            use_generated_cff_half_edges,
+            generated,
             canonize_esurface,
             &initial_state_cut_edges,
         )
@@ -243,17 +304,20 @@ impl Graph {
         numerator_sampling_scale: NumeratorSamplingScaleMode,
     ) -> Result<Generate3DExpressionOptions> {
         let numerator = self.production_numerator_atom_for_full_3d_expression();
-        let initial_state_cut_edges = self
+        let cff_external_edges = self
             .iter_edges_of(&self.initial_state_cut)
+            .chain(self.iter_edges_of(&self.tree_edges))
             .map(|(_, edge_id, _)| edge_id);
         // Analyze the factorized numerator compositionally while keeping every
-        // energy degree attached to its EMR source edge. The standalone CFF
-        // generator remaps those source IDs only after extracting its local
-        // graph, so a loop-momentum basis never defines numerator ownership.
+        // active energy degree attached to its EMR source edge. Initial-cut
+        // aliases and structural bridges stay in their separately projected
+        // external sector. The standalone CFF generator remaps active source
+        // IDs only after extracting its local graph, so a loop-momentum basis
+        // never defines numerator ownership.
         let energy_degree_bounds = self
             .automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
                 &numerator,
-                initial_state_cut_edges,
+                cff_external_edges,
                 1,
             )?;
         debug!(
@@ -265,7 +329,7 @@ impl Graph {
             representation: RepresentationMode::Cff,
             energy_degree_bounds: Some(energy_degree_bounds),
             numerator_sampling_scale,
-            include_cff_duplicate_signature_excess_sign: true,
+            preserve_internal_edges_as_four_d_denominators: Vec::new(),
         })
     }
 
@@ -274,20 +338,18 @@ impl Graph {
             representation: RepresentationMode::Cff,
             energy_degree_bounds: Some(Vec::new()),
             numerator_sampling_scale: NumeratorSamplingScaleMode::None,
-            include_cff_duplicate_signature_excess_sign: false,
+            preserve_internal_edges_as_four_d_denominators: Vec::new(),
         }
     }
 
     pub(crate) fn convert_generated_expression_surfaces(
         &mut self,
-        expression: three_dimensional_reps::ThreeDExpression<OrientationID>,
-        use_generated_cff_half_edges: bool,
+        generated: GeneratedThreeDExpression,
         canonize_esurface: &Option<ShiftRewrite>,
         initial_state_cut_edges: &[EdgeIndex],
-    ) -> Result<CFFExpression<OrientationID>> {
+    ) -> Result<GeneratedThreeDExpression<Esurface, Hsurface>> {
         self.convert_generated_expression_surfaces_impl(
-            expression,
-            use_generated_cff_half_edges,
+            generated,
             canonize_esurface,
             initial_state_cut_edges,
             None,
@@ -296,18 +358,16 @@ impl Graph {
 
     pub(crate) fn convert_4d_expression_surfaces(
         &mut self,
-        expression: three_dimensional_reps::ThreeDExpression<OrientationID>,
-        use_generated_cff_half_edges: bool,
+        generated: GeneratedThreeDExpression,
         physical_surfaces: &[Option<LinearSurface>],
-    ) -> Result<CFFExpression<OrientationID>> {
+    ) -> Result<GeneratedThreeDExpression<Esurface, Hsurface>> {
         let canonize_esurface = self.get_esurface_canonization(&self.loop_momentum_basis);
         let initial_state_cut_edges = self
             .iter_edges_of(&self.initial_state_cut)
             .map(|(_, edge_id, _)| edge_id)
             .collect_vec();
         self.convert_generated_expression_surfaces_impl(
-            expression,
-            use_generated_cff_half_edges,
+            generated,
             &canonize_esurface,
             &initial_state_cut_edges,
             Some(physical_surfaces),
@@ -316,12 +376,25 @@ impl Graph {
 
     fn convert_generated_expression_surfaces_impl(
         &mut self,
-        mut expression: three_dimensional_reps::ThreeDExpression<OrientationID>,
-        use_generated_cff_half_edges: bool,
+        generated: GeneratedThreeDExpression,
         canonize_esurface: &Option<ShiftRewrite>,
         initial_state_cut_edges: &[EdgeIndex],
         physical_surfaces: Option<&[Option<LinearSurface>]>,
-    ) -> Result<CFFExpression<OrientationID>> {
+    ) -> Result<GeneratedThreeDExpression<Esurface, Hsurface>> {
+        let GeneratedThreeDExpression {
+            mut expression,
+            energy_factor_ownership,
+        } = generated;
+        if !expression.residual_denominators.is_empty() {
+            return Err(eyre::eyre!(
+                "GammaLoop production CFF conversion received residual four-dimensional denominator edges [{}]; production callers must contract tree edges and attach their projected denominators separately",
+                expression
+                    .residual_denominators
+                    .iter()
+                    .map(|denominator| denominator.edge_id.0)
+                    .join(", "),
+            ));
+        }
         let mut linear_surface_map = BTreeMap::<LinearSurfaceID, SurfaceMapEntry>::new();
         let mut retained_linear_surfaces = Vec::new();
         for (linear_surface_id, surface) in
@@ -366,13 +439,12 @@ impl Graph {
                         variant.prefactor *= Atom::num(-1);
                     }
                 }
-                if !use_generated_cff_half_edges {
+                if energy_factor_ownership == CffEnergyFactorOwnership::GlobalSourceProduct {
                     // GammaLoop's CFF evaluator convention keeps the
                     // on-shell-energy factors as one global product
-                    // 1/prod(-2E_i) for the pure CFF denominator sector. The
-                    // bounded higher-energy CFF algorithm has variant-local
-                    // half-edge factors, so those must remain attached to the
-                    // variants.
+                    // 1/prod(-2E_i) for the ordinary CFF denominator sector. The
+                    // generalized numerator and causal powered-pole algorithms
+                    // instead attach those factors to individual variants.
                     variant.half_edges.clear();
                 }
                 for remapped_denominator in signed_denominators {
@@ -388,9 +460,13 @@ impl Graph {
             orientation.variants = remapped_variants;
         }
 
-        Ok(CFFExpression {
-            orientations: expression.orientations,
-            surfaces: surface_cache,
+        Ok(GeneratedThreeDExpression {
+            expression: CFFExpression {
+                orientations: expression.orientations,
+                surfaces: surface_cache,
+                residual_denominators: Vec::new(),
+            },
+            energy_factor_ownership,
         })
     }
 
@@ -500,19 +576,6 @@ impl Graph {
         };
         Ok(SurfaceMapEntry { surface_id, sign })
     }
-}
-
-pub(crate) fn generated_cff_expression_uses_variant_half_edges(
-    expression: &three_dimensional_reps::ThreeDExpression<OrientationID>,
-) -> bool {
-    expression.orientations.iter().any(|orientation| {
-        orientation.variants.iter().any(|variant| {
-            variant
-                .origin
-                .as_deref()
-                .is_some_and(|origin| origin != "pure_cff")
-        })
-    })
 }
 
 fn three_d_source_summary(parsed: &three_dimensional_reps::ParsedGraph) -> String {
@@ -737,7 +800,11 @@ mod tests {
     use super::*;
     use crate::{
         dot,
-        graph::{FeynmanGraph, cuts::CutSet, parse::from_dot::IntoGraph},
+        graph::{
+            FeynmanGraph,
+            cuts::{CutSet, LuCutSelection},
+            parse::from_dot::IntoGraph,
+        },
         initialisation::test_initialise,
         settings::global::{GenerationSettings, OrientationPattern},
         utils::GS,
@@ -772,7 +839,6 @@ mod tests {
                 &None,
                 &options,
                 Some(&numerator),
-                false,
             )
             .expect_err("a bound owned by a shrunken EMR edge must not be silently reassigned");
         let error = format!("{error:#}");
@@ -785,7 +851,7 @@ mod tests {
     }
 
     #[test]
-    fn raised_lu_cff_uses_production_confluent_maps() -> Result<()> {
+    fn raised_lu_cff_uses_causal_powered_pole_maps() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = dot!(digraph raised_lu {
             edge [num=1 mass=1]
@@ -802,21 +868,17 @@ mod tests {
         let options = graph.denominator_only_cff_3d_expression_options();
         let numerator = GS.emr_mom(EdgeIndex(1), GS.cind(0)).pow(2);
         let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
-        let production = graph.generate_3d_expression_for_integrand(
+        let generated = graph.generate_3d_expression_for_integrand(
             &[],
             &canonization,
             &options,
             Some(&numerator),
-            true,
         )?;
-        assert!(production.orientations.iter().any(|orientation| {
-            orientation.variants.iter().any(|variant| {
-                variant
-                    .origin
-                    .as_deref()
-                    .is_some_and(|origin| origin.starts_with("confluent_residue:"))
-            })
-        }));
+        assert_eq!(
+            generated.energy_factor_ownership,
+            CffEnergyFactorOwnership::VariantLocal
+        );
+        let production = generated.expression;
         let lu_cut = graph
             .determine_raised_esurfaces_from_expression(&production)
             .raised_groups
@@ -831,7 +893,18 @@ mod tests {
             })
             .expect("raised production CFF should contain a physical repeated LU surface");
         let mut cutset = CutSet::empty(graph.n_hedges());
-        cutset.residue_selector.lu_cut = Some(lu_cut.clone());
+        cutset.residue_selector.lu = Some(LuCutSelection {
+            raised_group: lu_cut.clone(),
+            cut_edge_alternatives: lu_cut
+                .esurface_ids
+                .iter()
+                .map(|esurface_id| {
+                    production.surfaces.esurface_cache[*esurface_id]
+                        .energies
+                        .clone()
+                })
+                .collect(),
+        });
         let direct = graph.cff(
             &cutset.union,
             &cutset,
@@ -849,16 +922,19 @@ mod tests {
         assert!(direct.terms.iter().any(|(index, term)| {
             index.lu_cut_order == Some(2) && !term.orientations.is_empty()
         }));
-        assert!(direct.terms.values().any(|term| {
-            term.orientations.iter().any(|orientation| {
-                orientation.orientation.variants.iter().any(|variant| {
-                    variant
-                        .origin
-                        .as_deref()
-                        .is_some_and(|origin| origin.starts_with("confluent_residue:"))
-                })
-            })
-        }));
+        let selected_variants = direct
+            .terms
+            .values()
+            .flat_map(|term| &term.orientations)
+            .flat_map(|orientation| &orientation.orientation.variants)
+            .collect_vec();
+        assert!(!selected_variants.is_empty());
+        assert!(
+            selected_variants
+                .iter()
+                .all(|variant| !variant.half_edges.is_empty()),
+            "selected causal powered-pole variants must retain their local on-shell-energy factors"
+        );
         for local in direct.terms.values().flat_map(|term| &term.orientations) {
             assert!(
                 production.orientations.iter().any(|full| {

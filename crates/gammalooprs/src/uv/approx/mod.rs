@@ -380,7 +380,7 @@ impl Approximation {
                     .subtract(self.subgraph())
                     .subtract(&graph.initial_state_cut);
                 let source = Full4dCts::with_cograph(self.local(graph)?, graph, &cograph);
-                localizer.project_4d(&source, graph, false)?
+                localizer.project_4d(&source, graph, self.subgraph())?
             } else {
                 Local3DCts::root(graph, localizer)?
             };
@@ -463,7 +463,7 @@ impl Approximation {
                 .subtract(self.subgraph())
                 .subtract(&graph.initial_state_cut);
             let source = Full4dCts::with_cograph(self.local(graph)?, graph, &cograph);
-            localizer.project_4d(&source, graph, true)?
+            localizer.project_4d(&source, graph, self.subgraph())?
         } else {
             let parent_local = dependent.local_3d(graph)?;
             let parent_integrated = dependent.integrated(graph)?;

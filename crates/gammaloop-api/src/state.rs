@@ -1558,11 +1558,11 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 1;
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 2;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default, deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 struct StateManifest {
     version: u32,
 }
@@ -1576,6 +1576,13 @@ impl Default for StateManifest {
 }
 
 fn ensure_supported_state_manifest_version(manifest: &StateManifest) -> Result<()> {
+    if manifest.version < CURRENT_STATE_MANIFEST_VERSION {
+        return Err(eyre!(
+            "State version {} predates the supported version {} and cannot be migrated. Please regenerate the saved state with this gammaloop binary.",
+            manifest.version,
+            CURRENT_STATE_MANIFEST_VERSION
+        ));
+    }
     if manifest.version > CURRENT_STATE_MANIFEST_VERSION {
         return Err(eyre!(
             "State version {} is newer than this binary supports (max {}). Please upgrade gammaloop.",
@@ -1587,11 +1594,11 @@ fn ensure_supported_state_manifest_version(manifest: &StateManifest) -> Result<(
     Ok(())
 }
 
-fn run_state_migration_checks(manifest: &StateManifest, save_path: &Path) -> Result<()> {
+fn validate_state_layout(manifest: &StateManifest, save_path: &Path) -> Result<()> {
     ensure_supported_state_manifest_version(manifest)?;
 
     match manifest.version {
-        1 => {
+        CURRENT_STATE_MANIFEST_VERSION => {
             if !save_path.join("symbolica_state.bin").exists() {
                 return Err(eyre!(
                     "Saved state at '{}' is missing required file symbolica_state.bin",
@@ -1647,7 +1654,7 @@ pub fn classify_state_folder(save_path: &Path) -> Result<StateFolderKind> {
     let manifest_path = save_path.join(STATE_MANIFEST_FILE);
     if manifest_path.exists() {
         let manifest = load_state_manifest(save_path)?;
-        return Ok(match run_state_migration_checks(&manifest, save_path) {
+        return Ok(match validate_state_layout(&manifest, save_path) {
             Ok(()) => StateFolderKind::Saved,
             Err(err) => StateFolderKind::Invalid(err.to_string()),
         });
@@ -1674,9 +1681,9 @@ fn load_state_manifest(save_path: &Path) -> Result<StateManifest> {
             manifest_path.display()
         )
     })?;
-    let manifest = toml::from_str::<StateManifest>(&raw_manifest).with_context(|| {
-        format!(
-            "Trying to parse state manifest file {}",
+    let manifest = toml::from_str::<StateManifest>(&raw_manifest).map_err(|error| {
+        eyre!(
+            "Trying to parse state manifest file {}: {error}",
             manifest_path.display()
         )
     })?;
@@ -3180,7 +3187,7 @@ impl State {
     ) -> Result<Self> {
         // let root_folder = root_folder.join("gammaloop_state");
         let manifest = load_state_manifest(&save_path)?;
-        run_state_migration_checks(&manifest, &save_path)?;
+        validate_state_layout(&manifest, &save_path)?;
         // Install GammaLoop's subscriber before importing Symbolica state. Symbolica warnings
         // initialize its fallback subscriber on first use, which would otherwise claim the global
         // tracing dispatch and escape ANSI styling in all subsequent GammaLoop output.
@@ -3342,6 +3349,9 @@ impl State {
             }
         }
 
+        if selected_root_folder.join(STATE_MANIFEST_FILE).exists() {
+            load_state_manifest(&selected_root_folder)?;
+        }
         fs::create_dir_all(&selected_root_folder)?;
 
         let mut state_file =
@@ -4465,6 +4475,46 @@ commands = ["quit -n"]
 
         let manifest = load_state_manifest(temp.path()).unwrap();
         assert_eq!(manifest.version, CURRENT_STATE_MANIFEST_VERSION);
+    }
+
+    #[test]
+    fn state_manifest_rejects_legacy_versions() {
+        for version in [0, 1] {
+            let temp = tempdir().unwrap();
+            fs::write(
+                temp.path().join(STATE_MANIFEST_FILE),
+                format!("version = {version}\n"),
+            )
+            .unwrap();
+
+            let err = load_state_manifest(temp.path()).unwrap_err();
+            let message = err.to_string();
+            assert!(message.contains("cannot be migrated"));
+            assert!(message.contains("regenerate the saved state"));
+        }
+    }
+
+    #[test]
+    fn state_manifest_requires_an_explicit_version() {
+        let temp = tempdir().unwrap();
+        fs::write(temp.path().join(STATE_MANIFEST_FILE), "").unwrap();
+
+        let err = load_state_manifest(temp.path()).unwrap_err();
+        assert!(err.to_string().contains("missing field `version`"));
+    }
+
+    #[test]
+    fn state_save_rejects_legacy_target_before_writing() {
+        let temp = tempdir().unwrap();
+        let symbolica_state = temp.path().join("symbolica_state.bin");
+        fs::write(temp.path().join(STATE_MANIFEST_FILE), "version = 1\n").unwrap();
+        fs::write(&symbolica_state, b"legacy sentinel").unwrap();
+        let mut state = State::new_test();
+
+        let err = state.save(temp.path(), true, false).unwrap_err();
+        assert!(err.to_string().contains("cannot be migrated"));
+        assert_eq!(fs::read(symbolica_state).unwrap(), b"legacy sentinel");
+        assert!(!temp.path().join("model.json").exists());
     }
 
     #[test]

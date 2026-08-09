@@ -30,6 +30,7 @@ use typed_index_collections::{TiVec, ti_vec};
 use crate::{
     DependentMomentaConstructor, F, FloatLike, GammaLoopContext, GammaLoopContextContainer,
     cff::{
+        CutCFFIndex,
         esurface::{
             EsurfaceCollection, ExistingEsurfaces, GroupEsurfaceId, RaisedEsurfaceId,
             get_representative,
@@ -79,8 +80,7 @@ use super::{
     GraphTerm, GraphTermEvaluationContext, LmbMultiChannelingSetup, ProcessIntegrandImpl,
     RuntimeCache, create_grid, evaluate_sample, filtered_orientation_count,
     format_lmb_channel_label, format_orientation_label, histogram_process_info_for_integrand,
-    prepare_buffered_event, resolve_visible_orientation_id,
-    validate_explicit_orientation_sum_runtime_settings,
+    prepare_buffered_event, resolve_visible_orientation_id, validate_process_runtime_settings,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -214,7 +214,35 @@ impl AmplitudeGraphTerm {
             "Generation timing milestone"
         );
         let (original_integrand, evaluator_timings) =
-            if settings.generation.explicit_orientation_sum_only {
+            if let Some(deferred_integrands) = &graph.derived_data.deferred_integrands {
+                assert!(
+                    settings.generation.explicit_orientation_sum_only,
+                    "deferred projected-CFF terms require an explicit orientation sum"
+                );
+                let mut roots = deferred_integrands.iter();
+                let (index, compact_integrand) = roots
+                    .next()
+                    .ok_or_else(|| eyre!("deferred amplitude integrand has no root residue"))?;
+                if *index != CutCFFIndex::new_all_none() || roots.next().is_some() {
+                    return Err(eyre!(
+                        "deferred amplitude integrand must contain exactly one root residue"
+                    ));
+                }
+                if compact_integrand != &graph.derived_data.all_mighty_integrand {
+                    return Err(eyre!(
+                        "deferred amplitude compact integrand is out of sync with its public mirror"
+                    ));
+                }
+                EvaluatorStack::new_deferred_explicit_sum_with_timings(
+                    compact_integrand,
+                    deferred_integrands
+                        .deferred_terms(index)
+                        .expect("deferred amplitude integrand is missing its root residue"),
+                    &graph.graph.param_builder,
+                    None,
+                    &settings.generation.evaluator,
+                )?
+            } else if settings.generation.explicit_orientation_sum_only {
                 EvaluatorStack::new_explicit_sum_with_timings(
                     &[&graph.derived_data.all_mighty_integrand],
                     &graph.graph.param_builder,
@@ -1744,9 +1772,7 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
           )
     )]
     fn warm_up(&mut self, model: &Model) -> Result<()> {
-        if self.data.explicit_orientation_sum_only {
-            validate_explicit_orientation_sum_runtime_settings(&self.settings)?;
-        }
+        validate_process_runtime_settings(&self.settings, self.data.explicit_orientation_sum_only)?;
 
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))

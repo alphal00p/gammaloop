@@ -32,7 +32,7 @@ use colored::Colorize;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::PowersetIterator;
-use linnet::half_edge::involution::{EdgeIndex, SignOrZero};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation, SignOrZero};
 use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
 use linnet::half_edge::tree::SimpleTraversalTree;
@@ -1023,20 +1023,63 @@ pub struct UVSamplingResult {
 impl<'a> UVProfileRunner<'a> {
     fn sample_graph(&self, graph_id: usize, g: &AmplitudeGraph) -> Result<UVSamplingResult> {
         let lmbs = g.derived_data.lmbs.as_ref().unwrap();
-        let integrand_expr = &g.derived_data.all_mighty_integrand;
-        let analytic_orientations: Vec<_> = g
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .orientations
-            .iter()
-            .collect();
-        let orientation_labels = if self
+        let deferred_integrands = g.derived_data.deferred_integrands.as_ref();
+        let profiles_per_orientation = self
             .profile_settings
             .orientation_mode
-            .profiles_per_orientation()
-        {
+            .profiles_per_orientation();
+        if profiles_per_orientation {
+            let integrand = self.integrand.lock().expect("integrand mutex poisoned");
+            match &*integrand {
+                ProcessIntegrand::Amplitude(amplitude)
+                    if amplitude.data.explicit_orientation_sum_only =>
+                {
+                    return Err(eyre!(
+                        "an explicit orientation sum cannot be profiled by production orientation"
+                    ));
+                }
+                ProcessIntegrand::Amplitude(_) => {}
+                ProcessIntegrand::CrossSection(_) => {
+                    unreachable!("UV profiling expects amplitudes")
+                }
+            }
+        }
+        let analytic_integrands = if !self.profile_settings.analyse_analytically {
+            Vec::new()
+        } else if let Some(deferred_integrands) = deferred_integrands {
+            let materialized = deferred_integrands.materialize();
+            let mut roots = materialized.iter();
+            let (index, integrand) = roots
+                .next()
+                .ok_or_else(|| eyre!("deferred amplitude integrand has no root residue"))?;
+            if *index != crate::cff::CutCFFIndex::new_all_none() || roots.next().is_some() {
+                return Err(eyre!(
+                    "deferred amplitude integrand must contain exactly one root residue"
+                ));
+            }
+            let mut summed =
+                OrientationData::new(EdgeVec::from_iter(std::iter::empty::<Orientation>()));
+            summed.label = Some("explicit source-local sum".to_string());
+            vec![(summed, integrand.clone())]
+        } else {
+            g.derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    (
+                        orientation.data.clone(),
+                        orientation
+                            .data
+                            .orientation
+                            .select(&g.derived_data.all_mighty_integrand),
+                    )
+                })
+                .collect()
+        };
+        let orientation_labels = if profiles_per_orientation {
             let integrand = self.integrand.lock().expect("integrand mutex poisoned");
             match &*integrand {
                 ProcessIntegrand::Amplitude(amplitude) => {
@@ -1081,14 +1124,18 @@ impl<'a> UVProfileRunner<'a> {
                         SubSet<LoopIndex>,
                         OrientationData,
                         Series<AtomField>,
-                    )> = analytic_orientations
+                    )> = analytic_integrands
                         .par_iter()
-                        .map(|o| {
-                            let oatom = o.data.orientation.select(integrand_expr);
+                        .map(|(orientation, integrand)| {
                             g.graph
-                                .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), lmb)
+                                .all_limits(
+                                    &g.graph.full_filter(),
+                                    integrand,
+                                    symbol!("lambd"),
+                                    lmb,
+                                )
                                 .into_iter()
-                                .map(|(l, v)| (l, o.data.clone(), v))
+                                .map(|(l, v)| (l, orientation.clone(), v))
                                 .collect::<Vec<_>>()
                         })
                         .reduce(Vec::new, |mut acc, mut v| {

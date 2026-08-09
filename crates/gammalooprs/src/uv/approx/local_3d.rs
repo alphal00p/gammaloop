@@ -20,11 +20,11 @@ use crate::{
         orientations::GraphOrientation,
     },
     debug_tags,
-    graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
+    graph::{Graph, GraphThreeDSource, LMBext, LoopMomentumBasis, cuts::CutSet},
     settings::global::OrientationPattern,
     utils::{GS, W_},
     uv::{
-        ApproximationType, Integrands, UVgenerationSettings, UltravioletGraph,
+        ApproximationType, DeferredIntegrands, Integrands, UVgenerationSettings, UltravioletGraph,
         approx::{
             ForestNodeLike, OrientationProjection, UVCtx, integrated::IntegratedCts,
             local_4d::Full4dCts,
@@ -101,7 +101,7 @@ impl OrientationIntegrands {
     }
 
     pub(crate) fn zip_add(&self, other: &Self) -> Result<Self> {
-        self.checked_zip(other, |_, left, right| left.zip_add(right))
+        self.checked_zip(other, |_, left, right| left.clone().zip_add(right.clone()))
     }
 
     fn zip_mul_unmapped(&self, other: &Integrands) -> Result<Self> {
@@ -181,7 +181,12 @@ impl<'a> Localizer<'a> {
             .subtract(&graph.initial_state_cut)
     }
 
-    fn cff(self, graph: &mut Graph, to_contract: &SuBitGraph) -> Result<(CutCFF, SuBitGraph)> {
+    fn cff(
+        self,
+        graph: &mut Graph,
+        to_contract: &SuBitGraph,
+        analysis_numerator: &Atom,
+    ) -> Result<(CutCFF, SuBitGraph)> {
         let contract_subgraph = self.cff_contract_subgraph(graph, to_contract);
         let options = self.orientation.cff_options(graph);
         // Exact projection applies the user pattern to full production maps.
@@ -193,17 +198,20 @@ impl<'a> Localizer<'a> {
         } else {
             self.orientation.orientation_pattern
         };
+        // Only production exact maps own numerator-energy capacity. Coarse
+        // projectors retain their denominator-only CFF and identity numerator
+        // mapping, as used by legacy exports and isolated UV tests.
         let analysis_numerator = self
             .orientation
             .exact_orientations()
             .is_some()
-            .then(|| graph.production_numerator_atom_for_full_3d_expression());
+            .then_some(analysis_numerator);
         let cff = graph.cff(
             &contract_subgraph,
             self.cutset,
             orientation_pattern,
             &options,
-            analysis_numerator.as_ref(),
+            analysis_numerator,
         )?;
         Ok((cff, contract_subgraph))
     }
@@ -273,37 +281,40 @@ impl<'a> Localizer<'a> {
                 })
                 .collect::<Vec<_>>();
             let first_mismatch = compatible.first().map(|(id, full)| {
-                    let mismatches = surviving_edges
+                let mismatches = surviving_edges
+                    .iter()
+                    .filter_map(|edge_id| {
+                        let edge = usize::from(*edge_id);
+                        let full_energy = full
+                            .edge_energy_map
+                            .get(edge)
+                            .cloned()
+                            .unwrap_or_default()
+                            .canonical();
+                        let reduced_energy = reduced
+                            .edge_energy_map
+                            .get(edge)
+                            .cloned()
+                            .unwrap_or_default()
+                            .canonical();
+                        (full_energy != reduced_energy).then_some((
+                            *edge_id,
+                            full_energy,
+                            reduced_energy,
+                        ))
+                    })
+                    .collect::<Vec<_>>();
+                (
+                    *id,
+                    full.data.label.as_deref(),
+                    full.data.numerator_map_index,
+                    full.variants
                         .iter()
-                        .filter_map(|edge_id| {
-                            let edge = usize::from(*edge_id);
-                            let full_energy = full
-                                .edge_energy_map
-                                .get(edge)
-                                .cloned()
-                                .unwrap_or_default()
-                                .canonical();
-                            let reduced_energy = reduced
-                                .edge_energy_map
-                                .get(edge)
-                                .cloned()
-                                .unwrap_or_default()
-                                .canonical();
-                            (full_energy != reduced_energy)
-                                .then_some((*edge_id, full_energy, reduced_energy))
-                        })
-                        .collect::<Vec<_>>();
-                    (
-                        *id,
-                        full.data.label.as_deref(),
-                        full.data.numerator_map_index,
-                        full.variants
-                            .iter()
-                            .filter_map(|variant| variant.origin.as_deref())
-                            .collect::<Vec<_>>(),
-                        mismatches,
-                    )
-                });
+                        .filter_map(|variant| variant.origin.as_deref())
+                        .collect::<Vec<_>>(),
+                    mismatches,
+                )
+            });
             Err(eyre!(
                 "no production energy map exactly extends normalized reduced map {} after contracting edges {:?}; reduced provenance (label, numerator map, origins): ({:?}, {:?}, {:?}); {} production orientations match the surviving directions; first mismatch (orientation, label, numerator map, origins, edge/production/reduced): {first_mismatch:#?}",
                 GS.orientation_delta(&explicit_reduced_orientation),
@@ -470,8 +481,9 @@ impl<'a> Localizer<'a> {
         graph: &mut Graph,
         to_contract: &SuBitGraph,
         average: bool,
+        analysis_numerator: &Atom,
     ) -> Result<OrientationIntegrands> {
-        let (cff, contract_subgraph) = self.cff(graph, to_contract)?;
+        let (cff, contract_subgraph) = self.cff(graph, to_contract, analysis_numerator)?;
         let indices = cff.terms.keys().copied().collect::<Vec<_>>();
         let ids = self.orientation.orientation_ids();
         if ids.is_empty() {
@@ -533,16 +545,25 @@ impl<'a> Localizer<'a> {
         self,
         source: &Full4dCts,
         graph: &mut Graph,
-        average_extensions: bool,
+        current_spinney: &SuBitGraph,
     ) -> Result<Local3DCts> {
         let indices = self.cutset.residue_selector.generate_allowed_keys();
-        let mut projected = OrientationIntegrands::from_ids_and_indices(
-            self.orientation.orientation_ids(),
-            &indices,
-        );
-        let analysis_numerator = graph.production_numerator_atom_for_full_3d_expression();
+        let mut projected = DeferredIntegrands::from_indices(indices.iter().copied());
+        let reduced = graph
+            .full_filter()
+            .subtract(current_spinney)
+            .subtract(&graph.initial_state_cut);
+        let outside_numerator = graph
+            .numerator(&reduced, current_spinney)
+            .get_single_atom()
+            .expect("Graph numerator should be available")
+            * graph.global_atom();
 
         for term in source.terms()? {
+            // Analyze and later map the numerator owned by this exact 4D term
+            // together with the factors grown outside its owning spinney. Keep
+            // the product factorized throughout both operations.
+            let analysis_numerator = &term.numerator * &outside_numerator;
             let mut active_denominators = Vec::new();
             let mut residual_factor = Atom::one();
             for denominator in term.denominators {
@@ -560,83 +581,79 @@ impl<'a> Localizer<'a> {
                 if !indices.contains(&CutCFFIndex::new_all_none()) {
                     continue;
                 }
-                let contracted =
-                    graph.paired_edges(&graph.full_filter().subtract(&graph.initial_state_cut));
-                let orientation_ids = self.orientation.orientation_ids();
-                let normalization = if average_extensions {
-                    Atom::num(orientation_ids.len() as i64)
-                } else {
-                    Atom::one()
-                };
-                for orientation_id in orientation_ids {
-                    let selector = self
-                        .orientation
-                        .orientation(orientation_id)
-                        .map(|orientation| orientation.internal_orientation_selector(&contracted))
-                        .unwrap_or_else(Atom::one);
-                    let mapped_numerator =
-                        self.map_numerator(graph, orientation_id, &term.numerator)?;
-                    *projected
-                        .0
-                        .get_mut(&orientation_id)
-                        .unwrap()
-                        .0
-                        .get_mut(&CutCFFIndex::new_all_none())
-                        .unwrap() +=
-                        &selector * &mapped_numerator * &residual_factor / &normalization;
+                // A denominatorless exact source has no local energy residue
+                // and therefore no orientation selector. Its complete
+                // numerator must be independent of every loop energy; the
+                // empty exact source proves that before setting its inactive
+                // temporal placeholders to zero.
+                let exact_source =
+                    GraphThreeDSource::from_exact_denominators(graph, &[]).map_err(|error| {
+                        eyre!("could not build denominatorless exact 4D source: {error}")
+                    })?;
+                // Initial-cut and tree-edge energies are external to the empty
+                // CFF source. The mapper below still projects their complete
+                // external-affine physical energy into the factorized
+                // numerator, while `residual_factor` owns every corresponding
+                // denominator occurrence.
+                let cff_external_edges = graph
+                    .iter_edges_of(&graph.initial_state_cut)
+                    .chain(graph.iter_edges_of(&graph.tree_edges))
+                    .map(|(_, edge_id, _)| edge_id);
+                let energy_degree_bounds = graph
+                    .automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
+                        &analysis_numerator,
+                        cff_external_edges,
+                        1,
+                    )?;
+                if !energy_degree_bounds.is_empty() {
+                    return Err(eyre!(
+                        "denominatorless exact 4D term has nonconstant numerator EMR energy-degree bounds {:?}, but no denominator residue or affine numerator-only source map can carry them",
+                        energy_degree_bounds,
+                    ));
                 }
+                let mapped_numerator = exact_source
+                    .exact_source_energy_mapper()
+                    .expect("empty exact source has an owned parent-energy mapper")
+                    .map_numerator(&[], &[], &analysis_numerator)?;
+                projected.push(
+                    CutCFFIndex::new_all_none(),
+                    mapped_numerator * &residual_factor,
+                )?;
                 continue;
             }
 
             let options = self.orientation.cff_options(graph);
             // The exact source CFF resolves contracted directions internally.
-            // Apply the user pattern only after those reduced maps are matched
-            // to complete production maps below.
-            let (cff, contract_subgraph) = graph.cff_from_4d_denominators(
+            // Its orientations are an explicit source-local sum, so a
+            // production orientation pattern is deliberately never applied.
+            let (cff, _contract_subgraph) = graph.cff_from_4d_denominators(
                 &active_denominators,
                 self.cutset,
                 &options,
                 &analysis_numerator,
             )?;
-            let contracted_edges = graph.paired_edges(&contract_subgraph);
 
             for (index, cff_term) in cff.terms {
-                for orientation in cff_term.orientations {
-                    let localized_terms = self
-                        .localized_orientation_terms(
-                            graph,
-                            &orientation.orientation,
-                            &orientation.expression,
-                            &contract_subgraph,
-                            &contracted_edges,
-                            average_extensions,
-                        )
+                for orientation in &cff_term.orientations {
+                    let mapped_numerator = cff_term
+                        .map_exact_source_numerator(&orientation.orientation, &analysis_numerator)
                         .map_err(|error| {
                             eyre!(
                                 "{error}; exact 4D term active denominators are {:?}",
                                 active_denominators
                             )
                         })?;
-                    for (orientation_id, localized) in localized_terms {
-                        let mapped_numerator =
-                            self.map_numerator(graph, orientation_id, &term.numerator)?;
-                        *projected
-                            .0
-                            .get_mut(&orientation_id)
-                            .expect("projected orientation belongs to the production map set")
-                            .0
-                            .get_mut(&index)
-                            .expect("4D CFF residue belongs to the selected cut shape") +=
-                            localized * &mapped_numerator * &residual_factor;
-                    }
+                    projected.push(
+                        index,
+                        orientation.expression.clone() * mapped_numerator * &residual_factor,
+                    )?;
                 }
             }
         }
 
-        Ok(Local3DCts {
-            integrands: projected,
-            active_sectors: None,
-        })
+        Ok(Local3DCts::from_projected(Integrands::from_deferred(
+            projected,
+        )))
     }
 
     pub(crate) fn localize<S: ForestNodeLike>(
@@ -674,9 +691,25 @@ impl<'a> Localizer<'a> {
             graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
         );
 
+        // CFF capacity belongs to the complete factorized numerator of this
+        // reduced term. The integrated finite CT replaces the numerator of
+        // the contracted spinney; the remaining graph and global factors are
+        // still grown later by their existing owners.
+        let reduced = graph
+            .full_filter()
+            .subtract(to_contract)
+            .subtract(&graph.initial_state_cut);
+        let outside_numerator = graph
+            .numerator(&reduced, to_contract)
+            .get_single_atom()
+            .expect("Graph numerator should be available")
+            * graph.global_atom();
+        let analysis_numerator = expr * &outside_numerator;
+
         let localizing_integrand = GS.localizing_integrand(integrated_node.lmb());
-        let active = self.projected_cff(graph, to_contract, true)?.fallible_map(
-            |orientation_id, localized| {
+        let active = self
+            .projected_cff(graph, to_contract, true, &analysis_numerator)?
+            .fallible_map(|orientation_id, localized| {
                 let localized = localized * &fourddenoms;
                 let localized_cff_byte_size = localized.as_view().get_byte_size();
                 let mapped_finite_ct =
@@ -692,8 +725,7 @@ impl<'a> Localizer<'a> {
                     "Integrated UV CT localization size checkpoint"
                 );
                 Ok(active_ct)
-            },
-        )?;
+            })?;
         let frozen_integrands = self
             .cutset
             .residue_selector
@@ -907,16 +939,22 @@ impl<'a> Local3DApproximation<'a> {
 }
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Local3DCts {
-    integrands: OrientationIntegrands,
+    representation: Local3DRepresentation,
     // A disconnected join can leave a different set of loop variables active
     // in each local/integrated cross term.
     active_sectors: Option<Vec<(SuBitGraph, OrientationIntegrands)>>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum Local3DRepresentation {
+    Direct(OrientationIntegrands),
+    Projected(Integrands),
+}
+
 impl From<Integrands> for Local3DCts {
     fn from(integrands: Integrands) -> Self {
         Self {
-            integrands: integrands.into(),
+            representation: Local3DRepresentation::Direct(integrands.into()),
             active_sectors: None,
         }
     }
@@ -927,7 +965,14 @@ impl Neg for Local3DCts {
 
     fn neg(self) -> Self::Output {
         Self {
-            integrands: self.integrands.map(|a| a.neg()),
+            representation: match self.representation {
+                Local3DRepresentation::Direct(integrands) => {
+                    Local3DRepresentation::Direct(integrands.map(|a| a.neg()))
+                }
+                Local3DRepresentation::Projected(integrands) => {
+                    Local3DRepresentation::Projected(-integrands)
+                }
+            },
             active_sectors: self.active_sectors.map(|sectors| {
                 sectors
                     .into_iter()
@@ -945,14 +990,31 @@ impl Local3DCts {
                 "an unlabelled local term cannot be added to active UV sectors"
             ));
         }
+        let Local3DRepresentation::Direct(integrands) = &self.representation else {
+            return Err(eyre!(
+                "production-orientation terms cannot be added to projected 4D CFF terms"
+            ));
+        };
         Ok(Self {
-            integrands: self.integrands.zip_add(other)?,
+            representation: Local3DRepresentation::Direct(integrands.zip_add(other)?),
             active_sectors: None,
         })
     }
 
     pub(crate) fn integrands(&self) -> &OrientationIntegrands {
-        &self.integrands
+        let Local3DRepresentation::Direct(integrands) = &self.representation else {
+            panic!("projected 4D CFF terms have no production orientation IDs")
+        };
+        integrands
+    }
+
+    pub(crate) fn projected_integrands(&self) -> Result<&Integrands> {
+        match &self.representation {
+            Local3DRepresentation::Projected(integrands) => Ok(integrands),
+            Local3DRepresentation::Direct(_) => Err(eyre!(
+                "direct 3D terms are grouped by production orientation IDs"
+            )),
+        }
     }
 
     pub(crate) fn active_sectors(&self) -> Option<&[(SuBitGraph, OrientationIntegrands)]> {
@@ -977,7 +1039,7 @@ impl Local3DCts {
         }
 
         Ok(Self {
-            integrands,
+            representation: Local3DRepresentation::Direct(integrands),
             active_sectors: Some(active_sectors),
         })
     }
@@ -992,8 +1054,16 @@ impl Local3DCts {
                 .collect::<Result<_>>()?;
             Self::from_active_sectors(active_sectors)
         } else {
+            let representation = match &self.representation {
+                Local3DRepresentation::Direct(integrands) => {
+                    Local3DRepresentation::Direct(integrands.fallible_map(|_, atom| f(atom))?)
+                }
+                Local3DRepresentation::Projected(integrands) => {
+                    Local3DRepresentation::Projected(integrands.fallible_map(f)?)
+                }
+            };
             Ok(Self {
-                integrands: self.integrands.fallible_map(|_, atom| f(atom))?,
+                representation,
                 active_sectors: None,
             })
         }
@@ -1010,24 +1080,38 @@ impl Local3DCts {
                 .collect::<Result<_>>()?;
             Self::from_active_sectors(active_sectors)
         } else {
+            let Local3DRepresentation::Direct(integrands) = &self.representation else {
+                return Err(eyre!(
+                    "projected 4D CFF terms cannot be remapped to production orientations"
+                ));
+            };
             Ok(Self {
-                integrands: self.integrands.fallible_map(f)?,
+                representation: Local3DRepresentation::Direct(integrands.fallible_map(f)?),
                 active_sectors: None,
             })
         }
     }
 
     pub(crate) fn root(graph: &mut Graph, localizer: Localizer<'_>) -> Result<Self> {
-        let cff = localizer.projected_cff(graph, &graph.empty_subgraph::<SuBitGraph>(), false)?;
+        let analysis_numerator = graph.production_numerator_atom_for_full_3d_expression();
+        let to_contract = graph.empty_subgraph::<SuBitGraph>();
+        let cff = localizer.projected_cff(graph, &to_contract, false, &analysis_numerator)?;
 
         let fourddenoms = GS.wrap_tree_denoms(
             graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
         );
 
         Ok(Local3DCts {
-            integrands: cff.map(|atom| atom * &fourddenoms),
+            representation: Local3DRepresentation::Direct(cff.map(|atom| atom * &fourddenoms)),
             active_sectors: None,
         })
+    }
+
+    fn from_projected(integrands: Integrands) -> Self {
+        Self {
+            representation: Local3DRepresentation::Projected(integrands),
+            active_sectors: None,
+        }
     }
 }
 
@@ -1489,6 +1573,7 @@ impl Local3DLoopRescaling {
 mod tests {
     use crate::{
         cff::{
+            CutCFFIndex,
             expression::{
                 GammaLoopOrientationExpression, OrientationData, OrientationExpression,
                 OrientationID,
@@ -1501,7 +1586,7 @@ mod tests {
         settings::global::OrientationPattern,
         utils::GS,
         uv::{
-            Spinney,
+            ApproximationType, Spinney, UltravioletGraph,
             approx::{
                 OrientationProjection, Rooted,
                 local_3d::Localizer,
@@ -1514,9 +1599,9 @@ mod tests {
     use eyre::eyre;
     use linnet::half_edge::{
         involution::{EdgeIndex, EdgeVec, Orientation},
-        subgraph::SubSetOps,
+        subgraph::{InternalSubGraph, SubSetOps},
     };
-    use std::sync::OnceLock;
+    use std::{collections::BTreeMap, sync::OnceLock};
     use symbolica::{
         atom::{Atom, AtomCore},
         function,
@@ -1769,7 +1854,9 @@ mod tests {
             OrientationProjection::exact(&production, &options, &pattern),
         );
         let to_contract = graph.get_edge_subgraph(EdgeIndex(1));
-        let projected = localizer.projected_cff(&mut graph, &to_contract, true)?;
+        let analysis_numerator = graph.production_numerator_atom_for_full_3d_expression();
+        let projected =
+            localizer.projected_cff(&mut graph, &to_contract, true, &analysis_numerator)?;
 
         assert_eq!(
             projected
@@ -1779,6 +1866,69 @@ mod tests {
             vec![OrientationID(0)]
         );
         assert!(projected.iter().any(|(_, atom)| !atom.is_zero()));
+        Ok(())
+    }
+
+    #[test]
+    fn coarse_cff_keeps_denominator_only_capacity() -> Result<()> {
+        let mut graph = two_edge_graph()?;
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
+        let to_contract = graph.empty_subgraph();
+        let unsupported_numerator = (GS.emr_mom(EdgeIndex(0), GS.cind(0)) + Atom::one()).pow(-1);
+
+        let projected =
+            localizer.projected_cff(&mut graph, &to_contract, false, &unsupported_numerator)?;
+
+        assert!(projected.iter().any(|(_, atom)| !atom.is_zero()));
+        Ok(())
+    }
+
+    #[test]
+    fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<()> {
+        // Share model initialization with the other graph-backed tests in this module.
+        let _ = two_edge_graph()?;
+        let mut graph: Graph = dot!(
+            digraph replaced_spinney_numerator {
+                edge [pdg=1000 num=1 mass=1]
+                node [num=1]
+                a -> b [id=0 lmb_id=0 num="1/(Q(0,spenso::cind(0))+1)"]
+                a -> b [id=1]
+            },
+            "scalars"
+        )?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let contracted = graph.tree_edges.subtract(&graph.initial_state_cut);
+        let contract_edges = graph.paired_edges(&contracted);
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph
+            .generate_3d_expression_for_integrand(&contract_edges, &canonization, &options, None)?
+            .expression
+            .orientations;
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern),
+        );
+        let subgraph =
+            InternalSubGraph::cleaned_filter_optimist(graph.full_filter(), graph.as_ref());
+        let integrated_node = OwnedForestNode {
+            spinney: Spinney::with_scheme(
+                subgraph,
+                &graph,
+                &graph.loop_momentum_basis,
+                ApproximationType::MUV,
+                0,
+            )
+            .expect("the complete bubble has a compatible loop basis"),
+            topo_order: 0,
+        };
+
+        let localized = localizer.localize(&Atom::one(), &mut graph, &integrated_node)?;
+
+        assert!(localized.active.iter().any(|(_, atom)| !atom.is_zero()));
         Ok(())
     }
 
@@ -1805,13 +1955,8 @@ mod tests {
         assert!(contract_edges.contains(&EdgeIndex(2)));
         let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
         let production = graph
-            .generate_3d_expression_for_integrand(
-                &contract_edges,
-                &canonization,
-                &options,
-                None,
-                false,
-            )?
+            .generate_3d_expression_for_integrand(&contract_edges, &canonization, &options, None)?
+            .expression
             .orientations;
         let (orientation_id, finite_ct, mapped_finite_ct) = production
             .iter_enumerated()
@@ -1941,8 +2086,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_typed_4d_projection_defers_contracted_edge_patterns_to_full_projection() -> Result<()>
-    {
+    fn exact_typed_4d_projection_keeps_source_local_explicit_orientation_sum() -> Result<()> {
         let mut graph = two_edge_graph()?;
         let production = vec![
             energy_map(
@@ -1971,19 +2115,32 @@ mod tests {
         );
         let cograph = graph.full_filter();
         let source = Full4dCts::from_coefficient(&Atom::one(), &graph, &cograph);
-        let projected = localizer.project_4d(&source, &mut graph, true)?;
+        let root_spinney = graph.empty_subgraph();
+        let projected = localizer.project_4d(&source, &mut graph, &root_spinney)?;
+        let projected = projected.projected_integrands()?;
+        let root = CutCFFIndex::new_all_none();
+        let source_local_terms = projected
+            .deferred_terms(&root)
+            .expect("the projected root keeps its source-local CFF bodies");
+        let opposite_pattern = OrientationPattern::from_user_pattern("(-1,1)")?;
+        let opposite = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &opposite_pattern),
+        )
+        .project_4d(&source, &mut graph, &root_spinney)?;
 
+        assert!(
+            source_local_terms.iter().any(|atom| !atom.is_zero()),
+            "the exact source-local orientation sum must retain a nonzero body"
+        );
         assert_eq!(
-            projected
-                .integrands()
-                .iter_orientations()
-                .map(|(id, _)| id)
-                .collect::<Vec<_>>(),
-            vec![OrientationID(0)]
+            opposite.projected_integrands()?,
+            projected,
+            "production orientation patterns must not filter an exact source-local orientation sum"
         );
         assert!(
             projected
-                .integrands()
+                .materialize()
                 .iter()
                 .any(|(_, atom)| !atom.is_zero())
         );
@@ -2013,15 +2170,10 @@ mod tests {
         assert!(contract_edges.contains(&EdgeIndex(2)));
         let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
         let production = graph
-            .generate_3d_expression_for_integrand(
-                &contract_edges,
-                &canonization,
-                &options,
-                None,
-                false,
-            )?
+            .generate_3d_expression_for_integrand(&contract_edges, &canonization, &options, None)?
+            .expression
             .orientations;
-        let (orientation_id, finite_ct, mapped_finite_ct) = production
+        let (orientation_id, finite_ct) = production
             .iter_enumerated()
             .flat_map(|(orientation_id, orientation)| {
                 orientation
@@ -2038,11 +2190,7 @@ mod tests {
                 let finite_ct = GS.emr_mom(edge, GS.cind(0));
                 let replacements = orientation.energy_replacements_gs(&graph);
                 let mapped_finite_ct = finite_ct.replace_multiple(&replacements);
-                (mapped_finite_ct != finite_ct).then_some((
-                    orientation_id,
-                    finite_ct,
-                    mapped_finite_ct,
-                ))
+                (mapped_finite_ct != finite_ct).then_some((orientation_id, finite_ct))
             })
             .ok_or_else(|| {
                 eyre!(
@@ -2059,21 +2207,125 @@ mod tests {
         let cograph = graph.full_filter().subtract(&graph.initial_state_cut);
         let baseline_source = Full4dCts::from_coefficient(&Atom::one(), &graph, &cograph);
         let localized_source = Full4dCts::from_coefficient(&finite_ct, &graph, &cograph);
-        let baseline = localizer.project_4d(&baseline_source, &mut graph, true)?;
-        let localized = localizer.project_4d(&localized_source, &mut graph, true)?;
-        let baseline = baseline
-            .integrands()
-            .iter_orientations()
-            .find_map(|(id, integrands)| (id == orientation_id).then_some(integrands))
-            .expect("the selected production map has a baseline branch");
-        let localized = localized
-            .integrands()
-            .iter_orientations()
-            .find_map(|(id, integrands)| (id == orientation_id).then_some(integrands))
-            .expect("the selected production map has a finite-CT branch");
+        let root_spinney = graph.empty_subgraph();
 
-        assert_eq!(localized, &baseline.map(|atom| atom * &mapped_finite_ct));
-        assert_ne!(localized, &baseline.map(|atom| atom * &finite_ct));
+        let mut baseline_terms = baseline_source.terms()?;
+        assert_eq!(baseline_terms.len(), 1);
+        let mut active_denominators = Vec::new();
+        for denominator in baseline_terms
+            .pop()
+            .expect("the baseline has one exact 4D term")
+            .denominators
+        {
+            if denominator.depends_on_loop(&graph)? {
+                active_denominators.push(denominator);
+            }
+        }
+        let (source_cff, _) =
+            graph.cff_from_4d_denominators(&active_denominators, &cutset, &options, &finite_ct)?;
+        let mapped_finite_cts = source_cff
+            .terms
+            .iter()
+            .map(|(index, term)| {
+                let mapped = term
+                    .orientations
+                    .iter()
+                    .map(|orientation| {
+                        term.map_exact_source_numerator(&orientation.orientation, &finite_ct)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                Ok((*index, mapped))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
+
+        let baseline = localizer.project_4d(&baseline_source, &mut graph, &root_spinney)?;
+        let localized = localizer.project_4d(&localized_source, &mut graph, &root_spinney)?;
+        let baseline = baseline.projected_integrands()?;
+        let localized = localized.projected_integrands()?;
+        let mut mapped_any = false;
+        for (index, mapped_finite_cts) in mapped_finite_cts {
+            let baseline_terms = baseline
+                .deferred_terms(&index)
+                .expect("the exact source has a baseline branch");
+            let localized_terms = localized
+                .deferred_terms(&index)
+                .expect("the exact source has a finite-CT branch");
+            assert_eq!(baseline_terms.len(), mapped_finite_cts.len());
+            assert_eq!(localized_terms.len(), mapped_finite_cts.len());
+            for ((baseline, localized), mapped_finite_ct) in baseline_terms
+                .iter()
+                .zip(localized_terms)
+                .zip(mapped_finite_cts)
+            {
+                assert_eq!(localized, &(baseline * &mapped_finite_ct));
+                if mapped_finite_ct != finite_ct {
+                    mapped_any = true;
+                    assert_ne!(localized, &(baseline * &finite_ct));
+                }
+            }
+        }
+        assert!(
+            mapped_any,
+            "the source-local finite-CT fixture must exercise a nontrivial affine energy map"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn typed_4d_projection_analyzes_each_term_owned_numerator() -> Result<()> {
+        let mut graph = two_edge_graph()?;
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
+        let cograph = graph.full_filter();
+        let non_polynomial_term = (GS.emr_mom(EdgeIndex(0), GS.cind(0)) + Atom::one()).pow(-1);
+        let source = Full4dCts::from_coefficient(&non_polynomial_term, &graph, &cograph);
+        let root_spinney = graph.empty_subgraph();
+
+        let error = localizer
+            .project_4d(&source, &mut graph, &root_spinney)
+            .expect_err("the exact term numerator must determine its own CFF support");
+        assert!(
+            error
+                .to_string()
+                .contains("could not analyze numerator in the contracted-source loop basis")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn typed_4d_projection_does_not_reanalyze_the_current_spinney_numerator() -> Result<()> {
+        let mut graph: Graph = dot!(
+            digraph current_owned_numerator {
+                edge [pdg=1000 num=1 mass=1]
+                node [num=1]
+                a -> b [id=0 lmb_id=0 num="1/(Q(0,spenso::cind(0))+1)"]
+                a -> b [id=1]
+            },
+            "scalars"
+        )?;
+        let current_spinney = graph.get_edge_subgraph(EdgeIndex(0));
+        let reduced = graph
+            .full_filter()
+            .subtract(&current_spinney)
+            .subtract(&graph.initial_state_cut);
+        assert_eq!(
+            graph
+                .numerator(&reduced, &current_spinney)
+                .get_single_atom()
+                .expect("outside-spinney numerator is available"),
+            Atom::one(),
+            "the fixture must own its non-polynomial numerator only inside the current spinney"
+        );
+
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
+        let source = Full4dCts::with_cograph(&Local4dCts::root(), &graph, &reduced);
+        let projected = localizer.project_4d(&source, &mut graph, &current_spinney)?;
+        let projected = projected.projected_integrands()?.materialize();
+
+        assert!(projected.iter().any(|(_, atom)| !atom.is_zero()));
         Ok(())
     }
 
@@ -2155,17 +2407,13 @@ mod tests {
         let localizer = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
         let cograph = graph.full_filter().subtract(&graph.initial_state_cut);
         let source = Full4dCts::with_cograph(&Local4dCts::root(), &graph, &cograph);
+        let root_spinney = graph.empty_subgraph();
 
-        let projected = localizer.project_4d(&source, &mut graph, false)?;
+        let projected = localizer.project_4d(&source, &mut graph, &root_spinney)?;
+        let projected = projected.projected_integrands()?.materialize();
+        assert!(projected.iter().any(|(_, atom)| !atom.is_zero()));
         assert!(
             projected
-                .integrands()
-                .iter()
-                .any(|(_, atom)| !atom.is_zero())
-        );
-        assert!(
-            projected
-                .integrands()
                 .iter()
                 .all(|(_, atom)| !atom.contains_symbol(GS.den)),
             "tree propagators must remain exact scalar factors, not 4D wrapper atoms"
@@ -2188,12 +2436,17 @@ mod tests {
         let localizer = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
         let cograph = graph.full_filter();
         let source = Full4dCts::with_cograph(&Local4dCts::root(), &graph, &cograph);
+        let root_spinney = graph.empty_subgraph();
 
-        let projected = localizer.project_4d(&source, &mut graph, false)?;
-        let terms = projected.integrands().iter().collect::<Vec<_>>();
+        let projected = localizer.project_4d(&source, &mut graph, &root_spinney)?;
+        let root = CutCFFIndex::new_all_none();
+        let terms = projected
+            .projected_integrands()?
+            .deferred_terms(&root)
+            .expect("a pure tree has one denominatorless exact source term");
         assert_eq!(terms.len(), 1);
-        assert!(!terms[0].1.is_zero());
-        assert!(!terms[0].1.contains_symbol(GS.den));
+        assert!(!terms[0].is_zero());
+        assert!(!terms[0].contains_symbol(GS.den));
         Ok(())
     }
 }

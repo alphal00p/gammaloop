@@ -4,6 +4,8 @@ use std::{
 };
 
 #[cfg(test)]
+use crate::uv::Integrands;
+#[cfg(test)]
 use std::cmp::Reverse;
 
 use ahash::AHashMap;
@@ -36,8 +38,7 @@ use crate::{
     },
     utils::{GS, W_},
     uv::{
-        ApproximationType, Integrands, RenormalizationPart, Spinney, UVgenerationSettings,
-        UltravioletGraph,
+        ApproximationType, RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
         approx::{
             CutStructure, ForestNodeLike, OrientationProjection, Rooted, UVCtx,
             final_integrand::{FinalIntegrandBuilder, FinalIntegrands},
@@ -1169,7 +1170,7 @@ impl Forests {
             graph,
             &cograph,
         );
-        let local_3d = localizer.project_4d(&source, graph, true)?;
+        let local_3d = localizer.project_4d(&source, graph, self.source_spinney(node).filter())?;
 
         let integrated = self
             .compute_store
@@ -1282,19 +1283,17 @@ impl Forests {
         let mut expressions = Vec::with_capacity(self.cuts.len());
 
         for (compatible_subset, cutset) in &self.cuts {
-            let mut sum: Option<Integrands> = None;
+            let mut sum: Option<FinalIntegrands> = None;
             for nidx in self.compatible_topological_order(compatible_subset)? {
                 let operation = &self.graph[nidx];
-                let terms: Integrands = self
+                let terms = self
                     .compute_store
                     .require(operation)?
                     .cut(operation, cutset)?
                     .final_integrands
-                    .iter()
-                    .map(|(index, integrand)| (*index, integrand.clone().collect_color()))
-                    .collect();
+                    .map(|integrand| integrand.clone().collect_color());
                 sum = Some(match sum {
-                    Some(sum) => sum.zip_add(&terms).wrap_err_with(|| {
+                    Some(sum) => sum.zip_add(terms).wrap_err_with(|| {
                         format!("while aggregating hedge-poset term {operation} for cut {cutset:?}")
                     })?,
                     None => terms,
@@ -1309,10 +1308,7 @@ impl Forests {
                         .replace(function!(GS.den, W_.a_, W_.b_, W_.c_, W_.d_))
                         .with(W_.d_)
                 });
-            expressions.push(ParametricIntegrands {
-                integrands,
-                cuts: cutset.clone(),
-            });
+            expressions.push(ParametricIntegrands::from_final(integrands, cutset.clone()));
         }
 
         Ok(expressions)
@@ -1335,7 +1331,11 @@ impl Forests {
         {
             let operation = &self.graph[nidx];
             let computed = self.compute_store.require(operation)?;
-            let final_integrands = &computed.cut(operation, cutset)?.final_integrands;
+            let final_integrands = computed
+                .cut(operation, cutset)?
+                .final_integrands
+                .map(|numerator| post_process(numerator.clone()))
+                .materialize();
             let node_key = operation.to_string();
             for (term_index, (&residue_index, numerator)) in final_integrands.iter().enumerate() {
                 terms.push(UVForestNodeExpression {
@@ -1344,7 +1344,7 @@ impl Forests {
                     node_key: node_key.clone(),
                     term_index,
                     residue_index,
-                    numerator: post_process(numerator.clone()),
+                    numerator: numerator.clone(),
                 });
             }
         }
@@ -1706,13 +1706,13 @@ mod tests {
                 .subtract(forests.source_spinney(union).filter())
                 .subtract(&graph.initial_state_cut);
             let source = Full4dCts::with_cograph(local, &graph, &cograph);
-            let projected = localizer.project_4d(&source, &mut graph, false)?;
-            assert!(
-                projected
-                    .integrands()
-                    .iter()
-                    .any(|(_, integrand)| !integrand.is_zero())
-            );
+            let projected = localizer.project_4d(
+                &source,
+                &mut graph,
+                forests.source_spinney(union).filter(),
+            )?;
+            let projected = projected.projected_integrands()?.materialize();
+            assert!(projected.iter().any(|(_, integrand)| !integrand.is_zero()));
         }
         Ok(())
     }
@@ -2570,13 +2570,10 @@ mod tests {
             .subtract(f.source_spinney(child).filter())
             .subtract(&spectacles.initial_state_cut);
         let source = Full4dCts::with_cograph(local, &spectacles, &cograph);
-        let projected = localizer.project_4d(&source, &mut spectacles, false)?;
-        assert!(
-            projected
-                .integrands()
-                .iter()
-                .any(|(_, integrand)| !integrand.is_zero())
-        );
+        let projected =
+            localizer.project_4d(&source, &mut spectacles, f.source_spinney(child).filter())?;
+        let projected = projected.projected_integrands()?.materialize();
+        assert!(projected.iter().any(|(_, integrand)| !integrand.is_zero()));
 
         Ok(())
     }

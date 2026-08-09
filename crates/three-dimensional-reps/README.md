@@ -10,6 +10,7 @@ The GammaLoop-facing API is intentionally small:
 
 - `generate_3d_expression(...)`
 - `Generate3DExpressionOptions`
+- `GeneratedThreeDExpression` and its `CffEnergyFactorOwnership`
 - the serializable `ThreeDExpression<OrientationID>` data model
 
 The production GammaLoop path calls the graph-first generator through traits
@@ -26,12 +27,15 @@ CLI/state layer.
 The compiled Symbolica runtime evaluator from the Python prototype is not part
 of this library crate. The current `eval` feature is an eager f64 diagnostic
 evaluator used by the GammaLoop integration tests. The GammaLoop CLI-side
-`3Drep evaluate` command reuses GammaLoop's evaluator construction machinery to
-materialize the Symbolica expression and parameter builder artifacts.
+`3Drep build` command validates, renders, and optionally writes the oriented
+expression; production evaluator construction remains in GammaLoop.
 
 ## Current Limits
 
-The initial production boundary covers affine CFF, bounded-energy CFF
-completions for repeated and multiloop high-power cases, and uniform numerator
-sampling-scale modes. Four-dimensional UV support and a public LTD engine are
-staged separately so each layer has one clear owner.
+The production boundary covers affine CFF, bounded-energy CFF with
+repeated-channel normal form, multiloop high-power numerators, and uniform
+numerator sampling-scale modes. GammaLoop owns both UV orchestration orders:
+direct local 3D subtraction on CFF expressions and 4D-local UV followed by an
+explicit-orientation CFF sum. `RepresentationMode::Ltd` is reserved for a
+future proper LTD backend and currently returns an explicit not-implemented
+error.

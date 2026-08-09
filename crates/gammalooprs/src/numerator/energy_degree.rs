@@ -225,7 +225,11 @@ impl EnergyPowerAnalyzer {
                         self.loop_edges.get(loop_index).copied().ok_or(
                             EnergyPowerAnalysisError::MissingLoopCarrierEdge { loop_index },
                         )?;
-                    return Ok(self.component_degree(edge, function.get(1)));
+                    return Ok(if self.is_internal_edge(edge) {
+                        self.component_degree(edge, function.get(1))
+                    } else {
+                        EnergyPowerCapMap::default()
+                    });
                 }
 
                 let argument_degrees = function
@@ -325,16 +329,6 @@ impl Graph {
         self.analyze_numerator_energy_powers(EnergyPowerAnalysisMode::ConservativeUpperBound)
     }
 
-    pub(crate) fn numerator_energy_power_upper_bounds_in_atom(
-        &self,
-        numerator: &Atom,
-    ) -> Result<EnergyPowerCapMap, EnergyPowerAnalysisError> {
-        self.analyze_numerator_atom_energy_powers(
-            numerator,
-            EnergyPowerAnalysisMode::ConservativeUpperBound,
-        )
-    }
-
     fn analyze_numerator_energy_powers(
         &self,
         mode: EnergyPowerAnalysisMode,
@@ -381,14 +375,21 @@ impl Graph {
         min_degree: usize,
     ) -> Result<Vec<(usize, usize)>, EnergyPowerAnalysisError> {
         let excluded_edges = excluded_edges.into_iter().collect::<BTreeSet<_>>();
-        Ok(self
-            .numerator_energy_power_upper_bounds_in_atom(numerator)?
-            .iter()
-            .filter_map(|(edge, degree)| {
-                (!excluded_edges.contains(&edge) && degree >= min_degree)
-                    .then_some((usize::from(edge), degree))
-            })
-            .collect())
+        let active_edges = self
+            .underlying
+            .iter_edges()
+            .filter_map(|(pair, edge, edge_data)| {
+                (pair.is_paired() && !edge_data.data.is_dummy && !excluded_edges.contains(&edge))
+                    .then_some(edge)
+            });
+        Ok(EnergyPowerAnalyzer::with_internal_edges(
+            self.loop_momentum_basis.loop_edges.iter().copied(),
+            active_edges,
+        )
+        .analyze_atom(numerator)?
+        .iter()
+        .filter_map(|(edge, degree)| (degree >= min_degree).then_some((edge.into(), degree)))
+        .collect())
     }
 }
 
@@ -530,6 +531,18 @@ mod tests {
             error,
             EnergyPowerAnalysisError::NonPolynomialEnergyPower { .. }
         ));
+    }
+
+    #[test]
+    fn strict_analysis_ignores_energy_powers_outside_the_active_edge_set() {
+        let analyzer =
+            EnergyPowerAnalyzer::with_internal_edges([EdgeIndex(7), EdgeIndex(9)], [EdgeIndex(5)]);
+        for expression in [
+            function!(GS.emr_mom, 3, mink_index("mu")).pow(Atom::num(-1)),
+            function!(GS.loop_mom, 0, mink_index("mu")).pow(Atom::num(-1)),
+        ] {
+            assert!(analyzer.analyze_atom(&expression).unwrap().is_empty());
+        }
     }
 
     #[test]

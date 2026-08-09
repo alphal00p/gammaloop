@@ -96,6 +96,7 @@ fn export_evaluator_stack<T: ExportAtomTo>(
     representative_input: Vec<StandaloneComplexInput>,
 ) -> Result<StandaloneEvaluatorStackArchive<T>> {
     Ok(StandaloneEvaluatorStackArchive {
+        explicit_orientation_sum_only: evaluator_stack.explicit_orientation_sum_only,
         start,
         mult_offset,
         representative_input,
@@ -252,6 +253,9 @@ impl AmplitudeIntegrand {
                         .collect::<Result<Vec<_>>>()?;
 
                     let original_integrand = StandaloneEvaluatorStackArchive {
+                        explicit_orientation_sum_only: term
+                            .original_integrand
+                            .explicit_orientation_sum_only,
                         start: orientation_start,
                         mult_offset: multiplicative_offset,
                         representative_input: representative_input.clone(),

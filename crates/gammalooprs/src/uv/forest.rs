@@ -4,7 +4,10 @@ use crate::{
     utils::{GS, W_},
     uv::{
         ApproximationType, Integrands,
-        approx::{CutStructure, ForestNodeLike, OrientationProjection, local_3d::Localizer},
+        approx::{
+            CutStructure, ForestNodeLike, OrientationProjection, final_integrand::FinalIntegrands,
+            local_3d::Localizer,
+        },
         marker::UvMarker,
         settings::FinalIntegrandDimension,
     },
@@ -45,6 +48,13 @@ pub struct ParametricIntegrands {
 }
 
 impl ParametricIntegrands {
+    pub(crate) fn from_final(integrands: FinalIntegrands, cuts: CutSet) -> Self {
+        Self {
+            integrands: integrands.into_integrands(),
+            cuts,
+        }
+    }
+
     pub fn map<F: FnMut(Atom) -> Atom>(self, mut map: F) -> Self {
         Self {
             integrands: self.integrands.map(|atom| map(atom.clone())),
@@ -54,7 +64,7 @@ impl ParametricIntegrands {
 
     pub fn zero_like(&self) -> Self {
         Self {
-            integrands: self.integrands.map(|_| Atom::Zero),
+            integrands: self.integrands.zero_like(),
             cuts: self.cuts.clone(),
         }
     }
@@ -103,10 +113,10 @@ impl CutForests {
         let mut exprs = vec![];
 
         for (forest, cuts) in forests.iter().zip(cuts.cuts.into_iter()) {
-            exprs.push(ParametricIntegrands {
-                integrands: forest.orientation_parametric_expr(graph)?,
+            exprs.push(ParametricIntegrands::from_final(
+                forest.orientation_parametric_expr(graph)?,
                 cuts,
-            });
+            ));
         }
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "orientation_parametric_exprs_done",
@@ -154,7 +164,11 @@ impl Forest {
         for node in nodes {
             let node_index = node.data.topo_order;
             let node_key = Self::export_node_key(node_index, &node.data);
-            let final_integrand = node.data.final_integrand(graph)?;
+            let final_integrand = node
+                .data
+                .final_integrand(graph)?
+                .map(|numerator| post_process(numerator.clone()))
+                .materialize();
             for (term_index, (&residue_index, numerator)) in final_integrand.iter().enumerate() {
                 terms.push(UVForestNodeExpression {
                     forest_index,
@@ -162,7 +176,7 @@ impl Forest {
                     node_key: node_key.clone(),
                     term_index,
                     residue_index,
-                    numerator: post_process(numerator.clone()),
+                    numerator: numerator.clone(),
                 });
             }
         }
@@ -344,8 +358,8 @@ impl Forest {
     }
 
     #[debug_instrument(graph = %graph.log_display())]
-    pub(crate) fn orientation_parametric_expr(&self, graph: &Graph) -> Result<Integrands> {
-        let mut sum: Option<Integrands> = None;
+    pub(crate) fn orientation_parametric_expr(&self, graph: &Graph) -> Result<FinalIntegrands> {
+        let mut sum: Option<FinalIntegrands> = None;
 
         for (_, n) in &self.dag.nodes {
             debug_tags!(#generation, #uv, #graph, #term;
@@ -356,11 +370,9 @@ impl Forest {
             let terms = n
                 .data
                 .final_integrand(graph)?
-                .iter()
-                .map(|(cut_index, integrand)| (*cut_index, integrand.clone().collect_color()))
-                .collect();
+                .map(|integrand| integrand.clone().collect_color());
             sum = Some(match sum {
-                Some(sum) => sum.zip_add(&terms).wrap_err_with(|| {
+                Some(sum) => sum.zip_add(terms).wrap_err_with(|| {
                     format!(
                         "while aggregating legacy UV forest term {}",
                         n.data.simple_display(graph)

@@ -312,6 +312,9 @@ fn build_base_graph_from_parsed(parsed: &ParsedGraph) -> CffGenerationGraph {
         vertex.incoming.sort();
         vertex.outgoing.sort();
     }
+    // Isolated zero-edge components contribute the multiplicative identity;
+    // retaining them would manufacture a causal surface with value zero.
+    vertices.retain(|vertex| !vertex.incoming.is_empty() || !vertex.outgoing.is_empty());
     CffGenerationGraph::new(vertices)
 }
 

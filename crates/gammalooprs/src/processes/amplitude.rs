@@ -26,6 +26,7 @@ use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol}
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
+        CutCFFIndex,
         esurface::{GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceId},
         expression::{CFFExpression, OrientationID},
     },
@@ -51,7 +52,7 @@ use crate::{
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, GS, Length, W_},
     uv::{
-        RenormalizationPart, UVgenerationSettings, UltravioletGraph,
+        Integrands, RenormalizationPart, UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, OrientationProjection, integrated::to_vakint_integrand},
         settings::VakintSettings,
     },
@@ -760,6 +761,7 @@ impl AmplitudeGraph {
             graph,
             derived_data: AmplitudeDerivedData {
                 all_mighty_integrand: Atom::Zero,
+                deferred_integrands: None,
                 cff_expression: None,
 
                 lmbs: None,
@@ -844,15 +846,14 @@ impl AmplitudeGraph {
         let analysis_numerator = self
             .graph
             .production_numerator_atom_for_full_3d_expression();
-        let cff_expression = self.graph.generate_3d_expression_for_integrand(
+        let generated = self.graph.generate_3d_expression_for_integrand(
             &contract_edges,
             &shift_rewrite,
             &options,
             Some(&analysis_numerator),
-            false,
         )?;
 
-        self.derived_data.cff_expression = Some(cff_expression);
+        self.derived_data.cff_expression = Some(generated.expression);
 
         Ok(())
     }
@@ -1260,8 +1261,21 @@ impl AmplitudeGraph {
         );
 
         let assign_started = std::time::Instant::now();
-        let integrands = exprs.into_iter().next().unwrap().integrands;
-        self.derived_data.all_mighty_integrand = integrands.iter().next().unwrap().1.clone(); // should be exactly one expression
+        let expr = exprs.into_iter().next().unwrap();
+        let mut roots = expr.integrands.iter();
+        let (index, integrand) = roots
+            .next()
+            .ok_or_else(|| eyre!("amplitude UV integrand has no root residue"))?;
+        if *index != CutCFFIndex::new_all_none() || roots.next().is_some() {
+            return Err(eyre!(
+                "amplitude UV integrand must contain exactly one root residue"
+            ));
+        }
+        self.derived_data.all_mighty_integrand = integrand.clone();
+        self.derived_data.deferred_integrands = expr
+            .integrands
+            .deferred_terms(index)
+            .map(|_| expr.integrands.clone());
         crate::debug_tags!(#generation, #profile, #graph, #summary;
             stage = "amplitude_graph_build_integrands_done",
             graph = %self.graph.name,
@@ -1389,7 +1403,7 @@ impl AmplitudeGraph {
 
             let cutset = CutSet {
                 residue_selector: ResidueSelector {
-                    lu_cut: None,
+                    lu: None,
                     left_th_cut: Some(raised_data.clone()),
                     right_th_cut: None,
                 },
@@ -1588,6 +1602,7 @@ impl AmplitudeGraph {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeDerivedData {
     pub all_mighty_integrand: Atom,
+    pub(crate) deferred_integrands: Option<Integrands>,
     pub threshold_counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
     pub raised_data: RaisedEsurfaceData,
     pub raised_esurface_ids: TiVec<EsurfaceID, RaisedEsurfaceId>,

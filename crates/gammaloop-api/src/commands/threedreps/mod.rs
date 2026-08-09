@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
 };
@@ -19,9 +20,9 @@ use serde::{Deserialize, Serialize};
 use symbolica::atom::AtomCore;
 use three_dimensional_reps::{
     generate_3d_expression, graph_info, render_expression_summary, validate_parsed_graph,
-    DisplayOptions, EnergyPowerSupport, GenerationError, GraphInfo, GraphValidation,
-    NumeratorDisplay, NumeratorSamplingScaleMode, OrientationID, RepresentationMode,
-    ThreeDExpression, ThreeDGraphSource,
+    DisplayOptions, GenerationError, GraphInfo, GraphValidation, NumeratorDisplay,
+    NumeratorSamplingScaleMode, OrientationID, RepresentationMode, ThreeDExpression,
+    ThreeDGraphSource,
 };
 
 use crate::{
@@ -189,7 +190,7 @@ struct BuildOutput {
     graph_name: String,
     graph: GraphInfo,
     validation: GraphValidation,
-    numerator_energy_support: EnergyPowerSupport,
+    energy_degree_bounds: Option<Vec<(usize, usize)>>,
     numerator_sampling_scale_mode: NumeratorSamplingScaleMode,
     expression: ThreeDExpression<OrientationID>,
 }
@@ -360,8 +361,23 @@ impl Build {
             .graph
             .cff_3d_expression_options(numerator_sampling_scale_mode)?;
         options.representation = representation;
-        let numerator_energy_support = options.numerator_energy_support.clone();
-        let expression = generate_3d_expression(selected.graph, &options)?;
+        let initial_state_cut_edges = selected
+            .graph
+            .iter_edges_of(&selected.graph.initial_state_cut)
+            .map(|(_, edge_id, _)| edge_id)
+            .collect::<BTreeSet<_>>();
+        options.preserve_internal_edges_as_four_d_denominators = selected
+            .graph
+            .iter_edges_of(&selected.graph.tree_edges)
+            .filter_map(|(pair, edge_id, edge)| {
+                (pair.is_paired()
+                    && !edge.data.is_dummy
+                    && !initial_state_cut_edges.contains(&edge_id))
+                .then_some(usize::from(edge_id))
+            })
+            .collect();
+        let energy_degree_bounds = options.energy_degree_bounds.clone();
+        let expression = generate_3d_expression(selected.graph, &options)?.expression;
         let output = BuildOutput {
             backend: "gammaloop-3Drep",
             family: "cff",
@@ -371,7 +387,7 @@ impl Build {
             graph_name: selected.graph.name.clone(),
             graph: graph_info(&parsed),
             validation: validate_parsed_graph(&parsed),
-            numerator_energy_support: numerator_energy_support.clone(),
+            energy_degree_bounds: energy_degree_bounds.clone(),
             numerator_sampling_scale_mode,
             expression,
         };
@@ -405,7 +421,7 @@ impl Build {
                 render_expression_summary(
                     &output.expression,
                     &output.graph,
-                    &numerator_energy_support,
+                    energy_degree_bounds.as_deref(),
                     NumeratorDisplay {
                         original: Some(&numerator),
                         simplified: None,

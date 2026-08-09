@@ -350,9 +350,9 @@ For local experimentation, prefer an isolated path such as `.local/scratch/<run>
 The persistence model is file-system based and intentionally human-editable for settings/run cards, mixed with binary artifacts for performance-heavy data.
 
 ### Persistence Compatibility Contract
-- State format is versioned with `state_manifest.toml` (`version = 1` currently).
-- `State::load` validates the manifest version and rejects states from newer binaries.
-- If no manifest is present, load falls back to a legacy compatibility path (`version = 0`) and runs migration checks on required layout entries before loading.
+- State format is versioned with `state_manifest.toml` (`version = 2` currently).
+- State loading and direct overwrite both require exactly the current manifest version; older states must be regenerated, and states from newer binaries require a newer GammaLoop binary.
+- A missing manifest denotes an unmanifested folder rather than a legacy state and is never loaded as saved state.
 - Process settings history now uses `settings_history.toml` consistently; loader still accepts legacy `settings_history.yaml` for backward compatibility and migration.
 
 ## Configuration Architecture

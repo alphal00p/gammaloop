@@ -212,10 +212,6 @@ pub(crate) fn determinant_i32_signum(matrix: &[Vec<i32>]) -> i32 {
     determinant_i32(matrix).signum_i32()
 }
 
-pub(crate) fn factorial(value: usize) -> Rational {
-    (1..=value).fold(Rational::one(), |acc, item| acc * rational_from_usize(item))
-}
-
 pub(crate) fn binomial(n: usize, k: usize) -> Rational {
     if k > n {
         return Rational::zero();
@@ -224,37 +220,6 @@ pub(crate) fn binomial(n: usize, k: usize) -> Rational {
     (0..k).fold(Rational::one(), |acc, item| {
         acc * rational_from_usize(n - item) / rational_from_usize(item + 1)
     })
-}
-
-pub(crate) fn rising(value: usize, order: usize) -> Rational {
-    (0..order).fold(Rational::one(), |acc, offset| {
-        acc * rational_from_usize(value + offset)
-    })
-}
-
-pub(crate) fn multi_factorial(values: &[usize]) -> Rational {
-    values
-        .iter()
-        .fold(Rational::one(), |acc, value| acc * factorial(*value))
-}
-
-pub(crate) fn multiindices_leq(bounds: &[usize]) -> Vec<Vec<usize>> {
-    if bounds.is_empty() {
-        return vec![Vec::new()];
-    }
-    let mut out = vec![Vec::new()];
-    for bound in bounds {
-        let mut next = Vec::new();
-        for prefix in &out {
-            for value in 0..=*bound {
-                let mut item = prefix.clone();
-                item.push(value);
-                next.push(item);
-            }
-        }
-        out = next;
-    }
-    out
 }
 
 fn rational_matrix_from_i64(rows: &[Vec<i64>]) -> Option<Matrix<RationalField>> {
