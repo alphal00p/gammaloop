@@ -99,6 +99,42 @@ pub struct UltraVioletProfile {
     )]
     pub uv_ray_norms: Vec<f64>,
 
+    /// Restrict profiling to these zero-based graph indices
+    #[arg(
+        long = "graph-index",
+        visible_alias = "graph-indices",
+        value_delimiter = ','
+    )]
+    #[serde(default)]
+    pub graph_indices: Vec<usize>,
+
+    /// Restrict profiling to these zero-based LMB indices in each selected graph
+    #[arg(
+        long = "lmb-index",
+        visible_alias = "lmb-indices",
+        value_delimiter = ','
+    )]
+    #[serde(default)]
+    pub lmb_indices: Vec<usize>,
+
+    /// Restrict profiling to nonzero masks whose bit i selects LMB loop coordinate i
+    #[arg(
+        long = "loop-subset-mask",
+        visible_alias = "subset-masks",
+        value_delimiter = ','
+    )]
+    #[serde(default)]
+    pub subset_masks: Vec<usize>,
+
+    /// Restrict profiling to loop subsets with these cardinalities
+    #[arg(
+        long = "subset-cardinality",
+        visible_alias = "subset-cardinalities",
+        value_delimiter = ','
+    )]
+    #[serde(default)]
+    pub subset_cardinalities: Vec<usize>,
+
     /// Output file for results (optional)
     #[arg(short = 'o', long = "output", value_hint = clap::ValueHint::FilePath)]
     pub output_file: Option<PathBuf>,
@@ -187,6 +223,10 @@ impl Default for UltraVioletProfile {
             seed: None,
             uv_ray_directions: Vec::new(),
             uv_ray_norms: Vec::new(),
+            graph_indices: Vec::new(),
+            lmb_indices: Vec::new(),
+            subset_masks: Vec::new(),
+            subset_cardinalities: Vec::new(),
             output_file: None,
         }
     }
@@ -232,6 +272,10 @@ impl Profile {
                 seed,
                 uv_ray_directions,
                 uv_ray_norms,
+                graph_indices,
+                lmb_indices,
+                subset_masks,
+                subset_cardinalities,
                 analyse_analytically,
                 per_orientation,
                 output_file,
@@ -304,6 +348,10 @@ impl Profile {
                         OrientationProfileMode::Summed
                     },
                     fixed_uv_ray,
+                    graph_indices: graph_indices.clone(),
+                    lmb_indices: lmb_indices.clone(),
+                    subset_masks: subset_masks.clone(),
+                    subset_cardinalities: subset_cardinalities.clone(),
                     ..Default::default()
                 };
                 let profile_res = {
@@ -430,5 +478,45 @@ impl Profile {
                 Ok(ProfileResult::InfraRed(profile_result))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UltraVioletProfile;
+    use clap::Parser;
+
+    #[derive(Parser)]
+    struct UVProfileArgs {
+        #[command(flatten)]
+        profile: UltraVioletProfile,
+    }
+
+    #[test]
+    fn uv_profile_parses_generic_limit_filters() {
+        let args = UVProfileArgs::try_parse_from([
+            "test",
+            "--graph-index",
+            "1,3",
+            "--lmb-index",
+            "2,5",
+            "--loop-subset-mask",
+            "1,3,15",
+            "--subset-cardinality",
+            "1,4",
+        ])
+        .unwrap()
+        .profile;
+
+        assert_eq!(args.graph_indices, [1, 3]);
+        assert_eq!(args.lmb_indices, [2, 5]);
+        assert_eq!(args.subset_masks, [1, 3, 15]);
+        assert_eq!(args.subset_cardinalities, [1, 4]);
+
+        let defaults = UVProfileArgs::try_parse_from(["test"]).unwrap().profile;
+        assert!(defaults.graph_indices.is_empty());
+        assert!(defaults.lmb_indices.is_empty());
+        assert!(defaults.subset_masks.is_empty());
+        assert!(defaults.subset_cardinalities.is_empty());
     }
 }

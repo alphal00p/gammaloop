@@ -255,6 +255,103 @@ commands = [
   "run approach_correlated_double_soft_all_threshold_off",
 ]
 
+# Reduced high-precision adjudication of every threshold-sensitive/noisy e13
+# and double-soft family. These retain the complete graph/cut/orientation sum.
+[[command_blocks]]
+name = "approach_soft_e13_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,74,-52,137,74,-52,137
+      --approach-axis 0,0,0,0,0,0,211,-157,193,0,0,0
+      --axis-label 'e13 soft reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL090/remediation_soft_e13_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_double_soft_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-91,64,83,-91,64,83
+      --approach-axis 0,0,0,211,-157,193,98,-86,342,0,0,0
+      --axis-label 'independent e12 e13 double soft reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL090/remediation_double_soft_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_soft_e13_common_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 74,-52,137,37,126,-109,132.392517768422,-88.261678512281,441.308392561407,132.392517768422,-88.261678512281,441.308392561407
+      --approach-axis 0,0,0,0,0,0,211,-157,193,19,-23,41
+      --axis-label 'e13 soft at E16 E17 E23 E39 reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL090/remediation_correlated_soft_e13_common_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_soft_e13_E22_E38_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 74,-52,137,140.508077763535,-93.672051842357,234.180129605891,37,126,-109,37,126,-109
+      --approach-axis 0,0,0,19,-23,41,211,-157,193,0,0,0
+      --axis-label 'e13 soft at E22 E38 reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL090/remediation_correlated_soft_e13_E22_E38_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_double_soft_all_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,132.392517768422,-88.261678512281,441.308392561407,132.392517768422,-88.261678512281,441.308392561407,132.392517768422,-88.261678512281,441.308392561407
+      --approach-axis 0,0,0,211,-157,193,98,-86,342,19,-23,41
+      --axis-label 'double soft at all active thresholds reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL090/remediation_correlated_double_soft_all_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_arb16_regressions"
+commands = [
+  "run approach_soft_e13_arb16",
+  "run approach_double_soft_arb16",
+  "run approach_correlated_soft_e13_common_arb16",
+  "run approach_correlated_soft_e13_E22_E38_arb16",
+  "run approach_correlated_double_soft_all_arb16",
+]
+
+# q12=K1-K3, q13=K2-K3, their union, and the overall limit correspond to
+# exact masks 10, 12, 14, and 15 in the generation basis (2,4,6,11).
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "remediation_uv_random_masks10_12_14_15"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10
+      --per-orientation --seed 9020260810
+      --graph-index 0 --lmb-index 0
+      --loop-subset-mask 10,12,14,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL090/uv_profiles/remediation_random_g0_lmb0_masks10_12_14_15_n5_exp6_10_seed9020260810""",
+]
+
 [[command_blocks]]
 name = "all_approaches"
 commands = [

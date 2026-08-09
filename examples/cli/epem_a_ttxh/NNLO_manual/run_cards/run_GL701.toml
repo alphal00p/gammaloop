@@ -69,6 +69,25 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+# In LMB 0=(2,4,7,9), K2 and K3 span every physical massless soft
+# constraint. Profile each coordinate, their joint sector, and the overall UV
+# limit on an independent seeded-random ray.
+[[command_blocks]]
+name = "uv_profile_final_random_g0_lmb0_masks4_8_12_15_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 70120260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 4,8,12,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL701/uv_profiles/final_random_g0_lmb0_masks4_8_12_15_per_orientation_n5_exp6_10_seed70120260809""",
+]
+
+[[command_blocks]]
 name = "approach_soft_e9"
 commands = [
   "run runtime_approach",
@@ -228,6 +247,179 @@ commands = [
   "run approach_correlated_e9_E38",
   "run approach_correlated_e14_E38",
   "run approach_correlated_double_E38",
+]
+
+# Exact representatives cover both rank-three soft variables, the rank-six
+# intersection, and both independent massive-threshold complements. All
+# generated threshold associations are inactive, so no CT family is omitted.
+[[command_blocks]]
+name = "approach_soft_e9_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,74,-52,137,-91,64,83,0,0,0
+      --approach-axis 0,0,0,0,0,0,0,0,0,211,-157,193
+      --axis-label 'cut e9 soft exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL701/approaches/soft_e9_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_soft_e14_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,74,-52,137,-91,64,83,-91,64,83
+      --approach-axis 0,0,0,0,0,0,0,0,0,211,-157,193
+      --axis-label 'cut e14 soft exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL701/approaches/soft_e14_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_double_soft_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,74,-52,137,0,0,0,0,0,0
+      --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'cut double soft exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL701/approaches/double_soft_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_double_E37_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,37,126,360.117256131130,0,0,0,0,0,0
+      --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'double soft at E37 exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL701/approaches/correlated_double_E37_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_double_E38_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,0,0,469.117256131130,0,0,0,0,0,0
+      --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'double soft at E38 exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL701/approaches/correlated_double_E38_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e9_E35_E40_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,74,-52,137,0,0,500,0,0,0
+      --approach-axis 0,0,0,0,0,0,0,0,0,13,17,19
+      --axis-label 'e9 at E35 E40 exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL701/approaches/correlated_e9_E35_E40_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e14_E22_E29_E35_E40_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,74,-52,137,0,0,500,0,0,500
+      --approach-axis 0,0,0,0,0,0,0,0,0,13,17,19
+      --axis-label 'e14 at E22 E29 E35 E40 exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL701/approaches/correlated_e14_E22_E29_E35_E40_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e9_E37_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,37,126,111.071,0,0,440.142,0,0,0
+      --approach-axis 0,0,0,0,0,0,0,0,0,13,17,19
+      --axis-label 'e9 at E37 exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL701/approaches/correlated_e9_E37_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e14_E37_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,37,126,111.071,0,0,440.142,0,0,440.142
+      --approach-axis 0,0,0,0,0,0,0,0,0,13,17,19
+      --axis-label 'e14 at E37 exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL701/approaches/correlated_e14_E37_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e9_E38_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,0,0,220.071,0,0,440.142,0,0,0
+      --approach-axis 0,0,0,0,0,0,0,0,0,13,17,19
+      --axis-label 'e9 at E38 exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL701/approaches/correlated_e9_E38_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e14_E38_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,0,0,220.071,0,0,440.142,0,0,440.142
+      --approach-axis 0,0,0,0,0,0,0,0,0,13,17,19
+      --axis-label 'e14 at E38 exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL701/approaches/correlated_e14_E38_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_arb_plateaus"
+commands = [
+  "run approach_soft_e9_arb16",
+  "run approach_soft_e14_arb16",
+  "run approach_double_soft_arb16",
+  "run approach_correlated_e9_E35_E40_arb16",
+  "run approach_correlated_e14_E22_E29_E35_E40_arb16",
+  "run approach_correlated_e9_E37_arb16",
+  "run approach_correlated_e14_E37_arb16",
+  "run approach_correlated_double_E37_arb16",
+  "run approach_correlated_e9_E38_arb16",
+  "run approach_correlated_e14_E38_arb16",
+  "run approach_correlated_double_E38_arb16",
+]
+
+[[command_blocks]]
+name = "remediation_arb_correlated_singles"
+commands = [
+  "run approach_correlated_e9_E35_E40_arb16",
+  "run approach_correlated_e14_E22_E29_E35_E40_arb16",
+  "run approach_correlated_e9_E37_arb16",
+  "run approach_correlated_e14_E37_arb16",
+  "run approach_correlated_e9_E38_arb16",
+  "run approach_correlated_e14_E38_arb16",
 ]
 
 [[command_blocks]]

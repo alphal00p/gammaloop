@@ -251,6 +251,103 @@ commands = [
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL168/approach_correlated_soft_e14_E19_E32_threshold_off.json""",
 ]
 
+# Reduced Arb adjudicators at the exact existing nondegenerate geometries for
+# every f64-inconclusive double-soft or correlated family.
+[[command_blocks]]
+name = "remediation_double_soft_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,-91,64,83,-91,64,83
+      --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'independent e13 e14 double soft Arb adjudicator' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL168/remediation_double_soft_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_correlated_soft_e13_E6_E32_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,0,0,395.40507859734,0,0,0,0,0,395.40507859734
+      --approach-axis 0,0,0,0,0,0,0,0,47,13,17,-11
+      --axis-label 'e13 soft E6 E32 E41 Arb adjudicator' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL168/remediation_correlated_soft_e13_E6_E32_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_correlated_soft_e13_E2_E36_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,0,0,469.11725613113,130,-90,70,0,0,469.11725613113
+      --approach-axis 0,0,0,0,0,0,0,0,0,0,0,47
+      --axis-label 'e13 soft E2 E36 Arb adjudicator' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL168/remediation_correlated_soft_e13_E2_E36_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_correlated_soft_e14_E19_E32_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,0,0,469.11725613113,0,0,469.11725613113,130,-90,70
+      --approach-axis 0,0,0,0,0,0,13,17,-11,0,0,0
+      --axis-label 'e14 soft E19 E32 Arb adjudicator' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL168/remediation_correlated_soft_e14_E19_E32_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_correlated_soft_e13_E19_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,130,-90,70,0,0,469.11725613113,130,-90,70
+      --approach-axis 0,0,0,0,0,0,0,0,47,13,17,-11
+      --axis-label 'e13 soft E19 Arb adjudicator' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL168/remediation_correlated_soft_e13_E19_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_correlated_soft_e14_E2_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,130,-90,70,130,-90,70,0,0,469.11725613113
+      --approach-axis 0,0,0,0,0,0,13,17,-11,0,0,47
+      --axis-label 'e14 soft E2 Arb adjudicator' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL168/remediation_correlated_soft_e14_E2_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_arb16_ambiguities"
+commands = [
+  "run remediation_double_soft_arb16",
+  "run remediation_correlated_soft_e13_E6_E32_arb16",
+  "run remediation_correlated_soft_e13_E2_E36_arb16",
+  "run remediation_correlated_soft_e14_E19_E32_arb16",
+  "run remediation_correlated_soft_e13_E19_arb16",
+  "run remediation_correlated_soft_e14_E2_arb16",
+]
+
 [[command_blocks]]
 name = "inspect_max_weights"
 commands = [
@@ -307,6 +404,36 @@ commands = [
       --show-max-weight-info --show-top-discrete-grid
       --show-discrete-contributions-sum --write-results-for-each-iteration
       --restart""",
+]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+# Final LMB 0=(e2,e4,e6,e9): mask 10 spans q13=K3-K1, mask 6 spans
+# q14=K1-K2, mask 14 is their joint sector, and mask 15 is overall.
+[[command_blocks]]
+name = "remediation_uv_random_masks6_10_14_15"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 16820260810
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 6 --subset-cardinality 2
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL168/trials/remediation/uv_random_g0_lmb0_mask6_n5_exp6_10_seed16820260810""",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 16820260811
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 10 --subset-cardinality 2
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL168/trials/remediation/uv_random_g0_lmb0_mask10_n5_exp6_10_seed16820260811""",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 16820260812
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 14 --subset-cardinality 3
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL168/trials/remediation/uv_random_g0_lmb0_mask14_n5_exp6_10_seed16820260812""",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 16820260813
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 15 --subset-cardinality 4
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL168/trials/remediation/uv_random_g0_lmb0_mask15_n5_exp6_10_seed16820260813""",
 ]
 
 [default_runtime_settings.general]

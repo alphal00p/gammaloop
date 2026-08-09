@@ -51,6 +51,12 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "display_lmb"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
 name = "runtime_approach"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
@@ -60,6 +66,25 @@ commands = [
 name = "runtime_threshold_off_diagnostic"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=true",
+]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+# In LMB 0=(2,4,7,9), K2 and K3 span every physical massless soft
+# constraint. Profile each coordinate, their joint sector, and the overall UV
+# limit on an independent seeded-random ray.
+[[command_blocks]]
+name = "uv_profile_final_random_g0_lmb0_masks4_8_12_15_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 19420260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 4,8,12,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL194/uv_profiles/final_random_g0_lmb0_masks4_8_12_15_per_orientation_n5_exp6_10_seed19420260809""",
 ]
 
 # q7=-q8=K2: both gluons share one independent soft momentum.
@@ -146,6 +171,83 @@ commands = [
   "run approach_soft_K3mK2_light",
   "run approach_double_soft",
   "run approach_collinear_V74",
+]
+
+# Exact repeats distinguish bounded plateaus from low-R2 fits in every
+# independent physical constraint family.
+[[command_blocks]]
+name = "approach_soft_K2_gluons_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,0,0,0,31,-47,59
+      --approach-axis 0,0,0,0,0,0,211,-157,193,0,0,0
+      --axis-label 'K2 gluons exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL194/approaches/soft_K2_gluons_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_soft_K3_light_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,31,-47,59,0,0,0
+      --approach-axis 0,0,0,0,0,0,0,0,0,211,-157,193
+      --axis-label 'K3 light pair exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL194/approaches/soft_K3_light_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_soft_K3mK2_light_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,31,-47,59,31,-47,59
+      --approach-axis 0,0,0,0,0,0,0,0,0,211,-157,193
+      --axis-label 'K3-K2 light pair exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL194/approaches/soft_K3mK2_light_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_double_soft_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,0,0,0,0,0,0
+      --approach-axis 0,0,0,0,0,0,211,-157,193,98,-86,342
+      --axis-label 'rank-six K2 K3 exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL194/approaches/double_soft_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_V74_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,0,0,120,0,0,300
+      --approach-axis 0,0,0,0,0,0,0,0,0,47,29,0
+      --axis-label 'hard V74 collinear exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL194/approaches/collinear_V74_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_arb_plateaus"
+commands = [
+  "run approach_soft_K2_gluons_arb16",
+  "run approach_soft_K3_light_arb16",
+  "run approach_soft_K3mK2_light_arb16",
+  "run approach_double_soft_arb16",
+  "run approach_collinear_V74_arb16",
 ]
 
 [[command_blocks]]

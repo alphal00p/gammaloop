@@ -3,6 +3,9 @@ digraph GL588{
     overall_factor = "NumeratorDependentGrouping(588,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))+NumeratorDependentGrouping(589,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))";
     overall_factor_evaluated = "-4";
     projector = "u(1,spenso::bis(4,hedge(1)))*ubar(1,spenso::bis(4,hedge(29)))*v(0,spenso::bis(4,hedge(28)))*vbar(0,spenso::bis(4,hedge(0)))";
+    // In the topology-valid (3,4,13,14) generation basis, q13 and q14 are
+    // independent coordinates. No tested E4 projection cured the p≈4 tail;
+    // rejected common-parent and projected candidates are preserved in states/.
 
 	0 [int_id="V_141"];
 	1 [int_id="V_141"];
@@ -22,15 +25,15 @@ digraph GL588{
 	0:4	-> 6:5	[id=3 lmb_id="0" particle="t"];
 	7:6	-> 0:7	[id=4 lmb_id="1" particle="t"];
 	3:8	-> 1:9	[id=5 particle="t"];
-	1:10	-> 5:11	[id=6 lmb_id="2" particle="t"];
-	4:12	-> 2:13	[id=7 lmb_id="3" particle="t"];
+	1:10	-> 5:11	[id=6 particle="t"];
+	4:12	-> 2:13	[id=7 particle="t"];
 	2:14	-> 7:15	[id=8 particle="t"];
 	2:16	-> 9:17	[id=9 particle="a"];
 	6:18	-> 3:19	[id=10 particle="t"];
 	3:20	-> 8:21	[id=11 particle="a"];
 	5:22	-> 4:23	[id=12 particle="t"];
-	4:24	-> 6:25	[id=13 particle="g"];
-	5:26	-> 7:27	[id=14 particle="g"];
+	4:24	-> 6:25	[id=13 lmb_id="2" particle="g"];
+	5:26	-> 7:27	[id=14 lmb_id="3" particle="g"];
 	exte15	[style=invis];
 	8:28	-> exte15	[id=15 is_cut="28" particle="e+" ];
 	exte16	[style=invis];

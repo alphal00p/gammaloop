@@ -65,6 +65,10 @@ pub struct ProfileSettings {
     pub analyse_analytically: bool,
     pub orientation_mode: OrientationProfileMode,
     pub fixed_uv_ray: Option<UVProfileFixedRay>,
+    pub graph_indices: Vec<usize>,
+    pub lmb_indices: Vec<usize>,
+    pub subset_masks: Vec<usize>,
+    pub subset_cardinalities: Vec<usize>,
 }
 
 impl Default for ProfileSettings {
@@ -78,6 +82,10 @@ impl Default for ProfileSettings {
             use_f128: false,
             orientation_mode: OrientationProfileMode::Summed,
             fixed_uv_ray: None,
+            graph_indices: Vec::new(),
+            lmb_indices: Vec::new(),
+            subset_masks: Vec::new(),
+            subset_cardinalities: Vec::new(),
         }
     }
 }
@@ -265,13 +273,33 @@ impl UVProfileable for Amplitude {
             .collect();
 
         let base_seed = profile_settings.seed;
+        if let Some(index) = profile_settings
+            .graph_indices
+            .iter()
+            .copied()
+            .find(|index| *index >= self.graphs.len())
+        {
+            return Err(eyre!(
+                "UV profile graph index {index} is out of range for {} graphs.",
+                self.graphs.len()
+            ));
+        }
+        let graph_refs = self
+            .graphs
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| {
+                profile_settings.graph_indices.is_empty()
+                    || profile_settings.graph_indices.contains(index)
+            })
+            .collect::<Vec<_>>();
         let integrand = Arc::new(Mutex::new(self.integrand.take().unwrap()));
 
         let profile_span = info_span!("Profiling graphs", indicatif.pb_show = true);
         profile_span.pb_set_style(&ProgressStyle::with_template(
             "{wide_bar} {pos}/{len} {msg}",
         )?);
-        profile_span.pb_set_length(self.graphs.len() as u64);
+        profile_span.pb_set_length(graph_refs.len() as u64);
         profile_span.pb_set_message("Profiling graphs");
         profile_span.pb_set_finish_message("all graphs profiled");
         let _profile_span_enter = profile_span.enter();
@@ -286,16 +314,14 @@ impl UVProfileable for Amplitude {
             base_seed,
         };
 
-        let per_graph = self
-            .graphs
+        let per_graph_result = graph_refs
             .par_iter()
-            .enumerate()
-            .map(|(i, g)| {
-                let res = runner.sample_graph(i, g)?;
+            .map(|(graph_index, graph)| {
+                let res = runner.sample_graph(*graph_index, graph)?;
                 profile_span.pb_inc(1);
                 Ok(res)
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>>>();
 
         drop(_profile_span_enter);
         drop(profile_span);
@@ -305,6 +331,7 @@ impl UVProfileable for Amplitude {
             .into_inner()
             .expect("integrand mutex poisoned");
         self.integrand = Some(integrand);
+        let per_graph = per_graph_result?;
 
         Ok(UVProfile {
             per_graph,
@@ -331,12 +358,32 @@ impl UVProfileable for CrossSection {
             .ok_or(eyre!("Integrand Not built yet"))?;
         let settings = integrand.get_settings().clone();
         let graph_inputs = match integrand {
-            ProcessIntegrand::CrossSection(cross_section) => cross_section
-                .data
-                .graph_terms
-                .iter()
-                .map(|graph_term| (graph_term.graph.clone(), graph_term.lmbs.clone()))
-                .collect::<Vec<_>>(),
+            ProcessIntegrand::CrossSection(cross_section) => {
+                if let Some(index) = profile_settings
+                    .graph_indices
+                    .iter()
+                    .copied()
+                    .find(|index| *index >= cross_section.data.graph_terms.len())
+                {
+                    return Err(eyre!(
+                        "UV profile graph index {index} is out of range for {} graphs.",
+                        cross_section.data.graph_terms.len()
+                    ));
+                }
+                cross_section
+                    .data
+                    .graph_terms
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| {
+                        profile_settings.graph_indices.is_empty()
+                            || profile_settings.graph_indices.contains(index)
+                    })
+                    .map(|(index, graph_term)| {
+                        (index, graph_term.graph.clone(), graph_term.lmbs.clone())
+                    })
+                    .collect::<Vec<_>>()
+            }
             ProcessIntegrand::Amplitude(_) => {
                 unreachable!("cross-section UV profiling expects cross-section integrands")
             }
@@ -372,15 +419,14 @@ impl UVProfileable for CrossSection {
             base_seed,
         };
 
-        let per_graph = graph_inputs
+        let per_graph_result = graph_inputs
             .par_iter()
-            .enumerate()
-            .map(|(i, (graph, lmbs))| {
-                let res = runner.sample_cross_section_graph(i, graph, lmbs)?;
+            .map(|(graph_index, graph, lmbs)| {
+                let res = runner.sample_cross_section_graph(*graph_index, graph, lmbs)?;
                 profile_span.pb_inc(1);
                 Ok(res)
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>>>();
 
         drop(_profile_span_enter);
         drop(profile_span);
@@ -390,6 +436,7 @@ impl UVProfileable for CrossSection {
             .into_inner()
             .expect("integrand mutex poisoned");
         self.integrand = Some(integrand);
+        let per_graph = per_graph_result?;
 
         Ok(UVProfile {
             per_graph,
@@ -410,19 +457,25 @@ impl UVProfile {
         let graphs = self
             .per_graph
             .iter()
-            .enumerate()
-            .map(|(graph_index, graph)| {
+            .map(|graph| {
+                let graph_index = graph.graph_index;
                 let lmbs: Vec<UVProfileLmbAnalysis> = graph
                     .per_lmb
                     .iter()
-                    .enumerate()
-                    .map(|(lmb_index, lmb)| {
+                    .map(|lmb| {
+                        let lmb_index = lmb.lmb_index;
                         let lmb_label = lmb_label(&lmb.lmb);
                         let subsets: Vec<UVProfileSubsetAnalysis> = lmb
                             .per_subsets
                             .iter()
                             .enumerate()
                             .map(|(subset_index, (subset, subset_result))| {
+                                let subset_mask = subset.iter().enumerate().fold(
+                                    0usize,
+                                    |mask, (index, included)| {
+                                        mask | (usize::from(included) << index)
+                                    },
+                                );
                                 let mut not_included: SubSet<LoopIndex> =
                                     SubSet::full(subset.size());
                                 not_included.subtract_with(subset);
@@ -469,6 +522,7 @@ impl UVProfile {
                                     });
                                 UVProfileSubsetAnalysis {
                                     subset_index,
+                                    subset_mask,
                                     fixed,
                                     free,
                                     initial_dod: subset_result.initial_dod,
@@ -523,7 +577,6 @@ impl UVProfile {
 pub struct UVProfileAnalysis {
     pub scales: Vec<f64>,
     pub graphs: Vec<UVProfileGraphAnalysis>,
-    #[serde(skip_serializing)]
     pub allow_vanishing_missing_fits: bool,
 }
 
@@ -543,6 +596,7 @@ pub struct UVProfileLmbAnalysis {
 #[derive(Debug, Clone, Serialize)]
 pub struct UVProfileSubsetAnalysis {
     pub subset_index: usize,
+    pub subset_mask: usize,
     pub fixed: Vec<EdgeIndex>,
     pub free: Vec<EdgeIndex>,
     pub initial_dod: i32,
@@ -616,6 +670,9 @@ pub struct UVProfileAnalyticEntry {
 pub struct UVProfileOrientationInspectEntry {
     pub orientation_label: String,
     pub analysis: Option<InspectAnalysis>,
+    pub finite_samples: usize,
+    pub positive_finite_samples: usize,
+    pub missing_fit_is_vanishing: bool,
 }
 
 #[derive(Tabled)]
@@ -1017,6 +1074,7 @@ fn orientation_signs(orientation: &OrientationData) -> (Vec<String>, Vec<String>
 }
 
 pub struct UVSamplingResult {
+    pub graph_index: usize,
     pub per_lmb: Vec<LMBResult>,
 }
 
@@ -1049,7 +1107,26 @@ impl<'a> UVProfileRunner<'a> {
         } else {
             None
         };
-        let lmb_refs: Vec<_> = lmbs.iter().enumerate().collect();
+        if let Some(index) = self
+            .profile_settings
+            .lmb_indices
+            .iter()
+            .copied()
+            .find(|index| *index >= lmbs.len())
+        {
+            return Err(eyre!(
+                "UV profile LMB index {index} is out of range for graph {graph_id}, which has {} LMBs.",
+                lmbs.len()
+            ));
+        }
+        let lmb_refs = lmbs
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| {
+                self.profile_settings.lmb_indices.is_empty()
+                    || self.profile_settings.lmb_indices.contains(index)
+            })
+            .collect::<Vec<_>>();
 
         let lmb_span = info_span!(
             "Profiling loop momentum bases",
@@ -1097,10 +1174,9 @@ impl<'a> UVProfileRunner<'a> {
                         });
 
                     for (l, odata, v) in orientation_limits {
-                        let subset = res
-                            .per_subsets
-                            .get_mut(&l)
-                            .expect("subset missing for orientation limits");
+                        let Some(subset) = res.per_subsets.get_mut(&l) else {
+                            continue;
+                        };
                         let analytic = subset.analytic.get_or_insert_with(|| AnalyticResult {
                             per_orientations: BTreeMap::new(),
                         });
@@ -1115,7 +1191,10 @@ impl<'a> UVProfileRunner<'a> {
         drop(_lmb_span_enter);
         drop(lmb_span);
 
-        Ok(UVSamplingResult { per_lmb })
+        Ok(UVSamplingResult {
+            graph_index: graph_id,
+            per_lmb,
+        })
     }
 
     fn sample_cross_section_graph(
@@ -1147,7 +1226,26 @@ impl<'a> UVProfileRunner<'a> {
         } else {
             None
         };
-        let lmb_refs: Vec<_> = lmbs.iter().enumerate().collect();
+        if let Some(index) = self
+            .profile_settings
+            .lmb_indices
+            .iter()
+            .copied()
+            .find(|index| *index >= lmbs.len())
+        {
+            return Err(eyre!(
+                "UV profile LMB index {index} is out of range for graph {graph_id}, which has {} LMBs.",
+                lmbs.len()
+            ));
+        }
+        let lmb_refs = lmbs
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| {
+                self.profile_settings.lmb_indices.is_empty()
+                    || self.profile_settings.lmb_indices.contains(index)
+            })
+            .collect::<Vec<_>>();
 
         let lmb_span = info_span!(
             "Profiling loop momentum bases",
@@ -1181,11 +1279,15 @@ impl<'a> UVProfileRunner<'a> {
         drop(_lmb_span_enter);
         drop(lmb_span);
 
-        Ok(UVSamplingResult { per_lmb })
+        Ok(UVSamplingResult {
+            graph_index: graph_id,
+            per_lmb,
+        })
     }
 }
 
 pub struct LMBResult {
+    pub(crate) lmb_index: usize,
     pub(crate) lmb: LoopMomentumBasis,
     pub(crate) per_subsets: BTreeMap<SubSet<LoopIndex>, SubSetResult>,
 }
@@ -1220,10 +1322,59 @@ impl<'a> UVProfileRunner<'a> {
                     .collect()
             };
 
-        let mut loops = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);
+        let loop_count = lmb.loop_edges.len();
+        let mask_limit = 1usize.checked_shl(loop_count as u32).ok_or_else(|| {
+            eyre!("Cannot represent UV loop-subset masks for {loop_count} loops.")
+        })?;
+        if let Some(mask) = self
+            .profile_settings
+            .subset_masks
+            .iter()
+            .copied()
+            .find(|mask| *mask == 0 || *mask >= mask_limit)
+        {
+            return Err(eyre!(
+                "UV profile subset mask {mask} is invalid for graph {graph_id} LMB {lmb_index} with {loop_count} loops; expected 1..{}.",
+                mask_limit - 1
+            ));
+        }
+        if let Some(cardinality) = self
+            .profile_settings
+            .subset_cardinalities
+            .iter()
+            .copied()
+            .find(|cardinality| *cardinality == 0 || *cardinality > loop_count)
+        {
+            return Err(eyre!(
+                "UV profile subset cardinality {cardinality} is invalid for graph {graph_id} LMB {lmb_index} with {loop_count} loops; expected 1..={loop_count}."
+            ));
+        }
+
+        let mut loops = PowersetIterator::<LoopIndex>::new(loop_count as u8);
         loops.next();
 
-        let subsets: Vec<_> = loops.collect();
+        let subsets = loops
+            .filter(|subset| {
+                let mask = subset
+                    .iter()
+                    .enumerate()
+                    .fold(0usize, |mask, (index, included)| {
+                        mask | (usize::from(included) << index)
+                    });
+                (self.profile_settings.subset_masks.is_empty()
+                    || self.profile_settings.subset_masks.contains(&mask))
+                    && (self.profile_settings.subset_cardinalities.is_empty()
+                        || self
+                            .profile_settings
+                            .subset_cardinalities
+                            .contains(&subset.n_included()))
+            })
+            .collect::<Vec<_>>();
+        if subsets.is_empty() {
+            return Err(eyre!(
+                "UV profile subset filters select no limits for graph {graph_id} LMB {lmb_index}."
+            ));
+        }
         let subset_span = info_span!(
             "Profiling subsets",
             indicatif.pb_show = true,
@@ -1270,6 +1421,7 @@ impl<'a> UVProfileRunner<'a> {
         drop(subset_span);
 
         Ok(LMBResult {
+            lmb_index,
             lmb: lmb.clone(),
             per_subsets,
         })
@@ -1481,9 +1633,13 @@ impl SubSetResult {
     }
 
     pub fn analyse(&self, scales: &[f64]) -> Analysis {
+        let inspect_fit_status = InspectFitStatus::from_results(&self.inspect.summed);
         Analysis {
             inspect_level: self.analyse_inspect(scales),
-            inspect_fit_status: InspectFitStatus::from_results(&self.inspect.summed),
+            inspect_fit_status,
+            finite_samples: inspect_fit_status.finite_samples,
+            positive_finite_samples: inspect_fit_status.positive_finite_samples,
+            missing_fit_is_vanishing: inspect_fit_status.missing_fit_is_vanishing(),
             per_orientation_inspect: (!self.inspect.per_orientation.is_empty()).then(|| {
                 self.inspect
                     .per_orientation
@@ -1744,6 +1900,9 @@ pub struct Analysis {
     inspect_level: Option<InspectAnalysis>,
     #[serde(skip_serializing)]
     inspect_fit_status: InspectFitStatus,
+    pub finite_samples: usize,
+    pub positive_finite_samples: usize,
+    pub missing_fit_is_vanishing: bool,
     #[serde(skip_serializing)]
     per_orientation_inspect: Option<Vec<OrientationInspectAnalysis>>,
     ///Is None if the analytic analysis is disabled
@@ -1759,6 +1918,9 @@ impl Analysis {
                 .map(|entry| UVProfileOrientationInspectEntry {
                     orientation_label: entry.orientation_label.clone(),
                     analysis: entry.analysis.clone(),
+                    finite_samples: entry.inspect_fit_status.finite_samples,
+                    positive_finite_samples: entry.inspect_fit_status.positive_finite_samples,
+                    missing_fit_is_vanishing: entry.inspect_fit_status.missing_fit_is_vanishing(),
                 })
                 .collect()
         })

@@ -51,9 +51,103 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "display_lmb"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "uv_profile_focused_screen"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 9 --min-scaling 6 --max-scaling 10
+      --seed 35820260809
+      --uv-ray-directions 211,-157,193,37,126,-109,98,-86,342,30,148,-534
+      --uv-ray-norms 1000,1000,1000,1000
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL358/uv_profiles/focused_summed_exp6_10_seed35820260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_GL358_original_graph0_lmb0_mask14"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10
+      --per-orientation --seed 35820260809
+      --graph-index 0 --lmb-index 0
+      --loop-subset-mask 14 --subset-cardinality 3
+      --uv-ray-directions 211,-157,193,37,126,-109,98,-86,342,30,148,-534
+      --uv-ray-norms 1000,1000,1000,1000
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL358/uv_profiles/targeted_graph0_lmb0_mask14_per_orientation_n5_exp6_10_seed35820260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_GL358_original_graph0_lmb0_masks6_15"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10
+      --per-orientation --seed 35820260809
+      --graph-index 0 --lmb-index 0
+      --loop-subset-mask 6,15 --subset-cardinality 2,4
+      --uv-ray-directions 211,-157,193,37,126,-109,98,-86,342,30,148,-534
+      --uv-ray-norms 1000,1000,1000,1000
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL358/uv_profiles/targeted_graph0_lmb0_masks6_15_per_orientation_n5_exp6_10_seed35820260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_GL358_original_graph0_lmb0_single_masks"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10
+      --per-orientation --seed 35820260809
+      --graph-index 0 --lmb-index 0
+      --loop-subset-mask 1,2,4,8 --subset-cardinality 1
+      --uv-ray-directions 211,-157,193,37,126,-109,98,-86,342,30,148,-534
+      --uv-ray-norms 1000,1000,1000,1000
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL358/uv_profiles/targeted_graph0_lmb0_single_masks_per_orientation_n5_exp6_10_seed35820260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_GL358_targeted_batches"
+commands = [
+  "run uv_profile_GL358_original_graph0_lmb0_mask14",
+  "run uv_profile_GL358_original_graph0_lmb0_masks6_15",
+  "run uv_profile_GL358_original_graph0_lmb0_single_masks",
+]
+
+# In LMB 0=(e3,e4,e5,e12), q12=K3, q13=K1-K2-K3, and q14=K2-K1.
+# These four masks therefore cover the three gluon sectors and the overall UV limit.
+[[command_blocks]]
+name = "remediation_uv_random_masks6_8_14_15"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10
+      --per-orientation --seed 35820260810
+      --graph-index 0 --lmb-index 0
+      --loop-subset-mask 6,8,14,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL358/uv_profiles/remediation_random_g0_lmb0_masks6_8_14_15_n5_exp6_10_seed35820260810""",
+]
+
+[[command_blocks]]
 name = "runtime_approach"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "runtime_approach_threshold_off"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=true",
 ]
 
 # Spatial momentum map from the raw master DOT (P0+P1 has zero spatial part):
@@ -242,6 +336,107 @@ commands = [
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL358/approaches/correlated_e13_all_arb.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e13_all_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=0,0,-220.071,0,0,-220.071,0,0,220.071,0,0,-440.142
+      --approach-axis=0,0,0,0,0,-19,0,0,0,47,29,-31
+      --axis-label 'e13 soft at all coalescing pairs reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL358/approaches/correlated_e13_all_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e12_e13_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-157,152,-181,30,-40,120
+      --approach-axis 0,0,0,0,0,0,-31,53,0,47,29,0
+      --axis-label 'hard e12 e13 collinear reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL358/approaches/collinear_e12_e13_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_soft_e13_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,105,-99,196,74,-52,137,31,-47,59
+      --approach-axis 0,0,0,211,-157,193,0,0,0,0,0,0
+      --axis-label 'e13 soft reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL358/approaches/soft_e13_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_double_soft_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-91,64,83,0,0,0
+      --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'independent e12 e14 double soft reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL358/approaches/double_soft_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e13_e14_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-61,24,203,-66,88,-264
+      --approach-axis 0,0,0,0,0,0,-31,53,0,47,29,0
+      --axis-label 'hard e13 e14 collinear reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL358/approaches/collinear_e13_e14_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_double_soft_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=-469.11725613113,0,0,0,0,-469.11725613113,0,0,-469.11725613113,0,0,0
+      --approach-axis=0,0,0,-98,86,-342,0,0,0,211,-157,193
+      --axis-label 'triple soft at all active threshold families reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL358/approaches/correlated_double_soft_arb16.json""",
+]
+
+[[command_blocks]]
+name = "arb16_regressions"
+commands = [
+  "run approach_soft_e13_arb16",
+  "run approach_double_soft_arb16",
+  "run approach_collinear_e12_e13_arb16",
+  "run approach_collinear_e13_e14_arb16",
+  "run approach_correlated_double_soft_arb16",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e13_all_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=0,0,-220.071,0,0,-220.071,0,0,220.071,0,0,-440.142
+      --approach-axis=0,0,0,0,0,-19,0,0,0,47,29,-31
+      --axis-label 'e13 soft at all coalescing pairs threshold-off diagnostic' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL358/approaches/correlated_e13_all_threshold_off.json""",
 ]
 
 [[command_blocks]]

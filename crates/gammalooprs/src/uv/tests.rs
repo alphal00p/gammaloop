@@ -13,6 +13,7 @@ use crate::graph::parse::ParseGraph;
 use crate::graph::vertex::ParseVertex;
 use crate::graph::{LMBext, LoopMomentumBasis};
 use crate::initialisation::test_initialise;
+use crate::integrands::process::OrientationProfileMode;
 use crate::model::Model;
 use crate::momentum::sample::LoopIndex;
 use crate::processes::{Amplitude, AmplitudeGraph};
@@ -261,6 +262,89 @@ fn scalars_profile() {
         "subtracted scalar UV profile failed:\n{pass_fail:#?}\n\n{}",
         scalar_profile_tables(&analysis, -0.9)
     );
+}
+
+#[test]
+fn scalars_profile_respects_graph_lmb_and_subset_filters() {
+    let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
+        generate_integrated: false,
+        softct: false,
+        add_marker: true,
+        keep_marker: false,
+        subtract_uv: true,
+        orchestrator: UVOrchestrator::LegacyDagForest,
+        ..Default::default()
+    });
+
+    let profile_settings = ProfileSettings {
+        n_points: 3,
+        graph_indices: vec![1],
+        lmb_indices: vec![0],
+        subset_masks: vec![1, 3],
+        subset_cardinalities: vec![2],
+        orientation_mode: OrientationProfileMode::PerOrientation,
+        ..scalar_uv_profile_settings()
+    };
+    let analysis = amp.profile(&model, &profile_settings).unwrap().analyse();
+
+    assert_eq!(analysis.graphs.len(), 1);
+    assert_eq!(analysis.graphs[0].graph_index, 1);
+    assert_eq!(analysis.graphs[0].lmbs.len(), 1);
+    assert_eq!(analysis.graphs[0].lmbs[0].lmb_index, 0);
+    assert_eq!(analysis.graphs[0].lmbs[0].subsets.len(), 1);
+    assert_eq!(analysis.graphs[0].lmbs[0].subsets[0].subset_mask, 3);
+    assert_eq!(analysis.graphs[0].lmbs[0].subsets[0].free.len(), 2);
+    let subset_analysis = &analysis.graphs[0].lmbs[0].subsets[0].analysis;
+    assert!(subset_analysis.finite_samples >= subset_analysis.positive_finite_samples);
+    assert_eq!(
+        subset_analysis.missing_fit_is_vanishing,
+        subset_analysis.finite_samples > subset_analysis.positive_finite_samples
+            && subset_analysis.positive_finite_samples < 2
+    );
+    let serialized = serde_json::to_value(&analysis).unwrap();
+    assert_eq!(serialized["allow_vanishing_missing_fits"], false);
+    assert!(
+        serialized["graphs"][0]["lmbs"][0]["subsets"][0]["analysis"]["finite_samples"].is_number()
+    );
+    let orientation_entries =
+        serialized["graphs"][0]["lmbs"][0]["subsets"][0]["per_orientation_inspect_entries"]
+            .as_array()
+            .unwrap();
+    assert!(!orientation_entries.is_empty());
+    assert!(orientation_entries.iter().all(|entry| {
+        entry["finite_samples"].is_number()
+            && entry["positive_finite_samples"].is_number()
+            && entry["missing_fit_is_vanishing"].is_boolean()
+    }));
+}
+
+#[test]
+fn invalid_uv_subset_filter_preserves_the_integrand() {
+    let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
+        generate_integrated: false,
+        softct: false,
+        add_marker: true,
+        keep_marker: false,
+        subtract_uv: true,
+        orchestrator: UVOrchestrator::LegacyDagForest,
+        ..Default::default()
+    });
+    let invalid = ProfileSettings {
+        n_points: 3,
+        graph_indices: vec![1],
+        lmb_indices: vec![0],
+        subset_masks: vec![0],
+        ..scalar_uv_profile_settings()
+    };
+
+    let error = amp.profile(&model, &invalid).err().unwrap().to_string();
+    assert!(error.contains("subset mask 0 is invalid"));
+
+    let valid = ProfileSettings {
+        subset_masks: vec![3],
+        ..invalid
+    };
+    assert!(amp.profile(&model, &valid).is_ok());
 }
 
 #[test]

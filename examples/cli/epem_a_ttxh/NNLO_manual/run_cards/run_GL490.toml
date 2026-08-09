@@ -51,9 +51,21 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "display_lmb"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
 name = "runtime_approach"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "runtime_approach_threshold_off"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=true",
 ]
 
 # Spatial momentum map from the raw master DOT (P0+P1 has zero spatial part):
@@ -82,6 +94,34 @@ commands = [
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/soft_e13.json""",
+]
+
+# Causal remediation controls use the exact same point, axis, signed sampling,
+# cuts, and unrestricted orientation sum as approach_soft_e13.
+[[command_blocks]]
+name = "approach_soft_e13_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,74,-52,137,0,0,0
+      --approach-axis 0,0,0,0,0,0,0,0,0,211,-157,193
+      --axis-label 'e13 soft identical threshold-off control' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/remediation_soft_e13_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "approach_soft_e13_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,74,-52,137,0,0,0
+      --approach-axis 0,0,0,0,0,0,0,0,0,211,-157,193
+      --axis-label 'e13 soft unrestricted Arb adjudicator' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/remediation_soft_e13_arb.json""",
 ]
 
 [[command_blocks]]
@@ -162,6 +202,22 @@ commands = [
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/correlated_e12_651.json""",
 ]
 
+# The at-rest construction above is retained for provenance. This generic
+# nonzero replacement removes its radial-root degeneracy while imposing the
+# same q12=0 and E6=E51=0 constraints.
+[[command_blocks]]
+name = "approach_correlated_e12_651_generic"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=37,126,-109,80,-60,40,80,-60,40,150.93405375788296,-106.0617675055394,279.4319643895941
+      --approach-axis=0,0,0,0,0,0,13,17,-11,0,0,47
+      --axis-label 'generic e12 soft at coalescing E6/E51' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/remediation_correlated_e12_651_generic.json""",
+]
+
 [[command_blocks]]
 name = "approach_correlated_e13_all"
 commands = [
@@ -201,6 +257,167 @@ commands = [
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/correlated_double_soft.json""",
 ]
 
+# Arb adjudicators for the f64-inconclusive required paths. Each preserves the
+# exact corresponding midpoint, axis, cuts, and unrestricted orientation sum.
+[[command_blocks]]
+name = "approach_soft_e12_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,-91,64,83,31,-47,59
+      --approach-axis 0,0,0,0,0,0,211,-157,193,0,0,0
+      --axis-label 'e12 soft unrestricted Arb adjudicator' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/remediation_soft_e12_arb.json""",
+]
+
+[[command_blocks]]
+name = "approach_soft_e14_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 37,126,-109,105,-99,196,74,-52,137,31,-47,59
+      --approach-axis 0,0,0,211,-157,193,0,0,0,0,0,0
+      --axis-label 'e14 soft unrestricted Arb adjudicator' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/remediation_soft_e14_arb.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e12_651_generic_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=37,126,-109,80,-60,40,80,-60,40,150.93405375788296,-106.0617675055394,279.4319643895941
+      --approach-axis=0,0,0,0,0,0,13,17,-11,0,0,47
+      --axis-label 'e12 soft at E6/E51 unrestricted Arb' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/remediation_correlated_e12_651_generic_arb.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e13_all_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=37,126,-109,0,0,-220.071,0,0,220.071,0,0,0
+      --approach-axis=0,0,0,0,0,19,0,0,0,47,29,-31
+      --axis-label 'e13 soft at both pairs unrestricted Arb' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/remediation_correlated_e13_all_arb.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e14_4553_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=37,126,-109,214.32870479079577,-82.43827305439436,280.03854243533596,100,70,-50,114.32870479079577,-152.43827305439436,330.03854243533596
+      --approach-axis=0,0,0,13,17,-11,0,0,0,0,0,47
+      --axis-label 'e14 soft at E45/E53 unrestricted Arb' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/remediation_correlated_e14_4553_arb.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e12_e13_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,-61,24,203,30,-40,120
+      --approach-axis 0,0,0,0,0,0,-31,53,0,47,29,0
+      --axis-label 'hard e12 e13 collinear unrestricted Arb' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/remediation_collinear_e12_e13_arb.json""",
+]
+
+[[command_blocks]]
+name = "gl490_remaining_arb_adjudicators"
+commands = [
+  "run approach_soft_e12_arb",
+  "run approach_soft_e14_arb",
+  "run approach_correlated_e12_651_generic_arb",
+  "run approach_correlated_e13_all_arb",
+  "run approach_correlated_e14_4553_arb",
+  "run approach_collinear_e12_e13_arb",
+]
+
+# IR-away crossings of every active surface. At each midpoint all q12, q13,
+# and q14 norms are nonzero; the listed axis moves the named eta linearly.
+[[command_blocks]]
+name = "approach_threshold_only_E6"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 37,126,-109,80,-60,40,-70,90,55,116.60645243097255,-81.93966927581855,215.8795132843681
+      --approach-axis 0,0,0,0,0,0,0,0,0,47,29,-31
+      --axis-label 'IR-away threshold-only E6' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/remediation_threshold_only_E6.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E51"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 37,126,-109,80,-60,40,-70,90,55,181.3943584184435,-127.466305915663,335.82469058549674
+      --approach-axis 0,0,0,0,0,0,0,0,0,47,29,-31
+      --axis-label 'IR-away threshold-only E51' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/remediation_threshold_only_E51.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E45"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 37,126,-109,80,-60,40,-225.72436277226456,158.75120019148275,205.88046274832922,74,-52,137
+      --approach-axis 0,0,0,0,0,0,13,17,-11,0,0,0
+      --axis-label 'IR-away threshold-only E45' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/remediation_threshold_only_E45.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E53"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point 37,126,-109,80,-60,40,-70,90,55,137.9504798673117,-96.93817504189471,255.39480732191493
+      --approach-axis 0,0,0,0,0,0,0,0,0,47,29,-31
+      --axis-label 'IR-away threshold-only E53' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/approaches/remediation_threshold_only_E53.json""",
+]
+
+[[command_blocks]]
+name = "threshold_only_approaches"
+commands = [
+  "run approach_threshold_only_E6",
+  "run approach_threshold_only_E51",
+  "run approach_threshold_only_E45",
+  "run approach_threshold_only_E53",
+]
+
+[[command_blocks]]
+name = "gl490_generic_e12_and_threshold_only"
+commands = [
+  "run approach_correlated_e12_651_generic",
+  "run threshold_only_approaches",
+]
+
 [[command_blocks]]
 name = "all_approaches"
 commands = [
@@ -215,6 +432,203 @@ commands = [
   "run approach_correlated_e13_all",
   "run approach_correlated_e14_4553",
   "run approach_correlated_double_soft",
+]
+
+# Final remediation keeps every massive momentum generic.  The correlated
+# points isolate q12/E6-E51, q13/all four active surfaces, and q14/E45-E53;
+# the collinear points keep all active threshold surfaces away from zero.
+[[command_blocks]]
+name = "remediation_final_correlated_collinear_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,80,-60,40,80,-60,40,150.93405375788296,-106.0617675055394,279.4319643895941
+      --approach-axis=0,0,0,0,0,0,13,17,-11,0,0,47
+      --axis-label 'generic q12 soft E6-E51 bridge Arb' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/trials/remediation/correlated_q12_E6_E51_arb.json""",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-413.83565972137444,-80.96662393516857,-12.315871389057861,-379.01086802337534,-157.77435577777703,35.821244485992736,0,0,0
+      --approach-axis=0,0,0,211,-157,193,0,0,0,47,29,-31
+      --axis-label 'generic q13 soft all-active bridge Arb' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/trials/remediation/correlated_q13_all_arb.json""",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-413.83565972137444,-80.96662393516857,-12.315871389057861,-379.01086802337534,-157.77435577777703,35.821244485992736,-34.82479169799910,76.80773184260846,-48.137115875050597
+      --approach-axis=0,0,0,211,-157,193,0,0,0,0,0,0
+      --axis-label 'generic q14 soft E45-E53 bridge Arb' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/trials/remediation/correlated_q14_E45_E53_arb.json""",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-61,24,203,36,-48,144
+      --approach-axis=0,0,0,0,0,0,40,30,0,0,0,0
+      --axis-label 'nondegenerate process-valid q12-q13 hard-collinear Arb' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/trials/remediation/collinear_q12_q13_arb.json""",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-61,24,203,-66,88,-264
+      --approach-axis=0,0,0,0,0,0,40,30,0,0,0,0
+      --axis-label 'nondegenerate diagnostic q12-q14 hard-collinear Arb' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/trials/remediation/collinear_q12_q14_arb.json""",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-157,152,-181,30,-40,120
+      --approach-axis=0,0,0,0,0,0,0,0,0,40,30,0
+      --axis-label 'nondegenerate diagnostic q13-q14 hard-collinear Arb' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/trials/remediation/collinear_q13_q14_arb.json""",
+]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+# Summed-orientation screening uses the same fixed ray and still enumerates all
+# 15 nonempty loop subsets; it is the required first UV gate before the more
+# expensive 232-orientation decomposition below.
+[[command_blocks]]
+name = "uv_profile_fixed_screen"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 17 --min-scaling 8 --max-scaling 12
+      --seed 49020260809
+      --uv-ray-directions 37,126,-109,-91,64,83,74,-52,137,211,-157,193
+      --uv-ray-norms 1000,1000,1000,1000
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/uv_profiles/fixed_screen_exp8_12_seed49020260809""",
+]
+
+# Focused per-orientation UV adjudication in generated LMB 0 = (4,7,11,13).
+# Mask 6 scales the rejected genuine-two-loop [7,11] candidate, mask 8
+# scales the q13=K3 defect coordinate, and mask 14 checks their overlap.
+[[command_blocks]]
+name = "uv_profile_gl490_focus_lmb0_masks6_8_14_f64"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 17 --min-scaling 8 --max-scaling 12 --per-orientation
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 6,8,14
+      --seed 49020260809
+      --uv-ray-directions 37,126,-109,-91,64,83,74,-52,137,211,-157,193
+      --uv-ray-norms 1000,1000,1000,1000
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/uv_profiles/focused_per_orientation_lmb0_masks6_8_14_f64_exp8_12_seed49020260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_gl490_focus_lmb0_masks6_8_14_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 17 --min-scaling 8 --max-scaling 12 --per-orientation --use_f128
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 6,8,14
+      --seed 49020260809
+      --uv-ray-directions 37,126,-109,-91,64,83,74,-52,137,211,-157,193
+      --uv-ray-norms 1000,1000,1000,1000
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/uv_profiles/focused_per_orientation_lmb0_masks6_8_14_f128_exp8_12_seed49020260809""",
+]
+
+# Timing on the first campaign selector profiles motivates independent five-
+# point batches. Their completed JSON union covers the same three masks while
+# preserving partial evidence if a later batch reaches the lease boundary.
+[[command_blocks]]
+name = "uv_profile_gl490_focus_lmb0_mask6_f64_n5"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 8 --max-scaling 12 --per-orientation
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 6
+      --seed 49020260809
+      --uv-ray-directions 37,126,-109,-91,64,83,74,-52,137,211,-157,193
+      --uv-ray-norms 1000,1000,1000,1000
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/uv_profiles/focused_per_orientation_lmb0_mask6_f64_n5_exp8_12_seed49020260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_gl490_focus_lmb0_mask8_f64_n5"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 8 --max-scaling 12 --per-orientation
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 8
+      --seed 49020260809
+      --uv-ray-directions 37,126,-109,-91,64,83,74,-52,137,211,-157,193
+      --uv-ray-norms 1000,1000,1000,1000
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/uv_profiles/focused_per_orientation_lmb0_mask8_f64_n5_exp8_12_seed49020260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_gl490_focus_lmb0_mask14_f64_n5"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 8 --max-scaling 12 --per-orientation
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 14
+      --seed 49020260809
+      --uv-ray-directions 37,126,-109,-91,64,83,74,-52,137,211,-157,193
+      --uv-ray-norms 1000,1000,1000,1000
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/uv_profiles/focused_per_orientation_lmb0_mask14_f64_n5_exp8_12_seed49020260809""",
+]
+
+# Random rays replace the inconclusive fixed-ray masks.  Mask 14 is exactly
+# the q13-dependent (e7,e11,e13) sector of LMB 0; mask 15 is the full basis.
+[[command_blocks]]
+name = "remediation_uv_random_masks14_15"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 49020260810
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 14 --subset-cardinality 3
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/trials/remediation/uv_random_g0_lmb0_mask14_n5_exp6_10_seed49020260810""",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 49020260811
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 15 --subset-cardinality 4
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/trials/remediation/uv_random_g0_lmb0_mask15_n5_exp6_10_seed49020260811""",
+]
+
+# This legacy exhaustive block predates the focused selectors above. It retains
+# all 15 nonempty subsets and all 232 visible orientations for provenance.
+[[command_blocks]]
+name = "uv_profile_fixed_final"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12 --per-orientation
+      --seed 49020260809
+      --uv-ray-directions 37,126,-109,-91,64,83,74,-52,137,211,-157,193
+      --uv-ray-norms 1000,1000,1000,1000
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/uv_profiles/fixed_final_exp8_12_seed49020260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_fixed_final_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12 --per-orientation --use_f128
+      --seed 49020260809
+      --uv-ray-directions 37,126,-109,-91,64,83,74,-52,137,211,-157,193
+      --uv-ray-norms 1000,1000,1000,1000
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/uv_profiles/fixed_final_f128_exp8_12_seed49020260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_fixed_final_low_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 6 --max-scaling 10 --per-orientation --use_f128
+      --seed 49020260809
+      --uv-ray-directions 37,126,-109,-91,64,83,74,-52,137,211,-157,193
+      --uv-ray-norms 1000,1000,1000,1000
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL490/uv_profiles/fixed_final_f128_exp6_10_seed49020260809""",
 ]
 
 [[command_blocks]]

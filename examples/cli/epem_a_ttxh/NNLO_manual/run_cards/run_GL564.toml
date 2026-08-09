@@ -1,4 +1,5 @@
 [cli_settings]
+override_state = true
 
 [cli_settings.state]
 folder = "./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL564"
@@ -39,12 +40,84 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "generate_full_display_structure"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=true",
+  "generate existing -p epem_a_tth -i NNLO",
+  "display integrand --process epem_a_tth --integrand-name NNLO --category orientation cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
 name = "display_generation"
 commands = ["display integrand --process epem_a_tth --integrand-name NNLO --category generation"]
 
 [[command_blocks]]
 name = "display_structure"
 commands = ["display integrand --process epem_a_tth --integrand-name NNLO --category orientation cuts --show-threshold-functions"]
+
+[[command_blocks]]
+name = "display_lmb"
+commands = ["display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis cuts --show-threshold-functions"]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = ["set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false"]
+
+# Broad profiles retained for reproducibility of the earlier diagnostics.  The
+# serialized final acceptance profiles are the split seeded-random blocks below.
+[[command_blocks]]
+name = "uv_profile"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 56420260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL564/uv_profiles/base_exp8_12_seed56420260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_high_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 10 --max-scaling 14 --use_f128
+      --per-orientation --seed 56420260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL564/uv_profiles/high_f128_exp10_14_seed56420260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_low_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 6 --max-scaling 10 --use_f128
+      --per-orientation --seed 56420260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL564/uv_profiles/low_f128_exp6_10_seed56420260809""",
+]
+
+# Certification uses independent seeded-random rays and serializes each
+# physically relevant subset separately.  In LMB 0=(3,4,6,7), q14=K1-K3
+# selects mask 10, while q12=-K0+K1+K2-K3 and the overall limit select mask 15.
+[[command_blocks]]
+name = "uv_profile_final_random_g0_lmb0_mask10_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 56420260810
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 10 --subset-cardinality 2
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL564/uv_profiles/final_random_g0_lmb0_mask10_per_orientation_n5_exp6_10_seed56420260810""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_random_g0_lmb0_mask15_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 56420260811
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 15 --subset-cardinality 4
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL564/uv_profiles/final_random_g0_lmb0_mask15_per_orientation_n5_exp6_10_seed56420260811""",
+]
 
 [[command_blocks]]
 name = "runtime_approach"

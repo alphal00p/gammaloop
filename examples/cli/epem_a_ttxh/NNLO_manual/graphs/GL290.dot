@@ -3,6 +3,42 @@ digraph GL290{
     overall_factor = "NumeratorDependentGrouping(290,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1))+NumeratorDependentGrouping(291,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1))";
     overall_factor_evaluated = "-2";
     projector = "u(1,spenso::bis(4,hedge(1)))*ubar(1,spenso::bis(4,hedge(29)))*v(0,spenso::bis(4,hedge(28)))*vbar(0,spenso::bis(4,hedge(0)))";
+    // Four cut-[2,4,9] thresholds (E32/E41/E48/E64) share the q13-soft
+    // cancellation. Keep their subtraction in the common one-loop edge.
+    threshold_counterterms = "
+schema_version = 1
+
+[[cuts]]
+edges = [2, 4, 9]
+
+  [[cuts.thresholds]]
+  edges = [5, 7]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_1l\"
+    subspace = [5]
+
+  [[cuts.thresholds]]
+  edges = [5, 11, 13]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_1l\"
+    subspace = [5]
+
+  [[cuts.thresholds]]
+  edges = [5, 9, 14]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_1l\"
+    subspace = [5]
+
+  [[cuts.thresholds]]
+  edges = [5, 9, 12, 13]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_1l\"
+    subspace = [5]
+";
 
 	0 [int_id="V_141"];
 	1 [int_id="V_141"];

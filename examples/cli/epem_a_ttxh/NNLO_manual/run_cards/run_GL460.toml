@@ -51,6 +51,12 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "display_lmbs"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis",
+]
+
+[[command_blocks]]
 name = "runtime_approach"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
@@ -263,6 +269,24 @@ commands = [
   "run approach_correlated_e14_E27_E38",
   "run approach_correlated_double_nonstar",
   "run approach_correlated_double_star",
+]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+# Seeded-random certification of the q13 (K1,K2) and q14 (K2,K3) two-loop
+# sectors.  Fixed-ray arguments are deliberately omitted.
+[[command_blocks]]
+name = "uv_profile_final_seeded_random_g0_lmb0_masks6_12_n5_exp4_8"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 4 --max-scaling 8 --per-orientation --seed 46020260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 6,12 --subset-cardinality 2
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL460/uv_profiles/final_seeded_random_g0_lmb0_masks6_12_n5_exp4_8_seed46020260809""",
 ]
 
 [[command_blocks]]

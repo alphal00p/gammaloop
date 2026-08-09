@@ -51,6 +51,12 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "display_lmb"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
 name = "runtime_approach"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
@@ -152,12 +158,28 @@ commands = [
   "run runtime_approach",
   """approach -p epem_a_tth -i NNLO
       --momentum-space --graph-id 0
-      --point 37,126,-109,0,0,395.40507859734,0,0,395.40507859734,0,0,0
+      --point 37,126,-109,37,-29,409.8001916343071,37,-29,409.8001916343071,37,-29,41
       --approach-axis 0,0,0,0,0,0,211,-157,193,19,-23,41
-      --axis-label 'e14 soft at E19, E27 away' --parameter-name lambda
+      --axis-label 'nondegenerate e14 soft at E19, E27 away' --parameter-name lambda
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL160/approach_correlated_soft_e14_E19.json""",
+]
+
+# The first structural test uses the same nondegenerate E19 root in Arb and a
+# separate candidate state. K3 is nonzero and E27 remains 632 GeV away, avoiding
+# the radial-center ambiguity of the original K3=0 path.
+[[command_blocks]]
+name = "candidate_shared9_soft_e14_E19_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,37,-29,409.8001916343071,37,-29,409.8001916343071,37,-29,41
+      --approach-axis 0,0,0,0,0,0,211,-157,193,19,-23,41
+      --axis-label 'candidate shared-[9] nondegenerate e14 soft at E19' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL160_candidate_shared9/candidate_soft_e14_E19_arb16.json""",
 ]
 
 [[command_blocks]]
@@ -174,15 +196,105 @@ commands = [
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL160/approach_correlated_double_soft_E19_E27.json""",
 ]
 
+# Reduced-Arb adjudication at the corrected nondegenerate correlated root.
+[[command_blocks]]
+name = "remediation_soft_e14_E19_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,37,-29,409.8001916343071,37,-29,409.8001916343071,37,-29,41
+      --approach-axis 0,0,0,0,0,0,211,-157,193,19,-23,41
+      --axis-label 'shared-[9] nondegenerate e14 soft at E19 Arb' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL160/remediation_soft_e14_E19_arb16.json""",
+]
+
+# IR-away threshold-only roots for both edited associations. The E27 point has
+# E19 123 GeV away; the E19 point has E27 632 GeV away. Both massive projected
+# coordinates and every gluon momentum are nonzero.
+[[command_blocks]]
+name = "remediation_threshold_only_E27_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,74,-52,137,-91,64,83,0,0,469.11725613113
+      --approach-axis 0,0,0,0,0,0,0,0,0,19,-23,41
+      --axis-label 'IR-away threshold-only E27 shared-[9] Arb' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL160/remediation_threshold_only_E27_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_threshold_only_E19_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,74,-52,137,37,-29,409.8001916343071,37,-29,41
+      --approach-axis 0,0,0,0,0,0,19,-23,41,0,0,0
+      --axis-label 'IR-away threshold-only E19 shared-[9] Arb' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL160/remediation_threshold_only_E19_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_threshold_only_on_arb16"
+commands = [
+  "run remediation_threshold_only_E27_arb16",
+  "run remediation_threshold_only_E19_arb16",
+]
+
+[[command_blocks]]
+name = "remediation_threshold_only_off_arb16"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,74,-52,137,-91,64,83,0,0,469.11725613113
+      --approach-axis 0,0,0,0,0,0,0,0,0,19,-23,41
+      --axis-label 'diagnostic IR-away threshold-only E27 off Arb' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL160/remediation_threshold_only_E27_off_arb16.json""",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,74,-52,137,37,-29,409.8001916343071,37,-29,41
+      --approach-axis 0,0,0,0,0,0,19,-23,41,0,0,0
+      --axis-label 'diagnostic IR-away threshold-only E19 off Arb' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL160/remediation_threshold_only_E19_off_arb16.json""",
+]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+# q14=K1-K2, q12=K2-K3, their union, and the overall UV limit are exact
+# masks 6, 12, 14, and 15 in generation LMB #0=(e2,e4,e6,e9).
+[[command_blocks]]
+name = "remediation_uv_random_masks6_12_14_15"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10
+      --per-orientation --seed 16020260809
+      --graph-index 0 --lmb-index 0
+      --loop-subset-mask 6,12,14,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL160/uv_profiles/remediation_random_g0_lmb0_masks6_12_14_15_n5_exp6_10_seed16020260809""",
+]
+
 [[command_blocks]]
 name = "diagnose_threshold_off_soft_e14_E19"
 commands = [
   "run runtime_approach_threshold_off",
   """approach -p epem_a_tth -i NNLO
       --momentum-space --graph-id 0
-      --point 37,126,-109,0,0,395.40507859734,0,0,395.40507859734,0,0,0
+      --point 37,126,-109,37,-29,409.8001916343071,37,-29,409.8001916343071,37,-29,41
       --approach-axis 0,0,0,0,0,0,211,-157,193,19,-23,41
-      --axis-label 'e14 soft at E19 threshold-off diagnostic' --parameter-name lambda
+      --axis-label 'nondegenerate e14 soft at E19 threshold-off diagnostic' --parameter-name lambda
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL160/approach_correlated_soft_e14_E19_threshold_off.json""",
@@ -201,14 +313,14 @@ commands = [
     '""",
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
   """inspect -p epem_a_tth -i NNLO
-      -x 0.15873329432784430 0.62872345889402714 0.21366559887903705 0.18802960704739649 0.50748321307604305 0.34528407656751681 0.16666251273908955 0.053960778627259544 0.17123935086664144 0.082572801153901268 0.68944138785465026 0.83068993615283526
+      -x 0.081083200092217589 0.25666465948190892 0.71362735683488154 0.22449491061331842 0.30491898450379135 0.69607882467290461 0.035662344146169915 0.86010040969836865 0.58854665280669871 0.042973379730364386 0.90348194604590404 0.76414106120132297
       -d 0,1""",
   """inspect -p epem_a_tth -i NNLO
-      -x 0.057008616895385167 0.99076013738649771 0.22940905237287323 0.18650426269697973 0.071246793080345039 0.38695059235008716 0.051357492288614796 0.46180164310615784 0.81887912507727179 0.066004220491050258 0.50253801969773548 0.48126221966469097
-      -d 0,1""",
+      -x 0.075296424660611150 0.062101092936430957 0.15403820411224434 0.024430255287027025 0.65579769316114778 0.21524152764692195 0.19181720384076661 0.13457794757660900 0.49556579553709201 0.086021747997698683 0.69591733841546433 0.23849609879964018
+      -d 0,0""",
   """inspect -p epem_a_tth -i NNLO
-      -x 0.10972623466025451 0.99118847071714000 0.49789102450967843 0.20333605818166042 0.54914270964716383 0.20952880263449006 0.25472342575431661 0.72875103003230579 0.038757914299823344 0.22859789775561820 0.013640363910327994 0.74117680039598088
-      -d 0,1""",
+      -x 0.18068510104708657 0.13147579912880464 0.46218044884589954 0.40888146418164600 0.12536675075300691 0.60843537427349648 0.12788122823494927 0.59660105368204375 0.23515346312977223 0.061825558485915477 0.89677603329341715 0.97605550991758983
+      -d 0,0""",
 ]
 
 [[command_blocks]]

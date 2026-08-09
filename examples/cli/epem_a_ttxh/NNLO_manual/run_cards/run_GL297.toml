@@ -1,4 +1,5 @@
 [cli_settings]
+override_state = true
 
 [cli_settings.state]
 folder = "./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL297"
@@ -36,6 +37,42 @@ commands = [
   "set global kv global.generation.uv.generate_integrated=false",
   "generate existing -p epem_a_tth -i NNLO",
   "save state -o",
+]
+
+# Candidate regeneration without UV terms. This is a structural/IR gate only;
+# it cannot become the accepted final state.
+[[command_blocks]]
+name = "probe_structure_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "display integrand --process epem_a_tth --integrand-name NNLO --category generation orientation cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
+name = "probe_core_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_soft_e12",
+  "run approach_soft_e13",
+  "run approach_double_soft",
+  "run approach_correlated_e12",
+  "run approach_correlated_e13",
+  "run approach_bridge_e12",
+  "run approach_bridge_e13",
+  "run approach_double_soft_threshold",
+]
+
+[[command_blocks]]
+name = "probe_integration_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run integrate_smoke",
 ]
 
 [[command_blocks]]
@@ -212,6 +249,93 @@ commands = [
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL297/approach_threshold_51113.json""",
 ]
 
+# E33 and E62 share this bridge equation. At the midpoint K1=0 and
+# K3=(0,0,327), hence 2*MT+2*|K3|=1000 while both gluons remain hard.
+[[command_blocks]]
+name = "approach_threshold_bridge"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,0,0,0,0,0,0,0,0,327
+      --approach-axis 47,29,-31,0,0,0,0,0,0,0,0,0
+      --axis-label 'IR-away eta(5,9,12,13) eta(3,7,12,13)' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL297/approach_threshold_bridge.json""",
+]
+
+# The full 1e-6..1e-2 paths above expose the cancellation floor. These denser
+# asymptotic windows remain far below the hard scales and test the bounded
+# double-soft plateau before f64 cancellation noise takes over.
+[[command_blocks]]
+name = "approach_double_soft_plateau"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,37,126,-109,-91,64,83
+      --approach-axis 98,-86,342,0,0,0,0,0,0,211,-157,193
+      --axis-label 'e12 e13 double soft precision-safe plateau' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-3 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL297/approach_double_soft_plateau.json""",
+]
+
+[[command_blocks]]
+name = "approach_double_soft_threshold_plateau"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,108.257828337953,-144.343771117271,433.031313351812,37,126,-109,108.257828337953,-144.343771117271,433.031313351812
+      --approach-axis 98,-86,342,47,29,-31,0,0,0,258,-128,162
+      --axis-label 'double soft with all thresholds precision-safe plateau' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-3 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL297/approach_double_soft_threshold_plateau.json""",
+]
+
+# Arb diagnostics target the cancellation-limited close tail. Sixteen points
+# per branch are sufficient for the campaign's 8/12/16 fit windows.
+[[command_blocks]]
+name = "approach_double_soft_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,37,126,-109,-91,64,83
+      --approach-axis 98,-86,342,0,0,0,0,0,0,211,-157,193
+      --axis-label 'e12 e13 double soft Arb' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL297/approach_double_soft_arb.json""",
+]
+
+[[command_blocks]]
+name = "approach_double_soft_threshold_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,108.257828337953,-144.343771117271,433.031313351812,37,126,-109,108.257828337953,-144.343771117271,433.031313351812
+      --approach-axis 98,-86,342,47,29,-31,0,0,0,258,-128,162
+      --axis-label 'double soft with all thresholds Arb' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL297/approach_double_soft_threshold_arb.json""",
+]
+
+[[command_blocks]]
+name = "threshold_only_approaches"
+commands = [
+  "run approach_threshold_39",
+  "run approach_threshold_31112",
+  "run approach_threshold_57",
+  "run approach_threshold_51113",
+  "run approach_threshold_bridge",
+]
+
 [[command_blocks]]
 name = "all_approaches"
 commands = [
@@ -227,6 +351,36 @@ commands = [
   "run approach_threshold_31112",
   "run approach_threshold_57",
   "run approach_threshold_51113",
+  "run approach_threshold_bridge",
+]
+
+[[command_blocks]]
+name = "probe_threshold_only_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run threshold_only_approaches",
+]
+
+[[command_blocks]]
+name = "probe_double_plateaux_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_double_soft_plateau",
+  "run approach_double_soft_threshold_plateau",
+]
+
+[[command_blocks]]
+name = "probe_double_arb_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_double_soft_arb",
+  "run approach_double_soft_threshold_arb",
 ]
 
 [[command_blocks]]
@@ -262,6 +416,68 @@ commands = [
       --show-max-weight-info --show-top-discrete-grid
       --show-discrete-contributions-sum --write-results-for-each-iteration
       --restart""",
+]
+
+[[command_blocks]]
+name = "integrate_smoke"
+commands = [
+  """set process -p epem_a_tth -i NNLO string '
+    [integrator]
+    n_start = 10
+    n_increase = 0
+    n_max = 10
+    seed = 1337
+
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = true
+    lmb_channels = "monte_carlo"
+    lmb_channel_weight = "ose"
+
+    [stability]
+    escalate_if_exact_zero = false
+    loop_momenta_norm_escalation_factor = -1.0
+    rotation_axis = [{ type = "z" }]
+
+    [[stability.levels]]
+    precision = "Double"
+    required_precision_for_re = 1.0e-5
+    required_precision_for_im = 1.0e-5
+    escalate_for_large_weight_threshold = 1.0e99
+    '""",
+  """integrate -p epem_a_tth -i NNLO --n-cores 3
+      --renderer tabled --batch-size 10 --show-phase both
+      --show-max-weight-info --show-top-discrete-grid
+      --show-discrete-contributions-sum --write-results-for-each-iteration""",
+]
+
+# Mandatory remediation UV audit over every nonempty LMB subset and every
+# orientation. The runner supplies RAYON_NUM_THREADS=3.
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "uv_profile_final"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 29720260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL297/uv_profiles/final_exp8_12_seed29720260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12 --use_f128
+      --per-orientation --seed 29720260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL297/uv_profiles/final_f128_exp8_12_seed29720260809""",
 ]
 
 [default_runtime_settings.general]

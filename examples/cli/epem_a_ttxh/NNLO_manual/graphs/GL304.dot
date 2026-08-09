@@ -3,6 +3,178 @@ digraph GL304{
     overall_factor = "NumeratorDependentGrouping(304,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1))+NumeratorDependentGrouping(309,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1))";
     overall_factor_evaluated = "-2";
     projector = "u(1,spenso::bis(4,hedge(1)))*ubar(1,spenso::bis(4,hedge(29)))*v(0,spenso::bis(4,hedge(28)))*vbar(0,spenso::bis(4,hedge(0)))";
+    // The generation basis (4,9,12,13) makes both gluon-soft coordinates
+    // explicit. At either soft locus, E7/E8/E47 share their massive motion
+    // along edge 4, while E32/E49/E54 share it along edge 9. Apply those
+    // minimal one-loop projections consistently to every active association.
+    threshold_counterterms = "
+schema_version = 1
+
+[[cuts]]
+edges = [2, 11, 14]
+
+  [[cuts.thresholds]]
+  edges = [5, 13, 14]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e7_e8_e47_1l\"
+    subspace = [4]
+    parent_lmb = [4, 9, 12, 13]
+
+  [[cuts.thresholds]]
+  edges = [5, 7]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e7_e8_e47_1l\"
+    subspace = [4]
+    parent_lmb = [4, 9, 12, 13]
+
+  [[cuts.thresholds]]
+  edges = [3, 11, 12]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e32_e49_e54_1l\"
+    subspace = [9]
+    parent_lmb = [4, 9, 12, 13]
+
+  [[cuts.thresholds]]
+  edges = [3, 9]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e32_e49_e54_1l\"
+    subspace = [9]
+    parent_lmb = [4, 9, 12, 13]
+
+[[cuts]]
+edges = [2, 9, 12, 14]
+
+  [[cuts.thresholds]]
+  edges = [5, 13, 14]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e7_e8_e47_1l\"
+    subspace = [4]
+    parent_lmb = [4, 9, 12, 13]
+
+  [[cuts.thresholds]]
+  edges = [5, 7]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e7_e8_e47_1l\"
+    subspace = [4]
+    parent_lmb = [4, 9, 12, 13]
+
+[[cuts]]
+edges = [2, 7, 11, 13]
+
+  [[cuts.thresholds]]
+  edges = [3, 11, 12]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e32_e49_e54_1l\"
+    subspace = [9]
+    parent_lmb = [4, 9, 12, 13]
+
+  [[cuts.thresholds]]
+  edges = [3, 9]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e32_e49_e54_1l\"
+    subspace = [9]
+    parent_lmb = [4, 9, 12, 13]
+
+[[cuts]]
+edges = [2, 6, 13, 14]
+
+  [[cuts.thresholds]]
+  edges = [3, 9]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e32_e49_e54_1l\"
+    subspace = [9]
+    parent_lmb = [4, 9, 12, 13]
+
+  [[cuts.thresholds]]
+  edges = [3, 6, 12, 13]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e32_e49_e54_1l\"
+    subspace = [9]
+    parent_lmb = [4, 9, 12, 13]
+
+[[cuts]]
+edges = [2, 6, 7]
+
+  [[cuts.thresholds]]
+  edges = [3, 11, 12]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e32_e49_e54_1l\"
+    subspace = [9]
+    parent_lmb = [4, 9, 12, 13]
+
+  [[cuts.thresholds]]
+  edges = [3, 9]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e32_e49_e54_1l\"
+    subspace = [9]
+    parent_lmb = [4, 9, 12, 13]
+
+  [[cuts.thresholds]]
+  edges = [3, 6, 12, 13]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e32_e49_e54_1l\"
+    subspace = [9]
+    parent_lmb = [4, 9, 12, 13]
+
+[[cuts]]
+edges = [2, 4, 11, 12]
+
+  [[cuts.thresholds]]
+  edges = [5, 7]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e7_e8_e47_1l\"
+    subspace = [4]
+    parent_lmb = [4, 9, 12, 13]
+
+  [[cuts.thresholds]]
+  edges = [4, 5, 12, 13]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e7_e8_e47_1l\"
+    subspace = [4]
+    parent_lmb = [4, 9, 12, 13]
+
+[[cuts]]
+edges = [2, 4, 9]
+
+  [[cuts.thresholds]]
+  edges = [5, 13, 14]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e7_e8_e47_1l\"
+    subspace = [4]
+    parent_lmb = [4, 9, 12, 13]
+
+  [[cuts.thresholds]]
+  edges = [5, 7]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e7_e8_e47_1l\"
+    subspace = [4]
+    parent_lmb = [4, 9, 12, 13]
+
+  [[cuts.thresholds]]
+  edges = [4, 5, 12, 13]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_e7_e8_e47_1l\"
+    subspace = [4]
+    parent_lmb = [4, 9, 12, 13]
+";
 
 	0 [int_id="V_141"];
 	1 [int_id="V_141"];
@@ -21,14 +193,14 @@ digraph GL304{
 	0:2	-> 1:3	[id=2 particle="H"];
 	0:4	-> 3:5	[id=3 particle="t"];
 	7:6	-> 0:7	[id=4 lmb_id="0" particle="t"];
-	1:8	-> 2:9	[id=5 lmb_id="1" particle="t"];
+	1:8	-> 2:9	[id=5 particle="t"];
 	6:10	-> 1:11	[id=6 particle="t"];
 	2:12	-> 5:13	[id=7 particle="t"];
 	2:14	-> 9:15	[id=8 particle="a"];
-	3:16	-> 4:17	[id=9 lmb_id="2" particle="t"];
+	3:16	-> 4:17	[id=9 lmb_id="1" particle="t"];
 	3:18	-> 8:19	[id=10 particle="a"];
 	4:20	-> 6:21	[id=11 particle="t"];
-	4:22	-> 7:23	[id=12 particle="g"];
+	4:22	-> 7:23	[id=12 lmb_id="2" particle="g"];
 	5:24	-> 6:25	[id=13 lmb_id="3" particle="g"];
 	5:26	-> 7:27	[id=14 particle="t"];
 	exte15	[style=invis];
