@@ -62,6 +62,18 @@ fn young_projectors_time(criterion: &mut Criterion) {
         });
     }
     canonicalization.finish();
+
+    let mut declared = criterion.benchmark_group("young_declared_canonicalization");
+    for case in &corpus.declared_canonicalization {
+        declared.bench_function(case.name, |bench| {
+            bench.iter_batched(
+                || case.expression.clone(),
+                |expression| black_box(young_common::canonicalize(black_box(expression))),
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    declared.finish();
 }
 
 criterion_group!(benches, young_projectors_time);

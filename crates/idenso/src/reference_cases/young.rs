@@ -162,6 +162,17 @@ pub struct YoungProjectorFixture {
     pub projected: Atom,
 }
 
+/// A raw tensor expression carrying a Young declaration and the matching
+/// independent explicit `C_T R_T / h_T` factor oracles built with the same
+/// heads.
+#[derive(Clone, Debug)]
+pub struct DeclaredYoungFixture {
+    pub name: &'static str,
+    pub expression: Atom,
+    pub factor_oracles: Vec<(Atom, Atom)>,
+    pub renamed: Option<Atom>,
+}
+
 impl YoungProjectorFixture {
     fn new(
         name: &'static str,
@@ -241,6 +252,156 @@ pub fn young_projector_fixtures() -> Vec<YoungProjectorFixture> {
         YoungProjectorFixture::new(name, head, shape, slot_order, &arguments)
     })
     .collect()
+}
+
+impl DeclaredYoungFixture {
+    fn tensor(head: Symbol, arguments: &[Atom]) -> Atom {
+        arguments
+            .iter()
+            .fold(FunctionBuilder::new(head), |builder, argument| {
+                builder.add_arg(argument)
+            })
+            .finish()
+    }
+
+    fn single(name: &'static str, head_name: &str, fixture: &YoungProjectorFixture) -> Self {
+        let head = spenso::tensor_symbol!(
+            (head_name),
+            young_tableau = fixture.projector.tableau().clone()
+        );
+        let expression = Self::tensor(head, &fixture.arguments);
+        Self {
+            name,
+            factor_oracles: vec![(
+                expression.clone(),
+                fixture.projector.project(head, &fixture.arguments),
+            )],
+            expression,
+            renamed: None,
+        }
+    }
+
+    fn contracted<const N: usize>(
+        name: &'static str,
+        head_names: [&str; N],
+        arguments: &[Atom],
+        renamed_arguments: &[Atom],
+        topology: [[usize; 4]; N],
+    ) -> Self {
+        let projector = YoungProjector::new(
+            YoungTableau::new(vec![2, 2], vec![0, 2, 1, 3])
+                .expect("static Riemann tableau must be valid"),
+        );
+        let heads = head_names.map(|head_name| {
+            spenso::tensor_symbol!((head_name), young_tableau = projector.tableau().clone())
+        });
+        let factors = topology
+            .iter()
+            .zip(heads)
+            .map(|(selector, head)| {
+                let factor_arguments = selector.map(|slot| arguments[slot].clone());
+                (
+                    Self::tensor(head, &factor_arguments),
+                    projector.project(head, &factor_arguments),
+                )
+            })
+            .collect::<Vec<_>>();
+        let build = |source: &[Atom]| {
+            topology
+                .iter()
+                .zip(heads)
+                .map(|(selector, head)| {
+                    let factor_arguments = selector.map(|slot| source[slot].clone());
+                    Self::tensor(head, &factor_arguments)
+                })
+                .reduce(|product, factor| product * factor)
+                .expect("a contracted Young fixture must contain a factor")
+        };
+
+        Self {
+            name,
+            expression: build(arguments),
+            factor_oracles: factors,
+            renamed: Some(build(renamed_arguments)),
+        }
+    }
+}
+
+/// Build the post-straightening benchmark corpus from raw declared tensors.
+///
+/// Each fixture retains exact explicit projector oracles for its factors with
+/// the identical declared heads. Since multiplication is homomorphic, this
+/// validates the contracted expression without expanding the full projector
+/// product during benchmark setup. Contracted cases also include an isomorphic
+/// dummy-index renaming.
+pub fn declared_young_fixtures() -> Vec<DeclaredYoungFixture> {
+    let projectors = young_projector_fixtures();
+    let hook = projectors
+        .iter()
+        .find(|fixture| fixture.projector.tableau().shape() == [2, 1])
+        .expect("the Young-projector corpus must contain the hook fixture");
+    let riemann = projectors
+        .iter()
+        .find(|fixture| fixture.projector.tableau().shape() == [2, 2])
+        .expect("the Young-projector corpus must contain the Riemann fixture");
+    let two_arguments = ContractedRiemannFixture::slots(vec![
+        spenso::s!(young_declared_two_a),
+        spenso::s!(young_declared_two_b),
+        spenso::s!(young_declared_two_c),
+        spenso::s!(young_declared_two_d),
+    ]);
+    let two_renamed = ContractedRiemannFixture::slots(vec![
+        spenso::s!(young_declared_two_i),
+        spenso::s!(young_declared_two_j),
+        spenso::s!(young_declared_two_k),
+        spenso::s!(young_declared_two_l),
+    ]);
+    let ricci_arguments = ContractedRiemannFixture::slots(vec![
+        spenso::s!(young_declared_ricci_a),
+        spenso::s!(young_declared_ricci_b),
+        spenso::s!(young_declared_ricci_c),
+        spenso::s!(young_declared_ricci_x),
+        spenso::s!(young_declared_ricci_y),
+        spenso::s!(young_declared_ricci_z),
+    ]);
+    let ricci_renamed = ContractedRiemannFixture::slots(vec![
+        spenso::s!(young_declared_ricci_i),
+        spenso::s!(young_declared_ricci_j),
+        spenso::s!(young_declared_ricci_k),
+        spenso::s!(young_declared_ricci_u),
+        spenso::s!(young_declared_ricci_v),
+        spenso::s!(young_declared_ricci_w),
+    ]);
+
+    vec![
+        DeclaredYoungFixture::single("hook_2_1", "young_benchmark_declared_hook_2_1", hook),
+        DeclaredYoungFixture::single(
+            "riemann_2_2",
+            "young_benchmark_declared_riemann_2_2",
+            riemann,
+        ),
+        DeclaredYoungFixture::contracted(
+            "riemann_two_factor_crossed_distinct_heads",
+            [
+                "young_benchmark_declared_riemann_two_left",
+                "young_benchmark_declared_riemann_two_right",
+            ],
+            &two_arguments,
+            &two_renamed,
+            ContractedRiemannFixture::TWO_FACTOR_TOPOLOGY,
+        ),
+        DeclaredYoungFixture::contracted(
+            "riemann_three_factor_ricci_cycle_distinct_heads",
+            [
+                "young_benchmark_declared_riemann_ricci_first",
+                "young_benchmark_declared_riemann_ricci_second",
+                "young_benchmark_declared_riemann_ricci_third",
+            ],
+            &ricci_arguments,
+            &ricci_renamed,
+            ContractedRiemannFixture::RICCI_CYCLE_TOPOLOGY,
+        ),
+    ]
 }
 
 /// The graph-native `[2, 2]` `C_T R_T / h_T` projector for a carrier that is

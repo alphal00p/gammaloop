@@ -344,8 +344,9 @@ impl IndexTooling for AtomView<'_> {
         let cooked = cooking
             .try_cook_indices(*self)
             .map_err(|error| CanonicalizationError::StructuredIndex(format!("{error:?}")))?;
-        let canonical = tensor::CanonicalPolicyNet::<Aind>::parse(cooked)?.canonize(new_dummy)?;
-        Ok(cooking.uncook(canonical.into_atom().as_view()))
+        let canonical =
+            tensor::CanonicalPolicyNet::<Aind>::parse(cooked)?.canonize_atom(new_dummy)?;
+        Ok(cooking.uncook(canonical.as_view()))
     }
 
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(

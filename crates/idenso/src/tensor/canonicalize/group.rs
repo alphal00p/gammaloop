@@ -14,7 +14,12 @@ use thiserror::Error;
 /// One antisymmetric site's fixed canonical port frame.
 ///
 /// `layout_path` distinguishes multiple symmetry groups owned by the same
-/// tensor header. `members` are ordered in the canonical frame.
+/// vertex. Exchangeable Young columns instead have distinct owner vertices
+/// and deliberately share a height-based path. `members` are ordered in the
+/// canonical frame, so transporting a whole column is unsigned while reversing
+/// its internal frame remains odd. Strict private-carrier numeric scalar sign
+/// payloads use a reserved path and the singleton owner frame, whose transport
+/// has no intrinsic parity.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SignSiteFrame {
     pub(crate) owner: usize,
@@ -89,6 +94,14 @@ pub(crate) enum SignedGroupError {
     SiteMaskSize { actual: usize, expected: usize },
     #[error("active-site mask is not invariant under site transport {source_site} -> {target}")]
     NonInvariantSiteMask { source_site: usize, target: usize },
+    #[error(
+        "signed decoration orbit contains at least {observed_at_least} states across {sites} active sites, exceeding limit {limit}"
+    )]
+    DecorationOrbitLimit {
+        observed_at_least: usize,
+        limit: usize,
+        sites: usize,
+    },
 }
 
 impl SignedAction {
@@ -393,25 +406,27 @@ impl SignedGroup {
     }
 
     /// Choose the lexicographically least decoration in the exact affine
-    /// orbit. The orbit is bounded by the boolean decoration domain rather
-    /// than by the (usually much larger) graph automorphism group.
+    /// orbit. The uncapped test helper is bounded by the boolean decoration
+    /// domain rather than by the usually much larger graph automorphism group.
     #[cfg(test)]
     pub(crate) fn canonical_decoration(
         &self,
         phases: &[bool],
     ) -> Result<Vec<bool>, SignedGroupError> {
         Ok(self
-            .decoration_orbit(phases, &vec![true; self.site_count])?
+            .decoration_orbit(phases, &vec![true; self.site_count], None)?
             .into_iter()
             .next()
             .unwrap())
     }
 
-    /// Enumerate the exact observable affine decoration orbit in lexicographic order.
+    /// Enumerate the exact observable affine decoration orbit in lexicographic
+    /// order, stopping before an optional state-count limit would be exceeded.
     pub(crate) fn decoration_orbit(
         &self,
         phases: &[bool],
         active_sites: &[bool],
+        limit: Option<usize>,
     ) -> Result<Vec<Vec<bool>>, SignedGroupError> {
         if phases.len() != self.site_count {
             return Err(SignedGroupError::DecorationSize {
@@ -424,6 +439,17 @@ impl SignedGroup {
                 actual: active_sites.len(),
                 expected: self.site_count,
             });
+        }
+        let sites = active_sites.iter().filter(|active| **active).count();
+        if limit == Some(0) {
+            return Err(SignedGroupError::DecorationOrbitLimit {
+                observed_at_least: 1,
+                limit: 0,
+                sites,
+            });
+        }
+        if self.site_count == 0 {
+            return Ok(vec![Vec::new()]);
         }
 
         let generators = self.symmetric_generators();
@@ -452,7 +478,17 @@ impl SignedGroup {
         while let Some(decoration) = queue.pop_front() {
             for generator in &generators {
                 let image = erase_inactive(generator.apply_site_phases(&decoration)?);
-                if seen.insert(image.clone()) {
+                if !seen.contains(&image) {
+                    if let Some(limit) = limit
+                        && seen.len() == limit
+                    {
+                        return Err(SignedGroupError::DecorationOrbitLimit {
+                            observed_at_least: limit.saturating_add(1),
+                            limit,
+                            sites,
+                        });
+                    }
+                    seen.insert(image.clone());
                     queue.push_back(image);
                 }
             }
@@ -951,6 +987,24 @@ mod tests {
     }
 
     #[test]
+    fn empty_decoration_orbit_skips_vertex_only_generators_but_keeps_the_limit() {
+        let group = SignedGroup::new(2, 0, vec![action(&[1, 0], &[])]).unwrap();
+
+        assert_eq!(
+            group.decoration_orbit(&[], &[], None).unwrap(),
+            vec![Vec::<bool>::new()]
+        );
+        assert_eq!(
+            group.decoration_orbit(&[], &[], Some(0)),
+            Err(SignedGroupError::DecorationOrbitLimit {
+                observed_at_least: 1,
+                limit: 0,
+                sites: 0,
+            })
+        );
+    }
+
+    #[test]
     fn inactive_sites_are_quotiented_from_the_affine_decoration_orbit() {
         let site_count = 12;
         let generators = (0..site_count)
@@ -966,19 +1020,57 @@ mod tests {
 
         assert_eq!(
             group
-                .decoration_orbit(&phases, &vec![false; site_count])
+                .decoration_orbit(&phases, &vec![false; site_count], None)
                 .unwrap(),
             vec![phases.clone()]
         );
 
         let mut active_sites = vec![false; site_count];
         active_sites[..2].fill(true);
-        let orbit = group.decoration_orbit(&phases, &active_sites).unwrap();
+        let orbit = group
+            .decoration_orbit(&phases, &active_sites, None)
+            .unwrap();
         assert_eq!(orbit.len(), 4);
         assert!(
             orbit
                 .iter()
                 .all(|decoration| decoration[2..].iter().all(|phase| !phase))
+        );
+    }
+
+    #[test]
+    fn decoration_orbit_limit_accepts_the_limit_and_rejects_the_next_state() {
+        let site_count = 12;
+        let generators = (0..site_count - 1)
+            .map(|left| {
+                let mut sites = (0..site_count)
+                    .map(|site| (site, false))
+                    .collect::<Vec<_>>();
+                sites.swap(left, left + 1);
+                action(&[], &sites)
+            })
+            .collect();
+        let group = SignedGroup::new(0, site_count, generators).unwrap();
+        let mut phases = vec![false; site_count];
+        phases[site_count / 2..].fill(true);
+        let active_sites = vec![true; site_count];
+        let exact = group
+            .decoration_orbit(&phases, &active_sites, None)
+            .unwrap();
+        assert_eq!(exact.len(), 924);
+        assert_eq!(
+            group
+                .decoration_orbit(&phases, &active_sites, Some(exact.len()))
+                .unwrap(),
+            exact
+        );
+        assert_eq!(
+            group.decoration_orbit(&phases, &active_sites, Some(256)),
+            Err(SignedGroupError::DecorationOrbitLimit {
+                observed_at_least: 257,
+                limit: 256,
+                sites: site_count,
+            })
         );
     }
 
@@ -992,7 +1084,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            group.decoration_orbit(&[false; 3], &[true, false, false]),
+            group.decoration_orbit(&[false; 3], &[true, false, false], None),
             Err(SignedGroupError::NonInvariantSiteMask {
                 source_site: 0,
                 target: 2,

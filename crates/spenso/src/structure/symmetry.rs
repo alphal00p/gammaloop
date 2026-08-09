@@ -21,6 +21,11 @@ pub enum YoungTableauClass {
 /// Rows are ordered from longest to shortest. `slot_order` lists the original
 /// zero-based tensor slot placed in each box, reading rows from left to right
 /// and top to bottom.
+///
+/// Version 1 metadata uses the normalized manifest Young symmetrizer
+/// `P_T = C_T R_T / h_T`: `R_T` symmetrizes within the listed rows, `C_T`
+/// antisymmetrizes within the corresponding manifest columns, and `h_T` is the
+/// product of the diagram's hook lengths.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "UncheckedYoungTableau")]
 pub struct YoungTableau {
@@ -50,6 +55,8 @@ pub enum YoungTableauError {
     },
     #[error("Young tableau rank overflows usize")]
     RankOverflow,
+    #[error("cannot allocate storage for Young tableau rank {rank}")]
+    Allocation { rank: usize },
     #[error("Young tableau has rank {expected}, but its slot order contains {actual} slots")]
     SlotCount { expected: usize, actual: usize },
     #[error(
@@ -87,7 +94,10 @@ impl YoungTableau {
             });
         }
 
-        let mut seen = vec![false; rank];
+        let mut seen = Vec::new();
+        seen.try_reserve_exact(rank)
+            .map_err(|_| YoungTableauError::Allocation { rank })?;
+        seen.resize(rank, false);
         for (position, &slot) in slot_order.iter().enumerate() {
             let Some(entry) = seen.get_mut(slot) else {
                 return Err(YoungTableauError::SlotOutOfRange {
@@ -108,7 +118,12 @@ impl YoungTableau {
     /// Construct a tableau whose boxes follow the tensor's existing slot order.
     pub fn canonical(shape: Vec<usize>) -> Result<Self, YoungTableauError> {
         let rank = Self::validate_shape(&shape)?;
-        Self::new(shape, (0..rank).collect())
+        let mut slot_order = Vec::new();
+        slot_order
+            .try_reserve_exact(rank)
+            .map_err(|_| YoungTableauError::Allocation { rank })?;
+        slot_order.extend(0..rank);
+        Self::new(shape, slot_order)
     }
 
     pub fn shape(&self) -> &[usize] {
@@ -130,6 +145,15 @@ impl YoungTableau {
             let row = &self.slot_order[start..start + length];
             start += length;
             row
+        })
+    }
+
+    /// Iterate over the manifest columns, with slots ordered from top to bottom.
+    pub fn columns(&self) -> impl ExactSizeIterator<Item = Vec<usize>> + '_ {
+        (0..self.shape[0]).map(|column| {
+            self.rows()
+                .filter_map(|row| row.get(column).copied())
+                .collect()
         })
     }
 
@@ -292,6 +316,14 @@ mod tests {
     }
 
     #[test]
+    fn reports_unallocatable_rank() {
+        assert_eq!(
+            YoungTableau::canonical(vec![usize::MAX]),
+            Err(YoungTableauError::Allocation { rank: usize::MAX })
+        );
+    }
+
+    #[test]
     fn classifies_rows_columns_and_general_shapes() {
         assert_eq!(
             YoungTableau::canonical(vec![3]).unwrap().class(),
@@ -317,6 +349,10 @@ mod tests {
         assert_eq!(
             tableau.rows().collect::<Vec<_>>(),
             vec![&[2, 0][..], &[1][..]]
+        );
+        assert_eq!(
+            tableau.columns().collect::<Vec<_>>(),
+            vec![vec![2, 1], vec![0]]
         );
     }
 

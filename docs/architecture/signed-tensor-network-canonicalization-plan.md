@@ -22,8 +22,10 @@ normalized Atom
      skip another Graphica call only when reconstruction certifies stability
      or mandatory execution returns the exact iteration input;
      otherwise repeat on the complete reparsed network
-  -> stable CanonicalPolicyNet
-  -> canonical SymbolicNet and Atom output projections
+  -> stable CanonicalPolicyNet, or a terminal Atom from the successful
+     lone-root direct Young route
+  -> canonical Atom output; the test-only policy projection reparses a
+     terminal Atom when it specifically needs the network/Atom pair
 ```
 
 The unified graph contains both the network operation tree and the flat tensor
@@ -70,6 +72,154 @@ intrinsically symmetric tensor heads so that those immediate arguments are
 exactly the tensor slots. Bare `symbolica::AtomCore::canonize_tensors` must no
 longer be part of the production path.
 
+## General Young-Tableau Straightening Extension
+
+The one-complete-graph rules in this plan describe the ordinary signed
+fixed-point path. A tensor carrying a general (neither single-row nor
+single-column) version-1 tableau first enters one explicit algebraic
+straightening extension. Version 1 denotes the manifest projector
+`P_T = C_T R_T / h_T`; rows and columns are read from `slot_order`, and argument
+pullback gives selectors `column.compose(row)`. Because tableau columns are
+already structural antisymmetric graph sites, the projector is reduced by
+signed right-column cosets.
+
+The primary extension folds the existing network and replaces each general
+Young occurrence by its exact reduced projector `P_T` while retaining the
+surrounding Product, Sum, and nonlinear operation structure. The reduction is
+occurrence-local: after substituting the occurrence's slots, equal-slot classes
+may further identify right-column cosets, but concrete index names, neighboring
+factors, and context never select a representative. The complete factored root
+is executed and parsed with the canonical policy; this applies `P_T` exactly
+without distributing an unrelated Product of projector Sums. These factored
+policies run the same tensor-symmetry and Power-grammar validation and canonical
+network parser as other canonical-policy inputs.
+
+An eligible source consisting of one general-Young tensor whose index lines are
+all distinct and external and whose head has no custom Symbolica normalization
+function (`Symbol::get_normalization_function().is_none()`) sends its declared
+projected sum directly through the ordinary whole-root graph fixed-point driver.
+More generally, once the complete root contains a general-Young tensor,
+fast-path eligibility requires every exposed LocalTensor head and every exposed
+`NetworkOp::Function` anywhere in that root to have no custom normalization
+function. This includes siblings outside the Young subtree. Numeric-content
+normalization then selects the shared deterministic section. The lone-root
+direct route bypasses the carrier because there is no relative declared-head
+order or dummy frame to align.
+
+For other sources with no Young-containing Power, no custom normalizer on any
+exposed LocalTensor head or Function in the complete root, and no repeated
+exposed occurrences of the same general-Young head, every projected occurrence
+is encoded through one deterministic private `Linear` carrier. The carrier
+keeps the original tensor head as an opaque argument and represents each
+tableau column as either one direct slot or one ordered `aind(...)` bundle. The
+fixed carrier head makes graph color comparison fall through to that opaque
+head, preserving the semantic declared-head order across decode. Strict
+versioned private metadata maps the parsed flat holes back to the original
+manifest columns. The ordinary whole-root graph fixed-point driver therefore
+sees their signed internal order and unsigned equal-height owner stars exactly
+as it does for declared Young heads, while ordinary same-sized structural
+groups remain position-bound. The carrier result is decoded back to the
+original heads, after which root `collect_num` hoists numeric content and a
+process-independent semantic order chooses the orientation of each primitive
+Add factor. This decode normalization does not apply `P_T` again and does not
+run a second graph pass. The rebuilt Atom then undergoes full tensor-symmetry
+and Power-grammar validation and canonical parsing. Its parser-proven
+`CanonicalPolicyNet` is returned with the graph-canonical state already
+established.
+
+Only the successful lone-root direct route returns a terminal Atom to
+`canonize_atom` without reparsing it. Carrier, composite, and staged routes
+return `CanonicalPolicyNet`. The policy-returning canonicalization API exists
+only for tests and reparses the direct terminal output when those tests
+specifically require the network/Atom pair.
+
+If the carrier driver reports `ConvergenceCycle`, retry without the carrier as
+the composite iteration `P_T -> G -> P_T`: `G` is one complete ordinary graph
+step, and only exact equality of consecutive post-`P_T` Atoms certifies the
+composite fixed point. Return the middle `G` result, not the projected endpoint,
+so canonicalizing the returned value reproduces the same transition. An older
+post-projector repetition remains a typed cycle and the ordinary iteration
+limit remains the deterministic bound. This fallback is distinct from the
+ordinary driver's canonical-problem-identity history.
+
+Before carrier construction, occurrence-local equality classes quotient the
+right carrier stabilizer `C ⋊ W`: `C` sorts members within antisymmetric
+columns and contributes its parity, while `W` sorts equal-height whole-column
+blocks without a sign. This reduces emitted carrier terms without changing the
+independent explicit projector oracle or granting block exchange to ordinary
+structural groups.
+
+A Young-containing Power, any exposed LocalTensor head or
+`NetworkOp::Function` anywhere in the complete Young-containing root for which
+`Symbol::get_normalization_function().is_some()`, or repeated exposed
+occurrences of the same general-Young head enter the staged path directly. The
+root-wide normalizer guard includes siblings outside the Young subtree and
+avoids passing the graph-rebuilt root back through user normalizers during
+carrier decode and canonical reparse. Repeated heads use staging because
+decoding a carrier product can otherwise select an equivalent module basis that
+changes on a fresh projector pass. A typed whole-graph vertex/edge budget or
+carrier-decoration-orbit failure also restarts from the original parser-proven
+policy and uses that staged path. Staging distributes only projector
+alternatives through Products. At an expansion
+boundary it executes and reparses every current candidate, canonicalizes that whole
+candidate graph, and combines equal or opposite candidates with exact rational
+coefficients. A candidate may be a proper subexpression of the original input.
+The staged root first retries the aggregate whole graph; if that also exceeds
+the graph budget, its root candidates are canonicalized with the request's
+caller-backed dummy allocator and aggregated without another whole-Sum Graphica
+call. Primary projector execution, staged candidate calls, Power framing, and
+composite post-projector steps are the exceptions to unqualified “no
+pre-Graphica execution” and “one execution per iteration” statements below.
+Carrier encode/decode is an additional parse-normalization boundary but neither
+executes the network nor invokes Graphica. Composite stopping uses Atom history
+rather than ordinary canonical-problem identities. Within each ordinary graph
+call, projection, reconstruction, and execution use the ordinary whole-root
+contract.
+
+The 4,096 projector-action cap applies to the unreduced
+`|R_T| |C_T|` action set. The separate 4,096 logical-term cap is checked
+incrementally at each Sum, Product, or Young-containing Power expansion before
+later projector plans or staged candidates are built. It is not a bound on
+terms that ordinary execution may internally normalize and it is not a graph
+or process-memory budget. The complete primary result and every staged
+candidate independently use the request's existing vertex/edge `GraphBudget`.
+
+For a Young-containing `Power(n)`, the straightener rebuilds `|n|` complete
+copies with disjoint temporary dummy namespaces before multiplying projector
+alternatives. A negative exponent inverts that complete positive-magnitude
+product exactly once; a projected-zero base retains its original signed
+exponent, while `Power(0)` remains one. This staged materialization is distinct
+from the ordinary unified projection's `PowerMagnitude`/`PowerCopy` encoding.
+When a non-distributable projected base is bound by an even magnitude, first
+canonicalize that complete base in an anonymous boundary frame: external line
+colors retain the full representation but erase the concrete index name,
+reconstruction assigns source-disjoint canonical names, and the base is
+oriented modulo one overall sign. Boundary vertices remain pointwise fixed for
+negative-stabilizer and zero proofs, so exchanging two anonymous lines is a
+frame choice rather than a new tensor symmetry. Erasing the overall sign is
+valid only here because both positive and negative even Powers cancel it. The
+ordinary complete candidate pass still runs after the independently named
+copies have been assembled. This anonymous-frame graph call is part of the
+staged Young exception above; odd/open Powers retain their named interface.
+
+The Young Criterion corpus compares two semantically equivalent input
+encodings, not two source revisions: `young-before` times explicit-projector
+expressions, while `young-final-safe` times raw declared general-Young tensors.
+It characterizes topology-dependent straightening cost but is not the Phase 6
+existing-feature regression gate:
+
+| case | explicit projector `young-before` median (ns) | declared path `young-final-safe` median (ns) | declared / explicit |
+|---|---:|---:|---:|
+| `hook_2_1` | 682,871 | 1,029,652.3415094339 | 1.507828x |
+| `riemann_2_2` | 1,238,051 | 1,253,850.300595238 | 1.012761x |
+| `riemann_two_factor_crossed_distinct_heads` | 17,770,358 | 10,723,039.2 | 0.603423x |
+| `riemann_three_factor_ricci_cycle_distinct_heads` | 2,776,240 | 1,172,350.184090909 | 0.422280x |
+
+The geometric mean of `explicit / declared` is `1.266134`. Because the inputs
+and entry paths differ, neither that aggregate nor an individual ratio is a
+historical regression result or an acceptance condition. Retain these numbers
+as Young diagnostics only.
+
 ## Design Invariants
 
 - A Symbolica symmetry attribute acts on all immediate arguments of its owning
@@ -104,16 +254,17 @@ longer be part of the production path.
   information.
 - Structured index identity comes from the parsed network and reversible index
   representation. Flattened symbol names must never be used as proof identity.
-- Every fixed-point iteration constructs one complete
-  expression-and-incidence graph and calls Graphica once on that whole graph.
+- Outside the general-Young extension above, every ordinary fixed-point
+  iteration constructs one complete expression-and-incidence graph and calls
+  Graphica once on that whole graph.
   Operator nodes remain explicit; no execution or local canonicalization may
   replace a subgraph with an opaque canonical key before the global call.
   The initial input must be the opaque result of the canonical parser, paired
   with the exact normalized Atom from which it was parsed. A raw
   `SymbolicNet`, including one manually assembled or parsed with different
-  boundaries, is not a canonicalization input. There is no pre-Graphica
-  execute/reparse exception and no API for asserting that an arbitrary network
-  is normalized.
+  boundaries, is not a canonicalization input. A general-Young input instead
+  follows the documented projector, carrier, composite, or staged boundary;
+  there is no API for asserting that an arbitrary network is normalized.
 - Graph colors contain semantic identity only. Tensor/store indices, hedges,
   original dummy names, and layout member positions are hidden reconstruction
   data and must not influence graph equality or canonical ordering. Visible
@@ -177,19 +328,23 @@ longer be part of the production path.
   interface; no multiway line or per-slot partner choice is allowed. Reject an
   expansion that exceeds the preflight whole-graph resource budget rather than
   hiding it.
-- Every reconstructed iteration has one complete-network execution through the
-  ordinary symbolic executor, and its normalized Atom is reparsed with the
-  canonical parse policy. Exact group proofs may additionally execute temporary
-  decorated scope fragments through that same fallible path. Zero removal,
+- Every reconstruction performed by the ordinary graph driver has one
+  complete-network execution through the ordinary symbolic executor, and its
+  normalized Atom is reparsed with the canonical parse policy. Exact group
+  proofs may additionally execute temporary decorated scope fragments through
+  that same fallible path. General-Young projector execution, carrier decode
+  normalization, and composite post-projector comparison follow the separate
+  contract above. Zero removal,
   signed term cancellation, term combination, and any other normalization that
   removes or coarsens a visible
   distinction can expose automorphisms absent from the previous graph. A
   visible execution/reparse rewrite may also establish a different required
   network normal form. Skip another whole-network Graphica iteration only when
   reconstruction produces a complete one-sided stability certificate or the
-  executed normalized Atom is exactly the iteration input. Exact equality after
-  the mandatory execution is itself a complete extensional fixed-point
-  certificate because parsing and projection are deterministic. The one-sided
+  executed normalized Atom is exactly the iteration input. On the ordinary
+  path, exact equality after the mandatory execution is itself a complete
+  extensional fixed-point certificate because parsing and projection are
+  deterministic. The one-sided
   certificate proves that canonical transport preserved visible topology,
   semantic colors, scope and Power structure, and the equality partition of
   Symbolica-visible leaves and operation children while changing only
@@ -215,6 +370,10 @@ struct CanonicalPolicyNet<Aind> {
 CanonicalPolicyNet::parse(normalized_atom, /* parser context */)
     -> Result<CanonicalPolicyNet<Aind>, CanonicalizationError>
 
+canonical_net.canonize_atom(new_dummy)
+    -> Result<Atom, CanonicalizationError>
+
+#[cfg(test)]
 canonical_net.canonize(new_dummy)
     -> Result<CanonicalPolicyNet<Aind>, CanonicalizationError>
 ```
@@ -228,12 +387,18 @@ may be exposed where required, but a projected raw network cannot be fed back
 into canonicalization. This makes parser provenance a type invariant instead
 of a runtime guess about settings that `SymbolicNet` does not record.
 
-Use one driver that retains this normalized network/Atom pair through the
-fixed point. The canonical network and Atom returned to existing facades are
-two projections of that one result, not two canonicalization modes, and neither
-projection triggers another execution. The first iteration's input-normal-form
-precondition is certified by the opaque canonical-parser result; this does not
-prejudge its post-reconstruction stability certificate. Every later input is a fresh
+The ordinary signed path uses one driver that retains this normalized
+network/Atom pair through its fixed point. General-Young straightening wraps
+that driver with the projector, direct-root exception, private carrier, decode
+normalizer, composite fallback, and staging boundaries specified above.
+Ordinary, carrier, composite, and staged routes return the resulting pair. The
+successful lone-root direct route may instead return a terminal Atom, which
+`canonize_atom` consumes directly without a redundant parse; the test-only
+policy-returning API reparses that Atom because it specifically requires a
+network/Atom pair. Neither route triggers another execution. The first ordinary
+iteration's input-normal-form precondition is certified by the opaque
+canonical-parser result; this does not prejudge its post-reconstruction
+stability certificate. Every later ordinary input is a fresh
 `CanonicalPolicyNet` built from the normalized Atom produced by the preceding
 post-reconstruction execution. Before adding this wrapper or a traversal
 helper, confirm that the existing parser, expression-tree traversal, and result
@@ -248,8 +413,10 @@ private `CanonicalPolicyNet` pair is therefore the minimum wrapper that makes
 that provenance an invariant.
 
 The wrapper owns one deterministic parse policy: fully recursive
-`ParseSettings::default()` with every Sum term enabled, together with the same
-fixed tensor-symmetry validator used at entry. Preserve every parser-supported
+`ParseSettings::default()` with every Sum term enabled, together with one fixed
+tensor-symmetry validator. Public entry, ordinary post-execution reparses, and
+internal factored Young transforms all run that validator, Power-grammar
+validation, and the canonical network parser. Preserve every parser-supported
 signed integer Power. Under the existing grammar, any scalar-valued base may
 have a negative exponent, and a self-dual tensor may have a negative even
 exponent because its complete-copy contraction is scalar before inversion;
@@ -264,9 +431,11 @@ grammar error before Graphica rather than hiding tensor ports. A parser
 configured with depth limits, opaque shorthand boundaries, or other
 noncanonical settings returns a raw `SymbolicNet` and therefore cannot construct
 this wrapper. Ordinary algebraic normalization already represented by the
-source Atom is accepted. There is no pre-Graphica whole-network execution or
-arbitrary-network round-trip case because arbitrary networks never enter the
-API.
+source Atom is accepted. There is no ordinary-path pre-Graphica whole-network
+execution or arbitrary-network round-trip case because arbitrary networks never
+enter the API. The general-Young extension's exact projector execution,
+carrier translation, composite fallback, and staging are the documented
+exceptions.
 
 Wrap `new_dummy` in a request-local memoizing allocator: each numeric position
 calls the caller's `FnMut` at most once, and every fixed-point iteration reuses
@@ -688,8 +857,8 @@ canonicalization relies on them. The normalized executed form is reparsed;
 `Power(0)` becomes one, `Power(1)` becomes its base, and negative Powers become
 ordinary Symbolica division rather than an unsupported subtree or panic.
 
-After building the complete graph, call `Graph::canonize()` exactly once for
-that whole-network iteration. The canonical order of operation nodes, tensor
+Within one ordinary graph-driver iteration, call `Graph::canonize()` exactly
+once after building the complete graph. The canonical order of operation nodes, tensor
 occurrences, ports, and line vertices is therefore chosen together. Signed
 reconstruction returns a fresh canonical network. Resolve transient parity into
 fresh leaf values, nested Atom paths, or exact-scope Neg nodes, assign
@@ -737,8 +906,9 @@ do not promise that every sign-only input is a one-call case. An unsigned input
 requiring only relabeling may still use one Graphica call. Do not run an
 unconditional second Graphica verification pass.
 
-Retain the exact canonical-problem identity after every Graphica call; a hash
-may index candidates, but full canonical graph/key equality confirms a match.
+In the ordinary driver, retain the exact canonical-problem identity after every
+Graphica call; a hash may index candidates, but full canonical graph/key
+equality confirms a match.
 If a conservative retry immediately produces the same identity as the preceding
 iteration, that Graphica call has supplied the proof the one-sided certificate
 could not: return the normalized network and Atom retained from the preceding
@@ -747,6 +917,10 @@ older non-consecutive state, determinism of canonical frames, orbit minima,
 dummy allocation, execution, and reparsing makes it a genuine cycle; return a
 typed `CanonicalizationError::ConvergenceCycle` with the first/repeated
 iterations, cycle length, and recorded retry reasons.
+
+The general-Young composite fallback instead records exact post-projector Atoms
+and returns the middle graph result as specified above; it does not reuse this
+ordinary canonical-problem-identity stopping rule.
 
 Do not claim a monotone fixed-point measure across sign recoloring, zero/Sum
 reduction, Function linearity, and Power normalization without proving one.
@@ -1161,10 +1335,11 @@ exact-scope Neg nodes, not a signed payload type. If reconstruction produced the
 complete stability certificate, return that normalized network/Atom pair.
 Otherwise reproject the complete reparsed pair for the next whole-network
 iteration, except that terminal zero or one returns immediately.
-Before another reconstruction, compare the new exact canonical problem identity
-with the seen states: consecutive equality verifies the preceding result,
-non-consecutive equality is a convergence cycle, and the iteration budget
-guards a long sequence of distinct states.
+Before another ordinary reconstruction, compare the new exact canonical problem
+identity with the seen states: consecutive equality verifies the preceding
+result, non-consecutive equality is a convergence cycle, and the iteration
+budget guards a long sequence of distinct states. The general-Young composite
+fallback uses its exact post-projector Atom history instead.
 The clone consumed by execution is disposable, so its opaque contracted leaves
 never replace the stable proof-carrying result or any Graphica input. No subsequent
 bare tensor canonicalization, second full-network execution, bespoke rendering
@@ -1299,7 +1474,13 @@ comparison.
   `AmbiguousSignScope` only for a genuine semantic-class inequivalence.
   Symbolica, not the group layer, owns coefficient arithmetic and ordinary
   Sum/Product normalization.
-- Execute and reparse every reconstructed iteration. Skip reprojection only
+- Only a strictly validated private Young carrier moves exact numeric scalar
+  signs into the signed decoration. Its affine decoration orbit is capped at
+  256 states and a typed limit restarts from the declared input through exact
+  staging. Ordinary projections retain their signed scalar colors, create no
+  scalar sign sites, and keep the decoration orbit uncapped.
+- In the ordinary graph driver, execute and reparse every reconstructed
+  iteration. Skip reprojection only
   when the complete one-sided stability certificate succeeds or execution
   returns the exact normalized iteration input; otherwise retry the reparsed
   whole network, with terminal zero/one as the remaining immediate return.
@@ -1308,6 +1489,21 @@ comparison.
   `ConvergenceCycle`, and exhaustion of the injectable deterministic iteration
   budget as `IterationLimit`, without an unconditional Graphica verification
   pass.
+- For a general Young tensor outside Power, apply the exact reduced projector
+  without distributing Products. Send an eligible lone tensor with distinct
+  external lines and no custom normalizer through the ordinary driver in
+  declared form and normalize its numeric content directly. Otherwise translate
+  projected factors through the fixed private `Linear` ordered-column carrier,
+  promote its bundles through strict private metadata, run the ordinary
+  whole-root driver, then decode and orient primitive Add factors without a
+  second projector or graph pass. On a carrier cycle, use the exact
+  post-projector composite fallback and return its middle graph result. Use
+  staging only for Young-containing Power, repeated exposed Young heads,
+  a custom normalizer on any exposed LocalTensor head or Function in the
+  complete root, or graph/decorated-orbit budget fallback. The root-wide guard
+  includes siblings outside the Young subtree and prevents carrier decode and
+  canonical reparse from passing the graph-rebuilt root back through user
+  normalizers.
 
 ### 5. Migrate integrations
 
@@ -1327,6 +1523,11 @@ comparison.
 - Benchmark graph size, fixed-point iteration count, and Graphica search on
   large color products, symmetric sums, repeated branches, and powers without
   implicit distribution.
+- Compare existing gamma and color simplification and direct canonicalization
+  against the pre-migration implementation, per case. Aggregate wins across
+  unrelated workloads may not hide broad or material small-case regressions;
+  the different-encoding Young comparison above is diagnostic, not this
+  acceptance gate.
 - Use those iteration distributions to select and document the production
   convergence budget before migrating callers; benchmark thresholds are an
   acceptance decision rather than an unspecified telemetry result.
@@ -1335,6 +1536,232 @@ comparison.
   limits before migrating callers.
 - Run the three-loop RQFT signed six-`f` comparison and the disconnected scalar
   spectacles pointwise and Monte Carlo factorization checks.
+
+#### Existing-feature performance matrices
+
+The benchmark corpus is held fixed across each baseline and candidate. When a
+suite did not exist at a historical revision, its unchanged current harness was
+copied into the temporary baseline checkout. Both sides use the same host,
+toolchain, license configuration, and serialized suite execution. The Criterion
+suites use the Rust release benchmark profile. The 517 KB UV fixture instead
+uses `dev-optim`, and its rows report the median of five warmed sequential test
+invocations. Two comparisons answer different questions:
+
+- `3f896d9c` to current jj change `mszxoluk` measures the complete migration
+  from the implementation that preceded unified signed canonicalization.
+- `bb48254c` to `mszxoluk` isolates changes after the immediate pre-Young
+  revision.
+
+The geometric means below only summarize per-case median ratios; positive
+percentages mean the current implementation is slower. Per-case results and
+semantic support decide acceptance. A faster case or favorable aggregate cannot
+waive a regressed case.
+
+The gamma timing suite covers all 11 enabled Dirac4 reference cases:
+`dirac_form_two_gamma_trace`, `dirac_form_odd_gamma_trace`,
+`dirac_form_four_gamma_trace`, `dirac_feyncalc_open_chain_chisholm_id2`,
+`dirac_feyncalc_open_chain_chisholm_id3`,
+`dirac_feyncalc_slash_sandwich_id4`,
+`dirac_feyncalc_gamma5_anticommutes_id5`,
+`dirac_feyncalc_order_anticommutator_id30`, `dirac_gamma0_square`,
+`dirac_gamma0_conjugates_gamma5`, and
+`dirac_gamma5_four_gamma_trace_is_epsilon`.
+
+The color timing suite covers all 10 enabled SU(3) reference cases:
+`color_form_one_generator_trace`, `color_form_two_generator_trace`,
+`color_form_fierz_generator_contraction`,
+`color_feyncalc_open_chain_separated_casimir_id2`,
+`color_feyncalc_structure_loop_to_adjoint_delta_id3`,
+`color_feyncalc_structure_times_open_chain_id4`,
+`color_feyncalc_delta_closes_doubled_two_generator_chain_id18`,
+`color_feyncalc_three_generator_trace_terminal_id30`,
+`color_feyncalc_repeated_trace_pair_id52`, and
+`color_form_four_generator_trace_terminal`.
+
+The direct canonicalization suite covers 11 operation and topology cases:
+`signed_k33`, `three_signed_k33_components`, `repeated_symmetric_sum`,
+`positive_power_4`, `negative_power_4`, `positive_power_24`,
+`nonlinear_function_boundary`, `factored_product_sum`, `odd_power`,
+`product_power`, and `visible_signed_cancellation`. These suites do not measure
+arbitrary color or Dirac dimension, Python/API overhead, or a standalone
+metric-only simplifier; metric contractions are exercised inside the gamma and
+color cases.
+
+Run the Criterion wall-clock suites at a baseline revision, replacing
+`MATRIX_before` with a distinct saved-baseline name such as `pre_signed_before`
+or `pre_young_before`:
+
+```text
+nix develop -c env CARGO_TARGET_DIR=/tmp/gammaloop-perf-target \
+  cargo bench -p idenso --features reference-cases \
+  --bench gamma_algebra_time -- --save-baseline MATRIX_before
+nix develop -c env CARGO_TARGET_DIR=/tmp/gammaloop-perf-target \
+  cargo bench -p idenso --features reference-cases \
+  --bench color_algebra_time -- --save-baseline MATRIX_before
+nix develop -c env CARGO_TARGET_DIR=/tmp/gammaloop-perf-target \
+  cargo bench -p idenso --features reference-cases \
+  --bench canonicalization_time -- --save-baseline MATRIX_before
+```
+
+Then run the unchanged harnesses from the candidate using the same benchmark
+output directory:
+
+```text
+nix develop -c env CARGO_TARGET_DIR=/tmp/gammaloop-perf-target \
+  cargo bench -p idenso --features reference-cases \
+  --bench gamma_algebra_time -- --baseline MATRIX_before
+nix develop -c env CARGO_TARGET_DIR=/tmp/gammaloop-perf-target \
+  cargo bench -p idenso --features reference-cases \
+  --bench color_algebra_time -- --baseline MATRIX_before
+nix develop -c env CARGO_TARGET_DIR=/tmp/gammaloop-perf-target \
+  cargo bench -p idenso --features reference-cases \
+  --bench canonicalization_time -- --baseline MATRIX_before
+```
+
+The corresponding Gungraun instruction-count controls use the same enabled
+gamma and color corpora:
+
+```text
+nix develop -c env CARGO_TARGET_DIR=/tmp/gammaloop-perf-target \
+  cargo bench -p idenso --features reference-cases --bench gamma_algebra -- \
+  --home=/tmp/gammaloop-gungraun-home --save-baseline=MATRIX_before
+nix develop -c env CARGO_TARGET_DIR=/tmp/gammaloop-perf-target \
+  cargo bench -p idenso --features reference-cases --bench color_algebra -- \
+  --home=/tmp/gammaloop-gungraun-home --save-baseline=MATRIX_before
+nix develop -c env CARGO_TARGET_DIR=/tmp/gammaloop-perf-target \
+  cargo bench -p idenso --features reference-cases --bench gamma_algebra -- \
+  --home=/tmp/gammaloop-gungraun-home --baseline=MATRIX_before
+nix develop -c env CARGO_TARGET_DIR=/tmp/gammaloop-perf-target \
+  cargo bench -p idenso --features reference-cases --bench color_algebra -- \
+  --home=/tmp/gammaloop-gungraun-home --baseline=MATRIX_before
+```
+
+Use this exact command once to compile and warm the UV test and then five times
+sequentially at each revision; record the median of the five
+`color-simplified` durations:
+
+```text
+nix develop -c env CARGO_TARGET_DIR=/tmp/gammaloop-uv-perf-target \
+  RUST_MIN_STACK=67108864 \
+  cargo test -p gammalooprs --test test_uv_color_simplify_dump \
+  --profile dev-optim loads_uv_scalar_profile_hotspot_dump_and_simplifies_color \
+  -- --ignored --exact --nocapture --test-threads=1
+```
+
+##### Immediate pre-Young comparison: `bb48254c` to `mszxoluk`
+
+| workload | measured result | interpretation |
+|---|---:|---|
+| gamma, 11 cases | about 1.90% slower geometric mean on the repeat | Broad simplifier control; it is not a direct canonicalization-only timing. |
+| color, 10 cases | 2.84% faster geometric mean on the repeat | Complete enabled corpus. |
+| direct canonicalization, 11 cases | 1.61% faster geometric mean on the repeat | Broadly neutral; the individual signed odd Power was noisy. |
+| 517 KB integrated-UV color hotspot | 862.241 ms to 866.794 ms, 0.53% slower | Essentially neutral on a large real expression. |
+
+Positive direct-case deltas below mean that `mszxoluk` was slower:
+
+| direct case | repeat delta | run-to-run note |
+|---|---:|---|
+| `signed_k33` | -8.74% | Noisy direction change; first run was +1.87%. |
+| `three_signed_k33_components` | -0.84% | |
+| `repeated_symmetric_sum` | +0.42% | |
+| `positive_power_4` | +0.77% | |
+| `negative_power_4` | +0.87% | |
+| `positive_power_24` | +1.97% | |
+| `nonlinear_function_boundary` | -0.14% | |
+| `factored_product_sum` | +0.90% | |
+| `odd_power` | +13.82% | Noisy magnitude; first run was +7.12%. |
+| `product_power` | +3.90% | |
+| `visible_signed_cancellation` | -25.48% | |
+
+The Gungraun controls measure whole-suite totals rather than individual cases:
+
+| whole-suite corpus | `bb48254c` Ir | `mszxoluk` Ir | Ir change | estimated-cycle change |
+|---|---:|---:|---:|---:|
+| color | 78,919,166 | 73,954,837 | -6.2904% | -5.9625% |
+| gamma | 29,057,603 | 29,017,487 | -0.1381% | -0.1791% |
+
+The K3,3 direction change and odd-Power variation show why the favorable direct
+aggregate is only a summary. They do not prove a stable odd-Power regression,
+but neither may the aggregate waive that per-case result. Overall this matrix
+finds no broad regression from the Young extension.
+
+##### Low-hanging fixed-point follow-up
+
+An exact-output-preserving follow-up on 2026-08-14 removed work that the first
+matrix exposed:
+
+- the Color composite loop now skips its post-graph Color pass when Graphica
+  changed nothing and skips the final metric pass when default-chain
+  restoration changed nothing;
+- Power-free projections no longer construct or validate empty Power
+  descriptors; and
+- a graph with no sign sites no longer searches for an impossible odd signed
+  stabilizer or expands the singleton affine decoration orbit. It still
+  performs the one root classification required by the signed problem
+  identity.
+
+The saved `existing-current-r2` artifacts are the immediately preceding
+candidate, so this comparison isolates the follow-up rather than comparing
+source revisions or input encodings:
+
+| workload | follow-up result |
+|---|---:|
+| Color Criterion, all 10 enabled cases | 20.521% faster geometric mean; every case improved significantly, ranging from 4.747% to 36.949% faster |
+| direct canonicalization Criterion, all 11 cases | 44.089% faster geometric mean; eight improved significantly, two were statistically unchanged, and `factored_product_sum` regressed 7.805% while remaining 2.021 ms |
+| automorphism-rich unsigned repeated Sum | 29,601,419 to 8,751,236 Callgrind instructions, 70.44% fewer; Criterion mean improved 69.744% |
+| 517 KB integrated-UV Color hotspot | warmed seven-run median 866.794 ms to 573.221 ms, 33.869% faster |
+
+`factored_product_sum` has a sign site and a Power, so none of the new empty
+guards applies. An exact pre/post Callgrind comparison was 13,467,392 to
+13,495,692 instructions (0.210% more) with identical graph-step,
+classification, and execution counts. The larger wall-clock delta is therefore
+code-layout/frequency sensitivity rather than added algorithmic work.
+
+The final UV result is also 6.621% faster than the 613.862 ms pre-migration
+median while retaining the fixture's nonzero, changed-output, and fixed-point
+checks. Three tempting shortcuts were rejected during this pass: bypassing the
+Color loop on the UV syntax stopped an existing normalization; ending the
+composite loop merely because the post-graph Color pass was unchanged altered
+an exact historical factorization; and n-way Add/Product construction changed
+an exact historical coefficient-grouping snapshot. None is part of the
+implementation.
+
+##### Full migration comparison: `3f896d9c` to `mszxoluk`
+
+| workload | mutually measured coverage | current versus baseline |
+|---|---:|---:|
+| gamma | all 11 enabled cases | 1.56% faster geometric mean |
+| color | all 10 enabled cases | 90.38% slower geometric mean; individual cases range from 31.85% to 383.65% slower |
+| direct canonicalization | 6 semantically supported cases | 14.53x slower geometric mean |
+| 517 KB integrated-UV color hotspot | warmed five-run medians | 613.862 ms to 866.794 ms; current is 41.20% slower |
+
+This pre-follow-up large-workload measurement showed a 41.20% regression,
+substantially smaller than the worst small reference cases. The fixed-point
+follow-up above subsequently reverses that result to a 6.621% improvement over
+the same pre-migration median.
+
+The six direct ratios are:
+
+| direct case | current / baseline median |
+|---|---:|
+| `signed_k33` | 7.86x |
+| `three_signed_k33_components` | 7.20x |
+| `repeated_symmetric_sum` | 12.74x |
+| `nonlinear_function_boundary` | 130.86x |
+| `factored_product_sum` | 12.18x |
+| `visible_signed_cancellation` | 8.21x |
+
+The legacy implementation cannot correctly and idempotently handle the other
+five direct cases: `positive_power_4`, `negative_power_4`,
+`positive_power_24`, `odd_power`, and `product_power`. Even on the six common
+cases, the semantic scope differs: the current path constructs and canonicalizes
+the complete expression-and-incidence graph, performs signed stabilizer-aware
+reconstruction, executes the result, and reparses to a fixed point. The legacy
+path performs materially less work and does not provide those guarantees.
+That explains why the ratio is not a pure micro-optimization comparison, but it
+does not waive the original performance requirement. The full-migration matrix
+therefore does not currently meet the existing-feature performance acceptance
+for the small color and direct-canonicalization cases.
 
 The production budgets were measured on 2026-08-05 in jj change `rxtulqsp` on
 an Intel Xeon W-2135 (restricted single-core Symbolica, Rust `test` profile).
@@ -1474,7 +1901,8 @@ specified as part of the API.
   produces `-2*A_antisym(a,b)` without hiding that scalar before Graphica, and
   the visible sign rewrite gives this fixture exactly two Graphica calls before
   stability;
-- execution and normalized reparse run after every reconstruction, while only
+- ordinary-driver execution and normalized reparse run after every
+  reconstruction, while only
   a complete one-sided stability certificate or exact executed-Atom equality
   may skip another Graphica call;
 - association, commutative ordering, declared even/unsigned slot transport, and
@@ -1487,9 +1915,11 @@ specified as part of the API.
   statistics cannot be declared stable by a hash or multiset fingerprint;
 - an incomplete or ambiguous stability witness conservatively retries instead
   of returning an early result;
-- instrumentation proves there is no full-network execution before the first
-  Graphica call and distinguishes the one full-network execution per rebuilt
-  iteration from temporary scope executions used by exact group proofs;
+- ordinary-path instrumentation proves there is no full-network execution
+  before the first Graphica call and distinguishes the one full-network
+  execution per rebuilt iteration from temporary scope executions used by
+  exact group proofs; separate Young instrumentation covers the projector,
+  carrier decode, composite, and staged boundaries;
 - when direct leaf negation and execution move the sign into an existing scalar,
   for example `2 * (-A) -> -2 * A`, the changed semantic color retries the
   complete graph; a merge of previously distinct scalar/term colors is also a
@@ -1743,8 +2173,18 @@ generated case to the transformations covered by that oracle.
 - the proof wrapper has no raw-network conversion, unchecked constructor,
   mutable network projection, or other API by which the source Atom and network
   can become inconsistent;
-- instrument the first iteration to prove that Graphica receives the network
-  directly from `CanonicalPolicyNet` without a pre-Graphica ordinary execution;
+- instrument the first ordinary iteration to prove that Graphica receives the
+  network directly from `CanonicalPolicyNet`; separately prove that the
+  general-Young fast path preserves factored projector Sums, sends an eligible
+  lone external tensor without a custom normalizer through the declared direct
+  route, encodes other eligible original heads through the fixed private
+  carrier, routes a custom normalizer on any exposed LocalTensor head or
+  Function to staging even when that node is a sibling outside the Young
+  subtree, leaks no carrier into the result, performs no second projector after
+  decode, and agrees with both forced composite and staged modes; verify
+  unsigned equal-height carrier-sum reduction,
+  internal-column parity, declared-head block exchange, and that ordinary
+  same-sized antisymmetric arguments do not exchange;
 - injected failures from post-reconstruction full-network execution, temporary
   scope execution, and result extraction return
   `CanonicalizationError::Execution` with the relevant whole-network or scope
@@ -1794,33 +2234,67 @@ generated case to the transformations covered by that oracle.
 ## Acceptance Criteria
 
 - Production idenso code no longer calls bare Symbolica `canonize_tensors`.
-- Every iteration projects the complete normalized operation tree, recognized
-  tensor ports, and index lines into one graph and calls Graphica once. The
-  `ContextGraph`/flat-scope split and barriers are gone; neither local Graphica
-  calls, opaque pre-labeling contractions, nor a custom graph-building executor
-  remain. Opaque contraction is allowed only inside temporary post-Graphica
+- Outside the general-Young extension above, every ordinary signed
+  fixed-point iteration projects the complete normalized operation tree,
+  recognized tensor ports, and index lines into one graph and calls Graphica
+  once. The `ContextGraph`/flat-scope split and barriers are gone; neither local
+  Graphica calls, opaque pre-labeling contractions, nor a custom graph-building
+  executor remain. Opaque contraction is allowed only inside temporary post-Graphica
   group-proof scope clones and the post-reconstruction full-network execution
   clone; every such result is reparsed or reduced to an Atom comparison before
   further use.
-- Every reconstruction has one complete-network execution through ordinary
-  symbolic network execution and is reparsed. Fallible temporary scope
-  executions are allowed only for exact group quotient proofs. Skip another
-  Graphica iteration only when reconstruction certifies that the normalized
-  input changed solely by association, commutative ordering, declared unsigned
+- Every ordinary-driver reconstruction has one complete-network execution
+  through ordinary symbolic network execution and is reparsed. Fallible
+  temporary scope executions are limited to exact group quotient proofs. Skip
+  another Graphica iteration only when reconstruction certifies that the
+  normalized input changed solely by association, commutative ordering, declared unsigned
   symmetry transport, and bijective dummy renaming while preserving visible
   topology, colors, scopes, Power structure, and all bottom-up Symbolica-visible
   equality classes, or when mandatory execution returns the exact normalized
   iteration input and thereby proves an extensional fixed point. Any sign, zero,
   payload edit, residual phase, class merge/split, or ambiguity otherwise
   retries the complete reparsed problem; terminal zero/one returns immediately.
-  Consecutive equality of exact canonical problem
+  On this ordinary path, consecutive equality of exact canonical-problem
   identities is successful conditional verification; an older repetition is a
   typed convergence cycle, and a benchmarked deterministic iteration budget
   bounds distinct states. Hash equality alone proves neither case. Ordinary
   canonical transport has no unconditional final Graphica verification pass.
   Network and Atom idempotence remain required.
-- Initial Atom parsing and every post-execution reparse use the same fixed,
-  fully recursive canonical parse policy and tensor-symmetry validator. The
+- General Young straightening applies the exact reduced projector while
+  preserving Product factorization. An eligible lone general-Young tensor with
+  distinct external lines and no custom normalizer sends its declared projector
+  directly through the ordinary whole-root driver and numeric normalization,
+  bypassing the carrier. Other eligible inputs use deterministic private
+  `Linear` carriers sharing one fixed head, whose opaque original-head payloads
+  and ordered column bundles enter that driver through strict private metadata.
+  The opaque payload preserves declared-head semantic ordering across decode.
+  Successful carrier output is decoded, root numeric content is collected, and
+  primitive Add signs are oriented deterministically, with no second projector
+  or graph pass. The rebuilt Atom is then fully validated and canonically parsed
+  into a graph-canonical `CanonicalPolicyNet`. A carrier `ConvergenceCycle` uses
+  exact post-projector composite iteration and returns its middle graph result.
+  Young-containing Power, a custom normalizer on any exposed LocalTensor head or
+  Function anywhere in the complete root, repeated exposed Young heads, and
+  carrier graph-budget or decoration-orbit-limit failures use staging. This
+  root-wide guard includes siblings outside the Young subtree and prevents
+  carrier decode and canonical reparse from passing the graph-rebuilt root back
+  through user normalizers.
+  Occurrence-local `C ⋊ W` reduction reduces the projected carrier sum, and
+  strict carrier metadata gives its individual monomials the matching signed
+  columns and unsigned equal-height owner stars. Neither mechanism grants block
+  exchange to an ordinary structural group; declared Young heads expose their
+  manifest columns directly as the same graph-owned blocks.
+  Only a successful lone-root direct result may return as a terminal Atom
+  without a public-path reparse. Carrier, composite, and staged results retain
+  `CanonicalPolicyNet`, while the test-only policy API reparses the direct
+  terminal Atom.
+  `young-before` and `young-final-safe` compare different, semantically
+  equivalent input encodings rather than source revisions. Their
+  topology-specific ratios remain diagnostic and do not participate in the
+  Phase 6 existing-feature performance gate.
+- Initial Atom parsing and ordinary post-execution reparses use the same fixed,
+  fully recursive canonical parse policy and tensor-symmetry validator. Internal
+  factored Young transforms use those same validations and parser. The
   opaque parser result pairs the exact normalized source Atom with its network,
   keeps both fields consistent, and is the canonicalizer's only input type. A
   raw `SymbolicNet`, whether manually built or parsed with noncanonical
@@ -1903,14 +2377,21 @@ generated case to the transformations covered by that oracle.
   materializers share one core with an explicit reduction-order policy, and
   normal and in-place Product contraction share operand classification without
   conflating their distinct graph rewrites.
-- Only temporary post-Graphica scope clones used by exact group proofs and one
-  post-reconstruction full-network clone per iteration are passed to ordinary
-  `Network::execute`. The initial parser-produced network is projected without
-  execution. Every executed value is reparsed or reduced to an Atom comparison;
-  no opaque executed leaf enters Graphica. The normalized full-network reparse
-  and its exact source Atom form the stable `CanonicalPolicyNet`; existing
-  facades expose network or Atom projections. Canonicalization contains no
-  bespoke structural renderer or Power evaluator.
+- On the ordinary path, only temporary post-Graphica scope clones used by exact
+  group proofs and one post-reconstruction full-network value per iteration are
+  passed to ordinary `Network::execute`; the initial parser-produced network is
+  projected without execution. General Young additionally executes and
+  canonically parses its exact factored projector root, uses ordinary executions
+  inside carrier/composite graph steps, and executes staged candidates or Power
+  frames on fallback. Every executed value is reparsed, reduced to an exact Atom
+  comparison, or returned only by the successful lone-root direct route as a
+  normalized terminal Atom; no opaque executed leaf enters Graphica. Carrier
+  decode fully validates and canonically parses its rebuilt Atom. The normalized
+  full-network reparse and its exact source Atom form the stable
+  `CanonicalPolicyNet` on policy-returning paths. The Atom facade consumes
+  either that policy projection or the direct terminal Atom; only the test-only
+  policy API reparses terminal output. Canonicalization contains no bespoke
+  structural renderer or Power evaluator.
 - Targeted unit and integration checks, the K3,3 checks, Idenso's independent
   assertions over the two exact d2 signed six-`f` RQFT contractions, and the
   disconnected Monte Carlo spectacles validation pass. The enclosing

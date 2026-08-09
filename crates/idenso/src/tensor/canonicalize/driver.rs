@@ -10,15 +10,42 @@ use symbolica::atom::Atom;
 
 use super::{
     CanonicalPolicyNet, CanonicalizationError,
-    projection::{DEFAULT_GRAPH_BUDGET, ProblemIdentity, project},
-    reconstruct::{
-        DummyAllocator, RetryReason, SignedProblemIdentity, prepare_reconstruction, reconstruct,
+    projection::{
+        CanonicalProjection, DEFAULT_GRAPH_BUDGET, ExternalLineMode, GraphBudget, ProblemIdentity,
+        project,
     },
+    reconstruct::{
+        DummyAllocator, PreparedReconstruction, RetryReason, SignedProblemIdentity,
+        prepare_reconstruction, reconstruct,
+    },
+    semantic::SemanticAtomKey,
 };
 use crate::tensor::SymbolicTensor;
 
 // See the Phase 6 budget table in the signed-canonicalization architecture plan.
 pub(super) const DEFAULT_ITERATION_LIMIT: usize = 8;
+
+pub(super) struct CanonicalRequest<'a, Aind: AbsInd, F> {
+    new_dummy: &'a mut F,
+    dummy_allocator: DummyAllocator<Aind>,
+    temporary_dummy_next: usize,
+    iteration_limit: usize,
+    graph_budget: GraphBudget,
+    external_line_mode: ExternalLineMode,
+}
+
+impl<'a, Aind: AbsInd, F> CanonicalRequest<'a, Aind, F> {
+    fn new(new_dummy: &'a mut F, iteration_limit: usize, graph_budget: GraphBudget) -> Self {
+        Self {
+            new_dummy,
+            dummy_allocator: DummyAllocator::new(),
+            temporary_dummy_next: 0,
+            iteration_limit,
+            graph_budget,
+            external_line_mode: ExternalLineMode::Preserve,
+        }
+    }
+}
 
 #[cfg(test)]
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -86,6 +113,29 @@ struct CanonicalProblemIdentity {
     signed: SignedProblemIdentity,
 }
 
+struct PreparedGraphStep<Aind: AbsInd> {
+    projection: CanonicalProjection<Aind>,
+    prepared: PreparedReconstruction,
+}
+
+impl<Aind: AbsInd> PreparedGraphStep<Aind> {
+    fn identity(&self) -> CanonicalProblemIdentity {
+        CanonicalProblemIdentity {
+            graph: self.projection.identity.clone(),
+            signed: self.prepared.identity.clone(),
+        }
+    }
+}
+
+struct CompletedGraphStep<Aind: AbsInd> {
+    /// Reparsed graph result, absent when execution reproduced the input Atom
+    /// exactly and the caller can retain its parser-proven policy.
+    policy: Option<CanonicalPolicyNet<Aind>>,
+    retry_reason: Option<RetryReason>,
+    terminal: bool,
+    execution_unchanged: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum IdentityObservation {
     New,
@@ -124,6 +174,14 @@ impl IdentityObservation {
 struct IdentityHistory<I> {
     identities: Vec<I>,
     retry_reasons: Vec<RetryReason>,
+}
+
+// Boxing the policy variant would allocate on the ordinary canonicalization
+// path merely to shrink this short-lived result enum.
+#[allow(clippy::large_enum_variant)]
+enum Canonicalized<Aind: AbsInd> {
+    Policy(CanonicalPolicyNet<Aind>),
+    Terminal(Atom),
 }
 
 impl<I: Eq> IdentityHistory<I> {
@@ -165,20 +223,57 @@ impl<Aind> CanonicalPolicyNet<Aind>
 where
     Aind: AbsInd + DummyAind + ParseableAind + 'static,
 {
+    #[cfg(test)]
     pub(crate) fn canonize<F>(self, mut new_dummy: F) -> Result<Self, CanonicalizationError>
     where
         F: FnMut(usize) -> Aind,
         SymbolicTensor<Aind>: Contract<SymbolicTensor<Aind>, (), LCM = SymbolicTensor<Aind>>,
     {
-        self.canonize_with(
-            &mut new_dummy,
-            DEFAULT_ITERATION_LIMIT,
-            DEFAULT_GRAPH_BUDGET,
-        )
+        match self.canonize_output(&mut new_dummy)? {
+            Canonicalized::Policy(policy) => Ok(policy),
+            Canonicalized::Terminal(atom) => CanonicalPolicyNet::parse(atom),
+        }
     }
 
+    pub(crate) fn canonize_atom<F>(self, mut new_dummy: F) -> Result<Atom, CanonicalizationError>
+    where
+        F: FnMut(usize) -> Aind,
+        SymbolicTensor<Aind>: Contract<SymbolicTensor<Aind>, (), LCM = SymbolicTensor<Aind>>,
+    {
+        Ok(match self.canonize_output(&mut new_dummy)? {
+            Canonicalized::Policy(policy) => policy.into_atom(),
+            Canonicalized::Terminal(atom) => atom,
+        })
+    }
+
+    fn canonize_output<F>(
+        self,
+        new_dummy: &mut F,
+    ) -> Result<Canonicalized<Aind>, CanonicalizationError>
+    where
+        F: FnMut(usize) -> Aind,
+        SymbolicTensor<Aind>: Contract<SymbolicTensor<Aind>, (), LCM = SymbolicTensor<Aind>>,
+    {
+        let mut request =
+            CanonicalRequest::new(new_dummy, DEFAULT_ITERATION_LIMIT, DEFAULT_GRAPH_BUDGET);
+        match super::young::straighten(self, &mut request)? {
+            super::young::YoungStraightened::Terminal(atom) => Ok(Canonicalized::Terminal(atom)),
+            super::young::YoungStraightened::Policy {
+                policy,
+                graph_canonical,
+            } => {
+                if graph_canonical {
+                    Ok(Canonicalized::Policy(policy))
+                } else {
+                    request.canonize_graph(policy).map(Canonicalized::Policy)
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
     fn canonize_with<F>(
-        mut self,
+        self,
         new_dummy: &mut F,
         iteration_limit: usize,
         graph_budget: super::projection::GraphBudget,
@@ -187,75 +282,274 @@ where
         F: FnMut(usize) -> Aind,
         SymbolicTensor<Aind>: Contract<SymbolicTensor<Aind>, (), LCM = SymbolicTensor<Aind>>,
     {
+        CanonicalRequest::new(new_dummy, iteration_limit, graph_budget).canonize_graph(self)
+    }
+}
+
+impl<Aind, F> CanonicalRequest<'_, Aind, F>
+where
+    Aind: AbsInd + DummyAind + ParseableAind + 'static,
+    F: FnMut(usize) -> Aind,
+    SymbolicTensor<Aind>: Contract<SymbolicTensor<Aind>, (), LCM = SymbolicTensor<Aind>>,
+{
+    /// Reserve one deterministic source-disjoint namespace for a candidate batch.
+    pub(super) fn reserve_temporary_namespace(
+        &mut self,
+        source_indices: usize,
+    ) -> Result<usize, CanonicalizationError> {
+        // One graph can skip at most one currently visible name per line and
+        // then allocate at most one replacement per line. Source-wide names
+        // are an additional conservative forbidden set.
+        let width = self
+            .graph_budget
+            .vertices
+            .checked_mul(2)
+            .and_then(|width| width.checked_add(source_indices))
+            .and_then(|width| width.checked_add(1))
+            .ok_or_else(|| {
+                CanonicalizationError::Projection(
+                    "temporary canonical namespace width overflowed usize".to_owned(),
+                )
+            })?;
+        let start = self.temporary_dummy_next;
+        self.temporary_dummy_next = start.checked_add(width).ok_or_else(|| {
+            CanonicalizationError::Projection(
+                "temporary canonical namespace allocation overflowed usize".to_owned(),
+            )
+        })?;
+        Ok(start)
+    }
+
+    pub(super) fn canonize_graph(
+        &mut self,
+        mut policy: CanonicalPolicyNet<Aind>,
+    ) -> Result<CanonicalPolicyNet<Aind>, CanonicalizationError> {
         let mut identities = IdentityHistory::<CanonicalProblemIdentity>::new();
-        let mut dummy_allocator = DummyAllocator::<Aind>::new();
         let mut last_reason = "initial canonical projection".to_owned();
 
-        for _ in 0..iteration_limit {
-            let projection = project(&self, graph_budget)?;
-            let prepared = prepare_reconstruction(&projection)?;
-            let identity = CanonicalProblemIdentity {
-                graph: projection.identity.clone(),
-                signed: prepared.identity.clone(),
-            };
-            match identities.observe(identity) {
-                IdentityObservation::Consecutive => return Ok(self),
+        for _ in 0..self.iteration_limit {
+            let step = self.prepare_graph_step(&policy)?;
+            match identities.observe(step.identity()) {
+                IdentityObservation::Consecutive => return Ok(policy),
                 cycle @ IdentityObservation::Cycle { .. } => {
                     return Err(cycle.into_cycle_error());
                 }
                 IdentityObservation::New => {}
             }
-
-            let reconstruction =
-                reconstruct(&projection, prepared, &mut dummy_allocator, new_dummy)?;
-            let atom = execute_atom(reconstruction.network.clone())?;
-            let terminal = atom.as_view().is_zero() || atom.as_view().is_one();
-            // The parser and projection are deterministic, so exact equality
-            // after mandatory execution is a complete extensional fixed point.
-            let execution_unchanged = atom == *self.normalized_atom();
-            let reparsed = CanonicalPolicyNet::parse(atom)?;
-            if terminal || execution_unchanged {
-                return Ok(reparsed);
+            let completed = self.complete_graph_step(&policy, step)?;
+            if completed.execution_unchanged {
+                return Ok(policy);
             }
-            let mut retry_reason = reconstruction.retry_reason;
-            if retry_reason == Some(RetryReason::IncompleteStabilityCertificate) {
-                // This coarse profile only makes retry diagnostics more specific.
-                // Fixed-point correctness is still decided by exact executed atoms.
-                let operation_profile = |network: &crate::tensor::SymbolicNet<Aind>| {
-                    let mut profile = [0_usize; 5];
-                    for (_, _, node) in network.graph.graph.iter_nodes() {
-                        let spenso::network::graph::NetworkNode::Op(operation) = node else {
-                            continue;
-                        };
-                        let kind = match operation {
-                            spenso::network::graph::NetworkOp::Product => 0,
-                            spenso::network::graph::NetworkOp::Sum => 1,
-                            spenso::network::graph::NetworkOp::Neg => 2,
-                            spenso::network::graph::NetworkOp::Function(_) => 3,
-                            spenso::network::graph::NetworkOp::Power(_) => 4,
-                        };
-                        profile[kind] += 1;
-                    }
-                    profile
-                };
-                if operation_profile(&reconstruction.network)
-                    != operation_profile(reparsed.network())
-                {
-                    retry_reason = Some(RetryReason::ExecutionTopologyChange);
-                }
+            let next = completed
+                .policy
+                .expect("changed graph execution is reparsed");
+            if completed.terminal {
+                return Ok(next);
             }
-            let Some(retry_reason) = retry_reason else {
-                return Ok(reparsed);
+            let Some(retry_reason) = completed.retry_reason else {
+                return Ok(next);
             };
             last_reason = retry_reason.to_string();
             identities.record_retry(retry_reason);
-            self = reparsed;
+            policy = next;
         }
 
         Err(CanonicalizationError::IterationLimit {
-            limit: iteration_limit,
+            limit: self.iteration_limit,
             last_reason,
         })
+    }
+
+    /// Canonize modulo an exact deterministic normalizer.
+    ///
+    /// `policy` is already normalized. Each transition applies one complete
+    /// graph step and then re-applies `normalize`. Only consecutive exact
+    /// equality of the post-normalizer states certifies the composite fixed
+    /// point. The retained middle graph result is returned, so a fresh request
+    /// reproduces that graph-after-normalizer representative exactly: if
+    /// `x = normalize(input)`, `y = graph(x)`, and `normalize(y) = x`, then the
+    /// next request repeats the same `x -> y` transition.
+    pub(super) fn canonize_graph_modulo<N>(
+        &mut self,
+        mut policy: CanonicalPolicyNet<Aind>,
+        mut normalize: N,
+    ) -> Result<CanonicalPolicyNet<Aind>, CanonicalizationError>
+    where
+        N: FnMut(
+            &CanonicalPolicyNet<Aind>,
+        ) -> Result<CanonicalPolicyNet<Aind>, CanonicalizationError>,
+    {
+        let mut prepared = self.prepare_graph_step(&policy)?;
+        let mut atoms = vec![policy.normalized_atom().clone()];
+        let mut retry_reasons = Vec::<String>::new();
+        let mut last_reason = "initial canonical projection".to_owned();
+
+        for iteration in 0..self.iteration_limit {
+            let completed = self.complete_graph_step(&policy, prepared)?;
+            let graph = if completed.execution_unchanged {
+                policy
+            } else {
+                completed
+                    .policy
+                    .expect("changed graph execution is reparsed")
+            };
+            let normalized = normalize(&graph)?;
+            if normalized.normalized_atom().as_view().is_zero()
+                || normalized.normalized_atom().as_view().is_one()
+            {
+                return Ok(normalized);
+            }
+
+            last_reason = completed.retry_reason.map_or_else(
+                || "composite normalizer reapplication".to_owned(),
+                |reason| reason.to_string(),
+            );
+            retry_reasons.push(last_reason.clone());
+            let repeated_iteration = atoms.len();
+            let atom = normalized.normalized_atom();
+            if atoms.last() == Some(atom) {
+                return Ok(graph);
+            }
+            let repeated_atom = atoms.iter().position(|candidate| candidate == atom);
+            if let Some(first_iteration) = repeated_atom {
+                return Err(CanonicalizationError::ConvergenceCycle {
+                    first_iteration,
+                    repeated_iteration,
+                    cycle_length: repeated_iteration - first_iteration,
+                    retry_reasons: retry_reasons[first_iteration..repeated_iteration].to_vec(),
+                });
+            }
+            atoms.push(atom.clone());
+            policy = normalized;
+            if iteration + 1 == self.iteration_limit {
+                break;
+            }
+            prepared = self.prepare_graph_step(&policy)?;
+        }
+
+        Err(CanonicalizationError::IterationLimit {
+            limit: self.iteration_limit,
+            last_reason,
+        })
+    }
+
+    fn prepare_graph_step(
+        &self,
+        policy: &CanonicalPolicyNet<Aind>,
+    ) -> Result<PreparedGraphStep<Aind>, CanonicalizationError> {
+        let projection = project(policy, self.graph_budget, self.external_line_mode)?;
+        let prepared = prepare_reconstruction(&projection)?;
+        Ok(PreparedGraphStep {
+            projection,
+            prepared,
+        })
+    }
+
+    fn complete_graph_step(
+        &mut self,
+        policy: &CanonicalPolicyNet<Aind>,
+        step: PreparedGraphStep<Aind>,
+    ) -> Result<CompletedGraphStep<Aind>, CanonicalizationError> {
+        let reconstruction = reconstruct(
+            &step.projection,
+            step.prepared,
+            &mut self.dummy_allocator,
+            self.new_dummy,
+        )?;
+        let mut retry_reason = reconstruction.retry_reason;
+        let operation_profile = (retry_reason == Some(RetryReason::IncompleteStabilityCertificate))
+            .then(|| Self::operation_profile(&reconstruction.network));
+        let atom = execute_atom(reconstruction.network)?;
+        let atom = if self.external_line_mode == ExternalLineMode::AnonymousEvenPower {
+            // This mode is used only for a base bound by an even Power, so
+            // its two global orientations represent the same final value.
+            let negative = -atom.clone();
+            if SemanticAtomKey::new(negative.as_view()) < SemanticAtomKey::new(atom.as_view()) {
+                negative
+            } else {
+                atom
+            }
+        } else {
+            atom
+        };
+        let terminal = atom.as_view().is_zero() || atom.as_view().is_one();
+        // The parser and projection are deterministic, so exact equality after
+        // mandatory execution is a complete extensional graph fixed point.
+        let execution_unchanged = atom == *policy.normalized_atom();
+        if execution_unchanged {
+            return Ok(CompletedGraphStep {
+                policy: None,
+                retry_reason,
+                terminal,
+                execution_unchanged,
+            });
+        }
+        let reparsed = CanonicalPolicyNet::parse(atom)?;
+        if operation_profile
+            .is_some_and(|profile| profile != Self::operation_profile(reparsed.network()))
+        {
+            retry_reason = Some(RetryReason::ExecutionTopologyChange);
+        }
+        Ok(CompletedGraphStep {
+            policy: Some(reparsed),
+            retry_reason,
+            terminal,
+            execution_unchanged,
+        })
+    }
+
+    fn operation_profile(network: &crate::tensor::SymbolicNet<Aind>) -> [usize; 5] {
+        let mut profile = [0_usize; 5];
+        for (_, _, node) in network.graph.graph.iter_nodes() {
+            let spenso::network::graph::NetworkNode::Op(operation) = node else {
+                continue;
+            };
+            let kind = match operation {
+                spenso::network::graph::NetworkOp::Product => 0,
+                spenso::network::graph::NetworkOp::Sum => 1,
+                spenso::network::graph::NetworkOp::Neg => 2,
+                spenso::network::graph::NetworkOp::Function(_) => 3,
+                spenso::network::graph::NetworkOp::Power(_) => 4,
+            };
+            profile[kind] += 1;
+        }
+        profile
+    }
+
+    /// Canonize a staged graph in a source-disjoint temporary dummy namespace.
+    ///
+    /// The external-line mode either retains the currently exposed interface
+    /// or chooses the anonymous frame of an even-Power base.
+    pub(super) fn canonize_temporary_graph(
+        &mut self,
+        policy: CanonicalPolicyNet<Aind>,
+        source_indices: &[Atom],
+        namespace_start: usize,
+        external_line_mode: ExternalLineMode,
+    ) -> Result<CanonicalPolicyNet<Aind>, CanonicalizationError> {
+        let mut forbidden = source_indices.to_vec();
+        forbidden.extend(policy.network().store.tensors.iter().flat_map(|tensor| {
+            (&tensor.structure)
+                .into_iter()
+                .map(|slot| slot.aind.to_atom())
+        }));
+        let mut next = namespace_start;
+        let mut temporary_dummy = |_: usize| loop {
+            let dummy = Aind::new_dummy_at(next);
+            next += 1;
+            let atom = dummy.to_atom();
+            if !forbidden.contains(&atom) {
+                forbidden.push(atom);
+                break dummy;
+            }
+        };
+        let mut request = CanonicalRequest::new(
+            &mut temporary_dummy,
+            self.iteration_limit,
+            self.graph_budget,
+        );
+        request.external_line_mode = external_line_mode;
+        request.canonize_graph(policy)
     }
 }
 
@@ -522,6 +816,7 @@ mod tests {
             let projection = super::super::projection::project(
                 &policy,
                 super::super::projection::DEFAULT_GRAPH_BUDGET,
+                super::super::projection::ExternalLineMode::Preserve,
             )
             .unwrap();
             let prepared = super::super::reconstruct::prepare_reconstruction(&projection).unwrap();
@@ -640,6 +935,7 @@ mod tests {
         let projection = super::super::projection::project(
             &probe,
             super::super::projection::DEFAULT_GRAPH_BUDGET,
+            super::super::projection::ExternalLineMode::Preserve,
         )
         .unwrap();
         let prepared = super::super::reconstruct::prepare_reconstruction(&projection).unwrap();
@@ -671,6 +967,47 @@ mod tests {
     }
 
     #[test]
+    fn anonymous_boundary_frame_is_alpha_invariant_without_adding_symmetry() {
+        let rep = test_initialize().mink4;
+        let [first, second, renamed_first, renamed_second] = [
+            slot!(rep, canonical_driver_anonymous_first),
+            slot!(rep, canonical_driver_anonymous_second),
+            slot!(rep, canonical_driver_anonymous_renamed_first),
+            slot!(rep, canonical_driver_anonymous_renamed_second),
+        ]
+        .map(|slot| slot.to_lib());
+        let tensor = tensor_symbol!(canonical_driver_anonymous_tensor; Antisymmetric);
+        let canonize = |left: LibrarySlot<AbstractIndex>, right: LibrarySlot<AbstractIndex>| {
+            let expression = function!(tensor, left.to_atom(), right.to_atom());
+            let policy = CanonicalPolicyNet::<AbstractIndex>::parse(expression).unwrap();
+            let source_indices = [left.aind().to_atom(), right.aind().to_atom()];
+            let mut new_dummy = AbstractIndex::Dummy;
+            let mut request = CanonicalRequest::new(
+                &mut new_dummy,
+                DEFAULT_ITERATION_LIMIT,
+                super::super::projection::DEFAULT_GRAPH_BUDGET,
+            );
+            let namespace = request
+                .reserve_temporary_namespace(source_indices.len())
+                .unwrap();
+            request
+                .canonize_temporary_graph(
+                    policy,
+                    &source_indices,
+                    namespace,
+                    ExternalLineMode::AnonymousEvenPower,
+                )
+                .unwrap()
+                .into_atom()
+        };
+
+        let canonical = canonize(first, second);
+        assert!(!canonical.is_zero());
+        assert_eq!(canonical, canonize(renamed_first, renamed_second));
+        assert!(canonize(first, first).is_zero());
+    }
+
+    #[test]
     fn unsigned_transport_certifies_after_one_graphica_call() {
         let rep = test_initialize().mink4;
         let index = slot!(rep, canonical_driver_unsigned_index);
@@ -687,7 +1024,7 @@ mod tests {
         assert_eq!(super::super::projection::graphica_calls(), 1);
         let (full, temporary) = execution_calls();
         assert_eq!(full, 1);
-        assert!(temporary > 0);
+        assert_eq!(temporary, 1);
     }
 
     #[test]
@@ -883,6 +1220,7 @@ mod tests {
         let projection = super::super::projection::project(
             &policy,
             super::super::projection::DEFAULT_GRAPH_BUDGET,
+            super::super::projection::ExternalLineMode::Preserve,
         )
         .unwrap();
         assert_eq!(execution_calls(), (0, 0));

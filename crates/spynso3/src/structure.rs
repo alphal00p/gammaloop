@@ -137,10 +137,14 @@ impl PyStubType for SpensoSlotOrArgOrRep {
     }
 }
 
-/// A Young tableau describing an irreducible permutation symmetry of tensor slots.
+/// A Young tableau specifying permutation symmetry of tensor slots.
 ///
 /// The shape is a partition in non-increasing row order. ``slot_order`` fills
 /// those rows from left to right and must be a permutation of ``range(rank)``.
+/// Version 1 uses the normalized manifest Young symmetrizer
+/// ``P_T = C_T R_T / h_T``, where ``R_T`` symmetrizes the listed rows, ``C_T``
+/// antisymmetrizes their manifest columns, and ``h_T`` is the product of hook
+/// lengths.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -187,6 +191,11 @@ impl SpensoYoungTableau {
     #[getter]
     fn rows(&self) -> Vec<Vec<usize>> {
         self.tableau.rows().map(<[usize]>::to_vec).collect()
+    }
+
+    #[getter]
+    fn columns(&self) -> Vec<Vec<usize>> {
+        self.tableau.columns().collect()
     }
 
     fn __repr__(&self) -> String {
@@ -1299,6 +1308,14 @@ mod tensor_name_tests {
                 vec![vec![2, 0], vec![1]]
             );
             assert_eq!(
+                tableau
+                    .getattr("columns")
+                    .unwrap()
+                    .extract::<Vec<Vec<usize>>>()
+                    .unwrap(),
+                vec![vec![2, 1], vec![0]]
+            );
+            assert_eq!(
                 tableau.repr().unwrap().to_str().unwrap(),
                 "YoungTableau(shape=[2, 1], slot_order=[2, 0, 1])"
             );
@@ -1310,6 +1327,27 @@ mod tensor_name_tests {
             assert!(invalid.is_instance_of::<PyValueError>(py));
             let frozen = tableau.setattr("extra", 1).unwrap_err();
             assert!(frozen.is_instance_of::<exceptions::PyAttributeError>(py));
+        });
+    }
+
+    #[test]
+    fn young_tableau_python_api_reports_unallocatable_rank() {
+        Python::initialize();
+
+        Python::attach(|py| {
+            let error = py
+                .get_type::<SpensoYoungTableau>()
+                .call1((vec![usize::MAX],))
+                .unwrap_err();
+
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert_eq!(
+                error.value(py).to_string(),
+                format!(
+                    "cannot allocate storage for Young tableau rank {}",
+                    usize::MAX
+                )
+            );
         });
     }
 
@@ -1430,6 +1468,86 @@ mod tensor_name_tests {
             }
         });
     }
+
+    #[test]
+    fn young_tensor_indices_render_manifest_slots_without_metric_permutation() {
+        Python::initialize();
+
+        Python::attach(|py| {
+            let tableau = Py::new(
+                py,
+                SpensoYoungTableau {
+                    tableau: YoungTableau::new(vec![2, 2], vec![0, 2, 1, 3]).unwrap(),
+                },
+            )
+            .unwrap();
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("young_tableau", tableau.bind(py)).unwrap();
+            let tensor = py
+                .get_type::<SpensoName>()
+                .call(("__spynso3_test_manifest_young_tensor",), Some(&kwargs))
+                .unwrap();
+            let tensor_name = tensor.extract::<SpensoName>().unwrap().name;
+
+            let representation = py
+                .get_type::<SpensoRepresentation>()
+                .call_method1("mink", (4,))
+                .unwrap();
+            let a = representation.call1(("a",)).unwrap();
+            let b = representation.call1(("b",)).unwrap();
+            let c = representation.call1(("c",)).unwrap();
+            let d = representation.call1(("d",)).unwrap();
+            let [a_atom, b_atom, c_atom, d_atom] =
+                [&a, &b, &c, &d].map(|slot| slot.extract::<SpensoSlot>().unwrap().slot.to_atom());
+
+            let repeated = tensor.call1((&a, &b, &a, &b)).unwrap();
+            let repeated_expression = repeated
+                .call_method0("to_expression")
+                .unwrap()
+                .extract::<PythonExpression>()
+                .unwrap()
+                .expr;
+            let repeated_expected = FunctionBuilder::new(tensor_name)
+                .add_args([
+                    a_atom.clone(),
+                    b_atom.clone(),
+                    a_atom.clone(),
+                    b_atom.clone(),
+                ])
+                .finish();
+            assert_eq!(repeated_expression, repeated_expected);
+            assert_eq!(
+                repeated.str().unwrap().to_str().unwrap(),
+                repeated_expected.to_string()
+            );
+
+            let non_involutive = tensor.call1((&c, &a, &b, &d)).unwrap();
+            let non_involutive_expression = non_involutive
+                .call_method0("to_expression")
+                .unwrap()
+                .extract::<PythonExpression>()
+                .unwrap()
+                .expr;
+            let non_involutive_expected = FunctionBuilder::new(tensor_name)
+                .add_args([c_atom, a_atom, b_atom, d_atom])
+                .finish();
+            assert_eq!(non_involutive_expression, non_involutive_expected);
+            assert_eq!(
+                non_involutive.str().unwrap().to_str().unwrap(),
+                non_involutive_expected.to_string()
+            );
+
+            let metric_trace = representation
+                .call_method1("g", ("a", "a"))
+                .unwrap()
+                .call_method0("to_expression")
+                .unwrap()
+                .extract::<PythonExpression>()
+                .unwrap()
+                .expr;
+            assert_eq!(metric_trace, Atom::num(4));
+        });
+    }
 }
 
 /// A tensor structure with abstract indices for symbolic tensor operations.
@@ -1472,6 +1590,20 @@ impl From<ShadowedStructure<AbstractIndex>> for SpensoIndices {
         SpensoIndices {
             structure: PermutedStructure::identity(value),
         }
+    }
+}
+
+impl SpensoIndices {
+    fn young_manifest_expression(&self, name: Symbol) -> PyResult<Option<Atom>> {
+        if (SpensoName { name }).young_tableau_metadata()?.is_none() {
+            return Ok(None);
+        }
+
+        self.structure
+            .structure
+            .to_symbolic(Some(self.structure.index_permutation.inverse()))
+            .map(Some)
+            .ok_or_else(|| PyRuntimeError::new_err("No name"))
     }
 }
 
@@ -1681,7 +1813,13 @@ impl SpensoIndices {
         format!("{:?}", self.structure)
     }
 
-    fn __str__(&self) -> String {
+    fn __str__(&self) -> PyResult<String> {
+        if let Some(name) = self.structure.structure.name()
+            && let Some(atom) = self.young_manifest_expression(name)?
+        {
+            return Ok(atom.to_string());
+        }
+
         if let Some(structure) = SymbolicTensor::from_named(&self.structure.structure) {
             let atom = PermutedStructure {
                 index_permutation: self.structure.index_permutation.clone(),
@@ -1691,7 +1829,7 @@ impl SpensoIndices {
             .permute_inds()
             .expression;
 
-            format!("{}", atom)
+            Ok(format!("{}", atom))
         } else {
             assert!(self.structure.index_permutation.is_identity());
             assert!(self.structure.rep_permutation.is_identity());
@@ -1702,7 +1840,7 @@ impl SpensoIndices {
                 .map(|r| r.to_atom())
                 .join(",");
 
-            format!("({})", args.trim_end())
+            Ok(format!("({})", args.trim_end()))
         }
     }
 
@@ -1731,16 +1869,23 @@ impl SpensoIndices {
     /// >>> indices = T(mu, nu)
     /// >>> expr = indices.to_expression()
     fn to_expression(&self) -> PyResult<PythonExpression> {
-        if self.structure.structure.name().is_none() {
-            return Err(PyRuntimeError::new_err("No name"));
-        }
+        let name = self
+            .structure
+            .structure
+            .name()
+            .ok_or_else(|| PyRuntimeError::new_err("No name"))?;
 
-        let atom = PermutedStructure {
-            index_permutation: self.structure.index_permutation.clone(),
-            rep_permutation: self.structure.rep_permutation.clone(),
-            structure: self.structure.structure.clone(),
-        }
-        .permute_with_metric();
+        // Young metadata refers to manifest slot positions, including repeated contractions.
+        let atom = if let Some(atom) = self.young_manifest_expression(name)? {
+            atom
+        } else {
+            PermutedStructure {
+                index_permutation: self.structure.index_permutation.clone(),
+                rep_permutation: self.structure.rep_permutation.clone(),
+                structure: self.structure.structure.clone(),
+            }
+            .permute_with_metric()
+        };
 
         Ok(atom.into())
     }

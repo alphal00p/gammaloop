@@ -28,8 +28,11 @@ where
     /// Validate and parse one normalized Atom with the fixed canonical policy.
     pub(crate) fn parse(normalized_atom: Atom) -> Result<Self, CanonicalizationError> {
         validate_tensor_symmetry::<Aind>(normalized_atom.as_view())?;
-        Self::validate_power_grammar(normalized_atom.as_view())?;
+        Self::parse_validated(normalized_atom)
+    }
 
+    fn parse_validated(normalized_atom: Atom) -> Result<Self, CanonicalizationError> {
+        Self::validate_power_grammar(normalized_atom.as_view())?;
         let library = DummyLibrary::<SymbolicTensor<Aind>>::new();
         let network = SymbolicNet::<Aind>::try_from_view::<SymbolicTensor<Aind>, _>(
             normalized_atom.as_view(),
@@ -587,7 +590,7 @@ mod tests {
     }
 
     #[test]
-    fn general_young_shapes_report_missing_straightening() {
+    fn general_young_shapes_parse_with_declared_columns() {
         let rep = test_initialize().mink4;
         let tableau = YoungTableau::new(vec![2, 1], vec![2, 0, 1]).unwrap();
         let tensor = young_tensor_symbol("idenso::canonical_policy_young_general", &tableau);
@@ -598,18 +601,44 @@ mod tests {
             slot!(rep, canonical_policy_young_general_third).to_atom()
         );
 
-        assert!(matches!(
-            CanonicalPolicyNet::<AbstractIndex>::parse(expression.clone()),
-            Err(CanonicalizationError::YoungStraighteningUnavailable {
-                head,
-                shape,
-                slot_order,
-                expression: rejected,
-            }) if head == tensor
-                && shape == vec![2, 1]
-                && slot_order == vec![2, 0, 1]
-                && rejected == expression
+        let parsed = CanonicalPolicyNet::<AbstractIndex>::parse(expression.clone()).unwrap();
+        assert_eq!(parsed.normalized_atom(), &expression);
+    }
+
+    #[test]
+    fn general_young_columns_are_lifting_signed_graph_sites() {
+        let rep = test_initialize().mink4;
+        let tableau = YoungTableau::new(vec![2, 1], vec![0, 2, 1]).unwrap();
+        let tensor = young_tensor_symbol("idenso::canonical_policy_young_column_site", &tableau);
+        let first = slot!(rep, canonical_policy_young_column_site_first);
+        let second = slot!(rep, canonical_policy_young_column_site_second);
+        let third = slot!(rep, canonical_policy_young_column_site_third);
+        let component =
+            |left: Atom, middle: Atom, right: Atom| function!(tensor, left, middle, right);
+
+        let forward = canonize(component(
+            first.to_atom(),
+            second.to_atom(),
+            third.to_atom(),
         ));
+        let column_swap = canonize(component(
+            second.to_atom(),
+            first.to_atom(),
+            third.to_atom(),
+        ));
+        assert!(canonize(forward.clone() + column_swap).is_zero());
+        assert!(canonize(component(first.to_atom(), first.to_atom(), third.to_atom())).is_zero());
+
+        // Slots 0 and 2 share a tableau row, but rows are linear projector
+        // relations rather than graph automorphisms.
+        assert_ne!(
+            forward,
+            canonize(component(
+                third.to_atom(),
+                second.to_atom(),
+                first.to_atom()
+            ))
+        );
     }
 
     #[test]
@@ -624,14 +653,8 @@ mod tests {
             slot!(rep, canonical_policy_young_opaque_third).to_atom()
         );
 
-        assert!(matches!(
-            CanonicalPolicyNet::<AbstractIndex>::parse(exposed.clone()),
-            Err(CanonicalizationError::YoungStraighteningUnavailable { .. })
-        ));
-        assert!(matches!(
-            CanonicalPolicyNet::<AbstractIndex>::parse(bracket!(exposed.clone())),
-            Err(CanonicalizationError::YoungStraighteningUnavailable { .. })
-        ));
+        assert!(CanonicalPolicyNet::<AbstractIndex>::parse(exposed.clone()).is_ok());
+        assert!(CanonicalPolicyNet::<AbstractIndex>::parse(bracket!(exposed.clone())).is_ok());
 
         let wrapper = symbol!("canonical_policy_young_opaque_wrapper");
         let opaque = function!(wrapper, bracket!(exposed));

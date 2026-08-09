@@ -40,9 +40,23 @@ harness = false
 required-features = ["reference-cases"]
 
 [[bench]]
+name = "color_algebra"
+harness = false
+required-features = ["reference-cases"]
+
+[[bench]]
 name = "gamma_algebra_time"
 harness = false
 required-features = ["reference-cases"]
+
+[[bench]]
+name = "color_algebra_time"
+harness = false
+required-features = ["reference-cases"]
+
+[[bench]]
+name = "canonicalization_time"
+harness = false
 
 [[bench]]
 name = "young_projectors"

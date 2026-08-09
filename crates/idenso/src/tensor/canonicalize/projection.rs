@@ -22,6 +22,7 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, Symbol},
+    domains::rational::Rational,
     graph::{Graph, HiddenData},
 };
 
@@ -38,10 +39,29 @@ pub(super) const DEFAULT_GRAPH_BUDGET: GraphBudget = GraphBudget {
     vertices: 128,
     edges: 160,
 };
+const YOUNG_CARRIER_DECORATION_ORBIT_LIMIT: usize = 256;
 
 #[cfg(test)]
 thread_local! {
     static GRAPHICA_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static DECORATION_ORBIT_LIMIT_OVERRIDE: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+struct DecorationOrbitLimitOverrideGuard(Option<usize>);
+
+#[cfg(test)]
+impl Drop for DecorationOrbitLimitOverrideGuard {
+    fn drop(&mut self) {
+        DECORATION_ORBIT_LIMIT_OVERRIDE.with(|limit| limit.set(self.0));
+    }
+}
+
+#[cfg(test)]
+pub(super) fn with_decoration_orbit_limit<R>(limit: usize, run: impl FnOnce() -> R) -> R {
+    let previous = DECORATION_ORBIT_LIMIT_OVERRIDE.with(|current| current.replace(Some(limit)));
+    let _guard = DecorationOrbitLimitOverrideGuard(previous);
+    run()
 }
 
 #[cfg(test)]
@@ -60,6 +80,15 @@ pub(super) struct GraphBudget {
     pub(super) edges: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ExternalLineMode {
+    Preserve,
+    /// Canonicalize a base whose boundary is bound by an even Power.
+    ///
+    /// Boundary names and the base's overall sign are gauge in this mode.
+    AnonymousEvenPower,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(super) enum UnifiedNodeColor {
     Root,
@@ -72,9 +101,13 @@ pub(super) enum UnifiedNodeColor {
     PowerCopy,
     Scalar(semantic::SemanticAtomKey),
     Tensor(TensorColor),
+    /// The center of one exchangeable manifest Young column. Columns of the
+    /// same height deliberately share this visible color.
+    YoungColumnOwner(usize),
     Port(semantic::SemanticAtomKey),
     InternalLine(semantic::SemanticAtomKey),
     ExternalLine(semantic::SemanticAtomKey),
+    AnonymousBoundary(semantic::SemanticAtomKey),
 }
 
 /// Hidden provenance retained for reconstruction and invariant diagnostics.
@@ -86,6 +119,7 @@ pub(super) enum UnifiedNodeOrigin {
     Expression(usize),
     Magnitude(usize),
     Copy { power: usize, copy: usize },
+    YoungColumnOwner { occurrence: usize, column: usize },
     Port { occurrence: usize, flat_slot: usize },
     Line(usize),
 }
@@ -100,6 +134,8 @@ pub(super) enum UnifiedEdgeColor {
     Copy,
     Base,
     Incidence(IncidenceRole),
+    YoungColumnOwner,
+    YoungColumnMember,
     Cyclic(GroupKey),
     PortLine,
 }
@@ -161,6 +197,9 @@ pub(super) struct TensorOccurrence<Aind: AbsInd> {
     pub(super) header: usize,
     pub(super) layout: TensorLayout,
     pub(super) tensor: SymbolicTensor<Aind>,
+    /// Source-local manifest column number to its visible owner vertex.
+    /// Only columns in repeated-height blocks have owners.
+    pub(super) young_column_owners: BTreeMap<usize, usize>,
     pub(super) ports: Vec<TensorPort<Aind>>,
 }
 
@@ -185,8 +224,17 @@ pub(super) struct CanonicalProjection<Aind: AbsInd> {
     pub(super) tensors: Vec<TensorOccurrence<Aind>>,
     pub(super) lines: Vec<LineOccurrence<Aind>>,
     pub(super) powers: Vec<PowerDescriptor>,
+    /// Nonzero exact numeric scalar expressions in a strict private-carrier
+    /// policy and their source orientation. Their graph payload is the unsigned
+    /// magnitude; the sign is transported with the other signed reconstruction
+    /// sites. Ordinary policies keep the signed scalar payload and this map empty.
+    pub(super) scalar_signs: BTreeMap<usize, bool>,
+    /// Private Young carriers use a bounded exact affine-decoration search;
+    /// ordinary projections retain the uncapped legacy signed payload path.
+    pub(super) decoration_orbit_limit: Option<usize>,
     pub(super) root_expression: usize,
     pub(super) identity: ProblemIdentity,
+    pub(super) external_line_mode: ExternalLineMode,
 }
 
 impl<Aind: AbsInd> CanonicalProjection<Aind> {
@@ -490,26 +538,41 @@ struct LineSummary {
 pub(super) fn project<Aind>(
     policy: &CanonicalPolicyNet<Aind>,
     budget: GraphBudget,
+    external_line_mode: ExternalLineMode,
 ) -> Result<CanonicalProjection<Aind>, CanonicalizationError>
 where
     Aind: AbsInd + DummyAind + ParseableAind,
 {
-    ProjectionBuilder::new(policy.network(), policy.normalized_atom(), budget)?.build()
+    ProjectionBuilder::new(
+        policy.network(),
+        policy.normalized_atom(),
+        budget,
+        external_line_mode,
+    )?
+    .build()
 }
 
 struct ProjectionBuilder<'a, Aind: AbsInd> {
     network: &'a SymbolicNet<Aind>,
     source: &'a Atom,
     budget: GraphBudget,
+    external_line_mode: ExternalLineMode,
     tree: SimpleTraversalTree<ParentChildStore<()>>,
     hedge_component: Vec<Option<usize>>,
     components: Vec<Component<Aind>>,
+    /// Store-indexed so successes and their original parse errors are reused
+    /// without conflating structurally distinct tensor entries.
+    tensor_layouts: Vec<Option<Result<TensorLayout, CanonicalizationError>>>,
+    #[cfg(test)]
+    tensor_layout_scans: usize,
     graph: UnifiedGraph,
     expressions: Vec<ExpressionOccurrence>,
     tensors: Vec<TensorOccurrence<Aind>>,
     lines: Vec<LineOccurrence<Aind>>,
     line_by_key: BTreeMap<LineKey, usize>,
     powers: Vec<PowerDraft>,
+    scalar_signs: BTreeMap<usize, bool>,
+    contains_young_carrier: bool,
     next_power: usize,
 }
 
@@ -521,22 +584,30 @@ where
         network: &'a SymbolicNet<Aind>,
         source: &'a Atom,
         budget: GraphBudget,
+        external_line_mode: ExternalLineMode,
     ) -> Result<Self, CanonicalizationError> {
         let tree: SimpleTraversalTree<ParentChildStore<()>> = network.graph.expr_tree().cast();
         let (hedge_component, components) = Self::line_components(network, &tree)?;
+        let tensor_layouts = vec![None; network.store.tensors.len()];
         Ok(Self {
             network,
             source,
             budget,
+            external_line_mode,
             tree,
             hedge_component,
             components,
+            tensor_layouts,
+            #[cfg(test)]
+            tensor_layout_scans: 0,
             graph: Graph::new(),
             expressions: Vec::new(),
             tensors: Vec::new(),
             lines: Vec::new(),
             line_by_key: BTreeMap::new(),
             powers: Vec::new(),
+            scalar_signs: BTreeMap::new(),
+            contains_young_carrier: false,
             next_power: 0,
         })
     }
@@ -554,6 +625,14 @@ where
             &canonical.orbit_generators,
         )?;
         let identity = Self::problem_identity(&canonical.graph);
+        let decoration_orbit_limit = self
+            .contains_young_carrier
+            .then_some(YOUNG_CARRIER_DECORATION_ORBIT_LIMIT);
+        #[cfg(test)]
+        let decoration_orbit_limit = DECORATION_ORBIT_LIMIT_OVERRIDE
+            .with(std::cell::Cell::get)
+            .filter(|_| decoration_orbit_limit.is_some())
+            .or(decoration_orbit_limit);
         Ok(CanonicalProjection {
             graph: canonical.graph,
             vertex_map: canonical.vertex_map,
@@ -562,14 +641,22 @@ where
             tensors: self.tensors,
             lines: self.lines,
             powers,
+            scalar_signs: self.scalar_signs,
+            decoration_orbit_limit,
             root_expression,
             identity,
+            external_line_mode: self.external_line_mode,
         })
     }
 
     fn project_visible_graph(&mut self) -> Result<usize, CanonicalizationError> {
         let root = self.network.graph.graph.node_id(self.network.graph.head());
         let estimate = self.estimate_visible_graph(root)?;
+        self.contains_young_carrier = self
+            .tensor_layouts
+            .iter()
+            .flatten()
+            .any(|layout| layout.as_ref().is_ok_and(|layout| layout.is_young_carrier));
 
         if estimate.vertices > self.budget.vertices || estimate.edges > self.budget.edges {
             return Err(self.graph_size_error(
@@ -727,7 +814,10 @@ where
         Ok((hedge_component, components))
     }
 
-    fn estimate_visible_graph(&self, root: NodeIndex) -> Result<Estimate, CanonicalizationError> {
+    fn estimate_visible_graph(
+        &mut self,
+        root: NodeIndex,
+    ) -> Result<Estimate, CanonicalizationError> {
         let mut state = EstimateState::default();
         // The unique root marker and its directed edge are present around every
         // projected expression, including normalized nullary operations.
@@ -747,7 +837,7 @@ where
     }
 
     fn estimate_node(
-        &self,
+        &mut self,
         node: NodeIndex,
         state: &mut EstimateState,
     ) -> Result<(), CanonicalizationError> {
@@ -805,7 +895,7 @@ where
     }
 
     fn estimate_associative(
-        &self,
+        &mut self,
         source: NodeIndex,
         product: bool,
         state: &mut EstimateState,
@@ -826,13 +916,13 @@ where
     }
 
     fn estimate_tensor(
-        &self,
+        &mut self,
         source: NodeIndex,
         tensor_index: usize,
         state: &mut EstimateState,
     ) -> Result<(), CanonicalizationError> {
+        let layout = self.tensor_layout(tensor_index)?;
         let tensor = &self.network.store.tensors[tensor_index];
-        let layout = TensorLayout::scan(tensor)?;
         let mut hedges = self
             .network
             .graph
@@ -849,8 +939,16 @@ where
             });
         }
 
-        // Tensor header, followed by one port and two incidence edges per slot.
+        // Tensor header, followed by one owner vertex/edge for every column in
+        // a repeated-height Young block, then one port and two incidence edges
+        // per slot. Owner stars replace, rather than add to, header/port edges.
         self.add_estimated_size(state, 1, 0)?;
+        let owned_columns = layout
+            .exchangeable_young_column_blocks()
+            .into_values()
+            .map(|columns| columns.len())
+            .sum();
+        self.add_estimated_size(state, owned_columns, owned_columns)?;
         let mut cyclic = BTreeMap::<GroupKey, usize>::new();
         for (structural_position, hedge) in hedges.into_iter().enumerate() {
             let flat_slot = layout.structural_holes[structural_position];
@@ -964,6 +1062,34 @@ where
         Ok(())
     }
 
+    fn add_scalar(&mut self, atom: Atom, signed_payload: bool) -> usize {
+        let numeric = (signed_payload && self.contains_young_carrier)
+            .then(|| Rational::try_from(atom.as_view()).ok())
+            .flatten()
+            .filter(|value| value != &Rational::from(0));
+        let (atom, negative) = match numeric {
+            Some(value) => {
+                let negative = value < 0;
+                (Atom::num(value.abs()), Some(negative))
+            }
+            None => (atom, None),
+        };
+        let expression = self.expressions.len();
+        let root = self.graph.add_node(HiddenData::new(
+            UnifiedNodeColor::Scalar(semantic::SemanticAtomKey::new(atom.as_view())),
+            UnifiedNodeOrigin::Expression(expression),
+        ));
+        self.expressions.push(ExpressionOccurrence {
+            root,
+            kind: ExpressionKind::Scalar(atom),
+            children: Vec::new(),
+        });
+        if let Some(negative) = negative {
+            self.scalar_signs.insert(expression, negative);
+        }
+        expression
+    }
+
     fn project_node(
         &mut self,
         source: NodeIndex,
@@ -972,17 +1098,7 @@ where
         match &self.network.graph.graph[source] {
             NetworkNode::Leaf(NetworkLeaf::Scalar(reference)) => {
                 let atom = self.network.store.get_scalar_ref(*reference).clone();
-                let expression = self.expressions.len();
-                let root = self.graph.add_node(HiddenData::new(
-                    UnifiedNodeColor::Scalar(semantic::SemanticAtomKey::new(atom.as_view())),
-                    UnifiedNodeOrigin::Expression(expression),
-                ));
-                self.expressions.push(ExpressionOccurrence {
-                    root,
-                    kind: ExpressionKind::Scalar(atom),
-                    children: Vec::new(),
-                });
-                Ok(expression)
+                Ok(self.add_scalar(atom, true))
             }
             NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
                 self.project_tensor(source, *index, power_path)
@@ -1019,21 +1135,7 @@ where
                 )?;
                 Ok(expression)
             }
-            NetworkNode::Op(NetworkOp::Power(0)) => {
-                let expression = self.expressions.len();
-                let root = self.graph.add_node(HiddenData::new(
-                    UnifiedNodeColor::Scalar(semantic::SemanticAtomKey::new(
-                        Atom::num(1).as_view(),
-                    )),
-                    UnifiedNodeOrigin::Expression(expression),
-                ));
-                self.expressions.push(ExpressionOccurrence {
-                    root,
-                    kind: ExpressionKind::Scalar(Atom::num(1)),
-                    children: Vec::new(),
-                });
-                Ok(expression)
-            }
+            NetworkNode::Op(NetworkOp::Power(0)) => Ok(self.add_scalar(Atom::num(1), false)),
             NetworkNode::Op(NetworkOp::Power(1)) => {
                 self.project_node(self.only_child(source)?, power_path)
             }
@@ -1053,17 +1155,7 @@ where
         self.flatten_associative(source, product, &mut sources);
         if sources.is_empty() {
             let atom = if product { Atom::num(1) } else { Atom::Zero };
-            let expression = self.expressions.len();
-            let root = self.graph.add_node(HiddenData::new(
-                UnifiedNodeColor::Scalar(semantic::SemanticAtomKey::new(atom.as_view())),
-                UnifiedNodeOrigin::Expression(expression),
-            ));
-            self.expressions.push(ExpressionOccurrence {
-                root,
-                kind: ExpressionKind::Scalar(atom),
-                children: Vec::new(),
-            });
-            return Ok(expression);
+            return Ok(self.add_scalar(atom, false));
         }
         if sources.len() == 1 {
             return self.project_node(sources[0], power_path);
@@ -1186,7 +1278,7 @@ where
         power_path: &[PowerFrame],
     ) -> Result<usize, CanonicalizationError> {
         let tensor = self.network.store.tensors[tensor_index].clone();
-        let layout = TensorLayout::scan(&tensor)?;
+        let layout = self.tensor_layout(tensor_index)?;
         let structural_slots = tensor
             .structure
             .external_structure_iter()
@@ -1211,6 +1303,24 @@ where
             UnifiedNodeColor::Tensor(layout.color.clone()),
             UnifiedNodeOrigin::Expression(expression),
         ));
+        let mut young_column_owners = BTreeMap::new();
+        for column in layout
+            .exchangeable_young_column_blocks()
+            .into_values()
+            .flatten()
+        {
+            let owner = self.graph.add_node(HiddenData::new(
+                UnifiedNodeColor::YoungColumnOwner(layout.young_columns[column].len()),
+                UnifiedNodeOrigin::YoungColumnOwner { occurrence, column },
+            ));
+            self.add_edge(
+                header,
+                owner,
+                UnifiedEdgeColor::YoungColumnOwner,
+                UnifiedEdgeOrigin::None,
+            )?;
+            young_column_owners.insert(column, owner);
+        }
         let mut ports = Vec::with_capacity(layout.slot_count);
         let mut cyclic = BTreeMap::<GroupKey, Vec<(usize, usize)>>::new();
         for (structural_position, hedge) in hedges.into_iter().enumerate() {
@@ -1234,10 +1344,21 @@ where
                     flat_slot,
                 },
             ));
+            let column_owner = match &role {
+                IncidenceRole::Group {
+                    key: GroupKey::YoungColumn(column),
+                    ..
+                } => young_column_owners.get(column).copied(),
+                _ => None,
+            };
             self.add_edge(
-                header,
+                column_owner.unwrap_or(header),
                 port,
-                UnifiedEdgeColor::Incidence(role.clone()),
+                if column_owner.is_some() {
+                    UnifiedEdgeColor::YoungColumnMember
+                } else {
+                    UnifiedEdgeColor::Incidence(role.clone())
+                },
                 UnifiedEdgeOrigin::Incidence { flat_slot, member },
             )?;
             self.add_edge(
@@ -1286,6 +1407,7 @@ where
             header,
             layout,
             tensor,
+            young_column_owners,
             ports,
         });
         self.expressions.push(ExpressionOccurrence {
@@ -1296,6 +1418,22 @@ where
         Ok(expression)
     }
 
+    fn tensor_layout(
+        &mut self,
+        tensor_index: usize,
+    ) -> Result<TensorLayout, CanonicalizationError> {
+        if let Some(layout) = &self.tensor_layouts[tensor_index] {
+            return layout.clone();
+        }
+        let layout = TensorLayout::scan(&self.network.store.tensors[tensor_index]);
+        #[cfg(test)]
+        {
+            self.tensor_layout_scans += 1;
+        }
+        self.tensor_layouts[tensor_index] = Some(layout.clone());
+        layout
+    }
+
     fn line(&mut self, component: usize, power_path: &[PowerFrame]) -> usize {
         let key = self.line_key(component, power_path);
         if let Some(line) = self.line_by_key.get(&key) {
@@ -1303,10 +1441,17 @@ where
         }
         let metadata = &self.components[component];
         let external = key.steps.is_empty().then_some(metadata.external).flatten();
-        let color = external.map_or_else(
-            || UnifiedNodeColor::InternalLine(semantic::representation_key(metadata.group)),
-            |slot| UnifiedNodeColor::ExternalLine(semantic::slot_key(slot)),
-        );
+        let color = match (external, self.external_line_mode) {
+            (None, _) => {
+                UnifiedNodeColor::InternalLine(semantic::representation_key(metadata.group))
+            }
+            (Some(slot), ExternalLineMode::Preserve) => {
+                UnifiedNodeColor::ExternalLine(semantic::slot_key(slot))
+            }
+            (Some(_), ExternalLineMode::AnonymousEvenPower) => {
+                UnifiedNodeColor::AnonymousBoundary(semantic::representation_key(metadata.group))
+            }
+        };
         let line = self.lines.len();
         let vertex = self
             .graph
@@ -1442,6 +1587,9 @@ where
                 "canonical vertex map has the wrong domain for Power validation".into(),
             ));
         }
+        if self.powers.is_empty() {
+            return Ok(Vec::new());
+        }
 
         let powers_by_expression = self
             .powers
@@ -1502,6 +1650,12 @@ where
                         let occurrence = &self.expressions[expression];
                         vertices.insert(occurrence.root);
                         if let Some(&tensor) = tensors_by_expression.get(&expression) {
+                            vertices.extend(
+                                self.tensors[tensor]
+                                    .young_column_owners
+                                    .values()
+                                    .copied(),
+                            );
                             vertices.extend(
                                 self.tensors[tensor].ports.iter().map(|port| port.vertex),
                             );
@@ -1706,6 +1860,9 @@ where
         powers: &[PowerDescriptor],
         orbit_generators: &[Vec<Vec<usize>>],
     ) -> Result<(), CanonicalizationError> {
+        if powers.is_empty() {
+            return Ok(());
+        }
         let roots = powers
             .iter()
             .enumerate()
@@ -1824,9 +1981,10 @@ mod tests {
 
     use super::{
         CanonicalPolicyNet, CanonicalizationError, DEFAULT_GRAPH_BUDGET, Estimate, EstimateState,
-        ExpressionKind, GraphBudget, PowerBoundaryDescriptor, PowerBoundaryTarget,
-        PowerCopyDescriptor, PowerDescriptor, ProblemIdentity, ProjectionBuilder, UnifiedEdgeColor,
-        UnifiedGraph, UnifiedNodeColor, graphica_calls, project, reset_graphica_calls,
+        ExpressionKind, ExternalLineMode, GraphBudget, PowerBoundaryDescriptor,
+        PowerBoundaryTarget, PowerCopyDescriptor, PowerDescriptor, ProblemIdentity,
+        ProjectionBuilder, UnifiedEdgeColor, UnifiedGraph, UnifiedNodeColor, graphica_calls,
+        project, reset_graphica_calls,
     };
     use crate::tensor::canonicalize::driver::DEFAULT_ITERATION_LIMIT;
     use crate::test_support::test_initialize;
@@ -1864,7 +2022,8 @@ mod tests {
             1
         );
 
-        let projection = project(&policy, DEFAULT_GRAPH_BUDGET).unwrap();
+        let projection =
+            project(&policy, DEFAULT_GRAPH_BUDGET, ExternalLineMode::Preserve).unwrap();
         assert_eq!(projection.tensors.len(), 1);
         assert_eq!(projection.tensors[0].ports.len(), 2);
         let colors = projection
@@ -1903,7 +2062,8 @@ mod tests {
         let tensor = tensor_symbol!(projection_visible_scalar_tensor);
         let expression = Atom::num(2) * function!(tensor, index.to_atom());
         let policy = CanonicalPolicyNet::<AbstractIndex>::parse(expression).unwrap();
-        let projection = project(&policy, DEFAULT_GRAPH_BUDGET).unwrap();
+        let projection =
+            project(&policy, DEFAULT_GRAPH_BUDGET, ExternalLineMode::Preserve).unwrap();
         let only_vertex = |predicate: fn(&UnifiedNodeColor) -> bool| {
             let mut vertices = projection
                 .graph
@@ -1934,6 +2094,30 @@ mod tests {
     }
 
     #[test]
+    fn ordinary_numeric_scalar_keeps_its_signed_graph_payload() {
+        let rep = test_initialize().mink4;
+        let index = slot!(rep, projection_signed_scalar_index);
+        let tensor = tensor_symbol!(projection_signed_scalar_tensor);
+        let policy = CanonicalPolicyNet::<AbstractIndex>::parse(
+            Atom::num(-2) * function!(tensor, index.to_atom()),
+        )
+        .unwrap();
+        let projection =
+            project(&policy, DEFAULT_GRAPH_BUDGET, ExternalLineMode::Preserve).unwrap();
+        let signed = Atom::num(-2);
+        let signed_key = super::semantic::SemanticAtomKey::new(signed.as_view());
+
+        assert!(projection.scalar_signs.is_empty());
+        assert_eq!(projection.decoration_orbit_limit, None);
+        assert!(projection.graph.nodes().iter().any(|node| {
+            matches!(&node.data.data, UnifiedNodeColor::Scalar(key) if key == &signed_key)
+        }));
+        assert!(projection.expressions.iter().any(|occurrence| {
+            matches!(&occurrence.kind, ExpressionKind::Scalar(atom) if atom == &signed)
+        }));
+    }
+
+    #[test]
     fn root_and_equivalent_nested_operators_have_distinct_roles() {
         let rep = test_initialize().mink4;
         let index = slot!(rep, projection_root_nested_index);
@@ -1944,7 +2128,8 @@ mod tests {
             function!(wrapper, function!(tensor, index.to_atom()))
         );
         let policy = CanonicalPolicyNet::<AbstractIndex>::parse(expression).unwrap();
-        let projection = project(&policy, DEFAULT_GRAPH_BUDGET).unwrap();
+        let projection =
+            project(&policy, DEFAULT_GRAPH_BUDGET, ExternalLineMode::Preserve).unwrap();
         let root = projection
             .graph
             .nodes()
@@ -2009,7 +2194,12 @@ mod tests {
         let conflicting = reps.bis4.slot::<AbstractIndex, _>(index.aind()).to_lib();
         network.graph.graph[[&hedge]] = NetworkEdge::Slot(conflicting);
 
-        let Err(error) = ProjectionBuilder::new(&network, &expression, DEFAULT_GRAPH_BUDGET) else {
+        let Err(error) = ProjectionBuilder::new(
+            &network,
+            &expression,
+            DEFAULT_GRAPH_BUDGET,
+            ExternalLineMode::Preserve,
+        ) else {
             panic!("conflicting tensor endpoint must fail projection setup");
         };
         assert!(matches!(error, CanonicalizationError::Projection(message)
@@ -2027,7 +2217,8 @@ mod tests {
         let expression =
             function!(left, minkowski.to_atom()) * function!(right, bispinor.to_atom());
         let policy = CanonicalPolicyNet::<AbstractIndex>::parse(expression).unwrap();
-        let projection = project(&policy, DEFAULT_GRAPH_BUDGET).unwrap();
+        let projection =
+            project(&policy, DEFAULT_GRAPH_BUDGET, ExternalLineMode::Preserve).unwrap();
         let groups = projection
             .lines
             .iter()
@@ -2098,6 +2289,7 @@ mod tests {
                 vertices: usize::MAX,
                 edges: usize::MAX,
             },
+            ExternalLineMode::Preserve,
         )
         .unwrap();
         let root = builder
@@ -2140,6 +2332,7 @@ mod tests {
                 vertices: usize::MAX,
                 edges: usize::MAX,
             },
+            ExternalLineMode::Preserve,
         )
         .unwrap();
         let root = builder
@@ -2352,7 +2545,8 @@ mod tests {
         for exponent in [-4_i8, -2, 2, 3, 4, 5] {
             let expression = base.clone().pow(exponent);
             let policy = CanonicalPolicyNet::<AbstractIndex>::parse(expression).unwrap();
-            let projection = project(&policy, DEFAULT_GRAPH_BUDGET).unwrap();
+            let projection =
+                project(&policy, DEFAULT_GRAPH_BUDGET, ExternalLineMode::Preserve).unwrap();
             assert_eq!(projection.powers.len(), 1);
             let power = &projection.powers[0];
             let magnitude = usize::from(exponent.unsigned_abs());
@@ -2465,8 +2659,13 @@ mod tests {
             },
         ] {
             let policy = CanonicalPolicyNet::<AbstractIndex>::parse(expression.clone()).unwrap();
-            let mut builder =
-                ProjectionBuilder::new(policy.network(), policy.normalized_atom(), budget).unwrap();
+            let mut builder = ProjectionBuilder::new(
+                policy.network(),
+                policy.normalized_atom(),
+                budget,
+                ExternalLineMode::Preserve,
+            )
+            .unwrap();
             let error = builder.project_visible_graph().unwrap_err();
             assert!(matches!(
                 error,
@@ -2507,8 +2706,13 @@ mod tests {
             },
         ] {
             let policy = CanonicalPolicyNet::<AbstractIndex>::parse(expression.clone()).unwrap();
-            let mut builder =
-                ProjectionBuilder::new(policy.network(), policy.normalized_atom(), budget).unwrap();
+            let mut builder = ProjectionBuilder::new(
+                policy.network(),
+                policy.normalized_atom(),
+                budget,
+                ExternalLineMode::Preserve,
+            )
+            .unwrap();
             let error = builder.project_visible_graph().unwrap_err();
             assert!(matches!(
                 error,
@@ -2544,6 +2748,7 @@ mod tests {
                 vertices: estimate.vertices,
                 edges: estimate.edges,
             },
+            ExternalLineMode::Preserve,
         )
         .unwrap();
 
@@ -2703,6 +2908,7 @@ mod tests {
                 vertices: 1,
                 edges: 1,
             },
+            ExternalLineMode::Preserve,
         )
         .unwrap();
 
@@ -2730,6 +2936,7 @@ mod tests {
                 vertices: usize::MAX,
                 edges: usize::MAX,
             },
+            ExternalLineMode::Preserve,
         )
         .unwrap();
 
@@ -2773,8 +2980,13 @@ mod tests {
             vertices: 64,
             edges: usize::MAX,
         };
-        let mut builder =
-            ProjectionBuilder::new(policy.network(), policy.normalized_atom(), budget).unwrap();
+        let mut builder = ProjectionBuilder::new(
+            policy.network(),
+            policy.normalized_atom(),
+            budget,
+            ExternalLineMode::Preserve,
+        )
+        .unwrap();
 
         assert!(matches!(
             builder.project_visible_graph(),
@@ -2788,5 +3000,37 @@ mod tests {
         ));
         assert!(builder.graph.nodes().is_empty());
         assert!(builder.graph.edges().is_empty());
+    }
+
+    #[test]
+    fn tensor_layout_is_scanned_once_for_estimation_and_power_copies() {
+        let rep = test_initialize().mink4;
+        let first = slot!(rep, cached_layout_first);
+        let second = slot!(rep, cached_layout_second);
+        let tensor = tensor_symbol!(cached_layout_tensor; Symmetric);
+        let expression = function!(tensor, first.to_atom(), second.to_atom()).pow(4);
+        let policy = CanonicalPolicyNet::<AbstractIndex>::parse(expression).unwrap();
+        let mut builder = ProjectionBuilder::new(
+            policy.network(),
+            policy.normalized_atom(),
+            GraphBudget {
+                vertices: usize::MAX,
+                edges: usize::MAX,
+            },
+            ExternalLineMode::Preserve,
+        )
+        .unwrap();
+        let root = builder
+            .network
+            .graph
+            .graph
+            .node_id(builder.network.graph.head());
+
+        builder.estimate_visible_graph(root).unwrap();
+        assert_eq!(builder.tensor_layout_scans, 1);
+        builder.project_visible_graph().unwrap();
+
+        assert_eq!(builder.tensor_layout_scans, 1);
+        assert_eq!(builder.tensors.len(), 4);
     }
 }

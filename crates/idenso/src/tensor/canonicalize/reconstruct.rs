@@ -15,15 +15,18 @@ use spenso::{
         slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
     },
 };
-use symbolica::atom::{Atom, AtomView};
+use symbolica::{
+    atom::{Atom, AtomView},
+    domains::rational::Rational,
+};
 
 use super::{
     CanonicalizationError, GroupKey, IncidenceRole, LayoutArgument, SymmetryKind,
     driver::execute_atom,
-    group::{SignSiteFrame, SignedAction, SignedGroup, transport_site_frames},
+    group::{SignSiteFrame, SignedAction, SignedGroup, SignedGroupError, transport_site_frames},
     projection::{
-        CanonicalProjection, ExpressionKind, PowerBoundaryTarget, PowerCopyDescriptor,
-        UnifiedNodeColor,
+        CanonicalProjection, ExpressionKind, ExternalLineMode, PowerBoundaryTarget,
+        PowerCopyDescriptor, UnifiedNodeColor,
     },
     semantic,
 };
@@ -103,11 +106,29 @@ impl<Aind: AbsInd> DummyAllocator<Aind> {
 
 #[derive(Clone)]
 struct SiteMeta {
-    occurrence: usize,
     expression: usize,
-    key: GroupKey,
-    intrinsic: bool,
-    lifts: bool,
+    owner: usize,
+    kind: SiteKind,
+}
+
+#[derive(Clone, Copy)]
+enum SiteKind {
+    Scalar,
+    Tensor {
+        occurrence: usize,
+        key: GroupKey,
+        intrinsic: bool,
+        lifts: bool,
+    },
+}
+
+impl SiteMeta {
+    fn lifts(&self) -> bool {
+        match self.kind {
+            SiteKind::Scalar => true,
+            SiteKind::Tensor { lifts, .. } => lifts,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -281,6 +302,7 @@ impl SignedAnalysis {
         SymbolicTensor<Aind>: Contract<SymbolicTensor<Aind>, (), LCM = SymbolicTensor<Aind>>,
     {
         let mut source_sites = Vec::new();
+        let mut source_phases = Vec::new();
         let mut canonical_sites = Vec::<(SignSiteFrame, SiteMeta)>::new();
         for (occurrence_index, occurrence) in projection.tensors.iter().enumerate() {
             for (key, lifts) in occurrence.layout.antisymmetric_groups() {
@@ -290,9 +312,22 @@ impl SignedAnalysis {
                     .filter(|port| Self::port_in_group(&port.role, key))
                     .collect::<Vec<_>>();
                 source_members.sort_unstable_by_key(|port| port.member);
+                let (owner, layout_path) = match key {
+                    GroupKey::YoungColumn(column) => occurrence
+                        .young_column_owners
+                        .get(&column)
+                        .map(|owner| {
+                            (
+                                *owner,
+                                vec![2, occurrence.layout.young_columns[column].len()],
+                            )
+                        })
+                        .unwrap_or_else(|| (occurrence.header, Self::layout_path(key))),
+                    _ => (occurrence.header, Self::layout_path(key)),
+                };
                 let source_frame = SignSiteFrame {
-                    owner: occurrence.header,
-                    layout_path: Self::layout_path(key),
+                    owner,
+                    layout_path: layout_path.clone(),
                     members: source_members.iter().map(|port| port.vertex).collect(),
                 };
                 let mut canonical_members = source_members
@@ -301,21 +336,48 @@ impl SignedAnalysis {
                     .collect::<Vec<_>>();
                 canonical_members.sort_unstable();
                 source_sites.push(source_frame);
+                source_phases.push(false);
                 canonical_sites.push((
                     SignSiteFrame {
-                        owner: projection.vertex_map[occurrence.header],
-                        layout_path: Self::layout_path(key),
+                        owner: projection.vertex_map[owner],
+                        layout_path,
                         members: canonical_members,
                     },
                     SiteMeta {
-                        occurrence: occurrence_index,
                         expression: occurrence.expression,
-                        key,
-                        intrinsic: key == GroupKey::Intrinsic,
-                        lifts,
+                        owner: projection.vertex_map[owner],
+                        kind: SiteKind::Tensor {
+                            occurrence: occurrence_index,
+                            key,
+                            intrinsic: key == GroupKey::Intrinsic,
+                            lifts,
+                        },
                     },
                 ));
             }
+        }
+        for (&expression, &negative) in &projection.scalar_signs {
+            let owner = projection.expressions[expression].root;
+            let layout_path = vec![3];
+            source_sites.push(SignSiteFrame {
+                owner,
+                layout_path: layout_path.clone(),
+                members: vec![owner],
+            });
+            source_phases.push(negative);
+            let owner = projection.vertex_map[owner];
+            canonical_sites.push((
+                SignSiteFrame {
+                    owner,
+                    layout_path,
+                    members: vec![owner],
+                },
+                SiteMeta {
+                    expression,
+                    owner,
+                    kind: SiteKind::Scalar,
+                },
+            ));
         }
         canonical_sites.sort_by(|(left, _), (right, _)| {
             left.owner
@@ -326,15 +388,28 @@ impl SignedAnalysis {
         let images = transport_site_frames(&projection.vertex_map, &source_sites, &target_frames)
             .map_err(|error| CanonicalizationError::Projection(error.to_string()))?;
         let mut phases = vec![false; sites.len()];
-        for image in images {
-            phases[image.target] ^= image.odd;
+        for (source, image) in images.into_iter().enumerate() {
+            phases[image.target] ^= source_phases[source] ^ image.odd;
         }
-        let group = SignedGroup::from_graphica(
+        let mut group = SignedGroup::from_graphica(
             projection.graph.nodes().len(),
             &target_frames,
             &projection.orbit_generators,
         )
         .map_err(|error| CanonicalizationError::Projection(error.to_string()))?;
+        if projection.external_line_mode == ExternalLineMode::AnonymousEvenPower {
+            let mut boundaries = projection
+                .lines
+                .iter()
+                .filter(|line| line.external.is_some())
+                .map(|line| projection.vertex_map[line.vertex])
+                .collect::<Vec<_>>();
+            boundaries.sort_unstable();
+            boundaries.dedup();
+            group = group
+                .pointwise_vertex_stabilizer(&boundaries)
+                .map_err(|error| CanonicalizationError::Projection(error.to_string()))?;
+        }
 
         let mut analysis = Self {
             group,
@@ -363,6 +438,7 @@ impl SignedAnalysis {
             expression: usize,
             descendants: &mut BTreeSet<usize>,
             parents: &mut BTreeMap<usize, usize>,
+            postorder: &mut Vec<usize>,
         ) -> Result<(), CanonicalizationError> {
             if !descendants.insert(expression) {
                 return Ok(());
@@ -376,8 +452,9 @@ impl SignedAnalysis {
                 if parents.insert(child, expression).is_some() {
                     return Err(CanonicalizationError::AmbiguousSignScope);
                 }
-                visit(projection, child, descendants, parents)?;
+                visit(projection, child, descendants, parents, postorder)?;
             }
+            postorder.push(expression);
             Ok(())
         }
 
@@ -427,6 +504,26 @@ impl SignedAnalysis {
             }
         }
 
+        fn has_untracked_negative_scalar<Aind: AbsInd>(
+            projection: &CanonicalProjection<Aind>,
+            expression: usize,
+        ) -> bool {
+            let occurrence = &projection.expressions[expression];
+            if let ExpressionKind::Scalar(atom) = &occurrence.kind
+                && !projection.scalar_signs.contains_key(&expression)
+                && Rational::try_from(atom.as_view()).is_ok_and(|value| value < 0)
+            {
+                return true;
+            }
+            let children = match &occurrence.kind {
+                ExpressionKind::Power { copies, .. } => copies.as_slice(),
+                _ => occurrence.children.as_slice(),
+            };
+            children
+                .iter()
+                .any(|&child| has_untracked_negative_scalar(projection, child))
+        }
+
         fn toggle(decoration: &mut NormalizedDecoration, key: SinkKey, target: SinkTarget) {
             use std::collections::btree_map::Entry;
             match decoration.sinks.entry(key) {
@@ -441,7 +538,14 @@ impl SignedAnalysis {
 
         let mut descendants = BTreeSet::new();
         let mut parents = BTreeMap::new();
-        visit(projection, scope, &mut descendants, &mut parents)?;
+        let mut postorder = Vec::new();
+        visit(
+            projection,
+            scope,
+            &mut descendants,
+            &mut parents,
+            &mut postorder,
+        )?;
 
         let mut decoration = NormalizedDecoration::default();
         let mut whole_values = BTreeMap::<usize, bool>::new();
@@ -449,21 +553,24 @@ impl SignedAnalysis {
             if !phases[site] || !descendants.contains(&metadata.expression) {
                 continue;
             }
-            if metadata.lifts {
+            if metadata.lifts() {
                 *whole_values.entry(metadata.expression).or_default() ^= true;
             } else {
-                let occurrence = &projection.tensors[metadata.occurrence];
+                let SiteKind::Tensor {
+                    occurrence, key, ..
+                } = metadata.kind
+                else {
+                    unreachable!("scalar sign sites always lift")
+                };
+                let tensor = &projection.tensors[occurrence];
                 toggle(
                     &mut decoration,
                     SinkKey {
                         kind: 0,
-                        vertex: projection.vertex_map[occurrence.header],
-                        path: Self::layout_path(metadata.key),
+                        vertex: projection.vertex_map[tensor.header],
+                        path: Self::layout_path(key),
                     },
-                    SinkTarget::Nested {
-                        occurrence: metadata.occurrence,
-                        key: metadata.key,
-                    },
+                    SinkTarget::Nested { occurrence, key },
                 );
             }
         }
@@ -473,6 +580,49 @@ impl SignedAnalysis {
             if !odd {
                 continue;
             }
+            while let Some(parent) = parents.get(&expression).copied() {
+                if !transparent(projection, parent) {
+                    break;
+                }
+                expression = parent;
+            }
+            *transparent_regions.entry(expression).or_default() ^= true;
+        }
+
+        // A Sum is not generally sign-transparent, but an odd sign shared by
+        // every surviving term is one sign on the complete Sum. Factor that
+        // common parity before continuing through an enclosing transparent
+        // Product/Neg/linear-function region. Mixed term parities stay local.
+        // An ordinary negative coefficient keeps its sign in the visible
+        // graph; moving a lifted sign across it would ignore that existing
+        // parity and can change the graph on the next iteration. Private-
+        // carrier coefficients are scalar sign sites, so they are tracked in
+        // `scalar_signs` and remain eligible here.
+        for expression in postorder {
+            let occurrence = &projection.expressions[expression];
+            if !matches!(occurrence.kind, ExpressionKind::Sum) {
+                continue;
+            }
+            let children = occurrence
+                .children
+                .iter()
+                .copied()
+                .filter(|child| !self.zero_expressions.contains(child))
+                .collect::<Vec<_>>();
+            if children.is_empty()
+                || children
+                    .iter()
+                    .any(|&child| has_untracked_negative_scalar(projection, child))
+                || !children
+                    .iter()
+                    .all(|child| transparent_regions.get(child) == Some(&true))
+            {
+                continue;
+            }
+            for child in children {
+                transparent_regions.remove(&child);
+            }
+            let mut expression = expression;
             while let Some(parent) = parents.get(&expression).copied() {
                 if !transparent(projection, parent) {
                     break;
@@ -548,16 +698,36 @@ impl SignedAnalysis {
             .iter()
             .map(|site| {
                 active_expressions.contains(&site.expression)
-                    && !self
-                        .zero_groups
-                        .get(&site.occurrence)
-                        .is_some_and(|groups| groups.contains(&site.key))
+                    && match site.kind {
+                        SiteKind::Scalar => true,
+                        SiteKind::Tensor {
+                            occurrence, key, ..
+                        } => !self
+                            .zero_groups
+                            .get(&occurrence)
+                            .is_some_and(|groups| groups.contains(&key)),
+                    }
             })
             .collect::<Vec<_>>();
         let orbit = self
             .group
-            .decoration_orbit(&self.phases, &active_sites)
-            .map_err(|error| CanonicalizationError::Projection(error.to_string()))?;
+            .decoration_orbit(
+                &self.phases,
+                &active_sites,
+                projection.decoration_orbit_limit,
+            )
+            .map_err(|error| match error {
+                SignedGroupError::DecorationOrbitLimit {
+                    observed_at_least,
+                    limit,
+                    sites,
+                } => CanonicalizationError::SignedDecorationOrbitLimit {
+                    observed_at_least,
+                    limit,
+                    sites,
+                },
+                error => CanonicalizationError::Projection(error.to_string()),
+            })?;
         let mut best = None;
         for phases in orbit {
             let class =
@@ -633,10 +803,13 @@ impl SignedAnalysis {
                         });
                 let line_data = &projection.lines[line];
                 (occurs_outside || line_data.external.is_some()).then(|| {
-                    let key = line_data.external.map_or_else(
-                        || semantic::representation_key(line_data.group),
-                        semantic::slot_key,
-                    );
+                    let key = match (line_data.external, projection.external_line_mode) {
+                        (_, ExternalLineMode::AnonymousEvenPower)
+                        | (None, ExternalLineMode::Preserve) => {
+                            semantic::representation_key(line_data.group)
+                        }
+                        (Some(slot), ExternalLineMode::Preserve) => semantic::slot_key(slot),
+                    };
                     (projection.vertex_map[line_data.vertex], key)
                 })
             })
@@ -670,7 +843,7 @@ impl SignedAnalysis {
             expression,
             &mut dummy_allocator,
             &mut new_dummy,
-            true,
+            projection.external_line_mode == ExternalLineMode::Preserve,
         )?;
         let network = rebuilder.expression(expression)?;
         let realization = rebuilder.realized_sinks.iter().cloned().collect();
@@ -718,6 +891,9 @@ impl SignedAnalysis {
         Aind: AbsInd + DummyAind + ParseableAind,
         SymbolicTensor<Aind>: Contract<SymbolicTensor<Aind>, (), LCM = SymbolicTensor<Aind>>,
     {
+        if self.sites.is_empty() {
+            return Ok(false);
+        }
         let descriptor = Self::scope_descriptor(projection, expression);
         let mut fixed = Vec::with_capacity(descriptor.boundary.len() + 1);
         fixed.push(descriptor.root);
@@ -751,6 +927,9 @@ impl SignedAnalysis {
                 reason: "validated magnitude descriptor is missing".into(),
             }
         })?;
+        if self.sites.is_empty() {
+            return Ok(false);
+        }
         let descriptor = ScopeDescriptor {
             root: power.magnitude,
             kind: projection.graph.node(power.magnitude).data.data.clone(),
@@ -925,13 +1104,19 @@ impl SignedAnalysis {
         projection: &CanonicalProjection<Aind>,
     ) -> Result<(), CanonicalizationError> {
         for (site, metadata) in self.sites.iter().enumerate() {
-            let occurrence = &projection.tensors[metadata.occurrence];
-            let mut fixed = vec![projection.vertex_map[occurrence.header]];
+            let SiteKind::Tensor {
+                occurrence, key, ..
+            } = metadata.kind
+            else {
+                continue;
+            };
+            let tensor = &projection.tensors[occurrence];
+            let mut fixed = vec![metadata.owner];
             fixed.extend(
-                occurrence
+                tensor
                     .ports
                     .iter()
-                    .filter(|port| Self::port_in_group(&port.role, metadata.key))
+                    .filter(|port| Self::port_in_group(&port.role, key))
                     .map(|port| projection.vertex_map[projection.lines[port.line].vertex]),
             );
             fixed.sort_unstable();
@@ -944,10 +1129,7 @@ impl SignedAnalysis {
                 .has_odd_site_stabilizer(site)
                 .map_err(|error| CanonicalizationError::Projection(error.to_string()))?
             {
-                self.zero_groups
-                    .entry(metadata.occurrence)
-                    .or_default()
-                    .insert(metadata.key);
+                self.zero_groups.entry(occurrence).or_default().insert(key);
             }
         }
         Ok(())
@@ -992,10 +1174,9 @@ impl SignedAnalysis {
             ExpressionKind::Scalar(atom) => atom.as_view().is_zero(),
             ExpressionKind::Tensor(tensor_index) => {
                 let tensor = &projection.tensors[*tensor_index];
-                self.zero_groups.get(tensor_index).is_some_and(|groups| {
-                    groups.contains(&GroupKey::Intrinsic)
-                        || (tensor.layout.outer_linear && !groups.is_empty())
-                })
+                self.zero_groups
+                    .get(tensor_index)
+                    .is_some_and(|groups| groups.iter().any(|key| tensor.layout.group_lifts(*key)))
             }
             ExpressionKind::Product => !child_singular && child_zero.iter().any(|zero| *zero),
             ExpressionKind::Sum => !child_zero.is_empty() && child_zero.iter().all(|zero| *zero),
@@ -1107,6 +1288,7 @@ impl SignedAnalysis {
         match key {
             GroupKey::Intrinsic => vec![0],
             GroupKey::Argument(argument) => vec![1, argument],
+            GroupKey::YoungColumn(column) => vec![2, column],
         }
     }
 }
@@ -1142,7 +1324,7 @@ where
             projection.root_expression,
             dummy_allocator,
             new_dummy,
-            true,
+            projection.external_line_mode == ExternalLineMode::Preserve,
         )
     }
 
@@ -1305,6 +1487,7 @@ where
         let occurrence = &self.projection.tensors[tensor];
         let mut slots = vec![None; occurrence.layout.slot_count];
         if let Some(target_lines) = target_lines {
+            let column_targets = self.canonical_young_column_targets(occurrence).ok()?;
             let mut groups = BTreeMap::<(GroupKey, SymmetryKind), Vec<_>>::new();
             for port in &occurrence.ports {
                 let value = (
@@ -1320,21 +1503,8 @@ where
             }
             for ((key, kind), members) in groups {
                 let ordered = self.canonical_members(key, kind, members).ok()?;
-                let holes = match key {
-                    GroupKey::Intrinsic => occurrence
-                        .layout
-                        .arguments
-                        .iter()
-                        .filter_map(|argument| match argument {
-                            LayoutArgument::DirectSlot(hole) => Some(*hole),
-                            _ => None,
-                        })
-                        .collect::<Vec<_>>(),
-                    GroupKey::Argument(argument) => match &occurrence.layout.arguments[argument] {
-                        LayoutArgument::Group { holes, .. } => holes.clone(),
-                        _ => return None,
-                    },
-                };
+                let target = column_targets.get(&key).copied().unwrap_or(key);
+                let holes = occurrence.layout.group_holes(target)?;
                 if holes.len() != ordered.len() {
                     return None;
                 }
@@ -1422,6 +1592,7 @@ where
     ) -> Result<SymbolicNet<Aind>, CanonicalizationError> {
         let occurrence = &self.projection.tensors[tensor];
         let mut slots = vec![None; occurrence.layout.slot_count];
+        let column_targets = self.canonical_young_column_targets(occurrence)?;
         let mut groups = BTreeMap::<(GroupKey, SymmetryKind), Vec<_>>::new();
         let mut ports = occurrence.ports.iter().collect::<Vec<_>>();
         ports.sort_unstable_by_key(|port| {
@@ -1438,25 +1609,12 @@ where
         }
         for ((key, kind), members) in groups {
             let ordered = self.canonical_members(key, kind, members)?;
-            let holes = match key {
-                GroupKey::Intrinsic => occurrence
-                    .layout
-                    .arguments
-                    .iter()
-                    .filter_map(|argument| match argument {
-                        LayoutArgument::DirectSlot(hole) => Some(*hole),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>(),
-                GroupKey::Argument(argument) => match &occurrence.layout.arguments[argument] {
-                    LayoutArgument::Group { holes, .. } => holes.clone(),
-                    _ => {
-                        return Err(CanonicalizationError::StructureMismatch {
-                            expression: occurrence.tensor.expression.clone(),
-                        });
-                    }
-                },
-            };
+            let target = column_targets.get(&key).copied().unwrap_or(key);
+            let holes = occurrence.layout.group_holes(target).ok_or_else(|| {
+                CanonicalizationError::StructureMismatch {
+                    expression: occurrence.tensor.expression.clone(),
+                }
+            })?;
             if holes.len() != ordered.len() {
                 return Err(CanonicalizationError::StructureMismatch {
                     expression: occurrence.tensor.expression.clone(),
@@ -1480,18 +1638,27 @@ where
             .unwrap_or_default();
         let mut negative_groups = BTreeSet::new();
         for metadata in &self.analysis.sites {
+            let SiteKind::Tensor {
+                occurrence: site_occurrence,
+                key: group_key,
+                intrinsic,
+                lifts,
+            } = metadata.kind
+            else {
+                continue;
+            };
             debug_assert_eq!(
                 metadata.expression,
-                self.projection.tensors[metadata.occurrence].expression
+                self.projection.tensors[site_occurrence].expression
             );
-            if metadata.occurrence != tensor
-                || metadata.lifts
-                || zero_groups.contains(&metadata.key)
-                || !self.decoration.signs_nested(tensor, metadata.key)
+            if site_occurrence != tensor
+                || lifts
+                || zero_groups.contains(&group_key)
+                || !self.decoration.signs_nested(tensor, group_key)
             {
                 continue;
             }
-            debug_assert!(!metadata.intrinsic);
+            debug_assert!(!intrinsic);
             self.realized_sinks
                 .extend(
                     self.decoration
@@ -1501,13 +1668,11 @@ where
                             SinkTarget::Nested {
                                 occurrence,
                                 key: group,
-                            } if *occurrence == tensor && *group == metadata.key => {
-                                Some(key.clone())
-                            }
+                            } if *occurrence == tensor && *group == group_key => Some(key.clone()),
                             _ => None,
                         }),
                 );
-            negative_groups.insert(metadata.key);
+            negative_groups.insert(group_key);
         }
         let (mut expression, active_slots) =
             occurrence
@@ -1529,6 +1694,43 @@ where
             };
             Ok(Network::from_tensor(tensor))
         }
+    }
+
+    /// Map source-local Young column identities onto manifest column slots.
+    /// Whole columns within one repeated-height block are ordered only by
+    /// their canonical owner vertices; their local `GroupKey` values never
+    /// enter the visible graph identity.
+    fn canonical_young_column_targets(
+        &self,
+        occurrence: &super::projection::TensorOccurrence<Aind>,
+    ) -> Result<BTreeMap<GroupKey, GroupKey>, CanonicalizationError> {
+        let mut targets = BTreeMap::new();
+        for (height, manifest) in occurrence.layout.exchangeable_young_column_blocks() {
+            let mut sources = manifest
+                .iter()
+                .map(|column| {
+                    occurrence
+                        .young_column_owners
+                        .get(column)
+                        .map(|owner| (*column, self.projection.vertex_map[*owner]))
+                        .ok_or_else(|| {
+                            CanonicalizationError::Projection(format!(
+                                "Young column {column} in repeated height-{height} block has no owner"
+                            ))
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            sources.sort_unstable_by_key(|(_, owner)| *owner);
+            targets.extend(
+                sources
+                    .into_iter()
+                    .zip(manifest)
+                    .map(|((source, _), target)| {
+                        (GroupKey::YoungColumn(source), GroupKey::YoungColumn(target))
+                    }),
+            );
+        }
+        Ok(targets)
     }
 
     fn rebuilt_payload_changed(
@@ -1797,12 +1999,17 @@ where
         for boundary in &copy.boundaries {
             let mut ports = Vec::with_capacity(boundary.ports.len());
             for &canonical_port in &boundary.ports {
-                let port = self
+                let (tensor, port) = self
                     .projection
                     .tensors
                     .iter()
-                    .flat_map(|tensor| &tensor.ports)
-                    .find(|port| self.projection.vertex_map[port.vertex] == canonical_port)
+                    .find_map(|tensor| {
+                        tensor
+                            .ports
+                            .iter()
+                            .find(|port| self.projection.vertex_map[port.vertex] == canonical_port)
+                            .map(|port| (tensor, port))
+                    })
                     .ok_or_else(|| CanonicalizationError::PowerReconstruction {
                         expression: power,
                         reason: format!(
@@ -1810,10 +2017,15 @@ where
                             copy.root
                         ),
                     })?;
-                ports.push((
-                    port.role.clone(),
-                    semantic::representation_key(port.slot.rep()),
-                ));
+                let column_targets = self.canonical_young_column_targets(tensor)?;
+                let role = match &port.role {
+                    IncidenceRole::Group { key, kind } => IncidenceRole::Group {
+                        key: column_targets.get(key).copied().unwrap_or(*key),
+                        kind: *kind,
+                    },
+                    role => role.clone(),
+                };
+                ports.push((role, semantic::representation_key(port.slot.rep())));
             }
             ports.sort();
             seam.push(ports);
@@ -1882,16 +2094,184 @@ mod tests {
         antisym,
         network::graph::{NetworkLeaf, NetworkNode},
         slot,
-        structure::{abstract_index::AbstractIndex, slot::IsAbstractSlot},
+        structure::{YoungTableau, abstract_index::AbstractIndex, slot::IsAbstractSlot},
         tensor_symbol,
     };
     use symbolica::{
-        atom::{AtomCore, FunctionBuilder},
+        atom::{AtomCore, AtomView, FunctionBuilder, Symbol},
         function, symbol,
     };
 
     use super::*;
     use crate::{tensor::canonicalize::projection, test_support::test_initialize};
+
+    fn graph_step(expression: Atom) -> Atom {
+        let policy = super::super::CanonicalPolicyNet::<AbstractIndex>::parse(expression).unwrap();
+        let projection = projection::project(
+            &policy,
+            projection::DEFAULT_GRAPH_BUDGET,
+            projection::ExternalLineMode::Preserve,
+        )
+        .unwrap();
+        let prepared = prepare_reconstruction(&projection).unwrap();
+        let mut allocator = DummyAllocator::new();
+        let reconstructed = reconstruct(
+            &projection,
+            prepared,
+            &mut allocator,
+            &mut AbstractIndex::Dummy,
+        )
+        .unwrap();
+        execute_atom(reconstructed.network).unwrap()
+    }
+
+    #[test]
+    fn equal_height_two_column_exchange_is_unsigned() {
+        let rep = test_initialize().mink4;
+        let tableau = YoungTableau::new(vec![2, 2], vec![0, 2, 1, 3]).unwrap();
+        let tensor = tensor_symbol!(reconstruct_young_two_column, young_tableau = tableau);
+        let [a, b, c, d] = [
+            slot!(rep, reconstruct_young_two_column_a),
+            slot!(rep, reconstruct_young_two_column_b),
+            slot!(rep, reconstruct_young_two_column_c),
+            slot!(rep, reconstruct_young_two_column_d),
+        ]
+        .map(|slot| slot.to_atom());
+        let component = |first: &Atom, second: &Atom, third: &Atom, fourth: &Atom| {
+            function!(
+                tensor,
+                first.clone(),
+                second.clone(),
+                third.clone(),
+                fourth.clone()
+            )
+        };
+        let direct = component(&a, &b, &c, &d);
+        let policy =
+            super::super::CanonicalPolicyNet::<AbstractIndex>::parse(direct.clone()).unwrap();
+        let projection = projection::project(
+            &policy,
+            projection::DEFAULT_GRAPH_BUDGET,
+            projection::ExternalLineMode::Preserve,
+        )
+        .unwrap();
+        assert_eq!(projection.tensors[0].young_column_owners.len(), 2);
+        assert_eq!(
+            projection
+                .graph
+                .nodes()
+                .iter()
+                .filter(|node| { matches!(node.data.data, UnifiedNodeColor::YoungColumnOwner(2)) })
+                .count(),
+            2
+        );
+
+        assert_eq!(graph_step(direct), graph_step(component(&c, &d, &a, &b)));
+    }
+
+    #[test]
+    fn equal_height_column_internal_reversal_remains_odd() {
+        let rep = test_initialize().mink4;
+        let tableau = YoungTableau::new(vec![2, 2], vec![0, 2, 1, 3]).unwrap();
+        let tensor = tensor_symbol!(reconstruct_young_column_sign, young_tableau = tableau);
+        let [a, b, c, d] = [
+            slot!(rep, reconstruct_young_column_sign_a),
+            slot!(rep, reconstruct_young_column_sign_b),
+            slot!(rep, reconstruct_young_column_sign_c),
+            slot!(rep, reconstruct_young_column_sign_d),
+        ]
+        .map(|slot| slot.to_atom());
+        let component = |first: &Atom, second: &Atom, third: &Atom, fourth: &Atom| {
+            function!(
+                tensor,
+                first.clone(),
+                second.clone(),
+                third.clone(),
+                fourth.clone()
+            )
+        };
+
+        let direct = graph_step(component(&a, &b, &c, &d));
+        let reversed = graph_step(component(&b, &a, &c, &d));
+        assert_eq!(reversed, -direct);
+    }
+
+    #[test]
+    fn repeated_singleton_young_columns_exchange_unsigned() {
+        let rep = test_initialize().mink4;
+        let tableau = YoungTableau::canonical(vec![3, 1]).unwrap();
+        let tensor = tensor_symbol!(reconstruct_young_singletons, young_tableau = tableau);
+        let [a, b, c, d] = [
+            slot!(rep, reconstruct_young_singletons_a),
+            slot!(rep, reconstruct_young_singletons_b),
+            slot!(rep, reconstruct_young_singletons_c),
+            slot!(rep, reconstruct_young_singletons_d),
+        ]
+        .map(|slot| slot.to_atom());
+        let component = |first: &Atom, second: &Atom, third: &Atom, fourth: &Atom| {
+            function!(
+                tensor,
+                first.clone(),
+                second.clone(),
+                third.clone(),
+                fourth.clone()
+            )
+        };
+
+        assert_eq!(
+            graph_step(component(&a, &b, &c, &d)),
+            graph_step(component(&a, &c, &b, &d))
+        );
+    }
+
+    #[test]
+    fn repeated_height_three_young_columns_exchange_unsigned() {
+        let rep = test_initialize().mink4;
+        let tableau = YoungTableau::canonical(vec![2, 2, 2]).unwrap();
+        let tensor = tensor_symbol!(reconstruct_young_height_three, young_tableau = tableau);
+        let [a, b, c, d, e, f] = [
+            slot!(rep, reconstruct_young_height_three_a),
+            slot!(rep, reconstruct_young_height_three_b),
+            slot!(rep, reconstruct_young_height_three_c),
+            slot!(rep, reconstruct_young_height_three_d),
+            slot!(rep, reconstruct_young_height_three_e),
+            slot!(rep, reconstruct_young_height_three_f),
+        ]
+        .map(|slot| slot.to_atom());
+        let component = |slots: [&Atom; 6]| {
+            function!(
+                tensor,
+                slots[0].clone(),
+                slots[1].clone(),
+                slots[2].clone(),
+                slots[3].clone(),
+                slots[4].clone(),
+                slots[5].clone()
+            )
+        };
+
+        assert_eq!(
+            graph_step(component([&a, &b, &c, &d, &e, &f])),
+            graph_step(component([&b, &a, &d, &c, &f, &e]))
+        );
+    }
+
+    #[test]
+    fn ordinary_antisymmetric_arguments_do_not_exchange_as_a_block() {
+        let rep = test_initialize().mink4;
+        let [a, b, c, d] = [
+            slot!(rep, reconstruct_ordinary_antisym_a),
+            slot!(rep, reconstruct_ordinary_antisym_b),
+            slot!(rep, reconstruct_ordinary_antisym_c),
+            slot!(rep, reconstruct_ordinary_antisym_d),
+        ];
+        let tensor = tensor_symbol!(reconstruct_ordinary_antisym);
+
+        assert_ne!(
+            graph_step(function!(tensor, antisym!(a, b), antisym!(c, d))),
+            graph_step(function!(tensor, antisym!(c, d), antisym!(a, b)))
+        );
+    }
 
     #[test]
     fn class_stabilizer_retains_a_composed_odd_word() {
@@ -1945,7 +2325,12 @@ mod tests {
         assert_eq!(policy.network().store.tensors.len(), 1);
         let source_payload = policy.network().store.tensors[0].expression.clone();
 
-        let projection = projection::project(&policy, projection::DEFAULT_GRAPH_BUDGET).unwrap();
+        let projection = projection::project(
+            &policy,
+            projection::DEFAULT_GRAPH_BUDGET,
+            projection::ExternalLineMode::Preserve,
+        )
+        .unwrap();
         assert_eq!(projection.tensors.len(), 3);
         assert!(
             projection
@@ -2016,8 +2401,12 @@ mod tests {
                 .pow(Atom::num(exponent));
             let policy =
                 super::super::CanonicalPolicyNet::<AbstractIndex>::parse(expression).unwrap();
-            let projection =
-                projection::project(&policy, projection::DEFAULT_GRAPH_BUDGET).unwrap();
+            let projection = projection::project(
+                &policy,
+                projection::DEFAULT_GRAPH_BUDGET,
+                projection::ExternalLineMode::Preserve,
+            )
+            .unwrap();
             let (analysis, _) = SignedAnalysis::new(&projection).unwrap();
             let power = projection
                 .power_descriptor(projection.root_expression)
@@ -2108,8 +2497,12 @@ mod tests {
                 .pow(Atom::num(exponent));
             let policy =
                 super::super::CanonicalPolicyNet::<AbstractIndex>::parse(expression).unwrap();
-            let projection =
-                projection::project(&policy, projection::DEFAULT_GRAPH_BUDGET).unwrap();
+            let projection = projection::project(
+                &policy,
+                projection::DEFAULT_GRAPH_BUDGET,
+                projection::ExternalLineMode::Preserve,
+            )
+            .unwrap();
             let phase_count = prepare_reconstruction(&projection)
                 .unwrap()
                 .analysis
@@ -2152,7 +2545,12 @@ mod tests {
         let right = tensor_symbol!(reconstruct_retry_surviving_right);
         let expression = function!(left, original.to_atom()) * function!(right, original.to_atom());
         let policy = super::super::CanonicalPolicyNet::<AbstractIndex>::parse(expression).unwrap();
-        let projection = projection::project(&policy, projection::DEFAULT_GRAPH_BUDGET).unwrap();
+        let projection = projection::project(
+            &policy,
+            projection::DEFAULT_GRAPH_BUDGET,
+            projection::ExternalLineMode::Preserve,
+        )
+        .unwrap();
         let prepared = prepare_reconstruction(&projection).unwrap();
         let mut allocator = DummyAllocator::new();
         let mut allocated_positions = Vec::new();
@@ -2191,21 +2589,41 @@ mod tests {
             .add_arg(antisym!(second, first))
             .finish();
         let policy = super::super::CanonicalPolicyNet::<AbstractIndex>::parse(expression).unwrap();
-        let projection = projection::project(&policy, projection::DEFAULT_GRAPH_BUDGET).unwrap();
+        let projection = projection::project(
+            &policy,
+            projection::DEFAULT_GRAPH_BUDGET,
+            projection::ExternalLineMode::Preserve,
+        )
+        .unwrap();
         let (mut analysis, _) = SignedAnalysis::new(&projection).unwrap();
         let site = analysis
             .sites
             .iter()
-            .position(|site| !site.lifts && site.key == GroupKey::Argument(0))
+            .position(|site| {
+                matches!(
+                    site.kind,
+                    SiteKind::Tensor {
+                        key: GroupKey::Argument(0),
+                        lifts: false,
+                        ..
+                    }
+                )
+            })
             .unwrap();
         let metadata = analysis.sites[site].clone();
+        let SiteKind::Tensor {
+            occurrence, key, ..
+        } = metadata.kind
+        else {
+            unreachable!()
+        };
         analysis.phases.fill(false);
         analysis.phases[site] = true;
         analysis
             .zero_groups
-            .entry(metadata.occurrence)
+            .entry(occurrence)
             .or_default()
-            .insert(metadata.key);
+            .insert(key);
         analysis.canonicalize_decoration(&projection).unwrap();
 
         assert!(!analysis.phases[site]);
@@ -2214,14 +2632,138 @@ mod tests {
         let mut new_dummy = AbstractIndex::Dummy;
         let mut rebuilder =
             Rebuilder::new(&projection, analysis, &mut allocator, &mut new_dummy).unwrap();
-        assert!(
-            !rebuilder
-                .decoration
-                .signs_nested(metadata.occurrence, metadata.key)
-        );
+        assert!(!rebuilder.decoration.signs_nested(occurrence, key));
         rebuilder.expression(projection.root_expression).unwrap();
 
         assert!(rebuilder.realized_sinks.is_empty());
+    }
+
+    #[test]
+    fn common_sum_parity_lifts_through_a_product_but_mixed_parity_stays_local() {
+        let rep = test_initialize().mink4;
+        let first = slot!(rep, reconstruct_common_sum_sign_first);
+        let second = slot!(rep, reconstruct_common_sum_sign_second);
+        let left_first = tensor_symbol!(reconstruct_common_sum_sign_left_first; Antisymmetric);
+        let left_second = tensor_symbol!(reconstruct_common_sum_sign_left_second; Antisymmetric);
+        let right_first = tensor_symbol!(reconstruct_common_sum_sign_right_first; Antisymmetric);
+        let right_second = tensor_symbol!(reconstruct_common_sum_sign_right_second; Antisymmetric);
+        let tensor = |head| function!(head, first.to_atom(), second.to_atom());
+        let expression = (tensor(left_first) + tensor(left_second))
+            * (tensor(right_first) + tensor(right_second));
+        let policy = super::super::CanonicalPolicyNet::<AbstractIndex>::parse(expression).unwrap();
+        let projection = projection::project(
+            &policy,
+            projection::DEFAULT_GRAPH_BUDGET,
+            projection::ExternalLineMode::Preserve,
+        )
+        .unwrap();
+        let (analysis, _) = SignedAnalysis::new(&projection).unwrap();
+        assert_eq!(analysis.sites.len(), 4);
+
+        let phases_for = |heads: &[Symbol]| {
+            analysis
+                .sites
+                .iter()
+                .map(|site| {
+                    let SiteKind::Tensor { occurrence, .. } = site.kind else {
+                        return false;
+                    };
+                    matches!(
+                        projection.tensors[occurrence].tensor.expression.as_view(),
+                        AtomView::Fun(function) if heads.contains(&function.get_symbol())
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        for phases in [
+            phases_for(&[left_first, left_second]),
+            phases_for(&[right_first, right_second]),
+        ] {
+            let decoration = analysis
+                .normalized_decoration(&projection, projection.root_expression, &phases)
+                .unwrap();
+            assert_eq!(decoration.sinks.len(), 1);
+            assert!(decoration.signs_expression(projection.root_expression));
+        }
+
+        let phases = phases_for(&[left_first]);
+        let signed_term = analysis
+            .sites
+            .iter()
+            .zip(&phases)
+            .find_map(|(site, odd)| odd.then_some(site.expression))
+            .unwrap();
+        let decoration = analysis
+            .normalized_decoration(&projection, projection.root_expression, &phases)
+            .unwrap();
+        assert_eq!(decoration.sinks.len(), 1);
+        assert!(!decoration.signs_expression(projection.root_expression));
+        assert!(decoration.signs_expression(signed_term));
+    }
+
+    #[test]
+    fn private_carrier_scalar_sign_and_column_parity_share_one_unsigned_graph() {
+        let rep = test_initialize().mink4;
+        let tableau = YoungTableau::new(vec![2, 1], vec![2, 0, 1]).unwrap();
+        let tensor = tensor_symbol!(
+            reconstruct_carrier_scalar_sign_tensor,
+            young_tableau = tableau.clone()
+        );
+        let [first, second, third] = [
+            slot!(rep, reconstruct_carrier_scalar_sign_first),
+            slot!(rep, reconstruct_carrier_scalar_sign_second),
+            slot!(rep, reconstruct_carrier_scalar_sign_third),
+        ]
+        .map(|slot| slot.to_atom());
+        let carrier = |arguments: [&Atom; 3]| {
+            let expression = arguments
+                .iter()
+                .fold(FunctionBuilder::new(tensor), |builder, argument| {
+                    builder.add_arg((*argument).clone())
+                });
+            let slots = arguments
+                .iter()
+                .map(|argument| LibrarySlot::<AbstractIndex>::try_from(argument.as_view()).unwrap())
+                .collect::<Vec<_>>();
+            super::super::young::YoungColumnCarrier::tensor(
+                SymbolicTensor {
+                    structure: OrderedStructure::new(slots).structure,
+                    is_metric: false,
+                    is_composite: false,
+                    expression: expression.finish(),
+                },
+                &tableau,
+            )
+            .unwrap()
+            .expression
+        };
+        let direct = Atom::num(-2) * carrier([&first, &second, &third]);
+        let reversed = Atom::num(2) * carrier([&first, &third, &second]);
+        let projection_for = |expression| {
+            let policy =
+                super::super::CanonicalPolicyNet::<AbstractIndex>::parse(expression).unwrap();
+            projection::project(
+                &policy,
+                projection::DEFAULT_GRAPH_BUDGET,
+                projection::ExternalLineMode::Preserve,
+            )
+            .unwrap()
+        };
+        let direct_projection = projection_for(direct.clone());
+        let reversed_projection = projection_for(reversed.clone());
+        assert_eq!(direct_projection.identity, reversed_projection.identity);
+        assert_eq!(direct_projection.decoration_orbit_limit, Some(256));
+
+        let (direct_analysis, _) = SignedAnalysis::new(&direct_projection).unwrap();
+        let scalar_site = direct_analysis
+            .sites
+            .iter()
+            .position(|site| matches!(site.kind, SiteKind::Scalar))
+            .unwrap();
+        assert!(direct_analysis.phases[scalar_site]);
+        assert_eq!(graph_step(direct.clone()), graph_step(reversed));
+        let canonical = graph_step(direct);
+        assert_eq!(graph_step(canonical.clone()), canonical);
     }
 
     #[test]
@@ -2239,8 +2781,12 @@ mod tests {
             Atom::num(2) * tensor_product.clone(),
         )
         .unwrap();
-        let scalar_projection =
-            projection::project(&scalar_policy, projection::DEFAULT_GRAPH_BUDGET).unwrap();
+        let scalar_projection = projection::project(
+            &scalar_policy,
+            projection::DEFAULT_GRAPH_BUDGET,
+            projection::ExternalLineMode::Preserve,
+        )
+        .unwrap();
         let scalar_prepared = prepare_reconstruction(&scalar_projection).unwrap();
         assert_eq!(scalar_prepared.analysis.phases, vec![true]);
         let scalar_expression = scalar_projection
@@ -2296,8 +2842,12 @@ mod tests {
 
         let tensor_policy =
             super::super::CanonicalPolicyNet::<AbstractIndex>::parse(tensor_product).unwrap();
-        let tensor_projection =
-            projection::project(&tensor_policy, projection::DEFAULT_GRAPH_BUDGET).unwrap();
+        let tensor_projection = projection::project(
+            &tensor_policy,
+            projection::DEFAULT_GRAPH_BUDGET,
+            projection::ExternalLineMode::Preserve,
+        )
+        .unwrap();
         let tensor_prepared = prepare_reconstruction(&tensor_projection).unwrap();
         assert_eq!(tensor_prepared.analysis.phases, vec![true]);
         let tensor_expression = tensor_projection
@@ -2369,8 +2919,12 @@ mod tests {
         for expression in [leaf_classes, product_classes, sum_classes] {
             let policy =
                 super::super::CanonicalPolicyNet::<AbstractIndex>::parse(expression).unwrap();
-            let projection =
-                projection::project(&policy, projection::DEFAULT_GRAPH_BUDGET).unwrap();
+            let projection = projection::project(
+                &policy,
+                projection::DEFAULT_GRAPH_BUDGET,
+                projection::ExternalLineMode::Preserve,
+            )
+            .unwrap();
             let prepared = prepare_reconstruction(&projection).unwrap();
             let mut allocator = DummyAllocator::new();
             let reconstructed = reconstruct(

@@ -58,18 +58,30 @@ impl ColorAlgebraSimplifier {
                         };
                         **out = network.canonize::<AbstractIndex>(AbstractIndex::Dummy);
                     });
-                // Canonical network execution can materialize a one-generator
-                // chain as its tensor leaf and factor common tensor structure.
-                // Re-enter the same color normal form used at the top of the
-                // loop before deciding whether algebra changed.
-                let canonical = self.apply_once(canonical.as_view());
-                if canonical != next {
-                    current = canonical;
-                    continue;
-                }
+                // `next` is already an `apply_once` fixed point. Canonical
+                // network execution can nevertheless materialize a
+                // one-generator chain as its tensor leaf or factor common
+                // tensor structure; only then re-enter the color normal form.
+                let canonical = if canonical == next {
+                    canonical
+                } else {
+                    let color_canonical = self.apply_once(canonical.as_view());
+                    // A second collection/graph pass can further factor this
+                    // result even when the color pass leaves it unchanged.
+                    // Only returning to `next` closes the composite fixed point.
+                    if color_canonical != next {
+                        current = color_canonical;
+                        continue;
+                    }
+                    color_canonical
+                };
 
-                let simplified =
-                    restore_explicit_default_generator_chains(canonical).simplify_metrics();
+                let restored = restore_explicit_default_generator_chains(canonical.clone());
+                let simplified = if restored == canonical {
+                    restored
+                } else {
+                    restored.simplify_metrics()
+                };
                 return if self.settings.substitute_cof_dimension_invariants {
                     simplified.to_cof_dimension_invariants()
                 } else {

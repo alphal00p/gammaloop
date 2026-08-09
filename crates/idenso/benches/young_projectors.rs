@@ -41,6 +41,17 @@ fn canonicalization_inputs() -> Vec<Atom> {
         .collect()
 }
 
+fn declared_canonicalization_inputs() -> Vec<Atom> {
+    young_common::validated_corpus()
+        .declared_canonicalization
+        .into_iter()
+        .map(|case| {
+            assert!(!case.name.is_empty());
+            case.expression
+        })
+        .collect()
+}
+
 #[library_benchmark]
 #[bench::compilation_suite(setup = compilation_inputs)]
 fn compilation_suite(tableaux: Vec<YoungTableau>) -> Vec<YoungProjector> {
@@ -81,10 +92,20 @@ fn canonicalization_suite(expressions: Vec<Atom>) -> Vec<Atom> {
         .collect()
 }
 
+#[library_benchmark]
+#[bench::declared_canonicalization_suite(setup = declared_canonicalization_inputs)]
+fn declared_canonicalization_suite(expressions: Vec<Atom>) -> Vec<Atom> {
+    expressions
+        .into_iter()
+        .map(|expression| young_common::canonicalize(black_box(expression)))
+        .collect()
+}
+
 library_benchmark_group!(
     name = young_projectors;
     benchmarks =
-        compilation_suite, expansion_suite, product_expansion_suite, canonicalization_suite
+        compilation_suite, expansion_suite, product_expansion_suite, canonicalization_suite,
+        declared_canonicalization_suite
 );
 
 main!(

@@ -1,7 +1,8 @@
 use idenso::{
     IndexTooling,
     reference_cases::young::{
-        FactoredRiemannProjector, YoungProjectorFixture, distinct_head_contracted_riemann_fixtures,
+        FactoredRiemannProjector, YoungProjectorFixture, declared_young_fixtures,
+        distinct_head_contracted_riemann_fixtures,
         fully_projected_distinct_head_riemann_triangle_fixture, young_projector_fixtures,
     },
 };
@@ -12,6 +13,7 @@ pub struct ValidatedCorpus {
     pub projectors: Vec<YoungProjectorFixture>,
     pub product_expansion: Vec<CanonicalizationCase>,
     pub canonicalization: Vec<CanonicalizationCase>,
+    pub declared_canonicalization: Vec<CanonicalizationCase>,
 }
 
 pub struct CanonicalizationCase {
@@ -36,6 +38,41 @@ fn validate_canonicalization(expression: &Atom) -> Atom {
         "Young-projector benchmark output must be a fixed point"
     );
     canonical
+}
+
+fn declared_canonicalization() -> Vec<CanonicalizationCase> {
+    declared_young_fixtures()
+        .into_iter()
+        .map(|fixture| {
+            for (factor, oracle) in fixture.factor_oracles {
+                let automatic = canonicalize(factor);
+                let explicit = canonicalize(oracle);
+                assert!(
+                    (explicit - automatic).expand().is_zero(),
+                    "fixture {} factor must equal the independent explicit projector",
+                    fixture.name,
+                );
+            }
+            let canonical = validate_canonicalization(&fixture.expression);
+            assert!(
+                !canonical.is_zero(),
+                "fixture {} must be nonzero",
+                fixture.name
+            );
+            if let Some(renamed) = fixture.renamed {
+                assert_eq!(
+                    canonicalize(renamed),
+                    canonical,
+                    "fixture {} must ignore dummy-index names",
+                    fixture.name
+                );
+            }
+            CanonicalizationCase {
+                name: fixture.name,
+                expression: fixture.expression,
+            }
+        })
+        .collect()
 }
 
 pub fn validated_corpus() -> ValidatedCorpus {
@@ -142,6 +179,7 @@ pub fn validated_corpus() -> ValidatedCorpus {
         projectors,
         product_expansion,
         canonicalization,
+        declared_canonicalization: declared_canonicalization(),
     }
 }
 

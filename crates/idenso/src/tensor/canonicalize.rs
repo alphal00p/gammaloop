@@ -1,18 +1,46 @@
 //! Signed canonicalization for Spenso symbolic tensor networks.
 //!
 //! The network remains the semantic owner of products, sums, powers, and
-//! enclosing functions. Each iteration projects the complete operation tree,
-//! tensor ports, and index-line components into one graph. Graphica then
+//! enclosing functions. Each ordinary iteration projects its complete operation
+//! tree, tensor ports, and index-line components into one graph. Graphica
 //! supplies both the canonical labeling and stabilizer generators. Hidden graph
 //! data records only reconstruction origins; it does not participate in graph
 //! identity.
+//!
+//! General Young tableaux first apply their exact reduced projector without
+//! distributing Products. An eligible lone tensor with distinct external lines
+//! sends its declared projected sum through the ordinary whole-root driver and
+//! numeric normalization directly. Other eligible tensors become private linear
+//! ordered-column carriers sharing one fixed head; an opaque original-head
+//! payload preserves declared-head ordering. They decode with deterministic
+//! numeric-content and Add-sign normalization, then fully validate and
+//! canonically parse the rebuilt Atom into a graph-canonical policy, with no
+//! second projector or graph pass. A carrier cycle uses exact post-projector
+//! composite iteration and returns its middle graph result.
+//! Young-containing Power, a normalization-bearing exposed LocalTensor head or
+//! Function anywhere in a Young-containing root, repeated exposed Young heads,
+//! and carrier graph- or decoration-orbit-limit failures use the staged path in
+//! [`young`]. The root-wide guard includes siblings outside the Young subtree and
+//! prevents carrier decode and canonical reparse from passing the graph-rebuilt
+//! root back through user normalizers.
+//! Strict private metadata promotes carrier slot bundles to the same graph-owned
+//! signed columns as declared Young heads without granting block exchange to
+//! ordinary same-sized structural groups.
+//!
+//! Only the successful lone-root direct route may finish as a terminal Atom,
+//! which the Atom-facing entry point returns without another parse. Carrier,
+//! composite, staged, and ordinary routes retain `CanonicalPolicyNet`; the
+//! test-only policy entry point reparses direct terminal output. Factored Young
+//! transforms and carrier decode use the same tensor-symmetry and Power-grammar
+//! validation and canonical parser as other canonical-policy inputs.
 
 mod driver;
 mod group;
 mod projection;
 mod reconstruct;
+mod young;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use spenso::{
     network::{
@@ -116,6 +144,14 @@ pub enum CanonicalizationError {
         edge_limit: usize,
     },
     #[error(
+        "signed decoration orbit contains at least {observed_at_least} states across {sites} active sites, exceeding limit {limit}"
+    )]
+    SignedDecorationOrbitLimit {
+        observed_at_least: usize,
+        limit: usize,
+        sites: usize,
+    },
+    #[error(
         "canonicalization entered a cycle: iteration {repeated_iteration} repeats iteration {first_iteration} (length {cycle_length}); retry reasons: {retry_reasons:?}"
     )]
     ConvergenceCycle {
@@ -164,13 +200,22 @@ pub enum CanonicalizationError {
         expression: Atom,
     },
     #[error(
-        "Young straightening is unavailable for tensor {head} with shape {shape:?} and slot order {slot_order:?}: {expression}"
+        "Young projector on tensor {head} requires {requested_actions} full actions, exceeding the internal limit {action_limit}: shape {shape:?}"
     )]
-    YoungStraighteningUnavailable {
+    YoungProjectorSizeLimit {
         head: Symbol,
         shape: Vec<usize>,
-        slot_order: Vec<usize>,
-        expression: Atom,
+        requested_actions: usize,
+        action_limit: usize,
+    },
+    #[error("failed to construct the Young projector on tensor {head}: {reason}")]
+    YoungProjectorPlanning { head: Symbol, reason: String },
+    #[error(
+        "Young straightening requires {requested_terms} live product terms, exceeding the internal limit {term_limit}"
+    )]
+    YoungExpansionSizeLimit {
+        requested_terms: usize,
+        term_limit: usize,
     },
 }
 
@@ -242,7 +287,9 @@ struct TensorLayout {
     slot_count: usize,
     structural_holes: Vec<usize>,
     intrinsic: Option<SymmetryKind>,
+    young_columns: Vec<Vec<usize>>,
     outer_linear: bool,
+    is_young_carrier: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -252,7 +299,12 @@ struct TensorColor {
 }
 
 type PartialGroup<Aind> = (Symbol, SymmetryKind, Atom, Vec<LibrarySlot<Aind>>);
-type YoungDeclaration<Aind> = (Option<SymmetryKind>, Vec<LibrarySlot<Aind>>);
+
+struct YoungDeclaration<Aind> {
+    intrinsic: Option<SymmetryKind>,
+    columns: Vec<Vec<usize>>,
+    slots: Vec<LibrarySlot<Aind>>,
+}
 
 impl TensorLayout {
     fn scan<Aind: AbsInd + ParseableAind>(
@@ -265,7 +317,9 @@ impl TensorLayout {
         };
         let head = function.get_symbol();
         let tagged = head.has_tag(&SPENSO_TAG.tensor);
-        let young_declaration = if tagged {
+        let carrier_declaration = young::YoungColumnCarrier::declaration(function)?;
+        let is_young_carrier = carrier_declaration.is_some();
+        let young_declaration = if tagged && carrier_declaration.is_none() {
             Self::young_declaration::<Aind>(head, function, &tensor.expression)?
         } else {
             None
@@ -273,7 +327,7 @@ impl TensorLayout {
         let attribute_intrinsic = tagged.then(|| SymmetryKind::of(head)).flatten();
         let intrinsic = young_declaration
             .as_ref()
-            .map(|(kind, _)| *kind)
+            .map(|declaration| declaration.intrinsic)
             .unwrap_or(attribute_intrinsic);
         let root_group = SymmetryKind::structural(head);
 
@@ -282,8 +336,8 @@ impl TensorLayout {
         let mut expression_slots = Vec::<LibrarySlot<Aind>>::new();
         let mut slot_count = 0;
 
-        if let Some((_, slots)) = young_declaration {
-            for slot in slots {
+        if let Some(declaration) = &young_declaration {
+            for &slot in &declaration.slots {
                 arguments.push(LayoutArgument::DirectSlot(slot_count));
                 colors.push(LayoutColorArgument::DirectSlot);
                 expression_slots.push(slot);
@@ -369,6 +423,45 @@ impl TensorLayout {
             }
         }
 
+        let carrier_columns = if let Some((original, tableau)) = &carrier_declaration {
+            let manifest_columns = tableau.columns().collect::<Vec<_>>();
+            let mut columns = Vec::with_capacity(manifest_columns.len());
+            for (manifest, argument) in manifest_columns.iter().zip(&arguments[1..]) {
+                let holes = match (manifest.as_slice(), argument) {
+                    ([_], LayoutArgument::DirectSlot(hole)) => vec![*hole],
+                    ([_, _, ..], LayoutArgument::SlotBundle { holes })
+                        if holes.len() == manifest.len() =>
+                    {
+                        holes.clone()
+                    }
+                    _ => {
+                        return Err(CanonicalizationError::Projection(format!(
+                            "internal Young-column carrier for {original} does not match its declared column shape"
+                        )));
+                    }
+                };
+                columns.push(holes);
+            }
+            columns
+        } else {
+            Vec::new()
+        };
+        if let Some((original, _)) = &carrier_declaration
+            && let Some(expected) = expression_slots.first().map(|slot| slot.rep())
+            && let Some((argument, _)) = expression_slots
+                .iter()
+                .enumerate()
+                .find(|(_, slot)| slot.rep() != expected)
+        {
+            return Err(
+                CanonicalizationError::IncompatibleYoungTableauRepresentation {
+                    head: *original,
+                    argument,
+                    expression: tensor.expression.clone(),
+                },
+            );
+        }
+
         if slot_count != tensor.structure.order() {
             return Err(CanonicalizationError::StructureMismatch {
                 expression: tensor.expression.clone(),
@@ -407,7 +500,11 @@ impl TensorLayout {
             slot_count,
             structural_holes,
             intrinsic: intrinsic.or(root_group),
+            young_columns: young_declaration
+                .map(|declaration| declaration.columns)
+                .unwrap_or(carrier_columns),
             outer_linear: head.is_linear(),
+            is_young_carrier,
         })
     }
 
@@ -481,20 +578,20 @@ impl TensorLayout {
             }
             slots.push(slot);
         }
-        if class == YoungTableauClass::General {
-            return Err(CanonicalizationError::YoungStraighteningUnavailable {
-                head,
-                shape: tableau.shape().to_vec(),
-                slot_order: tableau.slot_order().to_vec(),
-                expression: expression.clone(),
-            });
-        }
+        let columns = if class == YoungTableauClass::General {
+            // Keep singleton columns as well so repeated height-one columns
+            // can form an unsigned exchange block. A unique singleton remains
+            // an ordinary ordered slot.
+            tableau.columns().collect()
+        } else {
+            Vec::new()
+        };
 
-        // Complete rows and columns are full permutation groups. Their
-        // Symbolica attribute therefore acts on expression-order arguments;
-        // the tableau filling becomes operational only once general-shape
-        // straightening is implemented.
-        Ok(Some((expected.filter(|_| tableau.rank() > 1), slots)))
+        Ok(Some(YoungDeclaration {
+            intrinsic: expected.filter(|_| tableau.rank() > 1),
+            columns,
+            slots,
+        }))
     }
 
     fn partial_group<Aind: AbsInd + ParseableAind>(
@@ -561,6 +658,21 @@ impl TensorLayout {
                 kind,
             };
         }
+        if let Some((column, _)) = self.young_columns.iter().enumerate().find(|(_, holes)| {
+            holes.contains(&flat_slot)
+                && (holes.len() > 1
+                    || self
+                        .young_columns
+                        .iter()
+                        .filter(|candidate| candidate.len() == holes.len())
+                        .nth(1)
+                        .is_some())
+        }) {
+            return IncidenceRole::Group {
+                key: GroupKey::YoungColumn(column),
+                kind: SymmetryKind::Antisymmetric,
+            };
+        }
         for (argument, layout) in self.arguments.iter().enumerate() {
             match layout {
                 LayoutArgument::DirectSlot(hole) if *hole == flat_slot => {
@@ -596,6 +708,13 @@ impl TensorLayout {
                 )
                 .expect("every intrinsic slot is one direct argument");
         }
+        if let Some(position) = self
+            .young_columns
+            .iter()
+            .find_map(|column| column.iter().position(|hole| *hole == flat_slot))
+        {
+            return position;
+        }
         for layout in &self.arguments {
             match layout {
                 LayoutArgument::Group { holes, .. } | LayoutArgument::SlotBundle { holes } => {
@@ -615,15 +734,65 @@ impl TensorLayout {
             .then_some((GroupKey::Intrinsic, true));
         intrinsic
             .into_iter()
+            .chain(
+                self.young_columns
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, holes)| holes.len() > 1)
+                    .map(|(column, _)| (GroupKey::YoungColumn(column), true)),
+            )
             .chain(self.arguments.iter().enumerate().filter_map(
                 |(argument, layout)| match layout {
                     LayoutArgument::Group {
                         kind: SymmetryKind::Antisymmetric,
                         ..
-                    } => Some((GroupKey::Argument(argument), self.outer_linear)),
+                    } => {
+                        let key = GroupKey::Argument(argument);
+                        Some((key, self.group_lifts(key)))
+                    }
                     _ => None,
                 },
             ))
+    }
+
+    /// Manifest Young columns grouped into repeated-height blocks.
+    ///
+    /// Only these columns gain a visible owner node. Ordinary structural
+    /// groups and a unique-height Young column retain their existing local
+    /// incidence identity.
+    fn exchangeable_young_column_blocks(&self) -> BTreeMap<usize, Vec<usize>> {
+        let mut blocks = BTreeMap::<usize, Vec<usize>>::new();
+        for (column, holes) in self.young_columns.iter().enumerate() {
+            blocks.entry(holes.len()).or_default().push(column);
+        }
+        blocks.retain(|_, columns| columns.len() > 1);
+        blocks
+    }
+
+    fn group_holes(&self, key: GroupKey) -> Option<Vec<usize>> {
+        match key {
+            GroupKey::Intrinsic => Some(
+                self.arguments
+                    .iter()
+                    .filter_map(|argument| match argument {
+                        LayoutArgument::DirectSlot(hole) => Some(*hole),
+                        _ => None,
+                    })
+                    .collect(),
+            ),
+            GroupKey::Argument(argument) => match self.arguments.get(argument) {
+                Some(LayoutArgument::Group { holes, .. }) => Some(holes.clone()),
+                _ => None,
+            },
+            GroupKey::YoungColumn(column) => self.young_columns.get(column).cloned(),
+        }
+    }
+
+    fn group_lifts(&self, key: GroupKey) -> bool {
+        match key {
+            GroupKey::Intrinsic | GroupKey::YoungColumn(_) => true,
+            GroupKey::Argument(_) => self.outer_linear,
+        }
     }
 
     fn rebuild<Aind: AbsInd + ParseableAind>(
@@ -632,6 +801,9 @@ impl TensorLayout {
         zero_groups: &BTreeSet<GroupKey>,
         negative_groups: &BTreeSet<GroupKey>,
     ) -> (Atom, Vec<LibrarySlot<Aind>>) {
+        if zero_groups.iter().any(|key| self.group_lifts(*key)) {
+            return (Atom::Zero, Vec::new());
+        }
         let mut builder = FunctionBuilder::new(self.head);
         let mut active_slots = Vec::new();
         for (argument, layout) in self.arguments.iter().enumerate() {
@@ -685,6 +857,7 @@ impl TensorLayout {
 enum GroupKey {
     Intrinsic,
     Argument(usize),
+    YoungColumn(usize),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
