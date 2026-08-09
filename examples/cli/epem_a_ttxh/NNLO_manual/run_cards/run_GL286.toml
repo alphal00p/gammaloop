@@ -51,9 +51,87 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "display_lmb"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+# In LMB 0=(4,5,6,12), q13=K0-K1-K3 and q14=K1-K0.  Keep the
+# gluon-sector, relative-pair, and overall UV limits in separate five-point
+# batches so each all-orientation result is serialized independently.
+[[command_blocks]]
+name = "uv_profile_final_g0_lmb0_mask11_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 28620260809
+      --uv-ray-directions 211,-157,193,37,126,-109,98,-86,342,30,148,-534
+      --uv-ray-norms 1000,1100,1300,1700
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 11 --subset-cardinality 3
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/uv_profiles/final_g0_lmb0_mask11_per_orientation_n5_exp6_10_seed28620260809""",
+]
+
+# A seeded random ray is the certification profile; the fixed-ray profiles
+# below are deterministic diagnostics of the reconstructed momentum sectors.
+[[command_blocks]]
+name = "uv_profile_final_random_g0_lmb0_mask11_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 28620260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 11 --subset-cardinality 3
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/uv_profiles/final_random_g0_lmb0_mask11_per_orientation_n5_exp6_10_seed28620260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_g0_lmb0_mask3_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 28620260809
+      --uv-ray-directions 211,-157,193,37,126,-109,98,-86,342,30,148,-534
+      --uv-ray-norms 1000,1100,1300,1700
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 3 --subset-cardinality 2
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/uv_profiles/final_g0_lmb0_mask3_per_orientation_n5_exp6_10_seed28620260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_g0_lmb0_mask15_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 28620260809
+      --uv-ray-directions 211,-157,193,37,126,-109,98,-86,342,30,148,-534
+      --uv-ray-norms 1000,1100,1300,1700
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 15 --subset-cardinality 4
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/uv_profiles/final_g0_lmb0_mask15_per_orientation_n5_exp6_10_seed28620260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_targeted_batches"
+commands = [
+  "run uv_profile_final_random_g0_lmb0_mask11_n5_exp6_10",
+  "run uv_profile_final_g0_lmb0_mask11_n5_exp6_10",
+  "run uv_profile_final_g0_lmb0_mask3_n5_exp6_10",
+  "run uv_profile_final_g0_lmb0_mask15_n5_exp6_10",
+]
+
+[[command_blocks]]
 name = "runtime_approach"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "runtime_approach_threshold_off"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=true",
 ]
 
 # Spatial momentum map from the raw master DOT (P0+P1 has zero spatial part):
@@ -188,14 +266,17 @@ commands = [
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/approaches/correlated_e12_3953.json""",
 ]
 
+# With d=300 and b=sqrt(350^2-173^2-150^2), the noncollinear midpoint
+# K0=(b,0,d/2), K1=(b,0,-d/2), K2=(0,b,-d/2), K3=(0,0,d)
+# has q13=0 and exactly satisfies all three coalescing threshold families.
 [[command_blocks]]
 name = "approach_correlated_e13_all"
 commands = [
   "run runtime_approach",
   """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
-      --point=0,0,-220.071,0,0,220.071,0,0,220.071,0,0,-440.142
-      --approach-axis=0,0,0,0,0,19,0,0,0,47,29,-31
-      --axis-label 'e13 soft at E16/E60 E21/E61 E46/E53' --parameter-name lambda
+      --point=264.70927448806924,0,150,264.70927448806924,0,-150,0,264.70927448806924,-150,0,0,300
+      --approach-axis=3,5,-7,0,0,0,19,23,-29,11,-13,17
+      --axis-label 'noncollinear e13 soft at E16/E60 E21/E61 E46/E53' --parameter-name lambda
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/approaches/correlated_e13_all.json""",
@@ -214,14 +295,16 @@ commands = [
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/approaches/correlated_e14_1617_2139.json""",
 ]
 
+# The same symmetric hard triangle in (K2,K2-K3,K3), with generic nonzero
+# K0=K1, avoids the collinear midpoint previously used for E46/E53.
 [[command_blocks]]
 name = "approach_correlated_e14_4653"
 commands = [
   "run runtime_approach",
   """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
-      --point=31,-47,83,31,-47,83,0,0,220.071,0,0,440.142
-      --approach-axis=0,0,0,47,29,-31,0,0,0,0,0,19
-      --axis-label 'e14 soft at coalescing E46/E53' --parameter-name lambda
+      --point=50,-70,90,50,-70,90,264.70927448806924,0,150,0,0,300
+      --approach-axis=0,0,0,47,29,-31,19,23,-29,11,-13,17
+      --axis-label 'noncollinear e14 soft at coalescing E46/E53' --parameter-name lambda
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/approaches/correlated_e14_4653.json""",
@@ -259,8 +342,130 @@ commands = [
   "run approach_correlated_double_soft",
 ]
 
-# Targeted high-precision checks distinguish catastrophic f64 LU cancellation
-# from physical growth on the two otherwise decisive paths.
+# Reduced causal and high-precision checks distinguish catastrophic f64 LU
+# cancellation from physical growth before any threshold structure is edited.
+[[command_blocks]]
+name = "approach_collinear_e12_e13_reduced"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=-91,64,83,-157,152,-181,37,126,-109,30,-40,120
+      --approach-axis=0,0,0,-31,53,0,0,0,0,47,29,0
+      --axis-label 'hard e12 e13 collinear reduced causal check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/approaches/collinear_e12_e13_reduced.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e12_e13_reduced_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=-91,64,83,-157,152,-181,37,126,-109,30,-40,120
+      --approach-axis=0,0,0,-31,53,0,0,0,0,47,29,0
+      --axis-label 'hard e12 e13 collinear reduced threshold-off check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/approaches/collinear_e12_e13_reduced_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e12_e13_reduced_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=-91,64,83,-157,152,-181,37,126,-109,30,-40,120
+      --approach-axis=0,0,0,-31,53,0,0,0,0,47,29,0
+      --axis-label 'hard e12 e13 collinear reduced Arb causal check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/approaches/collinear_e12_e13_reduced_arb.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e12_e13_reduced_threshold_off_arb"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=-91,64,83,-157,152,-181,37,126,-109,30,-40,120
+      --approach-axis=0,0,0,-31,53,0,0,0,0,47,29,0
+      --axis-label 'hard e12 e13 collinear reduced threshold-off Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/approaches/collinear_e12_e13_reduced_threshold_off_arb.json""",
+]
+
+[[command_blocks]]
+name = "collinear_e12_e13_causal_diagnostics"
+commands = [
+  "run approach_collinear_e12_e13_reduced",
+  "run approach_collinear_e12_e13_reduced_threshold_off",
+  "run approach_collinear_e12_e13_reduced_arb",
+  "run approach_collinear_e12_e13_reduced_threshold_off_arb",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e12_e14_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=-91,64,83,-61,24,203,37,126,-109,30,-40,120
+      --approach-axis=0,0,0,-31,53,0,0,0,0,47,29,0
+      --axis-label 'hard e12 e14 collinear reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/approaches/collinear_e12_e14_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e13_e14_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=-91,64,83,-61,24,203,37,126,-109,-66,88,-264
+      --approach-axis=0,0,0,-31,53,0,0,0,0,47,29,0
+      --axis-label 'hard e13 e14 collinear reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/approaches/collinear_e13_e14_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e13_all_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=264.70927448806924,0,150,264.70927448806924,0,-150,0,264.70927448806924,-150,0,0,300
+      --approach-axis=3,5,-7,0,0,0,19,23,-29,11,-13,17
+      --axis-label 'noncollinear e13 all-threshold reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/approaches/correlated_e13_all_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_e14_4653_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=50,-70,90,50,-70,90,264.70927448806924,0,150,0,0,300
+      --approach-axis=0,0,0,47,29,-31,19,23,-29,11,-13,17
+      --axis-label 'noncollinear e14 E46/E53 reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/approaches/correlated_e14_4653_arb16.json""",
+]
+
+[[command_blocks]]
+name = "arb16_regressions"
+commands = [
+  "run approach_collinear_e12_e14_arb16",
+  "run approach_collinear_e13_e14_arb16",
+  "run approach_correlated_e13_all_arb16",
+  "run approach_correlated_e14_4653_arb16",
+]
+
 [[command_blocks]]
 name = "approach_soft_e12_arb"
 commands = [
@@ -269,7 +474,7 @@ commands = [
       --point=-91,64,83,74,-52,137,37,126,-109,0,0,0
       --approach-axis=0,0,0,0,0,0,0,0,0,211,-157,193
       --axis-label 'e12 soft targeted Arb check' --parameter-name lambda
-      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL286/approaches/soft_e12_arb.json""",
 ]
