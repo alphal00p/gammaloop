@@ -3,6 +3,67 @@ digraph GL362{
     overall_factor = "NumeratorDependentGrouping(362,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1))+NumeratorDependentGrouping(363,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1))+NumeratorDependentGrouping(366,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1))+NumeratorDependentGrouping(367,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1))";
     overall_factor_evaluated = "4";
     projector = "u(1,spenso::bis(4,hedge(1)))*ubar(1,spenso::bis(4,hedge(29)))*v(0,spenso::bis(4,hedge(28)))*vbar(0,spenso::bis(4,hedge(0)))";
+    // E7/E51/E61 coalesce at q13=0. Project every active threshold on the two
+    // affected cuts into one shared one-loop subspace so their soft limits cancel.
+    // The unique common fundamental-cycle embedding keeps both soft edges in
+    // the active topology: (3,4,5,6,7,9,12,13).
+    threshold_counterterms = "
+schema_version = 1
+
+[[cuts]]
+edges = [2, 6, 7]
+
+  [[cuts.thresholds]]
+  edges = [6, 11, 12]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_1l\"
+    subspace = [6]
+    parent_lmb = [2, 6, 11, 14]
+
+  [[cuts.thresholds]]
+  edges = [6, 7, 12, 13]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_1l\"
+    subspace = [6]
+    parent_lmb = [2, 6, 11, 14]
+
+  [[cuts.thresholds]]
+  edges = [4, 6, 11, 14]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_1l\"
+    subspace = [6]
+    parent_lmb = [2, 6, 11, 14]
+
+[[cuts]]
+edges = [2, 5, 9]
+
+  [[cuts.thresholds]]
+  edges = [5, 9, 12, 13]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_1l\"
+    subspace = [5]
+    parent_lmb = [2, 5, 11, 14]
+
+  [[cuts.thresholds]]
+  edges = [3, 5, 11, 14]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_1l\"
+    subspace = [5]
+    parent_lmb = [2, 5, 11, 14]
+
+  [[cuts.thresholds]]
+  edges = [5, 11, 13]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_1l\"
+    subspace = [5]
+    parent_lmb = [2, 5, 11, 14]
+";
 	0 [int_id="V_141"];
 	1 [int_id="V_141"];
 	2 [int_id="V_134"];

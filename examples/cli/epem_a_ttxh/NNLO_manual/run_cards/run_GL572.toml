@@ -51,6 +51,136 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "display_lmb"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
+name = "inventory_pristine"
+commands = [
+  "run display_structure",
+  "run display_lmb",
+]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "uv_profile_final"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 57220260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/final_exp8_12_seed57220260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12 --use_f128
+      --per-orientation --seed 57220260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/final_f128_exp8_12_seed57220260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_low_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 6 --max-scaling 10 --use_f128
+      --per-orientation --seed 57220260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/final_f128_exp6_10_seed57220260809""",
+]
+
+# This legacy pre-selector block visits every derived LMB and every nonempty
+# loop subset. Its reduced fixed ray focuses four distinct directions of the
+# original (e3,e4,e6,e7) generation basis while retaining per-orientation
+# evidence.
+[[command_blocks]]
+name = "uv_profile_basis_focus"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 9 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 57220260809
+      --uv-ray-directions=211,-157,193,37,126,-109,98,-86,342,-91,64,83
+      --uv-ray-norms=1000,1000,1000,1000
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/original_basis_focus_exp8_12_seed57220260809""",
+]
+
+# Target the pristine generated graph and its generation LMB #0=(e3,e4,e6,e7).
+# Masks 1/2/4/8 test each independent loop coordinate, 5=(e3,e6) and
+# 12=(e6,e7) test the two massless-exchange sectors q13=e3-e6 and
+# q14=e7-e6, and 15 tests the simultaneous overall UV limit. Cardinalities
+# 1/2/4 intentionally exclude unrelated three-coordinate rays.
+[[command_blocks]]
+name = "uv_profile_GL572_pristine_graph0_lmb0_targeted_masks"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 9 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 57220260809
+      --uv-ray-directions=211,-157,193,37,126,-109,98,-86,342,-91,64,83
+      --uv-ray-norms=1000,1000,1000,1000
+      --graph-index=0 --lmb-index=0
+      --loop-subset-mask=1,2,4,5,8,12,15
+      --subset-cardinality=1,2,4
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_graph0_lmb0_masks_1_2_4_5_8_12_15_exp8_12_seed57220260809""",
+]
+
+# Five-point split fallbacks serialize each physically decisive sector
+# independently, so an interrupted batch cannot erase completed coverage.
+# Masks 5 and 12 completed; mask 15 remains an explicit unrun follow-up.
+[[command_blocks]]
+name = "uv_profile_GL572_pristine_g0_lmb0_mask5_q13_5pt"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 57220260809
+      --uv-ray-directions=211,-157,193,37,126,-109,98,-86,342,-91,64,83
+      --uv-ray-norms=1000,1000,1000,1000
+      --graph-index=0 --lmb-index=0
+      --loop-subset-mask=5 --subset-cardinality=2
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_g0_lmb0_mask5_q13_5pt_exp8_12_seed57220260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_GL572_pristine_g0_lmb0_mask12_q14_5pt"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 57220260809
+      --uv-ray-directions=211,-157,193,37,126,-109,98,-86,342,-91,64,83
+      --uv-ray-norms=1000,1000,1000,1000
+      --graph-index=0 --lmb-index=0
+      --loop-subset-mask=12 --subset-cardinality=2
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_g0_lmb0_mask12_q14_5pt_exp8_12_seed57220260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_GL572_pristine_g0_lmb0_mask15_overall_5pt"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 57220260809
+      --uv-ray-directions=211,-157,193,37,126,-109,98,-86,342,-91,64,83
+      --uv-ray-norms=1000,1000,1000,1000
+      --graph-index=0 --lmb-index=0
+      --loop-subset-mask=15 --subset-cardinality=4
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_g0_lmb0_mask15_overall_5pt_exp8_12_seed57220260809""",
+]
+
+[[command_blocks]]
 name = "runtime_approach"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
@@ -104,6 +234,340 @@ commands = [
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_double_soft_e13_e14.json""",
 ]
 
+# At q13=0, E6=(3,6,13), E13=(4,5,13), and E45=(8,12,13)
+# are the three two-top threshold families. E45 necessarily coalesces with
+# E10=(7,8); its axis moves d as well so both eta distances vanish linearly.
+[[command_blocks]]
+name = "approach_GL572_soft_e13_E6"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 0,0,469.11725613113,37,126,-109,0,0,469.11725613113,-91,64,83
+      --approach-axis 211,-157,193,0,0,0,0,0,0,0,0,0
+      --axis-label 'e13 soft with isolated E6 two-top threshold' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_correlated_soft_e13_E6.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL572_soft_e13_E13"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 74,-52,137,0,0,469.11725613113,74,-52,137,-91,64,83
+      --approach-axis 211,-157,193,0,0,0,0,0,0,0,0,0
+      --axis-label 'e13 soft with isolated E13 two-top threshold' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_correlated_soft_e13_E13.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL572_soft_e13_E45_E10"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 74,-52,137,37,126,-109,74,-52,137,0,0,469.11725613113
+      --approach-axis 211,-157,193,0,0,0,0,0,0,98,-86,342
+      --axis-label 'e13 soft with coalescing E45/E10 thresholds' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_correlated_soft_e13_E45_E10.json""",
+]
+
+# At q14=0, E9=(6,7,14) coalesces with E10=(7,8). The second
+# family E6/E44/E45/E63 has a common eta and is approached with q13 nonzero.
+[[command_blocks]]
+name = "approach_GL572_soft_e14_E9_E10"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 74,-52,137,37,126,-109,0,0,469.11725613113,0,0,469.11725613113
+      --approach-axis 0,0,0,0,0,0,0,0,0,98,-86,342
+      --axis-label 'e14 soft with coalescing E9/E10 thresholds' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_correlated_soft_e14_E9_E10.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL572_soft_e14_E6_E44_E45_E63"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 0,0,395.4050785973398,37,126,-109,0,0,0,0,0,0
+      --approach-axis 211,-157,193,0,0,0,0,0,0,98,-86,342
+      --axis-label 'e14 soft with coalescing E6/E44/E45/E63 thresholds' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_correlated_soft_e14_E6_E44_E45_E63.json""",
+]
+
+# Retained only to reproduce the rejected c=d=0 radial-root geometry above.
+# The aggregate suite uses the nondegenerate replacement defined below.
+
+[[command_blocks]]
+name = "approach_GL572_double_soft_all_thresholds"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 0,0,469.11725613113,37,126,-109,0,0,469.11725613113,0,0,469.11725613113
+      --approach-axis 211,-157,193,0,0,0,0,0,0,98,-86,342
+      --axis-label 'independent e13/e14 double soft with E6/E9/E10/E44/E45/E63' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_correlated_double_soft_all_thresholds.json""",
+]
+
+[[command_blocks]]
+name = "GL572_correlated_approaches"
+commands = [
+  "run approach_GL572_soft_e13_E6",
+  "run approach_GL572_soft_e13_E13",
+  "run approach_GL572_soft_e13_E45_E10",
+  "run approach_GL572_soft_e14_E9_E10",
+  "run approach_GL572_soft_e14_family_nondegenerate",
+  "run approach_GL572_double_soft_all_thresholds",
+]
+
+# IR-away threshold-only paths. Each midpoint has |q13|,|q14| > 140,
+# the named eta is zero, every other active eta is at least 35 away, and
+# the named eta varies linearly along the recorded non-tangent axis.
+[[command_blocks]]
+name = "approach_GL572_threshold_only_E6"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=253.646302021326,137.388238028538,-178.85044523722,31.0413497279945,-67.288515267717,-4.61527594646387,68.5152782680815,-100.11415668467,75.9945544577732,-100.142234521764,-75.6596122218764,85.9181209203448
+      --approach-axis 157.683327388059,85.409620970943,-111.185272898123,0,0,0,0,0,0,0,0,0
+      --axis-label 'IR-away E6 threshold-only' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_threshold_only_E6.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL572_threshold_only_E9"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-19.553303452955,-75.4011215970751,21.198323839635,121.538117402459,-100.041114375751,-41.090523987389,97.6309067540664,137.512148160176,-78.4370961312338,-188.732999547325,-80.0125490648385,162.036258286007
+      --approach-axis 0,0,0,0,0,0,0,0,0,-152.401840964604,-64.610109556884,130.844230341452
+      --axis-label 'IR-away E9 threshold-only' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_threshold_only_E9.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL572_threshold_only_E10"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=121.66997191925,-59.5898902464759,105.04238723728,64.8080743255856,-101.373030376389,-61.8022037289155,-20.0201634186801,-120.624949993,-91.1430099086647,-219.645787853313,289.216658518532,296.951936032875
+      --approach-axis 0,0,0,0,0,0,0,0,0,-98.792488725024,130.084140265248,133.563320649672
+      --axis-label 'IR-away E10 threshold-only' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_threshold_only_E10.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL572_threshold_only_E13"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=49.5518231282138,-116.507875736295,-21.5932206971945,243.404845531695,-71.5638347821454,245.352961381952,130.970021589523,-7.08950250546147,15.6690803081794,111.942014528718,-122.718872940862,-127.151391818341
+      --approach-axis 0,0,0,145.516755057289,-42.783606029724,146.68141345341,0,0,0,0,0,0
+      --axis-label 'IR-away E13 threshold-only' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_threshold_only_E13.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL572_threshold_only_E44"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-207.580024980458,-127.549581473741,57.5570463403156,-2.55282914105013,-128.918652990198,132.202237696352,-42.7450139416792,117.161616536837,69.8476274830119,53.9702282877489,8.28549098491845,111.914415774512
+      --approach-axis=-174.958115739849,-107.504729514089,48.511760108906,0,0,0,0,0,0,0,0,0
+      --axis-label 'IR-away E44 threshold-only' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_threshold_only_E44.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL572_threshold_only_E45"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-70.2203240564689,77.4697957929654,23.2885805139233,17.2715469512272,130.43937609863,-16.227598024793,85.6026697498512,123.116075433798,48.0376177172292,-207.870431437859,-196.72410503108,-100.693901626778
+      --approach-axis 0,0,0,0,0,0,0,0,0,-144.56523360047,-136.813427489148,-70.028417751033
+      --axis-label 'IR-away E45 threshold-only' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_threshold_only_E45.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL572_threshold_only_E63"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-33.6500977271328,165.941279907742,-236.439706748182,92.1312170964177,-43.7159296765414,-71.039624128537,-23.4367344302032,56.3958780275696,-9.93529015410886,123.700591637322,-60.920422909833,2.14070206370241
+      --approach-axis=-24.41484744388,120.398789520392,-171.548962999829,0,0,0,0,0,0,0,0,0
+      --axis-label 'IR-away E63 threshold-only' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_threshold_only_E63.json""",
+]
+
+[[command_blocks]]
+name = "GL572_threshold_only_approaches"
+commands = [
+  "run approach_GL572_threshold_only_E6",
+  "run approach_GL572_threshold_only_E9",
+  "run approach_GL572_threshold_only_E10",
+  "run approach_GL572_threshold_only_E13",
+  "run approach_GL572_threshold_only_E44",
+  "run approach_GL572_threshold_only_E45",
+  "run approach_GL572_threshold_only_E63",
+]
+
+[[command_blocks]]
+name = "approach_GL572_double_soft_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 74,-52,137,37,126,-109,74,-52,137,74,-52,137
+      --approach-axis 211,-157,193,0,0,0,0,0,0,98,-86,342
+      --axis-label 'independent e13/e14 double soft Arb adjudicator' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_double_soft_e13_e14_arb.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL572_soft_e13_E6_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 0,0,469.11725613113,37,126,-109,0,0,469.11725613113,-91,64,83
+      --approach-axis 211,-157,193,0,0,0,0,0,0,0,0,0
+      --axis-label 'e13 soft with isolated E6 threshold, Arb adjudicator' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_correlated_soft_e13_E6_arb.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL572_soft_e14_E6_E44_E45_E63_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 0,0,395.4050785973398,37,126,-109,0,0,0,0,0,0
+      --approach-axis 211,-157,193,0,0,0,0,0,0,98,-86,342
+      --axis-label 'q14/E6/E44/E45/E63 Arb root adjudicator' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_correlated_soft_e14_E6_E44_E45_E63_arb.json""",
+]
+
+# Nondegenerate replacement for the c=d=0 radial-root diagnostic. At the
+# midpoint E6/E44/E45/E63 vanish, while E9/E10 are -440.096 and E13 is
+# +533.563; q13 is nonzero and all four target distances have nonzero
+# one-sided linear slopes along the signed q14-soft approach.
+[[command_blocks]]
+name = "approach_GL572_soft_e14_family_nondegenerate"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-122.320469248357,-134.388631996564,-124.183902003017,-212.410639726654,192.993363941342,232.608677716832,128.143920640021,135.728643631826,116.623814140209,128.143920640021,135.728643631826,116.623814140209
+      --approach-axis 211,-157,193,0,0,0,0,0,0,98,-86,342
+      --axis-label 'nondegenerate q14 soft with E6/E44/E45/E63' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_correlated_soft_e14_family_nondegenerate.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL572_pristine_basis_soft_e14_family_nondegenerate"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-122.320469248357,-134.388631996564,-124.183902003017,-212.410639726654,192.993363941342,232.608677716832,-250.464389888378,-270.11727562839,-240.807716143227,0,0,0
+      --approach-axis 211,-157,193,0,0,0,211,-157,193,98,-86,342
+      --axis-label 'pristine-basis nondegenerate q14/E6/E44/E45/E63' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572_trial_basis341314_pristine_20260809/approach_correlated_soft_e14_family_nondegenerate.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL572_original_basis_soft_e14_family_nondegenerate"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point=-122.320469248357,-134.388631996564,-124.183902003017,-212.410639726654,192.993363941342,232.608677716832,128.143920640021,135.728643631826,116.623814140209,128.143920640021,135.728643631826,116.623814140209
+      --approach-axis 211,-157,193,0,0,0,0,0,0,98,-86,342
+      --axis-label 'original-basis nondegenerate q14/E6/E44/E45/E63' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_correlated_soft_e14_family_nondegenerate_original_compare.json""",
+]
+
+# Causal diagnostics only: these reproduce the two pristine threshold-on
+# blocker geometries with threshold subtraction disabled, never as a cure.
+[[command_blocks]]
+name = "approach_GL572_soft_e14_E6_E44_E45_E63_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 0,0,395.4050785973398,37,126,-109,0,0,0,0,0,0
+      --approach-axis 211,-157,193,0,0,0,0,0,0,98,-86,342
+      --axis-label 'q14/E6/E44/E45/E63 causal threshold-off diagnostic' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_correlated_soft_e14_E6_E44_E45_E63_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "approach_GL572_double_soft_all_thresholds_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 0,0,469.11725613113,37,126,-109,0,0,469.11725613113,0,0,469.11725613113
+      --approach-axis 211,-157,193,0,0,0,0,0,0,98,-86,342
+      --axis-label 'double-soft/all-thresholds causal threshold-off diagnostic' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/approach_correlated_double_soft_all_thresholds_threshold_off.json""",
+]
+
 [[command_blocks]]
 name = "all_approaches"
 commands = [
@@ -121,6 +585,50 @@ commands = [
     evaluator_method = "SingleParametric"
     generate_events = false
     store_additional_weights_in_event = false
+
+    [integrator]
+    n_start = 100
+    n_increase = 0
+    n_max = 10000000000
+    seed = 572
+
+    [sampling]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = true
+    lmb_channels = "monte_carlo"
+    lmb_channel_weight = "ose"
+
+    [subtraction]
+    disable_threshold_subtraction = false
+
+    [stability]
+    escalate_if_exact_zero = false
+    loop_momenta_norm_escalation_factor = -1.0
+    rotation_axis = [{ type = "z" }]
+
+    [[stability.levels]]
+    precision = "Double"
+    required_precision_for_re = 1.0e-5
+    required_precision_for_im = 1.0e-5
+    escalate_for_large_weight_threshold = 1.0e99
+    '""",
+  """integrate -p epem_a_tth -i NNLO --n-cores 3
+      --renderer tabled --batch-size 10 --show-phase both
+      --show-max-weight-info --show-top-discrete-grid
+      --show-discrete-contributions-sum --write-results-for-each-iteration
+      --restart""",
+]
+
+[[command_blocks]]
+name = "integrate_final"
+commands = [
+  """set process -p epem_a_tth -i NNLO string '
+    [general]
+    m_uv = 91.188
+    evaluator_method = "SingleParametric"
+    generate_events = true
+    store_additional_weights_in_event = true
 
     [integrator]
     n_start = 100

@@ -3,6 +3,106 @@ digraph GL612{
     overall_factor = "NumeratorDependentGrouping(612,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))+NumeratorDependentGrouping(613,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))";
     overall_factor_evaluated = "-4";
     projector = "u(1,spenso::bis(4,hedge(1)))*ubar(1,spenso::bis(4,hedge(29)))*v(0,spenso::bis(4,hedge(28)))*vbar(0,spenso::bis(4,hedge(0)))";
+    // At q12 soft, E30/E52 and E64/E70 coalesce. Parent (3,4,7,12)
+    // uses edge 12 as the soft coordinate, while shared direction 7 moves
+    // their common massive momentum at fixed q12. Use that projection for the
+    // cut-5 family and the three sibling associations carrying its soft tail.
+    // On cut 5, partition E30/E52 between intrinsic [7] subtraction and its
+    // genuine [3,7] extension so the separate E67 region remains soft safe.
+    threshold_counterterms = "
+schema_version = 1
+
+[[cuts]]
+edges = [2, 7, 13]
+
+  [[cuts.thresholds]]
+  edges = [4, 7, 14]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_q12_1l\"
+    subspace = [7]
+    parent_lmb = [3, 4, 7, 12]
+
+[[cuts]]
+edges = [2, 7, 10, 12]
+
+  [[cuts.thresholds]]
+  edges = [4, 7, 14]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_q12_1l\"
+    subspace = [7]
+    parent_lmb = [3, 4, 7, 12]
+
+[[cuts]]
+edges = [2, 6, 12, 13]
+
+  [[cuts.thresholds]]
+  edges = [4, 6, 12, 14]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_q12_1l\"
+    subspace = [7]
+    parent_lmb = [3, 4, 7, 12]
+
+[[cuts]]
+edges = [2, 6, 10]
+
+  [[cuts.thresholds]]
+  edges = [7, 8]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"intrinsic_q12_1l\"
+    subspace = [7]
+    parent_lmb = [3, 4, 7, 12]
+
+      [cuts.thresholds.counterterms.multiplier]
+      expression = \"UFO::MT^2 * (Q3(effective, 12, cind(1))^2 + Q3(effective, 12, cind(2))^2 + Q3(effective, 12, cind(3))^2) / (UFO::MT^2 * (Q3(effective, 12, cind(1))^2 + Q3(effective, 12, cind(2))^2 + Q3(effective, 12, cind(3))^2) + eta(effective, eset(7, 8))^4)\"
+
+    [[cuts.thresholds.counterterms]]
+    name = \"e67_region_2l\"
+    subspace = [3, 7]
+    parent_lmb = [3, 4, 7, 12]
+
+      [cuts.thresholds.counterterms.multiplier]
+      expression = \"eta(effective, eset(7, 8))^4 / (UFO::MT^2 * (Q3(effective, 12, cind(1))^2 + Q3(effective, 12, cind(2))^2 + Q3(effective, 12, cind(3))^2) + eta(effective, eset(7, 8))^4)\"
+
+  [[cuts.thresholds]]
+  edges = [6, 8, 12]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"intrinsic_q12_1l\"
+    subspace = [7]
+    parent_lmb = [3, 4, 7, 12]
+
+      [cuts.thresholds.counterterms.multiplier]
+      expression = \"UFO::MT^2 * (Q3(effective, 12, cind(1))^2 + Q3(effective, 12, cind(2))^2 + Q3(effective, 12, cind(3))^2) / (UFO::MT^2 * (Q3(effective, 12, cind(1))^2 + Q3(effective, 12, cind(2))^2 + Q3(effective, 12, cind(3))^2) + eta(effective, eset(6, 8, 12))^4)\"
+
+    [[cuts.thresholds.counterterms]]
+    name = \"e67_region_2l\"
+    subspace = [3, 7]
+    parent_lmb = [3, 4, 7, 12]
+
+      [cuts.thresholds.counterterms.multiplier]
+      expression = \"eta(effective, eset(6, 8, 12))^4 / (UFO::MT^2 * (Q3(effective, 12, cind(1))^2 + Q3(effective, 12, cind(2))^2 + Q3(effective, 12, cind(3))^2) + eta(effective, eset(6, 8, 12))^4)\"
+
+  [[cuts.thresholds]]
+  edges = [4, 7, 14]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_q12_1l\"
+    subspace = [7]
+    parent_lmb = [3, 4, 7, 12]
+
+  [[cuts.thresholds]]
+  edges = [4, 6, 12, 14]
+
+    [[cuts.thresholds.counterterms]]
+    name = \"shared_q12_1l\"
+    subspace = [7]
+    parent_lmb = [3, 4, 7, 12]
+
+";
 
 	0 [int_id="V_141"];
 	1 [int_id="V_141"];

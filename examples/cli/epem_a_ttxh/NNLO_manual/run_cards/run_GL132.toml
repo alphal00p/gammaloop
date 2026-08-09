@@ -216,6 +216,42 @@ commands = [
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL132/approach_threshold_only_E17.json""",
 ]
 
+# Reduced-Arb threshold-only adjudicators at generic hard, non-collinear roots.
+# These avoid the zero-spatial-momentum massive line in the original E39 probe
+# and exercise both retained surfaces without approaching an IR locus.
+[[command_blocks]]
+name = "remediation_threshold_only_E39_generic_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,80,-50,30,20,40,359.7801812757209
+      --approach-axis 0,0,0,0,0,0,0,0,0,0,0,47
+      --axis-label 'generic hard IR-away eta(6,11,12)' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL132/remediation_threshold_only_E39_generic_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_threshold_only_E17_generic_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,257.4028772665142,120,-80,80,-50,30,20,40,100
+      --approach-axis 0,0,0,47,0,0,0,0,0,0,0,0
+      --axis-label 'generic hard IR-away eta(6,11,13,14)' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL132/remediation_threshold_only_E17_generic_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_threshold_only_generic_arb16"
+commands = [
+  "run remediation_threshold_only_E39_generic_arb16",
+  "run remediation_threshold_only_E17_generic_arb16",
+]
+
 # Hard nonzero collinear sectors at V_36. In each path only the two independent
 # relative transverse components vanish; the third gluon carries the recoil.
 [[command_blocks]]
@@ -258,6 +294,75 @@ commands = [
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL132/approach_collinear_e13_e14.json""",
+]
+
+# Reduced-Arb adjudication of the physical pair-collinear cancellation and the
+# two conservative V_36 cross-checks on exactly the same kinematic paths.
+[[command_blocks]]
+name = "approach_collinear_e12_e13_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-91,64,-117,0,0,120
+      --approach-axis 0,0,0,0,0,0,-47,-29,0,47,29,0
+      --axis-label 'hard e12 e13 collinear reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL132/remediation_collinear_e12_e13_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e12_e14_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-91,64,163,0,0,120
+      --approach-axis 0,0,0,0,0,0,0,0,0,47,29,0
+      --axis-label 'hard e12 e14 collinear reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL132/remediation_collinear_e12_e14_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e13_e14_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-91,64,163,0,0,-200
+      --approach-axis 0,0,0,0,0,0,47,29,0,0,0,0
+      --axis-label 'hard e13 e14 collinear reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL132/remediation_collinear_e13_e14_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_collinear_arb16"
+commands = [
+  "run approach_collinear_e12_e13_arb16",
+  "run approach_collinear_e12_e14_arb16",
+  "run approach_collinear_e13_e14_arb16",
+]
+
+# q14=K2-K1, q12=K3, q13=K1-K2-K3, and the overall limit are masks
+# 6, 8, 14, and 15 in the pristine generation basis (2,4,6,12).
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "remediation_uv_random_masks6_8_14_15"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10
+      --per-orientation --seed 13220260810
+      --graph-index 0 --lmb-index 0
+      --loop-subset-mask 6,8,14,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL132/uv_profiles/remediation_random_g0_lmb0_masks6_8_14_15_n5_exp6_10_seed13220260810""",
 ]
 
 [[command_blocks]]

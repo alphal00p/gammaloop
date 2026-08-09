@@ -1,4 +1,5 @@
 [cli_settings]
+override_state = true
 
 [cli_settings.state]
 folder = "./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL098"
@@ -48,6 +49,118 @@ commands = [
 name = "display_structure"
 commands = [
   "display integrand --process epem_a_tth --integrand-name NNLO --category orientation cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
+name = "display_lmb"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+# The accepted threshold structure must pass every LMB subset and orientation.
+[[command_blocks]]
+name = "uv_profile"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 9820260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL098/uv_profiles/base_exp8_12_seed9820260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_high_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 10 --max-scaling 14 --use_f128
+      --per-orientation --seed 9820260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL098/uv_profiles/high_f128_exp10_14_seed9820260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_base_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12 --use_f128
+      --per-orientation --seed 9820260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL098/uv_profiles/base_f128_exp8_12_seed9820260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_low_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 6 --max-scaling 10 --use_f128
+      --per-orientation --seed 9820260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL098/uv_profiles/low_f128_exp6_10_seed9820260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_lower_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 4 --max-scaling 8 --use_f128
+      --per-orientation --seed 9820260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL098/uv_profiles/lower_f128_exp4_8_seed9820260809""",
+]
+
+# Adaptive remediation certificate in generation LMB #0=(e2,e6,e9,e11).
+# The separate batches preserve completed coverage if one physical sector is
+# expensive: mask 6 supports q12=K1-K2, mask 10 supports q14=K1-K3, mask 14
+# covers their joint three-coordinate sector, and mask 15 is the overall UV
+# limit. All use an independent seeded random ray and every orientation.
+[[command_blocks]]
+name = "uv_profile_selected_mask6_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10
+      --per-orientation --seed 9820260810
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 6 --subset-cardinality 2
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL098/uv_profiles/selected_random_g0_lmb0_mask6_per_orientation_n5_exp6_10_seed9820260810""",
+]
+
+[[command_blocks]]
+name = "uv_profile_selected_mask10_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10
+      --per-orientation --seed 9820260810
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 10 --subset-cardinality 2
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL098/uv_profiles/selected_random_g0_lmb0_mask10_per_orientation_n5_exp6_10_seed9820260810""",
+]
+
+[[command_blocks]]
+name = "uv_profile_selected_mask14_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10
+      --per-orientation --seed 9820260810
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 14 --subset-cardinality 3
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL098/uv_profiles/selected_random_g0_lmb0_mask14_per_orientation_n5_exp6_10_seed9820260810""",
+]
+
+[[command_blocks]]
+name = "uv_profile_selected_mask15_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10
+      --per-orientation --seed 9820260810
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 15 --subset-cardinality 4
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL098/uv_profiles/selected_random_g0_lmb0_mask15_per_orientation_n5_exp6_10_seed9820260810""",
 ]
 
 [[command_blocks]]

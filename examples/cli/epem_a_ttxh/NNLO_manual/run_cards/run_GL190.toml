@@ -51,6 +51,12 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "display_lmb"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
 name = "runtime_approach"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
@@ -60,6 +66,25 @@ commands = [
 name = "runtime_approach_threshold_off"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=true",
+]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+# The light-quark soft coordinates are K3 and K2-K3 in LMB 0=(2,4,7,9).
+# Profile K2, K3, their joint limit, and the overall four-loop limit on a
+# seeded random ray; no fixed ray is used for certification.
+[[command_blocks]]
+name = "uv_profile_final_random_g0_lmb0_masks4_8_12_15_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 19020260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 4,8,12,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL190/uv_profiles/final_random_g0_lmb0_masks4_8_12_15_per_orientation_n5_exp6_10_seed19020260809""",
 ]
 
 [[command_blocks]]
@@ -217,6 +242,55 @@ commands = [
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL190/approach_correlated_collinear_E32_E33.json""",
+]
+
+# Reduced exact checks distinguish a bounded plateau from a spurious
+# low-R2 log-log fit in representative rank-3, rank-6, and rank-2 sectors.
+[[command_blocks]]
+name = "approach_soft_e9_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,74,-52,137,-91,64,83,0,0,0
+      --approach-axis 0,0,0,0,0,0,0,0,0,211,-157,193
+      --axis-label 'cut d e9 soft exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL190/approaches/soft_e9_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_double_soft_e9_e14_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,74,-52,137,0,0,0,0,0,0
+      --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'independent cut e9 e14 double soft exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL190/approaches/double_soft_e9_e14_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_hard_collinear_e9_e14_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,74,-52,137,0,0,400,0,0,160
+      --approach-axis 0,0,0,0,0,0,0,0,23,13,17,0
+      --axis-label 'hard d dbar collinear exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL190/approaches/hard_collinear_e9_e14_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_arb_plateaus"
+commands = [
+  "run approach_soft_e9_arb16",
+  "run approach_double_soft_e9_e14_arb16",
+  "run approach_hard_collinear_e9_e14_arb16",
 ]
 
 [[command_blocks]]

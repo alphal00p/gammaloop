@@ -1,4 +1,5 @@
 [cli_settings]
+override_state = true
 
 [cli_settings.state]
 folder = "./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084"
@@ -48,6 +49,84 @@ commands = [
 name = "display_structure"
 commands = [
   "display integrand --process epem_a_tth --integrand-name NNLO --category orientation cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
+name = "display_lmbs"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis",
+]
+
+[[command_blocks]]
+name = "uv_profile_runtime"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "uv_profile"
+commands = [
+  "run uv_profile_runtime",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 8420260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084/uv_profiles/base_exp8_12_seed8420260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final"
+commands = [
+  "run uv_profile_runtime",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 33 --min-scaling 8 --max-scaling 12
+      --per-orientation --seed 8420260809
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084/uv_profiles/final_exp8_12_seed8420260809""",
+]
+
+# Final selected random-ray certification in the pristine generation basis
+# (K0,K1,K2,K3)=(e2,e4,e6,e12). Each batch covers every orientation.
+[[command_blocks]]
+name = "uv_profile_final_random_g0_lmb0_mask8_q12_n5_exp4_8"
+commands = [
+  "run uv_profile_runtime",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 4 --max-scaling 8
+      --per-orientation --seed 8420260809 --graph-index 0 --lmb-index 0
+      --loop-subset-mask 8 --subset-cardinality 1
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084/uv_profiles/final_random_g0_lmb0_mask8_q12_n5_exp4_8_seed8420260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_random_g0_lmb0_mask6_q14_n5_exp4_8"
+commands = [
+  "run uv_profile_runtime",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 4 --max-scaling 8
+      --per-orientation --seed 8420260809 --graph-index 0 --lmb-index 0
+      --loop-subset-mask 6 --subset-cardinality 2
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084/uv_profiles/final_random_g0_lmb0_mask6_q14_n5_exp4_8_seed8420260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_random_g0_lmb0_mask14_q13_n5_exp4_8"
+commands = [
+  "run uv_profile_runtime",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 4 --max-scaling 8
+      --per-orientation --seed 8420260809 --graph-index 0 --lmb-index 0
+      --loop-subset-mask 14 --subset-cardinality 3
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084/uv_profiles/final_random_g0_lmb0_mask14_q13_n5_exp4_8_seed8420260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_random_g0_lmb0_mask15_overall_n5_exp4_8"
+commands = [
+  "run uv_profile_runtime",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 4 --max-scaling 8
+      --per-orientation --seed 8420260809 --graph-index 0 --lmb-index 0
+      --loop-subset-mask 15 --subset-cardinality 4
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084/uv_profiles/final_random_g0_lmb0_mask15_overall_n5_exp4_8_seed8420260809""",
 ]
 
 [[command_blocks]]
@@ -135,6 +214,20 @@ commands = [
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084/approach_double_soft.json""",
+]
+
+[[command_blocks]]
+name = "approach_double_soft_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-91,64,83,0,0,0
+      --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'independent e12 e14 double soft (e13 also soft), Arb' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084/approach_double_soft_arb.json""",
 ]
 
 [[command_blocks]]
@@ -312,12 +405,125 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "approach_correlated_soft_e13_5133_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,0,0,395.40507859734,0,0,0,0,0,395.40507859734
+      --approach-axis 0,0,0,0,0,47,13,17,-11,0,0,0
+      --axis-label 'e13 soft with E51 E33 thresholds, Arb' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084/approach_correlated_soft_e13_5133_arb.json""",
+]
+
+[[command_blocks]]
 name = "correlated_approaches"
 commands = [
   "run approach_correlated_soft_e12_bridge",
   "run approach_correlated_soft_e14_3952",
   "run approach_correlated_soft_e13_3921",
   "run approach_correlated_soft_e13_5133",
+]
+
+[[command_blocks]]
+name = "remediation_limits"
+commands = [
+  "run approach_soft_e12",
+  "run approach_soft_e14",
+  "run approach_soft_e13",
+  "run approach_double_soft",
+  "run approach_collinear_e12_e13",
+  "run approach_collinear_e13_e14",
+  "run approach_correlated_soft_e12_bridge",
+  "run approach_correlated_soft_e14_3952",
+  "run approach_correlated_soft_e13_3921",
+  "run approach_correlated_soft_e13_5133",
+  "run approach_correlated_soft_e13_5133_arb",
+]
+
+# Each edited cut-2 threshold is approached separately with q12, q13, and q14
+# hard and noncollinear. The midpoint lies on only the named E-surface.
+[[command_blocks]]
+name = "approach_threshold_only_E51_generic"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,79.7011729115258,278.95410519034,-199.252932278814,80,-50,40,31,-47,59
+      --approach-axis 0,0,0,13,17,-11,0,0,0,0,0,0
+      --axis-label 'edited E51 threshold, all V36 gluons hard' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084/approach_threshold_only_E51.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E33_generic"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,60.3044118558584,211.065441495504,-150.761029639646,80,-50,40,31,-47,59
+      --approach-axis 0,0,0,13,17,-11,0,0,0,0,0,0
+      --axis-label 'edited E33 threshold, all V36 gluons hard' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084/approach_threshold_only_E33.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E21_generic"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,207.629515297169,571.20330354009,-382.573788242921,80,-50,40,31,-47,59
+      --approach-axis 0,0,0,13,17,-11,0,0,0,0,0,0
+      --axis-label 'edited E21 threshold, all V36 gluons hard' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084/approach_threshold_only_E21.json""",
+]
+
+[[command_blocks]]
+name = "approach_threshold_only_E39_generic"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,110.701172911526,231.95410519034,-140.252932278814,80,-50,40,31,-47,59
+      --approach-axis 0,0,0,13,17,-11,0,0,0,0,0,0
+      --axis-label 'edited E39 threshold, all V36 gluons hard' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084/approach_threshold_only_E39.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_soft_e13_5133_threshold_off"
+commands = [
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,0,0,395.40507859734,0,0,0,0,0,395.40507859734
+      --approach-axis 0,0,0,0,0,47,13,17,-11,0,0,0
+      --axis-label 'e13 soft with E51 E33 thresholds, threshold-off diagnostic' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL084/approach_correlated_soft_e13_5133_threshold_off.json""",
+]
+
+[[command_blocks]]
+name = "postedit_validation_final_v2"
+commands = [
+  "run remediation_limits",
+  "run approach_correlated_soft_e13_5133_threshold_off",
+  "run approach_threshold_only_E51_generic",
+  "run approach_threshold_only_E33_generic",
+  "run approach_threshold_only_E21_generic",
+  "run approach_threshold_only_E39_generic",
 ]
 
 [[command_blocks]]

@@ -45,6 +45,12 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "display_lmb"
+commands = [
+  "display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis cuts --show-threshold-functions",
+]
+
+[[command_blocks]]
 name = "all_approaches"
 commands = [
   "run approach_soft_e9_e10",
@@ -58,6 +64,24 @@ commands = [
 name = "runtime_approach"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+# K2 and K3 span the two cut-fermion soft constraints and the common internal
+# gluon-soft constraint in LMB 0=(2,4,7,9).
+[[command_blocks]]
+name = "uv_profile_final_random_g0_lmb0_masks4_8_12_15_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 70320260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 4,8,12,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL703/uv_profiles/final_random_g0_lmb0_masks4_8_12_15_per_orientation_n5_exp6_10_seed70320260809""",
 ]
 
 [[command_blocks]]
@@ -123,6 +147,83 @@ commands = [
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL703/approach_soft_e7_e8_crosscheck.json""",
+]
+
+# Repeat every accepted physical family in exact arithmetic so that a bounded
+# plateau is not rejected solely by a low-R2 near-zero log-log fit.
+[[command_blocks]]
+name = "approach_soft_e9_e10_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=74,-52,137,-91,64,83,37,126,-109,0,0,0
+      --approach-axis=0,0,0,0,0,0,0,0,0,211,-157,193
+      --axis-label 'common e9 e10 exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL703/approaches/soft_e9_e10_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_soft_e12_e13_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=74,-52,137,-91,64,83,37,126,-109,37,126,-109
+      --approach-axis=0,0,0,0,0,0,0,0,0,211,-157,193
+      --axis-label 'common e12 e13 exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL703/approaches/soft_e12_e13_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_double_soft_d_families_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=74,-52,137,-91,64,83,0,0,0,0,0,0
+      --approach-axis=0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'cut d families double-soft exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL703/approaches/double_soft_d_families_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_soft_e7_e8_common_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=74,-52,137,-91,64,83,0,0,0,37,126,-109
+      --approach-axis=0,0,0,0,0,0,211,-157,193,0,0,0
+      --axis-label 'common e7 e8 exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL703/approaches/soft_e7_e8_common_arb16.json""",
+]
+
+[[command_blocks]]
+name = "approach_soft_e7_e8_crosscheck_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=143,-71,211,31,97,-53,0,0,0,-48,59,161
+      --approach-axis=0,0,0,0,0,0,19,-23,41,0,0,0
+      --axis-label 'alternate common e7 e8 exact plateau' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL703/approaches/soft_e7_e8_crosscheck_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_arb_plateaus"
+commands = [
+  "run approach_soft_e9_e10_arb16",
+  "run approach_soft_e12_e13_arb16",
+  "run approach_double_soft_d_families_arb16",
+  "run approach_soft_e7_e8_common_arb16",
+  "run approach_soft_e7_e8_crosscheck_arb16",
 ]
 
 [[command_blocks]]

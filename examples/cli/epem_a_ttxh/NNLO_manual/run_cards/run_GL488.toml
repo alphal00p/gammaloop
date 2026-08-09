@@ -62,6 +62,12 @@ commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=true",
 ]
 
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
 # q12 = K3.
 [[command_blocks]]
 name = "approach_soft_e12"
@@ -352,6 +358,133 @@ name = "remaining_collinear_f64"
 commands = [
   "run approach_collinear_e12_e13_f64",
   "run approach_collinear_e13_e14",
+]
+
+# Remediation paths use generic nonzero massive momenta, keep E33/E53 away
+# unless explicitly targeted, and pair every decisive Arb run with identical
+# threshold-off kinematics.
+[[command_blocks]]
+name = "remediation_core_arb_pairs"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-127,112,-61,-157,152,-181,30,-40,120
+      --approach-axis=0,0,0,211,-157,193,0,0,0,0,0,0
+      --axis-label 'generic e13 soft Arb threshold-on' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL488/trials/remediation/soft_e13_arb.json""",
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-127,112,-61,-157,152,-181,30,-40,120
+      --approach-axis=0,0,0,211,-157,193,0,0,0,0,0,0
+      --axis-label 'generic e13 soft Arb threshold-off' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL488/trials/remediation/soft_e13_arb_threshold_off.json""",
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,100,70,-50,100,70,-50,0,0,0
+      --approach-axis=0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'generic independent all-gluon double soft Arb threshold-on' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL488/trials/remediation/double_soft_arb.json""",
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,100,70,-50,100,70,-50,0,0,0
+      --approach-axis=0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'generic independent all-gluon double soft Arb threshold-off' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL488/trials/remediation/double_soft_arb_threshold_off.json""",
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-157,152,-181,30,-40,120
+      --approach-axis=0,0,0,0,0,0,-47,-29,0,47,29,0
+      --axis-label 'nondegenerate physical e12/e13 hard-collinear Arb threshold-on' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL488/trials/remediation/collinear_e12_e13_arb.json""",
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-157,152,-181,30,-40,120
+      --approach-axis=0,0,0,0,0,0,-47,-29,0,47,29,0
+      --axis-label 'nondegenerate physical e12/e13 hard-collinear Arb threshold-off' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL488/trials/remediation/collinear_e12_e13_arb_threshold_off.json""",
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-61,24,203,-66,88,-264
+      --approach-axis=0,0,0,0,0,0,0,0,0,47,29,0
+      --axis-label 'nondegenerate physical e13/e14 hard-collinear Arb threshold-on' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL488/trials/remediation/collinear_e13_e14_arb.json""",
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=37,126,-109,-91,64,83,-61,24,203,-66,88,-264
+      --approach-axis=0,0,0,0,0,0,0,0,0,47,29,0
+      --axis-label 'nondegenerate physical e13/e14 hard-collinear Arb threshold-off' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL488/trials/remediation/collinear_e13_e14_arb_threshold_off.json""",
+]
+
+# The E53-only q14 root and the common E33/E53 q13 bridge are separated at
+# generic nonzero momenta; the old probes put a massive line at rest.
+[[command_blocks]]
+name = "remediation_threshold_family_pairs"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=37,126,-109,100,70,-50,100,70,-50,107.36340434824416,-162.7767743344347,204.33680182407758
+      --approach-axis=0,0,0,0,0,0,47,29,-31,0,0,0
+      --axis-label 'q14 soft isolated E53 f64 threshold-on' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL488/trials/remediation/soft_e14_E53_f64.json""",
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+      --point=37,126,-109,100,70,-50,100,70,-50,107.36340434824416,-162.7767743344347,204.33680182407758
+      --approach-axis=0,0,0,0,0,0,47,29,-31,0,0,0
+      --axis-label 'q14 soft isolated E53 f64 threshold-off' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL488/trials/remediation/soft_e14_E53_f64_threshold_off.json""",
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=-194.5513309645238,230.38914775933728,113.33400603508301,-413.83565972137444,-80.96662393516857,-12.315871389057861,-379.01086802337534,-157.77435577777703,35.821244485992736,-34.82479169799913,76.80773184260846,-48.1371158750506
+      --approach-axis=0,0,0,0,0,0,211,-157,193,0,0,0
+      --axis-label 'q13 soft common E33/E53 bridge Arb threshold-on' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL488/trials/remediation/soft_e13_E33_E53_arb.json""",
+  "run runtime_approach_threshold_off",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point=-194.5513309645238,230.38914775933728,113.33400603508301,-413.83565972137444,-80.96662393516857,-12.315871389057861,-379.01086802337534,-157.77435577777703,35.821244485992736,-34.82479169799913,76.80773184260846,-48.1371158750506
+      --approach-axis=0,0,0,0,0,0,211,-157,193,0,0,0
+      --axis-label 'q13 soft common E33/E53 bridge Arb threshold-off' --parameter-name lambda
+      --n-points 8 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL488/trials/remediation/soft_e13_E33_E53_arb_threshold_off.json""",
+]
+
+# Mask 14 is the exact K1/K2/K3 subset entering q13; mask 15 adds the full
+# four-loop scaling.  Both use seeded random rays and per-orientation output.
+[[command_blocks]]
+name = "remediation_uv_random_masks14_15"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 48820260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 14 --subset-cardinality 3
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL488/trials/remediation/uv_random_g0_lmb0_mask14_n5_exp6_10_seed48820260809""",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 48820260810
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 15 --subset-cardinality 4
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL488/trials/remediation/uv_random_g0_lmb0_mask15_n5_exp6_10_seed48820260810""",
 ]
 
 [[command_blocks]]

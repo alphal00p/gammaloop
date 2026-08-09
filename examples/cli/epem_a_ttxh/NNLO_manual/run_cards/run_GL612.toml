@@ -37,6 +37,10 @@ name = "display_structure"
 commands = ["display integrand --process epem_a_tth --integrand-name NNLO --category orientation cuts --show-threshold-functions"]
 
 [[command_blocks]]
+name = "display_lmbs"
+commands = ["display integrand --process epem_a_tth --integrand-name NNLO --category loop_momentum_basis"]
+
+[[command_blocks]]
 name = "runtime_approach"
 commands = ["set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=true general.store_additional_weights_in_event=true subtraction.disable_threshold_subtraction=false"]
 
@@ -167,6 +171,47 @@ commands = ["run runtime_approach_threshold_off", """approach -p epem_a_tth -i N
   --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL612/approach_corr_e12_E30_E52_threshold_off.json"""]
 
 [[command_blocks]]
+name = "approach_threshold_only_E30"
+commands = ["run runtime_approach", """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+  --point 74,-52,137,121,-77,63,0,0,469.11725613112975,31,-47,59
+  --approach-axis 0,0,0,0,0,0,31,-17,47,0,0,0
+  --axis-label 'edited E30 threshold; IR away' --parameter-name lambda --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2 --skip-midpoint --n-cores 3
+  --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL612/threshold_only_E30.json"""]
+
+[[command_blocks]]
+name = "approach_threshold_only_E52"
+commands = ["run runtime_approach", """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+  --point 74,-52,137,121,-77,63,0,0,-220.071,-47,25,294.071
+  --approach-axis 0,0,0,0,0,0,11,-7,5,0,0,0
+  --axis-label 'edited E52 threshold; IR away' --parameter-name lambda --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2 --skip-midpoint --n-cores 3
+  --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL612/threshold_only_E52.json"""]
+
+[[command_blocks]]
+name = "approach_threshold_only_E64"
+commands = ["run runtime_approach", """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+  --point 74,-52,137,0,0,395.4050785973398,0,0,0,800,0,0
+  --approach-axis 0,0,0,11,-7,5,0,0,0,0,0,0
+  --axis-label 'edited E64 threshold; IR away' --parameter-name lambda --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2 --skip-midpoint --n-cores 3
+  --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL612/threshold_only_E64.json"""]
+
+[[command_blocks]]
+name = "approach_threshold_only_E70"
+commands = ["run runtime_approach", """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0
+  --point 800,0,395.4050785973398,0,0,395.4050785973398,0,0,100,800,0,0
+  --approach-axis 0,0,0,0,0,0,0,0,0,11,-7,5
+  --axis-label 'edited E70 threshold; IR away' --parameter-name lambda --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2 --skip-midpoint --n-cores 3
+  --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL612/threshold_only_E70.json"""]
+
+[[command_blocks]]
+name = "threshold_inventory"
+commands = [
+  "run approach_threshold_only_E30",
+  "run approach_threshold_only_E52",
+  "run approach_threshold_only_E64",
+  "run approach_threshold_only_E70",
+]
+
+[[command_blocks]]
 name = "integrate"
 commands = [
   """set process -p epem_a_tth -i NNLO string '
@@ -200,6 +245,30 @@ commands = [
       --show-discrete-contributions-sum --write-results-for-each-iteration
       --restart""",
 ]
+
+# Mandatory final audit over all 15 nonempty LMB subsets and all orientations.
+# The guarded launcher supplies RAYON_NUM_THREADS=3.
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = ["set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false"]
+
+[[command_blocks]]
+name = "uv_profile_final"
+commands = ["run runtime_uv_profile", """profile ultra-violet -p epem_a_tth -i NNLO
+  --n-points 33 --min-scaling 8 --max-scaling 12 --per-orientation --seed 61220260809
+  --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL612/uv_profiles/final_exp8_12_seed61220260809"""]
+
+[[command_blocks]]
+name = "uv_profile_final_f128"
+commands = ["run runtime_uv_profile", """profile ultra-violet -p epem_a_tth -i NNLO
+  --n-points 33 --min-scaling 8 --max-scaling 12 --use_f128 --per-orientation --seed 61220260809
+  --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL612/uv_profiles/final_f128_exp8_12_seed61220260809"""]
+
+[[command_blocks]]
+name = "uv_profile_final_low_f128"
+commands = ["run runtime_uv_profile", """profile ultra-violet -p epem_a_tth -i NNLO
+  --n-points 33 --min-scaling 6 --max-scaling 10 --use_f128 --per-orientation --seed 61220260809
+  --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL612/uv_profiles/final_f128_exp6_10_seed61220260809"""]
 
 [default_runtime_settings.general]
 evaluator_method = "SingleParametric"

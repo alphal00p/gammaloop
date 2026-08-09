@@ -269,6 +269,58 @@ commands = [
   "run approach_correlated_double_soft_E41_threshold_off",
 ]
 
+# Reduced Arb adjudicators at the exact three existing nondegenerate
+# double-soft geometries. The f64 threshold-on/off copies are byte-equivalent.
+[[command_blocks]]
+name = "approach_double_soft_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,-91,64,83,-91,64,83,-91,64,83
+      --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'independent e13 e14 double soft Arb adjudicator' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL120/approach_double_soft_arb.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_double_soft_E19_E28_E51_E52_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,0,0,469.117256131130,0,0,469.117256131130,0,0,469.117256131130
+      --approach-axis 0,0,0,19,-23,41,98,-86,342,211,-157,193
+      --axis-label 'double soft at E19 E28 E51 E52 Arb adjudicator' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL120/approach_correlated_double_soft_E19_E28_E51_E52_arb.json""",
+]
+
+[[command_blocks]]
+name = "approach_correlated_double_soft_E41_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0
+      --point 37,126,-109,0,0,180.474374912340,0,0,180.474374912340,0,0,180.474374912340
+      --approach-axis 0,0,0,19,-23,41,98,-86,342,211,-157,193
+      --axis-label 'double soft at E41 Arb adjudicator' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3 --use_arb_prec
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL120/approach_correlated_double_soft_E41_arb.json""",
+]
+
+[[command_blocks]]
+name = "remediation_double_soft_arb16"
+commands = [
+  "run approach_double_soft_arb",
+  "run approach_correlated_double_soft_E19_E28_E51_E52_arb",
+  "run approach_correlated_double_soft_E41_arb",
+]
+
 [[command_blocks]]
 name = "all_approaches"
 commands = [
@@ -347,6 +399,36 @@ commands = [
       --show-max-weight-info --show-top-discrete-grid
       --show-discrete-contributions-sum --write-results-for-each-iteration
       --restart""",
+]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+# Final-state LMB 0=(e2,e4,e6,e11): mask 6 spans q13=K1-K2, mask 10 spans
+# q14=K1-K3, mask 14 is their joint sector, and mask 15 is overall.
+[[command_blocks]]
+name = "remediation_uv_random_masks6_10_14_15"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 12020260810
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 6 --subset-cardinality 2
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL120/trials/remediation/uv_random_g0_lmb0_mask6_n5_exp6_10_seed12020260810""",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 12020260811
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 10 --subset-cardinality 2
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL120/trials/remediation/uv_random_g0_lmb0_mask10_n5_exp6_10_seed12020260811""",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 12020260812
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 14 --subset-cardinality 3
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL120/trials/remediation/uv_random_g0_lmb0_mask14_n5_exp6_10_seed12020260812""",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 12020260813
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 15 --subset-cardinality 4
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL120/trials/remediation/uv_random_g0_lmb0_mask15_n5_exp6_10_seed12020260813""",
 ]
 
 [default_runtime_settings.general]

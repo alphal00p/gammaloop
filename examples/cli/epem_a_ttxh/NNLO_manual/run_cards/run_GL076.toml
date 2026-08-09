@@ -1,4 +1,5 @@
 [cli_settings]
+override_state = true
 
 [cli_settings.state]
 folder = "./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076"
@@ -38,6 +39,150 @@ commands = [
   "save state -o",
 ]
 
+# Structural candidate probe only. UV subtraction is deliberately absent, so
+# this cannot become the accepted campaign state.
+[[command_blocks]]
+name = "probe_threshold_structure"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "display integrand --process epem_a_tth --integrand-name NNLO --category generation orientation cuts --show-threshold-functions",
+]
+
+# Candidate triage and complete no-UV regression. Both regenerate from the
+# current DOT before evaluating any all-cut/all-orientation approach.
+[[command_blocks]]
+name = "probe_candidate_quick_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_soft_e12_arb",
+  "run approach_correlated_soft_e12_bridge",
+  "run approach_correlated_soft_e12_2627",
+  "run approach_collinear_e13_e14_arb",
+]
+
+[[command_blocks]]
+name = "probe_candidate_center_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_soft_e12_arb",
+  "run approach_collinear_e13_e14_arb",
+]
+
+[[command_blocks]]
+name = "probe_candidate_collinear_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_collinear_e13_e14_arb",
+]
+
+[[command_blocks]]
+name = "probe_all_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run all_approaches",
+]
+
+[[command_blocks]]
+name = "probe_threshold_only_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run threshold_only_approaches",
+]
+
+[[command_blocks]]
+name = "probe_threshold_remainder_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_threshold_691214",
+  "run approach_threshold_71112",
+  "run approach_threshold_67",
+]
+
+[[command_blocks]]
+name = "probe_candidate_A_acceptance_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_soft_e14_generic_arb",
+  "run approach_collinear_e13_e14_arb",
+  "run threshold_only_approaches",
+]
+
+[[command_blocks]]
+name = "probe_hybrid_E46_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_threshold_91114",
+]
+
+[[command_blocks]]
+name = "probe_candidate_q12_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_soft_e12_arb",
+]
+
+[[command_blocks]]
+name = "probe_candidate_q13_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_soft_e13_arb",
+]
+
+[[command_blocks]]
+name = "probe_candidate_double_soft_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_double_soft_arb",
+]
+
+# Precision follow-up for the cancellation-limited soft/collinear totals. The
+# fixed paths are unchanged; only the active numerical lane differs.
+[[command_blocks]]
+name = "probe_precision_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_soft_e12_arb",
+  "run approach_soft_e14_generic_arb",
+  "run approach_collinear_e12_e13_arb",
+  "run approach_collinear_e12_e14",
+  "run approach_collinear_e13_e14_arb",
+]
+
+[[command_blocks]]
+name = "probe_soft_e14_geometry_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "run approach_soft_e14_generic_arb",
+]
+
 [[command_blocks]]
 name = "display_generation"
 commands = [
@@ -48,6 +193,55 @@ commands = [
 name = "display_structure"
 commands = [
   "display integrand --process epem_a_tth --integrand-name NNLO --category orientation cuts --show-threshold-functions",
+]
+
+# Mandatory remediation UV audit in the generation LMB. The selected masks
+# cover q13=K2-K1, q12=K3, q14=K1-K2-K3, and the overall four-loop limit in
+# every orientation, using a reproducible random ray.
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "uv_profile"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10
+      --per-orientation --seed 7620260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 6,8,14,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/uv_profiles/pristine_random_g0_lmb0_masks6_8_14_15_per_orientation_n5_exp6_10_seed7620260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_f128"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --use_f128
+      --per-orientation --seed 7620260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 6,8,14,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/uv_profiles/pristine_random_f128_g0_lmb0_masks6_8_14_15_per_orientation_n5_exp6_10_seed7620260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_f128_low"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 4 --max-scaling 8 --use_f128
+      --per-orientation --seed 7620260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 6,8,14,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/uv_profiles/pristine_random_f128_g0_lmb0_masks6_8_14_15_per_orientation_n5_exp4_8_seed7620260809""",
+]
+
+[[command_blocks]]
+name = "final_generate_and_uv"
+commands = [
+  "run generate_full",
+  "run uv_profile",
 ]
 
 [[command_blocks]]
@@ -71,6 +265,20 @@ commands = [
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/approach_soft_e12.json""",
 ]
 
+[[command_blocks]]
+name = "approach_soft_e12_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,74,-52,137,0,0,0
+      --approach-axis 0,0,0,0,0,0,0,0,0,211,-157,193
+      --axis-label 'e12 soft arb' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/approach_soft_e12_arb.json""",
+]
+
 # q13 = K2-K1.
 [[command_blocks]]
 name = "approach_soft_e13"
@@ -84,6 +292,20 @@ commands = [
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/approach_soft_e13.json""",
+]
+
+[[command_blocks]]
+name = "approach_soft_e13_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-91,64,83,31,-47,59
+      --approach-axis 0,0,0,0,0,0,211,-157,193,0,0,0
+      --axis-label 'e13 soft arb' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/approach_soft_e13_arb.json""",
 ]
 
 # q14 = K1-K2-K3.
@@ -101,6 +323,35 @@ commands = [
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/approach_soft_e14.json""",
 ]
 
+[[command_blocks]]
+name = "approach_soft_e14_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,105,-99,196,74,-52,137,31,-47,59
+      --approach-axis 0,0,0,211,-157,193,0,0,0,0,0,0
+      --axis-label 'e14 soft arb' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/approach_soft_e14_arb.json""",
+]
+
+# Independent hard complement for the e14-soft constraint q14=K1-K2-K3.
+[[command_blocks]]
+name = "approach_soft_e14_generic_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,78,14,254,137,-83,211,-59,97,43
+      --approach-axis 0,0,0,113,-71,167,0,0,0,0,0,0
+      --axis-label 'e14 soft independent hard complement arb' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/approach_soft_e14_generic_arb.json""",
+]
+
 # Any two soft gluons force the third soft by q12+q13+q14=0. The two
 # independent soft momenta approach along independent three-vectors.
 [[command_blocks]]
@@ -115,6 +366,20 @@ commands = [
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/approach_double_soft.json""",
+]
+
+[[command_blocks]]
+name = "approach_double_soft_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-91,64,83,0,0,0
+      --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'independent e12 e13 double soft arb (e14 also soft)' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/approach_double_soft_arb.json""",
 ]
 
 # At q12=0 the threshold pairs (9,11,14)/(9,11,12,13) and
@@ -161,6 +426,20 @@ commands = [
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/approach_collinear_e12_e13.json""",
+]
+
+[[command_blocks]]
+name = "approach_collinear_e12_e13_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-61,24,203,30,-40,120
+      --approach-axis 0,0,0,0,0,0,-31,53,0,47,29,0
+      --axis-label 'hard e12 e13 collinear arb (e14 opposite)' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/approach_collinear_e12_e13_arb.json""",
 ]
 
 # Three nonzero collinear gluons, with e12 and e14 on the same ray.
@@ -271,26 +550,46 @@ commands = [
   "run runtime_approach",
   """approach -p epem_a_tth -i NNLO
       --momentum-space --graph-id 0
-      --point 37,126,-109,-91,64,83,-61,24,203,-66,88,-264
+      --point 211,347,-263,719,-533,641,760,-600,744,-123,201,-309
       --approach-axis 0,0,0,0,0,0,-31,53,0,47,29,0
-      --axis-label 'hard e13 e14 collinear (e12 opposite)' --parameter-name lambda
+      --axis-label 'generic hard e13 e14 collinear (e12 opposite)' --parameter-name lambda
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/approach_collinear_e13_e14.json""",
 ]
 
 [[command_blocks]]
+name = "approach_collinear_e13_e14_arb"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO
+      --momentum-space --graph-id 0 --use_arb_prec
+      --point 211,347,-263,719,-533,641,760,-600,744,-123,201,-309
+      --approach-axis 0,0,0,0,0,0,-31,53,0,47,29,0
+      --axis-label 'generic hard e13 e14 collinear arb (e12 opposite)' --parameter-name lambda
+      --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/approach_collinear_e13_e14_arb.json""",
+]
+
+[[command_blocks]]
 name = "all_approaches"
 commands = [
-  "run approach_soft_e12",
+  "run approach_soft_e12_arb",
   "run approach_soft_e13",
-  "run approach_soft_e14",
+  "run approach_soft_e14_generic_arb",
   "run approach_double_soft",
   "run approach_correlated_soft_e12_bridge",
   "run approach_correlated_soft_e12_2627",
-  "run approach_collinear_e12_e13",
+  "run approach_collinear_e12_e13_arb",
   "run approach_collinear_e12_e14",
-  "run approach_collinear_e13_e14",
+  "run approach_collinear_e13_e14_arb",
+  "run threshold_only_approaches",
+]
+
+[[command_blocks]]
+name = "threshold_only_approaches"
+commands = [
   "run approach_threshold_91114",
   "run approach_threshold_9111213",
   "run approach_threshold_6913",

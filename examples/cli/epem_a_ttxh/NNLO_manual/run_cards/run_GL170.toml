@@ -39,6 +39,15 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "generate_no_uv"
+commands = [
+  "run setup",
+  "set global kv global.generation.uv.generate_integrated=false global.generation.uv.subtract_uv=false",
+  "generate existing -p epem_a_tth -i NNLO",
+  "save state -o",
+]
+
+[[command_blocks]]
 name = "display_generation"
 commands = [
   "display integrand --process epem_a_tth --integrand-name NNLO --category generation",
@@ -264,6 +273,179 @@ commands = [
       --n-points 50 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
       --skip-midpoint --n-cores 3
       --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL170/approach_correlated_soft_e13_E19_threshold_off.json""",
+]
+
+# Reduced-Arb adjudication of every threshold-on family whose original f64
+# branch/window fit was cancellation-limited or asymmetric.
+[[command_blocks]]
+name = "remediation_double_soft_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,-91,64,83,-91,64,83,-91,64,83
+      --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'independent e13 e14 double soft reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL170/remediation_double_soft_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e14_E6_E48_E59_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,0,0,395.40507859734,0,0,0,0,0,395.40507859734
+      --approach-axis 0,0,0,0,0,0,0,0,47,13,17,-11
+      --axis-label 'e14 soft E6 E48 E59 reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL170/remediation_soft_e14_E6_E48_E59_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e14_E2_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,0,0,469.11725613113,130,-90,70,0,0,469.11725613113
+      --approach-axis 0,0,0,0,0,0,0,0,0,0,0,47
+      --axis-label 'e14 soft E2 reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL170/remediation_soft_e14_E2_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e13_E19_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,0,0,469.11725613113,0,0,469.11725613113,130,-90,70
+      --approach-axis 0,0,0,0,0,0,13,17,-11,0,0,0
+      --axis-label 'e13 soft E19 reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL170/remediation_soft_e13_E19_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e14_E19_E40_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,130,-90,70,0,0,469.11725613113,130,-90,70
+      --approach-axis 0,0,0,0,0,0,0,0,47,13,17,-11
+      --axis-label 'e14 soft E19 E40 reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL170/remediation_soft_e14_E19_E40_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_soft_e13_E2_E48_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,130,-90,70,130,-90,70,0,0,469.11725613113
+      --approach-axis 0,0,0,0,0,0,13,17,-11,0,0,47
+      --axis-label 'e13 soft E2 E48 reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL170/remediation_soft_e13_E2_E48_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_double_soft_all_thresholds_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,0,0,469.11725613113,0,0,469.11725613113,0,0,469.11725613113
+      --approach-axis 0,0,0,0,0,0,98,-86,342,211,-157,193
+      --axis-label 'double soft all thresholds reduced Arb check' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL170/remediation_double_soft_all_thresholds_arb16.json""",
+]
+
+[[command_blocks]]
+name = "remediation_arb16_ambiguities"
+commands = [
+  "run remediation_double_soft_arb16",
+  "run remediation_soft_e14_E6_E48_E59_arb16",
+  "run remediation_soft_e14_E2_arb16",
+  "run remediation_soft_e13_E19_arb16",
+  "run remediation_soft_e14_E19_E40_arb16",
+  "run remediation_soft_e13_E2_E48_arb16",
+  "run remediation_double_soft_all_thresholds_arb16",
+]
+
+# Structural gate for the E6 [7,10] bridge candidate in the original basis.
+[[command_blocks]]
+name = "candidate_e6_bridge_soft_e14_E6_E48_E59_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,0,0,395.40507859734,0,0,0,0,0,395.40507859734
+      --approach-axis 0,0,0,0,0,0,0,0,47,13,17,-11
+      --axis-label 'candidate E6 bridge e14 E6 E48 E59' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL170_candidate_e6_bridge/soft_e14_E6_E48_E59_arb16.json""",
+]
+
+[[command_blocks]]
+name = "candidate_e6_bridge_soft_e13_E6_E40_E59_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,0,0,0,0,0,0,0,0,395.40507859734
+      --approach-axis 0,0,0,0,0,47,13,17,-11,0,0,0
+      --axis-label 'candidate E6 bridge e13 E6 E40 E59' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL170_candidate_e6_bridge/soft_e13_E6_E40_E59_arb16.json""",
+]
+
+[[command_blocks]]
+name = "candidate_e6_bridge_soft_e14_E19_E40_arb16"
+commands = [
+  "run runtime_approach",
+  """approach -p epem_a_tth -i NNLO --momentum-space --graph-id 0 --use_arb_prec
+      --point 37,126,-109,130,-90,70,0,0,469.11725613113,130,-90,70
+      --approach-axis 0,0,0,0,0,0,0,0,47,13,17,-11
+      --axis-label 'candidate E6 bridge e14 E19 E40' --parameter-name lambda
+      --n-points 16 --logarithmic --min-abs-t 1e-6 --max-abs-t 1e-2
+      --skip-midpoint --n-cores 3
+      --output-results ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL170_candidate_e6_bridge/soft_e14_E19_E40_arb16.json""",
+]
+
+[[command_blocks]]
+name = "candidate_e6_bridge_core_arb16"
+commands = [
+  "run candidate_e6_bridge_soft_e14_E6_E48_E59_arb16",
+  "run candidate_e6_bridge_soft_e13_E6_E40_E59_arb16",
+  "run candidate_e6_bridge_soft_e14_E19_E40_arb16",
+]
+
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+# q13=K1-K2, q14=K3-K1, their joint limit, and the overall limit are
+# masks 6, 10, 14, and 15 in the pristine generation basis (2,4,6,9).
+[[command_blocks]]
+name = "remediation_uv_random_masks6_10_14_15"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10
+      --per-orientation --seed 17020260809
+      --graph-index 0 --lmb-index 0
+      --loop-subset-mask 6,10,14,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL170/uv_profiles/remediation_random_g0_lmb0_masks6_10_14_15_n5_exp6_10_seed17020260809""",
 ]
 
 [[command_blocks]]

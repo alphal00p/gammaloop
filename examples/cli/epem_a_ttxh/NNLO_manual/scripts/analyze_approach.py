@@ -114,9 +114,8 @@ def has_active_threshold_counterterm(raw: dict, axis_index: int) -> bool:
     for point in raw.get("points", []):
         if point.get("axis_index") != axis_index or point.get("status") != "evaluated":
             continue
-        summary = (point.get("evaluation") or {}).get(
-            "threshold_counterterm_summary"
-        ) or {}
+        evaluation = point.get("evaluation") or {}
+        summary = evaluation.get("threshold_counterterm_summary") or {}
         counterterm_sum = summary.get("counterterm_sum") or {}
         values = (counterterm_sum.get("re"), counterterm_sum.get("im"))
         if (
@@ -127,6 +126,20 @@ def has_active_threshold_counterterm(raw: dict, axis_index: int) -> bool:
             and math.hypot(*values) > 0.0
         ):
             return True
+        for name, contribution in (
+            evaluation.get("additional_contribution_sums") or {}
+        ).items():
+            if not name.startswith("threshold_counterterm"):
+                continue
+            values = (contribution.get("re"), contribution.get("im"))
+            if (
+                all(
+                    isinstance(value, (int, float)) and math.isfinite(value)
+                    for value in values
+                )
+                and math.hypot(*values) > 0.0
+            ):
+                return True
     return False
 
 

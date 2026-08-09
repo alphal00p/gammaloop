@@ -359,6 +359,47 @@ commands = [
       --restart""",
 ]
 
+# Remediation UV audit in the pristine generation basis (e2,e4,e7,e13).
+# Mask 8 scales the explicit q13 coordinate, mask 14 covers every coordinate
+# entering q12=K1+K3-K2, and mask 15 checks their overall four-loop UV limit.
+[[command_blocks]]
+name = "runtime_uv_profile"
+commands = [
+  "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_random_g0_lmb0_masks8_14_15_n5_exp6_10"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 44820260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 8,14,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL448/uv_profiles/remediation_final_random_g0_lmb0_masks8_14_15_per_orientation_n5_exp6_10_seed44820260809""",
+]
+
+# Adaptive range/precision fallbacks; use only if the random f64 screen loses
+# point coverage, fit quality, or stable decay.
+[[command_blocks]]
+name = "uv_profile_final_random_g0_lmb0_masks8_14_15_n5_exp4_8_arb"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 4 --max-scaling 8 --use_f128 --per-orientation --seed 44820260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 8,14,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL448/uv_profiles/remediation_final_random_g0_lmb0_masks8_14_15_per_orientation_n5_exp4_8_arb_seed44820260809""",
+]
+
+[[command_blocks]]
+name = "uv_profile_final_random_g0_lmb0_masks8_14_15_n5_exp8_12_arb"
+commands = [
+  "run runtime_uv_profile",
+  """profile ultra-violet -p epem_a_tth -i NNLO
+      --n-points 5 --min-scaling 8 --max-scaling 12 --use_f128 --per-orientation --seed 44820260809
+      --graph-index 0 --lmb-index 0 --loop-subset-mask 8,14,15
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL448/uv_profiles/remediation_final_random_g0_lmb0_masks8_14_15_per_orientation_n5_exp8_12_arb_seed44820260809""",
+]
+
 [default_runtime_settings.general]
 evaluator_method = "SingleParametric"
 enable_cache = false
