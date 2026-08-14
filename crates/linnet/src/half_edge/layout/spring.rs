@@ -89,33 +89,31 @@ fn apply_directional_shift(shift_val: f64, direction: ShiftDirection) -> f64 {
 pub(crate) fn directional_force_shift(
     constraints: &PointConstraint,
     index: usize,
+    point: Point2<f64>,
     magnitude: f64,
 ) -> Vector2<f64> {
     if magnitude == 0.0 {
         return Vector2::zero();
     }
 
-    let force_x = match constraints.x {
-        Constraint::Grouped(reference, ShiftDirection::PositiveOnly) if reference == index => {
+    let component = |constraint, coordinate| match constraint {
+        Constraint::Grouped(reference, ShiftDirection::PositiveOnly)
+            if reference == index && coordinate <= 0.0 =>
+        {
             magnitude
         }
-        Constraint::Grouped(reference, ShiftDirection::NegativeOnly) if reference == index => {
+        Constraint::Grouped(reference, ShiftDirection::NegativeOnly)
+            if reference == index && coordinate >= 0.0 =>
+        {
             -magnitude
         }
         _ => 0.0,
     };
 
-    let force_y = match constraints.y {
-        Constraint::Grouped(reference, ShiftDirection::PositiveOnly) if reference == index => {
-            magnitude
-        }
-        Constraint::Grouped(reference, ShiftDirection::NegativeOnly) if reference == index => {
-            -magnitude
-        }
-        _ => 0.0,
-    };
-
-    Vector2::from((force_x, force_y))
+    Vector2::new(
+        component(constraints.x, point.x),
+        component(constraints.y, point.y),
+    )
 }
 
 impl Shiftable for PointConstraint {
@@ -408,6 +406,7 @@ where
                         let bias = directional_force_shift(
                             st.graph[v].point_constraint(),
                             v.0,
+                            st.vertex_points[v],
                             st.directional_force * step,
                         );
                         shift += bias;
@@ -419,6 +418,7 @@ where
                         let bias = directional_force_shift(
                             st.graph[e].point_constraint(),
                             e.0,
+                            st.edge_points[e],
                             st.directional_force * step,
                         );
                         shift += bias;
@@ -434,6 +434,7 @@ where
                     let vertex_bias = directional_force_shift(
                         st.graph[v].point_constraint(),
                         v.0,
+                        st.vertex_points[v],
                         st.directional_force * step,
                     );
 
@@ -448,6 +449,7 @@ where
                         let edge_bias = directional_force_shift(
                             st.graph[index].point_constraint(),
                             index.0,
+                            st.edge_points[index],
                             st.directional_force * step,
                         );
                         let edge_shift = shift + edge_bias;
@@ -1513,6 +1515,31 @@ impl SpringChargeEnergy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn directional_force_only_restores_wrong_side() {
+        let constraints = PointConstraint {
+            x: Constraint::Grouped(0, ShiftDirection::PositiveOnly),
+            y: Constraint::Grouped(0, ShiftDirection::NegativeOnly),
+        };
+
+        assert_eq!(
+            directional_force_shift(&constraints, 0, Point2::new(-1.0, 1.0), 2.0),
+            Vector2::new(2.0, -2.0)
+        );
+        assert_eq!(
+            directional_force_shift(&constraints, 0, Point2::new(0.0, 0.0), 2.0),
+            Vector2::new(2.0, -2.0)
+        );
+        assert_eq!(
+            directional_force_shift(&constraints, 0, Point2::new(1.0, -1.0), 2.0),
+            Vector2::zero()
+        );
+        assert_eq!(
+            directional_force_shift(&constraints, 1, Point2::new(-1.0, 1.0), 2.0),
+            Vector2::zero()
+        );
+    }
 
     fn test_energy(c_center: f64) -> SpringChargeEnergy {
         SpringChargeEnergy {

@@ -61,6 +61,7 @@ pub fn force_directed_layout<'a, E, V, H, N>(
                     let bias = directional_force_shift(
                         state.graph[idx].point_constraint(),
                         idx.0,
+                        state.vertex_points[idx],
                         state.directional_force,
                     );
                     forces_v[idx] += Vector3::new(bias.x, bias.y, 0.0);
@@ -69,6 +70,7 @@ pub fn force_directed_layout<'a, E, V, H, N>(
                     let bias = directional_force_shift(
                         state.graph[idx].point_constraint(),
                         idx.0,
+                        state.edge_points[idx],
                         state.directional_force,
                     );
                     forces_e[idx] += Vector3::new(bias.x, bias.y, 0.0);
