@@ -10,6 +10,7 @@
   const searchButtons = document.querySelectorAll("[data-search-open]");
   const themeButton = document.querySelector("[data-theme-toggle]");
   const productSelect = document.querySelector("[data-product-select]");
+  const themeColor = document.querySelector('meta[name="theme-color"]');
 
   const setMenuOpen = (open) => {
     body.classList.toggle("sidebar-open", open);
@@ -22,10 +23,18 @@
 
   const storedTheme = localStorage.getItem("alphal00p-docs-theme");
   const preferredTheme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  root.dataset.theme = storedTheme || preferredTheme;
+  const applyTheme = (theme) => {
+    root.dataset.theme = theme;
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    themeButton?.setAttribute("aria-label", `Switch to ${nextTheme} theme`);
+    themeButton?.setAttribute("aria-pressed", String(theme === "dark"));
+    themeColor?.setAttribute("content", theme === "dark" ? "#211a23" : "#f9f6f0");
+  };
+  applyTheme(storedTheme || preferredTheme);
   themeButton?.addEventListener("click", () => {
-    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
-    localStorage.setItem("alphal00p-docs-theme", root.dataset.theme);
+    const theme = root.dataset.theme === "dark" ? "light" : "dark";
+    applyTheme(theme);
+    localStorage.setItem("alphal00p-docs-theme", theme);
   });
 
   productSelect?.addEventListener("change", (event) => {

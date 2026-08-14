@@ -24,9 +24,9 @@
     "kind": "start here"
   },
   {
-    "title": "Ownership across the stack",
+    "title": "Related crates",
     "summary": "GammaLoop · Overview",
-    "href": "index.html#ownership-across-the-stack",
+    "href": "index.html#related-crates",
     "kind": "start here"
   },
   {
@@ -48,15 +48,15 @@
     "kind": "tutorial"
   },
   {
-    "title": "Generate one maintained process",
+    "title": "Generate an example process",
     "summary": "GammaLoop · First calculation",
-    "href": "tutorial/#generate-one-maintained-process",
+    "href": "tutorial/#generate-an-example-process",
     "kind": "tutorial"
   },
   {
-    "title": "Prove that the state is reusable",
+    "title": "Resume the saved state",
     "summary": "GammaLoop · First calculation",
-    "href": "tutorial/#prove-that-the-state-is-reusable",
+    "href": "tutorial/#resume-the-saved-state",
     "kind": "tutorial"
   },
   {
@@ -96,39 +96,51 @@
     "kind": "manual"
   },
   {
-    "title": "Interfaces and API boundaries",
-    "summary": "The supported CLI, Rust, and Python ownership boundaries and precision contracts.",
+    "title": "CLI, Rust, and Python APIs",
+    "summary": "Choose an interface, understand precision behavior, and find the relevant API reference.",
     "href": "manual/interfaces/",
     "kind": "manual"
   },
   {
-    "title": "Rust ownership",
-    "summary": "GammaLoop · Interfaces and API boundaries",
-    "href": "manual/interfaces/#rust-ownership",
+    "title": "Rust packages",
+    "summary": "GammaLoop · CLI, Rust, and Python APIs",
+    "href": "manual/interfaces/#rust-packages",
     "kind": "manual"
   },
   {
     "title": "Python packaging",
-    "summary": "GammaLoop · Interfaces and API boundaries",
+    "summary": "GammaLoop · CLI, Rust, and Python APIs",
     "href": "manual/interfaces/#python-packaging",
     "kind": "manual"
   },
   {
     "title": "Sample evaluation and precision",
-    "summary": "GammaLoop · Interfaces and API boundaries",
+    "summary": "GammaLoop · CLI, Rust, and Python APIs",
     "href": "manual/interfaces/#sample-evaluation-and-precision",
     "kind": "manual"
   },
   {
-    "title": "CLI and settings metadata",
-    "summary": "GammaLoop · Interfaces and API boundaries",
-    "href": "manual/interfaces/#cli-and-settings-metadata",
+    "title": "CLI and settings reference",
+    "summary": "GammaLoop · CLI, Rust, and Python APIs",
+    "href": "manual/interfaces/#cli-and-settings-reference",
     "kind": "manual"
   },
   {
     "title": "Releases and change history",
-    "summary": "Version ownership, immutable documentation snapshots, and the current release-history policy.",
+    "summary": "Published versions, compatibility changes, and practical upgrade guidance.",
     "href": "manual/releases/",
+    "kind": "manual"
+  },
+  {
+    "title": "Choosing the matching documentation",
+    "summary": "GammaLoop · Releases and change history",
+    "href": "manual/releases/#choosing-the-matching-documentation",
+    "kind": "manual"
+  },
+  {
+    "title": "Before upgrading",
+    "summary": "GammaLoop · Releases and change history",
+    "href": "manual/releases/#before-upgrading",
     "kind": "manual"
   },
   {

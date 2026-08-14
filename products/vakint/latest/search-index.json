@@ -24,9 +24,9 @@
     "kind": "start here"
   },
   {
-    "title": "Test tiers and platform notes",
+    "title": "Diagnostics and platform notes",
     "summary": "Vakint · Overview",
-    "href": "index.html#test-tiers-and-platform-notes",
+    "href": "index.html#diagnostics-and-platform-notes",
     "kind": "start here"
   },
   {
@@ -91,7 +91,7 @@
   },
   {
     "title": "Rust and Python interfaces",
-    "summary": "Supported engine types, settings, expression forms, and the community-module boundary.",
+    "summary": "Engine types, settings, expression formats, and the Symbolica Python module.",
     "href": "manual/interfaces/",
     "kind": "manual"
   },
@@ -108,8 +108,8 @@
     "kind": "manual"
   },
   {
-    "title": "Releases and migration",
-    "summary": "Canonical package releases, compatibility boundaries, and migration notes.",
+    "title": "Versions and compatibility",
+    "summary": "Published versions, compatibility changes, and practical upgrade guidance.",
     "href": "manual/releases/",
     "kind": "manual"
   },

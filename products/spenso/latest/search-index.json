@@ -85,7 +85,7 @@
   },
   {
     "title": "Rust, macros, and Python",
-    "summary": "Core Rust APIs, procedural macros, HEP data, feature gates, and community-module boundaries.",
+    "summary": "Core Rust APIs, derive macros, HEP helpers, feature flags, and Python bindings.",
     "href": "manual/interfaces/",
     "kind": "manual"
   },
@@ -108,8 +108,8 @@
     "kind": "manual"
   },
   {
-    "title": "Releases and migration",
-    "summary": "Canonical package releases, compatibility boundaries, and migration notes.",
+    "title": "Releases and change history",
+    "summary": "Published versions, compatibility changes, and practical upgrade guidance.",
     "href": "manual/releases/",
     "kind": "manual"
   },

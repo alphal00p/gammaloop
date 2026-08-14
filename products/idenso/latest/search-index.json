@@ -55,7 +55,7 @@
   },
   {
     "title": "Algebra and rewrites",
-    "summary": "Index tooling, cooking, metric, epsilon, Dirac, color, and Schoonschip network operations.",
+    "summary": "Index tooling, cooking, metric, epsilon, Dirac, color, and Schoonschip network parsing.",
     "href": "manual/algebra/",
     "kind": "manual"
   },
@@ -85,7 +85,7 @@
   },
   {
     "title": "Rust and Python interfaces",
-    "summary": "Supported rewrite families, macros, features, and the Symbolica community-module boundary.",
+    "summary": "Rewrite families, macros, feature flags, and the Symbolica Python module.",
     "href": "manual/interfaces/",
     "kind": "manual"
   },
@@ -102,8 +102,8 @@
     "kind": "manual"
   },
   {
-    "title": "Releases and migration",
-    "summary": "Canonical package releases, compatibility boundaries, and migration notes.",
+    "title": "Releases and change history",
+    "summary": "Published versions, compatibility changes, and practical upgrade guidance.",
     "href": "manual/releases/",
     "kind": "manual"
   },

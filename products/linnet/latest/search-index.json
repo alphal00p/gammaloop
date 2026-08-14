@@ -24,9 +24,9 @@
     "kind": "start here"
   },
   {
-    "title": "Ecosystem ownership",
+    "title": "Related crates",
     "summary": "Linnet · Overview",
-    "href": "index.html#ecosystem-ownership",
+    "href": "index.html#related-crates",
     "kind": "start here"
   },
   {
@@ -91,7 +91,7 @@
   },
   {
     "title": "Rust and Python interfaces",
-    "summary": "Supported package surfaces, feature gates, typed IDs, and Python distribution boundaries.",
+    "summary": "Rust crates, feature flags, typed identifiers, and the Linnet Python package.",
     "href": "manual/interfaces/",
     "kind": "manual"
   },
@@ -108,9 +108,15 @@
     "kind": "manual"
   },
   {
-    "title": "Releases and migration",
-    "summary": "Canonical package releases, compatibility boundaries, and migration notes.",
+    "title": "Releases and change history",
+    "summary": "Published versions, compatibility changes, and practical upgrade guidance.",
     "href": "manual/releases/",
+    "kind": "manual"
+  },
+  {
+    "title": "Choosing the matching documentation",
+    "summary": "Linnet · Releases and change history",
+    "href": "manual/releases/#choosing-the-matching-documentation",
     "kind": "manual"
   },
   {
