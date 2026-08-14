@@ -237,6 +237,7 @@ pub mod swap;
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 /// The main graph data structure, representing a graph using the half-edge
 /// (or doubly connected edge list - DCEL) principle.
 ///

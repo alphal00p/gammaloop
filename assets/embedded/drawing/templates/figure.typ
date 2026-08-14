@@ -82,6 +82,7 @@
   layout(
     it.at("text"),
     columns: 1,
+    unit: 1.5,
     typst-fields: typst-fields,
     edge-style-options: edge-style-options,
     show-node-index: show-node-index,

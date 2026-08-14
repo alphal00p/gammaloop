@@ -221,24 +221,41 @@
         label-layout: "dangling-tangent",
       ) + additional-data
     } else if cross-section-mode {
-      (label-layout: "dangling-tangent") + additional-data
+      (
+        length-scale: 0.4,
+        z-spring-growth: 1.01,
+        label-length-scale: 1.2,
+        label-steps: 100,
+        label-layout: "dangling-tangent",
+      ) + additional-data
     } else {
       additional-data
     }
+    let node-label = if show-node-index { _node-index-label } else { auto }
+    let edge-label = edge => _momentum-edge-label(
+      edge,
+      typst-fields,
+      edge-style-options,
+    )
+    graph-bytes = graph.style(
+      graph-bytes,
+      scope: scope,
+      unit: unit,
+      node-label: node-label,
+      node-label-style: (padding: 0.08),
+      edge-label: edge-label,
+      edge-label-style: edge-label-style,
+    )
     graph-bytes = apply-layout(graph-bytes, ..layout-options)
     diags.push(draw(
       graph-bytes,
       scope: scope,
       unit: unit,
       title: auto,
-      node-label: if show-node-index { _node-index-label } else { auto },
+      node-label: node-label,
       source-style: edge => edge-style.source-style(edge, typst-fields: typst-fields, ..edge-style-options),
       sink-style: edge => edge-style.sink-style(edge, typst-fields: typst-fields, ..edge-style-options),
-      edge-label: edge => _momentum-edge-label(
-        edge,
-        typst-fields,
-        edge-style-options,
-      ),
+      edge-label: edge-label,
       edge-label-style: edge-label-style,
     ))
   }

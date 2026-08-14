@@ -23,7 +23,9 @@ momentum_thickness := "0.55pt"
 show_edge_index := "true"
 show_node_index := "true"
 show_half_edge_index := "false"
-show_particle := "true"
+# Keep the model's mapped math labels by default; set this to true to show raw
+# particle identifiers instead.
+show_particle := "false"
 
 # Defaults for the highlighted momentum-line demo. Override
 # `momentum_line_mark=none` to draw the offset lines without arrowheads.

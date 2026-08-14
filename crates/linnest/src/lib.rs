@@ -212,6 +212,7 @@ where
 #[derive(
     Debug, Serialize, Deserialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
+#[archive(check_bytes)]
 pub struct TypstNode {
     name: Option<String>,
     index: Option<NodeIndex>,
@@ -369,6 +370,7 @@ fn parse_rad_statement(value: &str) -> Option<Rad<f64>> {
 #[derive(
     Debug, Serialize, Deserialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
+#[archive(check_bytes)]
 pub struct TypstEdge {
     from: Option<(NodeIndex, Hedge)>,
     to: Option<(NodeIndex, Hedge)>,
@@ -529,6 +531,7 @@ impl TypstEdge {
 #[derive(
     Debug, Serialize, Deserialize, Clone, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
+#[archive(check_bytes)]
 pub struct TypstHedge {
     from: usize,
     to: usize,
@@ -612,6 +615,7 @@ fn hedge_compass_to_string(compass: CompassPt) -> String {
 }
 
 #[derive(Debug, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive(check_bytes)]
 pub struct TypstGraph {
     graph: HedgeGraph<TypstEdge, TypstNode, TypstHedge>,
     global_eval: Option<String>,
@@ -1239,6 +1243,7 @@ pub struct TreeInitCfg {
 #[derive(
     Debug, Clone, Copy, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
+#[archive(check_bytes)]
 #[serde(rename_all = "kebab-case")]
 enum LayoutAlgo {
     Anneal,
@@ -1256,6 +1261,7 @@ fn default_layout_algo() -> LayoutAlgo {
 #[derive(
     Debug, Clone, Copy, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
+#[archive(check_bytes)]
 #[serde(rename_all = "lowercase")]
 enum LayoutNodeMode {
     Fixed,
@@ -1284,6 +1290,7 @@ impl LayoutNodeMode {
     rkyv::Serialize,
     rkyv::Deserialize,
 )]
+#[archive(check_bytes)]
 #[serde(rename_all = "kebab-case")]
 enum LayoutDirection {
     Down,
@@ -1365,6 +1372,7 @@ impl LayoutDirection {
     rkyv::Serialize,
     rkyv::Deserialize,
 )]
+#[archive(check_bytes)]
 #[serde(rename_all = "kebab-case")]
 enum LayoutRankAlign {
     Center,
@@ -1391,6 +1399,7 @@ impl LayoutRankAlign {
 #[derive(
     Debug, Clone, Copy, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
+#[archive(check_bytes)]
 #[serde(rename_all = "kebab-case")]
 enum LabelLayout {
     DanglingTangent,
@@ -1405,6 +1414,7 @@ fn default_label_layout() -> LabelLayout {
 #[derive(
     Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
+#[archive(check_bytes)]
 #[serde(rename_all = "kebab-case")]
 struct LayoutConfig {
     #[serde(default = "default_viewport_w", deserialize_with = "deserialize_f64")]
@@ -1711,6 +1721,7 @@ fn default_crossing_penalty() -> f64 {
 #[derive(
     Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
+#[archive(check_bytes)]
 #[serde(rename_all = "kebab-case")]
 struct SpringConfig {
     #[serde(default = "default_length_scale", deserialize_with = "deserialize_f64")]
@@ -1774,6 +1785,7 @@ impl From<&SpringConfig> for ParamTuning {
 #[derive(
     Debug, Clone, Serialize, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
+#[archive(check_bytes)]
 #[serde(rename_all = "kebab-case")]
 struct ScheduleConfig {
     #[serde(default = "default_steps", deserialize_with = "deserialize_usize")]

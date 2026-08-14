@@ -88,6 +88,7 @@ pub(crate) const fn u8_to_compass_pt(value: u8) -> CompassPt {
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct DotHedgeData {
     pub statement: Option<String>,
     pub id: Option<Hedge>,

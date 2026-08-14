@@ -14,7 +14,7 @@ crate-type = ["cdylib", "rlib"]
 ciborium = "0.2.2"
 dot-parser = { workspace = true }
 linnet = { workspace = true, features = ["drawing", "rkyv", "serde"] }
-rkyv = "0.7"
+rkyv = { version = "0.7", features = ["validation"] }
 serde = { version = "1.0", features = ["derive"] }
 
 cgmath = { version = "0.18.0", features = ["serde"] }

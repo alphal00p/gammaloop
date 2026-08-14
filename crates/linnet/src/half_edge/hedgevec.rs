@@ -19,6 +19,7 @@ use super::{
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 /// A specialized vector-like structure for storing edge data along with its
 /// topological [`Involution`].
 ///

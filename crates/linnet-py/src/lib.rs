@@ -240,6 +240,7 @@ impl PyDotVertexData {
             data: DotVertexDataSource::Owned(DotVertexData {
                 name,
                 index: index.map(NodeIndex),
+                payload: None,
                 statements: statements.unwrap_or_default(),
             }),
         }
@@ -537,6 +538,7 @@ impl PyDotHedgeData {
             data: DotHedgeData {
                 statement,
                 id: id.map(Hedge),
+                payload: None,
                 port_label,
                 compasspt,
             },
@@ -606,6 +608,7 @@ impl PyDotEdgeData {
     ) -> Self {
         Self {
             data: DotEdgeDataSource::Owned(DotEdgeData {
+                payload: None,
                 statements: statements.unwrap_or_default(),
                 local_statements: local_statements.unwrap_or_default(),
                 edge_id: edge_id.map(EdgeIndex::from),
@@ -1098,6 +1101,7 @@ impl PyGlobalData {
         Self {
             data: GlobalData {
                 name: name.unwrap_or_default(),
+                payload: None,
                 statements: statements.unwrap_or_default(),
                 edge_statements: edge_statements.unwrap_or_default(),
                 node_statements: node_statements.unwrap_or_default(),

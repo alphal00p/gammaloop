@@ -602,7 +602,7 @@ fields to the Rust topology spec:
 `graph.info(g)` returns graph metadata. `nodes(g)` returns node records,
 and `edges(g)` returns edge records. Node and edge record `name` values are
 Typst labels when present. Pass `subgraph: sg` to filter nodes
-or edges by an subgraph object.
+or edges by a subgraph object.
 
 `graph.join(left, right, key: "statement")` joins matching dangling half edges.
 The key is read from half-edge statements or numeric ids and can be
@@ -682,11 +682,12 @@ sum_(i < j) 1/2 c_("vv") / (d(v_i, v_j) + epsilon)
 + sum_((v, e) " incident") 1/2 k (ell_e - d(v, e))^2
 \ + sum_("local edge pairs") 1/2 c_("ee") / (d(e_i, e_j) + epsilon)
 + sum_("dangling pairs") 1/2 c_("dangling") / (d(e_i, e_j) + epsilon)
-+ sum_(i) 1/2 c_("center") / (d(v_i, 0) + epsilon)
++ sum_(i) 1/2 c_("center") d(v_i, 0)^2
 + p_("cross") N_("cross") $.
 
 Here $p_("cross")$ is `crossing-penalty` and $N_("cross")$ is the number of
-detected edge crossings. `temp`, `step`, `seed`, `steps`, `epochs`, `cool`,
+detected edge crossings. The quadratic center term pulls nodes toward the
+origin at every radius. `temp`, `step`, `seed`, `steps`, `epochs`, `cool`,
 `accept-floor`, `step-shrink`, and `incremental-energy` belong to this
 simulated annealing mode. `crossing-penalty` is also anneal-only; force mode
 does not currently add a crossing force.

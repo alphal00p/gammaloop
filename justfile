@@ -76,9 +76,9 @@ sync-drawing-assets:
         "$target/crates/linnest/typst/src" \
         "$target/crates/kurvst/typst/src"
       install_asset crates/linnest/typst/typst.toml "$target/crates/linnest/typst/typst.toml"
-      install_assets "$target/crates/linnest/typst/src" crates/linnest/typst/src/*.typ
+      cp -R crates/linnest/typst/src/. "$target/crates/linnest/typst/src/"
       install_asset crates/kurvst/typst/typst.toml "$target/crates/kurvst/typst/typst.toml"
-      install_assets "$target/crates/kurvst/typst/src" crates/kurvst/typst/src/*.typ
+      cp -R crates/kurvst/typst/src/. "$target/crates/kurvst/typst/src/"
     }
 
     copy_wasm_bundles() {
@@ -163,9 +163,9 @@ sync-drawing-assets-cargo:
         "$target/crates/linnest/typst/src" \
         "$target/crates/kurvst/typst/src"
       install_asset crates/linnest/typst/typst.toml "$target/crates/linnest/typst/typst.toml"
-      install_assets "$target/crates/linnest/typst/src" crates/linnest/typst/src/*.typ
+      cp -R crates/linnest/typst/src/. "$target/crates/linnest/typst/src/"
       install_asset crates/kurvst/typst/typst.toml "$target/crates/kurvst/typst/typst.toml"
-      install_assets "$target/crates/kurvst/typst/src" crates/kurvst/typst/src/*.typ
+      cp -R crates/kurvst/typst/src/. "$target/crates/kurvst/typst/src/"
     }
 
     copy_wasm_bundles() {

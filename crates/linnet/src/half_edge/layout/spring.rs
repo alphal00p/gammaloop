@@ -22,6 +22,7 @@ use crate::{
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct PointConstraint {
     pub x: Constraint,
     pub y: Constraint,
@@ -41,6 +42,7 @@ impl Default for PointConstraint {
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub enum ShiftDirection {
     Any,
     PositiveOnly,
@@ -52,11 +54,22 @@ pub enum ShiftDirection {
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub enum Constraint {
     Fixed,
     #[default]
     Free,
     Grouped(usize, ShiftDirection),
+}
+
+impl Constraint {
+    pub(crate) fn force_target(self, index: usize) -> Option<usize> {
+        match self {
+            Constraint::Fixed => None,
+            Constraint::Free => Some(index),
+            Constraint::Grouped(reference, _) => Some(reference),
+        }
+    }
 }
 
 pub trait Shiftable {

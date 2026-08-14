@@ -353,13 +353,21 @@ fn decode_cbor<T: for<'de> Deserialize<'de>>(arg: &[u8], name: &str) -> Result<T
 }
 
 fn decode_subgraph(arg: &[u8]) -> Result<SuBitGraph, String> {
-    unsafe { rkyv::from_bytes_unchecked::<SuBitGraph>(arg) }
+    let bytes = aligned_copy(arg);
+    rkyv::from_bytes::<SuBitGraph>(&bytes)
         .map_err(|err| format!("Failed to deserialize archived subgraph: {err}"))
 }
 
-fn decode_typst_graph(arg: &[u8]) -> Result<TypstGraph, String> {
-    unsafe { rkyv::from_bytes_unchecked::<TypstGraph>(arg) }
+pub(crate) fn decode_typst_graph(arg: &[u8]) -> Result<TypstGraph, String> {
+    let bytes = aligned_copy(arg);
+    rkyv::from_bytes::<TypstGraph>(&bytes)
         .map_err(|err| format!("Failed to deserialize archived Typst graph: {err}"))
+}
+
+fn aligned_copy(bytes: &[u8]) -> rkyv::AlignedVec {
+    let mut aligned = rkyv::AlignedVec::with_capacity(bytes.len());
+    aligned.extend_from_slice(bytes);
+    aligned
 }
 
 fn encode_typst_graph(graph: &TypstGraph) -> Result<Vec<u8>, String> {
@@ -370,11 +378,8 @@ fn typst_graph_from_dot(dot: DotGraph) -> TypstGraph {
     TypstGraph::from_dot(dot, &default_figment())
 }
 
-fn dot_bytes_from_typst_graph(graph: &TypstGraph) -> Result<Vec<u8>, String> {
-    graph
-        .to_dot_graph()
-        .to_rkyv_bytes::<4096>()
-        .map(|bytes| bytes.to_vec())
+fn dot_bytes_from_typst_graph(graph: &TypstGraph) -> Result<rkyv::AlignedVec, String> {
+    graph.to_dot_graph().to_rkyv_bytes::<4096>()
 }
 
 fn with_dot_view<T>(
@@ -382,7 +387,7 @@ fn with_dot_view<T>(
     callback: impl FnOnce(&ArchivedDotGraphView<'_>) -> Result<T, String>,
 ) -> Result<T, String> {
     let dot_bytes = dot_bytes_from_typst_graph(graph)?;
-    let dot = DotGraph::archived_view(&dot_bytes);
+    let dot = DotGraph::archived_view(&dot_bytes)?;
     callback(&dot)
 }
 
@@ -667,7 +672,13 @@ fn refresh_point_state(
         None => {
             if let Some(position) = position {
                 *point = Point2::new(position.x, position.y);
-                *constraints = PointConstraint::default();
+                // Parsed group placements keep their constraints in the graph
+                // while exposing only the resolved point to structural maps.
+                if statement_map_value(statements, "pos-mode")
+                    .is_none_or(|mode| mode.trim().trim_matches('"') != "pin")
+                {
+                    *constraints = PointConstraint::default();
+                }
                 *start_x = position.x_set;
                 *start_y = position.y_set;
             }
@@ -1711,6 +1722,7 @@ fn parse_compass(value: &str) -> Result<Option<CompassPt>, String> {
         "w" => Ok(Some(CompassPt::W)),
         "nw" => Ok(Some(CompassPt::NW)),
         "c" => Ok(Some(CompassPt::C)),
+        "_" => Ok(Some(CompassPt::Underscore)),
         other => Err(format!("Invalid compass point: {other}")),
     }
 }
@@ -1734,6 +1746,7 @@ fn compass_to_string(compass: u8) -> String {
         6 => "w",
         7 => "nw",
         8 => "c",
+        9 => "_",
         _ => "?",
     }
     .to_string()

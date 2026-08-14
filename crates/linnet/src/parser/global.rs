@@ -11,6 +11,7 @@ use super::strip_quotes;
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct GlobalData {
     pub name: String,
     pub payload: Option<Vec<u8>>,

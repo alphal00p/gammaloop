@@ -3,7 +3,7 @@ use rkyv::Archived;
 use crate::half_edge::{
     involution::{ArchivedFlow, EdgeIndex, Hedge, Orientation},
     nodestore::DefaultNodeStore,
-    subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
+    subgraph::{SuBitGraph, SubSetLike},
     HedgeGraph,
 };
 
@@ -17,10 +17,24 @@ type ArchivedDotGraphBytesSetRoot = Archived<DotGraphBytesSet>;
 type ArchivedDotHedgeGraph =
     Archived<HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData, DefaultNodeStore<DotVertexData>>>;
 
-#[derive(Debug, Clone, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize)]
+#[archive(check_bytes)]
 pub struct DotGraphBytesSet {
-    pub graphs: Vec<Vec<u8>>,
+    pub graphs: Vec<rkyv::AlignedVec>,
 }
+
+impl PartialEq for DotGraphBytesSet {
+    fn eq(&self, other: &Self) -> bool {
+        self.graphs.len() == other.graphs.len()
+            && self
+                .graphs
+                .iter()
+                .zip(&other.graphs)
+                .all(|(left, right)| left.as_slice() == right.as_slice())
+    }
+}
+
+impl Eq for DotGraphBytesSet {}
 
 #[derive(Clone, Copy)]
 pub struct ArchivedDotGraphBytesSetView<'a> {
@@ -65,7 +79,7 @@ impl DotGraphSet {
     pub fn into_graph_bytes_set<const N: usize>(self) -> Result<DotGraphBytesSet, String> {
         let mut graphs = Vec::with_capacity(self.set.len());
         for graph in self {
-            graphs.push(graph.to_rkyv_bytes::<N>()?.to_vec());
+            graphs.push(graph.to_rkyv_bytes::<N>()?);
         }
         Ok(DotGraphBytesSet { graphs })
     }
@@ -76,7 +90,7 @@ impl DotGraphSet {
 }
 
 impl DotGraphBytesSet {
-    pub fn archived_view<'a>(bytes: &'a [u8]) -> ArchivedDotGraphBytesSetView<'a> {
+    pub fn archived_view<'a>(bytes: &'a [u8]) -> Result<ArchivedDotGraphBytesSetView<'a>, String> {
         ArchivedDotGraphBytesSetView::from_bytes(bytes)
     }
 
@@ -99,16 +113,16 @@ impl DotGraphBytesSet {
 }
 
 impl DotGraph {
-    pub fn archived_view<'a>(bytes: &'a [u8]) -> ArchivedDotGraphView<'a> {
+    pub fn archived_view<'a>(bytes: &'a [u8]) -> Result<ArchivedDotGraphView<'a>, String> {
         ArchivedDotGraphView::from_bytes(bytes)
     }
 }
 
 impl<'a> ArchivedDotGraphBytesSetView<'a> {
-    pub fn from_bytes(bytes: &'a [u8]) -> Self {
-        Self {
-            archived: unsafe { DotGraphBytesSet::archived_from_bytes(bytes) },
-        }
+    pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, String> {
+        rkyv::check_archived_root::<DotGraphBytesSet>(bytes)
+            .map(|archived| Self { archived })
+            .map_err(|err| format!("Invalid archived graph-byte set: {err}"))
     }
 
     pub fn len(&self) -> usize {
@@ -127,8 +141,10 @@ impl<'a> ArchivedDotGraphBytesSetView<'a> {
             .map(|bytes| bytes.as_slice())
     }
 
-    pub fn get(&self, index: usize) -> Option<ArchivedDotGraphView<'a>> {
-        self.get_bytes(index).map(ArchivedDotGraphView::from_bytes)
+    pub fn get(&self, index: usize) -> Result<Option<ArchivedDotGraphView<'a>>, String> {
+        self.get_bytes(index)
+            .map(ArchivedDotGraphView::from_bytes)
+            .transpose()
     }
 
     pub fn iter_bytes(&self) -> impl Iterator<Item = &'a [u8]> + 'a {
@@ -141,13 +157,14 @@ impl<'a> ArchivedDotGraphBytesSetView<'a> {
 }
 
 impl<'a> ArchivedDotGraphView<'a> {
-    pub(crate) fn from_bytes(bytes: &'a [u8]) -> Self {
-        let archived: &'a ArchivedDotGraph = unsafe { DotGraph::archived_from_bytes(bytes) };
-        Self {
+    pub(crate) fn from_bytes(bytes: &'a [u8]) -> Result<Self, String> {
+        let archived: &'a ArchivedDotGraph = rkyv::check_archived_root::<DotGraph>(bytes)
+            .map_err(|err| format!("Invalid archived DOT graph: {err}"))?;
+        Ok(Self {
             bytes,
             global_data: &archived.global_data,
             graph: &archived.graph,
-        }
+        })
     }
 
     pub fn bytes(&self) -> &'a [u8] {
@@ -311,13 +328,13 @@ impl<'a> ArchivedDotGraphView<'a> {
 
     pub fn compass_subgraph(&self, compass_pt: Option<dot_parser::ast::CompassPt>) -> SuBitGraph {
         let target = compass_pt.map(compass_pt_to_u8);
-        let mut subgraph = SuBitGraph::empty(self.n_hedges());
-        for (hedge, data) in self.graph.hedge_data.0.as_slice().iter().enumerate() {
-            if data.compasspt.as_ref().copied() == target {
-                subgraph.add(Hedge(hedge));
-            }
-        }
-        subgraph
+        self.graph
+            .hedge_data
+            .0
+            .as_slice()
+            .iter()
+            .map(|data| data.compasspt.as_ref().copied() == target)
+            .collect()
     }
 
     fn orientation_of_pair(
@@ -409,7 +426,7 @@ impl<'a> ArchivedDotGraphView<'a> {
 mod tests {
     use dot_parser::ast::CompassPt;
 
-    use super::{DotGraph, DotGraphBytesSet, DotGraphSet};
+    use super::{ArchivedDotGraph, DotGraph, DotGraphBytesSet, DotGraphSet};
     use crate::half_edge::{involution::ArchivedOrientation, subgraph::SubSetLike};
 
     #[test]
@@ -432,10 +449,17 @@ mod tests {
             .unwrap()
             .to_rkyv_bytes::<4096>()
             .unwrap();
-        let archived = DotGraphBytesSet::archived_view(&archived_bytes);
-        let first = archived.get(0).unwrap();
+        let archived = DotGraphBytesSet::archived_view(&archived_bytes).unwrap();
+        let first = archived.get(0).unwrap().unwrap();
 
         assert_eq!(archived.len(), 2);
+        assert_eq!(
+            first
+                .bytes()
+                .as_ptr()
+                .align_offset(std::mem::align_of::<ArchivedDotGraph>()),
+            0
+        );
         assert_eq!(first.global_data().name.as_str(), "first");
         assert_eq!(first.n_vertices(), 3);
         assert_eq!(first.n_edges(), 2);
@@ -480,7 +504,7 @@ mod tests {
         .unwrap();
 
         let bytes = graph.to_rkyv_bytes::<4096>().unwrap();
-        let archived = DotGraph::archived_view(&bytes);
+        let archived = DotGraph::archived_view(&bytes).unwrap();
 
         let mut bits = vec![false; archived.n_hedges()];
         bits[0] = true;
@@ -511,5 +535,44 @@ mod tests {
             .map(|vertex| vertex.data.name.as_ref().unwrap().as_str().to_string())
             .collect();
         assert_eq!(south_vertices, vec!["b".to_string()]);
+    }
+
+    #[test]
+    fn archived_graph_views_reject_malformed_and_misaligned_bytes() {
+        let graph: DotGraph = DotGraph::from_string("digraph { a -> b }").unwrap();
+        let bytes = graph.to_rkyv_bytes::<4096>().unwrap();
+
+        assert!(DotGraph::archived_view(&bytes[..bytes.len() / 2]).is_err());
+
+        let mut misaligned = rkyv::AlignedVec::with_capacity(bytes.len() + 1);
+        misaligned.push(0);
+        misaligned.extend_from_slice(&bytes);
+        assert_ne!(
+            misaligned[1..]
+                .as_ptr()
+                .align_offset(std::mem::align_of::<ArchivedDotGraph>()),
+            0
+        );
+        assert!(DotGraph::archived_view(&misaligned[1..]).is_err());
+    }
+
+    #[test]
+    fn archived_graph_bytes_set_validates_outer_and_nested_archives() {
+        let mut invalid = rkyv::AlignedVec::new();
+        invalid.push(0);
+        assert!(DotGraphBytesSet::archived_view(&invalid).is_err());
+
+        let graph: DotGraph = DotGraph::from_string("digraph { a -> b }").unwrap();
+        let bytes = graph.to_rkyv_bytes::<4096>().unwrap();
+        let mut truncated = rkyv::AlignedVec::new();
+        truncated.extend_from_slice(&bytes[..bytes.len() / 2]);
+        let set = DotGraphBytesSet {
+            graphs: vec![truncated],
+        }
+        .to_rkyv_bytes::<4096>()
+        .unwrap();
+
+        let archived = DotGraphBytesSet::archived_view(&set).unwrap();
+        assert!(archived.get(0).is_err());
     }
 }

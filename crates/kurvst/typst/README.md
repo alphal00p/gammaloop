@@ -9,21 +9,22 @@ drawing commands.
 #import "src/lib.typ" as kurvst
 
 #let segment = (
-  start: (x: 0, y: 0),
-  ctrl-a: (x: 1, y: 0.5),
-  ctrl-b: (x: 2, y: -0.5),
-  end: (x: 3, y: 0),
+  start: (0, 0),
+  control-start: (1, 0.5),
+  control-end: (2, -0.5),
+  end: (3, 0),
 )
 
-#let base = kurvst.cubic-path(..segment)
-#let path = kurvst.pattern-path(
+#let base = kurvst.from-cubic(segment)
+#let path = kurvst.pattern(
   base,
   pattern: kurvst.coil(longitudinal-scale: 1.6),
   amplitude: 0.15,
   wavelength: 0.7,
 )
 
-#let parallel = kurvst.parallel-path(base, distance: 0.18)
+#let parallel = kurvst.parallel(base, distance: 0.18)
 ```
 
-See `docs/manual.typ` for the full API manual.
+Kurvst requires Typst 0.15.0 or newer. See `docs/manual.typ` for the full API manual and
+`examples/` for compile-checked drawings.

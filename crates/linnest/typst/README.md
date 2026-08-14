@@ -2,6 +2,8 @@
 
 Typst wrapper package for the `linnest.wasm` graph layout plugin.
 
+Linnest requires Typst 0.15.0 or newer.
+
 ## Usage
 
 ```typ

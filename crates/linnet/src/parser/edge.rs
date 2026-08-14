@@ -14,6 +14,7 @@ use super::{strip_quotes, subgraph_free::Edge, DotHedgeData, GlobalData, NodeIdO
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct DotEdgeData {
     pub payload: Option<Vec<u8>>,
     pub statements: BTreeMap<String, String>,

@@ -3141,7 +3141,7 @@
       };
 
       devShells = {
-        default = mkDevShell [];
+        default = mkDevShell [clinnet-cli];
         full = mkDevShell [clinnet-cli rscls];
         clinnet = mkDevShell [clinnet-cli];
       };

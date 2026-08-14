@@ -26,6 +26,7 @@ use super::{NodeStorage, NodeStorageOps};
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 /// An implementation of [`NodeStorage`] and [`NodeStorageOps`] that uses `Vec`s
 /// and `BitVec`s to store node information and their incident half-edges.
 ///

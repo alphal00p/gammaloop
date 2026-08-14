@@ -18,6 +18,7 @@ struct GammaLoopTemplateAssets;
 #[derive(RustEmbed)]
 #[folder = "$CARGO_MANIFEST_DIR/../linnest/typst"]
 #[include = "src/*.typ"]
+#[include = "src/**/*.typ"]
 #[include = "typst.toml"]
 #[include = "linnest.wasm"]
 struct LinnestPackageAssets;
@@ -25,6 +26,7 @@ struct LinnestPackageAssets;
 #[derive(RustEmbed)]
 #[folder = "$CARGO_MANIFEST_DIR/../kurvst/typst"]
 #[include = "src/*.typ"]
+#[include = "src/**/*.typ"]
 #[include = "typst.toml"]
 #[include = "kurvst.wasm"]
 struct KurvstPackageAssets;
@@ -96,11 +98,15 @@ mod tests {
         assert!(figure.contains("amplitude-mode"));
         assert!(figure.contains("cross-section-mode"));
         assert!(figure.contains("show-node-index"));
+        assert!(figure.contains("unit: 1.5"));
         let layout = fs::read_to_string(templates.join("layout.typ"))?;
         assert!(layout.contains("autogen-external-edge-fields"));
         assert!(layout.contains("momentum-index"));
         assert!(layout.contains("$(p_#index)$"));
         assert!(layout.contains("$n_#index$"));
+        assert!(layout.contains("graph.style("));
+        assert!(layout.contains("length-scale: 0.4"));
+        assert!(layout.contains("z-spring-growth: 1.01"));
 
         assert!(templates
             .join("crates/linnest/typst/linnest.wasm")
@@ -108,8 +114,12 @@ mod tests {
         assert!(templates
             .join("crates/linnest/typst/src/curve.typ")
             .is_file());
+        assert!(templates
+            .join("crates/linnest/typst/src/impl/graph.typ")
+            .is_file());
         assert!(templates.join("crates/kurvst/typst/kurvst.wasm").is_file());
         assert!(templates.join("crates/kurvst/typst/src/lib.typ").is_file());
+        assert!(templates.join("crates/kurvst/typst/src/impl.typ").is_file());
 
         assert!(!templates.join("linnest.wasm").exists());
         assert!(!templates.join("kurvst.wasm").exists());
@@ -119,6 +129,7 @@ mod tests {
         let justfile = fs::read_to_string(tempdir.path().join("justfile"))?;
         assert!(justfile.contains("momentum_line_mark := \"auto\""));
         assert!(justfile.contains("show_node_index := \"true\""));
+        assert!(justfile.contains("show_particle := \"false\""));
 
         Ok(())
     }

@@ -2,6 +2,7 @@
 name = "kurvst"
 version = "0.1.0"
 entrypoint = "src/lib.typ"
+compiler = "0.15.0"
 authors = ["GammaLoop contributors"]
 license = "MIT"
 description = "Kurbo-backed Bezier and path pattern helpers for Typst."

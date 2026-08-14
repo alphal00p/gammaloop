@@ -1,3 +1,5 @@
+use std::ops::{Index, IndexMut};
+
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Point3, Vector2, Vector3, Zero};
 
 use crate::half_edge::{
@@ -48,8 +50,20 @@ pub fn force_directed_layout<'a, E, V, H, N>(
         apply_initial_jitter(state, &mut rng, jitter, &workset);
     }
     let z_spread = 10.0 * energy.spring_length;
-    let mut node_z = init_node_z(&mut rng, state.vertex_points.len().0, z_spread);
-    let mut edge_z = init_edge_z(&mut rng, state.edge_points.len().0, z_spread);
+    // Entries without a directly movable planar axis have no z update either,
+    // so keep them on the layout plane instead of stranding them at random z.
+    let mut node_z = init_node_z(
+        &mut rng,
+        state.vertex_points.len().0,
+        z_spread,
+        &workset.movable_nodes,
+    );
+    let mut edge_z = init_edge_z(
+        &mut rng,
+        state.edge_points.len().0,
+        z_spread,
+        &workset.movable_edges,
+    );
 
     for epoch in 0..cfg.epochs {
         let z_spring = cfg.z_spring * cfg.z_spring_growth.powi(epoch as i32);
@@ -112,8 +126,10 @@ pub fn force_directed_layout<'a, E, V, H, N>(
 struct ForceWorkSet {
     movable_nodes: Vec<NodeIndex>,
     movable_edges: Vec<EdgeIndex>,
-    movable_node: NodeVec<bool>,
-    movable_edge: EdgeVec<bool>,
+    force_nodes: Vec<NodeIndex>,
+    force_edges: Vec<EdgeIndex>,
+    force_node: NodeVec<bool>,
+    force_edge: EdgeVec<bool>,
     incident_edges: NodeVec<Vec<EdgeIndex>>,
     dangling_edges: Vec<EdgeIndex>,
 }
@@ -129,25 +145,37 @@ impl ForceWorkSet {
         let m = state.edge_points.len().0;
 
         let mut movable_nodes = Vec::new();
-        let mut movable_node = NodeVec::with_capacity(n);
+        let mut force_nodes = Vec::new();
+        let mut force_node = NodeVec::with_capacity(n);
         for i in 0..n {
             let idx = NodeIndex(i);
-            let movable = can_shift_directly(state.graph[idx].point_constraint(), i);
+            let constraints = state.graph[idx].point_constraint();
+            let movable = can_shift_directly(constraints, i);
             if movable {
                 movable_nodes.push(idx);
             }
-            movable_node.push(movable);
+            let receives_force = can_receive_force(constraints, i);
+            if receives_force {
+                force_nodes.push(idx);
+            }
+            force_node.push(receives_force);
         }
 
         let mut movable_edges = Vec::new();
-        let mut movable_edge = EdgeVec::with_capacity(m);
+        let mut force_edges = Vec::new();
+        let mut force_edge = EdgeVec::with_capacity(m);
         for i in 0..m {
             let idx = EdgeIndex(i);
-            let movable = can_shift_directly(state.graph[idx].point_constraint(), i);
+            let constraints = state.graph[idx].point_constraint();
+            let movable = can_shift_directly(constraints, i);
             if movable {
                 movable_edges.push(idx);
             }
-            movable_edge.push(movable);
+            let receives_force = can_receive_force(constraints, i);
+            if receives_force {
+                force_edges.push(idx);
+            }
+            force_edge.push(receives_force);
         }
 
         let mut incident_edges = NodeVec::with_capacity(n);
@@ -167,8 +195,10 @@ impl ForceWorkSet {
         ForceWorkSet {
             movable_nodes,
             movable_edges,
-            movable_node,
-            movable_edge,
+            force_nodes,
+            force_edges,
+            force_node,
+            force_edge,
             incident_edges,
             dangling_edges,
         }
@@ -180,11 +210,11 @@ fn can_shift_directly(constraints: &PointConstraint, index: usize) -> bool {
 }
 
 fn can_shift_axis(constraint: Constraint, index: usize) -> bool {
-    match constraint {
-        Constraint::Free => true,
-        Constraint::Grouped(reference, _) => reference == index,
-        Constraint::Fixed => false,
-    }
+    constraint.force_target(index) == Some(index)
+}
+
+fn can_receive_force(constraints: &PointConstraint, index: usize) -> bool {
+    constraints.x.force_target(index).is_some() || constraints.y.force_target(index).is_some()
 }
 
 fn clamp_shift3(shift: Vector3<f64>, max_delta: f64) -> Vector3<f64> {
@@ -240,6 +270,8 @@ fn compute_forces<'a, E, V, H, N>(
     workset: &ForceWorkSet,
 ) -> (NodeVec<Vector3<f64>>, EdgeVec<Vector3<f64>>)
 where
+    E: HasPointConstraint,
+    V: HasPointConstraint,
     N: NodeStorageOps<NodeData = V> + Clone,
 {
     let n = state.vertex_points.len().0;
@@ -256,8 +288,8 @@ where
     }
 
     // Vertex-vertex repulsion. Fixed vertices still act as static sources, but
-    // we only accumulate forces for vertices that can move.
-    for &ni in &workset.movable_nodes {
+    // we only accumulate forces that can reach a planar degree of freedom.
+    for &ni in &workset.force_nodes {
         let pi = point3_from_point(state.vertex_points[ni], node_z[ni]);
         for j in 0..n {
             if ni.0 == j {
@@ -279,7 +311,7 @@ where
 
     // Edge-vertex repulsion.
     if energy.c_ev != 0.0 {
-        for &ni in &workset.movable_nodes {
+        for &ni in &workset.force_nodes {
             let pi = point3_from_point(state.vertex_points[ni], node_z[ni]);
             for e in 0..m {
                 let ei = EdgeIndex(e);
@@ -299,7 +331,7 @@ where
         for i in 0..n {
             let ni = NodeIndex(i);
             let pi = point3_from_point(state.vertex_points[ni], node_z[ni]);
-            for &ei in &workset.movable_edges {
+            for &ei in &workset.force_edges {
                 let pe = point3_from_point(state.edge_points[ei], edge_z[ei]);
                 let d = pi - pe;
                 let dist = d.magnitude();
@@ -321,7 +353,7 @@ where
         let edges = &workset.incident_edges[ni];
 
         for &ei in edges {
-            if !workset.movable_node[ni] && !workset.movable_edge[ei] {
+            if !workset.force_node[ni] && !workset.force_edge[ei] {
                 continue;
             }
             let pe = point3_from_point(state.edge_points[ei], edge_z[ei]);
@@ -334,10 +366,10 @@ where
             let length = edge_spring_length(state, ei, energy.spring_length);
             let fmag = energy.k_spring * (length - dist);
             let f = dir * fmag;
-            if workset.movable_node[ni] {
+            if workset.force_node[ni] {
                 forces_v[ni] += f;
             }
-            if workset.movable_edge[ei] {
+            if workset.force_edge[ei] {
                 forces_e[ei] -= f;
             }
         }
@@ -346,7 +378,7 @@ where
             for b in (a + 1)..edges.len() {
                 let ea = edges[a];
                 let eb = edges[b];
-                if !workset.movable_edge[ea] && !workset.movable_edge[eb] {
+                if !workset.force_edge[ea] && !workset.force_edge[eb] {
                     continue;
                 }
                 let pa = point3_from_point(state.edge_points[ea], edge_z[ea]);
@@ -359,10 +391,10 @@ where
                 let dir = d / dist;
                 let fmag = energy.c_ee_local / (dist + energy.eps).powi(2);
                 let f = dir * fmag;
-                if workset.movable_edge[ea] {
+                if workset.force_edge[ea] {
                     forces_e[ea] += f;
                 }
-                if workset.movable_edge[eb] {
+                if workset.force_edge[eb] {
                     forces_e[eb] -= f;
                 }
             }
@@ -377,7 +409,7 @@ where
             for j in (i + 1)..ext_edges.len() {
                 let ei = ext_edges[i];
                 let ej = ext_edges[j];
-                if !workset.movable_edge[ei] && !workset.movable_edge[ej] {
+                if !workset.force_edge[ei] && !workset.force_edge[ej] {
                     continue;
                 }
                 let pi = point3_from_point(state.edge_points[ei], edge_z[ei]);
@@ -390,10 +422,10 @@ where
                 let dir = d / dist;
                 let fmag = 0.5 * energy.dangling_charge / (dist + energy.eps).powi(2);
                 let f = dir * fmag;
-                if workset.movable_edge[ei] {
+                if workset.force_edge[ei] {
                     forces_e[ei] += f;
                 }
-                if workset.movable_edge[ej] {
+                if workset.force_edge[ej] {
                     forces_e[ej] -= f;
                 }
             }
@@ -402,7 +434,7 @@ where
 
     // Center gravity (if enabled).
     if energy.c_center != 0.0 {
-        for &ni in &workset.movable_nodes {
+        for &ni in &workset.force_nodes {
             forces_v[ni] += center_gravity_force(
                 point3_from_point(state.vertex_points[ni], node_z[ni]),
                 energy.c_center,
@@ -419,7 +451,43 @@ where
         }
     }
 
+    // A grouped axis is one shared degree of freedom. Its generalized force is
+    // the sum of every dependent point's force along that axis.
+    project_grouped_forces(&mut forces_v, n, |idx: NodeIndex| {
+        *state.graph[idx].point_constraint()
+    });
+    project_grouped_forces(&mut forces_e, m, |idx: EdgeIndex| {
+        *state.graph[idx].point_constraint()
+    });
+
     (forces_v, forces_e)
+}
+
+fn project_grouped_forces<I, F>(
+    forces: &mut F,
+    len: usize,
+    mut constraints: impl FnMut(I) -> PointConstraint,
+) where
+    I: From<usize> + Copy,
+    F: Index<I, Output = Vector3<f64>> + IndexMut<I>,
+{
+    let mut projected = vec![Vector3::zero(); len];
+    for i in 0..len {
+        let idx = I::from(i);
+        let force = forces[idx];
+        let constraint = constraints(idx);
+        if let Some(target) = constraint.x.force_target(i) {
+            projected[target].x += force.x;
+        }
+        if let Some(target) = constraint.y.force_target(i) {
+            projected[target].y += force.y;
+        }
+        projected[i].z = force.z;
+    }
+
+    for (i, force) in projected.into_iter().enumerate() {
+        forces[I::from(i)] = force;
+    }
 }
 
 fn point3_from_point(p: Point2<f64>, z: f64) -> Point3<f64> {
@@ -445,18 +513,24 @@ where
     }
 }
 
-fn init_node_z(rng: &mut impl Rng, len: usize, spread: f64) -> NodeVec<f64> {
+fn init_node_z(rng: &mut impl Rng, len: usize, spread: f64, movable: &[NodeIndex]) -> NodeVec<f64> {
     let mut out = NodeVec::with_capacity(len);
     for _ in 0..len {
-        out.push(rng.gen_range(-spread..=spread));
+        out.push(0.0);
+    }
+    for &idx in movable {
+        out[idx] = rng.gen_range(-spread..=spread);
     }
     out
 }
 
-fn init_edge_z(rng: &mut impl Rng, len: usize, spread: f64) -> EdgeVec<f64> {
+fn init_edge_z(rng: &mut impl Rng, len: usize, spread: f64, movable: &[EdgeIndex]) -> EdgeVec<f64> {
     let mut out = EdgeVec::with_capacity(len);
     for _ in 0..len {
-        out.push(rng.gen_range(-spread..=spread));
+        out.push(0.0);
+    }
+    for &idx in movable {
+        out[idx] = rng.gen_range(-spread..=spread);
     }
     out
 }
@@ -464,11 +538,59 @@ fn init_edge_z(rng: &mut impl Rng, len: usize, spread: f64) -> EdgeVec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::half_edge::layout::spring::ShiftDirection;
 
     #[test]
     fn center_gravity_force_points_toward_origin() {
         let force = center_gravity_force(Point3::new(2.0, -3.0, 4.0), 0.5);
 
         assert_eq!(force, Vector3::new(-1.0, 1.5, -2.0));
+    }
+
+    #[test]
+    fn constrained_points_start_on_virtual_layout_plane() {
+        let mut rng = SmallRng::seed_from_u64(7);
+        let node_z = init_node_z(&mut rng, 3, 10.0, &[NodeIndex(1)]);
+        let edge_z = init_edge_z(&mut rng, 3, 10.0, &[EdgeIndex(2)]);
+
+        assert_eq!(node_z[NodeIndex(0)], 0.0);
+        assert_ne!(node_z[NodeIndex(1)], 0.0);
+        assert_eq!(node_z[NodeIndex(2)], 0.0);
+        assert_eq!(edge_z[EdgeIndex(0)], 0.0);
+        assert_eq!(edge_z[EdgeIndex(1)], 0.0);
+        assert_ne!(edge_z[EdgeIndex(2)], 0.0);
+    }
+
+    #[test]
+    fn dependent_group_forces_are_summed_at_reference() {
+        let constraints = [
+            PointConstraint {
+                x: Constraint::Grouped(0, ShiftDirection::Any),
+                y: Constraint::Free,
+            },
+            PointConstraint {
+                x: Constraint::Grouped(0, ShiftDirection::Any),
+                y: Constraint::Free,
+            },
+            PointConstraint {
+                x: Constraint::Grouped(0, ShiftDirection::Any),
+                y: Constraint::Fixed,
+            },
+        ];
+        assert!(!can_shift_directly(&constraints[2], 2));
+        assert!(can_receive_force(&constraints[2], 2));
+
+        let mut forces = NodeVec::new();
+        forces.push(Vector3::new(1.0, 10.0, 100.0));
+        forces.push(Vector3::new(2.0, 20.0, 200.0));
+        forces.push(Vector3::new(3.0, 30.0, 300.0));
+
+        project_grouped_forces(&mut forces, constraints.len(), |idx: NodeIndex| {
+            constraints[idx.0]
+        });
+
+        assert_eq!(forces[NodeIndex(0)], Vector3::new(6.0, 10.0, 100.0));
+        assert_eq!(forces[NodeIndex(1)], Vector3::new(0.0, 20.0, 200.0));
+        assert_eq!(forces[NodeIndex(2)], Vector3::new(0.0, 0.0, 300.0));
     }
 }

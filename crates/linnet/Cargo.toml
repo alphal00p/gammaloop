@@ -27,7 +27,7 @@ indexmap = { workspace = true }
 itertools = "0.14.0"
 paste = "1.0.15"
 rand = { version = "0.8.5", features = ["small_rng"] }
-rkyv = { version = "0.7", features = ["bitvec"], optional = true }
+rkyv = { version = "0.7", features = ["bitvec", "validation"], optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_repr = { workspace = true }
 symbolica = { workspace = true, default-features = false, optional = true }

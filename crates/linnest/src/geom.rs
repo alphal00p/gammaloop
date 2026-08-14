@@ -14,6 +14,7 @@ use thiserror::Error;
     rkyv::Serialize,
     rkyv::Deserialize,
 )]
+#[archive(check_bytes)]
 pub enum GeomError {
     #[error("degenerate triangle: two points coincide")]
     CoincidentPoints,

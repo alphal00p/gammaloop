@@ -30,6 +30,7 @@ pub type SuBitGraph = SubSet<Hedge>;
 
 #[cfg(feature = "rkyv")]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive(check_bytes)]
 pub(crate) struct BitVecArchiveRepr {
     raw: Vec<usize>,
     bit_len: usize,
@@ -95,6 +96,7 @@ where
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct SubSet<ID> {
     #[cfg_attr(feature = "bincode", bincode(with_serde))]
     #[cfg_attr(feature = "rkyv", with(BitVecRkyv))]

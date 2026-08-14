@@ -3,7 +3,7 @@ use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use linnet::parser::set::DotGraphSet;
 
 use crate::{
-    graph_api::{decode_graph_bytes_list, encode_cbor},
+    graph_api::{decode_graph_bytes_list, decode_typst_graph, encode_cbor},
     TypstGraph,
 };
 
@@ -67,8 +67,7 @@ pub fn layout_parsed_graph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, Str
     let subgraph_label = take_layout_subgraph(&mut cbor_map)?;
     let figment = Figment::from(Serialized::from(cbor_map, Profile::Default));
 
-    let mut typst_graph = unsafe { rkyv::from_bytes_unchecked::<TypstGraph>(arg) }
-        .map_err(|err| format!("Failed to deserialize archived Typst graph: {err}"))?;
+    let mut typst_graph = decode_typst_graph(arg)?;
     let subgraph = subgraph_label
         .as_deref()
         .map(|label| {

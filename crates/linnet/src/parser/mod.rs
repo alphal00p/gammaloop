@@ -145,6 +145,7 @@ pub use hedge::DotHedgeData;
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {
     pub global_data: GlobalData,
     pub graph: HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData, N>,

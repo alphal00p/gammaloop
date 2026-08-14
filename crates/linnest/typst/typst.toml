@@ -2,6 +2,7 @@
 name = "linnest"
 version = "0.1.0"
 entrypoint = "src/lib.typ"
+compiler = "0.15.0"
 authors = ["GammaLoop contributors"]
 license = "MIT"
 description = "Typst wrapper package for the linnest WebAssembly graph layout plugin."

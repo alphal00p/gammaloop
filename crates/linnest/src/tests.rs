@@ -393,6 +393,8 @@ struct TestEdgeStructuralPatch {
     label_pos: Option<(f64, f64)>,
     #[serde(skip_serializing_if = "Option::is_none")]
     bend: Option<f64>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    statements: BTreeMap<String, String>,
 }
 
 #[derive(Serialize)]
@@ -444,10 +446,38 @@ fn test_parse_pass_returns_archived_typst_graphs() {
     let archived = decode_graphs(&parsed);
 
     assert_eq!(archived.len(), 2);
-    let first = unsafe { rkyv::from_bytes_unchecked::<TypstGraph>(&archived[0]).unwrap() };
-    let second = unsafe { rkyv::from_bytes_unchecked::<TypstGraph>(&archived[1]).unwrap() };
+    let first = crate::graph_api::decode_typst_graph(&archived[0]).unwrap();
+    let second = crate::graph_api::decode_typst_graph(&archived[1]).unwrap();
     assert_eq!(first.name, "first");
     assert_eq!(second.name, "second");
+}
+
+#[test]
+fn graph_archive_boundaries_validate_bytes_without_requiring_input_alignment() {
+    let parsed = parse_dot_graphs_bytes(br#"digraph safe { a -> b }"#).unwrap();
+    let graph = decode_graphs(&parsed).pop().unwrap();
+
+    assert!(graph_info_bytes(&graph[..graph.len() / 2]).is_err());
+
+    let mut misaligned = rkyv::AlignedVec::with_capacity(graph.len() + 1);
+    misaligned.push(0);
+    misaligned.extend_from_slice(&graph);
+    assert_ne!(
+        misaligned[1..]
+            .as_ptr()
+            .align_offset(std::mem::align_of::<rkyv::Archived<TypstGraph>>()),
+        0
+    );
+    let info: TypstDotGraphInfo = decode_cbor(&graph_info_bytes(&misaligned[1..]).unwrap());
+    assert_eq!(info.name, "safe");
+
+    let subgraph = graph_archived_compass_subgraph_bytes(&graph, &encode_cbor(&"none")).unwrap();
+    assert!(subgraph_label_bytes(&subgraph[..subgraph.len() / 2]).is_err());
+
+    let mut misaligned = rkyv::AlignedVec::with_capacity(subgraph.len() + 1);
+    misaligned.push(0);
+    misaligned.extend_from_slice(&subgraph);
+    assert!(subgraph_label_bytes(&misaligned[1..]).is_ok());
 }
 
 #[test]
@@ -495,7 +525,7 @@ fn test_graph_query_api_reads_nodes_edges_and_subgraphs() {
     .unwrap();
     assert_eq!(north_edges.len(), 1);
 
-    let view = unsafe { rkyv::from_bytes_unchecked::<TypstGraph>(graph).unwrap() };
+    let view = crate::graph_api::decode_typst_graph(graph).unwrap();
     let mut south_bits = vec![false; view.n_hedges()];
     south_bits[view.n_hedges() - 1] = true;
     let subgraph = graph_subgraph_bytes(graph, &encode_cbor(&south_bits)).unwrap();
@@ -602,6 +632,50 @@ fn test_graph_spec_constructor_reads_nodes_edges_and_subgraphs() {
     )
     .unwrap();
     assert_eq!(internal_nodes.len(), 2);
+}
+
+#[test]
+fn graph_spec_underscore_compass_round_trips_through_archived_views() {
+    let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+        name: "underscore".to_string(),
+        statements: BTreeMap::new(),
+        nodes: vec![
+            TestNodeSpec {
+                name: "a".to_string(),
+                statements: BTreeMap::new(),
+            },
+            TestNodeSpec {
+                name: "b".to_string(),
+                statements: BTreeMap::new(),
+            },
+        ],
+        edges: vec![TestEdgeSpec {
+            source: Some(TestEndpointSpec {
+                node: 0,
+                compass: Some("_".to_string()),
+                statement: None,
+            }),
+            sink: Some(TestEndpointSpec {
+                node: 1,
+                compass: None,
+                statement: None,
+            }),
+            statements: BTreeMap::new(),
+        }],
+    }))
+    .unwrap();
+
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
+    assert_eq!(
+        edges[0].source.as_ref().unwrap().compass.as_deref(),
+        Some("_")
+    );
+
+    let label: String =
+        decode_cbor(&graph_compass_subgraph_bytes(&graph, &encode_cbor(&"_")).unwrap());
+    let selected: Vec<TypstDotEdge> =
+        decode_cbor(&graph_edges_of_bytes(&graph, &encode_cbor(&label)).unwrap());
+    assert_eq!(selected.len(), 1);
 }
 
 #[test]
@@ -1231,6 +1305,7 @@ fn test_graph_structural_patch_updates_edge_position() {
                 }),
                 label_pos: Some((1.5, -0.5)),
                 bend: Some(0.75),
+                statements: BTreeMap::new(),
             }],
         }),
     )
@@ -1281,6 +1356,60 @@ fn test_graph_structural_statement_patch_does_not_pin_nodes() {
         nodes[1].pos.as_ref().unwrap().y < -0.1,
         "statement-only structural patches must not freeze layout positions: {nodes:?}"
     );
+}
+
+#[test]
+fn test_graph_structural_statement_patch_preserves_grouped_edge_constraints() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph {
+            left [style=invis]
+            right [style=invis]
+            left -> a [id=0 pos="x:@-external!,y:@row!"]
+            b -> right [id=1 pos="x:@+external!,y:@row!"]
+            a -> b [id=2]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let patched = graph_apply_structural_patches_bytes(
+        &graph,
+        &encode_cbor(&TestStructuralPatch {
+            nodes: Vec::new(),
+            edges: vec![TestEdgeStructuralPatch {
+                index: 0,
+                pos: None,
+                label_pos: None,
+                bend: None,
+                statements: BTreeMap::from([
+                    ("label-width".to_string(), "2".to_string()),
+                    ("label-height".to_string(), "1".to_string()),
+                ]),
+            }],
+        }),
+    )
+    .unwrap();
+
+    let graph = crate::graph_api::decode_typst_graph(&patched).unwrap();
+    let mut edges = graph.iter_edges().map(|(_, _, edge)| edge.data);
+    let left = edges.next().unwrap();
+    let right = edges.next().unwrap();
+    assert!(matches!(
+        left.constraints.x,
+        Constraint::Grouped(_, ShiftDirection::NegativeOnly)
+    ));
+    assert!(matches!(
+        right.constraints.x,
+        Constraint::Grouped(_, ShiftDirection::PositiveOnly)
+    ));
+    let (
+        Constraint::Grouped(left_row, ShiftDirection::Any),
+        Constraint::Grouped(right_row, ShiftDirection::Any),
+    ) = (left.constraints.y, right.constraints.y)
+    else {
+        panic!("external edges lost their shared row constraint");
+    };
+    assert_eq!(left_row, right_row);
 }
 
 #[test]
@@ -1338,7 +1467,7 @@ fn test_graph_spec_axis_modes_pin_axes_independently() {
     }))
     .unwrap();
 
-    let graph = unsafe { rkyv::from_bytes_unchecked::<TypstGraph>(&graph).unwrap() };
+    let graph = crate::graph_api::decode_typst_graph(&graph).unwrap();
     let mut nodes = BTreeMap::new();
     for (_, _, node) in graph.iter_nodes() {
         nodes.insert(node.name.as_deref().unwrap(), node);
@@ -3033,9 +3162,8 @@ fn typst_graph_rkyv_roundtrip() {
     graph.layout();
 
     let bytes = rkyv::to_bytes::<_, 4096>(&graph).expect("failed to archive TypstGraph");
-    let restored = unsafe {
-        rkyv::from_bytes_unchecked::<TypstGraph>(&bytes).expect("failed to restore TypstGraph")
-    };
+    let restored =
+        crate::graph_api::decode_typst_graph(&bytes).expect("failed to restore TypstGraph");
 
     assert_eq!(
         graph.to_dot_graph().debug_dot(),
