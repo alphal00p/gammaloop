@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["IntegrandEsurfaceClassification","IntegrandKind","IntegrandThresholdStatus"],"struct":["IntegrandActiveThresholdCutInfo","IntegrandCutInfo","IntegrandCutThresholdInfo","IntegrandGraphGroupInfo","IntegrandGraphInfo","IntegrandInfo","IntegrandLoopMomentumBasisInfo","IntegrandOrientationInfo","IntegrandThresholdEsurfaceInfo"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["debug_cache_state","is_debug_cache_enabled","monte_carlo_cache_monitor","quick_cache_check","setup_debug_environment","validate_before_operation","warn_cache_efficiency"]};

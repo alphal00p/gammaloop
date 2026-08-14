@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["evaluate_overall_factor","evaluate_sign_origin"],"struct":["EdgeColor","NodeColorWithVertexRule","NodeColorWithoutVertexRule"],"trait":["NodeColorFunctions"]};

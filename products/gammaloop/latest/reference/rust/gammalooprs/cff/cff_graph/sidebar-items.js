@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CFFEdgeType"],"struct":["CFFEdge","CFFGenerationGraph","CFFVertex","VertexSet"]};

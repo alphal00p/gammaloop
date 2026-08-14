@@ -1,0 +1,152 @@
+{
+  "schema_version": 2,
+  "product": {
+    "id": "gammaloop",
+    "title": "GammaLoop"
+  },
+  "component": {
+    "id": "gammalooprs",
+    "package": "gammalooprs",
+    "title": "GammaLoop gammalooprs",
+    "version": "0.3.4",
+    "language": "rust",
+    "features": []
+  },
+  "root": {
+    "id": "gammalooprs",
+    "title": "gammalooprs supported API",
+    "docs": {
+      "format": "typst-markup",
+      "body": "GammaLoop's supported Rust entry points. The complete compiled surface\nremains available in the #link(\"reference/rust/\")[Rustdoc sidecar]."
+    },
+    "summary": "GammaLoop's supported Rust entry points.",
+    "since": null,
+    "keywords": [],
+    "source": {
+      "identifier": "alphal00p_docs_catalogs::annotated_scopes::gammalooprs",
+      "file": "crates/alphal00p-docs-catalogs/src/lib.rs",
+      "line": 34,
+      "column": 5
+    },
+    "items": {},
+    "scopes": {
+      "supported": {
+        "id": "supported",
+        "title": "Supported entry points",
+        "docs": null,
+        "summary": null,
+        "since": null,
+        "keywords": [],
+        "source": null,
+        "items": {
+          "GammaLoopContext": {
+            "id": "GammaLoopContext",
+            "name": "GammaLoopContext",
+            "title": "GammaLoopContext",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Combines the state-map and model capabilities required by GammaLoop computations."
+            },
+            "summary": "Combines the state-map and model capabilities required by GammaLoop computations.",
+            "signature": "pub trait GammaLoopContext : HasStateMap + HasModel {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn accepts_context<C: gammalooprs::GammaLoopContext>(_context: &C) {}"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammalooprs::GammaLoopContext",
+              "file": "crates/gammalooprs/src/lib.rs",
+              "line": 44,
+              "column": 1
+            }
+          },
+          "HasModel": {
+            "id": "HasModel",
+            "name": "HasModel",
+            "title": "HasModel",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Provides shared access to the physics model owned by a computation context."
+            },
+            "summary": "Provides shared access to the physics model owned by a computation context.",
+            "signature": "pub trait HasModel { fn get_model(& self) -> & Model; }",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn model_owner<C: gammalooprs::HasModel>(_context: &C) {}"
+              }
+            ],
+            "members": [
+              {
+                "name": "get_model",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn get_model(& self) -> & Model;",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammalooprs::HasModel",
+              "file": "crates/gammalooprs/src/lib.rs",
+              "line": 46,
+              "column": 1
+            }
+          },
+          "set_interrupt_handler": {
+            "id": "set_interrupt_handler",
+            "name": "set_interrupt_handler",
+            "title": "Install interrupt handling",
+            "kind": "function",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Installs GammaLoop's process interrupt handler before a long-running integration."
+            },
+            "summary": "Installs GammaLoop's process interrupt handler before a long-running integration.",
+            "signature": "fn set_interrupt_handler()",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "gammalooprs::set_interrupt_handler();"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammalooprs::set_interrupt_handler",
+              "file": "crates/gammalooprs/src/lib.rs",
+              "line": 81,
+              "column": 1
+            }
+          }
+        },
+        "scopes": {}
+      }
+    }
+  }
+}

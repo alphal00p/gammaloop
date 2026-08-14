@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["UFNode","UnionFindError"],"fn":["left","right"],"struct":["SetData","SetIndex","UnionFind"],"type":["ParentPointer"]};

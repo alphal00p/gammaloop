@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["add","add_assign","algebraic_traits","complex","fallible_add","fallible_sub","neg","ref_zero","scalar_mul","sub","sub_assign","upgrading_arithmetic"],"trait":["ScalarMul","ScalarMulMut"]};

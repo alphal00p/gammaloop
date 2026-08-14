@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Profile","ProfileResult"],"struct":["InfraRedProfile","UltraVioletProfile"]};

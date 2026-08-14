@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Flow","HedgePair","HedgePairWithData","InvolutionError","InvolutiveMapping","Orientation"],"struct":["DrainingInvolutionIter","EdgeData","EdgeIndex","EdgeVec","EdgeVecIntoIter","EdgeVecIter","EdgeVecIterMut","Hedge","HedgeVec","HedgeVecIntoIter","HedgeVecIter","HedgeVecIterMut","Involution","InvolutionIter","InvolutionIterMut"]};

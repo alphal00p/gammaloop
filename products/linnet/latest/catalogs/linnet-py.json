@@ -1,0 +1,3756 @@
+{
+  "schema_version": 2,
+  "product": {
+    "id": "linnet",
+    "title": "Linnet"
+  },
+  "component": {
+    "id": "linnet-py",
+    "package": "linnet-py",
+    "title": "Linnet linnet-py",
+    "version": "0.1.0",
+    "language": "python",
+    "features": [
+      "extension-module",
+      "abi3-py310"
+    ]
+  },
+  "root": {
+    "id": "linnet-py",
+    "title": "Linnet Python API",
+    "docs": {
+      "format": "python-docstring",
+      "body": "Exports registered by linnet-py."
+    },
+    "summary": "Ordered Python module exports",
+    "since": null,
+    "keywords": [],
+    "source": null,
+    "items": {},
+    "scopes": {
+      "exports": {
+        "id": "exports",
+        "title": "Module exports",
+        "docs": null,
+        "summary": null,
+        "since": null,
+        "keywords": [],
+        "source": null,
+        "items": {
+          "Cycle": {
+            "id": "Cycle",
+            "name": "Cycle",
+            "title": "Cycle",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Cycle represented as a subgraph and optional loop count."
+            },
+            "summary": "Cycle represented as a subgraph and optional loop count.",
+            "signature": "class Cycle:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import Cycle\nhelp(Cycle)"
+              }
+            ],
+            "members": [
+              {
+                "name": "filter",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Subgraph filter for this cycle."
+                },
+                "signature": "def filter(self) -> Subgraph:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "loop_count",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Optional loop count for this cycle."
+                },
+                "signature": "def loop_count(self) -> typing.Optional[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::Cycle",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 32,
+              "column": 1
+            }
+          },
+          "DotEdgeData": {
+            "id": "DotEdgeData",
+            "name": "DotEdgeData",
+            "title": "DotEdgeData",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "DOT edge data (attributes + optional edge id)."
+            },
+            "summary": "DOT edge data (attributes + optional edge id).",
+            "signature": "class DotEdgeData:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import DotEdgeData\nhelp(DotEdgeData)"
+              }
+            ],
+            "members": [
+              {
+                "name": "statements",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Edge attributes as a dict-like proxy."
+                },
+                "signature": "def statements(self) -> EdgeStatements:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "local_statements",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Local edge attributes as a dict-like proxy."
+                },
+                "signature": "def local_statements(self) -> EdgeStatements:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "edge_id",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Optional edge id."
+                },
+                "signature": "def edge_id(self) -> typing.Optional[EdgeIndex]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__new__",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Create edge data from fields."
+                },
+                "signature": "def __new__(cls, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, local_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, edge_id: typing.Optional[builtins.int] = None) -> DotEdgeData:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "statements",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "local_statements",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "local_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "edge_id",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "edge_id: typing.Optional[builtins.int] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "add_statement",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Insert or update an attribute statement."
+                },
+                "signature": "def add_statement(self, key: builtins.str, value: builtins.str) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::DotEdgeData",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 52,
+              "column": 1
+            }
+          },
+          "DotGraph": {
+            "id": "DotGraph",
+            "name": "DotGraph",
+            "title": "DotGraph",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "DOT-backed hedge graph."
+            },
+            "summary": "DOT-backed hedge graph.",
+            "signature": "class DotGraph:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import DotGraph\nhelp(DotGraph)"
+              }
+            ],
+            "members": [
+              {
+                "name": "global_data",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Global graph attributes."
+                },
+                "signature": "def global_data(self) -> GlobalData:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "global_data",
+                "kind": "setter",
+                "docs": null,
+                "signature": "def global_data(self, value: GlobalData) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: GlobalData",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "from_string",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Parse a DOT string into a graph."
+                },
+                "signature": "def from_string(cls, s: builtins.str) -> DotGraph:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "s",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "s: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "from_string_set",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Parse a DOT string into multiple graphs."
+                },
+                "signature": "def from_string_set(cls, s: builtins.str) -> builtins.list[DotGraph]:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "s",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "s: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "from_file",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Parse a DOT file into a graph."
+                },
+                "signature": "def from_file(cls, path: builtins.str) -> DotGraph:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "path",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "path: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "debug_dot",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Serialize graph to DOT for debugging."
+                },
+                "signature": "def debug_dot(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "dot",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Serialize the full graph to DOT."
+                },
+                "signature": "def dot(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "dot_of",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Serialize a subgraph to DOT."
+                },
+                "signature": "def dot_of(self, subgraph: Subgraph) -> builtins.str:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "subgraph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "n_nodes",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Number of nodes."
+                },
+                "signature": "def n_nodes(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "n_edges",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Number of edges."
+                },
+                "signature": "def n_edges(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "n_hedges",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Number of hedges."
+                },
+                "signature": "def n_hedges(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "n_externals",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Number of external hedges."
+                },
+                "signature": "def n_externals(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "n_internals",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Number of internal hedges."
+                },
+                "signature": "def n_internals(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "full_filter",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Subgraph including all hedges."
+                },
+                "signature": "def full_filter(self) -> Subgraph:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "empty_subgraph",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Empty subgraph of this graph."
+                },
+                "signature": "def empty_subgraph(self) -> Subgraph:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "iter_edges",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Iterate edges in the full graph."
+                },
+                "signature": "def iter_edges(self) -> builtins.list[tuple[HedgePair, EdgeIndex, EdgeData]]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "iter_edges_of",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Iterate edges within a subgraph."
+                },
+                "signature": "def iter_edges_of(self, subgraph: Subgraph) -> builtins.list[tuple[HedgePair, EdgeIndex, EdgeData]]:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "subgraph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "iter_nodes",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Iterate nodes in the full graph."
+                },
+                "signature": "def iter_nodes(self) -> builtins.list[tuple[NodeIndex, builtins.list[Hedge], DotVertexData]]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "iter_nodes_of",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Iterate nodes within a subgraph."
+                },
+                "signature": "def iter_nodes_of(self, subgraph: Subgraph) -> builtins.list[tuple[NodeIndex, builtins.list[Hedge], DotVertexData]]:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "subgraph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "connected_components",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Connected components of a subgraph."
+                },
+                "signature": "def connected_components(self, subgraph: Subgraph) -> builtins.list[Subgraph]:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "subgraph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "count_connected_components",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Count connected components."
+                },
+                "signature": "def count_connected_components(self, subgraph: Subgraph) -> builtins.int:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "subgraph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "is_connected",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Whether a subgraph is connected."
+                },
+                "signature": "def is_connected(self, subgraph: Subgraph) -> builtins.bool:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "subgraph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "depth_first_traverse",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Depth-first traversal from a root node."
+                },
+                "signature": "def depth_first_traverse(self, subgraph: Subgraph, root_node: NodeIndex, include_hedge: typing.Optional[Hedge]) -> TraversalTree:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "subgraph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph: Subgraph",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "root_node",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "root_node: NodeIndex",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "include_hedge",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "include_hedge: typing.Optional[Hedge]",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "breadth_first_traverse",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Breadth-first traversal from a root node."
+                },
+                "signature": "def breadth_first_traverse(self, subgraph: Subgraph, root_node: NodeIndex, include_hedge: typing.Optional[Hedge]) -> TraversalTree:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "subgraph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph: Subgraph",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "root_node",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "root_node: NodeIndex",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "include_hedge",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "include_hedge: typing.Optional[Hedge]",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "bridges",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Bridges in the full graph."
+                },
+                "signature": "def bridges(self) -> Subgraph:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "bridges_of",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Bridges within a subgraph."
+                },
+                "signature": "def bridges_of(self, subgraph: Subgraph) -> Subgraph:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "subgraph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "cycle_basis",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Cycle basis of the full graph."
+                },
+                "signature": "def cycle_basis(self) -> tuple[builtins.list[Cycle], Subgraph]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cycle_basis_of",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Cycle basis of a subgraph."
+                },
+                "signature": "def cycle_basis_of(self, subgraph: Subgraph) -> tuple[builtins.list[Cycle], Subgraph]:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "subgraph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "all_spanning_forests",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "All spanning forests of the full graph."
+                },
+                "signature": "def all_spanning_forests(self) -> builtins.list[Subgraph]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "all_spanning_forests_of",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "All spanning forests of a subgraph."
+                },
+                "signature": "def all_spanning_forests_of(self, subgraph: Subgraph) -> builtins.list[Subgraph]:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "subgraph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "combine_to_single_hedgenode",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Combine nodes into a single hedge node."
+                },
+                "signature": "def combine_to_single_hedgenode(self, nodes: typing.Sequence[NodeIndex]) -> HedgeNode:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "nodes",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "nodes: typing.Sequence[NodeIndex]",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "all_cuts",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "All cuts between two hedge nodes."
+                },
+                "signature": "def all_cuts(self, source: HedgeNode, target: HedgeNode) -> builtins.list[tuple[Subgraph, OrientedCut, Subgraph]]:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "source",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "source: HedgeNode",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "target",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "target: HedgeNode",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "all_cuts_from_ids",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "All cuts between two sets of node indices."
+                },
+                "signature": "def all_cuts_from_ids(self, source: typing.Sequence[NodeIndex], target: typing.Sequence[NodeIndex]) -> builtins.list[tuple[Subgraph, OrientedCut, Subgraph]]:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "source",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "source: typing.Sequence[NodeIndex]",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "target",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "target: typing.Sequence[NodeIndex]",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "contract_subgraph",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Contract a subgraph into a single node, deleting its edges."
+                },
+                "signature": "def contract_subgraph(self, subgraph: Subgraph, node_data_merge: typing.Optional[DotVertexData] = None) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "subgraph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph: Subgraph",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "node_data_merge",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "node_data_merge: typing.Optional[DotVertexData] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "join",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Join two graphs, matching dangling edges via a Python callback."
+                },
+                "signature": "def join(self, other: DotGraph, matching_fn: typing.Any, merge_fn: typing.Any) -> DotGraph:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "other",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "other: DotGraph",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "matching_fn",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "matching_fn: typing.Any",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "merge_fn",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "merge_fn: typing.Any",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "join_mut",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "In-place join, matching dangling edges via a Python callback."
+                },
+                "signature": "def join_mut(self, other: DotGraph, matching_fn: typing.Any, merge_fn: typing.Any) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "other",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "other: DotGraph",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "matching_fn",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "matching_fn: typing.Any",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "merge_fn",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "merge_fn: typing.Any",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "extract",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Extract a subgraph with Python callbacks to transform edge/node data."
+                },
+                "signature": "def extract(self, subgraph: Subgraph, split_edge_fn: typing.Any, internal_data: typing.Any, split_node: typing.Any, owned_node: typing.Any) -> DotGraph:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "subgraph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph: Subgraph",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "split_edge_fn",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "split_edge_fn: typing.Any",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "internal_data",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "internal_data: typing.Any",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "split_node",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "split_node: typing.Any",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "owned_node",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "owned_node: typing.Any",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__getitem__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __getitem__(self, key: Hedge) -> DotHedgeData:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: Hedge",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__getitem__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __getitem__(self, key: NodeIndex) -> DotVertexData:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: NodeIndex",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__getitem__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __getitem__(self, key: EdgeIndex) -> DotEdgeData:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: EdgeIndex",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::DotGraph",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 85,
+              "column": 1
+            }
+          },
+          "DotGraphBuilder": {
+            "id": "DotGraphBuilder",
+            "name": "DotGraphBuilder",
+            "title": "DotGraphBuilder",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Builder for constructing DOT graphs programmatically."
+            },
+            "summary": "Builder for constructing DOT graphs programmatically.",
+            "signature": "class DotGraphBuilder:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import DotGraphBuilder\nhelp(DotGraphBuilder)"
+              }
+            ],
+            "members": [
+              {
+                "name": "__new__",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Create a new, empty graph builder."
+                },
+                "signature": "def __new__(cls) -> DotGraphBuilder:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "add_node",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Add a node and return its index."
+                },
+                "signature": "def add_node(self, data: typing.Optional[DotVertexData] = None) -> NodeIndex:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "data",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "data: typing.Optional[DotVertexData] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "add_edge",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Add an edge between two nodes."
+                },
+                "signature": "def add_edge(self, source: NodeIndex, sink: NodeIndex, data: typing.Optional[DotEdgeData] = None, orientation: typing.Optional[Orientation] = None, source_hedge: typing.Optional[DotHedgeData] = None, sink_hedge: typing.Optional[DotHedgeData] = None) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "source",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "source: NodeIndex",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "sink",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "sink: NodeIndex",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "data",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "data: typing.Optional[DotEdgeData] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "orientation",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "orientation: typing.Optional[Orientation] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "source_hedge",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "source_hedge: typing.Optional[DotHedgeData] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "sink_hedge",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "sink_hedge: typing.Optional[DotHedgeData] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "add_external_edge",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Add a dangling (external) edge incident to a node."
+                },
+                "signature": "def add_external_edge(self, source: NodeIndex, data: typing.Optional[DotEdgeData] = None, orientation: typing.Optional[Orientation] = None, flow: typing.Optional[Flow] = None, hedge: typing.Optional[DotHedgeData] = None) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "source",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "source: NodeIndex",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "data",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "data: typing.Optional[DotEdgeData] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "orientation",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "orientation: typing.Optional[Orientation] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "flow",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "flow: typing.Optional[Flow] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "hedge",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "hedge: typing.Optional[DotHedgeData] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "build",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Build the graph and reset the builder."
+                },
+                "signature": "def build(self) -> DotGraph:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::DotGraphBuilder",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 247,
+              "column": 1
+            }
+          },
+          "DotHedgeData": {
+            "id": "DotHedgeData",
+            "name": "DotHedgeData",
+            "title": "DotHedgeData",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "DOT hedge (half-edge) data."
+            },
+            "summary": "DOT hedge (half-edge) data.",
+            "signature": "class DotHedgeData:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import DotHedgeData\nhelp(DotHedgeData)"
+              }
+            ],
+            "members": [
+              {
+                "name": "statement",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Optional statement string."
+                },
+                "signature": "def statement(self) -> typing.Optional[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "id",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Optional hedge id."
+                },
+                "signature": "def id(self) -> typing.Optional[Hedge]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "port_label",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Optional port label."
+                },
+                "signature": "def port_label(self) -> typing.Optional[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "compasspt",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Optional compass point as a string."
+                },
+                "signature": "def compasspt(self) -> typing.Optional[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__new__",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Create hedge data from fields."
+                },
+                "signature": "def __new__(cls, statement: typing.Optional[builtins.str] = None, id: typing.Optional[builtins.int] = None, port_label: typing.Optional[builtins.str] = None, compasspt: typing.Optional[builtins.str] = None) -> DotHedgeData:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "statement",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "statement: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "id",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "id: typing.Optional[builtins.int] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "port_label",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "port_label: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "compasspt",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "compasspt: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::DotHedgeData",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 273,
+              "column": 1
+            }
+          },
+          "DotVertexData": {
+            "id": "DotVertexData",
+            "name": "DotVertexData",
+            "title": "DotVertexData",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "DOT vertex data (name, optional index, and attribute statements)."
+            },
+            "summary": "DOT vertex data (name, optional index, and attribute statements).",
+            "signature": "class DotVertexData:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import DotVertexData\nhelp(DotVertexData)"
+              }
+            ],
+            "members": [
+              {
+                "name": "name",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Optional vertex name."
+                },
+                "signature": "def name(self) -> typing.Optional[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "index",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Optional node index."
+                },
+                "signature": "def index(self) -> typing.Optional[NodeIndex]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "statements",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Attribute statements as a dict-like proxy."
+                },
+                "signature": "def statements(self) -> NodeStatements:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__new__",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Create vertex data from fields."
+                },
+                "signature": "def __new__(cls, name: typing.Optional[builtins.str] = None, index: typing.Optional[builtins.int] = None, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None) -> DotVertexData:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "name: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "index",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "index: typing.Optional[builtins.int] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "statements",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "add_statement",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Insert or update an attribute statement."
+                },
+                "signature": "def add_statement(self, key: builtins.str, value: builtins.str) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::DotVertexData",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 307,
+              "column": 1
+            }
+          },
+          "EdgeData": {
+            "id": "EdgeData",
+            "name": "EdgeData",
+            "title": "EdgeData",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Edge data with orientation."
+            },
+            "summary": "Edge data with orientation.",
+            "signature": "class EdgeData:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import EdgeData\nhelp(EdgeData)"
+              }
+            ],
+            "members": [
+              {
+                "name": "orientation",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Orientation of this edge."
+                },
+                "signature": "def orientation(self) -> Orientation:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "data",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "DOT edge data."
+                },
+                "signature": "def data(self) -> DotEdgeData:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__new__",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Create edge data from orientation and DotEdgeData."
+                },
+                "signature": "def __new__(cls, orientation: typing.Any, data: typing.Any) -> EdgeData:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "orientation",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "orientation: typing.Any",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "data",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "data: typing.Any",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::EdgeData",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 340,
+              "column": 1
+            }
+          },
+          "EdgeIndex": {
+            "id": "EdgeIndex",
+            "name": "EdgeIndex",
+            "title": "EdgeIndex",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Edge index identifier."
+            },
+            "summary": "Edge index identifier.",
+            "signature": "class EdgeIndex:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import EdgeIndex\nhelp(EdgeIndex)"
+              }
+            ],
+            "members": [
+              {
+                "name": "value",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Numeric value of this edge index."
+                },
+                "signature": "def value(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__new__",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Create an edge index from a zero-based index."
+                },
+                "signature": "def __new__(cls, value: builtins.int) -> EdgeIndex:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.int",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__int__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Convert to int."
+                },
+                "signature": "def __int__(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::EdgeIndex",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 364,
+              "column": 1
+            }
+          },
+          "EdgeStatements": {
+            "id": "EdgeStatements",
+            "name": "EdgeStatements",
+            "title": "EdgeStatements",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Dict-like proxy for edge attribute statements."
+            },
+            "summary": "Dict-like proxy for edge attribute statements.",
+            "signature": "class EdgeStatements:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import EdgeStatements\nhelp(EdgeStatements)"
+              }
+            ],
+            "members": [
+              {
+                "name": "__getitem__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __getitem__(self, key: builtins.str) -> builtins.str:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__setitem__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __setitem__(self, key: builtins.str, value: builtins.str) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__delitem__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __delitem__(self, key: builtins.str) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__contains__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __contains__(self, key: builtins.str) -> builtins.bool:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__len__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __len__(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__iter__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __iter__(self) -> typing.Iterator[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get",
+                "kind": "method",
+                "docs": null,
+                "signature": "def get(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "default",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "default: typing.Any = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "keys",
+                "kind": "method",
+                "docs": null,
+                "signature": "def keys(self) -> builtins.list[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "values",
+                "kind": "method",
+                "docs": null,
+                "signature": "def values(self) -> builtins.list[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "items",
+                "kind": "method",
+                "docs": null,
+                "signature": "def items(self) -> builtins.list[tuple[builtins.str, builtins.str]]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "clear",
+                "kind": "method",
+                "docs": null,
+                "signature": "def clear(self) -> None:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "update",
+                "kind": "method",
+                "docs": null,
+                "signature": "def update(self, other: typing.Mapping[builtins.str, builtins.str]) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "other",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "other: typing.Mapping[builtins.str, builtins.str]",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "pop",
+                "kind": "method",
+                "docs": null,
+                "signature": "def pop(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "default",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "default: typing.Any = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "popitem",
+                "kind": "method",
+                "docs": null,
+                "signature": "def popitem(self) -> tuple[builtins.str, builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "setdefault",
+                "kind": "method",
+                "docs": null,
+                "signature": "def setdefault(self, key: builtins.str, default: typing.Optional[builtins.str] = None) -> builtins.str:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "default",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "default: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::EdgeStatements",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 387,
+              "column": 1
+            }
+          },
+          "Flow": {
+            "id": "Flow",
+            "name": "Flow",
+            "title": "Flow",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Flow direction (Source/Sink)."
+            },
+            "summary": "Flow direction (Source/Sink).",
+            "signature": "class Flow:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import Flow\nhelp(Flow)"
+              }
+            ],
+            "members": [
+              {
+                "name": "source",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Flow::Source."
+                },
+                "signature": "def source() -> Flow:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "sink",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Flow::Sink."
+                },
+                "signature": "def sink() -> Flow:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::Flow",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 409,
+              "column": 1
+            }
+          },
+          "GlobalData": {
+            "id": "GlobalData",
+            "name": "GlobalData",
+            "title": "GlobalData",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Global graph attributes (graph/node/edge statements)."
+            },
+            "summary": "Global graph attributes (graph/node/edge statements).",
+            "signature": "class GlobalData:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import GlobalData\nhelp(GlobalData)"
+              }
+            ],
+            "members": [
+              {
+                "name": "name",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Graph name."
+                },
+                "signature": "def name(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "name",
+                "kind": "setter",
+                "docs": null,
+                "signature": "def name(self, value: builtins.str) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "statements",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Graph-level statements."
+                },
+                "signature": "def statements(self) -> GlobalStatements:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "statements",
+                "kind": "setter",
+                "docs": null,
+                "signature": "def statements(self, value: builtins.dict[builtins.str, builtins.str]) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.dict[builtins.str, builtins.str]",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "edge_statements",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Default edge statements."
+                },
+                "signature": "def edge_statements(self) -> GlobalStatements:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "edge_statements",
+                "kind": "setter",
+                "docs": null,
+                "signature": "def edge_statements(self, value: builtins.dict[builtins.str, builtins.str]) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.dict[builtins.str, builtins.str]",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "node_statements",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Default node statements."
+                },
+                "signature": "def node_statements(self) -> GlobalStatements:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "node_statements",
+                "kind": "setter",
+                "docs": null,
+                "signature": "def node_statements(self, value: builtins.dict[builtins.str, builtins.str]) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.dict[builtins.str, builtins.str]",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__new__",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Create global data from fields."
+                },
+                "signature": "def __new__(cls, name: typing.Optional[builtins.str] = None, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, edge_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, node_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None) -> GlobalData:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "name: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "statements",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "edge_statements",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "edge_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "node_statements",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "node_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "add_statement",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Insert or update a graph-level statement."
+                },
+                "signature": "def add_statement(self, key: builtins.str, value: builtins.str) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "add_edge_statement",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Insert or update a default edge statement."
+                },
+                "signature": "def add_edge_statement(self, key: builtins.str, value: builtins.str) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "add_node_statement",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Insert or update a default node statement."
+                },
+                "signature": "def add_node_statement(self, key: builtins.str, value: builtins.str) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::GlobalData",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 429,
+              "column": 1
+            }
+          },
+          "GlobalStatements": {
+            "id": "GlobalStatements",
+            "name": "GlobalStatements",
+            "title": "GlobalStatements",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Dict-like proxy for global statements."
+            },
+            "summary": "Dict-like proxy for global statements.",
+            "signature": "class GlobalStatements:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import GlobalStatements\nhelp(GlobalStatements)"
+              }
+            ],
+            "members": [
+              {
+                "name": "__getitem__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __getitem__(self, key: builtins.str) -> builtins.str:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__setitem__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __setitem__(self, key: builtins.str, value: builtins.str) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__delitem__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __delitem__(self, key: builtins.str) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__contains__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __contains__(self, key: builtins.str) -> builtins.bool:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__len__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __len__(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__iter__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __iter__(self) -> typing.Iterator[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get",
+                "kind": "method",
+                "docs": null,
+                "signature": "def get(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "default",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "default: typing.Any = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "keys",
+                "kind": "method",
+                "docs": null,
+                "signature": "def keys(self) -> builtins.list[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "values",
+                "kind": "method",
+                "docs": null,
+                "signature": "def values(self) -> builtins.list[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "items",
+                "kind": "method",
+                "docs": null,
+                "signature": "def items(self) -> builtins.list[tuple[builtins.str, builtins.str]]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "clear",
+                "kind": "method",
+                "docs": null,
+                "signature": "def clear(self) -> None:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "update",
+                "kind": "method",
+                "docs": null,
+                "signature": "def update(self, other: typing.Mapping[builtins.str, builtins.str]) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "other",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "other: typing.Mapping[builtins.str, builtins.str]",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "pop",
+                "kind": "method",
+                "docs": null,
+                "signature": "def pop(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "default",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "default: typing.Any = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "popitem",
+                "kind": "method",
+                "docs": null,
+                "signature": "def popitem(self) -> tuple[builtins.str, builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "setdefault",
+                "kind": "method",
+                "docs": null,
+                "signature": "def setdefault(self, key: builtins.str, default: typing.Optional[builtins.str] = None) -> builtins.str:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "default",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "default: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::GlobalStatements",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 483,
+              "column": 1
+            }
+          },
+          "Hedge": {
+            "id": "Hedge",
+            "name": "Hedge",
+            "title": "Hedge",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Half-edge identifier."
+            },
+            "summary": "Half-edge identifier.",
+            "signature": "class Hedge:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import Hedge\nhelp(Hedge)"
+              }
+            ],
+            "members": [
+              {
+                "name": "value",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Numeric value of this hedge."
+                },
+                "signature": "def value(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__new__",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Create a hedge from a zero-based index."
+                },
+                "signature": "def __new__(cls, value: builtins.int) -> Hedge:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.int",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__int__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Convert to int."
+                },
+                "signature": "def __int__(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::Hedge",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 505,
+              "column": 1
+            }
+          },
+          "HedgeNode": {
+            "id": "HedgeNode",
+            "name": "HedgeNode",
+            "title": "HedgeNode",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Hedge node with internal graph and hairs."
+            },
+            "summary": "Hedge node with internal graph and hairs.",
+            "signature": "class HedgeNode:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import HedgeNode\nhelp(HedgeNode)"
+              }
+            ],
+            "members": [
+              {
+                "name": "internal_graph",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Internal subgraph."
+                },
+                "signature": "def internal_graph(self) -> Subgraph:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "hairs",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Hair subgraph."
+                },
+                "signature": "def hairs(self) -> Subgraph:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__new__",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Create a hedge node from internal graph and hairs subgraphs."
+                },
+                "signature": "def __new__(cls, internal_graph: Subgraph, hairs: Subgraph) -> HedgeNode:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "internal_graph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "internal_graph: Subgraph",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "hairs",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "hairs: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::HedgeNode",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 528,
+              "column": 1
+            }
+          },
+          "HedgePair": {
+            "id": "HedgePair",
+            "name": "HedgePair",
+            "title": "HedgePair",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Hedge pairing (paired, unpaired, split)."
+            },
+            "summary": "Hedge pairing (paired, unpaired, split).",
+            "signature": "class HedgePair:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import HedgePair\nhelp(HedgePair)"
+              }
+            ],
+            "members": [
+              {
+                "name": "kind",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Kind of hedge pair: \\\"paired\\\", \\\"unpaired\\\", or \\\"split\\\"."
+                },
+                "signature": "def kind(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "source",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Source hedge (paired/split)."
+                },
+                "signature": "def source(self) -> typing.Optional[Hedge]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "sink",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Sink hedge (paired/split)."
+                },
+                "signature": "def sink(self) -> typing.Optional[Hedge]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "hedge",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Hedge (unpaired only)."
+                },
+                "signature": "def hedge(self) -> typing.Optional[Hedge]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "flow",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Flow for unpaired hedge."
+                },
+                "signature": "def flow(self) -> typing.Optional[Flow]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "split",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Which side is split for split edges."
+                },
+                "signature": "def split(self) -> typing.Optional[Flow]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::HedgePair",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 552,
+              "column": 1
+            }
+          },
+          "NodeIndex": {
+            "id": "NodeIndex",
+            "name": "NodeIndex",
+            "title": "NodeIndex",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Node index identifier."
+            },
+            "summary": "Node index identifier.",
+            "signature": "class NodeIndex:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import NodeIndex\nhelp(NodeIndex)"
+              }
+            ],
+            "members": [
+              {
+                "name": "value",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Numeric value of this node index."
+                },
+                "signature": "def value(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__new__",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Create a node index from a zero-based index."
+                },
+                "signature": "def __new__(cls, value: builtins.int) -> NodeIndex:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.int",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__int__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Convert to int."
+                },
+                "signature": "def __int__(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::NodeIndex",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 592,
+              "column": 1
+            }
+          },
+          "NodeStatements": {
+            "id": "NodeStatements",
+            "name": "NodeStatements",
+            "title": "NodeStatements",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Dict-like proxy for node attribute statements."
+            },
+            "summary": "Dict-like proxy for node attribute statements.",
+            "signature": "class NodeStatements:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import NodeStatements\nhelp(NodeStatements)"
+              }
+            ],
+            "members": [
+              {
+                "name": "__getitem__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __getitem__(self, key: builtins.str) -> builtins.str:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__setitem__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __setitem__(self, key: builtins.str, value: builtins.str) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__delitem__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __delitem__(self, key: builtins.str) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__contains__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __contains__(self, key: builtins.str) -> builtins.bool:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__len__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __len__(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__iter__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __iter__(self) -> typing.Iterator[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get",
+                "kind": "method",
+                "docs": null,
+                "signature": "def get(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "default",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "default: typing.Any = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "keys",
+                "kind": "method",
+                "docs": null,
+                "signature": "def keys(self) -> builtins.list[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "values",
+                "kind": "method",
+                "docs": null,
+                "signature": "def values(self) -> builtins.list[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "items",
+                "kind": "method",
+                "docs": null,
+                "signature": "def items(self) -> builtins.list[tuple[builtins.str, builtins.str]]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "clear",
+                "kind": "method",
+                "docs": null,
+                "signature": "def clear(self) -> None:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "update",
+                "kind": "method",
+                "docs": null,
+                "signature": "def update(self, other: typing.Mapping[builtins.str, builtins.str]) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "other",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "other: typing.Mapping[builtins.str, builtins.str]",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "pop",
+                "kind": "method",
+                "docs": null,
+                "signature": "def pop(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "default",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "default: typing.Any = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "popitem",
+                "kind": "method",
+                "docs": null,
+                "signature": "def popitem(self) -> tuple[builtins.str, builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "setdefault",
+                "kind": "method",
+                "docs": null,
+                "signature": "def setdefault(self, key: builtins.str, default: typing.Optional[builtins.str] = None) -> builtins.str:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "default",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "default: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::NodeStatements",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 615,
+              "column": 1
+            }
+          },
+          "Orientation": {
+            "id": "Orientation",
+            "name": "Orientation",
+            "title": "Orientation",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Edge orientation (Default/Reversed/Undirected)."
+            },
+            "summary": "Edge orientation (Default/Reversed/Undirected).",
+            "signature": "class Orientation:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import Orientation\nhelp(Orientation)"
+              }
+            ],
+            "members": [
+              {
+                "name": "default",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Orientation::Default."
+                },
+                "signature": "def default() -> Orientation:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "reversed",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Orientation::Reversed."
+                },
+                "signature": "def reversed() -> Orientation:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "undirected",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Orientation::Undirected."
+                },
+                "signature": "def undirected() -> Orientation:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::Orientation",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 637,
+              "column": 1
+            }
+          },
+          "OrientedCut": {
+            "id": "OrientedCut",
+            "name": "OrientedCut",
+            "title": "OrientedCut",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Oriented cut represented by left/right subgraphs."
+            },
+            "summary": "Oriented cut represented by left/right subgraphs.",
+            "signature": "class OrientedCut:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import OrientedCut\nhelp(OrientedCut)"
+              }
+            ],
+            "members": [
+              {
+                "name": "left",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Left side of the cut."
+                },
+                "signature": "def left(self) -> Subgraph:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "right",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Right side of the cut."
+                },
+                "signature": "def right(self) -> Subgraph:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::OrientedCut",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 662,
+              "column": 1
+            }
+          },
+          "Subgraph": {
+            "id": "Subgraph",
+            "name": "Subgraph",
+            "title": "Subgraph",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Subgraph represented as a bitset of hedges."
+            },
+            "summary": "Subgraph represented as a bitset of hedges.",
+            "signature": "class Subgraph:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import Subgraph\nhelp(Subgraph)"
+              }
+            ],
+            "members": [
+              {
+                "name": "empty",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Create an empty subgraph of the given size (number of hedges)."
+                },
+                "signature": "def empty(cls, size: builtins.int) -> Subgraph:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "size",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "size: builtins.int",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "full",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Create a full subgraph including all hedges."
+                },
+                "signature": "def full(cls, size: builtins.int) -> Subgraph:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "size",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "size: builtins.int",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "from_hedges",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Create a subgraph from a list of hedges."
+                },
+                "signature": "def from_hedges(cls, size: builtins.int, hedges: typing.Sequence[Hedge]) -> Subgraph:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "size",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "size: builtins.int",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "hedges",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "hedges: typing.Sequence[Hedge]",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "to_hedges",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "List included hedges."
+                },
+                "signature": "def to_hedges(self) -> builtins.list[Hedge]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "size",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Total number of hedges in the parent graph."
+                },
+                "signature": "def size(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "n_included",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Number of included hedges."
+                },
+                "signature": "def n_included(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "includes",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Whether a hedge is included."
+                },
+                "signature": "def includes(self, hedge: typing.Any) -> builtins.bool:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "hedge",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "hedge: typing.Any",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "union",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Union with another subgraph."
+                },
+                "signature": "def union(self, other: Subgraph) -> Subgraph:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "other",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "other: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "intersection",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Intersection with another subgraph."
+                },
+                "signature": "def intersection(self, other: Subgraph) -> Subgraph:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "other",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "other: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "sym_diff",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Symmetric difference with another subgraph."
+                },
+                "signature": "def sym_diff(self, other: Subgraph) -> Subgraph:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "other",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "other: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "subtract",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Subtract another subgraph."
+                },
+                "signature": "def subtract(self, other: Subgraph) -> Subgraph:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "other",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "other: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Debug-style representation."
+                },
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::Subgraph",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 682,
+              "column": 1
+            }
+          },
+          "TraversalTree": {
+            "id": "TraversalTree",
+            "name": "TraversalTree",
+            "title": "TraversalTree",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "extension-module",
+              "abi3-py310"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Traversal tree produced by DFS/BFS."
+            },
+            "summary": "Traversal tree produced by DFS/BFS.",
+            "signature": "class TraversalTree:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from linnet_py import TraversalTree\nhelp(TraversalTree)"
+              }
+            ],
+            "members": [
+              {
+                "name": "tree_subgraph",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Subgraph corresponding to the tree edges."
+                },
+                "signature": "def tree_subgraph(self) -> Subgraph:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "node_order",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Node order from traversal."
+                },
+                "signature": "def node_order(self) -> builtins.list[NodeIndex]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "covers",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Covers a subgraph with the traversal tree."
+                },
+                "signature": "def covers(self, subgraph: Subgraph) -> Subgraph:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "subgraph",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph: Subgraph",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "iter_hedges",
+                "kind": "method",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Iterate hedges as (hedge, kind, root_hedge)."
+                },
+                "signature": "def iter_hedges(self) -> builtins.list[tuple[Hedge, builtins.str, typing.Optional[Hedge]]]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet-py::TraversalTree",
+              "file": "docs/api/python/linnet-py.pyi",
+              "line": 739,
+              "column": 1
+            }
+          }
+        },
+        "scopes": {}
+      }
+    }
+  }
+}

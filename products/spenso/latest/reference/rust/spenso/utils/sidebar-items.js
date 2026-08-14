@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["to_subscript","to_superscript"]};

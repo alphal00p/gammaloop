@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["scalar_store_alias","scalar_store_alias_index"],"static":["SPENSO_TAG"],"struct":["SpensoTags"],"trait":["SymbolAtomExt"]};

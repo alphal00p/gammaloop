@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["spenso",[["impl&lt;T, S&gt; <a class=\"trait\" href=\"spenso/algebra/algebraic_traits/trait.RefZero.html\" title=\"trait spenso::algebra::algebraic_traits::RefZero\">RefZero</a> for <a class=\"struct\" href=\"spenso/tensors/data/dense/struct.DenseTensor.html\" title=\"struct spenso::tensors::data::dense::DenseTensor\">DenseTensor</a>&lt;T, S&gt;<div class=\"where\">where\n    T: <a class=\"trait\" href=\"spenso/algebra/algebraic_traits/trait.RefZero.html\" title=\"trait spenso::algebra::algebraic_traits::RefZero\">RefZero</a> + <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.0/core/clone/trait.Clone.html\" title=\"trait core::clone::Clone\">Clone</a>,\n    S: <a class=\"trait\" href=\"spenso/structure/trait.TensorStructure.html\" title=\"trait spenso::structure::TensorStructure\">TensorStructure</a> + <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.0/core/clone/trait.Clone.html\" title=\"trait core::clone::Clone\">Clone</a>,</div>",0],["impl&lt;T: <a class=\"trait\" href=\"spenso/algebra/algebraic_traits/trait.RefZero.html\" title=\"trait spenso::algebra::algebraic_traits::RefZero\">RefZero</a>&gt; <a class=\"trait\" href=\"spenso/algebra/algebraic_traits/trait.RefZero.html\" title=\"trait spenso::algebra::algebraic_traits::RefZero\">RefZero</a> for <a class=\"struct\" href=\"spenso/algebra/complex/struct.Complex.html\" title=\"struct spenso::algebra::complex::Complex\">Complex</a>&lt;T&gt;",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[1439]}

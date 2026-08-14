@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["ReplaceBuilderGeneric"],"trait":["ClonableAtomMap","ReplaceWithBuilder","TensorAtomMaps","TensorAtomMapsTest","TensorAtomOps"]};

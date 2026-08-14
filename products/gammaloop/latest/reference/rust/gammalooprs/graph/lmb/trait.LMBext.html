@@ -1,0 +1,302 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Helpers for constructing loop-momentum bases and turning them into Symbolica replacement rules."><title>LMBext in gammalooprs::graph::lmb - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="gammalooprs" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc trait"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">LMBext</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../gammalooprs/index.html">gammalooprs</a><span class="version">0.3.4</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">LMBext</a></h2><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.compatible_sub_lmb" title="compatible_sub_lmb">compatible_sub_lmb</a></li><li><a href="#tymethod.dot_lmb_of" title="dot_lmb_of">dot_lmb_of</a></li><li><a href="#tymethod.empty_lmb" title="empty_lmb">empty_lmb</a></li><li><a href="#tymethod.generate_loop_momentum_bases" title="generate_loop_momentum_bases">generate_loop_momentum_bases</a></li><li><a href="#tymethod.generate_loop_momentum_bases_of" title="generate_loop_momentum_bases_of">generate_loop_momentum_bases_of</a></li><li><a href="#tymethod.lmb" title="lmb">lmb</a></li><li><a href="#tymethod.lmb_impl" title="lmb_impl">lmb_impl</a></li><li><a href="#tymethod.lmb_of" title="lmb_of">lmb_of</a></li><li><a href="#tymethod.replacement_impl" title="replacement_impl">replacement_impl</a></li><li><a href="#tymethod.shrunken_lmb_of" title="shrunken_lmb_of">shrunken_lmb_of</a></li><li><a href="#tymethod.shrunken_sub_lmb" title="shrunken_sub_lmb">shrunken_sub_lmb</a></li></ul><h3><a href="#provided-methods">Provided Methods</a></h3><ul class="block"><li><a href="#method.cotree_lmb" title="cotree_lmb">cotree_lmb</a></li><li><a href="#method.integrand_replacement" title="integrand_replacement">integrand_replacement</a></li><li><a href="#method.normal_emr_replacement" title="normal_emr_replacement">normal_emr_replacement</a></li><li><a href="#method.try_compatible_sub_lmb" title="try_compatible_sub_lmb">try_compatible_sub_lmb</a></li><li><a href="#method.uv_spatial_wrapped_replacement" title="uv_spatial_wrapped_replacement">uv_spatial_wrapped_replacement</a></li><li><a href="#method.uv_wrapped_replacement" title="uv_wrapped_replacement">uv_wrapped_replacement</a></li></ul><h3><a href="#foreign-impls">Implementations on Foreign Types</a></h3><ul class="block"><li><a href="#impl-LMBext-for-HedgeGraph%3CE,+V,+H%3E" title="HedgeGraph&#60;E, V, H&#62;">HedgeGraph&#60;E, V, H&#62;</a></li></ul><h3><a href="#dyn-compatibility">Dyn Compatibility</a></h3><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In gammalooprs::<wbr>graph::<wbr>lmb</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">gammalooprs</a>::<wbr><a href="../index.html">graph</a>::<wbr><a href="index.html">lmb</a></div><h1>Trait <span class="trait">LMBext</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/gammalooprs/graph/lmb.rs.html#238-556">Source</a> </span></div><pre class="rust item-decl"><code>pub trait LMBext {
+<details class="toggle type-contents-toggle"><summary class="hideme"><span>Show 17 methods</span></summary>    // Required methods
+    fn <a href="#tymethod.generate_loop_momentum_bases_of" class="fn">generate_loop_momentum_bases_of</a>&lt;S: SubGraphLike&gt;(
+        &amp;self,
+        subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    ) -&gt; TiVec&lt;<a class="struct" href="struct.LmbIndex.html" title="struct gammalooprs::graph::lmb::LmbIndex">LmbIndex</a>, <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;
+       <span class="where">where S::Base: SubGraphLike&lt;Base = S::Base&gt; + SubSetOps + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a> + ModifySubSet&lt;HedgePair&gt; + ModifySubSet&lt;Hedge&gt;</span>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.generate_loop_momentum_bases" class="fn">generate_loop_momentum_bases</a>(&amp;self) -&gt; TiVec&lt;<a class="struct" href="struct.LmbIndex.html" title="struct gammalooprs::graph::lmb::LmbIndex">LmbIndex</a>, <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.replacement_impl" class="fn">replacement_impl</a>&lt;'a, S: SubSetLike, I&gt;(
+        &amp;self,
+        rep: impl <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/ops/function/trait.Fn.html" title="trait core::ops::function::Fn">Fn</a>(EdgeIndex, Atom, Atom) -&gt; Replacement,
+        subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+        lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+        loop_symbol: Symbol,
+        ext_symbol: Symbol,
+        loop_args: &amp;'a <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.slice.html">[I]</a>,
+        ext_args: &amp;'a <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.slice.html">[I]</a>,
+        filter_pair: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.fn.html">fn</a>(&amp;HedgePair) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.bool.html">bool</a>,
+        emr_id: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.bool.html">bool</a>,
+    ) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;Replacement&gt;
+       <span class="where">where <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;'a I</a>: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;AtomOrView&lt;'a&gt;&gt;</span>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.lmb_impl" class="fn">lmb_impl</a>&lt;S: SubGraphLike + SubSetOps + ModifySubSet&lt;HedgePair&gt; + ModifySubSet&lt;Hedge&gt;&gt;(
+        &amp;self,
+        subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+        tree: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+        externals: S,
+    ) -&gt; <a class="type" href="type.LmbResult.html" title="type gammalooprs::graph::lmb::LmbResult">LmbResult</a>&lt;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;
+       <span class="where">where S::Base: ModifySubSet&lt;Hedge&gt; + SubGraphLike</span>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.lmb_of" class="fn">lmb_of</a>&lt;S: SubGraphLike&lt;Base = SuBitGraph&gt;&gt;(
+        &amp;self,
+        subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    ) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.lmb" class="fn">lmb</a>(&amp;self) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.shrunken_sub_lmb" class="fn">shrunken_sub_lmb</a>(
+        &amp;self,
+        outer: &amp;SuBitGraph,
+        shrunken: &amp;InternalSubGraph,
+        externals: SuBitGraph,
+    ) -&gt; <a class="type" href="type.LmbResult.html" title="type gammalooprs::graph::lmb::LmbResult">LmbResult</a>&lt;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.shrunken_lmb_of" class="fn">shrunken_lmb_of</a>(
+        &amp;self,
+        outer: &amp;SuBitGraph,
+        shrunken: &amp;InternalSubGraph,
+    ) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.compatible_sub_lmb" class="fn">compatible_sub_lmb</a>&lt;S: SubGraphLike&gt;(
+        &amp;self,
+        subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+        externals: S::Base,
+        lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+    ) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>
+       <span class="where">where S::Base: SubGraphLike&lt;Base = S::Base&gt; + SubSetOps + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a> + ModifySubSet&lt;HedgePair&gt; + ModifySubSet&lt;Hedge&gt;</span>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.empty_lmb" class="fn">empty_lmb</a>(&amp;self) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.dot_lmb_of" class="fn">dot_lmb_of</a>&lt;S: SubGraphLike&gt;(
+        &amp;self,
+        subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+        lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+    ) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>;
+
+    // Provided methods
+    fn <a href="#method.uv_wrapped_replacement" class="fn">uv_wrapped_replacement</a>&lt;'a, S: SubSetLike, I&gt;(
+        &amp;self,
+        subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+        lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+        rep_args: &amp;'a <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.slice.html">[I]</a>,
+    ) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;Replacement&gt;
+       <span class="where">where <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;'a I</a>: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;AtomOrView&lt;'a&gt;&gt;</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.uv_spatial_wrapped_replacement" class="fn">uv_spatial_wrapped_replacement</a>&lt;'a, S: SubSetLike, I&gt;(
+        &amp;self,
+        subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+        lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+        rep_args: &amp;'a <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.slice.html">[I]</a>,
+    ) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;Replacement&gt;
+       <span class="where">where <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;'a I</a>: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;AtomOrView&lt;'a&gt;&gt;</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.normal_emr_replacement" class="fn">normal_emr_replacement</a>&lt;'a, S: SubSetLike, I&gt;(
+        &amp;self,
+        subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+        lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+        rep_args: &amp;'a <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.slice.html">[I]</a>,
+        filter_pair: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.fn.html">fn</a>(&amp;HedgePair) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.bool.html">bool</a>,
+    ) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;Replacement&gt;
+       <span class="where">where <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;'a I</a>: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;AtomOrView&lt;'a&gt;&gt;</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.integrand_replacement" class="fn">integrand_replacement</a>&lt;'a, S: SubSetLike, I&gt;(
+        &amp;self,
+        subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+        lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+        rep_args: &amp;'a <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.slice.html">[I]</a>,
+    ) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;Replacement&gt;
+       <span class="where">where <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;'a I</a>: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;AtomOrView&lt;'a&gt;&gt;</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.try_compatible_sub_lmb" class="fn">try_compatible_sub_lmb</a>&lt;S: SubGraphLike&gt;(
+        &amp;self,
+        subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+        externals: S::Base,
+        lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+    ) -&gt; <a class="type" href="type.LmbResult.html" title="type gammalooprs::graph::lmb::LmbResult">LmbResult</a>&lt;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;
+       <span class="where">where S::Base: SubGraphLike&lt;Base = S::Base&gt; + SubSetOps + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a> + ModifySubSet&lt;HedgePair&gt; + ModifySubSet&lt;Hedge&gt;</span> { ... }
+<span class="item-spacer"></span>    fn <a href="#method.cotree_lmb" class="fn">cotree_lmb</a>&lt;S: SubGraphLike + SubSetOps + SubGraphOps + ModifySubSet&lt;HedgePair&gt; + ModifySubSet&lt;Hedge&gt;&gt;(
+        &amp;self,
+        subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+        cotree: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+        externals: S,
+    ) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>
+       <span class="where">where S::Base: ModifySubSet&lt;Hedge&gt; + SubGraphLike</span> { ... }
+</details>}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Helpers for constructing loop-momentum bases and turning them into Symbolica
+replacement rules.</p>
+<p>The replacement methods decompose an edge momentum into its loop-dependent
+and external-flow parts using a <a href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis"><code>LoopMomentumBasis</code></a>. The basis-building
+methods pick those signatures from spanning forests of a graph or subgraph.</p>
+</div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.generate_loop_momentum_bases_of" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#244-253">Source</a><h4 class="code-header">fn <a href="#tymethod.generate_loop_momentum_bases_of" class="fn">generate_loop_momentum_bases_of</a>&lt;S: SubGraphLike&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+) -&gt; TiVec&lt;<a class="struct" href="struct.LmbIndex.html" title="struct gammalooprs::graph::lmb::LmbIndex">LmbIndex</a>, <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;<div class="where">where
+    S::Base: SubGraphLike&lt;Base = S::Base&gt; + SubSetOps + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a> + ModifySubSet&lt;HedgePair&gt; + ModifySubSet&lt;Hedge&gt;,</div></h4></section></summary><div class="docblock"><p>Enumerate all loop-momentum bases induced by spanning forests of
+<code>subgraph</code>.</p>
+<p>Each spanning forest covering the same nodes as <code>subgraph</code> produces one
+basis. Empty subgraphs return an empty list.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.generate_loop_momentum_bases" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#256">Source</a><h4 class="code-header">fn <a href="#tymethod.generate_loop_momentum_bases" class="fn">generate_loop_momentum_bases</a>(&amp;self) -&gt; TiVec&lt;<a class="struct" href="struct.LmbIndex.html" title="struct gammalooprs::graph::lmb::LmbIndex">LmbIndex</a>, <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;</h4></section></summary><div class="docblock"><p>Enumerate all loop-momentum bases for the full graph.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.replacement_impl" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#438-451">Source</a><h4 class="code-header">fn <a href="#tymethod.replacement_impl" class="fn">replacement_impl</a>&lt;'a, S: SubSetLike, I&gt;(
+    &amp;self,
+    rep: impl <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/ops/function/trait.Fn.html" title="trait core::ops::function::Fn">Fn</a>(EdgeIndex, Atom, Atom) -&gt; Replacement,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+    loop_symbol: Symbol,
+    ext_symbol: Symbol,
+    loop_args: &amp;'a <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.slice.html">[I]</a>,
+    ext_args: &amp;'a <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.slice.html">[I]</a>,
+    filter_pair: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.fn.html">fn</a>(&amp;HedgePair) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.bool.html">bool</a>,
+    emr_id: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.bool.html">bool</a>,
+) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;Replacement&gt;<div class="where">where
+    <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;'a I</a>: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;AtomOrView&lt;'a&gt;&gt;,</div></h4></section></summary><div class="docblock"><p>Core implementation shared by the public replacement constructors.</p>
+<p>For each edge of <code>subgraph</code> whose [<code>HedgePair</code>] passes <code>filter_pair</code>, this
+computes the loop-dependent and external-flow atoms from <code>lmb</code> and passes
+them to <code>rep</code>.</p>
+<p><code>rep</code> is the final replacement builder: it receives the original edge id,
+the loop-dependent atom, and the external-flow atom, and returns the
+<code>Replacement</code> inserted into the result vector.</p>
+<p><code>loop_symbol</code> and <code>ext_symbol</code> select the function symbol used for the
+generated loop and external terms, while <code>loop_args</code> and <code>ext_args</code> are
+appended to those function calls. When <code>emr_id</code> is <code>true</code>, the generated
+loop/external indices are the concrete edge ids stored in the basis;
+otherwise they are the compact loop/external basis positions.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.lmb_impl" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#460-467">Source</a><h4 class="code-header">fn <a href="#tymethod.lmb_impl" class="fn">lmb_impl</a>&lt;S: SubGraphLike + SubSetOps + ModifySubSet&lt;HedgePair&gt; + ModifySubSet&lt;Hedge&gt;&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    tree: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    externals: S,
+) -&gt; <a class="type" href="type.LmbResult.html" title="type gammalooprs::graph::lmb::LmbResult">LmbResult</a>&lt;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;<div class="where">where
+    S::Base: ModifySubSet&lt;Hedge&gt; + SubGraphLike,</div></h4></section></summary><div class="docblock"><p>Build a loop-momentum basis for <code>subgraph</code> using <code>tree</code> as the spanning
+forest guide and <code>externals</code> as the external-flow carriers.</p>
+<p><code>tree</code> must cover the same nodes as <code>subgraph</code>. <code>externals</code> must only
+contain nodes from <code>subgraph</code>; it chooses which external edges are treated
+as true external flows and which one in each connected component becomes
+the dependent external.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.lmb_of" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#473">Source</a><h4 class="code-header">fn <a href="#tymethod.lmb_of" class="fn">lmb_of</a>&lt;S: SubGraphLike&lt;Base = SuBitGraph&gt;&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a></h4></section></summary><div class="docblock"><p>Construct one canonical loop-momentum basis for <code>subgraph</code>.</p>
+<p>This uses <code>subgraph</code> itself as the forest guide and the full crown of the
+subgraph as its external carriers.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.lmb" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#476">Source</a><h4 class="code-header">fn <a href="#tymethod.lmb" class="fn">lmb</a>(&amp;self) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a></h4></section></summary><div class="docblock"><p>Construct the canonical loop-momentum basis for the full graph.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.shrunken_sub_lmb" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#480-485">Source</a><h4 class="code-header">fn <a href="#tymethod.shrunken_sub_lmb" class="fn">shrunken_sub_lmb</a>(
+    &amp;self,
+    outer: &amp;SuBitGraph,
+    shrunken: &amp;InternalSubGraph,
+    externals: SuBitGraph,
+) -&gt; <a class="type" href="type.LmbResult.html" title="type gammalooprs::graph::lmb::LmbResult">LmbResult</a>&lt;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;</h4></section></summary><div class="docblock"><p>Build the LMB for <code>outer - shrunken</code> while each connected component of
+<code>shrunken</code> acts as a contracted passage node.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.shrunken_lmb_of" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#489-490">Source</a><h4 class="code-header">fn <a href="#tymethod.shrunken_lmb_of" class="fn">shrunken_lmb_of</a>(
+    &amp;self,
+    outer: &amp;SuBitGraph,
+    shrunken: &amp;InternalSubGraph,
+) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a></h4></section></summary><div class="docblock"><p>Construct the canonical shrunken-subgraph LMB using the full crown of
+<code>outer</code> as external-flow carriers.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.compatible_sub_lmb" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#497-508">Source</a><h4 class="code-header">fn <a href="#tymethod.compatible_sub_lmb" class="fn">compatible_sub_lmb</a>&lt;S: SubGraphLike&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    externals: S::Base,
+    lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a><div class="where">where
+    S::Base: SubGraphLike&lt;Base = S::Base&gt; + SubSetOps + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a> + ModifySubSet&lt;HedgePair&gt; + ModifySubSet&lt;Hedge&gt;,</div></h4></section></summary><div class="docblock"><p>Construct a basis for <code>subgraph</code> that reuses loop edges from <code>lmb</code>
+whenever the induced cut still spans the same connected components.</p>
+<p>This is used when descending into a subgraph while keeping its loop
+variables compatible with a parent basis.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.empty_lmb" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#551">Source</a><h4 class="code-header">fn <a href="#tymethod.empty_lmb" class="fn">empty_lmb</a>(&amp;self) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a></h4></section></summary><div class="docblock"><p>Return the empty basis with no loop or external generators.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.dot_lmb_of" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#555">Source</a><h4 class="code-header">fn <a href="#tymethod.dot_lmb_of" class="fn">dot_lmb_of</a>&lt;S: SubGraphLike&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/string/struct.String.html" title="struct alloc::string::String">String</a></h4></section></summary><div class="docblock"><p>Render a DOT graph whose edge labels show the explicit momentum carried by
+each edge according to <code>lmb</code>.</p>
+</div></details></div><h2 id="provided-methods" class="section-header">Provided Methods<a href="#provided-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="method.uv_wrapped_replacement" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#263-301">Source</a><h4 class="code-header">fn <a href="#method.uv_wrapped_replacement" class="fn">uv_wrapped_replacement</a>&lt;'a, S: SubSetLike, I&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+    rep_args: &amp;'a <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.slice.html">[I]</a>,
+) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;Replacement&gt;<div class="where">where
+    <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;'a I</a>: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;AtomOrView&lt;'a&gt;&gt;,</div></h4></section></summary><div class="docblock"><p>Replace <code>EMRmom(edge, ..)</code> by a UV-recursion-friendly decomposition.</p>
+<p>The loop-dependent part stays wrapped in <code>EMRmom(...)</code>, but its index is
+rewritten from the concrete edge id to the loop-basis edge selected by
+<code>lmb</code>. The external-flow contribution is added explicitly.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.uv_spatial_wrapped_replacement" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#307-345">Source</a><h4 class="code-header">fn <a href="#method.uv_spatial_wrapped_replacement" class="fn">uv_spatial_wrapped_replacement</a>&lt;'a, S: SubSetLike, I&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+    rep_args: &amp;'a <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.slice.html">[I]</a>,
+) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;Replacement&gt;<div class="where">where
+    <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;'a I</a>: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;AtomOrView&lt;'a&gt;&gt;,</div></h4></section></summary><div class="docblock"><p>Spatial-vector variant of <a href="trait.LMBext.html#method.uv_wrapped_replacement" title="method gammalooprs::graph::lmb::LMBext::uv_wrapped_replacement"><code>Self::uv_wrapped_replacement</code></a>.</p>
+<p>This uses <code>EMRvec</code> for both the matched pattern and the wrapped loop
+contribution.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.normal_emr_replacement" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#353-383">Source</a><h4 class="code-header">fn <a href="#method.normal_emr_replacement" class="fn">normal_emr_replacement</a>&lt;'a, S: SubSetLike, I&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+    rep_args: &amp;'a <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.slice.html">[I]</a>,
+    filter_pair: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.fn.html">fn</a>(&amp;HedgePair) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.bool.html">bool</a>,
+) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;Replacement&gt;<div class="where">where
+    <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;'a I</a>: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;AtomOrView&lt;'a&gt;&gt;,</div></h4></section></summary><div class="docblock"><p>Replace <code>EMRmom(edge, ..)</code> by the explicit loop-plus-external momentum
+carried by that edge.</p>
+<p><code>filter_pair</code> can restrict which edge kinds are rewritten, for example to
+skip split or unpaired half-edge pairs in contexts that only want full
+propagators.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.integrand_replacement" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#391-420">Source</a><h4 class="code-header">fn <a href="#method.integrand_replacement" class="fn">integrand_replacement</a>&lt;'a, S: SubSetLike, I&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+    rep_args: &amp;'a <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.slice.html">[I]</a>,
+) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;Replacement&gt;<div class="where">where
+    <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;'a I</a>: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;AtomOrView&lt;'a&gt;&gt;,</div></h4></section></summary><div class="docblock"><p>Replace <code>EMRmom(edge, ..)</code> by the integrand momentum variables
+<code>K(...) + P(...)</code>, i.e. <code>GS.loop_mom(...) + GS.external_mom(...)</code>.</p>
+<p>Unlike the UV-wrapped replacements, the generated terms are expressed in
+the loop/external variable families used in the integrand rather than in
+<code>EMRmom</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.try_compatible_sub_lmb" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#514-528">Source</a><h4 class="code-header">fn <a href="#method.try_compatible_sub_lmb" class="fn">try_compatible_sub_lmb</a>&lt;S: SubGraphLike&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    externals: S::Base,
+    lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+) -&gt; <a class="type" href="type.LmbResult.html" title="type gammalooprs::graph::lmb::LmbResult">LmbResult</a>&lt;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;<div class="where">where
+    S::Base: SubGraphLike&lt;Base = S::Base&gt; + SubSetOps + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a> + ModifySubSet&lt;HedgePair&gt; + ModifySubSet&lt;Hedge&gt;,</div></h4></section></summary><div class="docblock"><p>Fallible form of <a href="trait.LMBext.html#tymethod.compatible_sub_lmb" title="method gammalooprs::graph::lmb::LMBext::compatible_sub_lmb"><code>Self::compatible_sub_lmb</code></a> for callers that must handle
+an unavailable parent-compatible basis without panicking. The default
+preserves compatibility with external trait implementations that only
+implement the original infallible method.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.cotree_lmb" class="method"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#534-548">Source</a><h4 class="code-header">fn <a href="#method.cotree_lmb" class="fn">cotree_lmb</a>&lt;S: SubGraphLike + SubSetOps + SubGraphOps + ModifySubSet&lt;HedgePair&gt; + ModifySubSet&lt;Hedge&gt;&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    cotree: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    externals: S,
+) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a><div class="where">where
+    S::Base: ModifySubSet&lt;Hedge&gt; + SubGraphLike,</div></h4></section></summary><div class="docblock"><p>Construct a basis from a chosen cotree of <code>subgraph</code>.</p>
+<p>The cotree is converted into the corresponding tree by subtracting it
+from <code>subgraph</code>, then forwarded to <a href="trait.LMBext.html#tymethod.lmb_impl" title="method gammalooprs::graph::lmb::LMBext::lmb_impl"><code>Self::lmb_impl</code></a>.</p>
+</div></details></div><h2 id="dyn-compatibility" class="section-header">Dyn Compatibility<a href="#dyn-compatibility" class="anchor">§</a></h2><div class="dyn-compatibility-info"><p>This trait is <b>not</b> <a href="https://doc.rust-lang.org/1.97.0/reference/items/traits.html#dyn-compatibility">dyn compatible</a>.</p><p><i>In older versions of Rust, dyn compatibility was called "object safety", so this trait is not object safe.</i></p></div><h2 id="foreign-impls" class="section-header">Implementations on Foreign Types<a href="#foreign-impls" class="anchor">§</a></h2><details class="toggle implementors-toggle"><summary><section id="impl-LMBext-for-HedgeGraph%3CE,+V,+H%3E" class="impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#562-1220">Source</a><a href="#impl-LMBext-for-HedgeGraph%3CE,+V,+H%3E" class="anchor">§</a><h3 class="code-header">impl&lt;E, V, H&gt; <a class="trait" href="trait.LMBext.html" title="trait gammalooprs::graph::lmb::LMBext">LMBext</a> for HedgeGraph&lt;E, V, H&gt;</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.lmb_impl" class="method trait-impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#802-1151">Source</a><a href="#method.lmb_impl" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.lmb_impl" class="fn">lmb_impl</a>&lt;S: SubGraphLike + SubSetOps + ModifySubSet&lt;HedgePair&gt; + ModifySubSet&lt;Hedge&gt;&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    forest_guide: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    externals: S,
+) -&gt; <a class="type" href="type.LmbResult.html" title="type gammalooprs::graph::lmb::LmbResult">LmbResult</a>&lt;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;<div class="where">where
+    S::Base: ModifySubSet&lt;Hedge&gt; + SubGraphLike,</div></h4></section></summary><div class="docblock"><p>The true externals (that will flow through the graph (i.e. not dummy)) are those that are both in the subgraph and in the externals</p>
+</div></details><section id="method.empty_lmb" class="method trait-impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#563-570">Source</a><a href="#method.empty_lmb" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.empty_lmb" class="fn">empty_lmb</a>(&amp;self) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a></h4></section><section id="method.lmb" class="method trait-impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#571-573">Source</a><a href="#method.lmb" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.lmb" class="fn">lmb</a>(&amp;self) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a></h4></section><section id="method.shrunken_sub_lmb" class="method trait-impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#575-646">Source</a><a href="#method.shrunken_sub_lmb" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.shrunken_sub_lmb" class="fn">shrunken_sub_lmb</a>(
+    &amp;self,
+    outer: &amp;SuBitGraph,
+    shrunken: &amp;InternalSubGraph,
+    externals: SuBitGraph,
+) -&gt; <a class="type" href="type.LmbResult.html" title="type gammalooprs::graph::lmb::LmbResult">LmbResult</a>&lt;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;</h4></section><section id="method.shrunken_lmb_of" class="method trait-impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#648-658">Source</a><a href="#method.shrunken_lmb_of" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.shrunken_lmb_of" class="fn">shrunken_lmb_of</a>(
+    &amp;self,
+    outer: &amp;SuBitGraph,
+    shrunken: &amp;InternalSubGraph,
+) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a></h4></section><section id="method.dot_lmb_of" class="method trait-impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#660-683">Source</a><a href="#method.dot_lmb_of" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.dot_lmb_of" class="fn">dot_lmb_of</a>&lt;S: SubGraphLike&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/string/struct.String.html" title="struct alloc::string::String">String</a></h4></section><section id="method.lmb_of" class="method trait-impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#685-695">Source</a><a href="#method.lmb_of" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.lmb_of" class="fn">lmb_of</a>&lt;S: SubGraphLike&lt;Base = SuBitGraph&gt;&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a></h4></section><section id="method.compatible_sub_lmb" class="method trait-impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#697-714">Source</a><a href="#method.compatible_sub_lmb" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.compatible_sub_lmb" class="fn">compatible_sub_lmb</a>&lt;S: SubGraphLike&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    externals: S::Base,
+    lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+) -&gt; <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a><div class="where">where
+    S::Base: SubGraphLike&lt;Base = S::Base&gt; + SubSetOps + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a> + ModifySubSet&lt;HedgePair&gt; + ModifySubSet&lt;Hedge&gt;,</div></h4></section><section id="method.try_compatible_sub_lmb-1" class="method trait-impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#716-799">Source</a><a href="#method.try_compatible_sub_lmb-1" class="anchor">§</a><h4 class="code-header">fn <a href="#method.try_compatible_sub_lmb" class="fn">try_compatible_sub_lmb</a>&lt;S: SubGraphLike&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    externals: S::Base,
+    lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+) -&gt; <a class="type" href="type.LmbResult.html" title="type gammalooprs::graph::lmb::LmbResult">LmbResult</a>&lt;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;<div class="where">where
+    S::Base: SubGraphLike&lt;Base = S::Base&gt; + SubSetOps + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a> + ModifySubSet&lt;HedgePair&gt; + ModifySubSet&lt;Hedge&gt;,</div></h4></section><section id="method.generate_loop_momentum_bases_of" class="method trait-impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#1153-1182">Source</a><a href="#method.generate_loop_momentum_bases_of" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.generate_loop_momentum_bases_of" class="fn">generate_loop_momentum_bases_of</a>&lt;S: SubGraphLike&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+) -&gt; TiVec&lt;<a class="struct" href="struct.LmbIndex.html" title="struct gammalooprs::graph::lmb::LmbIndex">LmbIndex</a>, <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;<div class="where">where
+    S::Base: SubGraphLike&lt;Base = S::Base&gt; + SubSetOps + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a> + ModifySubSet&lt;HedgePair&gt; + ModifySubSet&lt;Hedge&gt;,</div></h4></section><section id="method.generate_loop_momentum_bases" class="method trait-impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#1184-1186">Source</a><a href="#method.generate_loop_momentum_bases" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.generate_loop_momentum_bases" class="fn">generate_loop_momentum_bases</a>(&amp;self) -&gt; TiVec&lt;<a class="struct" href="struct.LmbIndex.html" title="struct gammalooprs::graph::lmb::LmbIndex">LmbIndex</a>, <a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>&gt;</h4></section><section id="method.replacement_impl" class="method trait-impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#1189-1219">Source</a><a href="#method.replacement_impl" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.replacement_impl" class="fn">replacement_impl</a>&lt;'a, S: SubSetLike, I&gt;(
+    &amp;self,
+    rep: impl <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/ops/function/trait.Fn.html" title="trait core::ops::function::Fn">Fn</a>(EdgeIndex, Atom, Atom) -&gt; Replacement,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    lmb: &amp;<a class="struct" href="struct.LoopMomentumBasis.html" title="struct gammalooprs::graph::lmb::LoopMomentumBasis">LoopMomentumBasis</a>,
+    loop_symbol: Symbol,
+    ext_symbol: Symbol,
+    loop_args: &amp;'a <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.slice.html">[I]</a>,
+    ext_args: &amp;'a <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.slice.html">[I]</a>,
+    filter_pair: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.fn.html">fn</a>(&amp;HedgePair) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.bool.html">bool</a>,
+    emr_id: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.bool.html">bool</a>,
+) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;Replacement&gt;<div class="where">where
+    <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;'a I</a>: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;AtomOrView&lt;'a&gt;&gt;,</div></h4></section></div></details><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"><div class="negative-marker"></div><section id="impl-LMBext-for-%26Graph" class="impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#1474-1629">Source</a><a href="#impl-LMBext-for-%26Graph" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.LMBext.html" title="trait gammalooprs::graph::lmb::LMBext">LMBext</a> for &amp;<a class="struct" href="../struct.Graph.html" title="struct gammalooprs::graph::Graph">Graph</a></h3></section><section id="impl-LMBext-for-Graph" class="impl"><a class="src rightside" href="../../../src/gammalooprs/graph/lmb.rs.html#1317-1472">Source</a><a href="#impl-LMBext-for-Graph" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.LMBext.html" title="trait gammalooprs::graph::lmb::LMBext">LMBext</a> for <a class="struct" href="../struct.Graph.html" title="struct gammalooprs::graph::Graph">Graph</a></h3></section></div><script src="../../../trait.impl/gammalooprs/graph/lmb/trait.LMBext.js" data-ignore-extern-crates="linnet" async></script></section></div></main></body></html>

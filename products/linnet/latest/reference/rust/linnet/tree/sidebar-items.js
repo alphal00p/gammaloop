@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ForestError"],"mod":["child_pointer","child_vec","iterato","parent_pointer"],"struct":["Forest","NodeIdIter","RootData","RootId","TreeNodeId"],"trait":["ForestNodeStore","ForestNodeStoreAncestors","ForestNodeStoreBfs","ForestNodeStoreDown","ForestNodeStorePreorder","ForestNodeStoreRootLeaves"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["initialize"],"struct":["Bispinor","ColorAdjoint","ColorAntiFundamental","ColorAntiSextet","ColorFundamental","ColorSextet","SpinAntiFundamental","SpinFundamental"]};

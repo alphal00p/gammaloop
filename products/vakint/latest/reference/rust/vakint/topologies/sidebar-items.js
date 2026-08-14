@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Topology","TopologyContractions"],"struct":["Topologies"]};

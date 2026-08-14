@@ -1,0 +1,81 @@
+{
+  "schema_version": 2,
+  "product": {
+    "id": "spenso",
+    "title": "Spenso"
+  },
+  "component": {
+    "id": "spenso-macros",
+    "package": "spenso-macros",
+    "title": "Spenso spenso-macros",
+    "version": "0.3.2",
+    "language": "rust",
+    "features": [
+      "shadowing"
+    ]
+  },
+  "root": {
+    "id": "spenso-macros",
+    "title": "spenso-macros supported API",
+    "docs": {
+      "format": "typst-markup",
+      "body": "Spenso's exported procedural macros. Expansion details remain in the\n#link(\"reference/rust/\")[exhaustive Rustdoc sidecar]."
+    },
+    "summary": "Spenso's exported procedural macros.",
+    "since": null,
+    "keywords": [],
+    "source": {
+      "identifier": "alphal00p_docs_catalogs::annotated_scopes::spenso-macros",
+      "file": "crates/alphal00p-docs-catalogs/src/lib.rs",
+      "line": 63,
+      "column": 5
+    },
+    "items": {},
+    "scopes": {
+      "supported": {
+        "id": "supported",
+        "title": "Supported entry points",
+        "docs": null,
+        "summary": null,
+        "since": null,
+        "keywords": [],
+        "source": null,
+        "items": {
+          "SimpleRepresentation": {
+            "id": "SimpleRepresentation",
+            "name": "SimpleRepresentation",
+            "title": "SimpleRepresentation derive",
+            "kind": "exported-macro",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Derives representation naming and duality boilerplate from the representation helper attribute."
+            },
+            "summary": "Derives representation naming and duality boilerplate from the representation helper attribute.",
+            "signature": "#[derive(SimpleRepresentation)]\nfn derive_simple_representation(input : TokenStream) -> TokenStream",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, spenso_macros::SimpleRepresentation)] #[representation(name = \"flavor\", self_dual)] struct Flavor;"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "spenso_macros::SimpleRepresentation",
+              "file": "crates/spenso-macros/src/lib.rs",
+              "line": 213,
+              "column": 1
+            }
+          }
+        },
+        "scopes": {}
+      }
+    }
+  }
+}

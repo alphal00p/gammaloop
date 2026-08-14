@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["NetworkEdge","NetworkGraphError","NetworkLeaf","NetworkLeafWithInds","NetworkNode","NetworkOp","ScalarRef"],"struct":["NetworkGraph","NetworkOperation","NetworkOperationBatchRef","NetworkOperationReadiness","NetworkOperationRef","ScaledTensorRef"],"trait":["NAdd","NMul"],"type":["NetworkHedgeGraph","NetworkNodeStore","ReadyNetworkOp"]};

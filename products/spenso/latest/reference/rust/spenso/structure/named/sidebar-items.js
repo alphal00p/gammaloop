@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["METRIC_NAME"],"struct":["NamedStructure"],"trait":["ArgDisplay","ArgDisplayMarker","IdentityName"],"type":["AtomStructure"]};

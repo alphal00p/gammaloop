@@ -1,0 +1,99 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Shorthand for tagged debug events."><title>debug_tags in gammalooprs - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="gammalooprs" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc macro"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">debug_tags</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../gammalooprs/index.html">gammalooprs</a><span class="version">0.3.4</span></h2></div><div class="sidebar-elems"><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="index.html">gammalooprs</a></div><h1>Macro <span class="macro">debug_<wbr>tags</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/gammalooprs/utils/mod.rs.html#182-226">Source</a> </span></div><pre class="rust item-decl"><code>macro_rules! debug_tags {
+    (@collect_tags [$($acc:tt)*] # $tag:ident, $($tail:tt)*) =&gt; { ... };
+    (@collect_tags [$($acc:tt)*] # $tag:ident; $($rest:tt)*) =&gt; { ... };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] log.$name:ident = $value:expr, $($tail:tt)*) =&gt; { ... };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $prefix:ident.$name:ident = %$value:expr, $($tail:tt)*) =&gt; { ... };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $prefix:ident.$name:ident = ?$value:expr, $($tail:tt)*) =&gt; { ... };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $prefix:ident.$name:ident = $value:expr, $($tail:tt)*) =&gt; { ... };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $name:ident = %$value:expr, $($tail:tt)*) =&gt; { ... };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $name:ident = ?$value:expr, $($tail:tt)*) =&gt; { ... };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $name:ident = $value:expr, $($tail:tt)*) =&gt; { ... };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $name:ident, $($tail:tt)*) =&gt; { ... };
+    (@collect_fields [$($tags:tt)*] [$($fields:tt)*] $($rest:tt)+) =&gt; { ... };
+    ($($input:tt)*) =&gt; { ... };
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Shorthand for tagged debug events.</p>
+<p><code>#tag</code> expands to <code>tag = true</code> and the remaining tokens are forwarded to
+<code>tracing::debug!</code> unchanged.</p>
+<p>GammaLoop’s logging DSL treats tags as boolean event fields.</p>
+<p>Emitting <code>#generation</code> makes directives such as <code>[{generation}]</code> eligible to
+match this event. A negated directive term such as <code>[{!inspect}]</code> matches
+events where the field is absent. If you need value-sensitive filtering, use
+an explicit field such as <code>inspect = false</code> or <code>mode = "summary"</code> at the
+callsite and a directive such as <code>[{inspect=false}]</code> or <code>[{mode=summary}]</code>.</p>
+<p>Separately, the formatter supports sink-only field prefixes:</p>
+<ul>
+<li><code>file.&lt;name&gt;</code> is rendered only in the logfile/json sink</li>
+<li><code>display.&lt;name&gt;</code> is rendered only in the stderr/display sink</li>
+</ul>
+<p>For example, <code>file.integrands = %expr</code> is useful for attaching large dumps
+to the logfile without printing them to stderr.</p>
+<p>Pipeline-wide tag set:</p>
+<p>Prefer a small stable vocabulary that cuts across the whole pipeline.</p>
+<p>Primary phase tags:</p>
+<div><table><thead><tr><th>Tag</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>#generation</code></td><td>Work that builds or prepares runtime objects before Monte Carlo integration starts</td></tr>
+<tr><td><code>#integration</code></td><td>Work performed while evaluating samples or managing the adaptive integration loop</td></tr>
+<tr><td><code>#profile</code></td><td>UV/IR/profile-style diagnostic scans and their analysis</td></tr>
+<tr><td><code>#persistence</code></td><td>Reading or writing saved state, manifests, checkpoints, and exported results</td></tr>
+</tbody></table>
+</div>
+<p>Core domain tags:</p>
+<div><table><thead><tr><th>Tag</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>#uv</code></td><td>Ultraviolet counterterms, UV forests, UV profiles, or UV-specific generation/evaluation logic</td></tr>
+<tr><td><code>#ir</code></td><td>Infrared subtraction, IR profiles, or IR-specific generation/evaluation logic</td></tr>
+<tr><td><code>#subtraction</code></td><td>Threshold, UV, or IR subtraction logic when the main concern is subtraction rather than the specific regime</td></tr>
+<tr><td><code>#sampling</code></td><td>Channel choice, discrete axes, parameterizations, or sample-generation choices</td></tr>
+<tr><td><code>#stability</code></td><td>Precision escalation, retries, instability diagnosis, and numerical safety checks</td></tr>
+<tr><td><code>#observables</code></td><td>Histogramming, event-to-observable projection, and observable snapshot production</td></tr>
+<tr><td><code>#selectors</code></td><td>Event-selection logic and selector decisions</td></tr>
+<tr><td><code>#cache</code></td><td>Cache lookup, reuse, invalidation, or cache-debug instrumentation</td></tr>
+</tbody></table>
+</div>
+<p>Common work-unit tags:</p>
+<div><table><thead><tr><th>Tag</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>#graph</code></td><td>The log is about one graph or graph-local data</td></tr>
+<tr><td><code>#group</code></td><td>The log is about a graph group or another explicitly grouped aggregate</td></tr>
+<tr><td><code>#orientation</code></td><td>The log is about orientation-dependent data or choosing/summing orientations</td></tr>
+<tr><td><code>#channel</code></td><td>The log is about multi-channeling or a particular channel</td></tr>
+<tr><td><code>#cut</code></td><td>The log is about a cut, raised cut, or cut-local computation</td></tr>
+<tr><td><code>#event</code></td><td>The log is about generated/retained event objects or event-group processing</td></tr>
+<tr><td><code>#sample</code></td><td>The log is about one evaluation sample, its coordinates, or per-sample intermediate values</td></tr>
+<tr><td><code>#iteration</code></td><td>The log is about one adaptive integration iteration or iteration-level summaries</td></tr>
+<tr><td><code>#term</code></td><td>The log is about one algebraic term, summand, or term-local contribution</td></tr>
+</tbody></table>
+</div>
+<p>Common purpose tags:</p>
+<div><table><thead><tr><th>Tag</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>#solver</code></td><td>The log is about root-finding, linear solves, fitting, or similar numerical solver state</td></tr>
+<tr><td><code>#compile</code></td><td>The log is about evaluator/code generation or compilation-oriented preparation</td></tr>
+<tr><td><code>#inspect</code></td><td>The log exposes detailed intermediate state for debugging, rather than a high-level milestone</td></tr>
+<tr><td><code>#summary</code></td><td>The log is a compact roll-up rather than a step-by-step trace</td></tr>
+<tr><td><code>#dump</code></td><td>The log emits large or structured payloads such as expressions, tables, or serialized views</td></tr>
+</tbody></table>
+</div>
+<p>Tag boundaries:</p>
+<ul>
+<li>Prefer <code>#generation</code> over <code>#compile</code> when the message is a broad generation milestone.</li>
+<li>Add <code>#compile</code> only when the message is specifically about evaluator construction or compilation-like work.</li>
+<li>Prefer <code>#uv</code> or <code>#ir</code> when the regime matters to the user; use <code>#subtraction</code> when the subtraction mechanism is the real concern.</li>
+<li>Prefer <code>#inspect</code> for verbose intermediate values that are mainly useful while debugging internals.</li>
+<li>Add <code>#dump</code> when the payload is large enough that users may want to suppress it separately from lighter debug logs.</li>
+<li>Do not use <code>#graph</code>, <code>#cut</code>, or <code>#sample</code> as substitutes for <code>#generation</code> or <code>#integration</code>; they refine phase tags rather than replace them.</li>
+</ul>
+<p>Naming guidance:</p>
+<ul>
+<li>Use phase tags first. They answer “when in the pipeline did this happen?”</li>
+<li>Use domain tags second. They answer “what subsystem is this about?”</li>
+<li>Use work-unit tags third. They answer “what object is being worked on?”</li>
+<li>Use purpose tags last for optional refinement.</li>
+<li>Prefer tags that are meaningful across multiple modules.</li>
+<li>Avoid tags that merely restate a function name.</li>
+<li>Avoid tags tied to one internal representation unless that representation is a stable concept in user-facing debugging.</li>
+</ul>
+<p><code>parametric</code> is usually not a core pipeline tag. It is acceptable as a local refinement when needed, but should not be treated as part of the primary vocabulary unless it becomes a consistently useful cross-cutting concept.</p>
+<p>Examples:</p>
+<ul>
+<li><code>debug_tags!(#generation, #uv, #graph, #dump; name = %graph.name, "generated graph payload");</code></li>
+<li><code>debug_tags!(#integration, #summary; inspect = false, "iteration summary");</code></li>
+</ul>
+</div></details></section></div></main></body></html>

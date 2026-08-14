@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["AmplitudeCountertermAtom","AmplitudeCountertermData","AmplitudeCountertermEvaluation","AmplitudeCountertermEvaluator","AmplitudeLocalCountertermEvaluation","OverlapGroupWithKinematics","OverlapStructureWithKinematics"]};

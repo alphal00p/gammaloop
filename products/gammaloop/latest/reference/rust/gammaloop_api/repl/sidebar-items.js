@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ProcessKind","ReadCommandOutput"],"struct":["ClapEditor","ClapEditorBuilder","CompletionState","IntegrandDetailCompletionEntry","IrProfileCompletionEntry","ModelParameterCompletionEntry","ModelVertexCompletionEntry","ProcessCompletionEntry","SharedCompletionState"]};

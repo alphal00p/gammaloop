@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["cff_graph","esurface","expression","generation","hsurface","orientations","surface","tree"],"struct":["CFFTerm","CutCFF","CutCFFIndex"]};

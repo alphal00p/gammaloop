@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"static":["COMPLEXRATPOLYFIELD","LOGPRINTOPTS","Q_I"],"struct":["StringSerializedAtom"],"trait":["DOD"]};

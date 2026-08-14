@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["spenso",[["impl&lt;C&gt; <a class=\"trait\" href=\"spenso/algebra/algebraic_traits/trait.RefOne.html\" title=\"trait spenso::algebra::algebraic_traits::RefOne\">RefOne</a> for <a class=\"enum\" href=\"spenso/tensors/parametric/enum.ConcreteOrParam.html\" title=\"enum spenso::tensors::parametric::ConcreteOrParam\">ConcreteOrParam</a>&lt;C&gt;",0],["impl&lt;T: <a class=\"trait\" href=\"spenso/algebra/algebraic_traits/trait.RefOne.html\" title=\"trait spenso::algebra::algebraic_traits::RefOne\">RefOne</a>&gt; <a class=\"trait\" href=\"spenso/algebra/algebraic_traits/trait.RefOne.html\" title=\"trait spenso::algebra::algebraic_traits::RefOne\">RefOne</a> for <a class=\"enum\" href=\"spenso/algebra/complex/enum.RealOrComplex.html\" title=\"enum spenso::algebra::complex::RealOrComplex\">RealOrComplex</a>&lt;T&gt;",0],["impl&lt;T: <a class=\"trait\" href=\"spenso/algebra/algebraic_traits/trait.RefZero.html\" title=\"trait spenso::algebra::algebraic_traits::RefZero\">RefZero</a> + <a class=\"trait\" href=\"spenso/algebra/algebraic_traits/trait.RefOne.html\" title=\"trait spenso::algebra::algebraic_traits::RefOne\">RefOne</a>&gt; <a class=\"trait\" href=\"spenso/algebra/algebraic_traits/trait.RefOne.html\" title=\"trait spenso::algebra::algebraic_traits::RefOne\">RefOne</a> for <a class=\"struct\" href=\"spenso/algebra/complex/struct.Complex.html\" title=\"struct spenso::algebra::complex::Complex\">Complex</a>&lt;T&gt;",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[1441]}

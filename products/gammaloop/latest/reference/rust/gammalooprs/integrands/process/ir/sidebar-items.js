@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["CutLimitReport","DisplayOnlyLimitReport","GraphCutDefinition","GraphIRLimitReport","IRProfileSetting","IrLimitTestReport","PowerLawFit","SingleLimitReport"]};

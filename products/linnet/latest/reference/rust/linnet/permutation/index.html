@@ -1,0 +1,61 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Permutations"><title>linnet::permutation - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="linnet" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module permutation</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../linnet/index.html">linnet</a><span class="version">0.17.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module permutation</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#permutations" title="Permutations">Permutations</a><ul><li><a href="#key-features" title="Key Features:">Key Features:</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#traits" title="Traits">Traits</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate linnet</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">linnet</a></div><h1>Module <span>permutation</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/linnet/permutation.rs.html#1-2619">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="permutations"><a class="doc-anchor" href="#permutations">§</a>Permutations</h2>
+<p>This module provides a <code>Permutation</code> struct and associated functionalities
+for representing and working with permutations of a sequence of integers <code>0..n</code>.</p>
+<h3 id="key-features"><a class="doc-anchor" href="#key-features">§</a>Key Features:</h3>
+<ul>
+<li><strong>Representation</strong>: A <code>Permutation</code> is stored by its direct mapping (<code>map[i]</code> is
+the image of <code>i</code>) and its inverse mapping.</li>
+<li><strong>Construction</strong>:
+<ul>
+<li>Identity permutation: <code>Permutation::id(n)</code>.</li>
+<li>From a mapping vector: <code>Permutation::from_map(vec![...])</code>.</li>
+<li>From disjoint cycles: <code>Permutation::from_disjoint_cycles(&amp;[vec![...]])</code>.</li>
+<li>From potentially overlapping cycles with specified composition order:
+<code>Permutation::from_cycles_ordered(&amp;[vec![...]], order)</code>.</li>
+</ul>
+</li>
+<li><strong>Basic Operations</strong>:
+<ul>
+<li>Inverse: <code>p.inverse()</code>.</li>
+<li>Composition: <code>p1.compose(&amp;p2)</code> (applies <code>p2</code> then <code>p1</code>).</li>
+<li>Apply to slices: <code>p.apply_slice(data)</code> (returns a new <code>Vec</code>),
+<code>p.apply_slice_in_place(data_mut)</code>.</li>
+<li>Power: <code>p.pow(k)</code>.</li>
+<li>Sign: <code>p.sign()</code> (+1 for even, -1 for odd).</li>
+<li>Check for identity: <code>p.is_identity()</code>.</li>
+</ul>
+</li>
+<li><strong>Cycle Utilities</strong>:
+<ul>
+<li>Find cycle decomposition: <code>p.find_cycles()</code>.</li>
+<li>Convert to transpositions: <code>p.transpositions()</code>.</li>
+</ul>
+</li>
+<li><strong>Iterators</strong>:
+<ul>
+<li><code>p.iter_slice(data)</code>: Iterates over <code>data</code> in the order defined by <code>p.map</code>.</li>
+<li><code>p.iter_slice_inv(data)</code>: Iterates over <code>data</code> in the order defined by <code>p.inv</code>.</li>
+<li>Mutable versions: <code>p.iter_slice_mut(data_mut)</code>, <code>p.iter_slice_inv_mut(data_mut)</code>.</li>
+</ul>
+</li>
+<li><strong>Ranking and Unranking</strong>:
+<ul>
+<li>Myrvold &amp; Ruskey’s ranking/unranking algorithms (<code>myrvold_ruskey_rank1</code>, <code>myrvold_ruskey_unrank1</code>, etc.).</li>
+</ul>
+</li>
+<li><strong>Sorting</strong>:
+<ul>
+<li><code>Permutation::sort(slice)</code>: Returns the permutation that sorts the slice.</li>
+</ul>
+</li>
+<li><strong>Graph Integration</strong>:
+<ul>
+<li>The <code>HedgeGraphExt</code> and <code>PermutationExt</code> traits suggest integration with
+graph structures, likely for tasks like finding graph automorphisms or
+canonical labellings by permuting vertices/hedges.</li>
+</ul>
+</li>
+</ul>
+<p>The module is designed to be comprehensive for permutation-related tasks,
+including those relevant to combinatorial algorithms and graph theory.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Permutation.html" title="struct linnet::permutation::Permutation">Permutation</a></dt><dd>A permutation of <code>0..n</code>, with the ability to apply itself (or its inverse) to slices.</dd><dt><a class="struct" href="struct.PermutationMapIter.html" title="struct linnet::permutation::PermutationMapIter">Permutation<wbr>MapIter</a></dt><dd>An iterator over a slice, ordered by a permutation’s <code>map</code>.</dd><dt><a class="struct" href="struct.PermutationMapIterMut.html" title="struct linnet::permutation::PermutationMapIterMut">Permutation<wbr>MapIter<wbr>Mut</a></dt></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.CycleOrder.html" title="enum linnet::permutation::CycleOrder">Cycle<wbr>Order</a></dt><dd>Specifies the direction for reading cycle compositions</dd><dt><a class="enum" href="enum.PermutationError.html" title="enum linnet::permutation::PermutationError">Permutation<wbr>Error</a></dt></dl><h2 id="traits" class="section-header">Traits<a href="#traits" class="anchor">§</a></h2><dl class="item-table"><dt><a class="trait" href="trait.HedgeGraphExt.html" title="trait linnet::permutation::HedgeGraphExt">Hedge<wbr>Graph<wbr>Ext</a></dt><dt><a class="trait" href="trait.PermutationExt.html" title="trait linnet::permutation::PermutationExt">Permutation<wbr>Ext</a></dt></dl></section></div></main></body></html>

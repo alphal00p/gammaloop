@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"macro":[["define_indexed_vec",1],["dot",1]],"mod":["drawing","half_edge","num_traits","parser","permutation","tree","union_find"]};

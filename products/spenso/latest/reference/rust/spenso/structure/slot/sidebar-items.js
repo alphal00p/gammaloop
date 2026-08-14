@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["SlotError"],"struct":["Slot"],"trait":["AbsInd","ConstructibleSlot","DualSlotTo","DummyAind","IsAbstractSlot","ParseableAind"]};

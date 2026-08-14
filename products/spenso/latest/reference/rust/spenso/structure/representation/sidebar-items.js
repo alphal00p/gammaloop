@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CIRCLED","CYRILLIC","GREEK","LATIN","MATH_BOLD"],"enum":["LibraryRep","RepLibraryError","RepresentationError"],"fn":["encode_base","initialize"],"struct":["DualLorentz","Dummy","Euclidean","ExtendibleReps","Lorentz","MetricRepData","Minkowski","RepData","Representation"],"trait":["BaseRepName","RepName"],"type":["LibrarySlot"]};

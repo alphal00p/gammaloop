@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["gammalooprs",[["impl <a class=\"trait\" href=\"gammalooprs/trait.LogMessage.html\" title=\"trait gammalooprs::LogMessage\">LogMessage</a> for <a class=\"struct\" href=\"gammalooprs/graph/cuts/struct.CutSet.html\" title=\"struct gammalooprs::graph::cuts::CutSet\">CutSet</a>",0],["impl <a class=\"trait\" href=\"gammalooprs/trait.LogMessage.html\" title=\"trait gammalooprs::LogMessage\">LogMessage</a> for <a class=\"struct\" href=\"gammalooprs/graph/struct.Graph.html\" title=\"struct gammalooprs::graph::Graph\">Graph</a>",0],["impl <a class=\"trait\" href=\"gammalooprs/trait.LogMessage.html\" title=\"trait gammalooprs::LogMessage\">LogMessage</a> for <a class=\"struct\" href=\"gammalooprs/uv/approx/struct.Approximation.html\" title=\"struct gammalooprs::uv::approx::Approximation\">Approximation</a>",0],["impl <a class=\"trait\" href=\"gammalooprs/trait.LogMessage.html\" title=\"trait gammalooprs::LogMessage\">LogMessage</a> for <a class=\"struct\" href=\"gammalooprs/uv/hedge_poset/struct.ForestNode.html\" title=\"struct gammalooprs::uv::hedge_poset::ForestNode\">ForestNode</a>&lt;'_&gt;",0],["impl <a class=\"trait\" href=\"gammalooprs/trait.LogMessage.html\" title=\"trait gammalooprs::LogMessage\">LogMessage</a> for <a class=\"struct\" href=\"gammalooprs/uv/hedge_poset/struct.OwnedForestNode.html\" title=\"struct gammalooprs::uv::hedge_poset::OwnedForestNode\">OwnedForestNode</a>",0],["impl <a class=\"trait\" href=\"gammalooprs/trait.LogMessage.html\" title=\"trait gammalooprs::LogMessage\">LogMessage</a> for <a class=\"struct\" href=\"gammalooprs/uv/spinney/struct.Spinney.html\" title=\"struct gammalooprs::uv::spinney::Spinney\">Spinney</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[1674]}

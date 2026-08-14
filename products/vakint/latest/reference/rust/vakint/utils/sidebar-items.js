@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["could_match","get_full_name","multi_string_replace","pysecdec_decode","pysecdec_encode","replace_until_stable","set_precision_in_float_atom","set_precision_in_polynomial_atom","simplify_real","split_linear_atom","to_symbol","to_vk_symbol","undress_vakint_symbols"]};

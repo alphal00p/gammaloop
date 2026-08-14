@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"static":["MASTERS_EXPANSION","MASTERS_SUBSTITUTION"],"struct":["MATAD"]};

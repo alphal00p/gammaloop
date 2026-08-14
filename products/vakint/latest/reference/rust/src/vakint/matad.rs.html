@@ -1,0 +1,784 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/vakint/src/matad.rs`."><title>matad.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="vakint" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">vakint/</div>matad.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::collections::{BTreeMap, HashSet};
+<a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>std::{collections::HashMap, sync::LazyLock};
+<a href=#3 id=3 data-nosnippet>3</a>
+<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span><span class="kw">crate</span>::matad_numerics::DIRECT_SUBSTITUTIONS;
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span><span class="kw">crate</span>::utils::vakint_macros::{vk_parse, vk_symbol};
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span><span class="kw">crate</span>::utils::{<span class="self">self</span>, set_precision_in_polynomial_atom, undress_vakint_symbols};
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span><span class="kw">crate</span>::utils::{get_full_name, set_precision_in_float_atom};
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use crate</span>::{
+<a href=#9 id=9 data-nosnippet>9</a>    gt_condition,
+<a href=#10 id=10 data-nosnippet>10</a>    matad_numerics::{ADDITIONAL_CONSTANTS, HPL_SUBSTITUTIONS, POLY_GAMMA_SUBSTITUTIONS},
+<a href=#11 id=11 data-nosnippet>11</a>};
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>colored::Colorize;
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>log::debug;
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>regex::Regex;
+<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>string_template_plus::{Render, RenderOptions, Template};
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>symbolica::atom::Symbol;
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>symbolica::id::Replacement;
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>symbolica::printer::{AtomPrinter, PrintOptions};
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>symbolica::{
+<a href=#20 id=20 data-nosnippet>20</a>    atom::{Atom, AtomCore, AtomView},
+<a href=#21 id=21 data-nosnippet>21</a>    domains::{integer::Integer, rational::Rational},
+<a href=#22 id=22 data-nosnippet>22</a>    function,
+<a href=#23 id=23 data-nosnippet>23</a>    id::Condition,
+<a href=#24 id=24 data-nosnippet>24</a>};
+<a href=#25 id=25 data-nosnippet>25</a>
+<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use crate</span>::{
+<a href=#27 id=27 data-nosnippet>27</a>    MATADOptions, TEMPLATES, even_condition, get_integer_from_atom, number_condition,
+<a href=#28 id=28 data-nosnippet>28</a>    odd_condition, symbol_condition, symbols::S,
+<a href=#29 id=29 data-nosnippet>29</a>};
+<a href=#30 id=30 data-nosnippet>30</a>
+<a href=#31 id=31 data-nosnippet>31</a><span class="kw">use crate</span>::{ReplacementRules, Vakint, VakintError, VakintSettings};
+<a href=#32 id=32 data-nosnippet>32</a>
+<a href=#33 id=33 data-nosnippet>33</a><span class="attr">#[rustfmt::skip]
+<a href=#34 id=34 data-nosnippet>34</a></span><span class="kw">pub static </span>MASTERS_EXPANSION: LazyLock&lt;HashMap&lt;Atom, (Atom, symbolica::id::Condition&lt;symbolica::id::PatternRestriction&gt;)&gt;&gt; = LazyLock::new(|| {
+<a href=#35 id=35 data-nosnippet>35</a>    HashMap::&lt;Atom, (Atom, symbolica::id::Condition&lt;symbolica::id::PatternRestriction&gt;)&gt;::from_iter([
+<a href=#36 id=36 data-nosnippet>36</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"miD6"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"(D6bar(0) + ep*D6bar(1) + ep^2*D6bar(2) + ep^3*Oep(3, D6) + (2*Zeta(3))/ep)/((1 - 2*ep)*(1 - ep))"</span>).unwrap(), Condition::default() ) ),
+<a href=#37 id=37 data-nosnippet>37</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"miD5"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"(D5bar(0) + ep*D5bar(1) + ep^2*D5bar(2) + ep^3*Oep(3, D5) + (2*Zeta(3))/ep)/((1 - 2*ep)*(1 - ep))"</span>).unwrap(), Condition::default() ) ),
+<a href=#38 id=38 data-nosnippet>38</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"miD4"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"(D4bar(0) + ep*D4bar(1) + ep^2*D4bar(2) + ep^3*Oep(3, D4) + (2*Zeta(3))/ep)/((1 - 2*ep)*(1 - ep))"</span>).unwrap(), Condition::default() ) ),
+<a href=#39 id=39 data-nosnippet>39</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"miD3"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"(D3bar(0) + ep*D3bar(1) + ep^2*D3bar(2) + ep^3*Oep(3, D3) + (2*Zeta(3))/ep)/((1 - 2*ep)*(1 - ep))"</span>).unwrap(), Condition::default() ) ),
+<a href=#40 id=40 data-nosnippet>40</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"miDM"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"(DMbar(0) + ep*DMbar(1) + ep^2*DMbar(2) + ep^3*Oep(3, DM) + (2*Zeta(3))/ep)/((1 - 2*ep)*(1 - ep))"</span>).unwrap(), Condition::default()) ),
+<a href=#41 id=41 data-nosnippet>41</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"miDN"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"(DNbar(0) + ep*DNbar(1) + ep^2*DNbar(2) + ep^3*Oep(3, DN) + (2*Zeta(3))/ep)/((1 - 2*ep)*(1 - ep))"</span>).unwrap(), Condition::default() ) ),
+<a href=#42 id=42 data-nosnippet>42</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"miE3"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"((exp(3*ep*EulerGamma)*Gamma(1 - ep)*Gamma(1 + ep)^2*Gamma(1 + 2*ep)*(1 + ((1 - ep)*Gamma(1 + 2*ep)*Gamma(1 + 3*ep))/(3*(1 - 3*ep)*Gamma(1 + ep)*Gamma(1 + 4*ep))))/(2*ep^3) + (E3bar(-1)/ep + E3bar(0) + ep*E3bar(1) + ep^2*E3bar(2) + ep^3*E3bar(3) + ep^4*Oep(4, E3))/Sqrt(3))/((1 - 2*ep)^2*(-1 + ep))"</span>).unwrap(), Condition::default() ) ),
+<a href=#43 id=43 data-nosnippet>43</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"miBN"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"(exp(3*ep*EulerGamma)*Gamma(1 + ep)^3*(4/ep^3 - 44/(3*ep^2) + ep*BNbar(1) + ep^2*BNbar(2) + ep^3*BNbar(3) + ep^4*BNbar(4) + ep^5*Oep(5, BN)))/((1 - 3*ep)*(2 - 3*ep)*(1 - 2*ep)*(1 - ep))"</span>).unwrap(), Condition::default() ) ),
+<a href=#44 id=44 data-nosnippet>44</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"miBN1"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"-1/2*(exp(3*ep*EulerGamma)*(-1 + ep)^2*(-4 + 15*ep)*Gamma(-1 + ep)^3)/((-1 + 2*ep)*(-2 + 3*ep)*(-1 + 3*ep)) + (3*Sqrt(3)*(BN1bar(0) + ep*BN1bar(1) + ep^2*BN1bar(2) + ep^3*BN1bar(3) + ep^4*BN1bar(4) + ep^5*Oep(5, BN1)))/(2*(1 - ep)*(-1 + 2*ep)*(-2 + 3*ep)*(-1 + 3*ep))"</span>).unwrap(), Condition::default() ) ),
+<a href=#45 id=45 data-nosnippet>45</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"miT111"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"(exp(2*ep*EulerGamma)*Gamma(1 + ep)^2*((3*Sqrt(3))/(2*ep^2) + ep^5*Oep(5, T1) + T111bar(0) + ep*T111bar(1) + ep^2*T111bar(2) + ep^3*T111bar(3) + ep^4*T111bar(4)))/(Sqrt(3)*(1 - 2*ep)*(-1 + ep))"</span>).unwrap(), Condition::default() ) ),
+<a href=#46 id=46 data-nosnippet>46</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"Gamma(b_*ep)"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"GammaArgs(0,b_)"</span>).unwrap(), Condition::default() ) ),
+<a href=#47 id=47 data-nosnippet>47</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"Gamma(ep)"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"GammaArgs(0,1)"</span>).unwrap(), Condition::default() ) ),
+<a href=#48 id=48 data-nosnippet>48</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"Gamma(-ep)"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"GammaArgs(0,-1)"</span>).unwrap(), Condition::default() ) ),
+<a href=#49 id=49 data-nosnippet>49</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"Gamma(a_ + ep)"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"GammaArgs(a_,1)"</span>).unwrap(), Condition::default() ) ),
+<a href=#50 id=50 data-nosnippet>50</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"Gamma(a_ - ep)"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"GammaArgs(a_,-1)"</span>).unwrap(), Condition::default() ) ),
+<a href=#51 id=51 data-nosnippet>51</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"Gamma(a_ + b_*ep)"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"GammaArgs(a_,b_)"</span>).unwrap(), Condition::default() ) ),
+<a href=#52 id=52 data-nosnippet>52</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"GammaArgs(-1,b_)"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"-1 + EulerGamma - 1/(ep*(b_)) + ep*(-(b_) + EulerGamma*(b_) - ((EulerGamma^2 + 𝜋^2/6)*(b_))/2) + ep^2*(-(b_)^2 + EulerGamma*(b_)^2 - ((EulerGamma^2 + 𝜋^2/6)*(b_)^2)/2 - ((b_)^2*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + PolyGamma(2, 1)))/6) + ep^3*(-(b_)^3 + EulerGamma*(b_)^3 - ((EulerGamma^2 + 𝜋^2/6)*(b_)^3)/2 - ((b_)^3*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + PolyGamma(2, 1)))/6 - ((b_)^3*(EulerGamma^4 + EulerGamma^2*𝜋^2 + (3*𝜋^4)/20 - 4*EulerGamma*PolyGamma(2, 1)))/24) + ep^4*(-(b_)^4 + EulerGamma*(b_)^4 - ((EulerGamma^2 + 𝜋^2/6)*(b_)^4)/2 - ((b_)^4*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + PolyGamma(2, 1)))/6 - ((b_)^4*(EulerGamma^4 + EulerGamma^2*𝜋^2 + (3*𝜋^4)/20 - 4*EulerGamma*PolyGamma(2, 1)))/24 - ((b_)^4*(-EulerGamma^5 - (5*EulerGamma^3*𝜋^2)/3 - (3*EulerGamma*𝜋^4)/4 + 10*EulerGamma^2*PolyGamma(2, 1) + (5*𝜋^2*PolyGamma(2, 1))/3 + PolyGamma(4, 1)))/120) + ep^5*(-(b_)^5 + EulerGamma*(b_)^5 - ((EulerGamma^2 + 𝜋^2/6)*(b_)^5)/2 - ((b_)^5*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + PolyGamma(2, 1)))/6 - ((b_)^5*(EulerGamma^4 + EulerGamma^2*𝜋^2 + (3*𝜋^4)/20 - 4*EulerGamma*PolyGamma(2, 1)))/24 - ((b_)^5*(-EulerGamma^5 - (5*EulerGamma^3*𝜋^2)/3 - (3*EulerGamma*𝜋^4)/4 + 10*EulerGamma^2*PolyGamma(2, 1) + (5*𝜋^2*PolyGamma(2, 1))/3 + PolyGamma(4, 1)))/120 - ((b_)^5*(EulerGamma^6 + (5*EulerGamma^4*𝜋^2)/2 + (9*EulerGamma^2*𝜋^4)/4 + (61*𝜋^6)/168 - 20*EulerGamma^3*PolyGamma(2, 1) - 10*EulerGamma*𝜋^2*PolyGamma(2, 1) + 10*PolyGamma(2, 1)^2 - 6*EulerGamma*PolyGamma(4, 1)))/720) + ep^6 * Oep(6, I_Gamma)"</span>).unwrap(), Condition::default() ) ),
+<a href=#53 id=53 data-nosnippet>53</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"GammaArgs(0,b_)"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"-EulerGamma + 1/(ep*(b_)) + (ep*(6*EulerGamma^2 + 𝜋^2)*(b_))/12 + (ep^2*(b_)^2*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + PolyGamma(2, 1)))/6 + (ep^3*(b_)^3*(EulerGamma^4 + EulerGamma^2*𝜋^2 + (3*𝜋^4)/20 - 4*EulerGamma*PolyGamma(2, 1)))/24 + (ep^4*(b_)^4*(-EulerGamma^5 - (5*EulerGamma^3*𝜋^2)/3 - (3*EulerGamma*𝜋^4)/4 + 10*EulerGamma^2*PolyGamma(2, 1) + (5*𝜋^2*PolyGamma(2, 1))/3 + PolyGamma(4, 1)))/120 + (ep^5*(b_)^5*(EulerGamma^6 + (5*EulerGamma^4*𝜋^2)/2 + (9*EulerGamma^2*𝜋^4)/4 + (61*𝜋^6)/168 - 20*EulerGamma^3*PolyGamma(2, 1) - 10*EulerGamma*𝜋^2*PolyGamma(2, 1) + 10*PolyGamma(2, 1)^2 - 6*EulerGamma*PolyGamma(4, 1)))/720 + ep^6 * Oep(6, I_Gamma)"</span>).unwrap(), Condition::default() ) ),
+<a href=#54 id=54 data-nosnippet>54</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"GammaArgs(a_,b_)"</span>).unwrap(), ( <span class="macro">vk_parse!</span>(<span class="string">"Gamma(a_) + ep*Gamma(a_)*(b_)*PolyGamma(0, a_) + (ep^2*(b_)^2*(Gamma(a_)*PolyGamma(0, a_)^2 + Gamma(a_)*PolyGamma(1, a_)))/2 + (ep^3*(b_)^3*(Gamma(a_)*PolyGamma(0, a_)^3 + 3*Gamma(a_)*PolyGamma(0, a_)*PolyGamma(1, a_) + Gamma(a_)*PolyGamma(2, a_)))/6 + (ep^4*(b_)^4*(Gamma(a_)*PolyGamma(0, a_)^4 + 6*Gamma(a_)*PolyGamma(0, a_)^2*PolyGamma(1, a_) + 3*Gamma(a_)*PolyGamma(1, a_)^2 + 4*Gamma(a_)*PolyGamma(0, a_)*PolyGamma(2, a_) + Gamma(a_)*PolyGamma(3, a_)))/24 + (ep^5*(b_)^5*(Gamma(a_)*PolyGamma(0, a_)^5 + 10*Gamma(a_)*PolyGamma(0, a_)^3*PolyGamma(1, a_) + 15*Gamma(a_)*PolyGamma(0, a_)*PolyGamma(1, a_)^2 + 10*Gamma(a_)*PolyGamma(0, a_)^2*PolyGamma(2, a_) + 10*Gamma(a_)*PolyGamma(1, a_)*PolyGamma(2, a_) + 5*Gamma(a_)*PolyGamma(0, a_)*PolyGamma(3, a_) + Gamma(a_)*PolyGamma(4, a_)))/120 + ep^6*Oep(6, I_Gamma)"</span>).unwrap(), Condition::from((S.a_, gt_condition(<span class="number">0</span>))) ) ),
+<a href=#55 id=55 data-nosnippet>55</a>    ])
+<a href=#56 id=56 data-nosnippet>56</a>});
+<a href=#57 id=57 data-nosnippet>57</a>
+<a href=#58 id=58 data-nosnippet>58</a><span class="attr">#[rustfmt::skip]
+<a href=#59 id=59 data-nosnippet>59</a></span><span class="kw">pub static </span>MASTERS_SUBSTITUTION: LazyLock&lt;HashMap&lt;Atom, Atom&gt;&gt; = LazyLock::new(|| {
+<a href=#60 id=60 data-nosnippet>60</a>    HashMap::&lt;Atom, Atom&gt;::from_iter([
+<a href=#61 id=61 data-nosnippet>61</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"D6bar(0)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"(-72*HR(1, -1, 1, 0, om1))/11 + (180*HR(1, -1, 1, 1, om1))/11 + (148*HR(1, 0, 1, 0, om1))/11 - (144*HR(1, 1, -1, 0, om1))/11 + (360*HR(1, 1, -1, 1, om1))/11 + (540*HR(1, 1, 1, -1, om1))/11 - (33587*HR(1, 1, 1, 1, om1))/55"</span>).unwrap() ),
+<a href=#62 id=62 data-nosnippet>62</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"D6bar(1)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"156*HR(1, -1, 1, 1, 0, om1) - 16*HR(1, 0, -1, 1, 0, om1) - 16*HR(1, 0, 1, -1, 0, om1) - 468*HR(1, 0, 1, 1, 1, om1) + (7712*HR(1, 1, -1, 0, 0, om1))/87 - (7084*HR(1, 1, -1, 0, 1, om1))/87 + (15884*HR(1, 1, -1, 1, 0, om1))/87 + (5632*HR(1, 1, -1, 1, 1, om1))/29 - 36*HR(1, 1, 0, 1, -1, om1) - (13708319*HR(1, 1, 0, 1, 1, om1))/15138 + (9448*HR(1, 1, 1, -1, 0, om1))/87 + (15640*HR(1, 1, 1, -1, 1, om1))/29 - 108*HR(1, 1, 1, 0, -1, om1) - (59151355*HR(1, 1, 1, 0, 1, om1))/45414 + 992*HR(1, 1, 1, 1, -1, om1) - (51713387*HR(1, 1, 1, 1, 0, om1))/22707"</span>).unwrap() ),
+<a href=#63 id=63 data-nosnippet>63</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"D6bar(2)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"-624*HR(1, -1, -1, 1, 1, 0, om1) - (8592*HR(1, -1, 1, -1, 1, 0, om1))/11 + (4320*HR(1, -1, 1, -1, 1, 1, om1))/11 + (2848*HR(1, -1, 1, 0, 1, 0, om1))/11 - (10320*HR(1, -1, 1, 1, -1, 0, om1))/11 + (8640*HR(1, -1, 1, 1, -1, 1, om1))/11 + 144*HR(1, -1, 1, 1, 0, -1, om1) + (12960*HR(1, -1, 1, 1, 1, -1, om1))/11 - (391256*HR(1, -1, 1, 1, 1, 1, om1))/55 + 32*HR(1, 0, -1, -1, 1, 0, om1) + 32*HR(1, 0, -1, 1, -1, 0, om1) + 1976*HR(1, 0, -1, 1, 1, 1, om1) + 32*HR(1, 0, 1, -1, -1, 1, om1) + 32*HR(1, 0, 1, -1, 1, -1, om1) + (5024*HR(1, 0, 1, -1, 1, 0, om1))/33 + (17432*HR(1, 0, 1, -1, 1, 1, om1))/11 - (53444*HR(1, 0, 1, 0, 1, 1, om1))/99 + 64*HR(1, 0, 1, 1, -1, -1, om1) + (11104*HR(1, 0, 1, 1, -1, 0, om1))/33 + (12776*HR(1, 0, 1, 1, -1, 1, om1))/11 - (39451*HR(1, 0, 1, 1, 0, 1, om1))/99 + (7768*HR(1, 0, 1, 1, 1, -1, om1))/11 + (96931*HR(1, 0, 1, 1, 1, 0, om1))/99 - (16128*HR(1, 1, -1, -1, 1, 0, om1))/11 + (6000*HR(1, 1, -1, -1, 1, 1, om1))/11 - (19584*HR(1, 1, -1, 1, -1, 0, om1))/11 + (14640*HR(1, 1, -1, 1, -1, 1, om1))/11 + 288*HR(1, 1, -1, 1, 0, -1, om1) - (5696*HR(1, 1, -1, 1, 0, 1, om1))/11 + (23280*HR(1, 1, -1, 1, 1, -1, om1))/11 - (2128*HR(1, 1, -1, 1, 1, 0, om1))/11 - (372192*HR(1, 1, -1, 1, 1, 1, om1))/55 + (12064*HR(1, 1, 0, -1, 1, 1, om1))/3 + 208*HR(1, 1, 0, 1, -1, -1, om1) + (1405771580504*HR(1, 1, 0, 1, -1, 0, om1))/52401195 - (449711597968*HR(1, 1, 0, 1, -1, 1, om1))/17467065 - (820125684944*HR(1, 1, 0, 1, 1, -1, om1))/17467065 - (44309295476*HR(1, 1, 1, -1, -1, 0, om1))/1940785 + (42581643956*HR(1, 1, 1, -1, -1, 1, om1))/1940785 - (5328*HR(1, 1, 1, -1, 0, -1, om1))/5 + (56916979364*HR(1, 1, 1, -1, 0, 0, om1))/7485885 - (113890854256*HR(1, 1, 1, -1, 0, 1, om1))/7485885 + (44868241556*HR(1, 1, 1, -1, 1, -1, om1))/1940785 - (42534744232*HR(1, 1, 1, -1, 1, 0, om1))/52401195 + (104647550068*HR(1, 1, 1, -1, 1, 1, om1))/17467065 + 432*HR(1, 1, 1, 0, -1, -1, om1) + (179716135264*HR(1, 1, 1, 0, -1, 0, om1))/1940785 - (26026092432*HR(1, 1, 1, 0, -1, 1, om1))/277255 + (37024*HR(1, 1, 1, 0, 0, -1, om1))/5 + (2350091860163*HR(1, 1, 1, 0, 0, 1, om1))/471610755 - (909009749728*HR(1, 1, 1, 0, 1, -1, om1))/5822355 - (1515749729887*HR(1, 1, 1, 0, 1, 0, om1))/471610755 + (163974915824*HR(1, 1, 1, 1, -1, -1, om1))/1940785 + (551982130556*HR(1, 1, 1, 1, -1, 0, om1))/17467065 + (280123847084*HR(1, 1, 1, 1, -1, 1, om1))/17467065 - (19847388288*HR(1, 1, 1, 1, 0, -1, om1))/55451 + (8283679238293*HR(1, 1, 1, 1, 0, 0, om1))/419209560 - (4590966964*HR(1, 1, 1, 1, 1, -1, om1))/388157 - (14507424807748399*HR(1, 1, 1, 1, 1, 1, om1))/2400927480"</span>).unwrap() ),
+<a href=#64 id=64 data-nosnippet>64</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"D5bar(0)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"-26*HR(-1, 1, 1, 0, om1) - 26*HR(1, -1, 1, 0, om1) + (16*HR(1, 0, 1, 0, om1))/3 - 26*HR(1, 1, -1, 0, om1) + 6*HR(1, 1, 0, -1, om1) + (616*HR(1, 1, 1, 1, om1))/15"</span>).unwrap() ),
+<a href=#65 id=65 data-nosnippet>65</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"D5bar(1)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"104*HR(-1, -1, 1, 1, 0, om1) + (1432*HR(-1, 1, -1, 1, 0, om1))/11 - (720*HR(-1, 1, -1, 1, 1, om1))/11 - (1424*HR(-1, 1, 0, 1, 0, om1))/33 + (1720*HR(-1, 1, 1, -1, 0, om1))/11 - (1440*HR(-1, 1, 1, -1, 1, om1))/11 - 24*HR(-1, 1, 1, 0, -1, om1) - (2160*HR(-1, 1, 1, 1, -1, om1))/11 + (195628*HR(-1, 1, 1, 1, 1, om1))/165 + 260*HR(1, -1, -1, 1, 1, om1) + (2572*HR(1, -1, 1, -1, 1, om1))/11 + (668*HR(1, -1, 1, 0, 1, om1))/33 + (2284*HR(1, -1, 1, 1, -1, om1))/11 + (674*HR(1, -1, 1, 1, 0, om1))/3 + (1076*HR(1, 0, -1, 1, 0, om1))/11 + (1316*HR(1, 0, 1, -1, 0, om1))/11 - (360*HR(1, 0, 1, -1, 1, om1))/11 - 20*HR(1, 0, 1, 0, -1, om1) - (720*HR(1, 0, 1, 1, -1, om1))/11 - (14198*HR(1, 0, 1, 1, 1, om1))/33 + (4864*HR(1, 1, -1, -1, 1, om1))/11 - (11992*HR(1, 1, -1, 0, 0, om1))/405 + (759664*HR(1, 1, -1, 0, 1, om1))/4455 + (5008*HR(1, 1, -1, 1, -1, om1))/11 + (2357524*HR(1, 1, -1, 1, 0, om1))/4455 - (198584*HR(1, 1, -1, 1, 1, om1))/135 - 24*HR(1, 1, 0, -1, -1, om1) - (926*HR(1, 1, 0, 1, -1, om1))/11 - (559454947*HR(1, 1, 0, 1, 1, om1))/775170 + (6012*HR(1, 1, 1, -1, -1, om1))/11 + (850486*HR(1, 1, 1, -1, 0, om1))/891 - (5116084*HR(1, 1, 1, -1, 1, om1))/1485 + (3514*HR(1, 1, 1, 0, -1, om1))/33 - (44410145*HR(1, 1, 1, 0, 1, om1))/42282 - (9118444*HR(1, 1, 1, 1, -1, om1))/1485 - (2126716774*HR(1, 1, 1, 1, 0, om1))/1162755"</span>).unwrap() ),
+<a href=#66 id=66 data-nosnippet>66</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"D5bar(2)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"-416*HR(-1, -1, -1, 1, 1, 0, om1) - (5728*HR(-1, -1, 1, -1, 1, 0, om1))/11 + (2880*HR(-1, -1, 1, -1, 1, 1, om1))/11 + (5696*HR(-1, -1, 1, 0, 1, 0, om1))/33 - (6880*HR(-1, -1, 1, 1, -1, 0, om1))/11 + (5760*HR(-1, -1, 1, 1, -1, 1, om1))/11 + 96*HR(-1, -1, 1, 1, 0, -1, om1) + (8640*HR(-1, -1, 1, 1, 1, -1, om1))/11 - (782512*HR(-1, -1, 1, 1, 1, 1, om1))/165 - 1040*HR(-1, 1, -1, -1, 1, 1, om1) - (10288*HR(-1, 1, -1, 1, -1, 1, om1))/11 - (2672*HR(-1, 1, -1, 1, 0, 1, om1))/33 - (9136*HR(-1, 1, -1, 1, 1, -1, om1))/11 - (2696*HR(-1, 1, -1, 1, 1, 0, om1))/3 - (4304*HR(-1, 1, 0, -1, 1, 0, om1))/11 - (5264*HR(-1, 1, 0, 1, -1, 0, om1))/11 + (1440*HR(-1, 1, 0, 1, -1, 1, om1))/11 + 80*HR(-1, 1, 0, 1, 0, -1, om1) + (2880*HR(-1, 1, 0, 1, 1, -1, om1))/11 + (56792*HR(-1, 1, 0, 1, 1, 1, om1))/33 - (19456*HR(-1, 1, 1, -1, -1, 1, om1))/11 + (3257312*HR(-1, 1, 1, -1, 0, 0, om1))/11745 - (117630944*HR(-1, 1, 1, -1, 0, 1, om1))/129195 - (20032*HR(-1, 1, 1, -1, 1, -1, om1))/11 - (302982704*HR(-1, 1, 1, -1, 1, 0, om1))/129195 + (24202144*HR(-1, 1, 1, -1, 1, 1, om1))/3915 + 96*HR(-1, 1, 1, 0, -1, -1, om1) + (3704*HR(-1, 1, 1, 0, 1, -1, om1))/11 + (38639896921*HR(-1, 1, 1, 0, 1, 1, om1))/11239965 - (24048*HR(-1, 1, 1, 1, -1, -1, om1))/11 - (123547352*HR(-1, 1, 1, 1, -1, 0, om1))/25839 + (649919504*HR(-1, 1, 1, 1, -1, 1, om1))/43065 - (14056*HR(-1, 1, 1, 1, 0, -1, om1))/33 + (3586576799*HR(-1, 1, 1, 1, 0, 1, om1))/613089 + (41605936*HR(-1, 1, 1, 1, 1, -1, om1))/1485 + (357300160814*HR(-1, 1, 1, 1, 1, 0, om1))/33719895 - 1040*HR(1, -1, -1, -1, 1, 1, om1) - (10288*HR(1, -1, -1, 1, -1, 1, om1))/11 - (2672*HR(1, -1, -1, 1, 0, 1, om1))/33 - (9136*HR(1, -1, -1, 1, 1, -1, om1))/11 - (2696*HR(1, -1, -1, 1, 1, 0, om1))/3 - (576*HR(1, -1, 1, -1, 1, -1, om1))/11 - (387824*HR(1, -1, 1, -1, 1, 0, om1))/121 + (13241792*HR(1, -1, 1, -1, 1, 1, om1))/1815 - (35584*HR(1, -1, 1, 0, -1, 1, om1))/33 - (28792*HR(1, -1, 1, 0, 1, -1, om1))/33 + (2296288*HR(1, -1, 1, 0, 1, 0, om1))/1089 + (14864*HR(1, -1, 1, 1, -1, -1, om1))/11 - (5392193704*HR(1, -1, 1, 1, -1, 0, om1))/1421145 + (5442900016*HR(1, -1, 1, 1, -1, 1, om1))/473715 - (32280*HR(1, -1, 1, 1, 0, -1, om1))/11 + (6570705136*HR(1, -1, 1, 1, 1, -1, om1))/473715 + (25996220167837*HR(1, -1, 1, 1, 1, 1, om1))/1854594225 + (64*HR(1, 0, -1, -1, 1, 0, om1))/3 + (64*HR(1, 0, -1, 1, -1, 0, om1))/3 - (208*HR(1, 0, -1, 1, 1, 1, om1))/3 - (47936*HR(1, 0, 1, -1, -1, 1, om1))/33 - (47936*HR(1, 0, 1, -1, 1, -1, om1))/33 + (540736*HR(1, 0, 1, -1, 1, 0, om1))/363 - (345216128*HR(1, 0, 1, -1, 1, 1, om1))/94743 + 80*HR(1, 0, 1, 0, -1, -1, om1) + (49280509019*HR(1, 0, 1, 0, 1, 1, om1))/148367538 - (95872*HR(1, 0, 1, 1, -1, -1, om1))/33 + (634929920*HR(1, 0, 1, 1, -1, 0, om1))/852687 - (676898224*HR(1, 0, 1, 1, -1, 1, om1))/284229 + (387546944255*HR(1, 0, 1, 1, 0, 1, om1))/222551307 + (352181312*HR(1, 0, 1, 1, 1, -1, om1))/94743 + (4241416264027*HR(1, 0, 1, 1, 1, 0, om1))/445102614 + (19456*HR(1, 1, -1, -1, -1, 1, om1))/11 + (18880*HR(1, 1, -1, -1, 1, -1, om1))/11 - (1901200*HR(1, 1, -1, -1, 1, 0, om1))/363 + (19253152*HR(1, 1, -1, -1, 1, 1, om1))/1815 + (824*HR(1, 1, -1, 0, 1, -1, om1))/11 + (53776*HR(1, 1, -1, 1, -1, -1, om1))/11 - (5754526792*HR(1, 1, -1, 1, -1, 0, om1))/1421145 + (965522608*HR(1, 1, -1, 1, -1, 1, om1))/94743 - (34744*HR(1, 1, -1, 1, 0, -1, om1))/11 - (1791826416874*HR(1, 1, -1, 1, 0, 1, om1))/370918845 + (201931024*HR(1, 1, -1, 1, 1, -1, om1))/94743 - (5946278372713*HR(1, 1, -1, 1, 1, 0, om1))/370918845 + (181225331611139*HR(1, 1, -1, 1, 1, 1, om1))/1854594225 + 96*HR(1, 1, 0, -1, -1, -1, om1) + (824*HR(1, 1, 0, -1, 1, -1, om1))/11 - (61094644559*HR(1, 1, 0, -1, 1, 1, om1))/11239965 - (93400*HR(1, 1, 0, 1, -1, -1, om1))/33 + (71673534978119191589*HR(1, 1, 0, 1, -1, 0, om1))/588987597758175 - (27778395373685590393*HR(1, 1, 0, 1, -1, 1, om1))/196329199252725 - (39808709428404512639*HR(1, 1, 0, 1, 1, -1, om1))/196329199252725 + (92688*HR(1, 1, 1, -1, -1, -1, om1))/11 - (49767882477121799173*HR(1, 1, 1, -1, -1, 0, om1))/392658398505450 + (50254587600763374613*HR(1, 1, 1, -1, -1, 1, om1))/392658398505450 - (191463192286*HR(1, 1, 1, -1, 0, -1, om1))/18733275 + (30945325345674631*HR(1, 1, 1, -1, 0, 0, om1))/692519221350 - (15249629583930690367*HR(1, 1, 1, -1, 0, 1, om1))/168282170788050 + (43031534692552744213*HR(1, 1, 1, -1, 1, -1, om1))/392658398505450 - (41886306721880707259*HR(1, 1, 1, -1, 1, 0, om1))/1177975195516350 + (108791082954484641911*HR(1, 1, 1, -1, 1, 1, om1))/392658398505450 - (14056*HR(1, 1, 1, 0, -1, -1, om1))/33 + (89657794477349654246*HR(1, 1, 1, 0, -1, 0, om1))/196329199252725 - (4767577759273275116*HR(1, 1, 1, 0, -1, 1, om1))/9349009488225 + (1559414393279*HR(1, 1, 1, 0, 0, -1, om1))/33719895 + (13690397558977227041*HR(1, 1, 1, 0, 0, 1, om1))/848142140771772 - (15533573816964260686*HR(1, 1, 1, 0, 1, -1, om1))/21814355472525 - (882309482505750318589*HR(1, 1, 1, 0, 1, 0, om1))/21203553519294300 + (88944543800158224026*HR(1, 1, 1, 1, -1, -1, om1))/196329199252725 + (54362172151172329627*HR(1, 1, 1, 1, -1, 0, om1))/392658398505450 + (187944687444042632053*HR(1, 1, 1, 1, -1, 1, om1))/392658398505450 - (557811878457413554*HR(1, 1, 1, 1, 0, -1, om1))/322379637525 - (355643681672062658107*HR(1, 1, 1, 1, 0, 0, om1))/18847603128261600 + (13865776375815235211*HR(1, 1, 1, 1, 1, -1, om1))/26177226567030 - (3656464529968891203697567*HR(1, 1, 1, 1, 1, 1, om1))/107945363370952800"</span>).unwrap() ),
+<a href=#67 id=67 data-nosnippet>67</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"D4bar(0)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"12*HR(1, 0, 1, 0, om1) - (2742*HR(1, 1, 1, 1, om1))/5"</span>).unwrap() ),
+<a href=#68 id=68 data-nosnippet>68</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"D4bar(1)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"-56*HR(1, 0, -1, 1, 0, om1) - 56*HR(1, 0, 1, -1, 0, om1) + 198*HR(1, 0, 1, 1, 1, om1) + (15539*HR(1, 1, 0, 1, 1, om1))/174 - (152353*HR(1, 1, 1, 0, 1, om1))/522 - (219164*HR(1, 1, 1, 1, 0, om1))/261"</span>).unwrap() ),
+<a href=#69 id=69 data-nosnippet>69</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"D4bar(2)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"304*HR(1, 0, -1, -1, 1, 0, om1) + 304*HR(1, 0, -1, 1, -1, 0, om1) - 1020*HR(1, 0, -1, 1, 1, 1, om1) + 304*HR(1, 0, 1, -1, -1, 1, om1) + 304*HR(1, 0, 1, -1, 1, -1, om1) + (608*HR(1, 0, 1, -1, 1, 0, om1))/3 - 1628*HR(1, 0, 1, -1, 1, 1, om1) + (2602*HR(1, 0, 1, 0, 1, 1, om1))/9 + 608*HR(1, 0, 1, 1, -1, -1, om1) + (2128*HR(1, 0, 1, 1, -1, 0, om1))/3 - 2540*HR(1, 0, 1, 1, -1, 1, om1) + (3733*HR(1, 0, 1, 1, 0, 1, om1))/18 - 3756*HR(1, 0, 1, 1, 1, -1, om1) - (18773*HR(1, 0, 1, 1, 1, 0, om1))/18 - (4144*HR(1, 1, 0, -1, 1, 1, om1))/3 + 608*HR(1, 1, 0, 1, -1, -1, om1) - (84256336*HR(1, 1, 0, 1, -1, 0, om1))/136107 - (69730720*HR(1, 1, 0, 1, -1, 1, om1))/45369 - (104376080*HR(1, 1, 0, 1, 1, -1, om1))/45369 + (17755424*HR(1, 1, 1, -1, -1, 0, om1))/45369 - (17755424*HR(1, 1, 1, -1, -1, 1, om1))/45369 - (21428960*HR(1, 1, 1, -1, 0, 0, om1))/136107 + (4285792*HR(1, 1, 1, -1, 0, 1, om1))/15123 - (17755424*HR(1, 1, 1, -1, 1, -1, om1))/45369 + (3061280*HR(1, 1, 1, -1, 1, 0, om1))/136107 - (6734816*HR(1, 1, 1, -1, 1, 1, om1))/45369 - (20198672*HR(1, 1, 1, 0, -1, 0, om1))/5041 + (129077548*HR(1, 1, 1, 0, -1, 1, om1))/45369 - (1187408470*HR(1, 1, 1, 0, 0, 1, om1))/1224963 + (190647580*HR(1, 1, 1, 0, 1, -1, om1))/45369 + (3293614283*HR(1, 1, 1, 0, 1, 0, om1))/1224963 - (71021696*HR(1, 1, 1, 1, -1, -1, om1))/45369 - (26327008*HR(1, 1, 1, 1, -1, 0, om1))/45369 - (7959328*HR(1, 1, 1, 1, -1, 1, om1))/45369 + (707222944*HR(1, 1, 1, 1, 0, -1, om1))/45369 + (4181188831*HR(1, 1, 1, 1, 0, 0, om1))/1088856 + (3061280*HR(1, 1, 1, 1, 1, -1, om1))/5041 + (25498178108029*HR(1, 1, 1, 1, 1, 1, om1))/68597928"</span>).unwrap() ),
+<a href=#70 id=70 data-nosnippet>70</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"D3bar(0)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"12*HR(1, 0, 1, 0, om1) - (2454*HR(1, 1, 1, 1, om1))/5"</span>).unwrap() ),
+<a href=#71 id=71 data-nosnippet>71</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"D3bar(1)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"-72*HR(1, 0, -1, 1, 0, om1) - 72*HR(1, 0, 1, -1, 0, om1) + 234*HR(1, 0, 1, 1, 1, om1) + (8565*HR(1, 1, 0, 1, 1, om1))/58 - (12469*HR(1, 1, 1, 0, 1, om1))/58 - (21182*HR(1, 1, 1, 1, 0, om1))/29"</span>).unwrap() ),
+<a href=#72 id=72 data-nosnippet>72</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"D3bar(2)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"432*HR(1, 0, -1, -1, 1, 0, om1) + 432*HR(1, 0, -1, 1, -1, 0, om1) - 1404*HR(1, 0, -1, 1, 1, 1, om1) + 432*HR(1, 0, 1, -1, -1, 1, om1) + 432*HR(1, 0, 1, -1, 1, -1, om1) + 288*HR(1, 0, 1, -1, 1, 0, om1) - 2268*HR(1, 0, 1, -1, 1, 1, om1) + 426*HR(1, 0, 1, 0, 1, 1, om1) + 864*HR(1, 0, 1, 1, -1, -1, om1) + 1008*HR(1, 0, 1, 1, -1, 0, om1) - 3564*HR(1, 0, 1, 1, -1, 1, om1) + (597*HR(1, 0, 1, 1, 0, 1, om1))/2 - 5292*HR(1, 0, 1, 1, 1, -1, om1) - (2997*HR(1, 0, 1, 1, 1, 0, om1))/2 - 1872*HR(1, 1, 0, -1, 1, 1, om1) + 864*HR(1, 1, 0, 1, -1, -1, om1) - (4434544*HR(1, 1, 0, 1, -1, 0, om1))/5041 - (10551648*HR(1, 1, 0, 1, -1, 1, om1))/5041 - (16021968*HR(1, 1, 0, 1, 1, -1, om1))/5041 + (2803488*HR(1, 1, 1, -1, -1, 0, om1))/5041 - (2803488*HR(1, 1, 1, -1, -1, 1, om1))/5041 - (1127840*HR(1, 1, 1, -1, 0, 0, om1))/5041 + (2030112*HR(1, 1, 1, -1, 0, 1, om1))/5041 - (2803488*HR(1, 1, 1, -1, 1, -1, om1))/5041 + (161120*HR(1, 1, 1, -1, 1, 0, om1))/5041 - (1063392*HR(1, 1, 1, -1, 1, 1, om1))/5041 - (28703376*HR(1, 1, 1, 0, -1, 0, om1))/5041 + (21068364*HR(1, 1, 1, 0, -1, 1, om1))/5041 - (64500970*HR(1, 1, 1, 0, 0, 1, om1))/45369 + (30789948*HR(1, 1, 1, 0, 1, -1, om1))/5041 + (171036689*HR(1, 1, 1, 0, 1, 0, om1))/45369 - (11213952*HR(1, 1, 1, 1, -1, -1, om1))/5041 - (4156896*HR(1, 1, 1, 1, -1, 0, om1))/5041 - (1256736*HR(1, 1, 1, 1, -1, 1, om1))/5041 + (112583712*HR(1, 1, 1, 1, 0, -1, om1))/5041 + (216348149*HR(1, 1, 1, 1, 0, 0, om1))/40328 + (4350240*HR(1, 1, 1, 1, 1, -1, om1))/5041 + (1158178961791*HR(1, 1, 1, 1, 1, 1, om1))/2540664"</span>).unwrap() ),
+<a href=#73 id=73 data-nosnippet>73</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"DMbar(0)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"8*HR(1, 0, 1, 0, om1) - 392*HR(1, 1, 1, 1, om1)"</span>).unwrap() ),
+<a href=#74 id=74 data-nosnippet>74</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"DMbar(1)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"-16*HR(1, 0, -1, 1, 0, om1) - 16*HR(1, 0, 1, -1, 0, om1) + 4*HR(1, 0, 1, 1, 1, om1) - (21209*HR(1, 1, 0, 1, 1, om1))/174 - (192041*HR(1, 1, 1, 0, 1, om1))/522 - (178807*HR(1, 1, 1, 1, 0, om1))/261"</span>).unwrap() ),
+<a href=#75 id=75 data-nosnippet>75</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"DMbar(2)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"32*HR(1, 0, -1, -1, 1, 0, om1) + 32*HR(1, 0, -1, 1, -1, 0, om1) - 8*HR(1, 0, -1, 1, 1, 1, om1) + 32*HR(1, 0, 1, -1, -1, 1, om1) + 32*HR(1, 0, 1, -1, 1, -1, om1) + (64*HR(1, 0, 1, -1, 1, 0, om1))/3 - 72*HR(1, 0, 1, -1, 1, 1, om1) - (148*HR(1, 0, 1, 0, 1, 1, om1))/9 + 64*HR(1, 0, 1, 1, -1, -1, om1) + (224*HR(1, 0, 1, 1, -1, 0, om1))/3 - 168*HR(1, 0, 1, 1, -1, 1, om1) - (1529*HR(1, 0, 1, 1, 0, 1, om1))/9 - 296*HR(1, 0, 1, 1, 1, -1, om1) - 479*HR(1, 0, 1, 1, 1, 0, om1) + (160*HR(1, 1, 0, -1, 1, 1, om1))/3 + 64*HR(1, 1, 0, 1, -1, -1, om1) - (8869088*HR(1, 1, 0, 1, -1, 0, om1))/136107 + (1676416*HR(1, 1, 0, 1, -1, 1, om1))/45369 - (1970464*HR(1, 1, 0, 1, 1, -1, om1))/45369 + (1868992*HR(1, 1, 1, -1, -1, 0, om1))/45369 - (1868992*HR(1, 1, 1, -1, -1, 1, om1))/45369 - (2255680*HR(1, 1, 1, -1, 0, 0, om1))/136107 + (451136*HR(1, 1, 1, -1, 0, 1, om1))/15123 - (1868992*HR(1, 1, 1, -1, 1, -1, om1))/45369 + (322240*HR(1, 1, 1, -1, 1, 0, om1))/136107 - (708928*HR(1, 1, 1, -1, 1, 1, om1))/45369 - (2126176*HR(1, 1, 1, 0, -1, 0, om1))/5041 + (27111848*HR(1, 1, 1, 0, -1, 1, om1))/45369 + (262986220*HR(1, 1, 1, 0, 0, 1, om1))/1224963 + (33592904*HR(1, 1, 1, 0, 1, -1, om1))/45369 + (1398989602*HR(1, 1, 1, 0, 1, 0, om1))/1224963 - (7475968*HR(1, 1, 1, 1, -1, -1, om1))/45369 - (2771264*HR(1, 1, 1, 1, -1, 0, om1))/45369 - (837824*HR(1, 1, 1, 1, -1, 1, om1))/45369 + (92477504*HR(1, 1, 1, 1, 0, -1, om1))/45369 + (49177327*HR(1, 1, 1, 1, 0, 0, om1))/20164 + (322240*HR(1, 1, 1, 1, 1, -1, om1))/5041 + (5318919501463*HR(1, 1, 1, 1, 1, 1, om1))/34298964"</span>).unwrap() ),
+<a href=#76 id=76 data-nosnippet>76</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"DNbar(0)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"(-72*HR(1, -1, 1, 0, om1))/11 + (180*HR(1, -1, 1, 1, om1))/11 + (60*HR(1, 0, 1, 0, om1))/11 - (144*HR(1, 1, -1, 0, om1))/11 + (360*HR(1, 1, -1, 1, om1))/11 + (540*HR(1, 1, 1, -1, om1))/11 - (10839*HR(1, 1, 1, 1, om1))/55"</span>).unwrap() ),
+<a href=#77 id=77 data-nosnippet>77</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"DNbar(1)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"(-328*HR(1, 1, -1, 0, 0, om1))/29 + (428*HR(1, 1, -1, 0, 1, om1))/29 + (428*HR(1, 1, -1, 1, 0, om1))/29 - (528*HR(1, 1, -1, 1, 1, om1))/29 - (451079*HR(1, 1, 0, 1, 1, om1))/5046 + (1684*HR(1, 1, 1, -1, 0, om1))/29 - (2184*HR(1, 1, 1, -1, 1, om1))/29 - (4056811*HR(1, 1, 1, 0, 1, om1))/15138 - 192*HR(1, 1, 1, 1, -1, om1) - (3533174*HR(1, 1, 1, 1, 0, om1))/7569"</span>).unwrap() ),
+<a href=#78 id=78 data-nosnippet>78</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"DNbar(2)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"(-232020872*HR(1, 1, 0, 1, -1, 0, om1))/35287 + (242178240*HR(1, 1, 0, 1, -1, 1, om1))/35287 + (484356480*HR(1, 1, 0, 1, 1, -1, om1))/35287 + (110839452*HR(1, 1, 1, -1, -1, 0, om1))/35287 - (110839452*HR(1, 1, 1, -1, -1, 1, om1))/35287 - (6313068*HR(1, 1, 1, -1, 0, 0, om1))/5041 + (11391752*HR(1, 1, 1, -1, 0, 1, om1))/5041 - (110839452*HR(1, 1, 1, -1, 1, -1, om1))/35287 + (5849296*HR(1, 1, 1, -1, 1, 0, om1))/35287 - (41400084*HR(1, 1, 1, -1, 1, 1, om1))/35287 - (691680096*HR(1, 1, 1, 0, -1, 0, om1))/35287 + (103164600*HR(1, 1, 1, 0, -1, 1, om1))/5041 - (321226763*HR(1, 1, 1, 0, 0, 1, om1))/317583 + (1448686920*HR(1, 1, 1, 0, 1, -1, om1))/35287 - (347521883*HR(1, 1, 1, 0, 1, 0, om1))/317583 - (443357808*HR(1, 1, 1, 1, -1, -1, om1))/35287 - (166918020*HR(1, 1, 1, 1, -1, 0, om1))/35287 - (46386708*HR(1, 1, 1, 1, -1, 1, om1))/35287 + (412658400*HR(1, 1, 1, 1, 0, -1, om1))/5041 - (3381227415*HR(1, 1, 1, 1, 0, 0, om1))/282296 + (182067300*HR(1, 1, 1, 1, 1, -1, om1))/35287 + (21952587521807*HR(1, 1, 1, 1, 1, 1, om1))/17784648"</span>).unwrap() ),
+<a href=#79 id=79 data-nosnippet>79</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"E3bar(-1)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"6*HI(1, 0, om1)"</span>).unwrap() ),
+<a href=#80 id=80 data-nosnippet>80</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"E3bar(0)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"-12*HI(-1, 1, 0, om1) - 12*HI(1, -1, 0, om1) + 3*HI(1, 1, 1, om1)"</span>).unwrap() ),
+<a href=#81 id=81 data-nosnippet>81</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"E3bar(1)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"24*HI(-1, -1, 1, 0, om1) + 24*HI(-1, 1, -1, 0, om1) - 6*HI(-1, 1, 1, 1, om1) + 24*HI(1, -1, -1, 1, om1) + 24*HI(1, -1, 1, -1, om1) + 16*HI(1, -1, 1, 0, om1) - 54*HI(1, -1, 1, 1, om1) - (37*HI(1, 0, 1, 1, om1))/3 + 48*HI(1, 1, -1, -1, om1) + 56*HI(1, 1, -1, 0, om1) - 126*HI(1, 1, -1, 1, om1) - (1529*HI(1, 1, 0, 1, om1))/12 - 222*HI(1, 1, 1, -1, om1) - (1437*HI(1, 1, 1, 0, om1))/4"</span>).unwrap() ),
+<a href=#82 id=82 data-nosnippet>82</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"E3bar(2)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"-48*HI(-1, -1, -1, 1, 0, om1) - 48*HI(-1, -1, 1, -1, 0, om1) + 12*HI(-1, -1, 1, 1, 1, om1) - 48*HI(-1, 1, -1, -1, 1, om1) - 48*HI(-1, 1, -1, 1, -1, om1) - 32*HI(-1, 1, -1, 1, 0, om1) + 108*HI(-1, 1, -1, 1, 1, om1) + (74*HI(-1, 1, 0, 1, 1, om1))/3 - 96*HI(-1, 1, 1, -1, -1, om1) - 112*HI(-1, 1, 1, -1, 0, om1) + 252*HI(-1, 1, 1, -1, 1, om1) + (1529*HI(-1, 1, 1, 0, 1, om1))/6 + 444*HI(-1, 1, 1, 1, -1, om1) + (1437*HI(-1, 1, 1, 1, 0, om1))/2 - 48*HI(1, -1, -1, -1, 1, om1) - 48*HI(1, -1, -1, 1, -1, om1) - 32*HI(1, -1, -1, 1, 0, om1) - 112*HI(1, -1, 1, -1, 0, om1) + 96*HI(1, -1, 1, -1, 1, om1) - 80*HI(1, -1, 1, 0, -1, om1) + 144*HI(1, -1, 1, 1, -1, om1) + (11841*HI(1, -1, 1, 1, 1, om1))/4 + 90*HI(1, 0, -1, 1, 1, om1) - 80*HI(1, 0, 1, -1, -1, om1) + 130*HI(1, 0, 1, -1, 1, om1) + (8105*HI(1, 0, 1, 0, 1, om1))/36 + 250*HI(1, 0, 1, 1, -1, om1) + (21503*HI(1, 0, 1, 1, 0, om1))/36 + 96*HI(1, 1, -1, -1, -1, om1) - 172*HI(1, 1, -1, -1, 1, om1) + (1725367*HI(1, 1, -1, 0, 0, om1))/4161 - (412061*HI(1, 1, -1, 0, 1, om1))/8322 - 268*HI(1, 1, -1, 1, -1, om1) - (1334797*HI(1, 1, -1, 1, 0, om1))/2774 + (14659325*HI(1, 1, -1, 1, 1, om1))/2774 + (771*HI(1, 1, 0, -1, 1, om1))/2 - (5253406*HI(1, 1, 0, 0, -1, om1))/12483 + (1081050*HI(1, 1, 0, 1, -1, om1))/1387 - 1112*HI(1, 1, 1, -1, -1, om1) - (1316324*HI(1, 1, 1, -1, 0, om1))/1387 + (40815981*HI(1, 1, 1, -1, 1, om1))/5548 + (1357934*HI(1, 1, 1, 0, -1, om1))/657 - (1768682807*HI(1, 1, 1, 0, 0, om1))/898776 + (14459841*HI(1, 1, 1, 1, -1, om1))/1387 - (3591211175*HI(1, 1, 1, 1, 1, om1))/112347"</span>).unwrap() ),
+<a href=#83 id=83 data-nosnippet>83</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"E3bar(3)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"96*HI(-1, -1, -1, -1, 1, 0, om1) + 96*HI(-1, -1, -1, 1, -1, 0, om1) - 24*HI(-1, -1, -1, 1, 1, 1, om1) + 96*HI(-1, -1, 1, -1, -1, 1, om1) + 96*HI(-1, -1, 1, -1, 1, -1, om1) + 64*HI(-1, -1, 1, -1, 1, 0, om1) - 216*HI(-1, -1, 1, -1, 1, 1, om1) - (148*HI(-1, -1, 1, 0, 1, 1, om1))/3 + 192*HI(-1, -1, 1, 1, -1, -1, om1) + 224*HI(-1, -1, 1, 1, -1, 0, om1) - 504*HI(-1, -1, 1, 1, -1, 1, om1) - (1529*HI(-1, -1, 1, 1, 0, 1, om1))/3 - 888*HI(-1, -1, 1, 1, 1, -1, om1) - 1437*HI(-1, -1, 1, 1, 1, 0, om1) + 96*HI(-1, 1, -1, -1, -1, 1, om1) + 96*HI(-1, 1, -1, -1, 1, -1, om1) + 64*HI(-1, 1, -1, -1, 1, 0, om1) + 224*HI(-1, 1, -1, 1, -1, 0, om1) - 192*HI(-1, 1, -1, 1, -1, 1, om1) + 160*HI(-1, 1, -1, 1, 0, -1, om1) - 288*HI(-1, 1, -1, 1, 1, -1, om1) - (11841*HI(-1, 1, -1, 1, 1, 1, om1))/2 - 180*HI(-1, 1, 0, -1, 1, 1, om1) + 160*HI(-1, 1, 0, 1, -1, -1, om1) - 260*HI(-1, 1, 0, 1, -1, 1, om1) - (8105*HI(-1, 1, 0, 1, 0, 1, om1))/18 - 500*HI(-1, 1, 0, 1, 1, -1, om1) - (21503*HI(-1, 1, 0, 1, 1, 0, om1))/18 - 192*HI(-1, 1, 1, -1, -1, -1, om1) + 344*HI(-1, 1, 1, -1, -1, 1, om1) - (3450734*HI(-1, 1, 1, -1, 0, 0, om1))/4161 + (412061*HI(-1, 1, 1, -1, 0, 1, om1))/4161 + 536*HI(-1, 1, 1, -1, 1, -1, om1) + (1334797*HI(-1, 1, 1, -1, 1, 0, om1))/1387 - (14659325*HI(-1, 1, 1, -1, 1, 1, om1))/1387 - 771*HI(-1, 1, 1, 0, -1, 1, om1) + (10506812*HI(-1, 1, 1, 0, 0, -1, om1))/12483 - (2162100*HI(-1, 1, 1, 0, 1, -1, om1))/1387 + 2224*HI(-1, 1, 1, 1, -1, -1, om1) + (2632648*HI(-1, 1, 1, 1, -1, 0, om1))/1387 - (40815981*HI(-1, 1, 1, 1, -1, 1, om1))/2774 - (2715868*HI(-1, 1, 1, 1, 0, -1, om1))/657 + (1768682807*HI(-1, 1, 1, 1, 0, 0, om1))/449388 - (28919682*HI(-1, 1, 1, 1, 1, -1, om1))/1387 + (7182422350*HI(-1, 1, 1, 1, 1, 1, om1))/112347 + 96*HI(1, -1, -1, -1, -1, 1, om1) + 96*HI(1, -1, -1, -1, 1, -1, om1) + 64*HI(1, -1, -1, -1, 1, 0, om1) + 224*HI(1, -1, -1, 1, -1, 0, om1) - 192*HI(1, -1, -1, 1, -1, 1, om1) + 160*HI(1, -1, -1, 1, 0, -1, om1) - 288*HI(1, -1, -1, 1, 1, -1, om1) - (11841*HI(1, -1, -1, 1, 1, 1, om1))/2 + 248*HI(1, -1, 1, -1, -1, 1, om1) + 440*HI(1, -1, 1, -1, 1, -1, om1) + (2590*HI(1, -1, 1, -1, 1, 0, om1))/3 - 10608*HI(1, -1, 1, -1, 1, 1, om1) - 320*HI(1, -1, 1, 0, -1, -1, om1) - (759843*HI(1, -1, 1, 0, 1, -1, om1))/1387 + (13919645*HI(1, -1, 1, 0, 1, 1, om1))/12483 + 1520*HI(1, -1, 1, 1, -1, -1, om1) + (7073822*HI(1, -1, 1, 1, -1, 0, om1))/4161 - (40321721*HI(1, -1, 1, 1, -1, 1, om1))/2774 + (6271329955*HI(1, -1, 1, 1, 0, 1, om1))/898776 - (26862395*HI(1, -1, 1, 1, 1, -1, om1))/1387 + (6038799457*HI(1, -1, 1, 1, 1, 0, om1))/299592 - 160*HI(1, 0, 1, -1, -1, -1, om1) - (277814945*HI(1, 0, 1, -1, 1, 0, om1))/137313 + (212581060*HI(1, 0, 1, -1, 1, 1, om1))/45771 - (585*HI(1, 0, 1, 0, -1, 1, om1))/2 - (585*HI(1, 0, 1, 0, 1, -1, om1))/2 + (2272287250*HI(1, 0, 1, 0, 1, 0, om1))/1235817 + (1280*HI(1, 0, 1, 1, -1, -1, om1))/3 - (221375860*HI(1, 0, 1, 1, -1, 0, om1))/137313 + (4419865*HI(1, 0, 1, 1, -1, 1, om1))/803 - (2624160*HI(1, 0, 1, 1, 0, -1, om1))/1387 + (86319175*HI(1, 0, 1, 1, 1, -1, om1))/45771 - (7230866663213*HI(1, 0, 1, 1, 1, 1, om1))/74149020 + 192*HI(1, 1, -1, -1, -1, -1, om1) + 152*HI(1, 1, -1, -1, -1, 1, om1) + 344*HI(1, 1, -1, -1, 1, -1, om1) + (2590*HI(1, 1, -1, -1, 1, 0, om1))/3 - (30479*HI(1, 1, -1, -1, 1, 1, om1))/3 - (426963*HI(1, 1, -1, 0, 1, -1, om1))/1387 + 944*HI(1, 1, -1, 1, -1, -1, om1) + 1601*HI(1, 1, -1, 1, -1, 0, om1) - (83605*HI(1, 1, -1, 1, -1, 1, om1))/6 + (2419561*HI(1, 1, -1, 1, 0, -1, om1))/657 + (837579887*HI(1, 1, -1, 1, 0, 1, om1))/112347 - (73453112*HI(1, 1, -1, 1, 1, -1, om1))/4161 + (24602317907*HI(1, 1, -1, 1, 1, 0, om1))/898776 - (2981940259*HI(1, 1, -1, 1, 1, 1, om1))/224694 - 571*HI(1, 1, 0, -1, -1, 1, om1) - (1218940*HI(1, 1, 0, -1, 1, -1, om1))/1387 - (1284799676*HI(1, 1, 0, -1, 1, 0, om1))/411939 + (172606885810943423*HI(1, 1, 0, 1, -1, -1, om1))/31412461173192 + (330844112035157*HI(1, 1, 0, 1, -1, 0, om1))/387808162632 - (335938955928166355*HI(1, 1, 0, 1, -1, 1, om1))/62824922346384 - (9666835700761579*HI(1, 1, 0, 1, 1, -1, om1))/296343973332 - 784*HI(1, 1, 1, -1, -1, -1, om1) + (32163144510925889*HI(1, 1, 1, -1, -1, 0, om1))/1903785525648 - (52473680391301577*HI(1, 1, 1, -1, -1, 1, om1))/1903785525648 + (910517365657338137*HI(1, 1, 1, -1, 0, -1, om1))/62824922346384 + (263100146907443657*HI(1, 1, 1, -1, 0, 0, om1))/17134069730832 - (46280134588267057*HI(1, 1, 1, -1, 0, 1, om1))/188474767039152 - (57799520399301857*HI(1, 1, 1, -1, 1, -1, om1))/1903785525648 + (931530505381579307*HI(1, 1, 1, -1, 1, 0, om1))/62824922346384 + (1778265423341603573*HI(1, 1, 1, -1, 1, 1, om1))/62824922346384 + (161624158645205183*HI(1, 1, 1, 0, -1, -1, om1))/10470820391064 - (67738084863003155*HI(1, 1, 1, 0, -1, 0, om1))/5235410195532 - (25709636977147441*HI(1, 1, 1, 0, -1, 1, om1))/2326848975792 - (1201750627073139241*HI(1, 1, 1, 0, 0, -1, om1))/205608836769984 + (37123461223687789039459901*HI(1, 1, 1, 0, 0, 0, om1))/489612210823627499520 - (15065768752177753*HI(1, 1, 1, 0, 1, -1, om1))/183698603352 + (5890725611419818825578737*HI(1, 1, 1, 0, 1, 1, om1))/25769063727559342080 - (2641792499452155803*HI(1, 1, 1, 1, -1, -1, om1))/31412461173192 - (232062550415237737*HI(1, 1, 1, 1, -1, 0, om1))/3306574860336 + (709822530971820472*HI(1, 1, 1, 1, -1, 1, om1))/3926557646649 - (114034845156029701411*HI(1, 1, 1, 1, 0, -1, om1))/1130848602234912 + (497108468757262704945911459*HI(1, 1, 1, 1, 0, 1, om1))/979224421647254999040 + (19072578396451593155*HI(1, 1, 1, 1, 1, -1, om1))/31412461173192 + (160662586785011672453801383*HI(1, 1, 1, 1, 1, 0, om1))/326408140549084999680"</span>).unwrap() ),
+<a href=#84 id=84 data-nosnippet>84</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"BNbar(1)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"112*HR(1, 1, 0, om1)"</span>).unwrap() ),
+<a href=#85 id=85 data-nosnippet>85</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"BNbar(2)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"(-2304*HR(1, -1, 1, 0, om1))/11 + (5760*HR(1, -1, 1, 1, om1))/11 + (1920*HR(1, 0, 1, 0, om1))/11 - (4608*HR(1, 1, -1, 0, om1))/11 + (11520*HR(1, 1, -1, 1, om1))/11 + (17280*HR(1, 1, 1, -1, om1))/11 - (593952*HR(1, 1, 1, 1, om1))/55"</span>).unwrap() ),
+<a href=#86 id=86 data-nosnippet>86</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"BNbar(3)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"(-36864*HR(1, 1, -1, 0, 0, om1))/29 + (52992*HR(1, 1, -1, 0, 1, om1))/29 + (52992*HR(1, 1, -1, 1, 0, om1))/29 - (69120*HR(1, 1, -1, 1, 1, om1))/29 - (3282240*HR(1, 1, 0, 1, 1, om1))/841 + (223488*HR(1, 1, 1, -1, 0, om1))/29 - (304128*HR(1, 1, 1, -1, 1, om1))/29 - (9820736*HR(1, 1, 1, 0, 1, om1))/841 - 27648*HR(1, 1, 1, 1, -1, om1) - (19524608*HR(1, 1, 1, 1, 0, om1))/841"</span>).unwrap() ),
+<a href=#87 id=87 data-nosnippet>87</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"BNbar(4)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"(-1303119360*HR(1, 1, 0, 1, -1, 0, om1))/5041 + (1354682880*HR(1, 1, 0, 1, -1, 1, om1))/5041 + (2709365760*HR(1, 1, 0, 1, 1, -1, om1))/5041 + (613018368*HR(1, 1, 1, -1, -1, 0, om1))/5041 - (613018368*HR(1, 1, 1, -1, -1, 1, om1))/5041 - (208168704*HR(1, 1, 1, -1, 0, 0, om1))/5041 + (388641024*HR(1, 1, 1, -1, 0, 1, om1))/5041 - (613018368*HR(1, 1, 1, -1, 1, -1, om1))/5041 - (20037888*HR(1, 1, 1, -1, 1, 0, om1))/5041 - (160434432*HR(1, 1, 1, -1, 1, 1, om1))/5041 - (3867098112*HR(1, 1, 1, 0, -1, 0, om1))/5041 + (4021788672*HR(1, 1, 1, 0, -1, 1, om1))/5041 - (181188480*HR(1, 1, 1, 0, 0, 1, om1))/5041 + (8085837312*HR(1, 1, 1, 0, 1, -1, om1))/5041 - (209361792*HR(1, 1, 1, 0, 1, 0, om1))/5041 - (2452073472*HR(1, 1, 1, 1, -1, -1, om1))/5041 - (1197317376*HR(1, 1, 1, 1, -1, 0, om1))/5041 + (114483456*HR(1, 1, 1, 1, -1, 1, om1))/5041 + (16087154688*HR(1, 1, 1, 1, 0, -1, om1))/5041 - (2378746336*HR(1, 1, 1, 1, 0, 0, om1))/5041 + (2176761600*HR(1, 1, 1, 1, 1, -1, om1))/5041 + (249395302624*HR(1, 1, 1, 1, 1, 1, om1))/5041"</span>).unwrap() ),
+<a href=#88 id=88 data-nosnippet>88</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"BN1bar(0)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"4*HI(1, 0, om1)"</span>).unwrap() ),
+<a href=#89 id=89 data-nosnippet>89</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"BN1bar(1)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"-24*HI(-1, 1, 0, om1) - 24*HI(1, -1, 0, om1) + 78*HI(1, 1, 1, om1)"</span>).unwrap() ),
+<a href=#90 id=90 data-nosnippet>90</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"BN1bar(2)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"144*HI(-1, -1, 1, 0, om1) + 144*HI(-1, 1, -1, 0, om1) - 468*HI(-1, 1, 1, 1, om1) + 144*HI(1, -1, -1, 1, om1) + 144*HI(1, -1, 1, -1, om1) + 96*HI(1, -1, 1, 0, om1) - 756*HI(1, -1, 1, 1, om1) + 142*HI(1, 0, 1, 1, om1) + 288*HI(1, 1, -1, -1, om1) + 336*HI(1, 1, -1, 0, om1) - 1188*HI(1, 1, -1, 1, om1) + (199*HI(1, 1, 0, 1, om1))/2 - 1764*HI(1, 1, 1, -1, om1) - (999*HI(1, 1, 1, 0, om1))/2"</span>).unwrap() ),
+<a href=#91 id=91 data-nosnippet>91</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"BN1bar(3)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"-864*HI(-1, -1, -1, 1, 0, om1) - 864*HI(-1, -1, 1, -1, 0, om1) + 2808*HI(-1, -1, 1, 1, 1, om1) - 864*HI(-1, 1, -1, -1, 1, om1) - 864*HI(-1, 1, -1, 1, -1, om1) - 576*HI(-1, 1, -1, 1, 0, om1) + 4536*HI(-1, 1, -1, 1, 1, om1) - 852*HI(-1, 1, 0, 1, 1, om1) - 1728*HI(-1, 1, 1, -1, -1, om1) - 2016*HI(-1, 1, 1, -1, 0, om1) + 7128*HI(-1, 1, 1, -1, 1, om1) - 597*HI(-1, 1, 1, 0, 1, om1) + 10584*HI(-1, 1, 1, 1, -1, om1) + 2997*HI(-1, 1, 1, 1, 0, om1) - 864*HI(1, -1, -1, -1, 1, om1) - 864*HI(1, -1, -1, 1, -1, om1) - 576*HI(1, -1, -1, 1, 0, om1) - 2016*HI(1, -1, 1, -1, 0, om1) + 1728*HI(1, -1, 1, -1, 1, om1) - 1440*HI(1, -1, 1, 0, -1, om1) + 2592*HI(1, -1, 1, 1, -1, om1) + (41337*HI(1, -1, 1, 1, 1, om1))/2 + 3780*HI(1, 0, -1, 1, 1, om1) - 1440*HI(1, 0, 1, -1, -1, om1) + 4500*HI(1, 0, 1, -1, 1, om1) + (1625*HI(1, 0, 1, 0, 1, om1))/2 + 6660*HI(1, 0, 1, 1, -1, om1) + (5903*HI(1, 0, 1, 1, 0, om1))/2 + 1728*HI(1, 1, -1, -1, -1, om1) - 5688*HI(1, 1, -1, -1, 1, om1) + (3566346*HI(1, 1, -1, 0, 0, om1))/1387 + (2763273*HI(1, 1, -1, 0, 1, om1))/1387 - 7416*HI(1, 1, -1, 1, -1, om1) - (1422693*HI(1, 1, -1, 1, 0, om1))/1387 + (54624501*HI(1, 1, -1, 1, 1, om1))/1387 + 8667*HI(1, 1, 0, -1, 1, om1) - (5422460*HI(1, 1, 0, 0, -1, om1))/1387 + (17237556*HI(1, 1, 0, 1, -1, om1))/1387 - 25200*HI(1, 1, 1, -1, -1, om1) - (5703624*HI(1, 1, 1, -1, 0, om1))/1387 + (174917637*HI(1, 1, 1, -1, 1, om1))/2774 + (1624492*HI(1, 1, 1, 0, -1, om1))/73 - (400772087*HI(1, 1, 1, 0, 0, om1))/49932 + (158327730*HI(1, 1, 1, 1, -1, om1))/1387 - (3279409000*HI(1, 1, 1, 1, 1, om1))/12483"</span>).unwrap() ),
+<a href=#92 id=92 data-nosnippet>92</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"BN1bar(4)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"5184*HI(-1, -1, -1, -1, 1, 0, om1) + 5184*HI(-1, -1, -1, 1, -1, 0, om1) - 16848*HI(-1, -1, -1, 1, 1, 1, om1) + 5184*HI(-1, -1, 1, -1, -1, 1, om1) + 5184*HI(-1, -1, 1, -1, 1, -1, om1) + 3456*HI(-1, -1, 1, -1, 1, 0, om1) - 27216*HI(-1, -1, 1, -1, 1, 1, om1) + 5112*HI(-1, -1, 1, 0, 1, 1, om1) + 10368*HI(-1, -1, 1, 1, -1, -1, om1) + 12096*HI(-1, -1, 1, 1, -1, 0, om1) - 42768*HI(-1, -1, 1, 1, -1, 1, om1) + 3582*HI(-1, -1, 1, 1, 0, 1, om1) - 63504*HI(-1, -1, 1, 1, 1, -1, om1) - 17982*HI(-1, -1, 1, 1, 1, 0, om1) + 5184*HI(-1, 1, -1, -1, -1, 1, om1) + 5184*HI(-1, 1, -1, -1, 1, -1, om1) + 3456*HI(-1, 1, -1, -1, 1, 0, om1) + 12096*HI(-1, 1, -1, 1, -1, 0, om1) - 10368*HI(-1, 1, -1, 1, -1, 1, om1) + 8640*HI(-1, 1, -1, 1, 0, -1, om1) - 15552*HI(-1, 1, -1, 1, 1, -1, om1) - 124011*HI(-1, 1, -1, 1, 1, 1, om1) - 22680*HI(-1, 1, 0, -1, 1, 1, om1) + 8640*HI(-1, 1, 0, 1, -1, -1, om1) - 27000*HI(-1, 1, 0, 1, -1, 1, om1) - 4875*HI(-1, 1, 0, 1, 0, 1, om1) - 39960*HI(-1, 1, 0, 1, 1, -1, om1) - 17709*HI(-1, 1, 0, 1, 1, 0, om1) - 10368*HI(-1, 1, 1, -1, -1, -1, om1) + 34128*HI(-1, 1, 1, -1, -1, 1, om1) - (21398076*HI(-1, 1, 1, -1, 0, 0, om1))/1387 - (16579638*HI(-1, 1, 1, -1, 0, 1, om1))/1387 + 44496*HI(-1, 1, 1, -1, 1, -1, om1) + (8536158*HI(-1, 1, 1, -1, 1, 0, om1))/1387 - (327747006*HI(-1, 1, 1, -1, 1, 1, om1))/1387 - 52002*HI(-1, 1, 1, 0, -1, 1, om1) + (32534760*HI(-1, 1, 1, 0, 0, -1, om1))/1387 - (103425336*HI(-1, 1, 1, 0, 1, -1, om1))/1387 + 151200*HI(-1, 1, 1, 1, -1, -1, om1) + (34221744*HI(-1, 1, 1, 1, -1, 0, om1))/1387 - (524752911*HI(-1, 1, 1, 1, -1, 1, om1))/1387 - (9746952*HI(-1, 1, 1, 1, 0, -1, om1))/73 + (400772087*HI(-1, 1, 1, 1, 0, 0, om1))/8322 - (949966380*HI(-1, 1, 1, 1, 1, -1, om1))/1387 + (6558818000*HI(-1, 1, 1, 1, 1, 1, om1))/4161 + 5184*HI(1, -1, -1, -1, -1, 1, om1) + 5184*HI(1, -1, -1, -1, 1, -1, om1) + 3456*HI(1, -1, -1, -1, 1, 0, om1) + 12096*HI(1, -1, -1, 1, -1, 0, om1) - 10368*HI(1, -1, -1, 1, -1, 1, om1) + 8640*HI(1, -1, -1, 1, 0, -1, om1) - 15552*HI(1, -1, -1, 1, 1, -1, om1) - 124011*HI(1, -1, -1, 1, 1, 1, om1) + 28944*HI(1, -1, 1, -1, -1, 1, om1) + 39312*HI(1, -1, 1, -1, 1, -1, om1) + 18108*HI(1, -1, 1, -1, 1, 0, om1) - 290304*HI(1, -1, 1, -1, 1, 1, om1) - 17280*HI(1, -1, 1, 0, -1, -1, om1) - (13323042*HI(1, -1, 1, 0, 1, -1, om1))/1387 + (34731966*HI(1, -1, 1, 0, 1, 1, om1))/1387 + 113184*HI(1, -1, 1, 1, -1, -1, om1) + (67381020*HI(1, -1, 1, 1, -1, 0, om1))/1387 - (655388307*HI(1, -1, 1, 1, -1, 1, om1))/1387 + (1961738995*HI(1, -1, 1, 1, 0, 1, om1))/16644 - (1054843506*HI(1, -1, 1, 1, 1, -1, om1))/1387 + (1636490353*HI(1, -1, 1, 1, 1, 0, om1))/5548 - 8640*HI(1, 0, 1, -1, -1, -1, om1) - (1057484550*HI(1, 0, 1, -1, 1, 0, om1))/15257 + (2896138440*HI(1, 0, 1, -1, 1, 1, om1))/15257 - 13635*HI(1, 0, 1, 0, -1, 1, om1) - 13635*HI(1, 0, 1, 0, 1, -1, om1) + (2536761620*HI(1, 0, 1, 0, 1, 0, om1))/45771 + 23040*HI(1, 0, 1, 1, -1, -1, om1) - (722452920*HI(1, 0, 1, 1, -1, 0, om1))/15257 + (189139590*HI(1, 0, 1, 1, -1, 1, om1))/803 - (73887840*HI(1, 0, 1, 1, 0, -1, om1))/1387 + (1521319230*HI(1, 0, 1, 1, 1, -1, om1))/15257 - (1739984020721*HI(1, 0, 1, 1, 1, 1, om1))/1373130 + 10368*HI(1, 1, -1, -1, -1, -1, om1) + 23760*HI(1, 1, -1, -1, -1, 1, om1) + 34128*HI(1, 1, -1, -1, 1, -1, om1) + 18108*HI(1, 1, -1, -1, 1, 0, om1) - 323118*HI(1, 1, -1, -1, 1, 1, om1) + (4652478*HI(1, 1, -1, 0, 1, -1, om1))/1387 + 82080*HI(1, 1, -1, 1, -1, -1, om1) + 60534*HI(1, 1, -1, 1, -1, 0, om1) - 548973*HI(1, 1, -1, 1, -1, 1, om1) + (7212246*HI(1, 1, -1, 1, 0, -1, om1))/73 + (499549318*HI(1, 1, -1, 1, 0, 1, om1))/4161 - (1149502896*HI(1, 1, -1, 1, 1, -1, om1))/1387 + (6314678771*HI(1, 1, -1, 1, 1, 0, om1))/16644 - (3100825687*HI(1, 1, -1, 1, 1, 1, om1))/4161 - 15282*HI(1, 1, 0, -1, -1, 1, om1) - (16543656*HI(1, 1, 0, -1, 1, -1, om1))/1387 - (1961940664*HI(1, 1, 0, -1, 1, 0, om1))/15257 + (64895701668594431*HI(1, 1, 0, 1, -1, -1, om1))/581712243948 - (1378601274793377*HI(1, 1, 0, 1, -1, 0, om1))/21544897924 + (125263181337378061*HI(1, 1, 0, 1, -1, 1, om1))/1163424487896 - (1211150098669531*HI(1, 1, 0, 1, 1, -1, om1))/5487851358 - 11232*HI(1, 1, 1, -1, -1, -1, om1) + (2392665851955041*HI(1, 1, 1, -1, -1, 0, om1))/35255287512 - (20464349954168681*HI(1, 1, 1, -1, -1, 1, om1))/35255287512 + (189472199905473497*HI(1, 1, 1, -1, 0, -1, om1))/1163424487896 + (47207116920801641*HI(1, 1, 1, -1, 0, 0, om1))/317297587608 - (298649341166732401*HI(1, 1, 1, -1, 0, 1, om1))/3490273463688 - (30404966076339713*HI(1, 1, 1, -1, 1, -1, om1))/35255287512 + (181778915331736427*HI(1, 1, 1, -1, 1, 0, om1))/1163424487896 - (366128024895147883*HI(1, 1, 1, -1, 1, 1, om1))/1163424487896 + (53912974502856191*HI(1, 1, 1, 0, -1, -1, om1))/193904081316 - (10304731594730675*HI(1, 1, 1, 0, -1, 0, om1))/96952040658 - (16995388457766673*HI(1, 1, 1, 0, -1, 1, om1))/43089795848 + (186908888125819415*HI(1, 1, 1, 0, 0, -1, om1))/3807571051296 + (10276798443600238610374397*HI(1, 1, 1, 0, 0, 0, om1))/9066892793030138880 - (3306662120409625*HI(1, 1, 1, 0, 1, -1, om1))/3401825988 + (1299407259007733189665969*HI(1, 1, 1, 0, 1, 1, om1))/477204883843691520 - (384757595682873755*HI(1, 1, 1, 1, -1, -1, om1))/581712243948 - (30219787275121801*HI(1, 1, 1, 1, -1, 0, om1))/61232867784 + (228583496909607344*HI(1, 1, 1, 1, -1, 1, om1))/145428060987 - (44409253854794826595*HI(1, 1, 1, 1, 0, -1, om1))/20941640782128 + (111015775290234750628966883*HI(1, 1, 1, 1, 0, 1, om1))/18133785586060277760 + (2811281629788118067*HI(1, 1, 1, 1, 1, -1, om1))/581712243948 + (35725379481317601118816231*HI(1, 1, 1, 1, 1, 0, om1))/6044595195353425920"</span>).unwrap() ),
+<a href=#93 id=93 data-nosnippet>93</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"T111bar(0)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"6*HI(1, 0, om1)"</span>).unwrap() ),
+<a href=#94 id=94 data-nosnippet>94</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"T111bar(1)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"-12*HI(-1, 1, 0, om1) - 12*HI(1, -1, 0, om1) + 39*HI(1, 1, 1, om1)"</span>).unwrap() ),
+<a href=#95 id=95 data-nosnippet>95</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"T111bar(2)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"24*HI(-1, -1, 1, 0, om1) + 24*HI(-1, 1, -1, 0, om1) - 78*HI(-1, 1, 1, 1, om1) + 24*HI(1, -1, -1, 1, om1) + 24*HI(1, -1, 1, -1, om1) + 16*HI(1, -1, 1, 0, om1) - 126*HI(1, -1, 1, 1, om1) + (80*HI(1, 0, 1, 1, om1))/3 + 48*HI(1, 1, -1, -1, om1) + 56*HI(1, 1, -1, 0, om1) - 198*HI(1, 1, -1, 1, om1) + (127*HI(1, 1, 0, 1, om1))/12 - 294*HI(1, 1, 1, -1, om1) - (409*HI(1, 1, 1, 0, om1))/4"</span>).unwrap() ),
+<a href=#96 id=96 data-nosnippet>96</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"T111bar(3)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"-48*HI(-1, -1, -1, 1, 0, om1) - 48*HI(-1, -1, 1, -1, 0, om1) + 156*HI(-1, -1, 1, 1, 1, om1) - 48*HI(-1, 1, -1, -1, 1, om1) - 48*HI(-1, 1, -1, 1, -1, om1) - 32*HI(-1, 1, -1, 1, 0, om1) + 252*HI(-1, 1, -1, 1, 1, om1) - (160*HI(-1, 1, 0, 1, 1, om1))/3 - 96*HI(-1, 1, 1, -1, -1, om1) - 112*HI(-1, 1, 1, -1, 0, om1) + 396*HI(-1, 1, 1, -1, 1, om1) - (127*HI(-1, 1, 1, 0, 1, om1))/6 + 588*HI(-1, 1, 1, 1, -1, om1) + (409*HI(-1, 1, 1, 1, 0, om1))/2 - 48*HI(1, -1, -1, -1, 1, om1) - 48*HI(1, -1, -1, 1, -1, om1) - 32*HI(1, -1, -1, 1, 0, om1) - 112*HI(1, -1, 1, -1, 0, om1) + 96*HI(1, -1, 1, -1, 1, om1) - 80*HI(1, -1, 1, 0, -1, om1) + 144*HI(1, -1, 1, 1, -1, om1) + (5189*HI(1, -1, 1, 1, 1, om1))/4 + 210*HI(1, 0, -1, 1, 1, om1) - 80*HI(1, 0, 1, -1, -1, om1) + 250*HI(1, 0, 1, -1, 1, om1) + (2165*HI(1, 0, 1, 0, 1, om1))/36 + 370*HI(1, 0, 1, 1, -1, om1) + (7235*HI(1, 0, 1, 1, 0, om1))/36 + 96*HI(1, 1, -1, -1, -1, om1) - 316*HI(1, 1, -1, -1, 1, om1) + (634711*HI(1, 1, -1, 0, 0, om1))/4161 + (1001731*HI(1, 1, -1, 0, 1, om1))/8322 - 412*HI(1, 1, -1, 1, -1, om1) - (203321*HI(1, 1, -1, 1, 0, om1))/2774 + (6715537*HI(1, 1, -1, 1, 1, om1))/2774 + (1011*HI(1, 1, 0, -1, 1, om1))/2 - (2899054*HI(1, 1, 0, 0, -1, om1))/12483 + (991354*HI(1, 1, 0, 1, -1, om1))/1387 - 1400*HI(1, 1, 1, -1, -1, om1) - (332028*HI(1, 1, 1, -1, 0, om1))/1387 + (20832225*HI(1, 1, 1, -1, 1, om1))/5548 + (870038*HI(1, 1, 1, 0, -1, om1))/657 - (502923119*HI(1, 1, 1, 0, 0, om1))/898776 + (9081125*HI(1, 1, 1, 1, -1, om1))/1387 - (7166073467*HI(1, 1, 1, 1, 1, om1))/449388"</span>).unwrap() ),
+<a href=#97 id=97 data-nosnippet>97</a>        ( <span class="macro">vk_parse!</span>(<span class="string">"T111bar(4)"</span>).unwrap(), <span class="macro">vk_parse!</span>(<span class="string">"96*HI(-1, -1, -1, -1, 1, 0, om1) + 96*HI(-1, -1, -1, 1, -1, 0, om1) - 312*HI(-1, -1, -1, 1, 1, 1, om1) + 96*HI(-1, -1, 1, -1, -1, 1, om1) + 96*HI(-1, -1, 1, -1, 1, -1, om1) + 64*HI(-1, -1, 1, -1, 1, 0, om1) - 504*HI(-1, -1, 1, -1, 1, 1, om1) + (320*HI(-1, -1, 1, 0, 1, 1, om1))/3 + 192*HI(-1, -1, 1, 1, -1, -1, om1) + 224*HI(-1, -1, 1, 1, -1, 0, om1) - 792*HI(-1, -1, 1, 1, -1, 1, om1) + (127*HI(-1, -1, 1, 1, 0, 1, om1))/3 - 1176*HI(-1, -1, 1, 1, 1, -1, om1) - 409*HI(-1, -1, 1, 1, 1, 0, om1) + 96*HI(-1, 1, -1, -1, -1, 1, om1) + 96*HI(-1, 1, -1, -1, 1, -1, om1) + 64*HI(-1, 1, -1, -1, 1, 0, om1) + 224*HI(-1, 1, -1, 1, -1, 0, om1) - 192*HI(-1, 1, -1, 1, -1, 1, om1) + 160*HI(-1, 1, -1, 1, 0, -1, om1) - 288*HI(-1, 1, -1, 1, 1, -1, om1) - (5189*HI(-1, 1, -1, 1, 1, 1, om1))/2 - 420*HI(-1, 1, 0, -1, 1, 1, om1) + 160*HI(-1, 1, 0, 1, -1, -1, om1) - 500*HI(-1, 1, 0, 1, -1, 1, om1) - (2165*HI(-1, 1, 0, 1, 0, 1, om1))/18 - 740*HI(-1, 1, 0, 1, 1, -1, om1) - (7235*HI(-1, 1, 0, 1, 1, 0, om1))/18 - 192*HI(-1, 1, 1, -1, -1, -1, om1) + 632*HI(-1, 1, 1, -1, -1, 1, om1) - (1269422*HI(-1, 1, 1, -1, 0, 0, om1))/4161 - (1001731*HI(-1, 1, 1, -1, 0, 1, om1))/4161 + 824*HI(-1, 1, 1, -1, 1, -1, om1) + (203321*HI(-1, 1, 1, -1, 1, 0, om1))/1387 - (6715537*HI(-1, 1, 1, -1, 1, 1, om1))/1387 - 1011*HI(-1, 1, 1, 0, -1, 1, om1) + (5798108*HI(-1, 1, 1, 0, 0, -1, om1))/12483 - (1982708*HI(-1, 1, 1, 0, 1, -1, om1))/1387 + 2800*HI(-1, 1, 1, 1, -1, -1, om1) + (664056*HI(-1, 1, 1, 1, -1, 0, om1))/1387 - (20832225*HI(-1, 1, 1, 1, -1, 1, om1))/2774 - (1740076*HI(-1, 1, 1, 1, 0, -1, om1))/657 + (502923119*HI(-1, 1, 1, 1, 0, 0, om1))/449388 - (18162250*HI(-1, 1, 1, 1, 1, -1, om1))/1387 + (7166073467*HI(-1, 1, 1, 1, 1, 1, om1))/224694 + 96*HI(1, -1, -1, -1, -1, 1, om1) + 96*HI(1, -1, -1, -1, 1, -1, om1) + 64*HI(1, -1, -1, -1, 1, 0, om1) + 224*HI(1, -1, -1, 1, -1, 0, om1) - 192*HI(1, -1, -1, 1, -1, 1, om1) + 160*HI(1, -1, -1, 1, 0, -1, om1) - 288*HI(1, -1, -1, 1, 1, -1, om1) - (5189*HI(1, -1, -1, 1, 1, 1, om1))/2 + 536*HI(1, -1, 1, -1, -1, 1, om1) + 728*HI(1, -1, 1, -1, 1, -1, om1) + (1162*HI(1, -1, 1, -1, 1, 0, om1))/3 - 5900*HI(1, -1, 1, -1, 1, 1, om1) - 320*HI(1, -1, 1, 0, -1, -1, om1) - (247571*HI(1, -1, 1, 0, 1, -1, om1))/1387 + (6935939*HI(1, -1, 1, 0, 1, 1, om1))/12483 + 2096*HI(1, -1, 1, 1, -1, -1, om1) + (3995630*HI(1, -1, 1, 1, -1, 0, om1))/4161 - (25993133*HI(1, -1, 1, 1, -1, 1, om1))/2774 + (2339932507*HI(1, -1, 1, 1, 0, 1, om1))/898776 - (20346339*HI(1, -1, 1, 1, 1, -1, om1))/1387 + (1987391897*HI(1, -1, 1, 1, 1, 0, om1))/299592 - 160*HI(1, 0, 1, -1, -1, -1, om1) - (190762625*HI(1, 0, 1, -1, 1, 0, om1))/137313 + (172992580*HI(1, 0, 1, -1, 1, 1, om1))/45771 - (585*HI(1, 0, 1, 0, -1, 1, om1))/2 - (585*HI(1, 0, 1, 0, 1, -1, om1))/2 + (1401897460*HI(1, 0, 1, 0, 1, 0, om1))/1235817 + (1280*HI(1, 0, 1, 1, -1, -1, om1))/3 - (131698420*HI(1, 0, 1, 1, -1, 0, om1))/137313 + (3771385*HI(1, 0, 1, 1, -1, 1, om1))/803 - (13518640*HI(1, 0, 1, 1, 0, -1, om1))/12483 + (94194535*HI(1, 0, 1, 1, 1, -1, om1))/45771 - (224239650581*HI(1, 0, 1, 1, 1, 1, om1))/7414902 + 192*HI(1, 1, -1, -1, -1, -1, om1) + 440*HI(1, 1, -1, -1, -1, 1, om1) + 632*HI(1, 1, -1, -1, 1, -1, om1) + (1162*HI(1, 1, -1, -1, 1, 0, om1))/3 - (19523*HI(1, 1, -1, -1, 1, 1, om1))/3 + (85309*HI(1, 1, -1, 0, 1, -1, om1))/1387 + 1520*HI(1, 1, -1, 1, -1, -1, om1) + 1201*HI(1, 1, -1, 1, -1, 0, om1) - (65065*HI(1, 1, -1, 1, -1, 1, om1))/6 + (1286089*HI(1, 1, -1, 1, 0, -1, om1))/657 + (294745883*HI(1, 1, -1, 1, 0, 1, om1))/112347 - (66781712*HI(1, 1, -1, 1, 1, -1, om1))/4161 + (7672706315*HI(1, 1, -1, 1, 1, 0, om1))/898776 - (1500994997*HI(1, 1, -1, 1, 1, 1, om1))/112347 - 331*HI(1, 1, 0, -1, -1, 1, om1) - (373788*HI(1, 1, 0, -1, 1, -1, om1))/1387 - (1040075156*HI(1, 1, 0, -1, 1, 0, om1))/411939 + (71036008625022455*HI(1, 1, 0, 1, -1, -1, om1))/31412461173192 - (408164510625851*HI(1, 1, 0, 1, -1, 0, om1))/387808162632 + (112240612313169253*HI(1, 1, 0, 1, -1, 1, om1))/62824922346384 - (1671079834843531*HI(1, 1, 0, 1, 1, -1, om1))/296343973332 - 208*HI(1, 1, 1, -1, -1, -1, om1) + (4630766069502545*HI(1, 1, 1, -1, -1, 0, om1))/1903785525648 - (23840913916053689*HI(1, 1, 1, -1, -1, 1, om1))/1903785525648 + (236736287552028065*HI(1, 1, 1, -1, 0, -1, om1))/62824922346384 + (65236932450127865*HI(1, 1, 1, -1, 0, 0, om1))/17134069730832 - (324735078822098209*HI(1, 1, 1, -1, 0, 1, om1))/188474767039152 - (33937640451327857*HI(1, 1, 1, -1, 1, -1, om1))/1903785525648 + (217890103688771579*HI(1, 1, 1, -1, 1, 0, om1))/62824922346384 - (98098907738411707*HI(1, 1, 1, -1, 1, 1, om1))/62824922346384 + (60053281459284215*HI(1, 1, 1, 0, -1, -1, om1))/10470820391064 - (14276309865069491*HI(1, 1, 1, 0, -1, 0, om1))/5235410195532 - (17608277669750297*HI(1, 1, 1, 0, -1, 1, om1))/2326848975792 + (113893834864667471*HI(1, 1, 1, 0, 0, -1, om1))/205608836769984 + (2578864206755062092340321*HI(1, 1, 1, 0, 0, 0, om1))/97922442164725499904 - (4028157988084297*HI(1, 1, 1, 0, 1, -1, om1))/183698603352 + (342310613376007581255845*HI(1, 1, 1, 0, 1, 1, om1))/5153812745511868416 - (580499376653049347*HI(1, 1, 1, 1, -1, -1, om1))/31412461173192 - (47970936019094809*HI(1, 1, 1, 1, -1, 0, om1))/3306574860336 + (175367882302986940*HI(1, 1, 1, 1, -1, 1, om1))/3926557646649 - (48827026671130603771*HI(1, 1, 1, 1, 0, -1, om1))/1130848602234912 + (29301329002972334771885311*HI(1, 1, 1, 1, 0, 1, om1))/195844884329450999808 + (4274072449929751295*HI(1, 1, 1, 1, 1, -1, om1))/31412461173192 + (9649675317039589744890323*HI(1, 1, 1, 1, 1, 0, om1))/65281628109816999936"</span>).unwrap() )
+<a href=#98 id=98 data-nosnippet>98</a>    ])
+<a href=#99 id=99 data-nosnippet>99</a>});
+<a href=#100 id=100 data-nosnippet>100</a><span class="kw">pub struct </span>MATAD {
+<a href=#101 id=101 data-nosnippet>101</a>    settings: VakintSettings,
+<a href=#102 id=102 data-nosnippet>102</a>}
+<a href=#103 id=103 data-nosnippet>103</a>
+<a href=#104 id=104 data-nosnippet>104</a><span class="kw">impl </span>MATAD {
+<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">pub fn </span>with_settings(settings: VakintSettings) -&gt; <span class="self">Self </span>{
+<a href=#106 id=106 data-nosnippet>106</a>        MATAD { settings }
+<a href=#107 id=107 data-nosnippet>107</a>    }
+<a href=#108 id=108 data-nosnippet>108</a>
+<a href=#109 id=109 data-nosnippet>109</a>    <span class="kw">pub fn </span>process_matad_form_output(
+<a href=#110 id=110 data-nosnippet>110</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#111 id=111 data-nosnippet>111</a>        processed_form_output: Atom,
+<a href=#112 id=112 data-nosnippet>112</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Atom, VakintError&gt; {
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">let </span><span class="kw-2">mut </span>res = processed_form_output.to_owned();
+<a href=#114 id=114 data-nosnippet>114</a>        res = res
+<a href=#115 id=115 data-nosnippet>115</a>            .replace(<span class="macro">vk_parse!</span>(<span class="string">"d"</span>).unwrap().to_pattern())
+<a href=#116 id=116 data-nosnippet>116</a>            .with(<span class="macro">vk_parse!</span>(<span class="string">"4-2*ep"</span>).unwrap().to_pattern());
+<a href=#117 id=117 data-nosnippet>117</a>        res = res
+<a href=#118 id=118 data-nosnippet>118</a>            .replace(
+<a href=#119 id=119 data-nosnippet>119</a>                <span class="macro">function!</span>(S.vkdot, <span class="macro">function!</span>(S.p, S.id1_a), <span class="macro">function!</span>(S.p, S.id2_a)).to_pattern(),
+<a href=#120 id=120 data-nosnippet>120</a>            )
+<a href=#121 id=121 data-nosnippet>121</a>            .when(
+<a href=#122 id=122 data-nosnippet>122</a>                <span class="kw-2">&amp;</span>(Condition::from((S.id1_, number_condition()))
+<a href=#123 id=123 data-nosnippet>123</a>                    &amp; Condition::from((S.id2_, number_condition()))),
+<a href=#124 id=124 data-nosnippet>124</a>            )
+<a href=#125 id=125 data-nosnippet>125</a>            .with(<span class="macro">function!</span>(S.dot, <span class="macro">function!</span>(S.p, S.id1_a), <span class="macro">function!</span>(S.p, S.id2_a)).to_pattern());
+<a href=#126 id=126 data-nosnippet>126</a>        <span class="prelude-val">Ok</span>(res)
+<a href=#127 id=127 data-nosnippet>127</a>    }
+<a href=#128 id=128 data-nosnippet>128</a>
+<a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">pub fn </span>substitute_gam_functions(<span class="kw-2">&amp;</span><span class="self">self</span>, result: AtomView) -&gt; Atom {
+<a href=#130 id=130 data-nosnippet>130</a>        <span class="kw">let </span><span class="kw-2">mut </span>res = result.to_owned();
+<a href=#131 id=131 data-nosnippet>131</a>        res = res
+<a href=#132 id=132 data-nosnippet>132</a>            .replace(<span class="macro">vk_parse!</span>(<span class="string">"Gam(x_,y_)"</span>).unwrap().to_pattern())
+<a href=#133 id=133 data-nosnippet>133</a>            .with(
+<a href=#134 id=134 data-nosnippet>134</a>                <span class="macro">vk_parse!</span>(<span class="string">"exp(ep*y_*EulerGamma)*Gamma(x_+ep*y_)"</span>)
+<a href=#135 id=135 data-nosnippet>135</a>                    .unwrap()
+<a href=#136 id=136 data-nosnippet>136</a>                    .to_pattern(),
+<a href=#137 id=137 data-nosnippet>137</a>            );
+<a href=#138 id=138 data-nosnippet>138</a>        res = res
+<a href=#139 id=139 data-nosnippet>139</a>            .replace(<span class="macro">vk_parse!</span>(<span class="string">"iGam(x_,y_)"</span>).unwrap().to_pattern())
+<a href=#140 id=140 data-nosnippet>140</a>            .with(
+<a href=#141 id=141 data-nosnippet>141</a>                <span class="macro">vk_parse!</span>(<span class="string">"exp(-ep*y_*EulerGamma)/Gamma(x_+ep*y_)"</span>)
+<a href=#142 id=142 data-nosnippet>142</a>                    .unwrap()
+<a href=#143 id=143 data-nosnippet>143</a>                    .to_pattern(),
+<a href=#144 id=144 data-nosnippet>144</a>            );
+<a href=#145 id=145 data-nosnippet>145</a>        res
+<a href=#146 id=146 data-nosnippet>146</a>    }
+<a href=#147 id=147 data-nosnippet>147</a>
+<a href=#148 id=148 data-nosnippet>148</a>    <span class="kw">pub fn </span>substitute_masters_directly(<span class="kw-2">&amp;</span><span class="self">self</span>, result: AtomView) -&gt; <span class="prelude-ty">Result</span>&lt;Atom, VakintError&gt; {
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">let </span>processed_constants = DIRECT_SUBSTITUTIONS
+<a href=#150 id=150 data-nosnippet>150</a>            .iter()
+<a href=#151 id=151 data-nosnippet>151</a>            .map(|(src, (trgt, condition))| {
+<a href=#152 id=152 data-nosnippet>152</a>                (
+<a href=#153 id=153 data-nosnippet>153</a>                    src,
+<a href=#154 id=154 data-nosnippet>154</a>                    (
+<a href=#155 id=155 data-nosnippet>155</a>                        set_precision_in_polynomial_atom(
+<a href=#156 id=156 data-nosnippet>156</a>                            trgt.as_view(),
+<a href=#157 id=157 data-nosnippet>157</a>                            <span class="macro">vk_symbol!</span>(<span class="string">"ep"</span>),
+<a href=#158 id=158 data-nosnippet>158</a>                            <span class="kw-2">&amp;</span><span class="self">self</span>.settings,
+<a href=#159 id=159 data-nosnippet>159</a>                        ),
+<a href=#160 id=160 data-nosnippet>160</a>                        condition.clone(),
+<a href=#161 id=161 data-nosnippet>161</a>                    ),
+<a href=#162 id=162 data-nosnippet>162</a>                )
+<a href=#163 id=163 data-nosnippet>163</a>            })
+<a href=#164 id=164 data-nosnippet>164</a>            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="comment">// for (a, (b, _c)) in processed_constants.clone() {
+<a href=#166 id=166 data-nosnippet>166</a>        //     println!("{} -&gt; {}", a, b);
+<a href=#167 id=167 data-nosnippet>167</a>        // }
+<a href=#168 id=168 data-nosnippet>168</a>
+<a href=#169 id=169 data-nosnippet>169</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>r = result.to_owned();
+<a href=#170 id=170 data-nosnippet>170</a>        r.repeat_map(Box::new(<span class="kw">move </span>|av: AtomView| {
+<a href=#171 id=171 data-nosnippet>171</a>            <span class="kw">let </span><span class="kw-2">mut </span>res = av.to_owned();
+<a href=#172 id=172 data-nosnippet>172</a>            res = <span class="self">self</span>.substitute_gam_functions(res.as_view());
+<a href=#173 id=173 data-nosnippet>173</a>            <span class="kw">for </span>(src, (trgt, matching_condition)) <span class="kw">in </span>processed_constants.iter() {
+<a href=#174 id=174 data-nosnippet>174</a>                res = res
+<a href=#175 id=175 data-nosnippet>175</a>                    .replace(src.to_pattern())
+<a href=#176 id=176 data-nosnippet>176</a>                    .when(matching_condition)
+<a href=#177 id=177 data-nosnippet>177</a>                    .with(trgt.to_pattern());
+<a href=#178 id=178 data-nosnippet>178</a>            }
+<a href=#179 id=179 data-nosnippet>179</a>            res
+<a href=#180 id=180 data-nosnippet>180</a>        }));
+<a href=#181 id=181 data-nosnippet>181</a>
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="comment">// println!("DONE! {}", r);
+<a href=#183 id=183 data-nosnippet>183</a>        </span><span class="prelude-val">Ok</span>(r)
+<a href=#184 id=184 data-nosnippet>184</a>    }
+<a href=#185 id=185 data-nosnippet>185</a>
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">pub fn </span>expand_matad_masters(<span class="kw-2">&amp;</span><span class="self">self</span>, result: AtomView) -&gt; <span class="prelude-ty">Result</span>&lt;Atom, VakintError&gt; {
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = result.to_owned();
+<a href=#188 id=188 data-nosnippet>188</a>        r.repeat_map(Box::new(<span class="kw">move </span>|av: AtomView| {
+<a href=#189 id=189 data-nosnippet>189</a>            <span class="kw">let </span><span class="kw-2">mut </span>res = av.to_owned();
+<a href=#190 id=190 data-nosnippet>190</a>            res = <span class="self">self</span>.substitute_gam_functions(res.as_view());
+<a href=#191 id=191 data-nosnippet>191</a>            <span class="kw">for </span>(src, (trgt, restriction)) <span class="kw">in </span>MASTERS_EXPANSION.iter() {
+<a href=#192 id=192 data-nosnippet>192</a>                res = res
+<a href=#193 id=193 data-nosnippet>193</a>                    .replace(src.to_pattern())
+<a href=#194 id=194 data-nosnippet>194</a>                    .when(restriction)
+<a href=#195 id=195 data-nosnippet>195</a>                    .with(trgt.to_pattern());
+<a href=#196 id=196 data-nosnippet>196</a>            }
+<a href=#197 id=197 data-nosnippet>197</a>            res
+<a href=#198 id=198 data-nosnippet>198</a>        }));
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(m) = r
+<a href=#200 id=200 data-nosnippet>200</a>            .pattern_match(
+<a href=#201 id=201 data-nosnippet>201</a>                <span class="kw-2">&amp;</span><span class="macro">vk_parse!</span>(<span class="string">"GammaArgs(x_,y_)"</span>).unwrap().to_pattern(),
+<a href=#202 id=202 data-nosnippet>202</a>                <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>Condition::default()),
+<a href=#203 id=203 data-nosnippet>203</a>                <span class="prelude-val">None</span>,
+<a href=#204 id=204 data-nosnippet>204</a>            )
+<a href=#205 id=205 data-nosnippet>205</a>            .next()
+<a href=#206 id=206 data-nosnippet>206</a>        {
+<a href=#207 id=207 data-nosnippet>207</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(VakintError::MATADError(<span class="macro">format!</span>(
+<a href=#208 id=208 data-nosnippet>208</a>                <span class="string">"MATAD result contains a Gamma function whose numerical evaluation is not implemented in vakint: Gamma({}+{}*{})"</span>,
+<a href=#209 id=209 data-nosnippet>209</a>                m.get(<span class="kw-2">&amp;</span>S.x_).unwrap(),
+<a href=#210 id=210 data-nosnippet>210</a>                m.get(<span class="kw-2">&amp;</span>S.y_).unwrap(),
+<a href=#211 id=211 data-nosnippet>211</a>                <span class="self">self</span>.settings.epsilon_symbol
+<a href=#212 id=212 data-nosnippet>212</a>            )));
+<a href=#213 id=213 data-nosnippet>213</a>        }
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="prelude-val">Ok</span>(r)
+<a href=#215 id=215 data-nosnippet>215</a>    }
+<a href=#216 id=216 data-nosnippet>216</a>
+<a href=#217 id=217 data-nosnippet>217</a>    <span class="kw">pub fn </span>substitute_masters(<span class="kw-2">&amp;</span><span class="self">self</span>, result: AtomView) -&gt; <span class="prelude-ty">Result</span>&lt;Atom, VakintError&gt; {
+<a href=#218 id=218 data-nosnippet>218</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = result.to_owned();
+<a href=#219 id=219 data-nosnippet>219</a>        r.repeat_map(Box::new(<span class="kw">move </span>|av: AtomView| {
+<a href=#220 id=220 data-nosnippet>220</a>            <span class="kw">let </span><span class="kw-2">mut </span>res = av.to_owned();
+<a href=#221 id=221 data-nosnippet>221</a>            <span class="kw">for </span>(src, trgt) <span class="kw">in </span>MASTERS_SUBSTITUTION.iter() {
+<a href=#222 id=222 data-nosnippet>222</a>                res = res.replace(src.to_pattern()).with(trgt.to_pattern());
+<a href=#223 id=223 data-nosnippet>223</a>            }
+<a href=#224 id=224 data-nosnippet>224</a>            res
+<a href=#225 id=225 data-nosnippet>225</a>        }));
+<a href=#226 id=226 data-nosnippet>226</a>
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="prelude-val">Ok</span>(r)
+<a href=#228 id=228 data-nosnippet>228</a>    }
+<a href=#229 id=229 data-nosnippet>229</a>
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">pub fn </span>substitute_poly_gamma(<span class="kw-2">&amp;</span><span class="self">self</span>, result: AtomView) -&gt; <span class="prelude-ty">Result</span>&lt;Atom, VakintError&gt; {
+<a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">let </span>processed_constants = POLY_GAMMA_SUBSTITUTIONS
+<a href=#232 id=232 data-nosnippet>232</a>            .iter()
+<a href=#233 id=233 data-nosnippet>233</a>            .map(|(src, trgt)| {
+<a href=#234 id=234 data-nosnippet>234</a>                (
+<a href=#235 id=235 data-nosnippet>235</a>                    src,
+<a href=#236 id=236 data-nosnippet>236</a>                    set_precision_in_float_atom(trgt.as_view(), <span class="kw-2">&amp;</span><span class="self">self</span>.settings),
+<a href=#237 id=237 data-nosnippet>237</a>                )
+<a href=#238 id=238 data-nosnippet>238</a>            })
+<a href=#239 id=239 data-nosnippet>239</a>            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+<a href=#240 id=240 data-nosnippet>240</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = result.to_owned();
+<a href=#241 id=241 data-nosnippet>241</a>
+<a href=#242 id=242 data-nosnippet>242</a>        r = r
+<a href=#243 id=243 data-nosnippet>243</a>            .replace(<span class="macro">vk_parse!</span>(<span class="string">"Gamma(n_)"</span>).unwrap().to_pattern())
+<a href=#244 id=244 data-nosnippet>244</a>            .when(Condition::from((S.n_, gt_condition(<span class="number">0</span>))))
+<a href=#245 id=245 data-nosnippet>245</a>            .with_map(<span class="kw">move </span>|match_in| {
+<a href=#246 id=246 data-nosnippet>246</a>                <span class="kw">let </span>n = get_integer_from_atom(match_in.get(S.n_).unwrap().to_atom().as_view())
+<a href=#247 id=247 data-nosnippet>247</a>                    .unwrap() <span class="kw">as </span>u32;
+<a href=#248 id=248 data-nosnippet>248</a>                Atom::num(Integer::factorial(n - <span class="number">1</span>))
+<a href=#249 id=249 data-nosnippet>249</a>            });
+<a href=#250 id=250 data-nosnippet>250</a>        r.repeat_map(Box::new(<span class="kw">move </span>|av: AtomView| {
+<a href=#251 id=251 data-nosnippet>251</a>            <span class="kw">let </span><span class="kw-2">mut </span>res = av.to_owned();
+<a href=#252 id=252 data-nosnippet>252</a>            <span class="kw">for </span>(src, trgt) <span class="kw">in </span>processed_constants.iter() {
+<a href=#253 id=253 data-nosnippet>253</a>                res = res.replace(src.to_pattern()).with(trgt.to_pattern());
+<a href=#254 id=254 data-nosnippet>254</a>            }
+<a href=#255 id=255 data-nosnippet>255</a>            res
+<a href=#256 id=256 data-nosnippet>256</a>        }));
+<a href=#257 id=257 data-nosnippet>257</a>
+<a href=#258 id=258 data-nosnippet>258</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(m) = r
+<a href=#259 id=259 data-nosnippet>259</a>            .pattern_match(
+<a href=#260 id=260 data-nosnippet>260</a>                <span class="kw-2">&amp;</span><span class="macro">vk_parse!</span>(<span class="string">"PolyGamma(x_,y_)"</span>).unwrap().to_pattern(),
+<a href=#261 id=261 data-nosnippet>261</a>                <span class="prelude-val">None</span>,
+<a href=#262 id=262 data-nosnippet>262</a>                <span class="prelude-val">None</span>,
+<a href=#263 id=263 data-nosnippet>263</a>            )
+<a href=#264 id=264 data-nosnippet>264</a>            .next()
+<a href=#265 id=265 data-nosnippet>265</a>        {
+<a href=#266 id=266 data-nosnippet>266</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(VakintError::MATADError(<span class="macro">format!</span>(
+<a href=#267 id=267 data-nosnippet>267</a>                <span class="string">"MATAD result contains a PolyGamma function whose numerical evaluation is not implemented in vakint: PolyGamma({},{})"</span>,
+<a href=#268 id=268 data-nosnippet>268</a>                m.get(<span class="kw-2">&amp;</span>S.x_).unwrap(),
+<a href=#269 id=269 data-nosnippet>269</a>                m.get(<span class="kw-2">&amp;</span>S.y_).unwrap()
+<a href=#270 id=270 data-nosnippet>270</a>            )));
+<a href=#271 id=271 data-nosnippet>271</a>        }
+<a href=#272 id=272 data-nosnippet>272</a>        <span class="prelude-val">Ok</span>(r)
+<a href=#273 id=273 data-nosnippet>273</a>    }
+<a href=#274 id=274 data-nosnippet>274</a>
+<a href=#275 id=275 data-nosnippet>275</a>    <span class="kw">pub fn </span>substitute_hpls(<span class="kw-2">&amp;</span><span class="self">self</span>, result: AtomView) -&gt; <span class="prelude-ty">Result</span>&lt;Atom, VakintError&gt; {
+<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>processed_constants = HPL_SUBSTITUTIONS
+<a href=#277 id=277 data-nosnippet>277</a>            .iter()
+<a href=#278 id=278 data-nosnippet>278</a>            .map(|(src, trgt)| {
+<a href=#279 id=279 data-nosnippet>279</a>                (
+<a href=#280 id=280 data-nosnippet>280</a>                    src,
+<a href=#281 id=281 data-nosnippet>281</a>                    set_precision_in_float_atom(trgt.as_view(), <span class="kw-2">&amp;</span><span class="self">self</span>.settings),
+<a href=#282 id=282 data-nosnippet>282</a>                )
+<a href=#283 id=283 data-nosnippet>283</a>            })
+<a href=#284 id=284 data-nosnippet>284</a>            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+<a href=#285 id=285 data-nosnippet>285</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = result.to_owned();
+<a href=#286 id=286 data-nosnippet>286</a>
+<a href=#287 id=287 data-nosnippet>287</a>        r.repeat_map(Box::new(<span class="kw">move </span>|av: AtomView| {
+<a href=#288 id=288 data-nosnippet>288</a>            <span class="kw">let </span><span class="kw-2">mut </span>res = av.to_owned();
+<a href=#289 id=289 data-nosnippet>289</a>            <span class="kw">for </span>(src, trgt) <span class="kw">in </span>processed_constants.iter() {
+<a href=#290 id=290 data-nosnippet>290</a>                res = res.replace(src.to_pattern()).with(trgt.to_pattern());
+<a href=#291 id=291 data-nosnippet>291</a>            }
+<a href=#292 id=292 data-nosnippet>292</a>            res
+<a href=#293 id=293 data-nosnippet>293</a>        }));
+<a href=#294 id=294 data-nosnippet>294</a>
+<a href=#295 id=295 data-nosnippet>295</a>        <span class="prelude-val">Ok</span>(r)
+<a href=#296 id=296 data-nosnippet>296</a>    }
+<a href=#297 id=297 data-nosnippet>297</a>
+<a href=#298 id=298 data-nosnippet>298</a>    <span class="kw">pub fn </span>substitute_additional_constants(<span class="kw-2">&amp;</span><span class="self">self</span>, result: AtomView) -&gt; <span class="prelude-ty">Result</span>&lt;Atom, VakintError&gt; {
+<a href=#299 id=299 data-nosnippet>299</a>        <span class="kw">let </span>processed_constants = ADDITIONAL_CONSTANTS
+<a href=#300 id=300 data-nosnippet>300</a>            .iter()
+<a href=#301 id=301 data-nosnippet>301</a>            .map(|(src, trgt)| {
+<a href=#302 id=302 data-nosnippet>302</a>                (
+<a href=#303 id=303 data-nosnippet>303</a>                    src,
+<a href=#304 id=304 data-nosnippet>304</a>                    set_precision_in_float_atom(trgt.as_view(), <span class="kw-2">&amp;</span><span class="self">self</span>.settings),
+<a href=#305 id=305 data-nosnippet>305</a>                )
+<a href=#306 id=306 data-nosnippet>306</a>            })
+<a href=#307 id=307 data-nosnippet>307</a>            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+<a href=#308 id=308 data-nosnippet>308</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = result.to_owned();
+<a href=#309 id=309 data-nosnippet>309</a>        r.repeat_map(Box::new(<span class="kw">move </span>|av: AtomView| {
+<a href=#310 id=310 data-nosnippet>310</a>            <span class="kw">let </span><span class="kw-2">mut </span>res = av.to_owned();
+<a href=#311 id=311 data-nosnippet>311</a>            <span class="kw">for </span>(src, trgt) <span class="kw">in </span>processed_constants.iter() {
+<a href=#312 id=312 data-nosnippet>312</a>                res = res.replace(src.to_pattern()).with(trgt.to_pattern());
+<a href=#313 id=313 data-nosnippet>313</a>            }
+<a href=#314 id=314 data-nosnippet>314</a>            res
+<a href=#315 id=315 data-nosnippet>315</a>        }));
+<a href=#316 id=316 data-nosnippet>316</a>
+<a href=#317 id=317 data-nosnippet>317</a>        <span class="prelude-val">Ok</span>(r)
+<a href=#318 id=318 data-nosnippet>318</a>    }
+<a href=#319 id=319 data-nosnippet>319</a>}
+<a href=#320 id=320 data-nosnippet>320</a>
+<a href=#321 id=321 data-nosnippet>321</a><span class="kw">impl </span>Vakint {
+<a href=#322 id=322 data-nosnippet>322</a>    <span class="kw">pub fn </span>matad_evaluate(
+<a href=#323 id=323 data-nosnippet>323</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#324 id=324 data-nosnippet>324</a>        settings: <span class="kw-2">&amp;</span>VakintSettings,
+<a href=#325 id=325 data-nosnippet>325</a>        input_numerator: AtomView,
+<a href=#326 id=326 data-nosnippet>326</a>        integral_specs: <span class="kw-2">&amp;</span>ReplacementRules,
+<a href=#327 id=327 data-nosnippet>327</a>        options: <span class="kw-2">&amp;</span>MATADOptions,
+<a href=#328 id=328 data-nosnippet>328</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Atom, VakintError&gt; {
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="kw">let </span>integral = integral_specs.canonical_topology.get_integral();
+<a href=#330 id=330 data-nosnippet>330</a>
+<a href=#331 id=331 data-nosnippet>331</a>        <span class="macro">debug!</span>(
+<a href=#332 id=332 data-nosnippet>332</a>            <span class="string">"Processing the following integral with {}:\n{}"</span>,
+<a href=#333 id=333 data-nosnippet>333</a>            <span class="string">"MATAD"</span>.green(),
+<a href=#334 id=334 data-nosnippet>334</a>            integral
+<a href=#335 id=335 data-nosnippet>335</a>        );
+<a href=#336 id=336 data-nosnippet>336</a>
+<a href=#337 id=337 data-nosnippet>337</a>        <span class="kw">let </span>err = <span class="prelude-val">Err</span>(VakintError::InvalidGenericExpression(<span class="macro">format!</span>(
+<a href=#338 id=338 data-nosnippet>338</a>            <span class="string">"Could not find the shorthand integral name in the MATAD expression: {}"</span>,
+<a href=#339 id=339 data-nosnippet>339</a>            integral
+<a href=#340 id=340 data-nosnippet>340</a>                .short_expression
+<a href=#341 id=341 data-nosnippet>341</a>                .as_ref()
+<a href=#342 id=342 data-nosnippet>342</a>                .map(|a| a.to_canonical_string())
+<a href=#343 id=343 data-nosnippet>343</a>                .unwrap_or(<span class="string">"None"</span>.to_string())
+<a href=#344 id=344 data-nosnippet>344</a>        )));
+<a href=#345 id=345 data-nosnippet>345</a>
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="kw">let </span>matad = MATAD::with_settings(settings.clone());
+<a href=#347 id=347 data-nosnippet>347</a>
+<a href=#348 id=348 data-nosnippet>348</a>        <span class="kw">let </span>integral_name = <span class="kw">if let </span><span class="prelude-val">Some</span>(short_expression) = integral.short_expression.as_ref() {
+<a href=#349 id=349 data-nosnippet>349</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(m) = short_expression
+<a href=#350 id=350 data-nosnippet>350</a>                .pattern_match(
+<a href=#351 id=351 data-nosnippet>351</a>                    <span class="kw-2">&amp;</span><span class="macro">function!</span>(S.fun_, S.any_a___).to_pattern(),
+<a href=#352 id=352 data-nosnippet>352</a>                    <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>Condition::from((S.fun_, symbol_condition()))),
+<a href=#353 id=353 data-nosnippet>353</a>                    <span class="prelude-val">None</span>,
+<a href=#354 id=354 data-nosnippet>354</a>                )
+<a href=#355 id=355 data-nosnippet>355</a>                .next()
+<a href=#356 id=356 data-nosnippet>356</a>            {
+<a href=#357 id=357 data-nosnippet>357</a>                AtomPrinter::new_with_options(
+<a href=#358 id=358 data-nosnippet>358</a>                    m.get(<span class="kw-2">&amp;</span>S.fun_).unwrap().as_atom_view(),
+<a href=#359 id=359 data-nosnippet>359</a>                    PrintOptions::file_no_namespace(),
+<a href=#360 id=360 data-nosnippet>360</a>                )
+<a href=#361 id=361 data-nosnippet>361</a>                .to_string()
+<a href=#362 id=362 data-nosnippet>362</a>            } <span class="kw">else </span>{
+<a href=#363 id=363 data-nosnippet>363</a>                <span class="kw">return </span>err;
+<a href=#364 id=364 data-nosnippet>364</a>            }
+<a href=#365 id=365 data-nosnippet>365</a>        } <span class="kw">else </span>{
+<a href=#366 id=366 data-nosnippet>366</a>            <span class="kw">return </span>err;
+<a href=#367 id=367 data-nosnippet>367</a>        };
+<a href=#368 id=368 data-nosnippet>368</a>
+<a href=#369 id=369 data-nosnippet>369</a>        <span class="kw">let </span>(muv_atom, muv_sq_atom) =
+<a href=#370 id=370 data-nosnippet>370</a>            Vakint::identify_uv_mass_symbols(integral.canonical_expression.as_ref().unwrap())<span class="question-mark">?</span>;
+<a href=#371 id=371 data-nosnippet>371</a>
+<a href=#372 id=372 data-nosnippet>372</a>        <span class="comment">// Here we map the propagators in the correct order for the definition of the topology in MATAD
+<a href=#373 id=373 data-nosnippet>373</a>        </span><span class="kw">let </span>vakint_to_matad_edge_map = <span class="kw">match </span>integral_name.as_str().split(<span class="string">"_pinch_"</span>).next().unwrap()
+<a href=#374 id=374 data-nosnippet>374</a>        {
+<a href=#375 id=375 data-nosnippet>375</a>            <span class="string">"I1L" </span>=&gt; <span class="macro">vec!</span>[<span class="number">1</span>],
+<a href=#376 id=376 data-nosnippet>376</a>            <span class="string">"I2L" </span>=&gt; <span class="macro">vec!</span>[<span class="number">2</span>, <span class="number">3</span>, <span class="number">1</span>],
+<a href=#377 id=377 data-nosnippet>377</a>            <span class="string">"I3L" </span>=&gt; <span class="macro">vec!</span>[<span class="number">4</span>, <span class="number">5</span>, <span class="number">6</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>],
+<a href=#378 id=378 data-nosnippet>378</a>            <span class="kw">_ </span>=&gt; {
+<a href=#379 id=379 data-nosnippet>379</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(VakintError::InvalidGenericExpression(<span class="macro">format!</span>(
+<a href=#380 id=380 data-nosnippet>380</a>                    <span class="string">"Integral {} is not supported by MATAD."</span>,
+<a href=#381 id=381 data-nosnippet>381</a>                    integral_name
+<a href=#382 id=382 data-nosnippet>382</a>                )));
+<a href=#383 id=383 data-nosnippet>383</a>            }
+<a href=#384 id=384 data-nosnippet>384</a>        };
+<a href=#385 id=385 data-nosnippet>385</a>
+<a href=#386 id=386 data-nosnippet>386</a>        <span class="kw">let </span><span class="kw-2">mut </span>numerator = Vakint::convert_to_dot_notation(input_numerator);
+<a href=#387 id=387 data-nosnippet>387</a>
+<a href=#388 id=388 data-nosnippet>388</a>        <span class="comment">// println!("Numerator before processing: {}", numerator);
+<a href=#389 id=389 data-nosnippet>389</a>        </span>numerator = numerator.replace_multiple(<span class="kw-2">&amp;</span>[
+<a href=#390 id=390 data-nosnippet>390</a>            Replacement::new(
+<a href=#391 id=391 data-nosnippet>391</a>                muv_sq_atom.to_pattern(),
+<a href=#392 id=392 data-nosnippet>392</a>                <span class="macro">vk_parse!</span>(<span class="string">"M^2"</span>).unwrap().to_pattern(),
+<a href=#393 id=393 data-nosnippet>393</a>            ),
+<a href=#394 id=394 data-nosnippet>394</a>            Replacement::new(muv_atom.to_pattern(), <span class="macro">vk_parse!</span>(<span class="string">"M"</span>).unwrap().to_pattern()),
+<a href=#395 id=395 data-nosnippet>395</a>        ]);
+<a href=#396 id=396 data-nosnippet>396</a>
+<a href=#397 id=397 data-nosnippet>397</a>        <span class="kw">if </span>utils::could_match(
+<a href=#398 id=398 data-nosnippet>398</a>            <span class="kw-2">&amp;</span><span class="macro">function!</span>(S.dot, <span class="macro">function!</span>(S.p, S.id1_a), <span class="macro">function!</span>(S.k, S.id2_a)).to_pattern(),
+<a href=#399 id=399 data-nosnippet>399</a>            numerator.as_view(),
+<a href=#400 id=400 data-nosnippet>400</a>        ) {
+<a href=#401 id=401 data-nosnippet>401</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(VakintError::InvalidNumerator(<span class="macro">format!</span>(
+<a href=#402 id=402 data-nosnippet>402</a>                <span class="string">"Make sure the numerator has been tensor-reduced before being processed by MATAD : {}"</span>,
+<a href=#403 id=403 data-nosnippet>403</a>                numerator
+<a href=#404 id=404 data-nosnippet>404</a>            )));
+<a href=#405 id=405 data-nosnippet>405</a>        }
+<a href=#406 id=406 data-nosnippet>406</a>
+<a href=#407 id=407 data-nosnippet>407</a>        <span class="comment">// Now map all exterior dot products into a special function `vkdot` so that it does not interfere with MATAD
+<a href=#408 id=408 data-nosnippet>408</a>        </span>numerator = numerator
+<a href=#409 id=409 data-nosnippet>409</a>            .replace(
+<a href=#410 id=410 data-nosnippet>410</a>                <span class="macro">function!</span>(S.dot, <span class="macro">function!</span>(S.p, S.id1_a), <span class="macro">function!</span>(S.p, S.id2_a)).to_pattern(),
+<a href=#411 id=411 data-nosnippet>411</a>            )
+<a href=#412 id=412 data-nosnippet>412</a>            .when(
+<a href=#413 id=413 data-nosnippet>413</a>                <span class="kw-2">&amp;</span>(Condition::from((S.id1_, number_condition()))
+<a href=#414 id=414 data-nosnippet>414</a>                    &amp; Condition::from((S.id2_, number_condition()))),
+<a href=#415 id=415 data-nosnippet>415</a>            )
+<a href=#416 id=416 data-nosnippet>416</a>            .with(
+<a href=#417 id=417 data-nosnippet>417</a>                <span class="macro">function!</span>(S.vkdot, <span class="macro">function!</span>(S.p, S.id1_a), <span class="macro">function!</span>(S.p, S.id2_a)).to_pattern(),
+<a href=#418 id=418 data-nosnippet>418</a>            );
+<a href=#419 id=419 data-nosnippet>419</a>
+<a href=#420 id=420 data-nosnippet>420</a>        <span class="comment">// And finally map all interior products into the form p&lt;i&gt;.p&lt;i&gt; expected by matad, where &lt;i&gt; is the edge id carrying momentum k&lt;i&gt;.
+<a href=#421 id=421 data-nosnippet>421</a>        </span><span class="kw">let </span>momenta = integral_specs.get_propagator_property_list(<span class="string">"q_"</span>);
+<a href=#422 id=422 data-nosnippet>422</a>        <span class="kw">let </span><span class="kw-2">mut </span>lmb_prop_indices = <span class="macro">vec!</span>[];
+<a href=#423 id=423 data-nosnippet>423</a>        <span class="kw">for </span>i_loop <span class="kw">in </span><span class="number">1</span>..=integral.n_loops {
+<a href=#424 id=424 data-nosnippet>424</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>((i_edge, <span class="kw">_</span>)) = momenta.iter().find(|(_i_prop, k)| {
+<a href=#425 id=425 data-nosnippet>425</a>                k.as_view() == <span class="macro">function!</span>(S.k, Atom::num(i_loop <span class="kw">as </span>i64)).as_view()
+<a href=#426 id=426 data-nosnippet>426</a>            }) {
+<a href=#427 id=427 data-nosnippet>427</a>                lmb_prop_indices.push(<span class="kw-2">*</span>i_edge <span class="kw">as </span>isize);
+<a href=#428 id=428 data-nosnippet>428</a>            } <span class="kw">else </span>{
+<a href=#429 id=429 data-nosnippet>429</a>                lmb_prop_indices.push(-<span class="number">1</span>);
+<a href=#430 id=430 data-nosnippet>430</a>            }
+<a href=#431 id=431 data-nosnippet>431</a>        }
+<a href=#432 id=432 data-nosnippet>432</a>
+<a href=#433 id=433 data-nosnippet>433</a>        <span class="kw">let </span>vakint_to_matad_edge_map_copy = vakint_to_matad_edge_map.clone();
+<a href=#434 id=434 data-nosnippet>434</a>
+<a href=#435 id=435 data-nosnippet>435</a>        numerator = numerator.replace(
+<a href=#436 id=436 data-nosnippet>436</a>                <span class="macro">function!</span>(S.dot, <span class="macro">function!</span>(S.k, S.id1_a), <span class="macro">function!</span>(S.k, S.id2_a))
+<a href=#437 id=437 data-nosnippet>437</a>            .to_pattern()).when(<span class="kw-2">&amp;</span>(Condition::from((S.id1_, number_condition()))
+<a href=#438 id=438 data-nosnippet>438</a>            &amp; Condition::from((S.id2_, number_condition())))).with_map(
+<a href=#439 id=439 data-nosnippet>439</a>                <span class="kw">move </span>|match_in| {
+<a href=#440 id=440 data-nosnippet>440</a>                    <span class="kw">let </span>id1 = lmb_prop_indices[(get_integer_from_atom(match_in.get(S.id1_).unwrap().to_atom().as_view()).unwrap()-<span class="number">1</span>) <span class="kw">as </span>usize];
+<a href=#441 id=441 data-nosnippet>441</a>                    <span class="kw">if </span>id1 &lt; <span class="number">0 </span>{
+<a href=#442 id=442 data-nosnippet>442</a>                        <span class="macro">panic!</span>(
+<a href=#443 id=443 data-nosnippet>443</a>                            <span class="string">"Could not find LMB edge for momentum k({}) in a topology supported by MATAD and used in numerator."</span>,
+<a href=#444 id=444 data-nosnippet>444</a>                            get_integer_from_atom(match_in.get(S.id1_).unwrap().to_atom().as_view()).unwrap()
+<a href=#445 id=445 data-nosnippet>445</a>                        );
+<a href=#446 id=446 data-nosnippet>446</a>                    }
+<a href=#447 id=447 data-nosnippet>447</a>                    <span class="kw">let </span>id2 = lmb_prop_indices[(get_integer_from_atom(match_in.get(S.id2_).unwrap().to_atom().as_view()).unwrap()-<span class="number">1</span>) <span class="kw">as </span>usize];
+<a href=#448 id=448 data-nosnippet>448</a>                    <span class="kw">if </span>id2 &lt; <span class="number">0 </span>{
+<a href=#449 id=449 data-nosnippet>449</a>                        <span class="macro">panic!</span>(
+<a href=#450 id=450 data-nosnippet>450</a>                            <span class="string">"Could not find LMB edge for momentum k({}) in a topology supported by MATAD and used in numerator."</span>,
+<a href=#451 id=451 data-nosnippet>451</a>                            get_integer_from_atom(match_in.get(S.id2_).unwrap().to_atom().as_view()).unwrap()
+<a href=#452 id=452 data-nosnippet>452</a>                        );
+<a href=#453 id=453 data-nosnippet>453</a>                    }
+<a href=#454 id=454 data-nosnippet>454</a>                    <span class="kw">let </span>i_edge1 =
+<a href=#455 id=455 data-nosnippet>455</a>                        vakint_to_matad_edge_map_copy[(id1 <span class="kw">as </span>usize) - <span class="number">1</span>];
+<a href=#456 id=456 data-nosnippet>456</a>                    <span class="kw">let </span>i_edge2 =
+<a href=#457 id=457 data-nosnippet>457</a>                        vakint_to_matad_edge_map_copy[(id2 <span class="kw">as </span>usize) - <span class="number">1</span>];
+<a href=#458 id=458 data-nosnippet>458</a>                    <span class="comment">// in MATAD, the loop momenta dot products need to be written p&lt;i&gt;.p&lt;i&gt;
+<a href=#459 id=459 data-nosnippet>459</a>                    // The outter dot will be converted to an inner dot in the next step
+<a href=#460 id=460 data-nosnippet>460</a>                    // Also keep in mind that in MATAD propagators are euclidean propagators so
+<a href=#461 id=461 data-nosnippet>461</a>                    // a minus sign is necessary here.
+<a href=#462 id=462 data-nosnippet>462</a>                    </span><span class="macro">vk_parse!</span>(<span class="macro">format!</span>(<span class="string">"-dot(p{},p{})"</span>, i_edge1, i_edge2).as_str()).unwrap()
+<a href=#463 id=463 data-nosnippet>463</a>                });
+<a href=#464 id=464 data-nosnippet>464</a>
+<a href=#465 id=465 data-nosnippet>465</a>        <span class="comment">// Substitute eps by (4-d)/2
+<a href=#466 id=466 data-nosnippet>466</a>        </span>numerator = numerator
+<a href=#467 id=467 data-nosnippet>467</a>            .replace(<span class="macro">vk_parse!</span>(<span class="kw-2">&amp;</span>settings.epsilon_symbol).unwrap().to_pattern())
+<a href=#468 id=468 data-nosnippet>468</a>            .with(<span class="macro">vk_parse!</span>(<span class="string">"(4-d)/2"</span>).unwrap().to_pattern());
+<a href=#469 id=469 data-nosnippet>469</a>
+<a href=#470 id=470 data-nosnippet>470</a>        <span class="kw">let </span>muv_symbol = <span class="kw">match </span>(muv_atom.as_view(), muv_sq_atom.as_view()) {
+<a href=#471 id=471 data-nosnippet>471</a>            (AtomView::Var(s), <span class="kw">_</span>) =&gt; s.get_symbol(),
+<a href=#472 id=472 data-nosnippet>472</a>            (<span class="kw">_</span>, AtomView::Var(s2)) =&gt; s2.get_symbol(),
+<a href=#473 id=473 data-nosnippet>473</a>            <span class="kw">_ </span>=&gt; {
+<a href=#474 id=474 data-nosnippet>474</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(VakintError::MalformedGraph(
+<a href=#475 id=475 data-nosnippet>475</a>                    <span class="string">"Could not identify the UV mass symbol in the integral."</span>.into(),
+<a href=#476 id=476 data-nosnippet>476</a>                ));
+<a href=#477 id=477 data-nosnippet>477</a>            }
+<a href=#478 id=478 data-nosnippet>478</a>        };
+<a href=#479 id=479 data-nosnippet>479</a>
+<a href=#480 id=480 data-nosnippet>480</a>        <span class="comment">// let indices = Vakint::identify_vector_indices(numerator.as_view())?;
+<a href=#481 id=481 data-nosnippet>481</a>        // for (i_index, user_i) in indices.iter().enumerate() {
+<a href=#482 id=482 data-nosnippet>482</a>        //     numerator = numerator.replace(user_i.to_pattern()).with(Atom::num(
+<a href=#483 id=483 data-nosnippet>483</a>        //         (FORM_REPLACEMENT_INDEX_SHIFT + 1 + (i_index as u64)) as i64,
+<a href=#484 id=484 data-nosnippet>484</a>        //     ));
+<a href=#485 id=485 data-nosnippet>485</a>        // }
+<a href=#486 id=486 data-nosnippet>486</a>        </span><span class="kw">let </span>(form_header_additions, expression_str, indices) =
+<a href=#487 id=487 data-nosnippet>487</a>            <span class="self">self</span>.sanitize_user_expressions(settings, numerator.as_view(), <span class="bool-val">true</span>, <span class="kw-2">&amp;</span>[muv_symbol])<span class="question-mark">?</span>;
+<a href=#488 id=488 data-nosnippet>488</a>
+<a href=#489 id=489 data-nosnippet>489</a>        <span class="comment">// let expression_str =
+<a href=#490 id=490 data-nosnippet>490</a>        //     &amp;AtomPrinter::new_with_options(numerator.as_view(), PrintOptions::file_no_namespace())
+<a href=#491 id=491 data-nosnippet>491</a>        //         .to_string();
+<a href=#492 id=492 data-nosnippet>492</a>
+<a href=#493 id=493 data-nosnippet>493</a>        </span><span class="kw">let </span>dot_produce_replacer =
+<a href=#494 id=494 data-nosnippet>494</a>            Regex::new(<span class="string">r"dot\((?&lt;vecA&gt;[\w|\d]+),(?&lt;vecB&gt;[\w|\d]+)\)"</span>).unwrap();
+<a href=#495 id=495 data-nosnippet>495</a>        <span class="kw">let </span>numerator_string = dot_produce_replacer
+<a href=#496 id=496 data-nosnippet>496</a>            .replace_all(<span class="kw-2">&amp;</span>expression_str, <span class="string">"($vecA.$vecB)"</span>)
+<a href=#497 id=497 data-nosnippet>497</a>            .to_string();
+<a href=#498 id=498 data-nosnippet>498</a>        <span class="kw">let </span>powers = (<span class="number">1</span>..=integral.n_props)
+<a href=#499 id=499 data-nosnippet>499</a>            .map(|i_prop| {
+<a href=#500 id=500 data-nosnippet>500</a>                integral_specs
+<a href=#501 id=501 data-nosnippet>501</a>                    .canonical_expression_substitutions
+<a href=#502 id=502 data-nosnippet>502</a>                    .get(<span class="kw-2">&amp;</span><span class="macro">function!</span>(S.pow, Atom::num(i_prop <span class="kw">as </span>i64)))
+<a href=#503 id=503 data-nosnippet>503</a>                    .map(|a| a.try_into().unwrap())
+<a href=#504 id=504 data-nosnippet>504</a>                    .unwrap_or(<span class="number">0</span>)
+<a href=#505 id=505 data-nosnippet>505</a>            })
+<a href=#506 id=506 data-nosnippet>506</a>            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+<a href=#507 id=507 data-nosnippet>507</a>
+<a href=#508 id=508 data-nosnippet>508</a>        <span class="kw">let </span>integral_string = powers
+<a href=#509 id=509 data-nosnippet>509</a>            .iter()
+<a href=#510 id=510 data-nosnippet>510</a>            .zip(vakint_to_matad_edge_map)
+<a href=#511 id=511 data-nosnippet>511</a>            .map(|(pwr, matag_edge_index)| <span class="macro">format!</span>(<span class="string">"s{}m^{}"</span>, matag_edge_index, pwr))
+<a href=#512 id=512 data-nosnippet>512</a>            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
+<a href=#513 id=513 data-nosnippet>513</a>            .join(<span class="string">"*"</span>);
+<a href=#514 id=514 data-nosnippet>514</a>
+<a href=#515 id=515 data-nosnippet>515</a>        <span class="comment">//println!("MATAD input string: {}", format!("({})*({})", numerator_string, integral_string));
+<a href=#516 id=516 data-nosnippet>516</a>
+<a href=#517 id=517 data-nosnippet>517</a>        // Replace functions with 1 and get all remaining symbols
+<a href=#518 id=518 data-nosnippet>518</a>        // let mut numerator_additional_symbols: std::collections::HashSet&lt;
+<a href=#519 id=519 data-nosnippet>519</a>        //     symbolica::atom::Symbol,
+<a href=#520 id=520 data-nosnippet>520</a>        //     ahash::RandomState,
+<a href=#521 id=521 data-nosnippet>521</a>        // &gt; = input_numerator
+<a href=#522 id=522 data-nosnippet>522</a>        //     .replace(vk_parse!("f_(args__)").unwrap().to_pattern())
+<a href=#523 id=523 data-nosnippet>523</a>        //     .with(vk_parse!("1").unwrap().to_pattern())
+<a href=#524 id=524 data-nosnippet>524</a>        //     .get_all_symbols(false);
+<a href=#525 id=525 data-nosnippet>525</a>        // let eps_symbol = vk_symbol!(settings.epsilon_symbol.clone());
+<a href=#526 id=526 data-nosnippet>526</a>        // numerator_additional_symbols.retain(|&amp;s| s != eps_symbol);
+<a href=#527 id=527 data-nosnippet>527</a>        </span><span class="kw">let </span>numerator_additional_symbols: std::collections::HashSet&lt;
+<a href=#528 id=528 data-nosnippet>528</a>            symbolica::atom::Symbol,
+<a href=#529 id=529 data-nosnippet>529</a>            ahash::RandomState,
+<a href=#530 id=530 data-nosnippet>530</a>        &gt; = HashSet::default();
+<a href=#531 id=531 data-nosnippet>531</a>
+<a href=#532 id=532 data-nosnippet>532</a>        <span class="kw">let </span>template = Template::parse_template(TEMPLATES.get(<span class="string">"run_matad.txt"</span>).unwrap()).unwrap();
+<a href=#533 id=533 data-nosnippet>533</a>        <span class="kw">let </span><span class="kw-2">mut </span>vars: HashMap&lt;String, String&gt; = HashMap::new();
+<a href=#534 id=534 data-nosnippet>534</a>        vars.insert(<span class="string">"numerator"</span>.into(), numerator_string);
+<a href=#535 id=535 data-nosnippet>535</a>
+<a href=#536 id=536 data-nosnippet>536</a>        <span class="comment">// match (muv_atom.as_view(), muv_sq_atom.as_view()) {
+<a href=#537 id=537 data-nosnippet>537</a>        //     (AtomView::Var(s), _) =&gt; {
+<a href=#538 id=538 data-nosnippet>538</a>        //         vars.insert("symbols".into(), get_full_name(&amp;s.get_symbol()).into())
+<a href=#539 id=539 data-nosnippet>539</a>        //     }
+<a href=#540 id=540 data-nosnippet>540</a>        //     (_, AtomView::Var(s2)) =&gt; {
+<a href=#541 id=541 data-nosnippet>541</a>        //         vars.insert("symbols".into(), get_full_name(&amp;s2.get_symbol()).into())
+<a href=#542 id=542 data-nosnippet>542</a>        //     }
+<a href=#543 id=543 data-nosnippet>543</a>        //     _ =&gt; {
+<a href=#544 id=544 data-nosnippet>544</a>        //         return Err(VakintError::MalformedGraph(
+<a href=#545 id=545 data-nosnippet>545</a>        //             "Could not identify the UV mass symbol in the integral.".into(),
+<a href=#546 id=546 data-nosnippet>546</a>        //         ));
+<a href=#547 id=547 data-nosnippet>547</a>        //     }
+<a href=#548 id=548 data-nosnippet>548</a>        // };
+<a href=#549 id=549 data-nosnippet>549</a>        </span>vars.insert(<span class="string">"symbols"</span>.into(), <span class="string">"NOPREDEDUBEDVAKINTSYMBOL"</span>.into());
+<a href=#550 id=550 data-nosnippet>550</a>        vars.insert(<span class="string">"integral"</span>.into(), integral_string);
+<a href=#551 id=551 data-nosnippet>551</a>        vars.insert(<span class="string">"n_loops"</span>.into(), <span class="macro">format!</span>(<span class="string">"{}"</span>, integral.n_loops));
+<a href=#552 id=552 data-nosnippet>552</a>        <span class="kw">let </span><span class="kw-2">mut </span>additional_symbols_str = <span class="kw">if </span>!numerator_additional_symbols.is_empty() {
+<a href=#553 id=553 data-nosnippet>553</a>            <span class="macro">format!</span>(
+<a href=#554 id=554 data-nosnippet>554</a>                <span class="string">"Auto S {};\n"</span>,
+<a href=#555 id=555 data-nosnippet>555</a>                numerator_additional_symbols
+<a href=#556 id=556 data-nosnippet>556</a>                    .iter()
+<a href=#557 id=557 data-nosnippet>557</a>                    .map(|item| item.get_stripped_name())
+<a href=#558 id=558 data-nosnippet>558</a>                    .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
+<a href=#559 id=559 data-nosnippet>559</a>                    .join(<span class="string">", "</span>),
+<a href=#560 id=560 data-nosnippet>560</a>            )
+<a href=#561 id=561 data-nosnippet>561</a>        } <span class="kw">else </span>{
+<a href=#562 id=562 data-nosnippet>562</a>            <span class="string">""</span>.into()
+<a href=#563 id=563 data-nosnippet>563</a>        };
+<a href=#564 id=564 data-nosnippet>564</a>        additional_symbols_str = <span class="macro">format!</span>(
+<a href=#565 id=565 data-nosnippet>565</a>            <span class="string">"{}\nCF {};"</span>,
+<a href=#566 id=566 data-nosnippet>566</a>            additional_symbols_str,
+<a href=#567 id=567 data-nosnippet>567</a>            undress_vakint_symbols(<span class="kw-2">&amp;</span>get_full_name(<span class="kw-2">&amp;</span>S.g))
+<a href=#568 id=568 data-nosnippet>568</a>        );
+<a href=#569 id=569 data-nosnippet>569</a>        <span class="kw">if </span>!form_header_additions.is_empty() {
+<a href=#570 id=570 data-nosnippet>570</a>            <span class="kw">if </span>!additional_symbols_str.is_empty() {
+<a href=#571 id=571 data-nosnippet>571</a>                additional_symbols_str =
+<a href=#572 id=572 data-nosnippet>572</a>                    <span class="macro">format!</span>(<span class="string">"{}\n{}"</span>, form_header_additions, additional_symbols_str);
+<a href=#573 id=573 data-nosnippet>573</a>            } <span class="kw">else </span>{
+<a href=#574 id=574 data-nosnippet>574</a>                additional_symbols_str = form_header_additions;
+<a href=#575 id=575 data-nosnippet>575</a>            }
+<a href=#576 id=576 data-nosnippet>576</a>        }
+<a href=#577 id=577 data-nosnippet>577</a>        vars.insert(<span class="string">"additional_symbols"</span>.into(), additional_symbols_str);
+<a href=#578 id=578 data-nosnippet>578</a>
+<a href=#579 id=579 data-nosnippet>579</a>        <span class="kw">let </span>rendered = template
+<a href=#580 id=580 data-nosnippet>580</a>            .render(<span class="kw-2">&amp;</span>RenderOptions {
+<a href=#581 id=581 data-nosnippet>581</a>                variables: vars,
+<a href=#582 id=582 data-nosnippet>582</a>                ..Default::default()
+<a href=#583 id=583 data-nosnippet>583</a>            })
+<a href=#584 id=584 data-nosnippet>584</a>            .unwrap();
+<a href=#585 id=585 data-nosnippet>585</a>
+<a href=#586 id=586 data-nosnippet>586</a>        <span class="kw">let </span>form_result = <span class="self">self</span>.run_form(
+<a href=#587 id=587 data-nosnippet>587</a>            settings,
+<a href=#588 id=588 data-nosnippet>588</a>            <span class="kw-2">&amp;</span>[<span class="string">"matad-ng.hh"</span>.into()],
+<a href=#589 id=589 data-nosnippet>589</a>            (<span class="string">"run_matad.frm"</span>.into(), rendered),
+<a href=#590 id=590 data-nosnippet>590</a>            <span class="macro">vec!</span>[],
+<a href=#591 id=591 data-nosnippet>591</a>            settings.clean_tmp_dir,
+<a href=#592 id=592 data-nosnippet>592</a>            settings.temporary_directory.clone(),
+<a href=#593 id=593 data-nosnippet>593</a>        )<span class="question-mark">?</span>;
+<a href=#594 id=594 data-nosnippet>594</a>
+<a href=#595 id=595 data-nosnippet>595</a>        <span class="kw">let </span>processed_form_result =
+<a href=#596 id=596 data-nosnippet>596</a>            <span class="self">self</span>.process_form_output(settings, form_result, indices, BTreeMap::new())<span class="question-mark">?</span>;
+<a href=#597 id=597 data-nosnippet>597</a>        <span class="kw">let </span><span class="kw-2">mut </span>evaluated_integral = matad.process_matad_form_output(processed_form_result)<span class="question-mark">?</span>;
+<a href=#598 id=598 data-nosnippet>598</a>        <span class="macro">debug!</span>(
+<a href=#599 id=599 data-nosnippet>599</a>            <span class="string">"{}: raw result from FORM:\n{}"</span>,
+<a href=#600 id=600 data-nosnippet>600</a>            <span class="string">"MATAD"</span>.green(),
+<a href=#601 id=601 data-nosnippet>601</a>            evaluated_integral
+<a href=#602 id=602 data-nosnippet>602</a>        );
+<a href=#603 id=603 data-nosnippet>603</a>        evaluated_integral = evaluated_integral
+<a href=#604 id=604 data-nosnippet>604</a>            .replace(<span class="macro">vk_parse!</span>(<span class="string">"M^pow_"</span>).unwrap().to_pattern())
+<a href=#605 id=605 data-nosnippet>605</a>            .when(Condition::from((S.pow_, even_condition())))
+<a href=#606 id=606 data-nosnippet>606</a>            .with(
+<a href=#607 id=607 data-nosnippet>607</a>                <span class="macro">vk_parse!</span>(<span class="macro">format!</span>(<span class="string">"({})^(pow_/2)"</span>, muv_sq_atom.to_canonical_string()).as_str())
+<a href=#608 id=608 data-nosnippet>608</a>                    .unwrap()
+<a href=#609 id=609 data-nosnippet>609</a>                    .to_pattern(),
+<a href=#610 id=610 data-nosnippet>610</a>            );
+<a href=#611 id=611 data-nosnippet>611</a>        <span class="comment">// Use may have "stupidly" also kept odd powers in the numerator
+<a href=#612 id=612 data-nosnippet>612</a>        </span>evaluated_integral = evaluated_integral
+<a href=#613 id=613 data-nosnippet>613</a>            .replace(<span class="macro">vk_parse!</span>(<span class="string">"M^pow_"</span>).unwrap().to_pattern())
+<a href=#614 id=614 data-nosnippet>614</a>            .when(Condition::from((S.pow_, odd_condition())))
+<a href=#615 id=615 data-nosnippet>615</a>            .with(
+<a href=#616 id=616 data-nosnippet>616</a>                <span class="macro">vk_parse!</span>(<span class="macro">format!</span>(<span class="string">"({})^pow_"</span>, muv_atom.to_canonical_string()).as_str())
+<a href=#617 id=617 data-nosnippet>617</a>                    .unwrap()
+<a href=#618 id=618 data-nosnippet>618</a>                    .to_pattern(),
+<a href=#619 id=619 data-nosnippet>619</a>            );
+<a href=#620 id=620 data-nosnippet>620</a>        evaluated_integral = evaluated_integral
+<a href=#621 id=621 data-nosnippet>621</a>            .replace(<span class="macro">vk_parse!</span>(<span class="string">"M"</span>).unwrap().to_pattern())
+<a href=#622 id=622 data-nosnippet>622</a>            .when(Condition::from((S.pow_, odd_condition())))
+<a href=#623 id=623 data-nosnippet>623</a>            .with(
+<a href=#624 id=624 data-nosnippet>624</a>                <span class="macro">vk_parse!</span>(muv_atom.to_canonical_string().as_str())
+<a href=#625 id=625 data-nosnippet>625</a>                    .unwrap()
+<a href=#626 id=626 data-nosnippet>626</a>                    .to_pattern(),
+<a href=#627 id=627 data-nosnippet>627</a>            );
+<a href=#628 id=628 data-nosnippet>628</a>        <span class="kw">let </span><span class="kw-2">mut </span>matad_normalization_correction = <span class="macro">vk_parse!</span>(
+<a href=#629 id=629 data-nosnippet>629</a>            <span class="macro">format!</span>(
+<a href=#630 id=630 data-nosnippet>630</a>                <span class="string">"(
+<a href=#631 id=631 data-nosnippet>631</a>                    (𝑖*(𝜋^((4-2*{eps})/2)))\
+<a href=#632 id=632 data-nosnippet>632</a>                  * (exp(-EulerGamma))^({eps})\
+<a href=#633 id=633 data-nosnippet>633</a>                  * (exp(-logmUVmu-log_mu_sq))^({eps})\
+<a href=#634 id=634 data-nosnippet>634</a>                 )^{n_loops}"</span>,
+<a href=#635 id=635 data-nosnippet>635</a>                eps = settings.epsilon_symbol,
+<a href=#636 id=636 data-nosnippet>636</a>                n_loops = integral.n_loops
+<a href=#637 id=637 data-nosnippet>637</a>            )
+<a href=#638 id=638 data-nosnippet>638</a>            .as_str()
+<a href=#639 id=639 data-nosnippet>639</a>        )
+<a href=#640 id=640 data-nosnippet>640</a>        .unwrap();
+<a href=#641 id=641 data-nosnippet>641</a>
+<a href=#642 id=642 data-nosnippet>642</a>        <span class="comment">// Since MATAD uses euclidean denominator, we must adjust the overall sign by (-1) per quadratic denominator with power one.
+<a href=#643 id=643 data-nosnippet>643</a>        </span>matad_normalization_correction <span class="kw-2">*</span>=
+<a href=#644 id=644 data-nosnippet>644</a>            <span class="macro">vk_parse!</span>(<span class="macro">format!</span>(<span class="string">"((-1)^{})"</span>, powers.iter().sum::&lt;i64&gt;()).as_str()).unwrap();
+<a href=#645 id=645 data-nosnippet>645</a>
+<a href=#646 id=646 data-nosnippet>646</a>        <span class="comment">// Adjust normalization factor
+<a href=#647 id=647 data-nosnippet>647</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>complete_normalization = matad_normalization_correction
+<a href=#648 id=648 data-nosnippet>648</a>            * settings
+<a href=#649 id=649 data-nosnippet>649</a>                .get_integral_normalization_factor_atom()<span class="question-mark">?
+<a href=#650 id=650 data-nosnippet>650</a>                </span>.replace(S.n_loops.to_pattern())
+<a href=#651 id=651 data-nosnippet>651</a>                .with(Atom::num(integral.n_loops <span class="kw">as </span>i64).to_pattern());
+<a href=#652 id=652 data-nosnippet>652</a>        complete_normalization = complete_normalization
+<a href=#653 id=653 data-nosnippet>653</a>            .replace(Atom::var(<span class="macro">vk_symbol!</span>(settings.epsilon_symbol.as_str())).to_pattern())
+<a href=#654 id=654 data-nosnippet>654</a>            .with(<span class="macro">vk_parse!</span>(<span class="string">"ep"</span>).unwrap().to_pattern());
+<a href=#655 id=655 data-nosnippet>655</a>
+<a href=#656 id=656 data-nosnippet>656</a>        evaluated_integral <span class="kw-2">*</span>= complete_normalization;
+<a href=#657 id=657 data-nosnippet>657</a>
+<a href=#658 id=658 data-nosnippet>658</a>        <span class="kw">if </span>options.expand_masters {
+<a href=#659 id=659 data-nosnippet>659</a>            <span class="kw">let </span>expansion_depth =
+<a href=#660 id=660 data-nosnippet>660</a>                settings.number_of_terms_in_epsilon_expansion - (integral.n_loops <span class="kw">as </span>i64) - <span class="number">1</span>;
+<a href=#661 id=661 data-nosnippet>661</a>            <span class="kw">if </span>options.direct_numerical_substition {
+<a href=#662 id=662 data-nosnippet>662</a>                <span class="macro">debug!</span>(
+<a href=#663 id=663 data-nosnippet>663</a>                    <span class="string">"{}: Substitute masters directly with their numerical values, with terms up to and including {}^{} ..."</span>,
+<a href=#664 id=664 data-nosnippet>664</a>                    <span class="string">"MATAD"</span>.green(),
+<a href=#665 id=665 data-nosnippet>665</a>                    settings.epsilon_symbol,
+<a href=#666 id=666 data-nosnippet>666</a>                    expansion_depth
+<a href=#667 id=667 data-nosnippet>667</a>                );
+<a href=#668 id=668 data-nosnippet>668</a>                evaluated_integral =
+<a href=#669 id=669 data-nosnippet>669</a>                    matad.substitute_masters_directly(evaluated_integral.as_view())<span class="question-mark">?</span>;
+<a href=#670 id=670 data-nosnippet>670</a>            } <span class="kw">else </span>{
+<a href=#671 id=671 data-nosnippet>671</a>                <span class="macro">debug!</span>(
+<a href=#672 id=672 data-nosnippet>672</a>                    <span class="string">"{}: Expanding masters and including terms up to and including {}^{} ..."</span>,
+<a href=#673 id=673 data-nosnippet>673</a>                    <span class="string">"MATAD"</span>.green(),
+<a href=#674 id=674 data-nosnippet>674</a>                    settings.epsilon_symbol,
+<a href=#675 id=675 data-nosnippet>675</a>                    expansion_depth
+<a href=#676 id=676 data-nosnippet>676</a>                );
+<a href=#677 id=677 data-nosnippet>677</a>                evaluated_integral = matad.expand_matad_masters(evaluated_integral.as_view())<span class="question-mark">?</span>;
+<a href=#678 id=678 data-nosnippet>678</a>            }
+<a href=#679 id=679 data-nosnippet>679</a>            <span class="comment">// Temporary work around for series bug in Symbolica
+<a href=#680 id=680 data-nosnippet>680</a>            // evaluated_integral = vk_parse!("(any___)^-1").unwrap().replace_all(
+<a href=#681 id=681 data-nosnippet>681</a>            //     evaluated_integral.as_view(),
+<a href=#682 id=682 data-nosnippet>682</a>            //     &amp;PatternOrMap::Map(Box::new(move |match_in| {
+<a href=#683 id=683 data-nosnippet>683</a>            //         Atom::num(1) / match_in.get(S.any___).unwrap().to_atom().expand()
+<a href=#684 id=684 data-nosnippet>684</a>            //     })),
+<a href=#685 id=685 data-nosnippet>685</a>            //     None,
+<a href=#686 id=686 data-nosnippet>686</a>            //     None,
+<a href=#687 id=687 data-nosnippet>687</a>            // );
+<a href=#688 id=688 data-nosnippet>688</a>            </span><span class="macro">debug!</span>(
+<a href=#689 id=689 data-nosnippet>689</a>                <span class="string">"{}: Series expansion of the result up to and including terms of order {}^{} ..."</span>,
+<a href=#690 id=690 data-nosnippet>690</a>                <span class="string">"MATAD"</span>.green(),
+<a href=#691 id=691 data-nosnippet>691</a>                settings.epsilon_symbol,
+<a href=#692 id=692 data-nosnippet>692</a>                expansion_depth
+<a href=#693 id=693 data-nosnippet>693</a>            );
+<a href=#694 id=694 data-nosnippet>694</a>            evaluated_integral = <span class="kw">match </span>evaluated_integral.series(
+<a href=#695 id=695 data-nosnippet>695</a>                <span class="macro">vk_symbol!</span>(<span class="string">"ep"</span>),
+<a href=#696 id=696 data-nosnippet>696</a>                Atom::Zero.as_view(),
+<a href=#697 id=697 data-nosnippet>697</a>                Rational::from(expansion_depth),
+<a href=#698 id=698 data-nosnippet>698</a>            ) {
+<a href=#699 id=699 data-nosnippet>699</a>                <span class="prelude-val">Ok</span>(a) =&gt; a,
+<a href=#700 id=700 data-nosnippet>700</a>                <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(VakintError::SymbolicaError(e.to_string())),
+<a href=#701 id=701 data-nosnippet>701</a>            }
+<a href=#702 id=702 data-nosnippet>702</a>            .to_atom();
+<a href=#703 id=703 data-nosnippet>703</a>
+<a href=#704 id=704 data-nosnippet>704</a>            <span class="comment">// Sanity check
+<a href=#705 id=705 data-nosnippet>705</a>            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(m) = evaluated_integral
+<a href=#706 id=706 data-nosnippet>706</a>                .pattern_match(<span class="kw-2">&amp;</span><span class="macro">vk_parse!</span>(<span class="string">"Oep(x_,y_)"</span>).unwrap().to_pattern(), <span class="prelude-val">None</span>, <span class="prelude-val">None</span>)
+<a href=#707 id=707 data-nosnippet>707</a>                .next()
+<a href=#708 id=708 data-nosnippet>708</a>            {
+<a href=#709 id=709 data-nosnippet>709</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(VakintError::MATADError(<span class="macro">format!</span>(
+<a href=#710 id=710 data-nosnippet>710</a>                    <span class="string">"MATAD expansion yielded terms beyond expansion depth supported: Oep({},{})"</span>,
+<a href=#711 id=711 data-nosnippet>711</a>                    m.get(<span class="kw-2">&amp;</span>S.x_).unwrap(),
+<a href=#712 id=712 data-nosnippet>712</a>                    m.get(<span class="kw-2">&amp;</span>S.y_).unwrap(),
+<a href=#713 id=713 data-nosnippet>713</a>                )));
+<a href=#714 id=714 data-nosnippet>714</a>            }
+<a href=#715 id=715 data-nosnippet>715</a>            <span class="kw">if </span>options.direct_numerical_substition {
+<a href=#716 id=716 data-nosnippet>716</a>                <span class="macro">debug!</span>(
+<a href=#717 id=717 data-nosnippet>717</a>                    <span class="string">"{}: Substituting PolyGamma and period constants..."</span>,
+<a href=#718 id=718 data-nosnippet>718</a>                    <span class="string">"MATAD"</span>.green()
+<a href=#719 id=719 data-nosnippet>719</a>                );
+<a href=#720 id=720 data-nosnippet>720</a>                evaluated_integral = evaluated_integral.expand();
+<a href=#721 id=721 data-nosnippet>721</a>                evaluated_integral = matad.substitute_poly_gamma(evaluated_integral.as_view())<span class="question-mark">?</span>;
+<a href=#722 id=722 data-nosnippet>722</a>                evaluated_integral =
+<a href=#723 id=723 data-nosnippet>723</a>                    matad.substitute_additional_constants(evaluated_integral.as_view())<span class="question-mark">?</span>;
+<a href=#724 id=724 data-nosnippet>724</a>            } <span class="kw">else if </span>options.susbstitute_masters {
+<a href=#725 id=725 data-nosnippet>725</a>                <span class="macro">debug!</span>(<span class="string">"{}: Substituting masters with HPLs ..."</span>, <span class="string">"MATAD"</span>.green());
+<a href=#726 id=726 data-nosnippet>726</a>                evaluated_integral = matad.substitute_masters(evaluated_integral.as_view())<span class="question-mark">?</span>;
+<a href=#727 id=727 data-nosnippet>727</a>                <span class="kw">if </span>options.substitute_hpls {
+<a href=#728 id=728 data-nosnippet>728</a>                    <span class="comment">// Expanding here is important to improve efficiency and avoid symbolica bugs with floating point coefficients
+<a href=#729 id=729 data-nosnippet>729</a>                    </span>evaluated_integral = evaluated_integral.expand();
+<a href=#730 id=730 data-nosnippet>730</a>                    <span class="macro">debug!</span>(<span class="string">"{}: Substituting HPLs with numerics ..."</span>, <span class="string">"MATAD"</span>.green());
+<a href=#731 id=731 data-nosnippet>731</a>                    evaluated_integral = matad.substitute_hpls(evaluated_integral.as_view())<span class="question-mark">?</span>;
+<a href=#732 id=732 data-nosnippet>732</a>                    evaluated_integral =
+<a href=#733 id=733 data-nosnippet>733</a>                        matad.substitute_poly_gamma(evaluated_integral.as_view())<span class="question-mark">?</span>;
+<a href=#734 id=734 data-nosnippet>734</a>                    evaluated_integral =
+<a href=#735 id=735 data-nosnippet>735</a>                        matad.substitute_additional_constants(evaluated_integral.as_view())<span class="question-mark">?</span>;
+<a href=#736 id=736 data-nosnippet>736</a>                }
+<a href=#737 id=737 data-nosnippet>737</a>            }
+<a href=#738 id=738 data-nosnippet>738</a>            <span class="comment">// Sanity check
+<a href=#739 id=739 data-nosnippet>739</a>            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(m) = evaluated_integral
+<a href=#740 id=740 data-nosnippet>740</a>                .pattern_match(<span class="kw-2">&amp;</span><span class="macro">vk_parse!</span>(<span class="string">"Oep(x_,y_)"</span>).unwrap().to_pattern(), <span class="prelude-val">None</span>, <span class="prelude-val">None</span>)
+<a href=#741 id=741 data-nosnippet>741</a>                .next()
+<a href=#742 id=742 data-nosnippet>742</a>            {
+<a href=#743 id=743 data-nosnippet>743</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(VakintError::FMFTError(<span class="macro">format!</span>(
+<a href=#744 id=744 data-nosnippet>744</a>                    <span class="string">"FMFT expansion yielded terms beyond expansion depth supported: Oep({},{})"</span>,
+<a href=#745 id=745 data-nosnippet>745</a>                    m.get(<span class="kw-2">&amp;</span>S.x_).unwrap(),
+<a href=#746 id=746 data-nosnippet>746</a>                    m.get(<span class="kw-2">&amp;</span>S.y_).unwrap(),
+<a href=#747 id=747 data-nosnippet>747</a>                )));
+<a href=#748 id=748 data-nosnippet>748</a>            }
+<a href=#749 id=749 data-nosnippet>749</a>        }
+<a href=#750 id=750 data-nosnippet>750</a>
+<a href=#751 id=751 data-nosnippet>751</a>        evaluated_integral = evaluated_integral
+<a href=#752 id=752 data-nosnippet>752</a>            .replace(<span class="macro">vk_parse!</span>(<span class="string">"ep"</span>).unwrap().to_pattern())
+<a href=#753 id=753 data-nosnippet>753</a>            .with(Atom::var(<span class="macro">vk_symbol!</span>(settings.epsilon_symbol.as_str())).to_pattern());
+<a href=#754 id=754 data-nosnippet>754</a>
+<a href=#755 id=755 data-nosnippet>755</a>        <span class="kw">if </span>!settings.use_dot_product_notation {
+<a href=#756 id=756 data-nosnippet>756</a>            evaluated_integral = Vakint::convert_from_dot_notation(evaluated_integral.as_view());
+<a href=#757 id=757 data-nosnippet>757</a>        }
+<a href=#758 id=758 data-nosnippet>758</a>
+<a href=#759 id=759 data-nosnippet>759</a>        <span class="kw">let </span>log_muv_mu_sq = <span class="macro">function!</span>(
+<a href=#760 id=760 data-nosnippet>760</a>            Symbol::LOG,
+<a href=#761 id=761 data-nosnippet>761</a>            muv_sq_atom / Atom::var(<span class="macro">vk_symbol!</span>(settings.mu_r_sq_symbol.as_str()))
+<a href=#762 id=762 data-nosnippet>762</a>        );
+<a href=#763 id=763 data-nosnippet>763</a>
+<a href=#764 id=764 data-nosnippet>764</a>        <span class="kw">let </span>log_mu_sq = <span class="macro">function!</span>(
+<a href=#765 id=765 data-nosnippet>765</a>            Symbol::LOG,
+<a href=#766 id=766 data-nosnippet>766</a>            Atom::var(<span class="macro">vk_symbol!</span>(settings.mu_r_sq_symbol.as_str()))
+<a href=#767 id=767 data-nosnippet>767</a>        );
+<a href=#768 id=768 data-nosnippet>768</a>
+<a href=#769 id=769 data-nosnippet>769</a>        evaluated_integral = evaluated_integral
+<a href=#770 id=770 data-nosnippet>770</a>            .replace(<span class="macro">vk_parse!</span>(<span class="string">"logmUVmu"</span>).unwrap().to_pattern())
+<a href=#771 id=771 data-nosnippet>771</a>            .with((log_muv_mu_sq).to_pattern());
+<a href=#772 id=772 data-nosnippet>772</a>        evaluated_integral = evaluated_integral
+<a href=#773 id=773 data-nosnippet>773</a>            .replace(<span class="macro">vk_parse!</span>(<span class="string">"log_mu_sq"</span>).unwrap().to_pattern())
+<a href=#774 id=774 data-nosnippet>774</a>            .with((log_mu_sq).to_pattern());
+<a href=#775 id=775 data-nosnippet>775</a>
+<a href=#776 id=776 data-nosnippet>776</a>        <span class="comment">// println!(
+<a href=#777 id=777 data-nosnippet>777</a>        //     "evaluated_integral: {}",
+<a href=#778 id=778 data-nosnippet>778</a>        //     evaluated_integral.to_canonical_string()
+<a href=#779 id=779 data-nosnippet>779</a>        // );
+<a href=#780 id=780 data-nosnippet>780</a>
+<a href=#781 id=781 data-nosnippet>781</a>        </span><span class="prelude-val">Ok</span>(evaluated_integral)
+<a href=#782 id=782 data-nosnippet>782</a>    }
+<a href=#783 id=783 data-nosnippet>783</a>}
+</code></pre></div></section></main></body></html>

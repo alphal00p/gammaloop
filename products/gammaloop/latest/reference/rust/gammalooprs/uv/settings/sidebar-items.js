@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ApproximationType","FinalIntegrandDimension","UVOrchestrator"],"struct":["AlphaLoopSettings","CTIdentifier","CTRenormalizationRule","FMFTSettings","MATADSettings","PySecDecSettings","RenormalizationPrescriptionSettings","UVgenerationSettings","VakintSettings"]};

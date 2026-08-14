@@ -1,0 +1,35 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Builds a color-generator atom."><title>color_t in idenso - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="idenso" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc macro"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">color_t</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../idenso/index.html">idenso</a><span class="version">0.3.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">color_t</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#examples" title="Examples">Examples</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="index.html">In crate idenso</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="index.html">idenso</a></div><h1>Macro <span class="macro">color_t</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/idenso/color/macros.rs.html#30-98">Source</a> </span></div><pre class="rust item-decl"><code>macro_rules! color_t {
+    ([$($a:expr),+ $(,)?], $($rest:tt)+) =&gt; { ... };
+    ($base:ident . $a:ident, $($rest:tt)+) =&gt; { ... };
+    ($a:expr, $($rest:tt)+) =&gt; { ... };
+    ([$($a:expr),+ $(,)?] $(,)?) =&gt; { ... };
+    ($base:ident . $a:ident $(,)?) =&gt; { ... };
+    ($a:expr $(,)?) =&gt; { ... };
+    (@tensor $a:expr; [$($i:expr),+ $(,)?], $($rest:tt)*) =&gt; { ... };
+    (@tensor $a:expr; $base:ident . $i:ident, $($rest:tt)*) =&gt; { ... };
+    (@tensor $a:expr; $i:expr, $($rest:tt)*) =&gt; { ... };
+    (@tensor2 $a:expr, $i:expr; [$($j:expr),+ $(,)?] $(,)?) =&gt; { ... };
+    (@tensor2 $a:expr, $i:expr; $base:ident . $j:ident $(,)?) =&gt; { ... };
+    (@tensor2 $a:expr, $i:expr; $j:expr $(,)?) =&gt; { ... };
+    (@tensor_done $a:expr, $i:expr, $j:expr) =&gt; { ... };
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Builds a color-generator atom.</p>
+<p>With one argument, this builds a fundamental generator factor for use inside
+<code>chain!</code> or <code>trace!</code>. The factor uses the chain placeholder indices <code>in</code> and
+<code>out</code>; the surrounding chain or trace owns the physical endpoints.</p>
+<p>With three arguments, this builds an explicit generator <code>t(a,i,j)</code>. The first
+argument is an adjoint color index, the second is a fundamental color index,
+and the third is an anti-fundamental color index.</p>
+<p>Arguments can be typed slots, atoms, atom views, pattern variables such as
+<code>RS.a__</code>, or bracketed representation argument lists such as
+<code>[CS.adj_, RS.a_]</code>. Bare Rust identifiers and literals are expressions, so
+local slot bindings and numeric labels are used as-is.</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>idenso::color_t;
+<span class="kw">use </span>spenso::{slot, trace};
+
+<span class="kw">let </span>factor = <span class="macro">color_t!</span>(<span class="macro">slot!</span>(coad_na, a));
+<span class="kw">let </span>expr = <span class="macro">trace!</span>(<span class="kw-2">&amp;</span>cof_nc, factor);
+<span class="kw">let </span>factor_from_binding = <span class="macro">color_t!</span>(<span class="macro">slot!</span>(coad_na, a));
+<span class="kw">let </span>explicit_tensor = <span class="macro">color_t!</span>(<span class="macro">slot!</span>(coad_na, a), <span class="macro">slot!</span>(cof_nc, i), <span class="macro">slot!</span>(cof_nc.dual(), j));
+<span class="kw">let </span>pattern_tensor = <span class="macro">color_t!</span>(RS.a__, RS.i__, RS.j__);
+<span class="kw">let </span>dimensioned_pattern = <span class="macro">color_t!</span>([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);</code></pre></div></div></details></section></div></main></body></html>

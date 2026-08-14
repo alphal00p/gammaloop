@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["contracted","cut","cycle","empty","full","internal","node","subset"],"struct":["SubSetIter"],"trait":["BaseSubgraph","Inclusion","ModifySubSet","PairwiseSubSetOps","SubGraphLike","SubGraphOps","SubSetLike","SubSetOps"]};

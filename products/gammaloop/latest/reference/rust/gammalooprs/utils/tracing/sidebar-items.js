@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["LogFormat","LogLevel"],"fn":["init_bench_tracing","init_test_tracing","stderr_is_tty"],"static":["LOG_GUARD"],"struct":["LogStyle"],"trait":["StatusRenderable"]};

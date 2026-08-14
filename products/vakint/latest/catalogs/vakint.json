@@ -1,0 +1,598 @@
+{
+  "schema_version": 2,
+  "product": {
+    "id": "vakint",
+    "title": "Vakint"
+  },
+  "component": {
+    "id": "vakint",
+    "package": "vakint",
+    "title": "Vakint vakint",
+    "version": "0.1.2",
+    "language": "rust",
+    "features": []
+  },
+  "root": {
+    "id": "vakint",
+    "title": "vakint supported API",
+    "docs": {
+      "format": "typst-markup",
+      "body": "Vakint's supported topology and evaluation API. Generated topology and\nbackend tables are #emph[validated] against runtime sources."
+    },
+    "summary": "Vakint's supported topology and evaluation API.",
+    "since": null,
+    "keywords": [],
+    "source": {
+      "identifier": "alphal00p_docs_catalogs::annotated_scopes::vakint",
+      "file": "crates/alphal00p-docs-catalogs/src/lib.rs",
+      "line": 86,
+      "column": 5
+    },
+    "items": {},
+    "scopes": {
+      "supported": {
+        "id": "supported",
+        "title": "Supported entry points",
+        "docs": null,
+        "summary": null,
+        "since": null,
+        "keywords": [],
+        "source": null,
+        "items": {
+          "vakint_parse": {
+            "id": "vakint_parse",
+            "name": "vakint_parse!",
+            "title": "Vakint expression parser",
+            "kind": "exported-macro",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Parses a Symbolica expression using Vakint's namespace by default or a caller-supplied namespace."
+            },
+            "summary": "Parses a Symbolica expression using Vakint's namespace by default or a caller-supplied namespace.",
+            "signature": "#[macro_export] macro_rules! vakint_parse\n{\n    ($s: expr) =>\n    {{ symbolica::try_parse!($s, default_namespace = $crate::NAMESPACE) }};\n    ($s: expr, $ns: expr) =>\n    {{ symbolica::try_parse!($s, default_namespace = $ns) }};\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let expression = vakint::vakint_parse!(\"x\").expect(\"valid Vakint expression\"); let explicit = vakint::vakint_parse!(\"x\", vakint::NAMESPACE).expect(\"valid explicit namespace\");"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "vakint::vakint_parse",
+              "file": "crates/vakint/src/utils.rs",
+              "line": 59,
+              "column": 1
+            }
+          },
+          "vakint_symbol": {
+            "id": "vakint_symbol",
+            "name": "vakint_symbol!",
+            "title": "Vakint symbol parser",
+            "kind": "exported-macro",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Resolves a symbol name in Vakint's namespace while preserving an explicit namespace."
+            },
+            "summary": "Resolves a symbol name in Vakint's namespace while preserving an explicit namespace.",
+            "signature": "#[macro_export] macro_rules! vakint_symbol\n{\n    ($s: expr) =>\n    {{\n            if\n            format!(\"{}\",\n            $s).starts_with(format!(\"{}::\", $crate::NAMESPACE).as_str())\n            {\n                match symbolica::try_parse!($s)\n                {\n                    Ok::<_, String>(a) => match a\n                    {\n                        symbolica::atom::Atom::Var(sym) => sym.get_symbol(), _ =>\n                        panic!(\"Parsed atom is not a symbol: {}.\", $s),\n                    }, Err(e) =>\n                    panic!(\"Could not parse symbol from string: {}, Error: {}\",\n                    $s, e),\n                }\n            } else\n            {\n                match\n                symbolica::try_parse!(format!(\"{}\", $s), default_namespace =\n                $crate::NAMESPACE)\n                {\n                    Ok::<_, String>(a) => match a\n                    {\n                        symbolica::atom::Atom::Var(sym) => sym.get_symbol(), _ =>\n                        panic!(\"Parsed atom is not a symbol: {}.\", $s),\n                    }, Err(e) =>\n                    panic!(\"Could not parse symbol from string: {}, Error: {}\",\n                    $s, e),\n                }\n            }\n        }};\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let symbol = vakint::vakint_symbol!(\"mass\");"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "vakint::vakint_symbol",
+              "file": "crates/vakint/src/utils.rs",
+              "line": 76,
+              "column": 1
+            }
+          },
+          "Vakint": {
+            "id": "Vakint",
+            "name": "Vakint",
+            "title": "Vakint engine",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Owns supported topology matching, canonicalization, reduction, and evaluation operations."
+            },
+            "summary": "Owns supported topology matching, canonicalization, reduction, and evaluation operations.",
+            "signature": "#[derive(Debug, Clone)] pub struct Vakint { pub topologies : Topologies, }",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let engine = vakint::Vakint::new()?;"
+              }
+            ],
+            "members": [
+              {
+                "name": "topologies",
+                "kind": "field",
+                "docs": null,
+                "signature": "Topologies",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "vakint::Vakint",
+              "file": "crates/vakint/src/lib.rs",
+              "line": 2192,
+              "column": 1
+            }
+          },
+          "VakintSettings": {
+            "id": "VakintSettings",
+            "name": "VakintSettings",
+            "title": "Vakint settings",
+            "kind": "setting",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Controls symbols, precision, normalization, external tools, and backend evaluation order."
+            },
+            "summary": "Controls symbols, precision, normalization, external tools, and backend evaluation order.",
+            "signature": "#[derive(Debug, Clone)] pub struct VakintSettings\n{\n    #[allow(unused)] pub epsilon_symbol : String, pub mu_r_sq_symbol : String,\n    pub form_exe_path : String, pub python_exe_path : String, pub\n    verify_numerator_identification : bool, pub integral_normalization_factor\n    : LoopNormalizationFactor, pub run_time_decimal_precision : u32, pub\n    allow_unknown_integrals : bool, pub clean_tmp_dir : bool, pub\n    evaluation_order : EvaluationOrder, pub\n    number_of_terms_in_epsilon_expansion : i64, pub\n    precision_for_input_float_rationalization :\n    InputFloatRationalizationPrecision, pub use_dot_product_notation : bool,\n    pub temporary_directory : Option < String > ,\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let settings = vakint::VakintSettings::default();"
+              }
+            ],
+            "members": [
+              {
+                "name": "epsilon_symbol",
+                "kind": "field",
+                "docs": null,
+                "signature": "String",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "mu_r_sq_symbol",
+                "kind": "field",
+                "docs": null,
+                "signature": "String",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "form_exe_path",
+                "kind": "field",
+                "docs": null,
+                "signature": "String",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "python_exe_path",
+                "kind": "field",
+                "docs": null,
+                "signature": "String",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "verify_numerator_identification",
+                "kind": "field",
+                "docs": null,
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integral_normalization_factor",
+                "kind": "field",
+                "docs": null,
+                "signature": "LoopNormalizationFactor",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "run_time_decimal_precision",
+                "kind": "field",
+                "docs": null,
+                "signature": "u32",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "allow_unknown_integrals",
+                "kind": "field",
+                "docs": null,
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "clean_tmp_dir",
+                "kind": "field",
+                "docs": null,
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "evaluation_order",
+                "kind": "field",
+                "docs": null,
+                "signature": "EvaluationOrder",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "number_of_terms_in_epsilon_expansion",
+                "kind": "field",
+                "docs": null,
+                "signature": "i64",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "precision_for_input_float_rationalization",
+                "kind": "field",
+                "docs": null,
+                "signature": "InputFloatRationalizationPrecision",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "use_dot_product_notation",
+                "kind": "field",
+                "docs": null,
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "temporary_directory",
+                "kind": "field",
+                "docs": null,
+                "signature": "Option < String >",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "vakint::VakintSettings",
+              "file": "crates/vakint/src/lib.rs",
+              "line": 1937,
+              "column": 1
+            }
+          },
+          "VakintExpression": {
+            "id": "VakintExpression",
+            "name": "VakintExpression",
+            "title": "Vakint expression",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Stores a sum of matched vacuum-integral terms with separate numerators."
+            },
+            "summary": "Stores a sum of matched vacuum-integral terms with separate numerators.",
+            "signature": "#[derive(Debug, Clone, PartialEq, Eq)] pub struct\nVakintExpression(pub Vec < VakintTerm >);",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use vakint::VakintExpression;"
+              }
+            ],
+            "members": [
+              {
+                "name": "0",
+                "kind": "field",
+                "docs": null,
+                "signature": "Vec < VakintTerm >",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "vakint::VakintExpression",
+              "file": "crates/vakint/src/lib.rs",
+              "line": 2581,
+              "column": 1
+            }
+          },
+          "EvaluationOrder": {
+            "id": "EvaluationOrder",
+            "name": "EvaluationOrder",
+            "title": "Evaluation order",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Defines the ordered analytic and numerical backends available to an evaluation."
+            },
+            "summary": "Defines the ordered analytic and numerical backends available to an evaluation.",
+            "signature": "#[derive(Debug, Clone)] pub struct\nEvaluationOrder(pub Vec < EvaluationMethod >);",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let order = vakint::EvaluationOrder::empty();"
+              }
+            ],
+            "members": [
+              {
+                "name": "0",
+                "kind": "field",
+                "docs": null,
+                "signature": "Vec < EvaluationMethod >",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "vakint::EvaluationOrder",
+              "file": "crates/vakint/src/lib.rs",
+              "line": 1824,
+              "column": 1
+            }
+          },
+          "VakintExpression::canonicalize": {
+            "id": "VakintExpression::canonicalize",
+            "name": "canonicalize",
+            "title": "Canonicalize an expression",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Matches and rewrites each integral into Vakint's canonical topology representation."
+            },
+            "summary": "Matches and rewrites each integral into Vakint's canonical topology representation.",
+            "signature": "fn\ncanonicalize(& mut self, settings : & VakintSettings, topologies : &\nTopologies, short_form : bool,) -> Result < (), VakintError >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "self",
+                "docs": null,
+                "ty": "& mut self",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "settings",
+                "docs": null,
+                "ty": "& VakintSettings",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "topologies",
+                "docs": null,
+                "ty": "& Topologies",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "short_form",
+                "docs": null,
+                "ty": "bool",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < (), VakintError >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use vakint::VakintExpression;"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "vakint::VakintExpression::canonicalize",
+              "file": "crates/vakint/src/lib.rs",
+              "line": 2629,
+              "column": 1
+            }
+          },
+          "VakintExpression::tensor_reduce": {
+            "id": "VakintExpression::tensor_reduce",
+            "name": "tensor_reduce",
+            "title": "Tensor-reduce an expression",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Reduces tensor numerators to scalar-integral combinations."
+            },
+            "summary": "Reduces tensor numerators to scalar-integral combinations.",
+            "signature": "fn tensor_reduce(& mut self, vakint : & Vakint, settings : & VakintSettings,)\n-> Result < (), VakintError >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "self",
+                "docs": null,
+                "ty": "& mut self",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "vakint",
+                "docs": null,
+                "ty": "& Vakint",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "settings",
+                "docs": null,
+                "ty": "& VakintSettings",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < (), VakintError >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use vakint::VakintExpression;"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "vakint::VakintExpression::tensor_reduce",
+              "file": "crates/vakint/src/lib.rs",
+              "line": 2651,
+              "column": 1
+            }
+          },
+          "VakintExpression::evaluate_integral": {
+            "id": "VakintExpression::evaluate_integral",
+            "name": "evaluate_integral",
+            "title": "Evaluate an expression",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Evaluates canonical scalar integrals using the configured ordered backend policy."
+            },
+            "summary": "Evaluates canonical scalar integrals using the configured ordered backend policy.",
+            "signature": "fn\nevaluate_integral(& mut self, vakint : & Vakint, settings : & VakintSettings,)\n-> Result < (), VakintError >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "self",
+                "docs": null,
+                "ty": "& mut self",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "vakint",
+                "docs": null,
+                "ty": "& Vakint",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "settings",
+                "docs": null,
+                "ty": "& VakintSettings",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < (), VakintError >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use vakint::VakintExpression;"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "vakint::VakintExpression::evaluate_integral",
+              "file": "crates/vakint/src/lib.rs",
+              "line": 2662,
+              "column": 1
+            }
+          },
+          "NumericalEvaluationResult": {
+            "id": "NumericalEvaluationResult",
+            "name": "NumericalEvaluationResult",
+            "title": "Numerical Laurent result",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Stores numerical Laurent coefficients by power of the dimensional regulator."
+            },
+            "summary": "Stores numerical Laurent coefficients by power of the dimensional regulator.",
+            "signature": "#[derive(Debug, Clone, Default)] pub struct\nNumericalEvaluationResult(pub Vec < (i64, Complex < Float >) >);",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use vakint::NumericalEvaluationResult;"
+              }
+            ],
+            "members": [
+              {
+                "name": "0",
+                "kind": "field",
+                "docs": null,
+                "signature": "Vec < (i64, Complex < Float >) >",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "vakint::NumericalEvaluationResult",
+              "file": "crates/vakint/src/lib.rs",
+              "line": 2746,
+              "column": 1
+            }
+          }
+        },
+        "scopes": {}
+      }
+    }
+  }
+}

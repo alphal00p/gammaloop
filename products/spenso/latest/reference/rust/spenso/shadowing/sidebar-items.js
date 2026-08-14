@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["TensorCollectFilter"],"fn":["antisym","cyclic","sym","trace","trace_factor_views","trace_parts","trace_sym"],"mod":["static_symbols","symbolica_utils"],"static":["ANTISYM","COLLECT","CYCLIC","SYM"],"trait":["Collectable","Concretize","IntoAtom","ProjectorExpander","ShadowMapping","Shadowable","TensorCollectExt"]};

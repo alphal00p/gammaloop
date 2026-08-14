@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CONCRETEIND","DOWN","FLATIND","UP"],"enum":["DualConciousIndex"],"struct":["DualConciousExpandedIndex","ExpandedIndex","FlatIndex"],"type":["ConcreteIndex"]};

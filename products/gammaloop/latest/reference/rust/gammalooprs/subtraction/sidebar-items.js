@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["amplitude_counterterm","lu_counterterm","overlap","overlap_subspace"]};

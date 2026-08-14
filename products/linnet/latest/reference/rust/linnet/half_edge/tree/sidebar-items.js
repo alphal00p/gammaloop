@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["TTRoot"],"struct":["OwnedTraversalTree","PreorderTraversalIter","SimpleTraversalTree","TraversalTreeAncestorHedgeIterator","TraversalTreeAncestorNodeIterator"]};

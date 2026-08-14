@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ContractionError"],"mod":["exteriorproduct","multicontract","singlecontract","trace"],"trait":["Contract","ContractableWith","ExteriorProduct","ExteriorProductInterleaved","MultiContract","MultiContractInterleaved","SingleContract","SingleContractInterleaved","Trace"]};

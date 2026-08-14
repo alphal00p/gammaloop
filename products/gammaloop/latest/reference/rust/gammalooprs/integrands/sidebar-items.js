@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Integrand","IntegrandSettings"],"mod":["builtin","evaluation","process"],"struct":["UnitSurfaceIntegrand","UnitSurfaceSettings","UnitVolumeIntegrand","UnitVolumeSettings"],"trait":["HasIntegrand"]};

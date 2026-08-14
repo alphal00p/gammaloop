@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ABSTRACTIND","DOWNIND","SELFDUALIND","UPIND"],"enum":["AbstractIndex","AbstractIndexError"],"static":["AIND_SYMBOLS"],"struct":["AindSymbols"]};

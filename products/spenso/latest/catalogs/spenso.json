@@ -1,0 +1,700 @@
+{
+  "schema_version": 2,
+  "product": {
+    "id": "spenso",
+    "title": "Spenso"
+  },
+  "component": {
+    "id": "spenso",
+    "package": "spenso",
+    "title": "Spenso spenso",
+    "version": "0.6.0",
+    "language": "rust",
+    "features": [
+      "shadowing"
+    ]
+  },
+  "root": {
+    "id": "spenso",
+    "title": "spenso supported API",
+    "docs": {
+      "format": "typst-markup",
+      "body": "Spenso's supported tensor and network API. The scope is #emph[intentionally]\nordered so foundational tensor types precede planning and execution."
+    },
+    "summary": "Spenso's supported tensor and network API.",
+    "since": null,
+    "keywords": [],
+    "source": {
+      "identifier": "alphal00p_docs_catalogs::annotated_scopes::spenso",
+      "file": "crates/alphal00p-docs-catalogs/src/lib.rs",
+      "line": 58,
+      "column": 5
+    },
+    "items": {},
+    "scopes": {
+      "supported": {
+        "id": "supported",
+        "title": "Supported entry points",
+        "docs": null,
+        "summary": null,
+        "since": null,
+        "keywords": [],
+        "source": null,
+        "items": {
+          "TensorStructure": {
+            "id": "TensorStructure",
+            "name": "TensorStructure",
+            "title": "Tensor structure",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Describes ordered slots, dimensions, representations, and contraction compatibility independently of data."
+            },
+            "summary": "Describes ordered slots, dimensions, representations, and contraction compatibility independently of data.",
+            "signature": "pub trait TensorStructure\n{\n    type Slot : IsAbstractSlot + DualSlotTo < Dual = Self :: Slot > ; type\n    Indexed : TensorStructure < Indexed = Self :: Indexed, Slot = Self :: Slot\n    > ; fn\n    reindex(self, indices : & [< Self :: Slot as IsAbstractSlot > :: Aind],)\n    -> Result < PermutedStructure < Self :: Indexed > , StructureError > ; fn\n    dual(self) -> Self; fn string_rep(& self) -> String\n    {\n        self.external_structure_iter().map(| s | s.to_string()).collect :: <\n        Vec < _ > > ().join(\"\")\n    } fn external_structure_iter(& self) -> impl Iterator < Item = Self ::\n    Slot > ; fn external_dims_iter(& self) -> impl Iterator < Item = Dimension\n    > ; fn external_reps_iter(& self,) -> impl Iterator < Item =\n    Representation < < Self :: Slot as IsAbstractSlot > :: R > > ; fn\n    external_indices_iter(& self) -> impl Iterator < Item = < Self :: Slot as\n    IsAbstractSlot > :: Aind > ; fn\n    get_aind(& self, i : impl Into < SlotIndex >) -> Option < < Self :: Slot\n    as IsAbstractSlot > :: Aind > ; fn\n    get_rep(& self, i : impl Into < SlotIndex > ,) -> Option < Representation\n    < < Self :: Slot as IsAbstractSlot > :: R > > ; fn\n    get_dim(& self, i : impl Into < SlotIndex >) -> Option < Dimension > ; fn\n    get_slot(& self, i : impl Into < SlotIndex >) -> Option < Self :: Slot > ;\n    fn order(& self) -> usize;\n    #[doc =\n    \" returns the list of slots that are the external indices of the tensor\"]\n    fn external_structure(& self) -> Vec < Self :: Slot >\n    { self.external_structure_iter().collect() } fn to_shell(self) ->\n    TensorShell < Self > where Self : Sized, { TensorShell :: new(self) } fn\n    contains_matching(& self, slot : & Self :: Slot) -> bool\n    { self.external_structure_iter().any(| s | s.matches(slot)) } fn\n    external_reps(& self) -> Vec < Representation < < Self :: Slot as\n    IsAbstractSlot > :: R > > { self.external_reps_iter().collect() } fn\n    external_indices(& self) -> Vec < < Self :: Slot as IsAbstractSlot > ::\n    Aind > { self.external_indices_iter().collect() }\n    #[doc =\n    \" checks if the tensor has the same exact structure as another tensor\"] fn\n    same_content(& self, other : & Self) -> bool { self.same_external(other) }\n    #[doc =\n    \" Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match\"]\n    fn match_index(& self, other : & Self) -> Option < (bool, usize, usize) >\n    {\n        let posmap =\n        self.external_structure_iter().enumerate().map(| (i, slot) |\n        (slot, i)).collect :: < AHashMap < _, _ > > (); let mut first_pair :\n        Option < (usize, usize) > = None; for (j, slot) in\n        other.external_structure_iter().enumerate()\n        {\n            if let Some(& i) = posmap.get(& slot.dual())\n            {\n                if let Some((i, j)) = first_pair\n                { return Some((false, i, j)); } first_pair = Some((i, j));\n            }\n        } first_pair.map(| (i, j) | (true, i, j))\n    }\n    #[doc =\n    \" Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list\"]\n    fn match_indices(& self, other : & Self) -> Option <\n    (Permutation, Vec < bool > , Vec < bool >) >\n    {\n        let mut self_matches = vec! [false; self.order()]; let mut perm = Vec\n        :: new(); let mut other_matches = vec! [false; other.order()]; let\n        posmap =\n        self.external_structure_iter().enumerate().map(| (i, slot) |\n        (slot, i)).collect :: < AHashMap < _, _ > > (); for (j, slot_other) in\n        other.external_structure_iter().enumerate()\n        {\n            if let Some(& i) = posmap.get(& slot_other.dual())\n            {\n                self_matches [i] = true; other_matches [j] = true;\n                perm.push(i);\n            }\n        } if perm.is_empty() { None } else\n        {\n            let p : Permutation = Permutation :: sort(& perm);\n            Some((p, self_matches, other_matches))\n        }\n    } #[doc = \" Identify the repeated slots in the external index list\"] fn\n    traces(& self) -> Vec < [usize; 2] >\n    {\n        let mut positions : HashMap < < Self as TensorStructure > :: Slot, Vec\n        < usize > > = HashMap :: new(); for (index, key) in\n        self.external_structure_iter().enumerate()\n        {\n            if let Some(v) = positions.get_mut(& key.dual())\n            { v.push(index); } else { positions.insert(key, vec! [index]); }\n        }\n        positions.into_values().filter_map(| indices |\n        {\n            if indices.len() == 2 { Some([indices [0], indices [1]]) } else\n            { None }\n        }).collect()\n    }\n    #[doc =\n    \" yields the (outwards facing) shape of the tensor as a list of dimensions\"]\n    fn shape(& self) -> Vec < Dimension >\n    { self.external_dims_iter().collect() } fn reps(& self) -> Vec <\n    Representation < < Self :: Slot as IsAbstractSlot > :: R > >\n    { self.external_reps_iter().collect() }\n    #[doc = \" checks if externally, the two tensors are the same\"] fn\n    same_external(& self, other : & Self) -> bool\n    {\n        let set1 : HashSet < _ > = self.external_structure_iter().collect();\n        let set2 : HashSet < _ > = other.external_structure_iter().collect();\n        set1 == set2\n    }\n    #[doc =\n    \" find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self\"]\n    fn find_permutation(& self, other : & Self) -> Result < Permutation >\n    {\n        if self.order() != other.order()\n        {\n            return\n            Err(eyre!\n            (\"Mismatched order: {} vs {}\", self.order(), other.order()));\n        } let other_structure = other.external_structure(); let self_structure\n        = self.external_structure(); let other_sort = Permutation ::\n        sort(& other_structure); let self_sort = Permutation ::\n        sort(& self_structure); if other_sort.apply_slice(& other_structure)\n        == self_sort.apply_slice(& self_structure)\n        { Ok(other_sort.compose(& self_sort.inverse())) } else\n        { Err(eyre! (\"Mismatched structure\")) }\n    } #[doc = \" yields the strides of the tensor in column major order\"] fn\n    strides_column_major(& self) -> Result < Vec < usize > >\n    {\n        let mut strides : Vec < usize > = vec! [1; self.order()]; if\n        self.order() == 0 { return Ok(strides); } for i in 0 .. self.order() -\n        1\n        {\n            strides [i + 1] = strides [i] * usize ::\n            try_from(self.shape() [i]) ? ;\n        } Ok(strides)\n    } #[doc = \" yields the strides of the tensor in row major order\"] fn\n    strides_row_major(& self) -> Result < Vec < usize > >\n    {\n        let mut strides = vec! [1; self.order()]; if self.order() == 0\n        { return Ok(strides); } for i in (0 .. self.order() - 1).rev()\n        {\n            strides [i] = strides [i + 1] * usize ::\n            try_from(self.shape() [i + 1]) ? ;\n        } Ok(strides)\n    } #[doc = \" By default, the strides are row major\"] fn strides(& self) ->\n    Result < Vec < usize > > { self.strides_row_major() }\n    #[doc =\n    \" Verifies that the list of indices provided are valid for the tensor\"]\n    #[doc = \"\"] #[doc = \" # Errors\"] #[doc = \"\"]\n    #[doc =\n    \" `Mismatched order` = if the length of the indices is different from the order of the tensor,\"]\n    #[doc = \"\"]\n    #[doc =\n    \" `Index out of bounds` = if the index is out of bounds for the dimension of that index\"]\n    #[doc = \"\"] fn verify_indices < C : AsRef < [ConcreteIndex] > >\n    (& self, indices : C) -> Result < () >\n    {\n        if indices.as_ref().len() != self.order()\n        {\n            return\n            Err(eyre!\n            (\"Mismatched order: {} indices, vs order {}\",\n            indices.as_ref().len(), self.order()));\n        } for (i, dim_len) in\n        self.external_structure_iter().map(| slot | slot.dim()).enumerate()\n        {\n            if indices.as_ref() [i] >= usize :: try_from(dim_len) ?\n            {\n                return\n                Err(eyre!\n                (\"Index {} out of bounds for dimension {} of size {}\",\n                indices.as_ref()[i], i, usize::try_from(dim_len)?));\n            }\n        } Ok(())\n    } #[doc = \" yields the flat index of the tensor given a list of indices\"]\n    #[doc = \"\"] #[doc = \" # Errors\"] #[doc = \"\"]\n    #[doc = \" Same as [`Self::verify_indices`]\"] fn flat_index < C : AsRef <\n    [ConcreteIndex] > > (& self, indices : C) -> Result < FlatIndex >\n    {\n        let strides = self.strides() ? ; self.verify_indices(& indices) ? ;\n        let mut idx = 0; for (i, & index) in\n        indices.as_ref().iter().enumerate() { idx += index * strides [i]; }\n        Ok(idx.into())\n    } #[doc = \" yields the expanded index of the tensor given a flat index\"]\n    #[doc = \"\"] #[doc = \" # Errors\"] #[doc = \"\"]\n    #[doc =\n    \" `Index out of bounds` = if the flat index is out of bounds for the tensor\"]\n    fn expanded_index(& self, flat_index : FlatIndex) -> Result <\n    ExpandedIndex >\n    {\n        let mut indices = vec! []; let mut index : usize = flat_index.into();\n        for & stride in & self.strides() ?\n        { indices.push(index / stride); index %= stride; } if usize ::\n        from(flat_index) < self.size() ? { Ok(indices.into()) } else\n        { Err(eyre! (\"Index {flat_index} out of bounds\")) }\n    } fn co_expanded_index(& self, flat_index : FlatIndex) -> Result <\n    DualConciousExpandedIndex >\n    {\n        let mut indices = vec! []; for (r, i) in\n        self.external_reps_iter().zip(self.expanded_index(flat_index) ?\n        .iter())\n        {\n            if r.rep.is_base() && r.rep.is_dual()\n            { indices.push(DualConciousIndex :: SelfDual(* i)); } else if\n            r.rep.is_base() { indices.push(DualConciousIndex :: Up(* i)); }\n            else { indices.push(DualConciousIndex :: Down(* i)); }\n        } Ok(indices.into())\n    } #[doc = \" yields an iterator over the indices of the tensor\"] fn\n    index_iter(& self) -> TensorStructureIndexIterator < '_, Self > where Self\n    : Sized, { TensorStructureIndexIterator :: new(self) }\n    #[doc = \" if the tensor has no (external) indices, it is a scalar\"] fn\n    is_scalar(& self) -> bool { self.order() == 0 } fn\n    is_fully_self_dual(& self) -> bool;\n    #[doc =\n    \" yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor\"]\n    fn size(& self) -> Result < usize >\n    {\n        if self.order() == 0 { return Ok(1); } let mut size = 1; for dim in\n        self.shape() { size *= usize :: try_from(dim) ? ; } Ok(size)\n    }\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn accepts_structure<S: spenso::structure::TensorStructure>(_structure: &S) {}"
+              }
+            ],
+            "members": [
+              {
+                "name": "Slot",
+                "kind": "associated-type",
+                "docs": null,
+                "signature": "type Slot : IsAbstractSlot + DualSlotTo < Dual = Self :: Slot > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Indexed",
+                "kind": "associated-type",
+                "docs": null,
+                "signature": "type Indexed : TensorStructure < Indexed = Self :: Indexed, Slot = Self ::\nSlot > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "reindex",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn reindex(self, indices : & [< Self :: Slot as IsAbstractSlot > :: Aind],) ->\nResult < PermutedStructure < Self :: Indexed > , StructureError > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "dual",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn dual(self) -> Self;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "string_rep",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn string_rep(& self) -> String\n{\n    self.external_structure_iter().map(| s | s.to_string()).collect :: < Vec <\n    _ > > ().join(\"\")\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "external_structure_iter",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn external_structure_iter(& self) -> impl Iterator < Item = Self :: Slot > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "external_dims_iter",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn external_dims_iter(& self) -> impl Iterator < Item = Dimension > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "external_reps_iter",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn external_reps_iter(& self,) -> impl Iterator < Item = Representation < <\nSelf :: Slot as IsAbstractSlot > :: R > > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "external_indices_iter",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn external_indices_iter(& self) -> impl Iterator < Item = < Self :: Slot as\nIsAbstractSlot > :: Aind > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get_aind",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn get_aind(& self, i : impl Into < SlotIndex >) -> Option < < Self :: Slot as\nIsAbstractSlot > :: Aind > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get_rep",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn get_rep(& self, i : impl Into < SlotIndex > ,) -> Option < Representation <\n< Self :: Slot as IsAbstractSlot > :: R > > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get_dim",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn get_dim(& self, i : impl Into < SlotIndex >) -> Option < Dimension > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get_slot",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn get_slot(& self, i : impl Into < SlotIndex >) -> Option < Self :: Slot > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "order",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn order(& self) -> usize;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "external_structure",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "returns the list of slots that are the external indices of the tensor"
+                },
+                "signature": "#[doc =\n\" returns the list of slots that are the external indices of the tensor\"] fn\nexternal_structure(& self) -> Vec < Self :: Slot >\n{ self.external_structure_iter().collect() }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "to_shell",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn to_shell(self) -> TensorShell < Self > where Self : Sized,\n{ TensorShell :: new(self) }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "contains_matching",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn contains_matching(& self, slot : & Self :: Slot) -> bool\n{ self.external_structure_iter().any(| s | s.matches(slot)) }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "external_reps",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn external_reps(& self) -> Vec < Representation < < Self :: Slot as\nIsAbstractSlot > :: R > > { self.external_reps_iter().collect() }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "external_indices",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn external_indices(& self) -> Vec < < Self :: Slot as IsAbstractSlot > ::\nAind > { self.external_indices_iter().collect() }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "same_content",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "checks if the tensor has the same exact structure as another tensor"
+                },
+                "signature": "#[doc =\n\" checks if the tensor has the same exact structure as another tensor\"] fn\nsame_content(& self, other : & Self) -> bool { self.same_external(other) }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "match_index",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match"
+                },
+                "signature": "#[doc =\n\" Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match\"]\nfn match_index(& self, other : & Self) -> Option < (bool, usize, usize) >\n{\n    let posmap =\n    self.external_structure_iter().enumerate().map(| (i, slot) |\n    (slot, i)).collect :: < AHashMap < _, _ > > (); let mut first_pair :\n    Option < (usize, usize) > = None; for (j, slot) in\n    other.external_structure_iter().enumerate()\n    {\n        if let Some(& i) = posmap.get(& slot.dual())\n        {\n            if let Some((i, j)) = first_pair { return Some((false, i, j)); }\n            first_pair = Some((i, j));\n        }\n    } first_pair.map(| (i, j) | (true, i, j))\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "match_indices",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list"
+                },
+                "signature": "#[doc =\n\" Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list\"]\nfn match_indices(& self, other : & Self) -> Option <\n(Permutation, Vec < bool > , Vec < bool >) >\n{\n    let mut self_matches = vec! [false; self.order()]; let mut perm = Vec ::\n    new(); let mut other_matches = vec! [false; other.order()]; let posmap =\n    self.external_structure_iter().enumerate().map(| (i, slot) |\n    (slot, i)).collect :: < AHashMap < _, _ > > (); for (j, slot_other) in\n    other.external_structure_iter().enumerate()\n    {\n        if let Some(& i) = posmap.get(& slot_other.dual())\n        { self_matches [i] = true; other_matches [j] = true; perm.push(i); }\n    } if perm.is_empty() { None } else\n    {\n        let p : Permutation = Permutation :: sort(& perm);\n        Some((p, self_matches, other_matches))\n    }\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "traces",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Identify the repeated slots in the external index list"
+                },
+                "signature": "#[doc = \" Identify the repeated slots in the external index list\"] fn\ntraces(& self) -> Vec < [usize; 2] >\n{\n    let mut positions : HashMap < < Self as TensorStructure > :: Slot, Vec <\n    usize > > = HashMap :: new(); for (index, key) in\n    self.external_structure_iter().enumerate()\n    {\n        if let Some(v) = positions.get_mut(& key.dual()) { v.push(index); }\n        else { positions.insert(key, vec! [index]); }\n    }\n    positions.into_values().filter_map(| indices |\n    {\n        if indices.len() == 2 { Some([indices [0], indices [1]]) } else\n        { None }\n    }).collect()\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "shape",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "yields the (outwards facing) shape of the tensor as a list of dimensions"
+                },
+                "signature": "#[doc =\n\" yields the (outwards facing) shape of the tensor as a list of dimensions\"]\nfn shape(& self) -> Vec < Dimension > { self.external_dims_iter().collect() }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "reps",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn reps(& self) -> Vec < Representation < < Self :: Slot as IsAbstractSlot >\n:: R > > { self.external_reps_iter().collect() }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "same_external",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "checks if externally, the two tensors are the same"
+                },
+                "signature": "#[doc = \" checks if externally, the two tensors are the same\"] fn\nsame_external(& self, other : & Self) -> bool\n{\n    let set1 : HashSet < _ > = self.external_structure_iter().collect(); let\n    set2 : HashSet < _ > = other.external_structure_iter().collect(); set1 ==\n    set2\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "find_permutation",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self"
+                },
+                "signature": "#[doc =\n\" find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self\"]\nfn find_permutation(& self, other : & Self) -> Result < Permutation >\n{\n    if self.order() != other.order()\n    {\n        return\n        Err(eyre!\n        (\"Mismatched order: {} vs {}\", self.order(), other.order()));\n    } let other_structure = other.external_structure(); let self_structure =\n    self.external_structure(); let other_sort = Permutation ::\n    sort(& other_structure); let self_sort = Permutation ::\n    sort(& self_structure); if other_sort.apply_slice(& other_structure) ==\n    self_sort.apply_slice(& self_structure)\n    { Ok(other_sort.compose(& self_sort.inverse())) } else\n    { Err(eyre! (\"Mismatched structure\")) }\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "strides_column_major",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "yields the strides of the tensor in column major order"
+                },
+                "signature": "#[doc = \" yields the strides of the tensor in column major order\"] fn\nstrides_column_major(& self) -> Result < Vec < usize > >\n{\n    let mut strides : Vec < usize > = vec! [1; self.order()]; if self.order()\n    == 0 { return Ok(strides); } for i in 0 .. self.order() - 1\n    {\n        strides [i + 1] = strides [i] * usize :: try_from(self.shape() [i]) ?\n        ;\n    } Ok(strides)\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "strides_row_major",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "yields the strides of the tensor in row major order"
+                },
+                "signature": "#[doc = \" yields the strides of the tensor in row major order\"] fn\nstrides_row_major(& self) -> Result < Vec < usize > >\n{\n    let mut strides = vec! [1; self.order()]; if self.order() == 0\n    { return Ok(strides); } for i in (0 .. self.order() - 1).rev()\n    {\n        strides [i] = strides [i + 1] * usize ::\n        try_from(self.shape() [i + 1]) ? ;\n    } Ok(strides)\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "strides",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "By default, the strides are row major"
+                },
+                "signature": "#[doc = \" By default, the strides are row major\"] fn strides(& self) -> Result\n< Vec < usize > > { self.strides_row_major() }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "verify_indices",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Verifies that the list of indices provided are valid for the tensor\n\n# Errors\n\n`Mismatched order` = if the length of the indices is different from the order of the tensor,\n\n`Index out of bounds` = if the index is out of bounds for the dimension of that index"
+                },
+                "signature": "#[doc =\n\" Verifies that the list of indices provided are valid for the tensor\"]\n#[doc = \"\"] #[doc = \" # Errors\"] #[doc = \"\"]\n#[doc =\n\" `Mismatched order` = if the length of the indices is different from the order of the tensor,\"]\n#[doc = \"\"]\n#[doc =\n\" `Index out of bounds` = if the index is out of bounds for the dimension of that index\"]\n#[doc = \"\"] fn verify_indices < C : AsRef < [ConcreteIndex] > >\n(& self, indices : C) -> Result < () >\n{\n    if indices.as_ref().len() != self.order()\n    {\n        return\n        Err(eyre!\n        (\"Mismatched order: {} indices, vs order {}\", indices.as_ref().len(),\n        self.order()));\n    } for (i, dim_len) in\n    self.external_structure_iter().map(| slot | slot.dim()).enumerate()\n    {\n        if indices.as_ref() [i] >= usize :: try_from(dim_len) ?\n        {\n            return\n            Err(eyre!\n            (\"Index {} out of bounds for dimension {} of size {}\",\n            indices.as_ref()[i], i, usize::try_from(dim_len)?));\n        }\n    } Ok(())\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "flat_index",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "yields the flat index of the tensor given a list of indices\n\n# Errors\n\nSame as [`Self::verify_indices`]"
+                },
+                "signature": "#[doc = \" yields the flat index of the tensor given a list of indices\"]\n#[doc = \"\"] #[doc = \" # Errors\"] #[doc = \"\"]\n#[doc = \" Same as [`Self::verify_indices`]\"] fn flat_index < C : AsRef <\n[ConcreteIndex] > > (& self, indices : C) -> Result < FlatIndex >\n{\n    let strides = self.strides() ? ; self.verify_indices(& indices) ? ; let\n    mut idx = 0; for (i, & index) in indices.as_ref().iter().enumerate()\n    { idx += index * strides [i]; } Ok(idx.into())\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "expanded_index",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "yields the expanded index of the tensor given a flat index\n\n# Errors\n\n`Index out of bounds` = if the flat index is out of bounds for the tensor"
+                },
+                "signature": "#[doc = \" yields the expanded index of the tensor given a flat index\"]\n#[doc = \"\"] #[doc = \" # Errors\"] #[doc = \"\"]\n#[doc =\n\" `Index out of bounds` = if the flat index is out of bounds for the tensor\"]\nfn expanded_index(& self, flat_index : FlatIndex) -> Result < ExpandedIndex >\n{\n    let mut indices = vec! []; let mut index : usize = flat_index.into(); for\n    & stride in & self.strides() ?\n    { indices.push(index / stride); index %= stride; } if usize ::\n    from(flat_index) < self.size() ? { Ok(indices.into()) } else\n    { Err(eyre! (\"Index {flat_index} out of bounds\")) }\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "co_expanded_index",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn co_expanded_index(& self, flat_index : FlatIndex) -> Result <\nDualConciousExpandedIndex >\n{\n    let mut indices = vec! []; for (r, i) in\n    self.external_reps_iter().zip(self.expanded_index(flat_index) ? .iter())\n    {\n        if r.rep.is_base() && r.rep.is_dual()\n        { indices.push(DualConciousIndex :: SelfDual(* i)); } else if\n        r.rep.is_base() { indices.push(DualConciousIndex :: Up(* i)); } else\n        { indices.push(DualConciousIndex :: Down(* i)); }\n    } Ok(indices.into())\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "index_iter",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "yields an iterator over the indices of the tensor"
+                },
+                "signature": "#[doc = \" yields an iterator over the indices of the tensor\"] fn\nindex_iter(& self) -> TensorStructureIndexIterator < '_, Self > where Self :\nSized, { TensorStructureIndexIterator :: new(self) }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "is_scalar",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "if the tensor has no (external) indices, it is a scalar"
+                },
+                "signature": "#[doc = \" if the tensor has no (external) indices, it is a scalar\"] fn\nis_scalar(& self) -> bool { self.order() == 0 }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "is_fully_self_dual",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn is_fully_self_dual(& self) -> bool;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "size",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor"
+                },
+                "signature": "#[doc =\n\" yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor\"]\nfn size(& self) -> Result < usize >\n{\n    if self.order() == 0 { return Ok(1); } let mut size = 1; for dim in\n    self.shape() { size *= usize :: try_from(dim) ? ; } Ok(size)\n}",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "spenso::structure::TensorStructure",
+              "file": "crates/spenso/src/structure.rs",
+              "line": 356,
+              "column": 1
+            }
+          },
+          "DenseTensor": {
+            "id": "DenseTensor",
+            "name": "DenseTensor",
+            "title": "Dense tensor",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Stores every tensor component in structure-defined flat order."
+            },
+            "summary": "Stores every tensor component in structure-defined flat order.",
+            "signature": "#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Hash, Eq, Encode,\nDecode)] pub struct DenseTensor < T, S = OrderedStructure >\n{ pub data : Vec < T > , pub structure : S, }",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use spenso::tensors::data::DenseTensor;"
+              }
+            ],
+            "members": [
+              {
+                "name": "data",
+                "kind": "field",
+                "docs": null,
+                "signature": "Vec < T >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "structure",
+                "kind": "field",
+                "docs": null,
+                "signature": "S",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "spenso::tensors::data::dense::DenseTensor",
+              "file": "crates/spenso/src/tensors/data/dense.rs",
+              "line": 50,
+              "column": 1
+            }
+          },
+          "SparseTensor": {
+            "id": "SparseTensor",
+            "name": "SparseTensor",
+            "title": "Sparse tensor",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Sparse data tensor, generic on storage type `T`, and structure type `I`.\n\nStores data in a hashmap of usize, using ahash's hashmap.\nThe usize key is the flattened index of the corresponding position in the dense tensor"
+            },
+            "summary": "Stores only explicit tensor components keyed by flat index.",
+            "signature": "#[doc =\n\" Sparse data tensor, generic on storage type `T`, and structure type `I`.\"]\n#[doc = \"\"]\n#[doc = \" Stores data in a hashmap of usize, using ahash\\'s hashmap.\"]\n#[doc =\n\" The usize key is the flattened index of the corresponding position in the dense tensor\"]\n#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Encode, Decode)]\npub struct SparseTensor < T, I = OrderedStructure >\n{\n    pub elements : std :: collections :: HashMap < FlatIndex, T > , pub zero :\n    T, pub structure : I,\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use spenso::tensors::data::SparseTensor;"
+              }
+            ],
+            "members": [
+              {
+                "name": "elements",
+                "kind": "field",
+                "docs": null,
+                "signature": "std :: collections :: HashMap < FlatIndex, T >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "zero",
+                "kind": "field",
+                "docs": null,
+                "signature": "T",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "structure",
+                "kind": "field",
+                "docs": null,
+                "signature": "I",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "spenso::tensors::data::sparse::SparseTensor",
+              "file": "crates/spenso/src/tensors/data/sparse.rs",
+              "line": 50,
+              "column": 1
+            }
+          },
+          "Contract": {
+            "id": "Contract",
+            "name": "Contract",
+            "title": "Pairwise contraction",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Defines pairwise tensor contraction with an explicit settings type and output."
+            },
+            "summary": "Defines pairwise tensor contraction with an explicit settings type and output.",
+            "signature": "pub trait Contract < T = Self, Settings = () >\n{\n    type LCM; fn contract(& self, other : & T) -> Result < Self :: LCM,\n    ContractionError > ;\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn can_contract<T: spenso::contraction::Contract>(_tensor: &T) {}"
+              }
+            ],
+            "members": [
+              {
+                "name": "LCM",
+                "kind": "associated-type",
+                "docs": null,
+                "signature": "type LCM;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "contract",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn contract(& self, other : & T) -> Result < Self :: LCM, ContractionError > ;",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "spenso::contraction::Contract",
+              "file": "crates/spenso/src/contraction.rs",
+              "line": 32,
+              "column": 1
+            }
+          },
+          "Network": {
+            "id": "Network",
+            "name": "Network",
+            "title": "Tensor network",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Binds symbolic tensor expressions to libraries and an executable contraction graph."
+            },
+            "summary": "Binds symbolic tensor expressions to libraries and an executable contraction graph.",
+            "signature": "#[derive(Debug, Clone, Serialize, Deserialize, bincode_trait_derive::Encode,\nbincode_trait_derive::Decode, PartialEq, Eq,)]\n#[cfg_attr(feature = \"shadowing\",\ntrait_decode(trait = symbolica::state::HasStateMap),)] pub struct Network < S,\nLibKey, FunKey, Aind = AbstractIndex >\n{\n    pub graph : NetworkGraph < LibKey, FunKey, Aind > , pub store : S, pub\n    state : NetworkState,\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use spenso::network::Network;"
+              }
+            ],
+            "members": [
+              {
+                "name": "graph",
+                "kind": "field",
+                "docs": null,
+                "signature": "NetworkGraph < LibKey, FunKey, Aind >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "store",
+                "kind": "field",
+                "docs": null,
+                "signature": "S",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "state",
+                "kind": "field",
+                "docs": null,
+                "signature": "NetworkState",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "spenso::network::Network",
+              "file": "crates/spenso/src/network/mod.rs",
+              "line": 1660,
+              "column": 1
+            }
+          },
+          "ParamTensor": {
+            "id": "ParamTensor",
+            "name": "ParamTensor",
+            "title": "Parametric tensor",
+            "kind": "type",
+            "supported": true,
+            "required_features": [
+              "shadowing"
+            ],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Stores tensor components as parameter-dependent symbolic coefficients."
+            },
+            "summary": "Stores tensor components as parameter-dependent symbolic coefficients.",
+            "signature": "#[derive(Clone, Debug, PartialEq, Eq, Hash, bincode_trait_derive::Encode,\nbincode_trait_derive::Decode,)]\n#[trait_decode(trait = symbolica::state::HasStateMap)] pub struct ParamTensor\n< S = OrderedStructure >\n{ pub tensor : DataTensor < Atom, S > , pub param_type : ParamOrComposite, }",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use spenso::tensors::parametric::ParamTensor;"
+              }
+            ],
+            "members": [
+              {
+                "name": "tensor",
+                "kind": "field",
+                "docs": null,
+                "signature": "DataTensor < Atom, S >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "param_type",
+                "kind": "field",
+                "docs": null,
+                "signature": "ParamOrComposite",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "spenso::tensors::parametric::ParamTensor",
+              "file": "crates/spenso/src/tensors/parametric.rs",
+              "line": 353,
+              "column": 1
+            }
+          }
+        },
+        "scopes": {}
+      }
+    }
+  }
+}

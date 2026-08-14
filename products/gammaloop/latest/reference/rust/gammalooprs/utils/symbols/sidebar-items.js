@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"static":["GS","W_"],"struct":["GammaloopSymbols","WildCards"]};

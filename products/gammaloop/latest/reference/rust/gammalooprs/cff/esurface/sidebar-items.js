@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["EsurfaceExistenceStatus"],"struct":["Esurface","EsurfaceID","ExistingEsurfaceId","GroupEsurfaceId","RaisedEsurfaceData","RaisedEsurfaceGroup","RaisedEsurfaceId"],"type":["EsurfaceCache","EsurfaceCollection","ExistingEsurfaces","ExistingThresholds","ExternalShift"]};

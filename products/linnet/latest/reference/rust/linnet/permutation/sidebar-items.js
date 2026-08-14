@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CycleOrder","PermutationError"],"struct":["Permutation","PermutationMapIter","PermutationMapIterMut"],"trait":["HedgeGraphExt","PermutationExt"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ContributionSortOption","RendererOption","ShowPhaseOption"],"struct":["Integrate","IntegrationOutput"]};

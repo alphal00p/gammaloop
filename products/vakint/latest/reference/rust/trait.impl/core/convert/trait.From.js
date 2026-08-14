@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["vakint",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.0/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"https://doc.rust-lang.org/1.97.0/std/io/error/struct.Error.html\" title=\"struct std::io::error::Error\">Error</a>&gt; for <a class=\"enum\" href=\"vakint/enum.VakintError.html\" title=\"enum vakint::VakintError\">VakintError</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.0/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"vakint/struct.Integral.html\" title=\"struct vakint::Integral\">Integral</a>&gt; for <a class=\"enum\" href=\"vakint/topologies/enum.Topology.html\" title=\"enum vakint::topologies::Topology\">Topology</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.0/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"vakint/struct.VakintExpression.html\" title=\"struct vakint::VakintExpression\">VakintExpression</a>&gt; for Atom",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.0/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"vakint/struct.VakintTerm.html\" title=\"struct vakint::VakintTerm\">VakintTerm</a>&gt; for Atom",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[1362]}

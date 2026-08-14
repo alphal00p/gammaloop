@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_RUN_DEPTH"],"enum":["PreparedCommand"],"fn":["prepare_command_histories","prepare_command_histories_with_context"],"struct":["PreparedCommandsBlock","PreparedRun","Run"]};

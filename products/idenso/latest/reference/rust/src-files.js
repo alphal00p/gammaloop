@@ -1,0 +1,2 @@
+createSrcSidebar('[["idenso",["",[["color",[],["casimir.rs","conjugate.rs","macros.rs","mod.rs","simplify.rs"]],["dirac",[],["macros.rs","mod.rs","simplify.rs"]],["shorthands",[["schoonschip",[],["api.rs","contraction.rs","mod.rs","normalize_dots.rs","settings.rs","utils.rs","with_settings.rs"]]],["chain.rs","metric.rs","mod.rs"]],["tensor",[],["canonicalize.rs","contract.rs","mod.rs"]]],["cook.rs","epsilon.rs","lib.rs","reference_cases.rs","rep_symbols.rs","representations.rs","selective_expand.rs"]]]]');
+//{"start":19,"fragment_lengths":[488]}

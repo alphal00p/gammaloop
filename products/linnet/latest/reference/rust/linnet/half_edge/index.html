@@ -1,0 +1,87 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Half-Edge Graph Representation"><title>linnet::half_edge - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="linnet" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module half_edge</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../linnet/index.html">linnet</a><span class="version">0.17.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module half_<wbr>edge</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#half-edge-graph-representation" title="Half-Edge Graph Representation">Half-Edge Graph Representation</a><ul><li><a href="#key-concepts-and-components" title="Key Concepts and Components:">Key Concepts and Components:</a></li></ul></li></ul><h3><a href="#modules">Module Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#traits" title="Traits">Traits</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate linnet</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">linnet</a></div><h1>Module <span>half_<wbr>edge</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/linnet/half_edge.rs.html#1-3198">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="half-edge-graph-representation"><a class="doc-anchor" href="#half-edge-graph-representation">§</a>Half-Edge Graph Representation</h2>
+<p>This module provides the core data structures and algorithms for representing
+and manipulating graphs using the <strong>half-edge</strong> (or doubly connected edge list - DCEL)
+data structure. This representation is particularly useful for algorithms that
+require efficient traversal of graph topology, such as iterating around faces,
+finding incident edges to a node, or quickly accessing an edge’s opposite pair.</p>
+<h3 id="key-concepts-and-components"><a class="doc-anchor" href="#key-concepts-and-components">§</a>Key Concepts and Components:</h3><h4 id="1-hedgegraphe-v-s"><a class="doc-anchor" href="#1-hedgegraphe-v-s">§</a>1. <code>HedgeGraph&lt;E, V, S&gt;</code></h4>
+<p>This is the central struct representing a graph.</p>
+<ul>
+<li><code>E</code>: Generic type for data associated with edges.</li>
+<li><code>V</code>: Generic type for data associated with nodes (vertices).</li>
+<li><code>S</code>: A type implementing <code>NodeStorage</code>, which defines how node data and their connectivity to half-edges are stored.</li>
+</ul>
+<p><code>HedgeGraph</code> stores half-edges in an <code>edge_store</code> (typically <code>SmartHedgeVec</code>)
+and nodes in a <code>node_store</code>.</p>
+<h4 id="2-hedge-and-nodeindex"><a class="doc-anchor" href="#2-hedge-and-nodeindex">§</a>2. <code>Hedge</code> and <code>NodeIndex</code></h4>
+<ul>
+<li><code>Hedge</code>: An identifier (often an index) for a single directed half-edge.
+Each undirected edge in the graph is typically represented by two oppositely
+directed half-edges.</li>
+<li><code>NodeIndex</code>: A simple wrapper around <code>usize</code> used to identify nodes in the graph.</li>
+</ul>
+<h4 id="3-involutions-involution-module"><a class="doc-anchor" href="#3-involutions-involution-module">§</a>3. Involutions (<code>involution</code> module)</h4>
+<p>A crucial concept in this implementation is the <strong>involution</strong> on half-edges.
+An involution is a function that, when applied twice, returns the original input.
+In the context of a half-edge graph, the primary involution is finding the
+<strong>opposite half-edge</strong>.</p>
+<ul>
+<li><code>Involution</code>: The struct managing this mapping.</li>
+<li><code>HedgePair</code>: Represents how hedges are paired (e.g., forming a full edge,
+being unpaired/dangling, or split).</li>
+<li><code>Flow</code>: Indicates the underlying directionality of a half-edge (Source or Sink)
+relative to its edge.</li>
+<li><code>Orientation</code>: Indicates the superficial orientation of an edge (Default, Reversed,
+Undirected).</li>
+</ul>
+<p>The <code>inv(hedge: Hedge) -&gt; Hedge</code> method on <code>HedgeGraph</code> is the primary way to
+access the opposite half-edge.</p>
+<h4 id="4-node-storage-nodestore-module"><a class="doc-anchor" href="#4-node-storage-nodestore-module">§</a>4. Node Storage (<code>nodestore</code> module)</h4>
+<p>This module defines how nodes are stored and how they relate to the half-edges
+that originate from them.</p>
+<ul>
+<li><code>NodeStorage</code> trait: An abstraction for different node storage strategies.</li>
+<li><code>NodeStorageOps</code> trait: Provides operations on node storage.</li>
+<li>Each node typically stores a collection of its outgoing (or incident) half-edges.</li>
+</ul>
+<h4 id="5-subgraphs-subgraph-module"><a class="doc-anchor" href="#5-subgraphs-subgraph-module">§</a>5. Subgraphs (<code>subgraph</code> module)</h4>
+<p>This module provides extensive support for defining, manipulating, and querying
+subgraphs. A subgraph is essentially a subset of the half-edges of a parent graph.</p>
+<ul>
+<li><code>SubGraph</code> trait: Defines the basic interface for a subgraph.</li>
+<li><code>SubGraphOps</code> trait: Provides operations applicable to subgraphs.</li>
+<li>Various concrete subgraph types exist, such as:
+<ul>
+<li><code>InternalSubGraph</code>: Represents a subgraph composed of edges internal to a region.</li>
+<li><code>HedgeNode</code>: Represents a “node” in a higher-level graph structure, possibly
+formed by contracting a subgraph. It contains an <code>internal_graph</code> and <code>hairs</code>
+(external connections).</li>
+<li><code>Cycle</code>: Represents a cycle in the graph.</li>
+<li><code>OrientedCut</code>: Represents a cut separating the graph.</li>
+</ul>
+</li>
+</ul>
+<p>Operations include creating subgraphs from filters, extracting subgraphs,
+performing boolean operations (union, intersection, difference), and analyzing
+subgraph properties.</p>
+<h4 id="6-graph-operations"><a class="doc-anchor" href="#6-graph-operations">§</a>6. Graph Operations</h4>
+<p>The <code>HedgeGraph</code> provides a rich API for:</p>
+<ul>
+<li><strong>Construction</strong>: Building graphs using <code>HedgeGraphBuilder</code>, adding nodes and edges
+(<code>add_dangling_edge</code>, <code>add_pair</code>).</li>
+<li><strong>Modification</strong>: Deleting hedges (<code>delete_hedges</code>), splitting edges (<code>split_edge</code>),
+joining graphs (<code>join</code>), sewing dangling edges (<code>sew</code>), and identifying/contracting
+nodes (<code>identify_nodes</code>).</li>
+<li><strong>Traversal &amp; Access</strong>: Getting an edge’s opposite (<code>inv</code>), finding the node a
+hedge points to (<code>node_id</code>), iterating over neighbors (<code>iter_crown</code>), and
+accessing edge/node data.</li>
+<li><strong>Analysis</strong>: Checking connectivity (<code>is_connected</code>), counting components
+(<code>count_connected_components</code>), finding cycle bases (<code>cycle_basis</code>), spanning trees
+(<code>all_spanning_forests_of</code>), and calculating cyclotomatic numbers.</li>
+<li><strong>Serialization/Visualization</strong>: Generating DOT format strings for graph visualization.</li>
+</ul>
+<p>This module forms the backbone of the <code>linnet</code> library, enabling complex graph
+manipulations with a focus on subgraphs and topological features.</p>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="algorithms/index.html" title="mod linnet::half_edge::algorithms">algorithms</a></dt><dd>Graph Algorithms for Half-Edge Data Structure</dd><dt><a class="mod" href="builder/index.html" title="mod linnet::half_edge::builder">builder</a></dt><dt><a class="mod" href="hedgevec/index.html" title="mod linnet::half_edge::hedgevec">hedgevec</a></dt><dt><a class="mod" href="involution/index.html" title="mod linnet::half_edge::involution">involution</a></dt><dt><a class="mod" href="layout/index.html" title="mod linnet::half_edge::layout">layout</a></dt><dt><a class="mod" href="nodestore/index.html" title="mod linnet::half_edge::nodestore">nodestore</a></dt><dt><a class="mod" href="subgraph/index.html" title="mod linnet::half_edge::subgraph">subgraph</a></dt><dt><a class="mod" href="swap/index.html" title="mod linnet::half_edge::swap">swap</a></dt><dt><a class="mod" href="symbolica_interop/index.html" title="mod linnet::half_edge::symbolica_interop">symbolica_<wbr>interop</a></dt><dt><a class="mod" href="tree/index.html" title="mod linnet::half_edge::tree">tree</a></dt><dt><a class="mod" href="typed_vec/index.html" title="mod linnet::half_edge::typed_vec">typed_<wbr>vec</a></dt></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.EdgeIter.html" title="struct linnet::half_edge::EdgeIter">Edge<wbr>Iter</a></dt><dt><a class="struct" href="struct.GVEdgeAttrs.html" title="struct linnet::half_edge::GVEdgeAttrs">GVEdge<wbr>Attrs</a></dt><dd>Represents attributes for an edge when generating Graphviz DOT output.</dd><dt><a class="struct" href="struct.HedgeGraph.html" title="struct linnet::half_edge::HedgeGraph">Hedge<wbr>Graph</a></dt><dd>The main graph data structure, representing a graph using the half-edge
+(or doubly connected edge list - DCEL) principle.</dd><dt><a class="struct" href="struct.NoData.html" title="struct linnet::half_edge::NoData">NoData</a></dt><dt><a class="struct" href="struct.NodeIndex.html" title="struct linnet::half_edge::NodeIndex">Node<wbr>Index</a></dt><dd>A type-safe wrapper around a <code>usize</code> to represent the index of a node
+in a graph.</dd><dt><a class="struct" href="struct.NodeIterator.html" title="struct linnet::half_edge::NodeIterator">Node<wbr>Iterator</a></dt><dt><a class="struct" href="struct.NodeVec.html" title="struct linnet::half_edge::NodeVec">NodeVec</a></dt><dd>Vector whose items are <code>T</code>, indexable only by <code>EntityId</code>.</dd><dt><a class="struct" href="struct.NodeVecIntoIter.html" title="struct linnet::half_edge::NodeVecIntoIter">Node<wbr>VecInto<wbr>Iter</a></dt><dt><a class="struct" href="struct.NodeVecIter.html" title="struct linnet::half_edge::NodeVecIter">Node<wbr>VecIter</a></dt><dt><a class="struct" href="struct.NodeVecIterMut.html" title="struct linnet::half_edge::NodeVecIterMut">Node<wbr>VecIter<wbr>Mut</a></dt><dt><a class="struct" href="struct.PowersetIterator.html" title="struct linnet::half_edge::PowersetIterator">Powerset<wbr>Iterator</a></dt><dd>Iterator over the powerset of a bitvec, of size n &lt; 64.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.DanglingMatcher.html" title="enum linnet::half_edge::DanglingMatcher">Dangling<wbr>Matcher</a></dt><dt><a class="enum" href="enum.HedgeError.html" title="enum linnet::half_edge::HedgeError">Hedge<wbr>Error</a></dt><dt><a class="enum" href="enum.HedgeGraphError.html" title="enum linnet::half_edge::HedgeGraphError">Hedge<wbr>Graph<wbr>Error</a></dt><dt><a class="enum" href="enum.NodeKind.html" title="enum linnet::half_edge::NodeKind">Node<wbr>Kind</a></dt></dl><h2 id="traits" class="section-header">Traits<a href="#traits" class="anchor">§</a></h2><dl class="item-table"><dt><a class="trait" href="trait.EdgeAccessors.html" title="trait linnet::half_edge::EdgeAccessors">Edge<wbr>Accessors</a></dt></dl></section></div></main></body></html>

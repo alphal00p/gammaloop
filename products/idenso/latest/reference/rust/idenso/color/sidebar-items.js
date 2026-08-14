@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ColorError"],"fn":["color_conj_impl"],"static":["CS"],"struct":["ColorCasimirSettings","ColorSimplifySettings","ColorSymbols"],"trait":["ColorSimplifier"]};

@@ -1,0 +1,152 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/gammalooprs/src/utils/linnet_ext.rs`."><title>linnet_ext.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="gammalooprs" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">gammalooprs/utils/</div>linnet_ext.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>linnet::permutation::Permutation;
+<a href=#2 id=2 data-nosnippet>2</a>
+<a href=#3 id=3 data-nosnippet>3</a><span class="kw">pub trait </span>FromMappings: Sized {
+<a href=#4 id=4 data-nosnippet>4</a>    <span class="kw">fn </span>from_mappings&lt;I&gt;(mappings: I, size: usize) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, String&gt;
+<a href=#5 id=5 data-nosnippet>5</a>    <span class="kw">where
+<a href=#6 id=6 data-nosnippet>6</a>        </span>I: IntoIterator&lt;Item = (usize, usize)&gt;;
+<a href=#7 id=7 data-nosnippet>7</a>}
+<a href=#8 id=8 data-nosnippet>8</a>
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">impl </span>FromMappings <span class="kw">for </span>Permutation {
+<a href=#10 id=10 data-nosnippet>10</a>    <span class="doccomment">/// Creates a permutation from a set of mapping pairs, minimizing changes to other elements.
+<a href=#11 id=11 data-nosnippet>11</a>    ///
+<a href=#12 id=12 data-nosnippet>12</a>    /// Takes a collection of (from, to) pairs and constructs a valid permutation that satisfies
+<a href=#13 id=13 data-nosnippet>13</a>    /// these mappings while keeping other elements as close to their identity positions as possible.
+<a href=#14 id=14 data-nosnippet>14</a>    ///
+<a href=#15 id=15 data-nosnippet>15</a>    /// # Arguments
+<a href=#16 id=16 data-nosnippet>16</a>    ///
+<a href=#17 id=17 data-nosnippet>17</a>    /// * `mappings` - An iterator of (from, to) pairs where each pair represents `from -&gt; to`
+<a href=#18 id=18 data-nosnippet>18</a>    /// * `size` - The size of the permutation to create
+<a href=#19 id=19 data-nosnippet>19</a>    ///
+<a href=#20 id=20 data-nosnippet>20</a>    /// # Returns
+<a href=#21 id=21 data-nosnippet>21</a>    ///
+<a href=#22 id=22 data-nosnippet>22</a>    /// A `Result` containing the permutation if successful, or an error string if the mappings
+<a href=#23 id=23 data-nosnippet>23</a>    /// are inconsistent or invalid.
+<a href=#24 id=24 data-nosnippet>24</a>    ///
+<a href=#25 id=25 data-nosnippet>25</a>    /// # Examples
+<a href=#26 id=26 data-nosnippet>26</a>    ///
+<a href=#27 id=27 data-nosnippet>27</a>    /// ```
+<a href=#28 id=28 data-nosnippet>28</a>    /// # use linnet::permutation::Permutation;
+<a href=#29 id=29 data-nosnippet>29</a>    /// // Create a permutation where 5-&gt;0 and 0-&gt;1, others stay in place where possible
+<a href=#30 id=30 data-nosnippet>30</a>    /// let mappings = vec![(5, 0), (0, 1)];
+<a href=#31 id=31 data-nosnippet>31</a>    /// let p = Permutation::from_mappings(mappings.iter().copied(), 6).unwrap();
+<a href=#32 id=32 data-nosnippet>32</a>    /// assert_eq!(p.map(), &amp;[1, 5, 2, 3, 4, 0]);
+<a href=#33 id=33 data-nosnippet>33</a>    ///
+<a href=#34 id=34 data-nosnippet>34</a>    /// // Verify the specific mappings work
+<a href=#35 id=35 data-nosnippet>35</a>    /// assert_eq!(p[5], 0);  // 5 -&gt; 0
+<a href=#36 id=36 data-nosnippet>36</a>    /// assert_eq!(p[0], 1);  // 0 -&gt; 1
+<a href=#37 id=37 data-nosnippet>37</a>    /// ```
+<a href=#38 id=38 data-nosnippet>38</a>    </span><span class="kw">fn </span>from_mappings&lt;I&gt;(mappings: I, size: usize) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, String&gt;
+<a href=#39 id=39 data-nosnippet>39</a>    <span class="kw">where
+<a href=#40 id=40 data-nosnippet>40</a>        </span>I: IntoIterator&lt;Item = (usize, usize)&gt;,
+<a href=#41 id=41 data-nosnippet>41</a>    {
+<a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">if </span>size == <span class="number">0 </span>{
+<a href=#43 id=43 data-nosnippet>43</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="self">Self</span>::id(<span class="number">0</span>));
+<a href=#44 id=44 data-nosnippet>44</a>        }
+<a href=#45 id=45 data-nosnippet>45</a>
+<a href=#46 id=46 data-nosnippet>46</a>        <span class="comment">// Start with identity
+<a href=#47 id=47 data-nosnippet>47</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>map: Vec&lt;usize&gt; = (<span class="number">0</span>..size).collect();
+<a href=#48 id=48 data-nosnippet>48</a>
+<a href=#49 id=49 data-nosnippet>49</a>        <span class="comment">// owner_of_target[t] = Some(s) iff target t is already taken by source s (forced or assigned)
+<a href=#50 id=50 data-nosnippet>50</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>owner_of_target: Vec&lt;<span class="prelude-ty">Option</span>&lt;usize&gt;&gt; = <span class="macro">vec!</span>[<span class="prelude-val">None</span>; size];
+<a href=#51 id=51 data-nosnippet>51</a>
+<a href=#52 id=52 data-nosnippet>52</a>        <span class="comment">// forced_sources[s] = true iff s has a forced mapping in the input
+<a href=#53 id=53 data-nosnippet>53</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>forced_sources = <span class="macro">vec!</span>[<span class="bool-val">false</span>; size];
+<a href=#54 id=54 data-nosnippet>54</a>
+<a href=#55 id=55 data-nosnippet>55</a>        <span class="comment">// 1) Apply and validate forced mappings in O(1) each
+<a href=#56 id=56 data-nosnippet>56</a>        </span><span class="kw">for </span>(from, to) <span class="kw">in </span>mappings {
+<a href=#57 id=57 data-nosnippet>57</a>            <span class="kw">if </span>from &gt;= size || to &gt;= size {
+<a href=#58 id=58 data-nosnippet>58</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(
+<a href=#59 id=59 data-nosnippet>59</a>                    <span class="string">"Index out of bounds: mapping ({}, {}) for size {}"</span>,
+<a href=#60 id=60 data-nosnippet>60</a>                    from, to, size
+<a href=#61 id=61 data-nosnippet>61</a>                ));
+<a href=#62 id=62 data-nosnippet>62</a>            }
+<a href=#63 id=63 data-nosnippet>63</a>
+<a href=#64 id=64 data-nosnippet>64</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(prev_from) = owner_of_target[to]
+<a href=#65 id=65 data-nosnippet>65</a>                &amp;&amp; prev_from != from
+<a href=#66 id=66 data-nosnippet>66</a>            {
+<a href=#67 id=67 data-nosnippet>67</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(
+<a href=#68 id=68 data-nosnippet>68</a>                    <span class="string">"Target {} is mapped from multiple sources ({} and {})"</span>,
+<a href=#69 id=69 data-nosnippet>69</a>                    to, prev_from, from
+<a href=#70 id=70 data-nosnippet>70</a>                ));
+<a href=#71 id=71 data-nosnippet>71</a>            }
+<a href=#72 id=72 data-nosnippet>72</a>            <span class="kw">if </span>forced_sources[from] &amp;&amp; map[from] != to {
+<a href=#73 id=73 data-nosnippet>73</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(
+<a href=#74 id=74 data-nosnippet>74</a>                    <span class="string">"Source {} has conflicting mappings ({} vs {})"</span>,
+<a href=#75 id=75 data-nosnippet>75</a>                    from, map[from], to
+<a href=#76 id=76 data-nosnippet>76</a>                ));
+<a href=#77 id=77 data-nosnippet>77</a>            }
+<a href=#78 id=78 data-nosnippet>78</a>
+<a href=#79 id=79 data-nosnippet>79</a>            <span class="comment">// Record the forced mapping
+<a href=#80 id=80 data-nosnippet>80</a>            </span>map[from] = to;
+<a href=#81 id=81 data-nosnippet>81</a>            owner_of_target[to] = <span class="prelude-val">Some</span>(from);
+<a href=#82 id=82 data-nosnippet>82</a>            forced_sources[from] = <span class="bool-val">true</span>;
+<a href=#83 id=83 data-nosnippet>83</a>        }
+<a href=#84 id=84 data-nosnippet>84</a>
+<a href=#85 id=85 data-nosnippet>85</a>        <span class="comment">// 2) Keep identities whenever possible (minimal changes)
+<a href=#86 id=86 data-nosnippet>86</a>        //    If a source s is not forced and its identity target s is free, keep s-&gt;s.
+<a href=#87 id=87 data-nosnippet>87</a>        //    Otherwise, it becomes "displaced" and will be assigned later.
+<a href=#88 id=88 data-nosnippet>88</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>displaced_sources: Vec&lt;usize&gt; = Vec::new();
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">for </span>s <span class="kw">in </span><span class="number">0</span>..size {
+<a href=#90 id=90 data-nosnippet>90</a>            <span class="kw">if </span>forced_sources[s] {
+<a href=#91 id=91 data-nosnippet>91</a>                <span class="kw">continue</span>;
+<a href=#92 id=92 data-nosnippet>92</a>            }
+<a href=#93 id=93 data-nosnippet>93</a>            <span class="kw">if </span>owner_of_target[s].is_none() {
+<a href=#94 id=94 data-nosnippet>94</a>                <span class="comment">// take the identity slot
+<a href=#95 id=95 data-nosnippet>95</a>                </span>map[s] = s;
+<a href=#96 id=96 data-nosnippet>96</a>                owner_of_target[s] = <span class="prelude-val">Some</span>(s);
+<a href=#97 id=97 data-nosnippet>97</a>            } <span class="kw">else </span>{
+<a href=#98 id=98 data-nosnippet>98</a>                <span class="comment">// identity target already used by some forced mapping -&gt; displace s
+<a href=#99 id=99 data-nosnippet>99</a>                </span>displaced_sources.push(s);
+<a href=#100 id=100 data-nosnippet>100</a>            }
+<a href=#101 id=101 data-nosnippet>101</a>        }
+<a href=#102 id=102 data-nosnippet>102</a>
+<a href=#103 id=103 data-nosnippet>103</a>        <span class="comment">// 3) Gather remaining free targets (those without an owner)
+<a href=#104 id=104 data-nosnippet>104</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>free_targets: Vec&lt;usize&gt; = Vec::new();
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">for </span>(t, owner) <span class="kw">in </span>owner_of_target.iter().enumerate().take(size) {
+<a href=#106 id=106 data-nosnippet>106</a>            <span class="kw">if </span>owner.is_none() {
+<a href=#107 id=107 data-nosnippet>107</a>                free_targets.push(t);
+<a href=#108 id=108 data-nosnippet>108</a>            }
+<a href=#109 id=109 data-nosnippet>109</a>        }
+<a href=#110 id=110 data-nosnippet>110</a>
+<a href=#111 id=111 data-nosnippet>111</a>        <span class="comment">// Sanity: counts must match, otherwise constraints were inconsistent
+<a href=#112 id=112 data-nosnippet>112</a>        </span><span class="kw">if </span>displaced_sources.len() != free_targets.len() {
+<a href=#113 id=113 data-nosnippet>113</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Failed to create valid permutation (inconsistent counts)"</span>.to_string());
+<a href=#114 id=114 data-nosnippet>114</a>        }
+<a href=#115 id=115 data-nosnippet>115</a>
+<a href=#116 id=116 data-nosnippet>116</a>        <span class="comment">// 4) Assign displaced sources to remaining free targets
+<a href=#117 id=117 data-nosnippet>117</a>        </span><span class="kw">for </span>(s, t) <span class="kw">in </span>displaced_sources.into_iter().zip(free_targets) {
+<a href=#118 id=118 data-nosnippet>118</a>            <span class="comment">// Note: t != s by construction (if t==s, owner_of_target[s] would have been None earlier,
+<a href=#119 id=119 data-nosnippet>119</a>            // and we would have kept the identity)
+<a href=#120 id=120 data-nosnippet>120</a>            </span>map[s] = t;
+<a href=#121 id=121 data-nosnippet>121</a>            owner_of_target[t] = <span class="prelude-val">Some</span>(s);
+<a href=#122 id=122 data-nosnippet>122</a>        }
+<a href=#123 id=123 data-nosnippet>123</a>
+<a href=#124 id=124 data-nosnippet>124</a>        <span class="comment">// 5) Final uniqueness check (linear)
+<a href=#125 id=125 data-nosnippet>125</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>seen = <span class="macro">vec!</span>[<span class="bool-val">false</span>; size];
+<a href=#126 id=126 data-nosnippet>126</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>t <span class="kw">in </span><span class="kw-2">&amp;</span>map {
+<a href=#127 id=127 data-nosnippet>127</a>            <span class="kw">if </span>t &gt;= size || std::mem::replace(<span class="kw-2">&amp;mut </span>seen[t], <span class="bool-val">true</span>) {
+<a href=#128 id=128 data-nosnippet>128</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Failed to create valid permutation"</span>.to_string());
+<a href=#129 id=129 data-nosnippet>129</a>            }
+<a href=#130 id=130 data-nosnippet>130</a>        }
+<a href=#131 id=131 data-nosnippet>131</a>
+<a href=#132 id=132 data-nosnippet>132</a>        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::from_map(map))
+<a href=#133 id=133 data-nosnippet>133</a>    }
+<a href=#134 id=134 data-nosnippet>134</a>}
+<a href=#135 id=135 data-nosnippet>135</a>
+<a href=#136 id=136 data-nosnippet>136</a><span class="attr">#[cfg(test)]
+<a href=#137 id=137 data-nosnippet>137</a></span><span class="kw">mod </span>tests {
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="kw">use </span>insta::assert_snapshot;
+<a href=#139 id=139 data-nosnippet>139</a>    <span class="kw">use </span>linnet::permutation::Permutation;
+<a href=#140 id=140 data-nosnippet>140</a>
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="attr">#[test]
+<a href=#142 id=142 data-nosnippet>142</a>    </span><span class="kw">fn </span>test_from_mappings_complex() {
+<a href=#143 id=143 data-nosnippet>143</a>        <span class="comment">// Test more complex displacement
+<a href=#144 id=144 data-nosnippet>144</a>        </span><span class="kw">let </span>mappings = [(<span class="number">0</span>, <span class="number">3</span>), (<span class="number">1</span>, <span class="number">0</span>)];
+<a href=#145 id=145 data-nosnippet>145</a>        <span class="kw">let </span>p = Permutation::from_mappings(mappings.iter().copied(), <span class="number">4</span>).unwrap();
+<a href=#146 id=146 data-nosnippet>146</a>        <span class="macro">assert_eq!</span>(p[<span class="number">0</span>], <span class="number">3</span>);
+<a href=#147 id=147 data-nosnippet>147</a>        <span class="macro">assert_eq!</span>(p[<span class="number">1</span>], <span class="number">0</span>);
+<a href=#148 id=148 data-nosnippet>148</a>
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="macro">assert_snapshot!</span>( <span class="macro">format!</span>(<span class="string">"{:?}"</span>,p.apply_slice([<span class="number">0</span>,<span class="number">1</span>,<span class="number">2</span>,<span class="number">3</span>])),@<span class="string">"[1, 3, 2, 0]"</span>);
+<a href=#150 id=150 data-nosnippet>150</a>    }
+<a href=#151 id=151 data-nosnippet>151</a>}
+</code></pre></div></section></main></body></html>

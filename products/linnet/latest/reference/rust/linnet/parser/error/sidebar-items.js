@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["HedgeParseError"],"trait":["HedgeParseExt","MapGlobal"]};

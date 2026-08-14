@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["global","runtime"],"struct":["GlobalSettings","RuntimeSettings"]};

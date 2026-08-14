@@ -1,0 +1,1177 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Idenso</title></head><body><nav class="alphal00p-docs-nav"><strong>Idenso</strong> · <a href="reference/rust/">Rust API</a> · <a href="reference/python/">Python API</a> · <a href="manual.pdf">PDF</a><span><a href="../../gammaloop/latest/">GammaLoop</a> · <a href="../../linnet/latest/">Linnet</a> · <a href="../../spenso/latest/">Spenso</a> · <a href="../../idenso/latest/">Idenso</a> · <a href="../../vakint/latest/">Vakint</a></span></nav><div class="alphal00p-search"><label>Search <input id="alphal00p-search" type="search" placeholder="Guides and APIs"></label><ul id="alphal00p-search-results"></ul></div><h2 id="overview">1 Overview</h2><p>Idenso is the symbolic identity and simplification layer for tensors encoded in the form that Spenso can parse from Symbolica expressions. It provides representation symbols, index tooling, reversible “cooking” of subexpressions, selective expansion, and identities for Dirac, metric, epsilon, and color algebra.</p><div><p>Symbolic, not component expansion</p><p>Idenso rewrites abstract tensor expressions. Functions such as <code>expand_mink</code> distribute factorized terms that carry selected index families; they do not turn every tensor into a dense array of components. Concrete tensor storage and network execution belong to <a href="../../spenso/latest/">Spenso</a>.</p></div><h3>1.1 A controlled rewrite pipeline</h3><p>There is no universally correct “simplify everything” order. A robust workflow makes each phase explicit:</p><ul><li>initialize the standard representations and tensor symbols;</li><li>inspect dangling indices and normalize or wrap dummy-index namespaces when combining expressions;</li><li>expand only the sectors needed by the next identity pass;</li><li>simplify gamma, metric, or color structures as appropriate;</li><li>canonicalize and compare results using the conventions of the consuming calculation.</li></ul><p>Expansion can grow an expression quickly, so perform it as late and selectively as possible. Wrapping indices is especially important before multiplying independently constructed expressions: equal printed index names can otherwise acquire an unintended contraction.</p><h3>1.2 Representations and cooking</h3><p>The representation layer defines spin-fundamental, color-fundamental, color-sextet, bispinor, and color-adjoint types together with their duality. <code>initialize()</code> forces the related Symbolica symbols and Spenso tags to be registered before parsing or rewriting expressions.</p><p>The <code>Cookable</code> API can replace selected function-like subexpressions or index payloads with compact symbols and later reverse the operation. Use reversible settings when the original expression must be recovered. A cooked symbol is an intermediate encoding, not a portable serialized physics result unless the associated mapping and settings are retained.</p><div><p>Specifications versus supported entry points</p><p>The files under <code>docs/idenso/</code> describe detailed FORM/Symbolica conventions and rewrite investigations. Their representation names and supported rewrite boundaries were checked against the current registrations and tests while preparing this manual. Experimental performance observations remain developer notes and do not silently become compatibility promises.</p></div><p>Idenso is consumed by <a href="../../gammaloop/latest/">GammaLoop</a> and its tensor conventions are shared with <a href="../../spenso/latest/">Spenso</a>. Start with the <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/README.md">Idenso README</a> and generated API catalog.</p><h2 id="syntax-indices-and-algebra-passes">2 Syntax, indices, and algebra passes</h2><p>Idenso consumes the Symbolica function form emitted for Spenso structures. Function heads carry representation meaning and their arguments carry abstract indices or tensor data. Initialize Idenso before parsing so Symbolica attributes, Spenso tags, and dual representations are all registered in one deterministic order.</p><h3>2.1 Indices and cooking</h3><p>Free indices describe the result; repeated compatible indices describe contractions. Before combining independently built expressions, wrap or rename dummy-index namespaces so equal printed names do not create accidental contractions. Cooking temporarily replaces selected index payloads or function subexpressions with compact symbols. Retain the generated map and settings whenever uncooking is required.</p><p>Cooking is especially useful before expensive canonicalization, but it changes what downstream matchers can see. Uncook before applying an identity whose pattern depends on the hidden tensor head or index structure.</p><h3>2.2 Metric and epsilon operations</h3><p>Metric contraction raises, lowers, or identifies compatible Lorentz indices according to the registered representation. Epsilon identities depend on dimension, ordering, and sign conventions; expand them only when the next pass benefits from the larger expression. Keep Minkowski expansion selective to avoid distributing unrelated scalar factors.</p><h3>2.3 Dirac and color algebra</h3><p>Dirac passes simplify gamma chains, traces, slashes, and spinor-compatible contractions. Color passes handle fundamental/adjoint deltas, generators, structure constants, and registered group parameters. Apply one algebra family at a time and inspect the intermediate expression; an all-at-once fixed-point loop can obscure which convention produced a sign or normalization.</p><div><p>Canonical does not mean physically equivalent by itself</p><p>Canonical ordering makes structurally equivalent expressions comparable under the registered rules. On-shell relations, gauge choices, dimension-specific identities, and model parameter substitutions must still be requested explicitly.</p></div><h3>2.4 Schoonschip network parsing</h3><p>The Schoonschip path parses large gamma-chain expressions into the same Spenso-compatible network model before contraction. The maintained architecture note was checked against the current parser boundary: aliasing and normalization happen before network construction; contraction planning belongs to Spenso; Idenso supplies the representation and algebra rules. Use the exact-expression and unfiltered regression inputs when changing parsing or aliasing, as early scalar substitution can alter expression growth without changing the intended tensor network.</p><div><p>Validated design material</p><p>The detailed FORM/Symbolica notes under <code>docs/idenso</code> describe the conventions implemented by the current representation registrations and rewrite tests. The architecture document for Schoonschip parsing records the integration path. This manual extracts their supported user workflow; experimental optimization observations remain developer material rather than API promises.</p></div><p>Concrete syntax and rewrite cases are documented in <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/idenso/spenso_symbolica_syntax_and_rewrites.md">the Spenso/Symbolica syntax note</a> and <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/idenso/form_symbolica_color_and_dirac.typ">the color and Dirac comparison</a>. The larger parsing flow is tracked in <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/architecture/schoonschip-net-parsing.html">the Schoonschip architecture note</a>.</p><p>Tensor storage and execution remain owned by <a href="../../spenso/latest/">Spenso</a>.</p><h2 id="rust-and-python-api-boundaries">3 Rust and Python API boundaries</h2><div><p>Generated-reference contract</p><p>Signatures, fields, variants, defaults, feature gates, and source locations come from ordered generated descriptors. Hand-written prose explains intent and workflow; it must not duplicate a signature as a second source of truth. Rust documentation explicitly marked as Typst markup may be evaluated as markup. Python docstrings and all other external metadata are escaped as plain text.</p><p>Rust scope: <code>idenso</code><br>Python scope: <code>symbolica.community.idenso</code></p></div><h3>3.1 Rust package</h3><p>The <code>idenso</code> crate exposes representation types and syntax macros together with several rewrite families:</p><ul><li><code>IndexTooling</code> covers canonicalization, conjugation, index wrapping, and dangling-index inspection for Symbolica atoms;</li><li><code>Cookable</code>, <code>CookSettings</code>, and the cook filters control reversible or flattening encodings;</li><li><code>SelectiveExpand</code> expands terms by recognized representation families;</li><li><code>dirac</code>, <code>color</code>, <code>epsilon</code>, and shorthand modules implement algebra-specific rewrites;</li><li><code>representations::initialize</code> installs the standard representation and tensor symbols.</li></ul><p>Representation helper macros such as <code>bis!</code>, <code>cof!</code>, and <code>coad!</code> construct the symbolic forms expected by Spenso and Idenso. Exact macro grammar and rewrite return types come from the generated Rust catalog. The optional <code>bincode</code>, <code>reference-cases</code>, <code>python</code>, and <code>python_stubgen</code> surfaces must be labeled by feature.</p><h3>3.2 Python community module</h3><div><p>Part of Symbolica community</p><p>Import Idenso from <code>symbolica.community.idenso</code>. The <code>idenso</code> Cargo package supplies this community module when built with its Python feature; it is not a standalone PyPI distribution and is not included in the GammaLoop wheel merely because the crates share a repository.</p></div><p>Install a Symbolica Python distribution only if its release manifest says it includes Idenso, then verify the actual assembly with <code>python -c "import symbolica.community.idenso"</code>. There is no <code>pip install idenso</code> fallback. For a source build, add this crate to the external <a href="https://github.com/benruijl/symbolica-community">symbolica-community</a> assembly with the <code>python</code> feature and call <code>IdensoModule</code>’s <code>SymbolicaCommunityModule</code> registration when that extension is assembled. This documentation build validates the registration function but does not modify an installed Symbolica package.</p><p>The Python API operates on Symbolica expressions and groups naturally into four phases:</p><ul><li>setup: <code>initialize</code>;</li><li>expansion: <code>expand_bis</code>, <code>expand_mink</code>, <code>expand_mink_bis</code>, <code>expand_metrics</code>, and <code>expand_color</code>;</li><li>index preparation: <code>wrap_indices</code>, <code>wrap_dummies</code>, <code>list_dangling</code>, <code>cook_indices</code>, and <code>cook_function</code>;</li><li>algebra: <code>dirac_adjoint</code>, <code>simplify_gamma</code>, <code>to_dots</code>, <code>simplify_metrics</code>, and <code>simplify_color</code>.</li></ul><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> (
+    initialize,
+    list_dangling,
+    simplify_metrics,
+)
+
+<span style="color: #4b69c6">initialize</span>()
+<span style="color: #74747c">#</span><span style="color: #74747c"> `expr` is a Symbolica Expression written with Spenso-compatible tensor forms.</span>
+external_indices <span style="color: #d73948">=</span> <span style="color: #4b69c6">list_dangling</span>(expr)
+reduced <span style="color: #d73948">=</span> <span style="color: #4b69c6">simplify_metrics</span>(expr)</code></pre><p>The example deliberately leaves expression construction to Symbolica and Spenso: Idenso does not define a second parser syntax. Apply one transformation at a time while developing a pipeline so expression growth and convention changes remain observable.</p><p>Python docstrings, signatures, and module names come from the binding descriptor and are rendered as plain text. Source starting points are <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/lib.rs">the Rust API</a> and <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/python.rs">the Python binding</a>.</p><h2 id="releases-and-change-history">4 Releases and change history</h2><div><p>Release-history policy</p><p><code>crates/idenso/CHANGELOG.md</code> is the canonical history, but its newest recorded release is 0.2.5 while the current crate manifest is 0.3.0. The documentation build must show this gap and must not infer a 0.3.0 release note from commit history or implementation comments.</p></div><p>Idenso migrations should pay particular attention to representation initialization, dummy-index handling, canonicalization, and Dirac, metric, and color conventions. A rewrite change can alter the shape or ordering of a symbolic result without changing the mathematical intent, so callers that persist or compare printed expressions should verify their chosen canonical form.</p><p>Immutable documentation snapshots pair the changelog with the exact Idenso crate version, repository revision, feature set, and generated Rust/Python catalogs. Until a 0.3.0 entry is curated, the rendered historical page must describe the existing changelog as partial coverage.</p><p>Read the canonical source at <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/CHANGELOG.md">crates/idenso/CHANGELOG.md</a>.</p><h2>Supported API catalog</h2><p>This curated catalog is generated from explicit ordered scopes. Links lead to the exhaustive language references.</p><h3><code>idenso</code></h3><p>Idenso’s supported representation and algebra API. The manual owns the representation conventions; this scope provides <em>stable</em> source links.</p><h4><code>Index tooling</code></h4><p><code>Adds canonicalization, wrapping, conjugation, and dangling-index inspection to Symbolica atoms.</code></p><pre><code>Defines operations related to manipulating abstract indices within symbolic expressions,
+particularly relevant for physics calculations involving tensor structures and diagrams.
+
+This trait provides methods for conjugating expressions, wrapping indices, and identifying
+external ("dangling") indices.</code></pre><pre><code>#[doc =
+" Defines operations related to manipulating abstract indices within symbolic expressions,"]
+#[doc =
+" particularly relevant for physics calculations involving tensor structures and diagrams."]
+#[doc = ""]
+#[doc =
+" This trait provides methods for conjugating expressions, wrapping indices, and identifying"]
+#[doc = " external (\"dangling\") indices."] pub trait IndexTooling
+{
+    fn canonize &lt; Aind : AbsInd + ParseableAind + DummyAind >
+    (&amp; self, new_dummy : impl FnMut(usize) -> Aind,) -> Atom;
+    #[doc =
+    " Wraps all abstract indices within the expression using a specified header symbol."]
+    #[doc = ""]
+    #[doc =
+    " This transforms indices like `mink(dim,idx)` into `mink(dim,header(idx))`. Useful for distinguishing"]
+    #[doc =
+    " between different copies of an expression, e.g., an amplitude and its complex conjugate."]
+    #[doc = ""] #[doc = " # Arguments"]
+    #[doc =
+    " * `header` - The [`Symbol`] to use as the wrapping function name."]
+    #[doc = ""] #[doc = " # Returns"]
+    #[doc = " A new [`Atom`] with all indices wrapped."] fn
+    wrap_indices(&amp; self, header : Symbol) -> Atom; fn spenso_conj(&amp; self) ->
+    Atom; fn spenso_print &lt; 'a > (&amp; 'a self, settings : &amp; SpensoPrintSettings)
+    -> AtomPrinter &lt; 'a > ;
+    #[doc =
+    " Wraps only the dummy (contracted) abstract indices within the expression using a header symbol."]
+    #[doc = ""]
+    #[doc =
+    " Identifies indices that appear contracted (e.g., one covariant, one contravariant)"]
+    #[doc =
+    " and wraps only those, leaving external indices unchanged. Transforms `idx -> header(idx)`"]
+    #[doc = " for dummy indices `idx`."] #[doc = ""] #[doc = " # Arguments"]
+    #[doc =
+    " * `header` - The [`Symbol`] to use as the wrapping function name for dummy indices."]
+    #[doc = ""] #[doc = " # Returns"]
+    #[doc = " A new [`Atom`] with only dummy indices wrapped."] fn
+    wrap_dummies &lt; Aind : AbsInd + DummyAind + ParseableAind >
+    (&amp; self, header : Symbol) -> Atom;
+    #[doc = " Computes the physics-aware conjugate of the expression."]
+    #[doc = ""]
+    #[doc =
+    " Applies conjugation rules specific to physics objects like spinors, gamma matrices,"]
+    #[doc =
+    " color representations, and the imaginary unit `i`. See implementation details for"]
+    #[doc = " specific rules applied."] #[doc = ""] #[doc = " # Returns"]
+    #[doc = " A new [`Atom`] representing the conjugated expression."] fn
+    dirac_adjoint &lt; Aind : DummyAind + ParseableAind + AbsInd > (&amp; self) ->
+    eyre :: Result &lt; Atom > ; fn
+    conjugate_transpose(&amp; self, rep : impl RepName) -> Atom;
+    #[doc =
+    " Identifies and returns a list of dangling (external, uncontracted) indices."]
+    #[doc = ""]
+    #[doc =
+    " Analyzes the expression to find indices that are not summed over. Returns them"]
+    #[doc =
+    " as `Atom`s. Note that dual indices might be represented wrapped in a `dind` function."]
+    #[doc = ""] #[doc = " # Returns"]
+    #[doc = " A `Vec&lt;Atom>` where each `Atom` represents a dangling index."]
+    fn list_dangling &lt; Aind : AbsInd + DummyAind + ParseableAind > (&amp; self) ->
+    Vec &lt; Atom > ; fn alias_subtensors(&amp; self, tensor_name : &amp; str) ->
+    AliasedAtom;
+}</code></pre><p><strong>Reference feature matrix:</strong> <code>bincode, reference-cases</code> (item is available without an additional gate)</p><p><strong>Supported usage</strong></p><pre><code data-lang="rust"><span style="color: #d73948">fn</span> <span style="color: #4b69c6">accepts_index_tools</span>&lt;T: idenso::IndexTooling>(_expression: <span style="color: #d73948">&amp;</span>T) {}</code></pre><h5><code>canonize</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>fn canonize &lt; Aind : AbsInd + ParseableAind + DummyAind >
+(&amp; self, new_dummy : impl FnMut(usize) -> Aind,) -> Atom;</code></pre><h5><code>wrap_indices</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>#[doc =
+" Wraps all abstract indices within the expression using a specified header symbol."]
+#[doc = ""]
+#[doc =
+" This transforms indices like `mink(dim,idx)` into `mink(dim,header(idx))`. Useful for distinguishing"]
+#[doc =
+" between different copies of an expression, e.g., an amplitude and its complex conjugate."]
+#[doc = ""] #[doc = " # Arguments"]
+#[doc = " * `header` - The [`Symbol`] to use as the wrapping function name."]
+#[doc = ""] #[doc = " # Returns"]
+#[doc = " A new [`Atom`] with all indices wrapped."] fn
+wrap_indices(&amp; self, header : Symbol) -> Atom;</code></pre><pre><code>Wraps all abstract indices within the expression using a specified header symbol.
+
+This transforms indices like `mink(dim,idx)` into `mink(dim,header(idx))`. Useful for distinguishing
+between different copies of an expression, e.g., an amplitude and its complex conjugate.
+
+# Arguments
+* `header` - The [`Symbol`] to use as the wrapping function name.
+
+# Returns
+A new [`Atom`] with all indices wrapped.</code></pre><h5><code>spenso_conj</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>fn spenso_conj(&amp; self) -> Atom;</code></pre><h5><code>spenso_print</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>fn spenso_print &lt; 'a > (&amp; 'a self, settings : &amp; SpensoPrintSettings) ->
+AtomPrinter &lt; 'a > ;</code></pre><h5><code>wrap_dummies</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>#[doc =
+" Wraps only the dummy (contracted) abstract indices within the expression using a header symbol."]
+#[doc = ""]
+#[doc =
+" Identifies indices that appear contracted (e.g., one covariant, one contravariant)"]
+#[doc =
+" and wraps only those, leaving external indices unchanged. Transforms `idx -> header(idx)`"]
+#[doc = " for dummy indices `idx`."] #[doc = ""] #[doc = " # Arguments"]
+#[doc =
+" * `header` - The [`Symbol`] to use as the wrapping function name for dummy indices."]
+#[doc = ""] #[doc = " # Returns"]
+#[doc = " A new [`Atom`] with only dummy indices wrapped."] fn wrap_dummies &lt;
+Aind : AbsInd + DummyAind + ParseableAind > (&amp; self, header : Symbol) -> Atom;</code></pre><pre><code>Wraps only the dummy (contracted) abstract indices within the expression using a header symbol.
+
+Identifies indices that appear contracted (e.g., one covariant, one contravariant)
+and wraps only those, leaving external indices unchanged. Transforms `idx -> header(idx)`
+for dummy indices `idx`.
+
+# Arguments
+* `header` - The [`Symbol`] to use as the wrapping function name for dummy indices.
+
+# Returns
+A new [`Atom`] with only dummy indices wrapped.</code></pre><h5><code>dirac_adjoint</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>#[doc = " Computes the physics-aware conjugate of the expression."]
+#[doc = ""]
+#[doc =
+" Applies conjugation rules specific to physics objects like spinors, gamma matrices,"]
+#[doc =
+" color representations, and the imaginary unit `i`. See implementation details for"]
+#[doc = " specific rules applied."] #[doc = ""] #[doc = " # Returns"]
+#[doc = " A new [`Atom`] representing the conjugated expression."] fn
+dirac_adjoint &lt; Aind : DummyAind + ParseableAind + AbsInd > (&amp; self) -> eyre
+:: Result &lt; Atom > ;</code></pre><pre><code>Computes the physics-aware conjugate of the expression.
+
+Applies conjugation rules specific to physics objects like spinors, gamma matrices,
+color representations, and the imaginary unit `i`. See implementation details for
+specific rules applied.
+
+# Returns
+A new [`Atom`] representing the conjugated expression.</code></pre><h5><code>conjugate_transpose</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>fn conjugate_transpose(&amp; self, rep : impl RepName) -> Atom;</code></pre><h5><code>list_dangling</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>#[doc =
+" Identifies and returns a list of dangling (external, uncontracted) indices."]
+#[doc = ""]
+#[doc =
+" Analyzes the expression to find indices that are not summed over. Returns them"]
+#[doc =
+" as `Atom`s. Note that dual indices might be represented wrapped in a `dind` function."]
+#[doc = ""] #[doc = " # Returns"]
+#[doc = " A `Vec&lt;Atom>` where each `Atom` represents a dangling index."] fn
+list_dangling &lt; Aind : AbsInd + DummyAind + ParseableAind > (&amp; self) -> Vec &lt;
+Atom > ;</code></pre><pre><code>Identifies and returns a list of dangling (external, uncontracted) indices.
+
+Analyzes the expression to find indices that are not summed over. Returns them
+as `Atom`s. Note that dual indices might be represented wrapped in a `dind` function.
+
+# Returns
+A `Vec&lt;Atom>` where each `Atom` represents a dangling index.</code></pre><h5><code>alias_subtensors</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>fn alias_subtensors(&amp; self, tensor_name : &amp; str) -> AliasedAtom;</code></pre><p><a href="reference/rust/idenso/trait.IndexTooling.html">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/lib.rs#L173">Source</a></p><h4><code>Index cooking settings</code></h4><p><code>Controls reversible, flattened, and filtered encodings of tensor indices.</code></p><pre><code>Settings for cooking functions and representation-slot indices.
+
+Tags are attached through `SymbolBuilder::new(...).with_tags(...)`, so they must be
+fully namespaced Symbolica tags such as `idenso::cooked`.</code></pre><pre><code>#[doc = " Settings for cooking functions and representation-slot indices."]
+#[doc = ""]
+#[doc =
+" Tags are attached through `SymbolBuilder::new(...).with_tags(...)`, so they must be"]
+#[doc = " fully namespaced Symbolica tags such as `idenso::cooked`."]
+#[derive(Debug, Clone, PartialEq, Eq)] pub struct CookSettings
+{ mode : CookMode, source : CookSourceFilter, output_tags : CookOutputTags, }</code></pre><p><strong>Reference feature matrix:</strong> <code>bincode, reference-cases</code> (item is available without an additional gate)</p><p><strong>Supported usage</strong></p><pre><code data-lang="rust"><span style="color: #d73948">let</span> settings <span style="color: #d73948">=</span> idenso::CookSettings::reversible();</code></pre><h5><code>mode</code></h5><p><strong>Kind:</strong> <code>Field</code></p><pre><code>CookMode</code></pre><h5><code>source</code></h5><p><strong>Kind:</strong> <code>Field</code></p><pre><code>CookSourceFilter</code></pre><h5><code>output_tags</code></h5><p><strong>Kind:</strong> <code>Field</code></p><pre><code>CookOutputTags</code></pre><p><a href="reference/rust/idenso/cook/struct.CookSettings.html">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/cook.rs#L271">Source</a></p><h4><code>Cookable expressions</code></h4><p><code>Applies or reverses index-cooking transformations on symbolic expressions.</code></p><pre><code>Convenience methods for cooking Symbolica atoms.</code></pre><pre><code>#[doc = " Convenience methods for cooking Symbolica atoms."] pub trait
+Cookable
+{
+    #[doc =
+    " Reversibly cook function-like subexpressions with the default cooked tag."]
+    fn cook(&amp; self) -> Atom;
+    #[doc = " Cook function-like subexpressions with explicit settings."] fn
+    cook_with_settings(&amp; self, settings : &amp; CookSettings) -> Atom;
+    #[doc = " Undo default reversible cooking."] fn uncook(&amp; self) -> Atom;
+    #[doc = " Undo reversible cooking that used explicit settings."] fn
+    uncook_with_settings(&amp; self, settings : &amp; CookSettings) -> Atom;
+    #[doc =
+    " Flatten cook abstract-index payloads in recognized representation slots."]
+    fn cook_indices(&amp; self) -> Atom;
+    #[doc =
+    " Cook representation-slot index payloads with explicit settings."] fn
+    cook_indices_with_settings(&amp; self, settings : &amp; CookSettings) -> Atom;
+    #[doc = " Flatten cook a single atom into one symbol."] fn
+    cook_function(&amp; self) -> Result &lt; Atom, CookingError > ;
+    #[doc = " Cook a single atom into one symbol with explicit settings."] fn
+    cook_function_with_settings(&amp; self, settings : &amp; CookSettings) -> Result &lt;
+    Atom, CookingError > ;
+}</code></pre><p><strong>Reference feature matrix:</strong> <code>bincode, reference-cases</code> (item is available without an additional gate)</p><p><strong>Supported usage</strong></p><pre><code data-lang="rust"><span style="color: #d73948">fn</span> <span style="color: #4b69c6">accepts_cookable</span>&lt;T: idenso::Cookable>(_expression: <span style="color: #d73948">&amp;</span>T) {}</code></pre><h5><code>cook</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>#[doc =
+" Reversibly cook function-like subexpressions with the default cooked tag."]
+fn cook(&amp; self) -> Atom;</code></pre><pre><code>Reversibly cook function-like subexpressions with the default cooked tag.</code></pre><h5><code>cook_with_settings</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>#[doc = " Cook function-like subexpressions with explicit settings."] fn
+cook_with_settings(&amp; self, settings : &amp; CookSettings) -> Atom;</code></pre><pre><code>Cook function-like subexpressions with explicit settings.</code></pre><h5><code>uncook</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>#[doc = " Undo default reversible cooking."] fn uncook(&amp; self) -> Atom;</code></pre><pre><code>Undo default reversible cooking.</code></pre><h5><code>uncook_with_settings</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>#[doc = " Undo reversible cooking that used explicit settings."] fn
+uncook_with_settings(&amp; self, settings : &amp; CookSettings) -> Atom;</code></pre><pre><code>Undo reversible cooking that used explicit settings.</code></pre><h5><code>cook_indices</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>#[doc =
+" Flatten cook abstract-index payloads in recognized representation slots."]
+fn cook_indices(&amp; self) -> Atom;</code></pre><pre><code>Flatten cook abstract-index payloads in recognized representation slots.</code></pre><h5><code>cook_indices_with_settings</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>#[doc = " Cook representation-slot index payloads with explicit settings."] fn
+cook_indices_with_settings(&amp; self, settings : &amp; CookSettings) -> Atom;</code></pre><pre><code>Cook representation-slot index payloads with explicit settings.</code></pre><h5><code>cook_function</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>#[doc = " Flatten cook a single atom into one symbol."] fn
+cook_function(&amp; self) -> Result &lt; Atom, CookingError > ;</code></pre><pre><code>Flatten cook a single atom into one symbol.</code></pre><h5><code>cook_function_with_settings</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>#[doc = " Cook a single atom into one symbol with explicit settings."] fn
+cook_function_with_settings(&amp; self, settings : &amp; CookSettings) -> Result &lt;
+Atom, CookingError > ;</code></pre><pre><code>Cook a single atom into one symbol with explicit settings.</code></pre><p><a href="reference/rust/idenso/cook/trait.Cookable.html">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/cook.rs#L564">Source</a></p><h4><code>Selective expansion</code></h4><p><code>Expands only tensor families selected by their representation.</code></p><pre><code>Expands only tensor families selected by their representation.</code></pre><pre><code>pub trait SelectiveExpand
+{
+    fn expand_in_patterns(&amp; self, pats : &amp; [Pattern]) -> Vec &lt; (Atom, Atom) >
+    ; fn expand_metrics(&amp; self) -> Vec &lt; (Atom, Atom) >
+    {
+        let metric_pat = function! (ETS.metric, RS.a__).to_pattern(); let
+        id_pat = function! (ETS.metric, RS.a__).to_pattern();
+        self.expand_in_patterns(&amp; [metric_pat, id_pat])
+    } fn expand_bis(&amp; self) -> Vec &lt; (Atom, Atom) >
+    {
+        let bis = Bispinor {}; let bis_pat = function!
+        (RS.f_, RS.a___, bis.to_symbolic([RS.b__]), RS.c___).to_pattern();
+        self.expand_in_patterns(&amp; [bis_pat])
+    } fn expand_mink(&amp; self) -> Vec &lt; (Atom, Atom) >
+    {
+        let mink = Minkowski {}; let mink_pat = function!
+        (RS.f_, RS.a___, mink.to_symbolic([RS.b__]), RS.c___).to_pattern();
+        self.expand_in_patterns(&amp; [mink_pat])
+    } fn expand_mink_bis(&amp; self) -> Vec &lt; (Atom, Atom) >
+    {
+        let mink = Minkowski {}; let mink_pat = function!
+        (RS.f_, RS.a___, mink.to_symbolic([RS.b__]), RS.c___).to_pattern();
+        let bis = Bispinor {}; let bis_pat = function!
+        (RS.f_, RS.a___, bis.to_symbolic([RS.b__]), RS.c___).to_pattern();
+        self.expand_in_patterns(&amp; [mink_pat, bis_pat])
+    }
+}</code></pre><p><strong>Reference feature matrix:</strong> <code>bincode, reference-cases</code> (item is available without an additional gate)</p><p><strong>Supported usage</strong></p><pre><code data-lang="rust"><span style="color: #d73948">fn</span> <span style="color: #4b69c6">accepts_expansion</span>&lt;T: idenso::selective_expand::SelectiveExpand>(_expression: <span style="color: #d73948">&amp;</span>T) {}</code></pre><h5><code>expand_in_patterns</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>fn expand_in_patterns(&amp; self, pats : &amp; [Pattern]) -> Vec &lt; (Atom, Atom) > ;</code></pre><h5><code>expand_metrics</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>fn expand_metrics(&amp; self) -> Vec &lt; (Atom, Atom) >
+{
+    let metric_pat = function! (ETS.metric, RS.a__).to_pattern(); let id_pat =
+    function! (ETS.metric, RS.a__).to_pattern();
+    self.expand_in_patterns(&amp; [metric_pat, id_pat])
+}</code></pre><h5><code>expand_bis</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>fn expand_bis(&amp; self) -> Vec &lt; (Atom, Atom) >
+{
+    let bis = Bispinor {}; let bis_pat = function!
+    (RS.f_, RS.a___, bis.to_symbolic([RS.b__]), RS.c___).to_pattern();
+    self.expand_in_patterns(&amp; [bis_pat])
+}</code></pre><h5><code>expand_mink</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>fn expand_mink(&amp; self) -> Vec &lt; (Atom, Atom) >
+{
+    let mink = Minkowski {}; let mink_pat = function!
+    (RS.f_, RS.a___, mink.to_symbolic([RS.b__]), RS.c___).to_pattern();
+    self.expand_in_patterns(&amp; [mink_pat])
+}</code></pre><h5><code>expand_mink_bis</code></h5><p><strong>Kind:</strong> <code>Method</code></p><pre><code>fn expand_mink_bis(&amp; self) -> Vec &lt; (Atom, Atom) >
+{
+    let mink = Minkowski {}; let mink_pat = function!
+    (RS.f_, RS.a___, mink.to_symbolic([RS.b__]), RS.c___).to_pattern(); let
+    bis = Bispinor {}; let bis_pat = function!
+    (RS.f_, RS.a___, bis.to_symbolic([RS.b__]), RS.c___).to_pattern();
+    self.expand_in_patterns(&amp; [mink_pat, bis_pat])
+}</code></pre><p><a href="reference/rust/idenso/selective_expand/trait.SelectiveExpand.html">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/selective_expand.rs#L14">Source</a></p><h4><code>Bispinor representation macro</code></h4><p><code>Builds stripped or indexed bispinor representation atoms in Spenso syntax.</code></p><pre><code>Builds a stripped or indexed bispinor representation atom.</code></pre><pre><code>#[doc = " Builds a stripped or indexed bispinor representation atom."]
+#[macro_export] macro_rules! bis
+{
+    ($($args:tt)*) =>
+    {
+        spenso::spenso_rep_atom!($crate::representations::Bispinor {};
+        $($args)*)
+    };
+}</code></pre><p><strong>Reference feature matrix:</strong> <code>bincode, reference-cases</code> (item is available without an additional gate)</p><p><strong>Supported usage</strong></p><pre><code data-lang="rust"><span style="color: #d73948">let</span> representation <span style="color: #d73948">=</span> idenso::bis<span style="color: #d73948">!</span>(<span style="color: #b60157">4</span>);</code></pre><p><a href="reference/rust/idenso/macro.bis.html">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/lib.rs#L106">Source</a></p><h4><code>Color-fundamental macro</code></h4><p><code>Builds stripped or indexed color-fundamental representation atoms.</code></p><pre><code>Builds a stripped or indexed color-fundamental representation atom.</code></pre><pre><code>#[doc =
+" Builds a stripped or indexed color-fundamental representation atom."]
+#[macro_export] macro_rules! cof
+{
+    ($($args:tt)*) =>
+    {
+        spenso::spenso_rep_atom!($crate::representations::ColorFundamental {};
+        $($args)*)
+    };
+}</code></pre><p><strong>Reference feature matrix:</strong> <code>bincode, reference-cases</code> (item is available without an additional gate)</p><p><strong>Supported usage</strong></p><pre><code data-lang="rust"><span style="color: #d73948">let</span> representation <span style="color: #d73948">=</span> idenso::cof<span style="color: #d73948">!</span>(Nc);</code></pre><p><a href="reference/rust/idenso/macro.cof.html">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/lib.rs#L130">Source</a></p><h4><code>Color-adjoint representation macro</code></h4><p><code>Builds stripped or indexed color-adjoint representation atoms.</code></p><pre><code>Builds a stripped or indexed color-adjoint representation atom.</code></pre><pre><code>#[doc = " Builds a stripped or indexed color-adjoint representation atom."]
+#[macro_export] macro_rules! coad
+{
+    ($($args:tt)*) =>
+    {
+        spenso::spenso_rep_atom!($crate::representations::ColorAdjoint {};
+        $($args)*)
+    };
+}</code></pre><p><strong>Reference feature matrix:</strong> <code>bincode, reference-cases</code> (item is available without an additional gate)</p><p><strong>Supported usage</strong></p><pre><code data-lang="rust"><span style="color: #d73948">let</span> representation <span style="color: #d73948">=</span> idenso::coad<span style="color: #d73948">!</span>(Na);</code></pre><p><a href="reference/rust/idenso/macro.coad.html">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/lib.rs#L162">Source</a></p><h4><code>Dirac gamma macro</code></h4><p><code>Builds a Dirac gamma chain factor or an explicitly indexed gamma tensor.</code></p><pre><code>Builds a gamma matrix.
+
+With one argument, this builds a chain factor using the placeholder indices
+`in` and `out`; use this form only as a factor inside `chain!` or `trace!`.
+With three arguments, this builds the ordinary gamma tensor with explicit
+spinor endpoints and a Lorentz slot.
+
+Arguments are converted through `spenso::shadowing::IntoAtom`, so they
+can be typed slots, atoms, or atom views.
+
+# Examples
+
+```ignore
+use idenso::gamma;
+use spenso::{chain, slot};
+
+let factor = gamma!(slot!(mink4, mu));
+let chain_expr = chain!(slot!(bis4, a), slot!(bis4, b), factor);
+let default_tensor = gamma!(mu, a, b);
+let indexed_tensor = gamma!(1, 2, 3);
+let pattern_tensor = gamma!(RS.a__, RS.b__, RS.c__);
+let pattern_tensor_with_slots = gamma!(RS.a__, [RS.d_, RS.i_], [RS.d_, RS.j_]);
+let mixed_tensor = gamma!(mu, slot!(bis_d, a), 1);
+let explicit_tensor = gamma!(slot!(mink_d, mu), slot!(bis_d, a), slot!(bis_d, b));
+```</code></pre><pre><code>#[doc = " Builds a gamma matrix."] #[doc = ""]
+#[doc =
+" With one argument, this builds a chain factor using the placeholder indices"]
+#[doc =
+" `in` and `out`; use this form only as a factor inside `chain!` or `trace!`."]
+#[doc =
+" With three arguments, this builds the ordinary gamma tensor with explicit"]
+#[doc = " spinor endpoints and a Lorentz slot."] #[doc = ""]
+#[doc =
+" Arguments are converted through `spenso::shadowing::IntoAtom`, so they"]
+#[doc = " can be typed slots, atoms, or atom views."] #[doc = ""]
+#[doc = " # Examples"] #[doc = ""] #[doc = " ```ignore"]
+#[doc = " use idenso::gamma;"] #[doc = " use spenso::{chain, slot};"]
+#[doc = ""] #[doc = " let factor = gamma!(slot!(mink4, mu));"]
+#[doc = " let chain_expr = chain!(slot!(bis4, a), slot!(bis4, b), factor);"]
+#[doc = " let default_tensor = gamma!(mu, a, b);"]
+#[doc = " let indexed_tensor = gamma!(1, 2, 3);"]
+#[doc = " let pattern_tensor = gamma!(RS.a__, RS.b__, RS.c__);"]
+#[doc =
+" let pattern_tensor_with_slots = gamma!(RS.a__, [RS.d_, RS.i_], [RS.d_, RS.j_]);"]
+#[doc = " let mixed_tensor = gamma!(mu, slot!(bis_d, a), 1);"]
+#[doc =
+" let explicit_tensor = gamma!(slot!(mink_d, mu), slot!(bis_d, a), slot!(bis_d, b));"]
+#[doc = " ```"] #[macro_export] macro_rules! gamma
+{
+    ($mu:expr) =>
+    {
+        symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma).add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_in)).add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_out)).add_arg(spenso::shadowing::IntoAtom::into_atom($mu)).finish()
+    }; ($base:ident. $mu:ident, $($rest:tt)*) =>
+    {
+        $crate::gamma!(@tensor
+        spenso::structure::representation::RepName::to_symbolic(&amp;spenso::structure::representation::Minkowski
+        {}, [$base.$mu],); $($rest)*)
+    }; ($mu:ident, $($rest:tt)*) =>
+    {{
+            let mink =
+            spenso::structure::representation::RepName::new_rep(&amp;spenso::structure::representation::Minkowski
+            {}, 4,);
+            $crate::gamma!(@tensor spenso::slot!(mink, $mu); $($rest)*)
+        }}; ($mu:literal, $($rest:tt)*) =>
+    {{
+            let mink =
+            spenso::structure::representation::RepName::new_rep(&amp;spenso::structure::representation::Minkowski
+            {}, 4,);
+            $crate::gamma!(@tensor spenso::slot!(mink, $mu); $($rest)*)
+        }}; ($mu:expr, $($rest:tt)*) =>
+    { $crate::gamma!(@tensor $mu; $($rest)*) };
+    (@tensor $mu:expr; [$($i:expr),+ $(,)?], $($rest:tt)*) =>
+    {
+        $crate::gamma!(@tensor2 $mu,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::Bispinor
+        {}, [$($i),+],); $($rest)*)
+    }; (@tensor $mu:expr; $base:ident. $i:ident, $($rest:tt)*) =>
+    {
+        $crate::gamma!(@tensor2 $mu,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::Bispinor
+        {}, [$base.$i],); $($rest)*)
+    }; (@tensor $mu:expr; $i:ident, $($rest:tt)*) =>
+    {{
+            let bis =
+            spenso::structure::representation::RepName::new_rep(&amp;$crate::representations::Bispinor
+            {}, 4,);
+            $crate::gamma!(@tensor2 $mu, spenso::slot!(bis, $i); $($rest)*)
+        }}; (@tensor $mu:expr; $i:literal, $($rest:tt)*) =>
+    {{
+            let bis =
+            spenso::structure::representation::RepName::new_rep(&amp;$crate::representations::Bispinor
+            {}, 4,);
+            $crate::gamma!(@tensor2 $mu, spenso::slot!(bis, $i); $($rest)*)
+        }}; (@tensor $mu:expr; $i:expr, $($rest:tt)*) =>
+    { $crate::gamma!(@tensor2 $mu, $i; $($rest)*) };
+    (@tensor2 $mu:expr, $i:expr; [$($j:expr),+ $(,)?]) =>
+    {
+        $crate::gamma!(@tensor_done $mu, $i,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::Bispinor
+        {}, [$($j),+],))
+    }; (@tensor2 $mu:expr, $i:expr; $base:ident. $j:ident) =>
+    {
+        $crate::gamma!(@tensor_done $mu, $i,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::Bispinor
+        {}, [$base.$j],))
+    }; (@tensor2 $mu:expr, $i:expr; $j:ident) =>
+    {{
+            let bis =
+            spenso::structure::representation::RepName::new_rep(&amp;$crate::representations::Bispinor
+            {}, 4,);
+            $crate::gamma!(@tensor_done $mu, $i, spenso::slot!(bis, $j))
+        }}; (@tensor2 $mu:expr, $i:expr; $j:literal) =>
+    {{
+            let bis =
+            spenso::structure::representation::RepName::new_rep(&amp;$crate::representations::Bispinor
+            {}, 4,);
+            $crate::gamma!(@tensor_done $mu, $i, spenso::slot!(bis, $j))
+        }}; (@tensor2 $mu:expr, $i:expr; $j:expr) =>
+    { $crate::gamma!(@tensor_done $mu, $i, $j) };
+    (@tensor_done $mu:expr, $i:expr, $j:expr) =>
+    {
+        symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma).add_arg(spenso::shadowing::IntoAtom::into_atom($i)).add_arg(spenso::shadowing::IntoAtom::into_atom($j)).add_arg(spenso::shadowing::IntoAtom::into_atom($mu)).finish()
+    };
+}</code></pre><p><strong>Reference feature matrix:</strong> <code>bincode, reference-cases</code> (item is available without an additional gate)</p><p><strong>Example 1</strong></p><pre><code data-lang="ignore">use idenso::gamma;
+use spenso::{chain, slot};
+
+let factor = gamma!(slot!(mink4, mu));
+let chain_expr = chain!(slot!(bis4, a), slot!(bis4, b), factor);
+let default_tensor = gamma!(mu, a, b);
+let indexed_tensor = gamma!(1, 2, 3);
+let pattern_tensor = gamma!(RS.a__, RS.b__, RS.c__);
+let pattern_tensor_with_slots = gamma!(RS.a__, [RS.d_, RS.i_], [RS.d_, RS.j_]);
+let mixed_tensor = gamma!(mu, slot!(bis_d, a), 1);
+let explicit_tensor = gamma!(slot!(mink_d, mu), slot!(bis_d, a), slot!(bis_d, b));</code></pre><p><strong>Supported usage</strong></p><pre><code data-lang="rust"><span style="color: #d73948">let</span> tensor <span style="color: #d73948">=</span> idenso::gamma<span style="color: #d73948">!</span>(<span style="color: #b60157">1</span>, <span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>);</code></pre><p><a href="reference/rust/idenso/macro.gamma.html">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/dirac/macros.rs#L40">Source</a></p><h4><code>Gamma-zero macro</code></h4><p><code>Builds a gamma-zero chain factor or an explicitly indexed gamma-zero tensor.</code></p><pre><code>Builds a gamma-zero factor or tensor.
+
+With no arguments, this builds a chain factor using the placeholder indices
+`in` and `out`; use this form only as a factor inside `chain!` or `trace!`.
+With two arguments, this builds the ordinary gamma-zero tensor between
+explicit spinor endpoints.
+
+Endpoints can be typed slots, atoms, atom views, default four-dimensional
+bispinor identifiers/literals, pattern variables such as `RS.i__`, or
+bracketed bispinor argument lists such as `[RS.d_, RS.i_]`.
+
+# Examples
+
+```ignore
+use idenso::gamma0;
+
+let factor = gamma0!();
+let default_tensor = gamma0!(i, j);
+let pattern_tensor = gamma0!(RS.i__, RS.j__);
+let dimensioned_pattern_tensor = gamma0!([RS.d_, RS.i_], [RS.d_, RS.j_]);
+```</code></pre><pre><code>#[doc = " Builds a gamma-zero factor or tensor."] #[doc = ""]
+#[doc =
+" With no arguments, this builds a chain factor using the placeholder indices"]
+#[doc =
+" `in` and `out`; use this form only as a factor inside `chain!` or `trace!`."]
+#[doc =
+" With two arguments, this builds the ordinary gamma-zero tensor between"]
+#[doc = " explicit spinor endpoints."] #[doc = ""]
+#[doc =
+" Endpoints can be typed slots, atoms, atom views, default four-dimensional"]
+#[doc =
+" bispinor identifiers/literals, pattern variables such as `RS.i__`, or"]
+#[doc = " bracketed bispinor argument lists such as `[RS.d_, RS.i_]`."]
+#[doc = ""] #[doc = " # Examples"] #[doc = ""] #[doc = " ```ignore"]
+#[doc = " use idenso::gamma0;"] #[doc = ""]
+#[doc = " let factor = gamma0!();"]
+#[doc = " let default_tensor = gamma0!(i, j);"]
+#[doc = " let pattern_tensor = gamma0!(RS.i__, RS.j__);"]
+#[doc =
+" let dimensioned_pattern_tensor = gamma0!([RS.d_, RS.i_], [RS.d_, RS.j_]);"]
+#[doc = " ```"] #[macro_export] macro_rules! gamma0
+{
+    () =>
+    {
+        symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma0).add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_in)).add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_out)).finish()
+    }; ($base:ident. $i:ident, $($rest:tt)*) =>
+    {
+        $crate::gamma0!(@tensor
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::Bispinor
+        {}, [$base.$i],); $($rest)*)
+    }; ([$($i:expr),+ $(,)?], $($rest:tt)*) =>
+    {
+        $crate::gamma0!(@tensor
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::Bispinor
+        {}, [$($i),+],); $($rest)*)
+    }; ($i:ident, $($rest:tt)*) =>
+    {{
+            let bis =
+            spenso::structure::representation::RepName::new_rep(&amp;$crate::representations::Bispinor
+            {}, 4,);
+            $crate::gamma0!(@tensor spenso::slot!(bis, $i); $($rest)*)
+        }}; ($i:literal, $($rest:tt)*) =>
+    {{
+            let bis =
+            spenso::structure::representation::RepName::new_rep(&amp;$crate::representations::Bispinor
+            {}, 4,);
+            $crate::gamma0!(@tensor spenso::slot!(bis, $i); $($rest)*)
+        }}; ($i:expr, $($rest:tt)*) =>
+    { $crate::gamma0!(@tensor $i; $($rest)*) };
+    (@tensor $i:expr; $base:ident. $j:ident) =>
+    {
+        $crate::gamma0!(@tensor_done $i,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::Bispinor
+        {}, [$base.$j],))
+    }; (@tensor $i:expr; [$($j:expr),+ $(,)?]) =>
+    {
+        $crate::gamma0!(@tensor_done $i,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::Bispinor
+        {}, [$($j),+],))
+    }; (@tensor $i:expr; $j:ident) =>
+    {{
+            let bis =
+            spenso::structure::representation::RepName::new_rep(&amp;$crate::representations::Bispinor
+            {}, 4,); $crate::gamma0!(@tensor_done $i, spenso::slot!(bis, $j))
+        }}; (@tensor $i:expr; $j:literal) =>
+    {{
+            let bis =
+            spenso::structure::representation::RepName::new_rep(&amp;$crate::representations::Bispinor
+            {}, 4,); $crate::gamma0!(@tensor_done $i, spenso::slot!(bis, $j))
+        }}; (@tensor $i:expr; $j:expr) =>
+    { $crate::gamma0!(@tensor_done $i, $j) }; (@tensor_done $i:expr, $j:expr)
+    =>
+    {
+        symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma0).add_arg(spenso::shadowing::IntoAtom::into_atom($i)).add_arg(spenso::shadowing::IntoAtom::into_atom($j)).finish()
+    };
+}</code></pre><p><strong>Reference feature matrix:</strong> <code>bincode, reference-cases</code> (item is available without an additional gate)</p><p><strong>Example 1</strong></p><pre><code data-lang="ignore">use idenso::gamma0;
+
+let factor = gamma0!();
+let default_tensor = gamma0!(i, j);
+let pattern_tensor = gamma0!(RS.i__, RS.j__);
+let dimensioned_pattern_tensor = gamma0!([RS.d_, RS.i_], [RS.d_, RS.j_]);</code></pre><p><strong>Supported usage</strong></p><pre><code data-lang="rust"><span style="color: #d73948">let</span> tensor <span style="color: #d73948">=</span> idenso::gamma0<span style="color: #d73948">!</span>(<span style="color: #b60157">1</span>, <span style="color: #b60157">2</span>);</code></pre><p><a href="reference/rust/idenso/macro.gamma0.html">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/dirac/macros.rs#L260">Source</a></p><h4><code>Gamma-five macro</code></h4><p><code>Builds a gamma-five chain factor or an explicitly indexed gamma-five tensor.</code></p><pre><code>Builds a gamma-five factor or tensor.
+
+With no arguments, this builds a chain factor using the placeholder indices
+`in` and `out`; the surrounding chain or trace owns the physical endpoints.
+With two arguments, this builds the ordinary gamma-five tensor between
+explicit spinor endpoints.
+
+Pattern variables such as `RS.i__` are wrapped as bispinor arguments.</code></pre><pre><code>#[doc = " Builds a gamma-five factor or tensor."] #[doc = ""]
+#[doc =
+" With no arguments, this builds a chain factor using the placeholder indices"]
+#[doc =
+" `in` and `out`; the surrounding chain or trace owns the physical endpoints."]
+#[doc =
+" With two arguments, this builds the ordinary gamma-five tensor between"]
+#[doc = " explicit spinor endpoints."] #[doc = ""]
+#[doc =
+" Pattern variables such as `RS.i__` are wrapped as bispinor arguments."]
+#[macro_export] macro_rules! gamma5
+{
+    () =>
+    {
+        symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma5).add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_in)).add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_out)).finish()
+    }; ($base:ident. $i:ident, $($rest:tt)*) =>
+    {
+        $crate::gamma5!(@tensor
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::Bispinor
+        {}, [$base.$i],); $($rest)*)
+    }; ($i:expr, $($rest:tt)*) => { $crate::gamma5!(@tensor $i; $($rest)*) };
+    (@tensor $i:expr; $base:ident. $j:ident) =>
+    {
+        $crate::gamma5!(@tensor_done $i,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::Bispinor
+        {}, [$base.$j],))
+    }; (@tensor $i:expr; $j:expr) => { $crate::gamma5!(@tensor_done $i, $j) };
+    (@tensor_done $i:expr, $j:expr) =>
+    {
+        symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma5).add_arg(spenso::shadowing::IntoAtom::into_atom($i)).add_arg(spenso::shadowing::IntoAtom::into_atom($j)).finish()
+    };
+}</code></pre><p><strong>Reference feature matrix:</strong> <code>bincode, reference-cases</code> (item is available without an additional gate)</p><p><strong>Supported usage</strong></p><pre><code data-lang="rust"><span style="color: #d73948">let</span> tensor <span style="color: #d73948">=</span> idenso::gamma5<span style="color: #d73948">!</span>(<span style="color: #b60157">1</span>, <span style="color: #b60157">2</span>);</code></pre><p><a href="reference/rust/idenso/macro.gamma5.html">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/dirac/macros.rs#L342">Source</a></p><h4><code>Levi-Civita tensor macro</code></h4><p><code>Builds an arbitrary-rank antisymmetric epsilon tensor from atom-like arguments.</code></p><pre><code>Builds an antisymmetric epsilon tensor with arbitrary rank.
+
+Arguments are converted through `spenso::shadowing::IntoAtom`, so tests
+and rewrite code can pass slots, atoms, atom views, symbols, and integers
+without spelling out the conversion.</code></pre><pre><code>#[doc = " Builds an antisymmetric epsilon tensor with arbitrary rank."]
+#[doc = ""]
+#[doc =
+" Arguments are converted through `spenso::shadowing::IntoAtom`, so tests"]
+#[doc =
+" and rewrite code can pass slots, atoms, atom views, symbols, and integers"]
+#[doc = " without spelling out the conversion."] #[macro_export] macro_rules!
+epsilon
+{
+    (; $factors:expr $(,)?) =>
+    { $crate::epsilon::epsilon(($factors).into_iter()) };
+    ($($arg:expr),* $(,)?) =>
+    {{
+            let builder =
+            symbolica::atom::FunctionBuilder::new(*$crate::epsilon::EPSILON_SYMBOL);
+            $(let builder =
+            builder.add_arg(spenso::shadowing::IntoAtom::into_atom($arg));)*
+            builder.finish()
+        }};
+}</code></pre><p><strong>Reference feature matrix:</strong> <code>bincode, reference-cases</code> (item is available without an additional gate)</p><p><strong>Supported usage</strong></p><pre><code data-lang="rust"><span style="color: #d73948">let</span> tensor <span style="color: #d73948">=</span> idenso::epsilon<span style="color: #d73948">!</span>(<span style="color: #b60157">1</span>, <span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>, <span style="color: #b60157">4</span>);</code></pre><p><a href="reference/rust/idenso/macro.epsilon.html">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/epsilon.rs#L35">Source</a></p><h4><code>Color-generator macro</code></h4><p><code>Builds a color-generator chain factor or an explicitly indexed generator tensor.</code></p><pre><code>Builds a color-generator atom.
+
+With one argument, this builds a fundamental generator factor for use inside
+`chain!` or `trace!`. The factor uses the chain placeholder indices `in` and
+`out`; the surrounding chain or trace owns the physical endpoints.
+
+With three arguments, this builds an explicit generator `t(a,i,j)`. The first
+argument is an adjoint color index, the second is a fundamental color index,
+and the third is an anti-fundamental color index.
+
+Arguments can be typed slots, atoms, atom views, pattern variables such as
+`RS.a__`, or bracketed representation argument lists such as
+`[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so
+local slot bindings and numeric labels are used as-is.
+
+# Examples
+
+```ignore
+use idenso::color_t;
+use spenso::{slot, trace};
+
+let factor = color_t!(slot!(coad_na, a));
+let expr = trace!(&amp;cof_nc, factor);
+let factor_from_binding = color_t!(slot!(coad_na, a));
+let explicit_tensor = color_t!(slot!(coad_na, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));
+let pattern_tensor = color_t!(RS.a__, RS.i__, RS.j__);
+let dimensioned_pattern = color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);
+```</code></pre><pre><code>#[doc = " Builds a color-generator atom."] #[doc = ""]
+#[doc =
+" With one argument, this builds a fundamental generator factor for use inside"]
+#[doc =
+" `chain!` or `trace!`. The factor uses the chain placeholder indices `in` and"]
+#[doc = " `out`; the surrounding chain or trace owns the physical endpoints."]
+#[doc = ""]
+#[doc =
+" With three arguments, this builds an explicit generator `t(a,i,j)`. The first"]
+#[doc =
+" argument is an adjoint color index, the second is a fundamental color index,"]
+#[doc = " and the third is an anti-fundamental color index."] #[doc = ""]
+#[doc =
+" Arguments can be typed slots, atoms, atom views, pattern variables such as"]
+#[doc = " `RS.a__`, or bracketed representation argument lists such as"]
+#[doc =
+" `[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so"]
+#[doc = " local slot bindings and numeric labels are used as-is."] #[doc = ""]
+#[doc = " # Examples"] #[doc = ""] #[doc = " ```ignore"]
+#[doc = " use idenso::color_t;"] #[doc = " use spenso::{slot, trace};"]
+#[doc = ""] #[doc = " let factor = color_t!(slot!(coad_na, a));"]
+#[doc = " let expr = trace!(&amp;cof_nc, factor);"]
+#[doc = " let factor_from_binding = color_t!(slot!(coad_na, a));"]
+#[doc =
+" let explicit_tensor = color_t!(slot!(coad_na, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));"]
+#[doc = " let pattern_tensor = color_t!(RS.a__, RS.i__, RS.j__);"]
+#[doc =
+" let dimensioned_pattern = color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);"]
+#[doc = " ```"] #[macro_export] macro_rules! color_t
+{
+    ([$($a:expr),+ $(,)?], $($rest:tt)+) =>
+    {
+        $crate::color_t!(@tensor
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::ColorAdjoint
+        {}, [$($a),+],); $($rest)*)
+    }; ($base:ident. $a:ident, $($rest:tt)+) =>
+    {
+        $crate::color_t!(@tensor
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::ColorAdjoint
+        {}, [$base.$a],); $($rest)*)
+    }; ($a:expr, $($rest:tt)+) => { $crate::color_t!(@tensor $a; $($rest)*) };
+    ([$($a:expr),+ $(,)?] $(,)?) =>
+    {
+        $crate::color::CS.chain_t(spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::ColorAdjoint
+        {}, [$($a),+],))
+    }; ($base:ident. $a:ident $(,)?) =>
+    {
+        $crate::color::CS.chain_t(spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::ColorAdjoint
+        {}, [$base.$a],))
+    }; ($a:expr $(,)?) =>
+    { $crate::color::CS.chain_t(spenso::shadowing::IntoAtom::into_atom($a)) };
+    (@tensor $a:expr; [$($i:expr),+ $(,)?], $($rest:tt)*) =>
+    {
+        $crate::color_t!(@tensor2 $a,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::ColorFundamental
+        {}, [$($i),+],); $($rest)*)
+    }; (@tensor $a:expr; $base:ident. $i:ident, $($rest:tt)*) =>
+    {
+        $crate::color_t!(@tensor2 $a,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::ColorFundamental
+        {}, [$base.$i],); $($rest)*)
+    }; (@tensor $a:expr; $i:expr, $($rest:tt)*) =>
+    { $crate::color_t!(@tensor2 $a, $i; $($rest)*) };
+    (@tensor2 $a:expr, $i:expr; [$($j:expr),+ $(,)?] $(,)?) =>
+    {
+        $crate::color_t!(@tensor_done $a, $i,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::ColorAntiFundamental
+        {}, [$($j),+],))
+    }; (@tensor2 $a:expr, $i:expr; $base:ident. $j:ident $(,)?) =>
+    {
+        $crate::color_t!(@tensor_done $a, $i,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::ColorAntiFundamental
+        {}, [$base.$j],))
+    }; (@tensor2 $a:expr, $i:expr; $j:expr $(,)?) =>
+    { $crate::color_t!(@tensor_done $a, $i, $j) };
+    (@tensor_done $a:expr, $i:expr, $j:expr) =>
+    {
+        $crate::color::CS.explicit_t(spenso::shadowing::IntoAtom::into_atom($a),
+        spenso::shadowing::IntoAtom::into_atom($i),
+        spenso::shadowing::IntoAtom::into_atom($j),)
+    };
+}</code></pre><p><strong>Reference feature matrix:</strong> <code>bincode, reference-cases</code> (item is available without an additional gate)</p><p><strong>Example 1</strong></p><pre><code data-lang="ignore">use idenso::color_t;
+use spenso::{slot, trace};
+
+let factor = color_t!(slot!(coad_na, a));
+let expr = trace!(&amp;cof_nc, factor);
+let factor_from_binding = color_t!(slot!(coad_na, a));
+let explicit_tensor = color_t!(slot!(coad_na, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));
+let pattern_tensor = color_t!(RS.a__, RS.i__, RS.j__);
+let dimensioned_pattern = color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);</code></pre><p><strong>Supported usage</strong></p><pre><code data-lang="rust"><span style="color: #d73948">let</span> tensor <span style="color: #d73948">=</span> idenso::<span style="color: #d73948">color_t</span><span style="color: #d73948">!</span>(<span style="color: #b60157">1</span>, <span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>);</code></pre><p><a href="reference/rust/idenso/macro.color_t.html">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/color/macros.rs#L30">Source</a></p><h4><code>Color structure-constant macro</code></h4><p><code>Builds an explicitly indexed adjoint color structure-constant tensor.</code></p><pre><code>Builds an adjoint color structure-constant atom `f(a,b,c)`.
+
+Arguments can be typed slots, atoms, atom views, pattern variables such as
+`RS.a__`, or bracketed adjoint representation argument lists such as
+`[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so
+local slot bindings and numeric labels are used as-is.
+
+# Examples
+
+```ignore
+use idenso::color_f;
+use spenso::slot;
+
+let expr = color_f!(slot!(coad_na, a), slot!(coad_na, b), slot!(coad_na, c));
+let numeric_label_tensor = color_f!(1, 2, 3);
+let pattern_tensor = color_f!(RS.a__, RS.b__, RS.c__);
+let dimensioned_pattern = color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]);
+```</code></pre><pre><code>#[doc = " Builds an adjoint color structure-constant atom `f(a,b,c)`."]
+#[doc = ""]
+#[doc =
+" Arguments can be typed slots, atoms, atom views, pattern variables such as"]
+#[doc =
+" `RS.a__`, or bracketed adjoint representation argument lists such as"]
+#[doc =
+" `[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so"]
+#[doc = " local slot bindings and numeric labels are used as-is."] #[doc = ""]
+#[doc = " # Examples"] #[doc = ""] #[doc = " ```ignore"]
+#[doc = " use idenso::color_f;"] #[doc = " use spenso::slot;"] #[doc = ""]
+#[doc =
+" let expr = color_f!(slot!(coad_na, a), slot!(coad_na, b), slot!(coad_na, c));"]
+#[doc = " let numeric_label_tensor = color_f!(1, 2, 3);"]
+#[doc = " let pattern_tensor = color_f!(RS.a__, RS.b__, RS.c__);"]
+#[doc =
+" let dimensioned_pattern = color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]);"]
+#[doc = " ```"] #[macro_export] macro_rules! color_f
+{
+    ([$($a:expr),+ $(,)?], $($rest:tt)+) =>
+    {
+        $crate::color_f!(@tensor
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::ColorAdjoint
+        {}, [$($a),+],); $($rest)*)
+    }; ($base:ident. $a:ident, $($rest:tt)+) =>
+    {
+        $crate::color_f!(@tensor
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::ColorAdjoint
+        {}, [$base.$a],); $($rest)*)
+    }; ($a:expr, $($rest:tt)+) => { $crate::color_f!(@tensor $a; $($rest)*) };
+    (@tensor $a:expr; [$($b:expr),+ $(,)?], $($rest:tt)*) =>
+    {
+        $crate::color_f!(@tensor2 $a,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::ColorAdjoint
+        {}, [$($b),+],); $($rest)*)
+    }; (@tensor $a:expr; $base:ident. $b:ident, $($rest:tt)*) =>
+    {
+        $crate::color_f!(@tensor2 $a,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::ColorAdjoint
+        {}, [$base.$b],); $($rest)*)
+    }; (@tensor $a:expr; $b:expr, $($rest:tt)*) =>
+    { $crate::color_f!(@tensor2 $a, $b; $($rest)*) };
+    (@tensor2 $a:expr, $b:expr; [$($c:expr),+ $(,)?] $(,)?) =>
+    {
+        $crate::color_f!(@tensor_done $a, $b,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::ColorAdjoint
+        {}, [$($c),+],))
+    }; (@tensor2 $a:expr, $b:expr; $base:ident. $c:ident $(,)?) =>
+    {
+        $crate::color_f!(@tensor_done $a, $b,
+        spenso::structure::representation::RepName::to_symbolic(&amp;$crate::representations::ColorAdjoint
+        {}, [$base.$c],))
+    }; (@tensor2 $a:expr, $b:expr; $c:expr $(,)?) =>
+    { $crate::color_f!(@tensor_done $a, $b, $c) };
+    (@tensor_done $a:expr, $b:expr, $c:expr) =>
+    {
+        $crate::color::CS.structure_f(spenso::shadowing::IntoAtom::into_atom($a),
+        spenso::shadowing::IntoAtom::into_atom($b),
+        spenso::shadowing::IntoAtom::into_atom($c),)
+    };
+}</code></pre><p><strong>Reference feature matrix:</strong> <code>bincode, reference-cases</code> (item is available without an additional gate)</p><p><strong>Example 1</strong></p><pre><code data-lang="ignore">use idenso::color_f;
+use spenso::slot;
+
+let expr = color_f!(slot!(coad_na, a), slot!(coad_na, b), slot!(coad_na, c));
+let numeric_label_tensor = color_f!(1, 2, 3);
+let pattern_tensor = color_f!(RS.a__, RS.b__, RS.c__);
+let dimensioned_pattern = color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]);</code></pre><p><strong>Supported usage</strong></p><pre><code data-lang="rust"><span style="color: #d73948">let</span> tensor <span style="color: #d73948">=</span> idenso::color_f<span style="color: #d73948">!</span>(<span style="color: #b60157">1</span>, <span style="color: #b60157">2</span>, <span style="color: #b60157">3</span>);</code></pre><p><a href="reference/rust/idenso/macro.color_f.html">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/color/macros.rs#L119">Source</a></p><h4><code>Initialize representations</code></h4><p><code>Initializes Idenso's standard representations and tensor symbols.</code></p><pre><code>Register Idenso's built-in representations and algebra symbols with Symbolica.
+
+Symbolica calls this during community-module initialization. Calling it again
+is safe and ensures the standard Lorentz, spinor, and color objects exist.</code></pre><pre><code>fn initialize()</code></pre><p><strong>Reference feature matrix:</strong> <code>bincode, reference-cases</code> (item is available without an additional gate)</p><p><strong>Supported usage</strong></p><pre><code data-lang="rust">idenso::representations::initialize();</code></pre><p><a href="reference/rust/idenso/representations/fn.initialize.html">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/crates/idenso/src/representations.rs#L136">Source</a></p><h3><code>idenso-community</code></h3><pre><code>Exports registered by idenso.</code></pre><h4><code>cook_function</code></h4><p><code>Convert a single function call into a flattened variable symbol.</code></p><pre><code>Convert a single function call into a flattened variable symbol.
+
+Transforms a function expression with arguments into a single symbolic variable
+whose name encodes both the function name and its arguments. This is the
+atomic version of `cook_indices()`, operating on individual function calls
+rather than complete expressions.
+
+**Function Cooking Transform:**
+- Simple function: `f(a, b)` → `f_a_b`
+- Nested arguments: `tensor(rep(mu))` → `tensor_rep_mu`
+- Multiple arguments: `gamma(mu, alpha, beta)` → `gamma_mu_alpha_beta`
+- Complex names: `my_function(x, y)` → `my_function_x_y`
+
+
+**Constraints:**
+- Input must be a single function call (not sum, product, etc.)
+- Arguments must be cookable (symbols, numbers, simple functions)
+- Cannot cook expressions containing polynomials or complex structures
+
+# Arguments
+- `self_`: expression representing a single function call to cook
+
+# Returns
+Expression containing the flattened variable symbol.
+
+# Raises
+`TypeError` if input is not a cookable function or contains invalid argument types.
+
+# Examples:
+```python
+import symbolica as sp
+from symbolica.community.idenso import cook_function
+
+# Simple function cooking
+f = sp.S('f')
+a, b = sp.S('a','b')
+
+cooked = cook_function(f(a, b))
+print(cooked)  # Outputs: f_a_b
+```</code></pre><pre><code>def cook_function(self_: Expression) -> Expression:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> cook_function
+<span style="color: #4b69c6">help</span>(cook_function)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L7">Source</a></p><h4><code>cook_indices</code></h4><p><code>Convert complex nested index structures into flattened symbolic names.</code></p><pre><code>Convert complex nested index structures into flattened symbolic names.
+
+Transforms hierarchical index expressions within tensor function arguments
+into simplified, flat symbolic representations. This "cooking" process is
+essential for pattern matching, simplification, and computational efficiency
+when dealing with complex tensor expressions.
+
+**Index Cooking Transformation:**
+- Nested structure: `mink(4, f(g(h(μ))))` → `mink(4, f_g_h_mu)`
+- Function chains: `lorentz(up(mu))` → `lorentz(up_mu)`
+- Complex arguments: `tensor(rep(dim,type(idx)))` → `tensor(rep(dim,type_idx))`
+
+**Scope:**
+- Only affects indices appearing as function arguments
+- Preserves top-level function structure
+# Arguments
+- `self_`: expression containing complex nested index structures
+
+# Returns
+Expression with flattened, simplified index names.
+
+# Examples:
+```python
+from symbolica.community.spenso import TensorName, Slot, Representation
+import symbolica as sp
+from symbolica.community.idenso import wrap_indices, cook_indices
+
+T = TensorName("T")
+rep = Representation.euc(3)
+# With slots (creates TensorIndices)
+mu = rep("mu")
+nu = rep("nu")
+x = sp.S("x")
+tensor_with_args = T(mu, nu, x)  # T(mu, nu; x)
+print(tensor_with_args)
+print(
+cook_indices(wrap_indices(tensor_with_args.to_expression(), sp.S("wrap")))
+)
+```</code></pre><pre><code>def cook_indices(self_: Expression) -> Expression:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> cook_indices
+<span style="color: #4b69c6">help</span>(cook_indices)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L51">Source</a></p><h4><code>dirac_adjoint</code></h4><p><code>Return the Dirac adjoint of a Symbolica tensor expression.</code></p><pre><code>Return the Dirac adjoint of a Symbolica tensor expression.
+
+This reverses the spinor chain and applies the representation-aware adjoint
+rules used by Idenso's Dirac algebra.</code></pre><pre><code>def dirac_adjoint(self_: Expression) -> Expression:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> dirac_adjoint
+<span style="color: #4b69c6">help</span>(dirac_adjoint)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L94">Source</a></p><h4><code>expand_bis</code></h4><p><code>Expands factorized terms containing Dirac bispinor indices.</code></p><pre><code>Expands factorized terms containing Dirac bispinor indices.
+
+Finds and expands factorized expressions involving bispinor tensors and spinors,
+unfolding multiplicative structures into expanded sums for subsequent simplification.
+Does not expand into explicit components but rather expands nested factorizations.
+
+**Factorization Expansion:**
+- `ψ(α) * (γ(μ,α,β) + σ(μ,α,β)) → ψ(α)*γ(μ,α,β) + ψ(α)*σ(μ,α,β)`
+- Nested products with bispinor indices get distributed
+- Parenthesized expressions are expanded algebraically
+- Prepares expressions for gamma matrix simplification
+
+
+# Arguments
+- `self_`: expression containing factorized terms with bispinor indices
+
+# Returns
+Expanded expression with factorizations unfolded.</code></pre><pre><code>def expand_bis(self_: Expression) -> Expression:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> expand_bis
+<span style="color: #4b69c6">help</span>(expand_bis)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L102">Source</a></p><h4><code>expand_color</code></h4><p><code>Expands factorized terms containing SU(N) color indices.</code></p><pre><code>Expands factorized terms containing SU(N) color indices.
+
+Finds and expands factorized expressions involving color tensors and fields,
+unfolding multiplicative structures into expanded sums for subsequent simplification.
+Does not expand into explicit components but rather expands nested factorizations.
+
+**Factorization Expansion:**
+- `q(a) * (T(b,a,c) + S(b,a,c)) → q(a)*T(b,a,c) + q(a)*S(b,a,c)`
+- Nested products with color indices get distributed
+- Parenthesized expressions are expanded algebraically
+- Prepares expressions for color algebra simplification
+
+**Applications:**
+- Expanding factorized QCD expressions before simplification
+- Preparing for SU(N) algebra algorithms
+- Unfolding nested products in gauge theory calculations
+- Algebraic manipulation of color structures
+
+# Arguments
+- `self_`: expression containing factorized terms with color indices
+
+# Returns
+Expanded expression with factorizations unfolded.</code></pre><pre><code>def expand_color(self_: Expression) -> Expression:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> expand_color
+<span style="color: #4b69c6">help</span>(expand_color)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L124">Source</a></p><h4><code>expand_metrics</code></h4><p><code>Expands factorized terms containing metric tensors.</code></p><pre><code>Expands factorized terms containing metric tensors.
+
+Finds and expands factorized expressions involving metric tensors and related
+geometric objects, unfolding multiplicative structures for subsequent simplification.
+
+# Arguments
+- `self_`: expression containing factorized metric terms
+
+# Returns
+The expanded expression with metric factorizations unfolded.</code></pre><pre><code>def expand_metrics(self_: Expression) -> Expression:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> expand_metrics
+<span style="color: #4b69c6">help</span>(expand_metrics)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L151">Source</a></p><h4><code>expand_mink</code></h4><p><code>Expands factorized terms containing Minkowski spacetime indices.</code></p><pre><code>Expands factorized terms containing Minkowski spacetime indices.
+
+Finds and expands factorized expressions involving Minkowski tensors and vectors,
+unfolding multiplicative structures into expanded sums for subsequent simplification.
+Does not expand into explicit components but rather expands nested factorizations.
+
+**Factorization Expansion:**
+- `A(μ) * (B(ν) + C(ν)) → A(μ)*B(ν) + A(μ)*C(ν)`
+- Nested products with Minkowski indices get distributed
+- Parenthesized expressions are expanded algebraically
+- Prepares expressions for metric simplification and contractions
+
+**Applications:**
+- Expanding factorized tensor expressions before simplification
+- Preparing for index contraction algorithms
+- Unfolding nested products in field theory calculations
+- Algebraic manipulation of relativistic expressions
+
+# Arguments
+- `self_`: expression containing factorized terms with Minkowski indices
+
+# Returns
+Expanded expression with factorizations unfolded.
+
+# Examples:
+```python
+import symbolica as sp
+from symbolica.community.idenso import expand_mink
+
+# Expand factorized vector expression
+p = sp.S('p')
+q = sp.S('q')
+r = sp.S('r')
+mu = sp.S('mu')
+factorized = p(mu) * (q(mu) + r(mu))
+expanded = expand_mink(factorized)  # p(mu)*q(mu) + p(mu)*r(mu)
+
+# Complex factorization
+A = sp.S('A')
+expr = A * (p(mu) * q(mu) + r(mu))
+result = expand_mink(expr)  # A*p(mu)*q(mu) + A*r(mu)
+```</code></pre><pre><code>def expand_mink(self_: Expression) -> Expression:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> expand_mink
+<span style="color: #4b69c6">help</span>(expand_mink)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L165">Source</a></p><h4><code>expand_mink_bis</code></h4><p><code>Expands factorized terms containing both Minkowski and bispinor indices.</code></p><pre><code>Expands factorized terms containing both Minkowski and bispinor indices.
+
+Combines the functionality of `expand_mink()` and `expand_bis()` to perform
+simultaneous expansion of factorized expressions involving both spacetime
+and spinor indices.
+
+# Arguments
+- `self_`: expression containing factorized terms with both index types
+
+# Returns
+Expanded expression with all factorizations unfolded.</code></pre><pre><code>def expand_mink_bis(self_: Expression) -> Expression:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> expand_mink_bis
+<span style="color: #4b69c6">help</span>(expand_mink_bis)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L211">Source</a></p><h4><code>initialize</code></h4><p><code>Register Idenso's built-in representations and algebra symbols with Symbolica.</code></p><pre><code>Register Idenso's built-in representations and algebra symbols with Symbolica.
+
+Symbolica calls this during community-module initialization. Calling it again
+is safe and ensures the standard Lorentz, spinor, and color objects exist.</code></pre><pre><code>def initialize() -> None:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> initialize
+<span style="color: #4b69c6">help</span>(initialize)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L226">Source</a></p><h4><code>list_dangling</code></h4><p><code>Lists the dangling (external, uncontracted) indices present in the expression.</code></p><pre><code>Lists the dangling (external, uncontracted) indices present in the expression.
+
+Identifies and returns all indices that are not summed over (i.e., not dummy
+indices). These are the "free" indices that appear in the final result and
+determine the tensor rank of the expression. For dualizable representations,
+downstairs indices are represented wrapped in `dind(...)`.
+
+This is essential for:
+- Verifying index conservation in tensor equations
+- Determining the rank and structure of tensor expressions
+- Debugging index contractions
+
+# Arguments
+- `self_`: tensor expression to analyze
+
+# Returns
+A list of expressions, each representing a free (dangling) index.
+
+# Examples:
+```python
+from symbolica.community.spenso import TensorName, Slot, Representation
+import symbolica as sp
+from symbolica.community.idenso import (
+list_dangling,
+)
+
+T = TensorName("T")
+rep = Representation.euc(3)
+# With slots (creates TensorIndices)
+mu = rep("mu")
+nu = rep("nu")
+x = sp.S("x")
+tensor_with_args = T(mu, nu, nu, x)  # T(mu, nu; x)
+# print(tensor_with_args)
+print(list_dangling(tensor_with_args.to_expression()))
+```</code></pre><pre><code>def list_dangling(self_: Expression) -> builtins.list[Expression]:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> list_dangling
+<span style="color: #4b69c6">help</span>(list_dangling)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L234">Source</a></p><h4><code>simplify_color</code></h4><p><code>Applies SU(N) color algebra rules to simplify color group structures.</code></p><pre><code>Applies SU(N) color algebra rules to simplify color group structures.
+
+Performs comprehensive simplifications of SU(N) color algebra including:
+
+**Structure constants:**
+- `f^{abc}f^{ade} = CA δ^{bc}` (Casimir relations)
+- `f^{abc}f^{bcd} = CA f^{acd}` (Jacobi identities)
+- Antisymmetry: `f^{abc} = -f^{bac}`
+
+**Generators and traces:**
+- `Tr(T^a T^b) = TR δ^{ab}` (orthogonality)
+- `T^a_{ij} T^a_{kl} = δ_{il}δ_{jk}/Nc - δ_{ij}δ_{kl}/Nc²` (Fierz identity)
+- `(T^a)² = CF` (fundamental Casimir)
+
+**Color factors:**
+- `Nc`: Number of colors
+- `CA = Nc`: Adjoint Casimir
+- `CF = (Nc² - 1)/(2Nc)`: Fundamental Casimir
+- `TR = 1/2`: Normalization factor
+
+# Arguments
+- `self_`: expression containing SU(N) color structures
+
+# Returns
+Simplified expression with color algebra reduced to scalar factors (`Nc`, `CA`, `CF`,
+`TR`) when possible.
+
+# Notes
+If explicit color indices remain after simplification, it indicates the expression
+could not be fully reduced to color-scalar form.</code></pre><pre><code>def simplify_color(self_: Expression) -> Expression:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> simplify_color
+<span style="color: #4b69c6">help</span>(simplify_color)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L274">Source</a></p><h4><code>simplify_gamma</code></h4><p><code>Applies Clifford algebra rules and trace identities to simplify gamma matrix expressions.</code></p><pre><code>Applies Clifford algebra rules and trace identities to simplify gamma matrix expressions.
+
+Performs comprehensive simplifications of Dirac gamma matrix algebra including:
+- **Anticommutation relations**: `{γᵘ, γᵛ} = 2gᵘᵛ`
+- **Trace identities**: `Tr(γᵘ) = 0`, `Tr(γᵘγᵛ) = 4gᵘᵛ`, etc.
+- **Gamma5 properties**: `{γ₅, γᵘ} = 0`, `(γ₅)² = 1`
+- **Chain simplifications**: Reduces products of gamma matrices
+- **Contraction rules**: Simplifies contracted gamma matrix products
+
+The function recognizes gamma matrices represented as `spenso::gamma(spenso::mink(dim,mu), spenso::bis(dim,alpha), spenso::bis(dim,beta))`
+where `mu` is the Lorentz index and `alpha`, `beta` are spinor indices.
+These can be easily created using the hep_lib.
+
+# Arguments
+- `self_`: expression containing gamma matrix products and traces
+
+# Returns
+The simplified expression with gamma algebra applied.
+
+# Examples:
+```python
+from symbolica.community.spenso import TensorLibrary, TensorName
+from symbolica.community.idenso import simplify_gamma
+from symbolica import S, Expression
+# Get HEP library with standard tensors
+hep_lib = TensorLibrary.hep_lib()
+# Access standard tensors like gamma matrices
+gamma_structure = hep_lib[S("spenso::gamma")]
+print(gamma_structure)
+print(simplify_gamma(gamma_structure(7, 3, 4) * gamma_structure(3, 7, 4)))
+```</code></pre><pre><code>def simplify_gamma(self_: Expression) -> Expression:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> simplify_gamma
+<span style="color: #4b69c6">help</span>(simplify_gamma)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L308">Source</a></p><h4><code>simplify_metrics</code></h4><p><code>Simplifies contractions involving metric tensors and identity tensors.</code></p><pre><code>Simplifies contractions involving metric tensors and identity tensors.
+
+Applies fundamental tensor algebra rules for metric and identity tensors:
+
+**Metric tensor rules:**
+- `gᵘᵛ pᵥ → pᵘ` (index raising/lowering)
+- `gᵘᵛ gᵥρ → gᵘρ` or `δᵘρ` (metric composition)
+- `gᵘᵤ → D` (dimension of spacetime)
+- `ηᵘᵛ pᵥ → pᵘ` (flat metric contractions)
+
+**Identity tensor rules:**
+- `δᵘᵛ pᵥ → pᵘ` (Kronecker delta contraction)
+- `δᵘᵤ → D` (trace of identity)
+
+The function recognizes metrics as `spenso::g(...)`
+
+# Arguments
+- `self_`: expression containing metric/identity tensor contractions
+
+# Returns
+The simplified expression with metric rules applied.
+
+# Examples:
+```python
+from symbolica.community.idenso import simplify_metrics, to_dots
+from symbolica.community.spenso import Representation, TensorName
+q = TensorName("q")
+g = TensorName.g
+rep = Representation.euc(3)
+# With slots (creates TensorIndices)
+mu = rep("mu")
+nu = rep("nu")
+print(simplify_metrics(g(mu, nu) * q(mu)))
+```</code></pre><pre><code>def simplify_metrics(self_: Expression) -> Expression:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> simplify_metrics
+<span style="color: #4b69c6">help</span>(simplify_metrics)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L343">Source</a></p><h4><code>to_dots</code></h4><p><code>Converts contracted Lorentz/Minkowski indices into dot product notation.</code></p><pre><code>Converts contracted Lorentz/Minkowski indices into dot product notation.
+
+Automatically identifies and converts patterns like `p(mink(D, mu)) * q(mink(D, mu))`
+into the compact, representation-carrying `dot(p(mink(D)), q(mink(D)))` notation. This
+simplification is essential for physics calculations involving four-vectors.
+
+The function recognizes:
+- Contracted vector indices: `pᵘqᵤ → p·q`
+- Multiple contractions: `pᵘqᵤrᵛsᵥ → (p·q)(r·s)`
+- Self-contractions: `pᵘpᵤ → p²`
+
+# Arguments
+- `self_`: expression containing contracted Minkowski vector indices
+
+# Returns
+The expression with vector contractions converted to dot products.
+
+# Examples:
+```python
+from symbolica.community.idenso import to_dots
+from symbolica.community.spenso import Representation, TensorName
+p = TensorName("p")
+q = TensorName("q")
+rep = Representation.euc(3)
+# With slots (creates TensorIndices)
+mu = rep("mu")
+nu = rep("nu")
+
+print(to_dots( p(mu)*q(mu)))
+```</code></pre><pre><code>def to_dots(self_: Expression) -> Expression:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> to_dots
+<span style="color: #4b69c6">help</span>(to_dots)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L381">Source</a></p><h4><code>wrap_dummies</code></h4><p><code>Wraps only the dummy (contracted) indices within the expression using a header symbol.</code></p><pre><code>Wraps only the dummy (contracted) indices within the expression using a header symbol.
+
+Similar to `wrap_indices`, but selectively identifies and wraps only contracted
+indices (those appearing once upstairs and once downstairs, or twice in a
+self-dual representation), leaving external (dangling) indices untouched.
+This is crucial for proper index management in tensor calculations.
+
+Contracted indices are those that:
+- Appear in both upper and lower positions (for dualizable reps)
+- Appear twice in the same position (for self-dual reps)
+- Are summed over (Einstein summation convention)
+
+# Arguments
+- `self_`: input expression containing both dummy and free indices
+- `header`: symbol to use as wrapper function name for dummy indices only
+
+# Returns
+A new expression with only contracted indices wrapped.
+
+# Examples:
+```python
+from symbolica.community.spenso import TensorName, Slot, Representation
+import symbolica as sp
+from symbolica.community.idenso import simplify_metrics, wrap_dummies
+
+T = TensorName("T")
+rep = Representation.euc(3)
+# With slots (creates TensorIndices)
+mu = rep("mu")
+nu = rep("nu")
+x = sp.S("x")
+tensor_with_args = T(mu, nu, nu, x)  # T(mu, nu; x)
+# print(tensor_with_args)
+print(wrap_dummies(tensor_with_args.to_expression(), sp.S("wrap")))
+
+```</code></pre><pre><code>def wrap_dummies(self_: Expression, header: Expression) -> Expression:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> wrap_dummies
+<span style="color: #4b69c6">help</span>(wrap_dummies)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L415">Source</a></p><h4><code>wrap_indices</code></h4><p><code>Wrap all abstract indices with a header symbol # Arguments - `self_`: input expression containing tensor indices - `header`: symbol to use as the wrapper function for all indices # Returns Expression with all indices wrapped by the header symbol.</code></p><pre><code>Wrap all abstract indices with a header symbol
+
+# Arguments
+- `self_`: input expression containing tensor indices
+- `header`: symbol to use as the wrapper function for all indices
+
+# Returns
+Expression with all indices wrapped by the header symbol.
+
+# Examples:
+```python
+from symbolica.community.spenso import TensorName, Slot, Representation
+import symbolica as sp
+from symbolica.community.idenso import wrap_indices
+
+T = TensorName("T")
+rep = Representation.euc(3)
+# With slots (creates TensorIndices)
+mu = rep("mu")
+nu = rep("nu")
+x = sp.S("x")
+tensor_with_args = T(mu, nu, x)  # T(mu, nu; x)
+print(tensor_with_args)
+print(wrap_indices(tensor_with_args.to_expression(), sp.S("wrap")))
+
+```</code></pre><pre><code>def wrap_indices(self_: Expression, header: Expression) -> Expression:</code></pre><p><strong>Requires features:</strong> <code>python, python_stubgen</code></p><p><strong>Inspect the registered export</strong></p><pre><code data-lang="python"><span style="color: #d73948">from</span> symbolica.community.idenso <span style="color: #d73948">import</span> wrap_indices
+<span style="color: #4b69c6">help</span>(wrap_indices)</code></pre><p><a href="reference/python/#idenso-community">Exhaustive reference</a> · <a href="https://github.com/alphal00p/gammaloop/blob/a1a6e8d94b04bfcf905eaab96c68d02147714ba8/docs/api/python/idenso-community.pyi#L455">Source</a></p><h2>Canonical package changelog</h2><p>The following release history is imported as typed Markdown from <a href="reference/content/changelog.md"><code>crates/idenso/CHANGELOG.md</code></a>.</p><h3><code>Changelog</code></h3><p><code>All notable changes to this project will be documented in this file.</code></p><p><code>The format is based on </code><a href="https://keepachangelog.com/en/1.0.0/"><code>Keep a Changelog</code></a><code>,</code> <code>and this project adheres to </code><a href="https://semver.org/spec/v2.0.0.html"><code>Semantic Versioning</code></a><code>.</code></p><h4><code>[Unreleased]</code></h4><h4><a href="https://github.com/alphal00p/spenso/compare/idenso-v0.2.4...idenso-v0.2.5"><code>0.2.5</code></a><code> - 2026-01-08</code></h4><h5><code>Fixed</code></h5><ul><li><code>fix metric initialization and update to symbolica 1.2</code></li><li><code>fix initialize to also load ETS</code></li></ul><h5><code>Other</code></h5><ul><li><code>update linnet</code></li></ul><h4><a href="https://github.com/alphal00p/spenso/compare/idenso-v0.2.3...idenso-v0.2.4"><code>0.2.4</code></a><code> - 2025-12-15</code></h4><h5><code>Fixed</code></h5><ul><li><code>fix canonization in presence of duals</code></li><li><code>fix gamma normalisation</code></li><li><code>fix warnings</code></li><li><code>fix add_assign with sparse tensors</code></li><li><code>fix projp</code></li></ul><h5><code>Other</code></h5><ul><li><code>Import initialize function</code></li><li><code>Update symbolica to 1.1.0</code></li><li><code>update linnet</code></li><li><code>align to atom in argument of cof for Nc</code></li><li><code>update linnet</code></li><li><code>add readmes</code></li><li><code>formatting and add ref for parametric</code></li><li><code>update to 0.17 pyo3_stub_gen</code></li><li><code>update linnet and make classattr to classmethods</code></li><li><code>proper imports and feature flags for python</code></li><li><code>move initialize to api</code></li><li><code>Release spenso-macros 0.3</code></li><li><code>update to symbolica 1.0</code></li><li><code>update sympolica to 0.20</code></li><li><code>Properly precontract scalars</code></li><li><code>Add back pyo3-stub-gen-derive</code></li><li><code>update to current dev symbolica and add pattern for pslash + m conjugate</code></li><li><code>update to linnet 0.13.1</code></li><li><code>working canonize (up to functions) and dirac adjoint</code></li><li><code>spenso canonize buggy</code></li><li><code>robust_conj but with lots of gamma_0s</code></li><li><code>first try conj</code></li><li><code>working pow execution with wrapping</code></li><li><code>add function generic key</code></li></ul><h4><a href="https://github.com/alphal00p/spenso/compare/idenso-v0.2.1...idenso-v0.2.2"><code>0.2.2</code></a><code> - 2025-08-18</code></h4><h5><code>Fixed</code></h5><ul><li><code>fix cook indices</code></li><li><code>fix clippy errors</code></li></ul><h5><code>Other</code></h5><ul><li><code>update linnet to crates</code></li><li><code>all tests pass</code></li><li><code>Fix Multiple Heads Bug</code></li><li><code>update linnet</code></li><li><code>update linnet</code></li><li><code>update linnet</code></li><li><code>update parse problem and add spenso:: to all symbols</code></li><li><code>make all symbols take spenso namespace</code></li><li><code>operate directly on coefficient list</code></li><li><code>remove expand</code></li></ul><h4><a href="https://github.com/alphal00p/spenso/compare/idenso-v0.2.0...idenso-v0.2.1"><code>0.2.1</code></a><code> - 2025-07-15</code></h4><h5><code>Fixed</code></h5><ul><li><code>fix gamma algebra again</code></li></ul><h5><code>Other</code></h5><ul><li><code>update versions</code></li></ul><h4><a href="https://github.com/alphal00p/spenso/compare/idenso-v0.1.0...idenso-v0.2.0"><code>0.2.0</code></a><code> - 2025-07-15</code></h4><h5><code>Fixed</code></h5><ul><li><code>fix wrap_indices</code></li><li><code>fix gamma algebra≈</code></li></ul><h5><code>Other</code></h5><ul><li><code>allow arbitrary arguments for to dots</code></li></ul><h2>Snapshot and version metadata</h2><p>This manual was rendered from one immutable workspace identity.</p><ul><li><strong>Channel:</strong> <code>latest</code></li><li><strong>Route:</strong> <code>/products/idenso/latest/</code></li><li><strong>Git commit:</strong> <code>a1a6e8d94b04bfcf905eaab96c68d02147714ba8</code></li></ul><h3>Workspace component versions</h3><ul><li><code>gammaloop/gammalooprs</code> — <code>0.3.4</code> (<code>features: none (Cargo defaults disabled)</code>)</li><li><code>gammaloop/gammaloop-api</code> — <code>0.1.0</code> (<code>features: cli (Cargo defaults disabled; complete explicit matrix)</code>)</li><li><code>gammaloop/gammaloop</code> — <code>0.3.4</code> (<code>features: python_api, python_abi, python_stubgen (Cargo defaults disabled; complete explicit matrix)</code>)</li><li><code>linnet/linnet</code> — <code>0.17.0</code> (<code>features: nodestore-vec, serde, bincode, drawing, symbolica (Cargo defaults disabled; complete explicit matrix)</code>)</li><li><code>linnet/linnet-py</code> — <code>0.1.0</code> (<code>features: extension-module, abi3-py310 (Cargo defaults disabled; complete explicit matrix)</code>)</li><li><code>spenso/spenso</code> — <code>0.6.0</code> (<code>features: shadowing (Cargo defaults disabled; complete explicit matrix)</code>)</li><li><code>spenso/spenso-macros</code> — <code>0.3.2</code> (<code>features: shadowing (Cargo defaults disabled; complete explicit matrix)</code>)</li><li><code>spenso/spenso-hep-lib</code> — <code>0.1.7</code> (<code>features: none (Cargo defaults disabled)</code>)</li><li><code>spenso/spynso3</code> — <code>0.1.2</code> (<code>features: python_stubgen (Cargo defaults disabled; complete explicit matrix)</code>)</li><li><code>idenso/idenso</code> — <code>0.3.0</code> (<code>features: bincode, reference-cases (Cargo defaults disabled; complete explicit matrix)</code>)</li><li><code>idenso/idenso</code> — <code>0.3.0</code> (<code>features: python, python_stubgen (Cargo defaults disabled; complete explicit matrix)</code>)</li><li><code>vakint/vakint</code> — <code>0.1.2</code> (<code>features: none (Cargo defaults disabled)</code>)</li><li><code>vakint/vakint</code> — <code>0.1.2</code> (<code>features: symbolica_community_module, python_stubgen (Cargo defaults disabled; complete explicit matrix)</code>)</li></ul><style>.alphal00p-docs-nav{position:sticky;top:0;z-index:20;padding:.8rem 1rem;background:#172033;color:white;font:14px system-ui}.alphal00p-docs-nav a{color:#d8d2ff}.alphal00p-docs-nav span{float:right}.alphal00p-search{display:block;margin:1rem auto;max-width:70rem;font:14px system-ui}.alphal00p-search input{margin-left:.5rem;padding:.4rem .6rem}.alphal00p-search-results:empty{display:none}#alphal00p-search-results{padding:.75rem 1.5rem;border:1px solid #d9dce5;border-radius:.4rem}#alphal00p-search-results li{margin:.35rem 0}</style><script>(()=>{const input=document.querySelector('#alphal00p-search');const results=document.querySelector('#alphal00p-search-results');const index=fetch('search-index.json').then(response=>response.json()).catch(()=>[]);input?.addEventListener('input',async event=>{const query=event.target.value.trim().toLowerCase();for(const section of document.querySelectorAll('section'))section.hidden=query&&!section.textContent.toLowerCase().includes(query);results.replaceChildren();if(!query)return;for(const entry of (await index).filter(entry=>(entry.title+' '+entry.summary).toLowerCase().includes(query)).slice(0,15)){const item=document.createElement('li');const link=document.createElement('a');link.href=entry.href;link.textContent=entry.title;item.append(link,document.createTextNode(' · '+entry.kind));results.append(item);}});})();</script></body></html>

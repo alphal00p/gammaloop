@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ShorthandParsing","StrictTensorFilter","StructureInferenceMode"],"struct":["ParseSettings","ParseState","SchoonschipExpansionMode"],"trait":["AtomStructureExt","NetworkParse","StructureFromAtom","TensorFromExpression","TensorLibraryFor"],"type":["ParamNet","ShadowedStructure"]};

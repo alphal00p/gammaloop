@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["HedgeData","HedgeGraphBuilder","HedgeNodeBuilder"]};

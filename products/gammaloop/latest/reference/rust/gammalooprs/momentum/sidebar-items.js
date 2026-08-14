@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Dep","ExternalMomenta","ExternalMomentaError","Helicity","LorentzRep","LorentzTransformation","PolType","RotationMethod","Sign","SignError","SignOrZero"],"mod":["sample","signature"],"struct":["Energy","FourMomentum","PolDef","Polarization","Rotation","Signature","ThreeMomentum","ThreeRotation"],"trait":["LorentzTransformable","Pow","Rotatable"]};

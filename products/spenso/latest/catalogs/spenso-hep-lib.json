@@ -1,0 +1,197 @@
+{
+  "schema_version": 2,
+  "product": {
+    "id": "spenso",
+    "title": "Spenso"
+  },
+  "component": {
+    "id": "spenso-hep-lib",
+    "package": "spenso-hep-lib",
+    "title": "Spenso spenso-hep-lib",
+    "version": "0.1.7",
+    "language": "rust",
+    "features": []
+  },
+  "root": {
+    "id": "spenso-hep-lib",
+    "title": "spenso-hep-lib supported API",
+    "docs": {
+      "format": "typst-markup",
+      "body": "Spenso's high-energy-physics companion library. These entries #emph[complement]\nthe tensor concepts owned by the main Spenso documentation."
+    },
+    "summary": "Spenso's high-energy-physics companion library.",
+    "since": null,
+    "keywords": [],
+    "source": {
+      "identifier": "alphal00p_docs_catalogs::annotated_scopes::spenso-hep-lib",
+      "file": "crates/alphal00p-docs-catalogs/src/lib.rs",
+      "line": 72,
+      "column": 5
+    },
+    "items": {},
+    "scopes": {
+      "supported": {
+        "id": "supported",
+        "title": "Supported entry points",
+        "docs": null,
+        "summary": null,
+        "since": null,
+        "keywords": [],
+        "source": null,
+        "items": {
+          "hep_lib": {
+            "id": "hep_lib",
+            "name": "hep_lib",
+            "title": "HEP tensor library",
+            "kind": "function",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Constructs the standard high-energy-physics tensor library for a chosen scalar data type."
+            },
+            "summary": "Constructs the standard high-energy-physics tensor library for a chosen scalar data type.",
+            "signature": "fn hep_lib < Aind : AbsInd, T : TensorLibraryData + Clone + Default >\n(one : T, zero : T,) -> TensorLibrary < MixedTensor < T, ExplicitKey < Aind >\n> , Aind >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "one",
+                "docs": null,
+                "ty": "T",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "zero",
+                "docs": null,
+                "ty": "T",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "TensorLibrary < MixedTensor < T, ExplicitKey < Aind > > , Aind >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use spenso_hep_lib::hep_lib;"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "spenso_hep_lib::hep_lib",
+              "file": "crates/spenso-hep-lib/src/lib.rs",
+              "line": 542,
+              "column": 1
+            }
+          },
+          "gamma_data_dirac": {
+            "id": "gamma_data_dirac",
+            "name": "gamma_data_dirac",
+            "title": "Dirac gamma data",
+            "kind": "function",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Creates sparse Dirac-basis gamma-matrix data for the supplied tensor structure."
+            },
+            "summary": "Creates sparse Dirac-basis gamma-matrix data for the supplied tensor structure.",
+            "signature": "fn gamma_data_dirac < T, N > (structure : N, one : T, zero : T) ->\nSparseTensor < Complex < T > , N > where T : Clone + Neg < Output = T > , N :\nTensorStructure,",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "structure",
+                "docs": null,
+                "ty": "N",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "one",
+                "docs": null,
+                "ty": "T",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "zero",
+                "docs": null,
+                "ty": "T",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "SparseTensor < Complex < T > , N >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use spenso_hep_lib::gamma_data_dirac;"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "spenso_hep_lib::gamma_data_dirac",
+              "file": "crates/spenso-hep-lib/src/lib.rs",
+              "line": 30,
+              "column": 1
+            }
+          },
+          "su3_generator_data": {
+            "id": "su3_generator_data",
+            "name": "su3_generator_data",
+            "title": "SU(3) generator data",
+            "kind": "function",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Fundamental SU(3) generators in the normalization `Tr(T^a T^b)=1/2 delta^{ab}`.\n\nThe index order follows `CS.t_strct`: adjoint, fundamental, anti-fundamental."
+            },
+            "summary": "Creates the standard sparse SU(3) fundamental-generator tensor.",
+            "signature": "fn su3_generator_data < N > (structure : N) -> SparseTensor < Complex < f64 >\n, N > where N : TensorStructure,",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "structure",
+                "docs": null,
+                "ty": "N",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "SparseTensor < Complex < f64 > , N >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use spenso_hep_lib::su3_generator_data;"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "spenso_hep_lib::su3_generator_data",
+              "file": "crates/spenso-hep-lib/src/lib.rs",
+              "line": 330,
+              "column": 1
+            }
+          }
+        },
+        "scopes": {}
+      }
+    }
+  }
+}

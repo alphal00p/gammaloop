@@ -1,0 +1,758 @@
+{
+  "schema_version": 2,
+  "product": {
+    "id": "idenso",
+    "title": "Idenso"
+  },
+  "component": {
+    "id": "idenso",
+    "package": "idenso",
+    "title": "Idenso idenso",
+    "version": "0.3.0",
+    "language": "rust",
+    "features": [
+      "bincode",
+      "reference-cases"
+    ]
+  },
+  "root": {
+    "id": "idenso",
+    "title": "idenso supported API",
+    "docs": {
+      "format": "typst-markup",
+      "body": "Idenso's supported representation and algebra API. The manual owns the\nrepresentation conventions; this scope provides #emph[stable] source links."
+    },
+    "summary": "Idenso's supported representation and algebra API.",
+    "since": null,
+    "keywords": [],
+    "source": {
+      "identifier": "alphal00p_docs_catalogs::annotated_scopes::idenso",
+      "file": "crates/alphal00p-docs-catalogs/src/lib.rs",
+      "line": 81,
+      "column": 5
+    },
+    "items": {},
+    "scopes": {
+      "supported": {
+        "id": "supported",
+        "title": "Supported entry points",
+        "docs": null,
+        "summary": null,
+        "since": null,
+        "keywords": [],
+        "source": null,
+        "items": {
+          "IndexTooling": {
+            "id": "IndexTooling",
+            "name": "IndexTooling",
+            "title": "Index tooling",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Defines operations related to manipulating abstract indices within symbolic expressions,\nparticularly relevant for physics calculations involving tensor structures and diagrams.\n\nThis trait provides methods for conjugating expressions, wrapping indices, and identifying\nexternal (\"dangling\") indices."
+            },
+            "summary": "Adds canonicalization, wrapping, conjugation, and dangling-index inspection to Symbolica atoms.",
+            "signature": "#[doc =\n\" Defines operations related to manipulating abstract indices within symbolic expressions,\"]\n#[doc =\n\" particularly relevant for physics calculations involving tensor structures and diagrams.\"]\n#[doc = \"\"]\n#[doc =\n\" This trait provides methods for conjugating expressions, wrapping indices, and identifying\"]\n#[doc = \" external (\\\"dangling\\\") indices.\"] pub trait IndexTooling\n{\n    fn canonize < Aind : AbsInd + ParseableAind + DummyAind >\n    (& self, new_dummy : impl FnMut(usize) -> Aind,) -> Atom;\n    #[doc =\n    \" Wraps all abstract indices within the expression using a specified header symbol.\"]\n    #[doc = \"\"]\n    #[doc =\n    \" This transforms indices like `mink(dim,idx)` into `mink(dim,header(idx))`. Useful for distinguishing\"]\n    #[doc =\n    \" between different copies of an expression, e.g., an amplitude and its complex conjugate.\"]\n    #[doc = \"\"] #[doc = \" # Arguments\"]\n    #[doc =\n    \" * `header` - The [`Symbol`] to use as the wrapping function name.\"]\n    #[doc = \"\"] #[doc = \" # Returns\"]\n    #[doc = \" A new [`Atom`] with all indices wrapped.\"] fn\n    wrap_indices(& self, header : Symbol) -> Atom; fn spenso_conj(& self) ->\n    Atom; fn spenso_print < 'a > (& 'a self, settings : & SpensoPrintSettings)\n    -> AtomPrinter < 'a > ;\n    #[doc =\n    \" Wraps only the dummy (contracted) abstract indices within the expression using a header symbol.\"]\n    #[doc = \"\"]\n    #[doc =\n    \" Identifies indices that appear contracted (e.g., one covariant, one contravariant)\"]\n    #[doc =\n    \" and wraps only those, leaving external indices unchanged. Transforms `idx -> header(idx)`\"]\n    #[doc = \" for dummy indices `idx`.\"] #[doc = \"\"] #[doc = \" # Arguments\"]\n    #[doc =\n    \" * `header` - The [`Symbol`] to use as the wrapping function name for dummy indices.\"]\n    #[doc = \"\"] #[doc = \" # Returns\"]\n    #[doc = \" A new [`Atom`] with only dummy indices wrapped.\"] fn\n    wrap_dummies < Aind : AbsInd + DummyAind + ParseableAind >\n    (& self, header : Symbol) -> Atom;\n    #[doc = \" Computes the physics-aware conjugate of the expression.\"]\n    #[doc = \"\"]\n    #[doc =\n    \" Applies conjugation rules specific to physics objects like spinors, gamma matrices,\"]\n    #[doc =\n    \" color representations, and the imaginary unit `i`. See implementation details for\"]\n    #[doc = \" specific rules applied.\"] #[doc = \"\"] #[doc = \" # Returns\"]\n    #[doc = \" A new [`Atom`] representing the conjugated expression.\"] fn\n    dirac_adjoint < Aind : DummyAind + ParseableAind + AbsInd > (& self) ->\n    eyre :: Result < Atom > ; fn\n    conjugate_transpose(& self, rep : impl RepName) -> Atom;\n    #[doc =\n    \" Identifies and returns a list of dangling (external, uncontracted) indices.\"]\n    #[doc = \"\"]\n    #[doc =\n    \" Analyzes the expression to find indices that are not summed over. Returns them\"]\n    #[doc =\n    \" as `Atom`s. Note that dual indices might be represented wrapped in a `dind` function.\"]\n    #[doc = \"\"] #[doc = \" # Returns\"]\n    #[doc = \" A `Vec<Atom>` where each `Atom` represents a dangling index.\"]\n    fn list_dangling < Aind : AbsInd + DummyAind + ParseableAind > (& self) ->\n    Vec < Atom > ; fn alias_subtensors(& self, tensor_name : & str) ->\n    AliasedAtom;\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn accepts_index_tools<T: idenso::IndexTooling>(_expression: &T) {}"
+              }
+            ],
+            "members": [
+              {
+                "name": "canonize",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn canonize < Aind : AbsInd + ParseableAind + DummyAind >\n(& self, new_dummy : impl FnMut(usize) -> Aind,) -> Atom;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "wrap_indices",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Wraps all abstract indices within the expression using a specified header symbol.\n\nThis transforms indices like `mink(dim,idx)` into `mink(dim,header(idx))`. Useful for distinguishing\nbetween different copies of an expression, e.g., an amplitude and its complex conjugate.\n\n# Arguments\n* `header` - The [`Symbol`] to use as the wrapping function name.\n\n# Returns\nA new [`Atom`] with all indices wrapped."
+                },
+                "signature": "#[doc =\n\" Wraps all abstract indices within the expression using a specified header symbol.\"]\n#[doc = \"\"]\n#[doc =\n\" This transforms indices like `mink(dim,idx)` into `mink(dim,header(idx))`. Useful for distinguishing\"]\n#[doc =\n\" between different copies of an expression, e.g., an amplitude and its complex conjugate.\"]\n#[doc = \"\"] #[doc = \" # Arguments\"]\n#[doc = \" * `header` - The [`Symbol`] to use as the wrapping function name.\"]\n#[doc = \"\"] #[doc = \" # Returns\"]\n#[doc = \" A new [`Atom`] with all indices wrapped.\"] fn\nwrap_indices(& self, header : Symbol) -> Atom;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "spenso_conj",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn spenso_conj(& self) -> Atom;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "spenso_print",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn spenso_print < 'a > (& 'a self, settings : & SpensoPrintSettings) ->\nAtomPrinter < 'a > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "wrap_dummies",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Wraps only the dummy (contracted) abstract indices within the expression using a header symbol.\n\nIdentifies indices that appear contracted (e.g., one covariant, one contravariant)\nand wraps only those, leaving external indices unchanged. Transforms `idx -> header(idx)`\nfor dummy indices `idx`.\n\n# Arguments\n* `header` - The [`Symbol`] to use as the wrapping function name for dummy indices.\n\n# Returns\nA new [`Atom`] with only dummy indices wrapped."
+                },
+                "signature": "#[doc =\n\" Wraps only the dummy (contracted) abstract indices within the expression using a header symbol.\"]\n#[doc = \"\"]\n#[doc =\n\" Identifies indices that appear contracted (e.g., one covariant, one contravariant)\"]\n#[doc =\n\" and wraps only those, leaving external indices unchanged. Transforms `idx -> header(idx)`\"]\n#[doc = \" for dummy indices `idx`.\"] #[doc = \"\"] #[doc = \" # Arguments\"]\n#[doc =\n\" * `header` - The [`Symbol`] to use as the wrapping function name for dummy indices.\"]\n#[doc = \"\"] #[doc = \" # Returns\"]\n#[doc = \" A new [`Atom`] with only dummy indices wrapped.\"] fn wrap_dummies <\nAind : AbsInd + DummyAind + ParseableAind > (& self, header : Symbol) -> Atom;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "dirac_adjoint",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Computes the physics-aware conjugate of the expression.\n\nApplies conjugation rules specific to physics objects like spinors, gamma matrices,\ncolor representations, and the imaginary unit `i`. See implementation details for\nspecific rules applied.\n\n# Returns\nA new [`Atom`] representing the conjugated expression."
+                },
+                "signature": "#[doc = \" Computes the physics-aware conjugate of the expression.\"]\n#[doc = \"\"]\n#[doc =\n\" Applies conjugation rules specific to physics objects like spinors, gamma matrices,\"]\n#[doc =\n\" color representations, and the imaginary unit `i`. See implementation details for\"]\n#[doc = \" specific rules applied.\"] #[doc = \"\"] #[doc = \" # Returns\"]\n#[doc = \" A new [`Atom`] representing the conjugated expression.\"] fn\ndirac_adjoint < Aind : DummyAind + ParseableAind + AbsInd > (& self) -> eyre\n:: Result < Atom > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "conjugate_transpose",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn conjugate_transpose(& self, rep : impl RepName) -> Atom;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "list_dangling",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Identifies and returns a list of dangling (external, uncontracted) indices.\n\nAnalyzes the expression to find indices that are not summed over. Returns them\nas `Atom`s. Note that dual indices might be represented wrapped in a `dind` function.\n\n# Returns\nA `Vec<Atom>` where each `Atom` represents a dangling index."
+                },
+                "signature": "#[doc =\n\" Identifies and returns a list of dangling (external, uncontracted) indices.\"]\n#[doc = \"\"]\n#[doc =\n\" Analyzes the expression to find indices that are not summed over. Returns them\"]\n#[doc =\n\" as `Atom`s. Note that dual indices might be represented wrapped in a `dind` function.\"]\n#[doc = \"\"] #[doc = \" # Returns\"]\n#[doc = \" A `Vec<Atom>` where each `Atom` represents a dangling index.\"] fn\nlist_dangling < Aind : AbsInd + DummyAind + ParseableAind > (& self) -> Vec <\nAtom > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "alias_subtensors",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn alias_subtensors(& self, tensor_name : & str) -> AliasedAtom;",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "idenso::IndexTooling",
+              "file": "crates/idenso/src/lib.rs",
+              "line": 173,
+              "column": 1
+            }
+          },
+          "CookSettings": {
+            "id": "CookSettings",
+            "name": "CookSettings",
+            "title": "Index cooking settings",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Settings for cooking functions and representation-slot indices.\n\nTags are attached through `SymbolBuilder::new(...).with_tags(...)`, so they must be\nfully namespaced Symbolica tags such as `idenso::cooked`."
+            },
+            "summary": "Controls reversible, flattened, and filtered encodings of tensor indices.",
+            "signature": "#[doc = \" Settings for cooking functions and representation-slot indices.\"]\n#[doc = \"\"]\n#[doc =\n\" Tags are attached through `SymbolBuilder::new(...).with_tags(...)`, so they must be\"]\n#[doc = \" fully namespaced Symbolica tags such as `idenso::cooked`.\"]\n#[derive(Debug, Clone, PartialEq, Eq)] pub struct CookSettings\n{ mode : CookMode, source : CookSourceFilter, output_tags : CookOutputTags, }",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let settings = idenso::CookSettings::reversible();"
+              }
+            ],
+            "members": [
+              {
+                "name": "mode",
+                "kind": "field",
+                "docs": null,
+                "signature": "CookMode",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "source",
+                "kind": "field",
+                "docs": null,
+                "signature": "CookSourceFilter",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "output_tags",
+                "kind": "field",
+                "docs": null,
+                "signature": "CookOutputTags",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "idenso::cook::CookSettings",
+              "file": "crates/idenso/src/cook.rs",
+              "line": 271,
+              "column": 1
+            }
+          },
+          "Cookable": {
+            "id": "Cookable",
+            "name": "Cookable",
+            "title": "Cookable expressions",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Convenience methods for cooking Symbolica atoms."
+            },
+            "summary": "Applies or reverses index-cooking transformations on symbolic expressions.",
+            "signature": "#[doc = \" Convenience methods for cooking Symbolica atoms.\"] pub trait\nCookable\n{\n    #[doc =\n    \" Reversibly cook function-like subexpressions with the default cooked tag.\"]\n    fn cook(& self) -> Atom;\n    #[doc = \" Cook function-like subexpressions with explicit settings.\"] fn\n    cook_with_settings(& self, settings : & CookSettings) -> Atom;\n    #[doc = \" Undo default reversible cooking.\"] fn uncook(& self) -> Atom;\n    #[doc = \" Undo reversible cooking that used explicit settings.\"] fn\n    uncook_with_settings(& self, settings : & CookSettings) -> Atom;\n    #[doc =\n    \" Flatten cook abstract-index payloads in recognized representation slots.\"]\n    fn cook_indices(& self) -> Atom;\n    #[doc =\n    \" Cook representation-slot index payloads with explicit settings.\"] fn\n    cook_indices_with_settings(& self, settings : & CookSettings) -> Atom;\n    #[doc = \" Flatten cook a single atom into one symbol.\"] fn\n    cook_function(& self) -> Result < Atom, CookingError > ;\n    #[doc = \" Cook a single atom into one symbol with explicit settings.\"] fn\n    cook_function_with_settings(& self, settings : & CookSettings) -> Result <\n    Atom, CookingError > ;\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn accepts_cookable<T: idenso::Cookable>(_expression: &T) {}"
+              }
+            ],
+            "members": [
+              {
+                "name": "cook",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Reversibly cook function-like subexpressions with the default cooked tag."
+                },
+                "signature": "#[doc =\n\" Reversibly cook function-like subexpressions with the default cooked tag.\"]\nfn cook(& self) -> Atom;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cook_with_settings",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Cook function-like subexpressions with explicit settings."
+                },
+                "signature": "#[doc = \" Cook function-like subexpressions with explicit settings.\"] fn\ncook_with_settings(& self, settings : & CookSettings) -> Atom;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "uncook",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Undo default reversible cooking."
+                },
+                "signature": "#[doc = \" Undo default reversible cooking.\"] fn uncook(& self) -> Atom;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "uncook_with_settings",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Undo reversible cooking that used explicit settings."
+                },
+                "signature": "#[doc = \" Undo reversible cooking that used explicit settings.\"] fn\nuncook_with_settings(& self, settings : & CookSettings) -> Atom;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cook_indices",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Flatten cook abstract-index payloads in recognized representation slots."
+                },
+                "signature": "#[doc =\n\" Flatten cook abstract-index payloads in recognized representation slots.\"]\nfn cook_indices(& self) -> Atom;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cook_indices_with_settings",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Cook representation-slot index payloads with explicit settings."
+                },
+                "signature": "#[doc = \" Cook representation-slot index payloads with explicit settings.\"] fn\ncook_indices_with_settings(& self, settings : & CookSettings) -> Atom;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cook_function",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Flatten cook a single atom into one symbol."
+                },
+                "signature": "#[doc = \" Flatten cook a single atom into one symbol.\"] fn\ncook_function(& self) -> Result < Atom, CookingError > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cook_function_with_settings",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Cook a single atom into one symbol with explicit settings."
+                },
+                "signature": "#[doc = \" Cook a single atom into one symbol with explicit settings.\"] fn\ncook_function_with_settings(& self, settings : & CookSettings) -> Result <\nAtom, CookingError > ;",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "idenso::cook::Cookable",
+              "file": "crates/idenso/src/cook.rs",
+              "line": 564,
+              "column": 1
+            }
+          },
+          "SelectiveExpand": {
+            "id": "SelectiveExpand",
+            "name": "SelectiveExpand",
+            "title": "Selective expansion",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Expands only tensor families selected by their representation."
+            },
+            "summary": "Expands only tensor families selected by their representation.",
+            "signature": "pub trait SelectiveExpand\n{\n    fn expand_in_patterns(& self, pats : & [Pattern]) -> Vec < (Atom, Atom) >\n    ; fn expand_metrics(& self) -> Vec < (Atom, Atom) >\n    {\n        let metric_pat = function! (ETS.metric, RS.a__).to_pattern(); let\n        id_pat = function! (ETS.metric, RS.a__).to_pattern();\n        self.expand_in_patterns(& [metric_pat, id_pat])\n    } fn expand_bis(& self) -> Vec < (Atom, Atom) >\n    {\n        let bis = Bispinor {}; let bis_pat = function!\n        (RS.f_, RS.a___, bis.to_symbolic([RS.b__]), RS.c___).to_pattern();\n        self.expand_in_patterns(& [bis_pat])\n    } fn expand_mink(& self) -> Vec < (Atom, Atom) >\n    {\n        let mink = Minkowski {}; let mink_pat = function!\n        (RS.f_, RS.a___, mink.to_symbolic([RS.b__]), RS.c___).to_pattern();\n        self.expand_in_patterns(& [mink_pat])\n    } fn expand_mink_bis(& self) -> Vec < (Atom, Atom) >\n    {\n        let mink = Minkowski {}; let mink_pat = function!\n        (RS.f_, RS.a___, mink.to_symbolic([RS.b__]), RS.c___).to_pattern();\n        let bis = Bispinor {}; let bis_pat = function!\n        (RS.f_, RS.a___, bis.to_symbolic([RS.b__]), RS.c___).to_pattern();\n        self.expand_in_patterns(& [mink_pat, bis_pat])\n    }\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn accepts_expansion<T: idenso::selective_expand::SelectiveExpand>(_expression: &T) {}"
+              }
+            ],
+            "members": [
+              {
+                "name": "expand_in_patterns",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn expand_in_patterns(& self, pats : & [Pattern]) -> Vec < (Atom, Atom) > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "expand_metrics",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn expand_metrics(& self) -> Vec < (Atom, Atom) >\n{\n    let metric_pat = function! (ETS.metric, RS.a__).to_pattern(); let id_pat =\n    function! (ETS.metric, RS.a__).to_pattern();\n    self.expand_in_patterns(& [metric_pat, id_pat])\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "expand_bis",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn expand_bis(& self) -> Vec < (Atom, Atom) >\n{\n    let bis = Bispinor {}; let bis_pat = function!\n    (RS.f_, RS.a___, bis.to_symbolic([RS.b__]), RS.c___).to_pattern();\n    self.expand_in_patterns(& [bis_pat])\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "expand_mink",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn expand_mink(& self) -> Vec < (Atom, Atom) >\n{\n    let mink = Minkowski {}; let mink_pat = function!\n    (RS.f_, RS.a___, mink.to_symbolic([RS.b__]), RS.c___).to_pattern();\n    self.expand_in_patterns(& [mink_pat])\n}",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "expand_mink_bis",
+                "kind": "method",
+                "docs": null,
+                "signature": "fn expand_mink_bis(& self) -> Vec < (Atom, Atom) >\n{\n    let mink = Minkowski {}; let mink_pat = function!\n    (RS.f_, RS.a___, mink.to_symbolic([RS.b__]), RS.c___).to_pattern(); let\n    bis = Bispinor {}; let bis_pat = function!\n    (RS.f_, RS.a___, bis.to_symbolic([RS.b__]), RS.c___).to_pattern();\n    self.expand_in_patterns(& [mink_pat, bis_pat])\n}",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "idenso::selective_expand::SelectiveExpand",
+              "file": "crates/idenso/src/selective_expand.rs",
+              "line": 14,
+              "column": 1
+            }
+          },
+          "bis": {
+            "id": "bis",
+            "name": "bis!",
+            "title": "Bispinor representation macro",
+            "kind": "exported-macro",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Builds a stripped or indexed bispinor representation atom."
+            },
+            "summary": "Builds stripped or indexed bispinor representation atoms in Spenso syntax.",
+            "signature": "#[doc = \" Builds a stripped or indexed bispinor representation atom.\"]\n#[macro_export] macro_rules! bis\n{\n    ($($args:tt)*) =>\n    {\n        spenso::spenso_rep_atom!($crate::representations::Bispinor {};\n        $($args)*)\n    };\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let representation = idenso::bis!(4);"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "idenso::bis",
+              "file": "crates/idenso/src/lib.rs",
+              "line": 106,
+              "column": 1
+            }
+          },
+          "cof": {
+            "id": "cof",
+            "name": "cof!",
+            "title": "Color-fundamental macro",
+            "kind": "exported-macro",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Builds a stripped or indexed color-fundamental representation atom."
+            },
+            "summary": "Builds stripped or indexed color-fundamental representation atoms.",
+            "signature": "#[doc =\n\" Builds a stripped or indexed color-fundamental representation atom.\"]\n#[macro_export] macro_rules! cof\n{\n    ($($args:tt)*) =>\n    {\n        spenso::spenso_rep_atom!($crate::representations::ColorFundamental {};\n        $($args)*)\n    };\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let representation = idenso::cof!(Nc);"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "idenso::cof",
+              "file": "crates/idenso/src/lib.rs",
+              "line": 130,
+              "column": 1
+            }
+          },
+          "coad": {
+            "id": "coad",
+            "name": "coad!",
+            "title": "Color-adjoint representation macro",
+            "kind": "exported-macro",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Builds a stripped or indexed color-adjoint representation atom."
+            },
+            "summary": "Builds stripped or indexed color-adjoint representation atoms.",
+            "signature": "#[doc = \" Builds a stripped or indexed color-adjoint representation atom.\"]\n#[macro_export] macro_rules! coad\n{\n    ($($args:tt)*) =>\n    {\n        spenso::spenso_rep_atom!($crate::representations::ColorAdjoint {};\n        $($args)*)\n    };\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let representation = idenso::coad!(Na);"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "idenso::coad",
+              "file": "crates/idenso/src/lib.rs",
+              "line": 162,
+              "column": 1
+            }
+          },
+          "gamma": {
+            "id": "gamma",
+            "name": "gamma!",
+            "title": "Dirac gamma macro",
+            "kind": "exported-macro",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Builds a gamma matrix.\n\nWith one argument, this builds a chain factor using the placeholder indices\n`in` and `out`; use this form only as a factor inside `chain!` or `trace!`.\nWith three arguments, this builds the ordinary gamma tensor with explicit\nspinor endpoints and a Lorentz slot.\n\nArguments are converted through `spenso::shadowing::IntoAtom`, so they\ncan be typed slots, atoms, or atom views.\n\n# Examples\n\n```ignore\nuse idenso::gamma;\nuse spenso::{chain, slot};\n\nlet factor = gamma!(slot!(mink4, mu));\nlet chain_expr = chain!(slot!(bis4, a), slot!(bis4, b), factor);\nlet default_tensor = gamma!(mu, a, b);\nlet indexed_tensor = gamma!(1, 2, 3);\nlet pattern_tensor = gamma!(RS.a__, RS.b__, RS.c__);\nlet pattern_tensor_with_slots = gamma!(RS.a__, [RS.d_, RS.i_], [RS.d_, RS.j_]);\nlet mixed_tensor = gamma!(mu, slot!(bis_d, a), 1);\nlet explicit_tensor = gamma!(slot!(mink_d, mu), slot!(bis_d, a), slot!(bis_d, b));\n```"
+            },
+            "summary": "Builds a Dirac gamma chain factor or an explicitly indexed gamma tensor.",
+            "signature": "#[doc = \" Builds a gamma matrix.\"] #[doc = \"\"]\n#[doc =\n\" With one argument, this builds a chain factor using the placeholder indices\"]\n#[doc =\n\" `in` and `out`; use this form only as a factor inside `chain!` or `trace!`.\"]\n#[doc =\n\" With three arguments, this builds the ordinary gamma tensor with explicit\"]\n#[doc = \" spinor endpoints and a Lorentz slot.\"] #[doc = \"\"]\n#[doc =\n\" Arguments are converted through `spenso::shadowing::IntoAtom`, so they\"]\n#[doc = \" can be typed slots, atoms, or atom views.\"] #[doc = \"\"]\n#[doc = \" # Examples\"] #[doc = \"\"] #[doc = \" ```ignore\"]\n#[doc = \" use idenso::gamma;\"] #[doc = \" use spenso::{chain, slot};\"]\n#[doc = \"\"] #[doc = \" let factor = gamma!(slot!(mink4, mu));\"]\n#[doc = \" let chain_expr = chain!(slot!(bis4, a), slot!(bis4, b), factor);\"]\n#[doc = \" let default_tensor = gamma!(mu, a, b);\"]\n#[doc = \" let indexed_tensor = gamma!(1, 2, 3);\"]\n#[doc = \" let pattern_tensor = gamma!(RS.a__, RS.b__, RS.c__);\"]\n#[doc =\n\" let pattern_tensor_with_slots = gamma!(RS.a__, [RS.d_, RS.i_], [RS.d_, RS.j_]);\"]\n#[doc = \" let mixed_tensor = gamma!(mu, slot!(bis_d, a), 1);\"]\n#[doc =\n\" let explicit_tensor = gamma!(slot!(mink_d, mu), slot!(bis_d, a), slot!(bis_d, b));\"]\n#[doc = \" ```\"] #[macro_export] macro_rules! gamma\n{\n    ($mu:expr) =>\n    {\n        symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma).add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_in)).add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_out)).add_arg(spenso::shadowing::IntoAtom::into_atom($mu)).finish()\n    }; ($base:ident. $mu:ident, $($rest:tt)*) =>\n    {\n        $crate::gamma!(@tensor\n        spenso::structure::representation::RepName::to_symbolic(&spenso::structure::representation::Minkowski\n        {}, [$base.$mu],); $($rest)*)\n    }; ($mu:ident, $($rest:tt)*) =>\n    {{\n            let mink =\n            spenso::structure::representation::RepName::new_rep(&spenso::structure::representation::Minkowski\n            {}, 4,);\n            $crate::gamma!(@tensor spenso::slot!(mink, $mu); $($rest)*)\n        }}; ($mu:literal, $($rest:tt)*) =>\n    {{\n            let mink =\n            spenso::structure::representation::RepName::new_rep(&spenso::structure::representation::Minkowski\n            {}, 4,);\n            $crate::gamma!(@tensor spenso::slot!(mink, $mu); $($rest)*)\n        }}; ($mu:expr, $($rest:tt)*) =>\n    { $crate::gamma!(@tensor $mu; $($rest)*) };\n    (@tensor $mu:expr; [$($i:expr),+ $(,)?], $($rest:tt)*) =>\n    {\n        $crate::gamma!(@tensor2 $mu,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::Bispinor\n        {}, [$($i),+],); $($rest)*)\n    }; (@tensor $mu:expr; $base:ident. $i:ident, $($rest:tt)*) =>\n    {\n        $crate::gamma!(@tensor2 $mu,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::Bispinor\n        {}, [$base.$i],); $($rest)*)\n    }; (@tensor $mu:expr; $i:ident, $($rest:tt)*) =>\n    {{\n            let bis =\n            spenso::structure::representation::RepName::new_rep(&$crate::representations::Bispinor\n            {}, 4,);\n            $crate::gamma!(@tensor2 $mu, spenso::slot!(bis, $i); $($rest)*)\n        }}; (@tensor $mu:expr; $i:literal, $($rest:tt)*) =>\n    {{\n            let bis =\n            spenso::structure::representation::RepName::new_rep(&$crate::representations::Bispinor\n            {}, 4,);\n            $crate::gamma!(@tensor2 $mu, spenso::slot!(bis, $i); $($rest)*)\n        }}; (@tensor $mu:expr; $i:expr, $($rest:tt)*) =>\n    { $crate::gamma!(@tensor2 $mu, $i; $($rest)*) };\n    (@tensor2 $mu:expr, $i:expr; [$($j:expr),+ $(,)?]) =>\n    {\n        $crate::gamma!(@tensor_done $mu, $i,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::Bispinor\n        {}, [$($j),+],))\n    }; (@tensor2 $mu:expr, $i:expr; $base:ident. $j:ident) =>\n    {\n        $crate::gamma!(@tensor_done $mu, $i,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::Bispinor\n        {}, [$base.$j],))\n    }; (@tensor2 $mu:expr, $i:expr; $j:ident) =>\n    {{\n            let bis =\n            spenso::structure::representation::RepName::new_rep(&$crate::representations::Bispinor\n            {}, 4,);\n            $crate::gamma!(@tensor_done $mu, $i, spenso::slot!(bis, $j))\n        }}; (@tensor2 $mu:expr, $i:expr; $j:literal) =>\n    {{\n            let bis =\n            spenso::structure::representation::RepName::new_rep(&$crate::representations::Bispinor\n            {}, 4,);\n            $crate::gamma!(@tensor_done $mu, $i, spenso::slot!(bis, $j))\n        }}; (@tensor2 $mu:expr, $i:expr; $j:expr) =>\n    { $crate::gamma!(@tensor_done $mu, $i, $j) };\n    (@tensor_done $mu:expr, $i:expr, $j:expr) =>\n    {\n        symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma).add_arg(spenso::shadowing::IntoAtom::into_atom($i)).add_arg(spenso::shadowing::IntoAtom::into_atom($j)).add_arg(spenso::shadowing::IntoAtom::into_atom($mu)).finish()\n    };\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Example 1",
+                "language": "ignore",
+                "code": "use idenso::gamma;\nuse spenso::{chain, slot};\n\nlet factor = gamma!(slot!(mink4, mu));\nlet chain_expr = chain!(slot!(bis4, a), slot!(bis4, b), factor);\nlet default_tensor = gamma!(mu, a, b);\nlet indexed_tensor = gamma!(1, 2, 3);\nlet pattern_tensor = gamma!(RS.a__, RS.b__, RS.c__);\nlet pattern_tensor_with_slots = gamma!(RS.a__, [RS.d_, RS.i_], [RS.d_, RS.j_]);\nlet mixed_tensor = gamma!(mu, slot!(bis_d, a), 1);\nlet explicit_tensor = gamma!(slot!(mink_d, mu), slot!(bis_d, a), slot!(bis_d, b));"
+              },
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let tensor = idenso::gamma!(1, 2, 3);"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "idenso::gamma",
+              "file": "crates/idenso/src/dirac/macros.rs",
+              "line": 40,
+              "column": 1
+            }
+          },
+          "gamma0": {
+            "id": "gamma0",
+            "name": "gamma0!",
+            "title": "Gamma-zero macro",
+            "kind": "exported-macro",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Builds a gamma-zero factor or tensor.\n\nWith no arguments, this builds a chain factor using the placeholder indices\n`in` and `out`; use this form only as a factor inside `chain!` or `trace!`.\nWith two arguments, this builds the ordinary gamma-zero tensor between\nexplicit spinor endpoints.\n\nEndpoints can be typed slots, atoms, atom views, default four-dimensional\nbispinor identifiers/literals, pattern variables such as `RS.i__`, or\nbracketed bispinor argument lists such as `[RS.d_, RS.i_]`.\n\n# Examples\n\n```ignore\nuse idenso::gamma0;\n\nlet factor = gamma0!();\nlet default_tensor = gamma0!(i, j);\nlet pattern_tensor = gamma0!(RS.i__, RS.j__);\nlet dimensioned_pattern_tensor = gamma0!([RS.d_, RS.i_], [RS.d_, RS.j_]);\n```"
+            },
+            "summary": "Builds a gamma-zero chain factor or an explicitly indexed gamma-zero tensor.",
+            "signature": "#[doc = \" Builds a gamma-zero factor or tensor.\"] #[doc = \"\"]\n#[doc =\n\" With no arguments, this builds a chain factor using the placeholder indices\"]\n#[doc =\n\" `in` and `out`; use this form only as a factor inside `chain!` or `trace!`.\"]\n#[doc =\n\" With two arguments, this builds the ordinary gamma-zero tensor between\"]\n#[doc = \" explicit spinor endpoints.\"] #[doc = \"\"]\n#[doc =\n\" Endpoints can be typed slots, atoms, atom views, default four-dimensional\"]\n#[doc =\n\" bispinor identifiers/literals, pattern variables such as `RS.i__`, or\"]\n#[doc = \" bracketed bispinor argument lists such as `[RS.d_, RS.i_]`.\"]\n#[doc = \"\"] #[doc = \" # Examples\"] #[doc = \"\"] #[doc = \" ```ignore\"]\n#[doc = \" use idenso::gamma0;\"] #[doc = \"\"]\n#[doc = \" let factor = gamma0!();\"]\n#[doc = \" let default_tensor = gamma0!(i, j);\"]\n#[doc = \" let pattern_tensor = gamma0!(RS.i__, RS.j__);\"]\n#[doc =\n\" let dimensioned_pattern_tensor = gamma0!([RS.d_, RS.i_], [RS.d_, RS.j_]);\"]\n#[doc = \" ```\"] #[macro_export] macro_rules! gamma0\n{\n    () =>\n    {\n        symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma0).add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_in)).add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_out)).finish()\n    }; ($base:ident. $i:ident, $($rest:tt)*) =>\n    {\n        $crate::gamma0!(@tensor\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::Bispinor\n        {}, [$base.$i],); $($rest)*)\n    }; ([$($i:expr),+ $(,)?], $($rest:tt)*) =>\n    {\n        $crate::gamma0!(@tensor\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::Bispinor\n        {}, [$($i),+],); $($rest)*)\n    }; ($i:ident, $($rest:tt)*) =>\n    {{\n            let bis =\n            spenso::structure::representation::RepName::new_rep(&$crate::representations::Bispinor\n            {}, 4,);\n            $crate::gamma0!(@tensor spenso::slot!(bis, $i); $($rest)*)\n        }}; ($i:literal, $($rest:tt)*) =>\n    {{\n            let bis =\n            spenso::structure::representation::RepName::new_rep(&$crate::representations::Bispinor\n            {}, 4,);\n            $crate::gamma0!(@tensor spenso::slot!(bis, $i); $($rest)*)\n        }}; ($i:expr, $($rest:tt)*) =>\n    { $crate::gamma0!(@tensor $i; $($rest)*) };\n    (@tensor $i:expr; $base:ident. $j:ident) =>\n    {\n        $crate::gamma0!(@tensor_done $i,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::Bispinor\n        {}, [$base.$j],))\n    }; (@tensor $i:expr; [$($j:expr),+ $(,)?]) =>\n    {\n        $crate::gamma0!(@tensor_done $i,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::Bispinor\n        {}, [$($j),+],))\n    }; (@tensor $i:expr; $j:ident) =>\n    {{\n            let bis =\n            spenso::structure::representation::RepName::new_rep(&$crate::representations::Bispinor\n            {}, 4,); $crate::gamma0!(@tensor_done $i, spenso::slot!(bis, $j))\n        }}; (@tensor $i:expr; $j:literal) =>\n    {{\n            let bis =\n            spenso::structure::representation::RepName::new_rep(&$crate::representations::Bispinor\n            {}, 4,); $crate::gamma0!(@tensor_done $i, spenso::slot!(bis, $j))\n        }}; (@tensor $i:expr; $j:expr) =>\n    { $crate::gamma0!(@tensor_done $i, $j) }; (@tensor_done $i:expr, $j:expr)\n    =>\n    {\n        symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma0).add_arg(spenso::shadowing::IntoAtom::into_atom($i)).add_arg(spenso::shadowing::IntoAtom::into_atom($j)).finish()\n    };\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Example 1",
+                "language": "ignore",
+                "code": "use idenso::gamma0;\n\nlet factor = gamma0!();\nlet default_tensor = gamma0!(i, j);\nlet pattern_tensor = gamma0!(RS.i__, RS.j__);\nlet dimensioned_pattern_tensor = gamma0!([RS.d_, RS.i_], [RS.d_, RS.j_]);"
+              },
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let tensor = idenso::gamma0!(1, 2);"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "idenso::gamma0",
+              "file": "crates/idenso/src/dirac/macros.rs",
+              "line": 260,
+              "column": 1
+            }
+          },
+          "gamma5": {
+            "id": "gamma5",
+            "name": "gamma5!",
+            "title": "Gamma-five macro",
+            "kind": "exported-macro",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Builds a gamma-five factor or tensor.\n\nWith no arguments, this builds a chain factor using the placeholder indices\n`in` and `out`; the surrounding chain or trace owns the physical endpoints.\nWith two arguments, this builds the ordinary gamma-five tensor between\nexplicit spinor endpoints.\n\nPattern variables such as `RS.i__` are wrapped as bispinor arguments."
+            },
+            "summary": "Builds a gamma-five chain factor or an explicitly indexed gamma-five tensor.",
+            "signature": "#[doc = \" Builds a gamma-five factor or tensor.\"] #[doc = \"\"]\n#[doc =\n\" With no arguments, this builds a chain factor using the placeholder indices\"]\n#[doc =\n\" `in` and `out`; the surrounding chain or trace owns the physical endpoints.\"]\n#[doc =\n\" With two arguments, this builds the ordinary gamma-five tensor between\"]\n#[doc = \" explicit spinor endpoints.\"] #[doc = \"\"]\n#[doc =\n\" Pattern variables such as `RS.i__` are wrapped as bispinor arguments.\"]\n#[macro_export] macro_rules! gamma5\n{\n    () =>\n    {\n        symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma5).add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_in)).add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_out)).finish()\n    }; ($base:ident. $i:ident, $($rest:tt)*) =>\n    {\n        $crate::gamma5!(@tensor\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::Bispinor\n        {}, [$base.$i],); $($rest)*)\n    }; ($i:expr, $($rest:tt)*) => { $crate::gamma5!(@tensor $i; $($rest)*) };\n    (@tensor $i:expr; $base:ident. $j:ident) =>\n    {\n        $crate::gamma5!(@tensor_done $i,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::Bispinor\n        {}, [$base.$j],))\n    }; (@tensor $i:expr; $j:expr) => { $crate::gamma5!(@tensor_done $i, $j) };\n    (@tensor_done $i:expr, $j:expr) =>\n    {\n        symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma5).add_arg(spenso::shadowing::IntoAtom::into_atom($i)).add_arg(spenso::shadowing::IntoAtom::into_atom($j)).finish()\n    };\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let tensor = idenso::gamma5!(1, 2);"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "idenso::gamma5",
+              "file": "crates/idenso/src/dirac/macros.rs",
+              "line": 342,
+              "column": 1
+            }
+          },
+          "epsilon": {
+            "id": "epsilon",
+            "name": "epsilon!",
+            "title": "Levi-Civita tensor macro",
+            "kind": "exported-macro",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Builds an antisymmetric epsilon tensor with arbitrary rank.\n\nArguments are converted through `spenso::shadowing::IntoAtom`, so tests\nand rewrite code can pass slots, atoms, atom views, symbols, and integers\nwithout spelling out the conversion."
+            },
+            "summary": "Builds an arbitrary-rank antisymmetric epsilon tensor from atom-like arguments.",
+            "signature": "#[doc = \" Builds an antisymmetric epsilon tensor with arbitrary rank.\"]\n#[doc = \"\"]\n#[doc =\n\" Arguments are converted through `spenso::shadowing::IntoAtom`, so tests\"]\n#[doc =\n\" and rewrite code can pass slots, atoms, atom views, symbols, and integers\"]\n#[doc = \" without spelling out the conversion.\"] #[macro_export] macro_rules!\nepsilon\n{\n    (; $factors:expr $(,)?) =>\n    { $crate::epsilon::epsilon(($factors).into_iter()) };\n    ($($arg:expr),* $(,)?) =>\n    {{\n            let builder =\n            symbolica::atom::FunctionBuilder::new(*$crate::epsilon::EPSILON_SYMBOL);\n            $(let builder =\n            builder.add_arg(spenso::shadowing::IntoAtom::into_atom($arg));)*\n            builder.finish()\n        }};\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let tensor = idenso::epsilon!(1, 2, 3, 4);"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "idenso::epsilon",
+              "file": "crates/idenso/src/epsilon.rs",
+              "line": 35,
+              "column": 1
+            }
+          },
+          "color_t": {
+            "id": "color_t",
+            "name": "color_t!",
+            "title": "Color-generator macro",
+            "kind": "exported-macro",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Builds a color-generator atom.\n\nWith one argument, this builds a fundamental generator factor for use inside\n`chain!` or `trace!`. The factor uses the chain placeholder indices `in` and\n`out`; the surrounding chain or trace owns the physical endpoints.\n\nWith three arguments, this builds an explicit generator `t(a,i,j)`. The first\nargument is an adjoint color index, the second is a fundamental color index,\nand the third is an anti-fundamental color index.\n\nArguments can be typed slots, atoms, atom views, pattern variables such as\n`RS.a__`, or bracketed representation argument lists such as\n`[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so\nlocal slot bindings and numeric labels are used as-is.\n\n# Examples\n\n```ignore\nuse idenso::color_t;\nuse spenso::{slot, trace};\n\nlet factor = color_t!(slot!(coad_na, a));\nlet expr = trace!(&cof_nc, factor);\nlet factor_from_binding = color_t!(slot!(coad_na, a));\nlet explicit_tensor = color_t!(slot!(coad_na, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));\nlet pattern_tensor = color_t!(RS.a__, RS.i__, RS.j__);\nlet dimensioned_pattern = color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);\n```"
+            },
+            "summary": "Builds a color-generator chain factor or an explicitly indexed generator tensor.",
+            "signature": "#[doc = \" Builds a color-generator atom.\"] #[doc = \"\"]\n#[doc =\n\" With one argument, this builds a fundamental generator factor for use inside\"]\n#[doc =\n\" `chain!` or `trace!`. The factor uses the chain placeholder indices `in` and\"]\n#[doc = \" `out`; the surrounding chain or trace owns the physical endpoints.\"]\n#[doc = \"\"]\n#[doc =\n\" With three arguments, this builds an explicit generator `t(a,i,j)`. The first\"]\n#[doc =\n\" argument is an adjoint color index, the second is a fundamental color index,\"]\n#[doc = \" and the third is an anti-fundamental color index.\"] #[doc = \"\"]\n#[doc =\n\" Arguments can be typed slots, atoms, atom views, pattern variables such as\"]\n#[doc = \" `RS.a__`, or bracketed representation argument lists such as\"]\n#[doc =\n\" `[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so\"]\n#[doc = \" local slot bindings and numeric labels are used as-is.\"] #[doc = \"\"]\n#[doc = \" # Examples\"] #[doc = \"\"] #[doc = \" ```ignore\"]\n#[doc = \" use idenso::color_t;\"] #[doc = \" use spenso::{slot, trace};\"]\n#[doc = \"\"] #[doc = \" let factor = color_t!(slot!(coad_na, a));\"]\n#[doc = \" let expr = trace!(&cof_nc, factor);\"]\n#[doc = \" let factor_from_binding = color_t!(slot!(coad_na, a));\"]\n#[doc =\n\" let explicit_tensor = color_t!(slot!(coad_na, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));\"]\n#[doc = \" let pattern_tensor = color_t!(RS.a__, RS.i__, RS.j__);\"]\n#[doc =\n\" let dimensioned_pattern = color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);\"]\n#[doc = \" ```\"] #[macro_export] macro_rules! color_t\n{\n    ([$($a:expr),+ $(,)?], $($rest:tt)+) =>\n    {\n        $crate::color_t!(@tensor\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::ColorAdjoint\n        {}, [$($a),+],); $($rest)*)\n    }; ($base:ident. $a:ident, $($rest:tt)+) =>\n    {\n        $crate::color_t!(@tensor\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::ColorAdjoint\n        {}, [$base.$a],); $($rest)*)\n    }; ($a:expr, $($rest:tt)+) => { $crate::color_t!(@tensor $a; $($rest)*) };\n    ([$($a:expr),+ $(,)?] $(,)?) =>\n    {\n        $crate::color::CS.chain_t(spenso::structure::representation::RepName::to_symbolic(&$crate::representations::ColorAdjoint\n        {}, [$($a),+],))\n    }; ($base:ident. $a:ident $(,)?) =>\n    {\n        $crate::color::CS.chain_t(spenso::structure::representation::RepName::to_symbolic(&$crate::representations::ColorAdjoint\n        {}, [$base.$a],))\n    }; ($a:expr $(,)?) =>\n    { $crate::color::CS.chain_t(spenso::shadowing::IntoAtom::into_atom($a)) };\n    (@tensor $a:expr; [$($i:expr),+ $(,)?], $($rest:tt)*) =>\n    {\n        $crate::color_t!(@tensor2 $a,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::ColorFundamental\n        {}, [$($i),+],); $($rest)*)\n    }; (@tensor $a:expr; $base:ident. $i:ident, $($rest:tt)*) =>\n    {\n        $crate::color_t!(@tensor2 $a,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::ColorFundamental\n        {}, [$base.$i],); $($rest)*)\n    }; (@tensor $a:expr; $i:expr, $($rest:tt)*) =>\n    { $crate::color_t!(@tensor2 $a, $i; $($rest)*) };\n    (@tensor2 $a:expr, $i:expr; [$($j:expr),+ $(,)?] $(,)?) =>\n    {\n        $crate::color_t!(@tensor_done $a, $i,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::ColorAntiFundamental\n        {}, [$($j),+],))\n    }; (@tensor2 $a:expr, $i:expr; $base:ident. $j:ident $(,)?) =>\n    {\n        $crate::color_t!(@tensor_done $a, $i,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::ColorAntiFundamental\n        {}, [$base.$j],))\n    }; (@tensor2 $a:expr, $i:expr; $j:expr $(,)?) =>\n    { $crate::color_t!(@tensor_done $a, $i, $j) };\n    (@tensor_done $a:expr, $i:expr, $j:expr) =>\n    {\n        $crate::color::CS.explicit_t(spenso::shadowing::IntoAtom::into_atom($a),\n        spenso::shadowing::IntoAtom::into_atom($i),\n        spenso::shadowing::IntoAtom::into_atom($j),)\n    };\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Example 1",
+                "language": "ignore",
+                "code": "use idenso::color_t;\nuse spenso::{slot, trace};\n\nlet factor = color_t!(slot!(coad_na, a));\nlet expr = trace!(&cof_nc, factor);\nlet factor_from_binding = color_t!(slot!(coad_na, a));\nlet explicit_tensor = color_t!(slot!(coad_na, a), slot!(cof_nc, i), slot!(cof_nc.dual(), j));\nlet pattern_tensor = color_t!(RS.a__, RS.i__, RS.j__);\nlet dimensioned_pattern = color_t!([CS.adj_, RS.a_], [CS.nc_, RS.i_], [CS.nc_, RS.j_]);"
+              },
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let tensor = idenso::color_t!(1, 2, 3);"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "idenso::color_t",
+              "file": "crates/idenso/src/color/macros.rs",
+              "line": 30,
+              "column": 1
+            }
+          },
+          "color_f": {
+            "id": "color_f",
+            "name": "color_f!",
+            "title": "Color structure-constant macro",
+            "kind": "exported-macro",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Builds an adjoint color structure-constant atom `f(a,b,c)`.\n\nArguments can be typed slots, atoms, atom views, pattern variables such as\n`RS.a__`, or bracketed adjoint representation argument lists such as\n`[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so\nlocal slot bindings and numeric labels are used as-is.\n\n# Examples\n\n```ignore\nuse idenso::color_f;\nuse spenso::slot;\n\nlet expr = color_f!(slot!(coad_na, a), slot!(coad_na, b), slot!(coad_na, c));\nlet numeric_label_tensor = color_f!(1, 2, 3);\nlet pattern_tensor = color_f!(RS.a__, RS.b__, RS.c__);\nlet dimensioned_pattern = color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]);\n```"
+            },
+            "summary": "Builds an explicitly indexed adjoint color structure-constant tensor.",
+            "signature": "#[doc = \" Builds an adjoint color structure-constant atom `f(a,b,c)`.\"]\n#[doc = \"\"]\n#[doc =\n\" Arguments can be typed slots, atoms, atom views, pattern variables such as\"]\n#[doc =\n\" `RS.a__`, or bracketed adjoint representation argument lists such as\"]\n#[doc =\n\" `[CS.adj_, RS.a_]`. Bare Rust identifiers and literals are expressions, so\"]\n#[doc = \" local slot bindings and numeric labels are used as-is.\"] #[doc = \"\"]\n#[doc = \" # Examples\"] #[doc = \"\"] #[doc = \" ```ignore\"]\n#[doc = \" use idenso::color_f;\"] #[doc = \" use spenso::slot;\"] #[doc = \"\"]\n#[doc =\n\" let expr = color_f!(slot!(coad_na, a), slot!(coad_na, b), slot!(coad_na, c));\"]\n#[doc = \" let numeric_label_tensor = color_f!(1, 2, 3);\"]\n#[doc = \" let pattern_tensor = color_f!(RS.a__, RS.b__, RS.c__);\"]\n#[doc =\n\" let dimensioned_pattern = color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]);\"]\n#[doc = \" ```\"] #[macro_export] macro_rules! color_f\n{\n    ([$($a:expr),+ $(,)?], $($rest:tt)+) =>\n    {\n        $crate::color_f!(@tensor\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::ColorAdjoint\n        {}, [$($a),+],); $($rest)*)\n    }; ($base:ident. $a:ident, $($rest:tt)+) =>\n    {\n        $crate::color_f!(@tensor\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::ColorAdjoint\n        {}, [$base.$a],); $($rest)*)\n    }; ($a:expr, $($rest:tt)+) => { $crate::color_f!(@tensor $a; $($rest)*) };\n    (@tensor $a:expr; [$($b:expr),+ $(,)?], $($rest:tt)*) =>\n    {\n        $crate::color_f!(@tensor2 $a,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::ColorAdjoint\n        {}, [$($b),+],); $($rest)*)\n    }; (@tensor $a:expr; $base:ident. $b:ident, $($rest:tt)*) =>\n    {\n        $crate::color_f!(@tensor2 $a,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::ColorAdjoint\n        {}, [$base.$b],); $($rest)*)\n    }; (@tensor $a:expr; $b:expr, $($rest:tt)*) =>\n    { $crate::color_f!(@tensor2 $a, $b; $($rest)*) };\n    (@tensor2 $a:expr, $b:expr; [$($c:expr),+ $(,)?] $(,)?) =>\n    {\n        $crate::color_f!(@tensor_done $a, $b,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::ColorAdjoint\n        {}, [$($c),+],))\n    }; (@tensor2 $a:expr, $b:expr; $base:ident. $c:ident $(,)?) =>\n    {\n        $crate::color_f!(@tensor_done $a, $b,\n        spenso::structure::representation::RepName::to_symbolic(&$crate::representations::ColorAdjoint\n        {}, [$base.$c],))\n    }; (@tensor2 $a:expr, $b:expr; $c:expr $(,)?) =>\n    { $crate::color_f!(@tensor_done $a, $b, $c) };\n    (@tensor_done $a:expr, $b:expr, $c:expr) =>\n    {\n        $crate::color::CS.structure_f(spenso::shadowing::IntoAtom::into_atom($a),\n        spenso::shadowing::IntoAtom::into_atom($b),\n        spenso::shadowing::IntoAtom::into_atom($c),)\n    };\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Example 1",
+                "language": "ignore",
+                "code": "use idenso::color_f;\nuse spenso::slot;\n\nlet expr = color_f!(slot!(coad_na, a), slot!(coad_na, b), slot!(coad_na, c));\nlet numeric_label_tensor = color_f!(1, 2, 3);\nlet pattern_tensor = color_f!(RS.a__, RS.b__, RS.c__);\nlet dimensioned_pattern = color_f!([CS.adj_, RS.a_], [CS.adj_, RS.b_], [CS.adj_, RS.c_]);"
+              },
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let tensor = idenso::color_f!(1, 2, 3);"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "idenso::color_f",
+              "file": "crates/idenso/src/color/macros.rs",
+              "line": 119,
+              "column": 1
+            }
+          },
+          "representations::initialize": {
+            "id": "representations::initialize",
+            "name": "initialize",
+            "title": "Initialize representations",
+            "kind": "function",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Register Idenso's built-in representations and algebra symbols with Symbolica.\n\nSymbolica calls this during community-module initialization. Calling it again\nis safe and ensures the standard Lorentz, spinor, and color objects exist."
+            },
+            "summary": "Initializes Idenso's standard representations and tensor symbols.",
+            "signature": "fn initialize()",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "idenso::representations::initialize();"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "idenso::representations::initialize",
+              "file": "crates/idenso/src/representations.rs",
+              "line": 136,
+              "column": 1
+            }
+          }
+        },
+        "scopes": {}
+      }
+    }
+  }
+}

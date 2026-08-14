@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["evaluate_sample","evaluate_sample_precise","evaluate_samples","evaluate_samples_precise"],"struct":["EvaluateSamples","EvaluateSamplesPrecise"]};

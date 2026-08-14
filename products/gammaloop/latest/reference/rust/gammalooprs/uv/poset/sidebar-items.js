@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["BfsPaths","CoverSetNode","DAG","DagNode","PosetNode","SlotNode","TopoOrdered","UnfoldedWoodNode"],"trait":["DotAttrs"],"type":["HasseDiagram","Poset"]};

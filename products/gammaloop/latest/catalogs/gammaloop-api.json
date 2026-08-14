@@ -1,0 +1,402 @@
+{
+  "schema_version": 2,
+  "product": {
+    "id": "gammaloop",
+    "title": "GammaLoop"
+  },
+  "component": {
+    "id": "gammaloop-api",
+    "package": "gammaloop-api",
+    "title": "GammaLoop gammaloop-api",
+    "version": "0.1.0",
+    "language": "rust",
+    "features": [
+      "cli"
+    ]
+  },
+  "root": {
+    "id": "gammaloop-api",
+    "title": "gammaloop-api supported API",
+    "docs": {
+      "format": "typst-markup",
+      "body": "GammaLoop's stable facade and command API. Use this curated boundary for\napplications while consulting the #link(\"reference/rust/\")[full Rustdoc]\nfor exhaustive details."
+    },
+    "summary": "GammaLoop's stable facade and command API.",
+    "since": null,
+    "keywords": [],
+    "source": {
+      "identifier": "alphal00p_docs_catalogs::annotated_scopes::gammaloop-api",
+      "file": "crates/alphal00p-docs-catalogs/src/lib.rs",
+      "line": 44,
+      "column": 5
+    },
+    "items": {},
+    "scopes": {
+      "supported": {
+        "id": "supported",
+        "title": "Supported entry points",
+        "docs": null,
+        "summary": null,
+        "since": null,
+        "keywords": [],
+        "source": null,
+        "items": {
+          "StateLoadOption": {
+            "id": "StateLoadOption",
+            "name": "StateLoadOption",
+            "title": "State loading options",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Selects the state folder, boot commands, settings overrides, logging, and read-only mode."
+            },
+            "summary": "Selects the state folder, boot commands, settings overrides, logging, and read-only mode.",
+            "signature": "#[derive(Debug, Clone, PartialEq, Default)] pub struct StateLoadOption\n{\n    pub clean_state : bool, pub boot_commands_path : Option < PathBuf > , pub\n    state_folder : Option < PathBuf > , pub model_file : Option < PathBuf > ,\n    pub trace_logs_filename : Option < String > , pub level : Option <\n    LogLevel > , pub logfile_level : Option < LogLevel > , pub logging_prefix\n    : Option < LogFormat > , pub read_only_state : bool, pub\n    settings_global_path : Option < PathBuf > , pub\n    settings_runtime_defaults_path : Option < PathBuf > ,\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let options = gammaloop_api::StateLoadOption::default();"
+              }
+            ],
+            "members": [
+              {
+                "name": "clean_state",
+                "kind": "field",
+                "docs": null,
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "boot_commands_path",
+                "kind": "field",
+                "docs": null,
+                "signature": "Option < PathBuf >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "state_folder",
+                "kind": "field",
+                "docs": null,
+                "signature": "Option < PathBuf >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "model_file",
+                "kind": "field",
+                "docs": null,
+                "signature": "Option < PathBuf >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "trace_logs_filename",
+                "kind": "field",
+                "docs": null,
+                "signature": "Option < String >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "level",
+                "kind": "field",
+                "docs": null,
+                "signature": "Option < LogLevel >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "logfile_level",
+                "kind": "field",
+                "docs": null,
+                "signature": "Option < LogLevel >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "logging_prefix",
+                "kind": "field",
+                "docs": null,
+                "signature": "Option < LogFormat >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "read_only_state",
+                "kind": "field",
+                "docs": null,
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "settings_global_path",
+                "kind": "field",
+                "docs": null,
+                "signature": "Option < PathBuf >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "settings_runtime_defaults_path",
+                "kind": "field",
+                "docs": null,
+                "signature": "Option < PathBuf >",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::StateLoadOption",
+              "file": "crates/gammaloop-api/src/lib.rs",
+              "line": 463,
+              "column": 1
+            }
+          },
+          "StateLoadOption::load": {
+            "id": "StateLoadOption::load",
+            "name": "load",
+            "title": "Load a GammaLoop state",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Loads the selected state and returns the supported session boundary."
+            },
+            "summary": "Loads the selected state and returns the supported session boundary.",
+            "signature": "fn load(self) -> Result < LoadedState >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "self",
+                "docs": null,
+                "ty": "self",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < LoadedState >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let loaded = gammaloop_api::StateLoadOption::default().load()?;"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::StateLoadOption::load",
+              "file": "crates/gammaloop-api/src/lib.rs",
+              "line": 530,
+              "column": 1
+            }
+          },
+          "LoadedState::cli_session": {
+            "id": "LoadedState::cli_session",
+            "name": "cli_session",
+            "title": "Create a CLI session",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Borrows a loaded state as a command session while keeping state ownership explicit."
+            },
+            "summary": "Borrows a loaded state as a command session while keeping state ownership explicit.",
+            "signature": "fn cli_session(& mut self) -> CliSession < '_ >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "self",
+                "docs": null,
+                "ty": "& mut self",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "CliSession < '_ >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let mut loaded = gammaloop_api::StateLoadOption::default().load()?; let session = loaded.cli_session();"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::LoadedState::cli_session",
+              "file": "crates/gammaloop-api/src/lib.rs",
+              "line": 487,
+              "column": 1
+            }
+          },
+          "CLISettings": {
+            "id": "CLISettings",
+            "name": "CLISettings",
+            "title": "Command-line settings",
+            "kind": "setting",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Owns the generated command-line, global, session, and state-loading settings."
+            },
+            "summary": "Owns the generated command-line, global, session, and state-loading settings.",
+            "signature": "#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]\n#[serde(default, deny_unknown_fields)] pub struct CLISettings\n{\n    #[serde(skip_serializing_if = \"is_true\")] pub try_strings : bool,\n    #[serde(skip_serializing_if = \"is_false\")] pub override_state : bool,\n    #[serde(skip_serializing_if = \"IsDefault::is_default\")] pub state :\n    StateSettings, #[serde(skip_serializing_if = \"IsDefault::is_default\")] pub\n    global : GlobalSettings, #[serde(skip)] #[schemars(skip)] pub session :\n    SessionSettings,\n}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let settings = gammaloop_api::CLISettings::default();"
+              }
+            ],
+            "members": [
+              {
+                "name": "try_strings",
+                "kind": "field",
+                "docs": null,
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "override_state",
+                "kind": "field",
+                "docs": null,
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "state",
+                "kind": "field",
+                "docs": null,
+                "signature": "StateSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "global",
+                "kind": "field",
+                "docs": null,
+                "signature": "GlobalSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "session",
+                "kind": "field",
+                "docs": null,
+                "signature": "SessionSettings",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::CLISettings",
+              "file": "crates/gammaloop-api/src/lib.rs",
+              "line": 290,
+              "column": 1
+            }
+          },
+          "gammaloop": {
+            "id": "gammaloop",
+            "name": "gammaloop",
+            "title": "GammaLoop command",
+            "kind": "command",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Runs the Clap-derived command tree for state creation, inspection, generation, and evaluation."
+            },
+            "summary": "Runs the Clap-derived command tree for state creation, inspection, generation, and evaluation.",
+            "signature": "gammaloop [OPTIONS] [COMMAND]",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "console",
+                "code": "gammaloop --help"
+              }
+            ],
+            "members": [
+              {
+                "name": "try_strings",
+                "kind": "field",
+                "docs": null,
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "override_state",
+                "kind": "field",
+                "docs": null,
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "state",
+                "kind": "field",
+                "docs": null,
+                "signature": "StateSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "global",
+                "kind": "field",
+                "docs": null,
+                "signature": "GlobalSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "session",
+                "kind": "field",
+                "docs": null,
+                "signature": "SessionSettings",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::CLISettings",
+              "file": "crates/gammaloop-api/src/lib.rs",
+              "line": 290,
+              "column": 1
+            }
+          }
+        },
+        "scopes": {}
+      }
+    }
+  }
+}

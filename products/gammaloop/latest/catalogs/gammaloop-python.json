@@ -1,0 +1,4437 @@
+{
+  "schema_version": 2,
+  "product": {
+    "id": "gammaloop",
+    "title": "GammaLoop"
+  },
+  "component": {
+    "id": "gammaloop-python",
+    "package": "gammaloop",
+    "title": "GammaLoop gammaloop-python",
+    "version": "0.3.4",
+    "language": "python",
+    "features": [
+      "python_api",
+      "python_abi",
+      "python_stubgen"
+    ]
+  },
+  "root": {
+    "id": "gammaloop-python",
+    "title": "GammaLoop Python API",
+    "docs": {
+      "format": "python-docstring",
+      "body": "Exports registered by gammaloop."
+    },
+    "summary": "Ordered Python module exports",
+    "since": null,
+    "keywords": [],
+    "source": null,
+    "items": {},
+    "scopes": {
+      "exports": {
+        "id": "exports",
+        "title": "Module exports",
+        "docs": null,
+        "summary": null,
+        "since": null,
+        "keywords": [],
+        "source": null,
+        "items": {
+          "AdditionalWeight": {
+            "id": "AdditionalWeight",
+            "name": "AdditionalWeight",
+            "title": "AdditionalWeight",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class AdditionalWeight. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class AdditionalWeight.",
+            "signature": "class AdditionalWeight:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import AdditionalWeight\nhelp(AdditionalWeight)"
+              }
+            ],
+            "members": [
+              {
+                "name": "key",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def key(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "value",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def value(self) -> typing.Any:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::AdditionalWeight",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 13,
+              "column": 1
+            }
+          },
+          "BatchEvaluationResult": {
+            "id": "BatchEvaluationResult",
+            "name": "BatchEvaluationResult",
+            "title": "BatchEvaluationResult",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class BatchEvaluationResult. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class BatchEvaluationResult.",
+            "signature": "class BatchEvaluationResult:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import BatchEvaluationResult\nhelp(BatchEvaluationResult)"
+              }
+            ],
+            "members": [
+              {
+                "name": "samples",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def samples(self) -> builtins.list[SampleEvaluationResult]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "observables",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def observables(self) -> dict:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__str__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __str__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::BatchEvaluationResult",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 20,
+              "column": 1
+            }
+          },
+          "ComponentDiscreteBreakdown": {
+            "id": "ComponentDiscreteBreakdown",
+            "name": "ComponentDiscreteBreakdown",
+            "title": "ComponentDiscreteBreakdown",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class ComponentDiscreteBreakdown. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class ComponentDiscreteBreakdown.",
+            "signature": "class ComponentDiscreteBreakdown:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import ComponentDiscreteBreakdown\nhelp(ComponentDiscreteBreakdown)"
+              }
+            ],
+            "members": [
+              {
+                "name": "re",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def re(self) -> typing.Optional[DiscreteBreakdown]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "im",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def im(self) -> typing.Optional[DiscreteBreakdown]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::ComponentDiscreteBreakdown",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 29,
+              "column": 1
+            }
+          },
+          "CutInfo": {
+            "id": "CutInfo",
+            "name": "CutInfo",
+            "title": "CutInfo",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class CutInfo. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class CutInfo.",
+            "signature": "class CutInfo:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import CutInfo\nhelp(CutInfo)"
+              }
+            ],
+            "members": [
+              {
+                "name": "incoming_pdgs",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def incoming_pdgs(self) -> builtins.list[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "outgoing_pdgs",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def outgoing_pdgs(self) -> builtins.list[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cut_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def cut_id(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "graph_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def graph_id(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "graph_group_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def graph_group_id(self) -> typing.Optional[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "orientation_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def orientation_id(self) -> typing.Optional[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "lmb_channel_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def lmb_channel_id(self) -> typing.Optional[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "lmb_channel_edge_ids",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def lmb_channel_edge_ids(self) -> typing.Optional[builtins.list[builtins.int]]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::CutInfo",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 36,
+              "column": 1
+            }
+          },
+          "DiscreteBreakdown": {
+            "id": "DiscreteBreakdown",
+            "name": "DiscreteBreakdown",
+            "title": "DiscreteBreakdown",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class DiscreteBreakdown. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class DiscreteBreakdown.",
+            "signature": "class DiscreteBreakdown:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import DiscreteBreakdown\nhelp(DiscreteBreakdown)"
+              }
+            ],
+            "members": [
+              {
+                "name": "axis_label",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def axis_label(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "fixed_coordinates",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def fixed_coordinates(self) -> builtins.list[DiscreteCoordinate]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "entries",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def entries(self) -> builtins.list[DiscreteBreakdownEntry]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::DiscreteBreakdown",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 55,
+              "column": 1
+            }
+          },
+          "DiscreteBreakdownEntry": {
+            "id": "DiscreteBreakdownEntry",
+            "name": "DiscreteBreakdownEntry",
+            "title": "DiscreteBreakdownEntry",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class DiscreteBreakdownEntry. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class DiscreteBreakdownEntry.",
+            "signature": "class DiscreteBreakdownEntry:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import DiscreteBreakdownEntry\nhelp(DiscreteBreakdownEntry)"
+              }
+            ],
+            "members": [
+              {
+                "name": "bin_index",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def bin_index(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "bin_label",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def bin_label(self) -> typing.Optional[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "pdf",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def pdf(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "value",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def value(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "error",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def error(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "chi_sq",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def chi_sq(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "processed_samples",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def processed_samples(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::DiscreteBreakdownEntry",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 64,
+              "column": 1
+            }
+          },
+          "DiscreteCoordinate": {
+            "id": "DiscreteCoordinate",
+            "name": "DiscreteCoordinate",
+            "title": "DiscreteCoordinate",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class DiscreteCoordinate. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class DiscreteCoordinate.",
+            "signature": "class DiscreteCoordinate:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import DiscreteCoordinate\nhelp(DiscreteCoordinate)"
+              }
+            ],
+            "members": [
+              {
+                "name": "axis_label",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def axis_label(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "bin_index",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def bin_index(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "bin_label",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def bin_label(self) -> typing.Optional[builtins.str]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::DiscreteCoordinate",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 81,
+              "column": 1
+            }
+          },
+          "DotExportSettings": {
+            "id": "DotExportSettings",
+            "name": "DotExportSettings",
+            "title": "DotExportSettings",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class DotExportSettings. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class DotExportSettings.",
+            "signature": "class DotExportSettings:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import DotExportSettings\nhelp(DotExportSettings)"
+              }
+            ],
+            "members": [
+              {
+                "name": "combine_diagrams",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def combine_diagrams(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "combine_diagrams",
+                "kind": "setter",
+                "docs": null,
+                "signature": "def combine_diagrams(self, value: builtins.bool) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.bool",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "with_uv",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def with_uv(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "with_uv",
+                "kind": "setter",
+                "docs": null,
+                "signature": "def with_uv(self, value: builtins.bool) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.bool",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "output_full_numerator",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def output_full_numerator(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "output_full_numerator",
+                "kind": "setter",
+                "docs": null,
+                "signature": "def output_full_numerator(self, value: builtins.bool) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.bool",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "split_xs_by_initial_states",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def split_xs_by_initial_states(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "split_xs_by_initial_states",
+                "kind": "setter",
+                "docs": null,
+                "signature": "def split_xs_by_initial_states(self, value: builtins.bool) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.bool",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "do_gamma_algebra",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def do_gamma_algebra(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "do_gamma_algebra",
+                "kind": "setter",
+                "docs": null,
+                "signature": "def do_gamma_algebra(self, value: builtins.bool) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.bool",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "do_color_algebra",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def do_color_algebra(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "do_color_algebra",
+                "kind": "setter",
+                "docs": null,
+                "signature": "def do_color_algebra(self, value: builtins.bool) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.bool",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "include_autogenerated_fields",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def include_autogenerated_fields(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "include_autogenerated_fields",
+                "kind": "setter",
+                "docs": null,
+                "signature": "def include_autogenerated_fields(self, value: builtins.bool) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "value",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value: builtins.bool",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__new__",
+                "kind": "associated-function",
+                "docs": null,
+                "signature": "def __new__(cls) -> DotExportSettings:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::DotExportSettings",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 90,
+              "column": 1
+            }
+          },
+          "EvaluationResult": {
+            "id": "EvaluationResult",
+            "name": "EvaluationResult",
+            "title": "EvaluationResult",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class EvaluationResult. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class EvaluationResult.",
+            "signature": "class EvaluationResult:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import EvaluationResult\nhelp(EvaluationResult)"
+              }
+            ],
+            "members": [
+              {
+                "name": "sample",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def sample(self) -> SampleEvaluationResult:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integrand_result",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def integrand_result(self) -> complex:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integrator_weight",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def integrator_weight(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "generated_event_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def generated_event_count(self) -> typing.Optional[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "accepted_event_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def accepted_event_count(self) -> typing.Optional[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "event_processing_time_seconds",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def event_processing_time_seconds(self) -> typing.Optional[builtins.float]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "parameterization_jacobian",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def parameterization_jacobian(self) -> typing.Optional[builtins.float]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "is_nan",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def is_nan(self) -> typing.Optional[builtins.bool]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "stability_results",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "event_groups",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def event_groups(self) -> builtins.list[EventGroup]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "observables",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def observables(self) -> dict:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__str__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __str__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::EvaluationResult",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 122,
+              "column": 1
+            }
+          },
+          "Event": {
+            "id": "Event",
+            "name": "Event",
+            "title": "Event",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class Event. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class Event.",
+            "signature": "class Event:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import Event\nhelp(Event)"
+              }
+            ],
+            "members": [
+              {
+                "name": "incoming_momenta",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def incoming_momenta(self) -> builtins.list[FourMomentum]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "outgoing_momenta",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def outgoing_momenta(self) -> builtins.list[FourMomentum]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cut_info",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def cut_info(self) -> CutInfo:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "weight",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def weight(self) -> typing.Any:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "additional_weights",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def additional_weights(self) -> builtins.list[AdditionalWeight]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__str__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __str__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::Event",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 149,
+              "column": 1
+            }
+          },
+          "EventGroup": {
+            "id": "EventGroup",
+            "name": "EventGroup",
+            "title": "EventGroup",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class EventGroup. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class EventGroup.",
+            "signature": "class EventGroup:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import EventGroup\nhelp(EventGroup)"
+              }
+            ],
+            "members": [
+              {
+                "name": "events",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def events(self) -> builtins.list[Event]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__str__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __str__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::EventGroup",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 164,
+              "column": 1
+            }
+          },
+          "FourMomentum": {
+            "id": "FourMomentum",
+            "name": "FourMomentum",
+            "title": "FourMomentum",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class FourMomentum. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class FourMomentum.",
+            "signature": "class FourMomentum:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import FourMomentum\nhelp(FourMomentum)"
+              }
+            ],
+            "members": [
+              {
+                "name": "e",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def e(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "px",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def px(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "py",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def py(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "pz",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def pz(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::FourMomentum",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 171,
+              "column": 1
+            }
+          },
+          "GammaLoopAPI": {
+            "id": "GammaLoopAPI",
+            "name": "GammaLoopAPI",
+            "title": "GammaLoopAPI",
+            "kind": "python-class",
+            "supported": true,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Stateful entry point for loading, evaluating, and integrating GammaLoop processes."
+            },
+            "summary": "Stateful entry point for loading, evaluating, and integrating GammaLoop processes.",
+            "signature": "class GammaLoopAPI:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import GammaLoopAPI\nhelp(GammaLoopAPI)"
+              }
+            ],
+            "members": [
+              {
+                "name": "__new__",
+                "kind": "associated-function",
+                "docs": null,
+                "signature": "def __new__(cls, state_folder: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, boot_commands_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, model_file: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, trace_logs_filename: typing.Optional[builtins.str] = None, level: typing.Optional[LogLevel] = None, logfile_level: typing.Optional[LogLevel] = None, logging_prefix: builtins.object | None = None, read_only_state: builtins.bool = ..., settings_global_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, clean_state: builtins.bool = ...) -> GammaLoopAPI:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "state_folder",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "state_folder: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "boot_commands_path",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "boot_commands_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "model_file",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "model_file: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "trace_logs_filename",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "trace_logs_filename: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "level",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "level: typing.Optional[LogLevel] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "logfile_level",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "logfile_level: typing.Optional[LogLevel] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "logging_prefix",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "logging_prefix: builtins.object | None = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "read_only_state",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "read_only_state: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "settings_global_path",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "settings_global_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "settings_runtime_defaults_path",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "settings_runtime_defaults_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "clean_state",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "clean_state: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "evaluate_sample",
+                "kind": "method",
+                "docs": null,
+                "signature": "def evaluate_sample(self, point: typing.Sequence[builtins.float], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = ..., minimal_output: builtins.bool = ..., return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = ..., integrator_weight: typing.Optional[builtins.float] = None, discrete_dim: typing.Optional[typing.Sequence[builtins.int]] = None, graph_name: typing.Optional[builtins.str] = None, orientation: typing.Optional[builtins.int] = None) -> EvaluationResult:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "point",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "point: typing.Sequence[builtins.float]",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "process_id",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "process_id: typing.Optional[builtins.int] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "integrand_name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "integrand_name: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "use_arb_prec",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "use_arb_prec: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "minimal_output",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "minimal_output: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "return_events",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "return_events: typing.Optional[builtins.bool] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "momentum_space",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "momentum_space: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "integrator_weight",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "integrator_weight: typing.Optional[builtins.float] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "discrete_dim",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "discrete_dim: typing.Optional[typing.Sequence[builtins.int]] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "graph_name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "graph_name: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "orientation",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "orientation: typing.Optional[builtins.int] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "evaluate_samples",
+                "kind": "method",
+                "docs": null,
+                "signature": "def evaluate_samples(self, points: numpy.typing.NDArray[numpy.float64], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = ..., minimal_output: builtins.bool = ..., return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = ..., integrator_weights: typing.Optional[numpy.typing.NDArray[numpy.float64]] = None, discrete_dims: numpy.typing.NDArray[numpy.unsignedinteger] | None = None, graph_names: typing.Optional[typing.Sequence[typing.Optional[builtins.str]]] = None, orientations: typing.Optional[typing.Sequence[typing.Optional[builtins.int]]] = None) -> BatchEvaluationResult:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "points",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "points: numpy.typing.NDArray[numpy.float64]",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "process_id",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "process_id: typing.Optional[builtins.int] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "integrand_name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "integrand_name: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "use_arb_prec",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "use_arb_prec: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "minimal_output",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "minimal_output: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "return_events",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "return_events: typing.Optional[builtins.bool] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "momentum_space",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "momentum_space: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "integrator_weights",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "integrator_weights: typing.Optional[numpy.typing.NDArray[numpy.float64]] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "discrete_dims",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "discrete_dims: numpy.typing.NDArray[numpy.unsignedinteger] | None = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "graph_names",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "graph_names: typing.Optional[typing.Sequence[typing.Optional[builtins.str]]] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "orientations",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "orientations: typing.Optional[typing.Sequence[typing.Optional[builtins.int]]] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "import_graphs",
+                "kind": "method",
+                "docs": null,
+                "signature": "def import_graphs(self, graphs: builtins.str, process_name: typing.Optional[builtins.str] = None, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, format: builtins.str = ..., overwrite: builtins.bool = ..., append: builtins.bool = ...) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "graphs",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "graphs: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "process_name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "process_name: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "process_id",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "process_id: typing.Optional[builtins.int] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "integrand_name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "integrand_name: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "format",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "format: builtins.str = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "overwrite",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "overwrite: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "append",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "append: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "get_lmbs",
+                "kind": "method",
+                "docs": null,
+                "signature": "def get_lmbs(self, graphs: builtins.str, format: builtins.str = ...) -> builtins.list[builtins.list[tuple[builtins.list[builtins.int], builtins.list[builtins.int], builtins.dict[builtins.int, tuple[builtins.list[builtins.int], builtins.list[builtins.int]]]]]]:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "graphs",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "graphs: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "format",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "format: builtins.str = ...",
+                    "default": "...",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "get_orientations",
+                "kind": "method",
+                "docs": null,
+                "signature": "def get_orientations(self, graph_name: builtins.str, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> builtins.list[builtins.dict[builtins.int, builtins.int]]:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "graph_name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "graph_name: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "process_id",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "process_id: typing.Optional[builtins.int] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "integrand_name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "integrand_name: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "get_model",
+                "kind": "method",
+                "docs": null,
+                "signature": "def get_model(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "evaluate",
+                "kind": "method",
+                "docs": null,
+                "signature": "def evaluate(self, process_id: typing.Optional[builtins.int] = None, graphs_group_name: typing.Optional[builtins.str] = None, result_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, numerical: builtins.bool = ..., number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None) -> builtins.str:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "process_id",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "process_id: typing.Optional[builtins.int] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "graphs_group_name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "graphs_group_name: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "result_path",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "result_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "numerical",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "numerical: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "number_of_terms_in_epsilon_expansion",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "import_model",
+                "kind": "method",
+                "docs": null,
+                "signature": "def import_model(self, model_specifier: builtins.str | os.PathLike | pathlib.Path, simplify_model: builtins.bool = ...) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "model_specifier",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "model_specifier: builtins.str | os.PathLike | pathlib.Path",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "simplify_model",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "simplify_model: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "list_outputs",
+                "kind": "method",
+                "docs": null,
+                "signature": "def list_outputs(self) -> tuple[builtins.dict[builtins.str, builtins.int], builtins.dict[builtins.str, builtins.int]]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get_integrand_info",
+                "kind": "method",
+                "docs": null,
+                "signature": "def get_integrand_info(self, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> IntegrandInfo:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "process_id",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "process_id: typing.Optional[builtins.int] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "integrand_name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "integrand_name: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "get_integrand_settings",
+                "kind": "method",
+                "docs": null,
+                "signature": "def get_integrand_settings(self, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> SettingsValue:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "process_id",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "process_id: typing.Optional[builtins.int] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "integrand_name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "integrand_name: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "get_run_history",
+                "kind": "method",
+                "docs": null,
+                "signature": "def get_run_history(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get_global_settings",
+                "kind": "method",
+                "docs": null,
+                "signature": "def get_global_settings(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get_active_command_blocks",
+                "kind": "method",
+                "docs": null,
+                "signature": "def get_active_command_blocks(self) -> builtins.dict[builtins.str, builtins.list[builtins.str]]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get_default_runtime_settings",
+                "kind": "method",
+                "docs": null,
+                "signature": "def get_default_runtime_settings(self) -> SettingsValue:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get_dot_files",
+                "kind": "method",
+                "docs": null,
+                "signature": "def get_dot_files(self, process: typing.Optional[builtins.int | builtins.str] = None, integrand_name: typing.Optional[builtins.str] = None, settings: DotExportSettings = ...) -> builtins.str:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "process",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "process: typing.Optional[builtins.int | builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "integrand_name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "integrand_name: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "settings",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "settings: DotExportSettings = ...",
+                    "default": "...",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "run",
+                "kind": "method",
+                "docs": null,
+                "signature": "def run(self, command: builtins.str) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "command",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "command: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "generate_cff",
+                "kind": "method",
+                "docs": null,
+                "signature": "def generate_cff(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.list[tuple[builtins.dict[builtins.int, builtins.int], builtins.str]]:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "dot_string",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "dot_string: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "subgraph_nodes",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph_nodes: typing.Sequence[builtins.str]",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "reverse_dangling",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "reverse_dangling: typing.Sequence[builtins.int]",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "orientation_pattern",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "orientation_pattern: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "generate_cff_as_json_string",
+                "kind": "method",
+                "docs": null,
+                "signature": "def generate_cff_as_json_string(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.str:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "dot_string",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "dot_string: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "subgraph_nodes",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "subgraph_nodes: typing.Sequence[builtins.str]",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "reverse_dangling",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "reverse_dangling: typing.Sequence[builtins.int]",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "orientation_pattern",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "orientation_pattern: typing.Optional[builtins.str] = None",
+                    "default": "None",
+                    "members": []
+                  }
+                ]
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::GammaLoopAPI",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 182,
+              "column": 1
+            }
+          },
+          "HistogramAccumulator": {
+            "id": "HistogramAccumulator",
+            "name": "HistogramAccumulator",
+            "title": "HistogramAccumulator",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class HistogramAccumulator. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class HistogramAccumulator.",
+            "signature": "class HistogramAccumulator:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import HistogramAccumulator\nhelp(HistogramAccumulator)"
+              }
+            ],
+            "members": [
+              {
+                "name": "continuous",
+                "kind": "associated-function",
+                "docs": null,
+                "signature": "def continuous(title: builtins.str, x_min: builtins.float, x_max: builtins.float, n_bins: builtins.int, type_description: builtins.str = ..., phase: builtins.str = ..., value_transform: builtins.str = ..., log_x_axis: builtins.bool = ..., log_y_axis: builtins.bool = ...) -> HistogramAccumulator:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "title",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "title: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "x_min",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "x_min: builtins.float",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "x_max",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "x_max: builtins.float",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "n_bins",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "n_bins: builtins.int",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "type_description",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "type_description: builtins.str = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "phase",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "phase: builtins.str = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "value_transform",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "value_transform: builtins.str = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "log_x_axis",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "log_x_axis: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "log_y_axis",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "log_y_axis: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "discrete",
+                "kind": "associated-function",
+                "docs": null,
+                "signature": "def discrete(title: builtins.str, min_bin_id: builtins.int, max_bin_id: builtins.int, ordering: builtins.str = ..., labels: typing.Optional[typing.Sequence[builtins.str]] = None, type_description: builtins.str = ..., phase: builtins.str = ..., log_y_axis: builtins.bool = ...) -> HistogramAccumulator:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "title",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "title: builtins.str",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "min_bin_id",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "min_bin_id: builtins.int",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "max_bin_id",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "max_bin_id: builtins.int",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "ordering",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "ordering: builtins.str = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "labels",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "labels: typing.Optional[typing.Sequence[builtins.str]] = None",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "type_description",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "type_description: builtins.str = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "phase",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "phase: builtins.str = ...",
+                    "default": "...",
+                    "members": []
+                  },
+                  {
+                    "name": "log_y_axis",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "log_y_axis: builtins.bool = ...",
+                    "default": "...",
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "snapshot",
+                "kind": "method",
+                "docs": null,
+                "signature": "def snapshot(self) -> HistogramSnapshot:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "merge_in_place",
+                "kind": "method",
+                "docs": null,
+                "signature": "def merge_in_place(self, other: HistogramAccumulator) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "other",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "other: HistogramAccumulator",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "rebin",
+                "kind": "method",
+                "docs": null,
+                "signature": "def rebin(self, contiguous_bins: builtins.int) -> HistogramAccumulator:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "contiguous_bins",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "contiguous_bins: builtins.int",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "rescale",
+                "kind": "method",
+                "docs": null,
+                "signature": "def rescale(self, factor: builtins.float) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "factor",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "factor: builtins.float",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "change_bin_ordering",
+                "kind": "method",
+                "docs": null,
+                "signature": "def change_bin_ordering(self, ordering: builtins.str) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "ordering",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "ordering: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "update_results",
+                "kind": "method",
+                "docs": null,
+                "signature": "def update_results(self) -> None:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "fill_continuous_sample",
+                "kind": "method",
+                "docs": null,
+                "signature": "def fill_continuous_sample(self, entries: typing.Sequence[tuple[builtins.float, builtins.float]]) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "entries",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "entries: typing.Sequence[tuple[builtins.float, builtins.float]]",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "fill_discrete_sample",
+                "kind": "method",
+                "docs": null,
+                "signature": "def fill_discrete_sample(self, entries: typing.Sequence[tuple[builtins.int, builtins.float]]) -> None:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "entries",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "entries: typing.Sequence[tuple[builtins.int, builtins.float]]",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::HistogramAccumulator",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 208,
+              "column": 1
+            }
+          },
+          "HistogramBin": {
+            "id": "HistogramBin",
+            "name": "HistogramBin",
+            "title": "HistogramBin",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class HistogramBin. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class HistogramBin.",
+            "signature": "class HistogramBin:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import HistogramBin\nhelp(HistogramBin)"
+              }
+            ],
+            "members": [
+              {
+                "name": "x_min",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def x_min(self) -> typing.Optional[builtins.float]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "x_max",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def x_max(self) -> typing.Optional[builtins.float]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "bin_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def bin_id(self) -> typing.Optional[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "label",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def label(self) -> typing.Optional[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "entry_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def entry_count(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "sum_weights",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def sum_weights(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "sum_weights_squared",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def sum_weights_squared(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "mitigated_fill_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def mitigated_fill_count(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "average",
+                "kind": "method",
+                "docs": null,
+                "signature": "def average(self, sample_count: builtins.int) -> builtins.float:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "sample_count",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "sample_count: builtins.int",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "error",
+                "kind": "method",
+                "docs": null,
+                "signature": "def error(self, sample_count: builtins.int) -> builtins.float:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "sample_count",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "sample_count: builtins.int",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::HistogramBin",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 223,
+              "column": 1
+            }
+          },
+          "HistogramSnapshot": {
+            "id": "HistogramSnapshot",
+            "name": "HistogramSnapshot",
+            "title": "HistogramSnapshot",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class HistogramSnapshot. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class HistogramSnapshot.",
+            "signature": "class HistogramSnapshot:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import HistogramSnapshot\nhelp(HistogramSnapshot)"
+              }
+            ],
+            "members": [
+              {
+                "name": "kind",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def kind(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "title",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def title(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "type_description",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def type_description(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "phase",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def phase(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "value_transform",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def value_transform(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "supports_misbinning_mitigation",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def supports_misbinning_mitigation(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "x_min",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def x_min(self) -> typing.Optional[builtins.float]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "x_max",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def x_max(self) -> typing.Optional[builtins.float]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "sample_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def sample_count(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "log_x_axis",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def log_x_axis(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "log_y_axis",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def log_y_axis(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "discrete_min_bin_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def discrete_min_bin_id(self) -> typing.Optional[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "discrete_ordering",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def discrete_ordering(self) -> typing.Optional[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "bins",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def bins(self) -> builtins.list[HistogramBin]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "underflow_bin",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def underflow_bin(self) -> HistogramBin:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "overflow_bin",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def overflow_bin(self) -> HistogramBin:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "statistics",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def statistics(self) -> HistogramStats:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::HistogramSnapshot",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 244,
+              "column": 1
+            }
+          },
+          "HistogramStats": {
+            "id": "HistogramStats",
+            "name": "HistogramStats",
+            "title": "HistogramStats",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class HistogramStats. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class HistogramStats.",
+            "signature": "class HistogramStats:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import HistogramStats\nhelp(HistogramStats)"
+              }
+            ],
+            "members": [
+              {
+                "name": "in_range_entry_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def in_range_entry_count(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "nan_value_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def nan_value_count(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "mitigated_pair_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def mitigated_pair_count(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::HistogramStats",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 281,
+              "column": 1
+            }
+          },
+          "IntegralEstimate": {
+            "id": "IntegralEstimate",
+            "name": "IntegralEstimate",
+            "title": "IntegralEstimate",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class IntegralEstimate. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class IntegralEstimate.",
+            "signature": "class IntegralEstimate:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import IntegralEstimate\nhelp(IntegralEstimate)"
+              }
+            ],
+            "members": [
+              {
+                "name": "neval",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def neval(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "real_zero",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def real_zero(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "im_zero",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def im_zero(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "result",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def result(self) -> typing.Any:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "error",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def error(self) -> typing.Any:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "real_chisq",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def real_chisq(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "im_chisq",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def im_chisq(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::IntegralEstimate",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 290,
+              "column": 1
+            }
+          },
+          "IntegrandActiveThresholdCut": {
+            "id": "IntegrandActiveThresholdCut",
+            "name": "IntegrandActiveThresholdCut",
+            "title": "IntegrandActiveThresholdCut",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class IntegrandActiveThresholdCut. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class IntegrandActiveThresholdCut.",
+            "signature": "class IntegrandActiveThresholdCut:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import IntegrandActiveThresholdCut\nhelp(IntegrandActiveThresholdCut)"
+              }
+            ],
+            "members": [
+              {
+                "name": "cut_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def cut_id(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "can_become_pinched",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def can_become_pinched(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::IntegrandActiveThresholdCut",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 307,
+              "column": 1
+            }
+          },
+          "IntegrandCut": {
+            "id": "IntegrandCut",
+            "name": "IntegrandCut",
+            "title": "IntegrandCut",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class IntegrandCut. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class IntegrandCut.",
+            "signature": "class IntegrandCut:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import IntegrandCut\nhelp(IntegrandCut)"
+              }
+            ],
+            "members": [
+              {
+                "name": "cut_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def cut_id(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "edge_ids",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def edge_ids(self) -> builtins.list[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "raising_power",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def raising_power(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "left_thresholds",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def left_thresholds(self) -> builtins.list[IntegrandCutThreshold]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "right_thresholds",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def right_thresholds(self) -> builtins.list[IntegrandCutThreshold]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::IntegrandCut",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 314,
+              "column": 1
+            }
+          },
+          "IntegrandCutThreshold": {
+            "id": "IntegrandCutThreshold",
+            "name": "IntegrandCutThreshold",
+            "title": "IntegrandCutThreshold",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class IntegrandCutThreshold. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class IntegrandCutThreshold.",
+            "signature": "class IntegrandCutThreshold:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import IntegrandCutThreshold\nhelp(IntegrandCutThreshold)"
+              }
+            ],
+            "members": [
+              {
+                "name": "esurface_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def esurface_id(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "status",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def status(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cut_boundary_edge_ids",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def cut_boundary_edge_ids(self) -> builtins.list[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "threshold_boundary_edge_ids",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def threshold_boundary_edge_ids(self) -> builtins.list[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "invariant_bound_is_applicable",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def invariant_bound_is_applicable(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::IntegrandCutThreshold",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 327,
+              "column": 1
+            }
+          },
+          "IntegrandGraph": {
+            "id": "IntegrandGraph",
+            "name": "IntegrandGraph",
+            "title": "IntegrandGraph",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class IntegrandGraph. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class IntegrandGraph.",
+            "signature": "class IntegrandGraph:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import IntegrandGraph\nhelp(IntegrandGraph)"
+              }
+            ],
+            "members": [
+              {
+                "name": "graph_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def graph_id(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "name",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def name(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "is_master",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def is_master(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::IntegrandGraph",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 340,
+              "column": 1
+            }
+          },
+          "IntegrandGraphGroup": {
+            "id": "IntegrandGraphGroup",
+            "name": "IntegrandGraphGroup",
+            "title": "IntegrandGraphGroup",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class IntegrandGraphGroup. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class IntegrandGraphGroup.",
+            "signature": "class IntegrandGraphGroup:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import IntegrandGraphGroup\nhelp(IntegrandGraphGroup)"
+              }
+            ],
+            "members": [
+              {
+                "name": "group_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def group_id(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "graphs",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def graphs(self) -> builtins.list[IntegrandGraph]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "orientation_edge_ids",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def orientation_edge_ids(self) -> builtins.list[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "orientations",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def orientations(self) -> builtins.list[IntegrandOrientation]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "loop_momentum_bases",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def loop_momentum_bases(self) -> builtins.list[IntegrandLoopMomentumBasis]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "threshold_esurface_ids",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def threshold_esurface_ids(self) -> builtins.list[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "threshold_esurfaces",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def threshold_esurfaces(self) -> builtins.list[IntegrandThresholdEsurface]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cuts",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def cuts(self) -> builtins.list[IntegrandCut]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::IntegrandGraphGroup",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 349,
+              "column": 1
+            }
+          },
+          "IntegrandInfo": {
+            "id": "IntegrandInfo",
+            "name": "IntegrandInfo",
+            "title": "IntegrandInfo",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class IntegrandInfo. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class IntegrandInfo.",
+            "signature": "class IntegrandInfo:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import IntegrandInfo\nhelp(IntegrandInfo)"
+              }
+            ],
+            "members": [
+              {
+                "name": "process_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def process_id(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "process_name",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def process_name(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integrand_name",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def integrand_name(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "kind",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def kind(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "generation_backend",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def generation_backend(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "generation_compile_options",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def generation_compile_options(self) -> typing.Optional[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "active_f64_backend",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def active_f64_backend(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "graph_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def graph_count(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "graph_group_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def graph_group_count(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "record_size_bytes",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def record_size_bytes(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "graph_groups",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def graph_groups(self) -> builtins.list[IntegrandGraphGroup]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::IntegrandInfo",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 368,
+              "column": 1
+            }
+          },
+          "IntegrandLoopMomentumBasis": {
+            "id": "IntegrandLoopMomentumBasis",
+            "name": "IntegrandLoopMomentumBasis",
+            "title": "IntegrandLoopMomentumBasis",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class IntegrandLoopMomentumBasis. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class IntegrandLoopMomentumBasis.",
+            "signature": "class IntegrandLoopMomentumBasis:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import IntegrandLoopMomentumBasis\nhelp(IntegrandLoopMomentumBasis)"
+              }
+            ],
+            "members": [
+              {
+                "name": "basis_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def basis_id(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "channel_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def channel_id(self) -> typing.Optional[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "edge_ids",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def edge_ids(self) -> builtins.list[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "matches_generation_basis",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def matches_generation_basis(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::IntegrandLoopMomentumBasis",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 393,
+              "column": 1
+            }
+          },
+          "IntegrandOrientation": {
+            "id": "IntegrandOrientation",
+            "name": "IntegrandOrientation",
+            "title": "IntegrandOrientation",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class IntegrandOrientation. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class IntegrandOrientation.",
+            "signature": "class IntegrandOrientation:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import IntegrandOrientation\nhelp(IntegrandOrientation)"
+              }
+            ],
+            "members": [
+              {
+                "name": "orientation_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def orientation_id(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "signature",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def signature(self) -> builtins.list[builtins.int]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::IntegrandOrientation",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 404,
+              "column": 1
+            }
+          },
+          "IntegrandThresholdEsurface": {
+            "id": "IntegrandThresholdEsurface",
+            "name": "IntegrandThresholdEsurface",
+            "title": "IntegrandThresholdEsurface",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class IntegrandThresholdEsurface. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class IntegrandThresholdEsurface.",
+            "signature": "class IntegrandThresholdEsurface:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import IntegrandThresholdEsurface\nhelp(IntegrandThresholdEsurface)"
+              }
+            ],
+            "members": [
+              {
+                "name": "esurface_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def esurface_id(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "representative_graph_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def representative_graph_id(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "edge_ids",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def edge_ids(self) -> builtins.list[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "classification",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def classification(self) -> typing.Optional[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "active_cuts",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def active_cuts(self) -> builtins.list[IntegrandActiveThresholdCut]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::IntegrandThresholdEsurface",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 411,
+              "column": 1
+            }
+          },
+          "IntegrationOutput": {
+            "id": "IntegrationOutput",
+            "name": "IntegrationOutput",
+            "title": "IntegrationOutput",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class IntegrationOutput. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class IntegrationOutput.",
+            "signature": "class IntegrationOutput:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import IntegrationOutput\nhelp(IntegrationOutput)"
+              }
+            ],
+            "members": [
+              {
+                "name": "workspace_path",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def workspace_path(self) -> pathlib.Path:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "result",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def result(self) -> IntegrationResult:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "observables",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def observables(self) -> dict:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::IntegrationOutput",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 424,
+              "column": 1
+            }
+          },
+          "IntegrationResult": {
+            "id": "IntegrationResult",
+            "name": "IntegrationResult",
+            "title": "IntegrationResult",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class IntegrationResult. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class IntegrationResult.",
+            "signature": "class IntegrationResult:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import IntegrationResult\nhelp(IntegrationResult)"
+              }
+            ],
+            "members": [
+              {
+                "name": "slots",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def slots(self) -> builtins.list[SlotIntegrationResult]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "slot",
+                "kind": "method",
+                "docs": null,
+                "signature": "def slot(self, key: builtins.str) -> typing.Optional[SlotIntegrationResult]:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "single_slot",
+                "kind": "method",
+                "docs": null,
+                "signature": "def single_slot(self) -> typing.Optional[SlotIntegrationResult]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::IntegrationResult",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 434,
+              "column": 1
+            }
+          },
+          "IntegrationStatisticsSnapshot": {
+            "id": "IntegrationStatisticsSnapshot",
+            "name": "IntegrationStatisticsSnapshot",
+            "title": "IntegrationStatisticsSnapshot",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class IntegrationStatisticsSnapshot. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class IntegrationStatisticsSnapshot.",
+            "signature": "class IntegrationStatisticsSnapshot:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import IntegrationStatisticsSnapshot\nhelp(IntegrationStatisticsSnapshot)"
+              }
+            ],
+            "members": [
+              {
+                "name": "num_evals",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def num_evals(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "average_total_time_seconds",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def average_total_time_seconds(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "average_parameterization_time_seconds",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def average_parameterization_time_seconds(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "average_integrand_time_seconds",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def average_integrand_time_seconds(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "average_evaluator_time_seconds",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def average_evaluator_time_seconds(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "average_observable_time_seconds",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def average_observable_time_seconds(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "average_integrator_time_seconds",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def average_integrator_time_seconds(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "f64_percentage",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def f64_percentage(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "f128_percentage",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def f128_percentage(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "arb_percentage",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def arb_percentage(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "nan_percentage",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def nan_percentage(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "nan_or_unstable_percentage",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def nan_or_unstable_percentage(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "generated_event_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def generated_event_count(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "accepted_event_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def accepted_event_count(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "selection_efficiency_percentage",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def selection_efficiency_percentage(self) -> typing.Optional[builtins.float]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::IntegrationStatisticsSnapshot",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 441,
+              "column": 1
+            }
+          },
+          "IntegrationTableComponentResult": {
+            "id": "IntegrationTableComponentResult",
+            "name": "IntegrationTableComponentResult",
+            "title": "IntegrationTableComponentResult",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class IntegrationTableComponentResult. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class IntegrationTableComponentResult.",
+            "signature": "class IntegrationTableComponentResult:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import IntegrationTableComponentResult\nhelp(IntegrationTableComponentResult)"
+              }
+            ],
+            "members": [
+              {
+                "name": "component",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def component(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "value",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def value(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "error",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def error(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "relative_error_percent",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def relative_error_percent(self) -> typing.Optional[builtins.float]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "chi_sq_per_dof",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def chi_sq_per_dof(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "target_delta_sigma",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def target_delta_sigma(self) -> typing.Optional[builtins.float]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "target_delta_percent",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def target_delta_percent(self) -> typing.Optional[builtins.float]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "max_weight_impact",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def max_weight_impact(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::IntegrationTableComponentResult",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 474,
+              "column": 1
+            }
+          },
+          "MaxWeightInfoEntry": {
+            "id": "MaxWeightInfoEntry",
+            "name": "MaxWeightInfoEntry",
+            "title": "MaxWeightInfoEntry",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class MaxWeightInfoEntry. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class MaxWeightInfoEntry.",
+            "signature": "class MaxWeightInfoEntry:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import MaxWeightInfoEntry\nhelp(MaxWeightInfoEntry)"
+              }
+            ],
+            "members": [
+              {
+                "name": "component",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def component(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "sign",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def sign(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "max_eval",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def max_eval(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "coordinates",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def coordinates(self) -> typing.Optional[builtins.str]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::MaxWeightInfoEntry",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 493,
+              "column": 1
+            }
+          },
+          "SampleEvaluationResult": {
+            "id": "SampleEvaluationResult",
+            "name": "SampleEvaluationResult",
+            "title": "SampleEvaluationResult",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class SampleEvaluationResult. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class SampleEvaluationResult.",
+            "signature": "class SampleEvaluationResult:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import SampleEvaluationResult\nhelp(SampleEvaluationResult)"
+              }
+            ],
+            "members": [
+              {
+                "name": "integrand_result",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def integrand_result(self) -> complex:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integrator_weight",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def integrator_weight(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "generated_event_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def generated_event_count(self) -> typing.Optional[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "accepted_event_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def accepted_event_count(self) -> typing.Optional[builtins.int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "event_processing_time_seconds",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def event_processing_time_seconds(self) -> typing.Optional[builtins.float]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "parameterization_jacobian",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def parameterization_jacobian(self) -> typing.Optional[builtins.float]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "is_nan",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def is_nan(self) -> typing.Optional[builtins.bool]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "stability_results",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "event_groups",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def event_groups(self) -> builtins.list[EventGroup]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__str__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __str__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::SampleEvaluationResult",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 504,
+              "column": 1
+            }
+          },
+          "SettingsValue": {
+            "id": "SettingsValue",
+            "name": "SettingsValue",
+            "title": "SettingsValue",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class SettingsValue. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class SettingsValue.",
+            "signature": "class SettingsValue:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import SettingsValue\nhelp(SettingsValue)"
+              }
+            ],
+            "members": [
+              {
+                "name": "path",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def path(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "kind",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def kind(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "is_object",
+                "kind": "method",
+                "docs": null,
+                "signature": "def is_object(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "is_array",
+                "kind": "method",
+                "docs": null,
+                "signature": "def is_array(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "is_scalar",
+                "kind": "method",
+                "docs": null,
+                "signature": "def is_scalar(self) -> builtins.bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "keys",
+                "kind": "method",
+                "docs": null,
+                "signature": "def keys(self) -> builtins.list[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get",
+                "kind": "method",
+                "docs": null,
+                "signature": "def get(self, path: builtins.str) -> typing.Any:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "path",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "path: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "to_dict",
+                "kind": "method",
+                "docs": null,
+                "signature": "def to_dict(self) -> typing.Any:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__getattr__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __getattr__(self, name: builtins.str) -> typing.Any:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "name",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "name: builtins.str",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "__dir__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __dir__(self) -> builtins.list[builtins.str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__len__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __len__(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__str__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __str__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__repr__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __repr__(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "__getitem__",
+                "kind": "method",
+                "docs": null,
+                "signature": "def __getitem__(self, key: typing.Any, /) -> typing.Any:",
+                "default": null,
+                "members": [
+                  {
+                    "name": "key",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "key: typing.Any",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::SettingsValue",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 527,
+              "column": 1
+            }
+          },
+          "SlotIntegrationResult": {
+            "id": "SlotIntegrationResult",
+            "name": "SlotIntegrationResult",
+            "title": "SlotIntegrationResult",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class SlotIntegrationResult. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class SlotIntegrationResult.",
+            "signature": "class SlotIntegrationResult:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import SlotIntegrationResult\nhelp(SlotIntegrationResult)"
+              }
+            ],
+            "members": [
+              {
+                "name": "key",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def key(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "process",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def process(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integrand",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def integrand(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "target",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def target(self) -> typing.Optional[typing.Any]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integral",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def integral(self) -> IntegralEstimate:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "table_results",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def table_results(self) -> builtins.list[IntegrationTableComponentResult]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integration_statistics",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def integration_statistics(self) -> IntegrationStatisticsSnapshot:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "max_weight_info",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def max_weight_info(self) -> builtins.list[MaxWeightInfoEntry]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "grid_breakdown",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def grid_breakdown(self) -> ComponentDiscreteBreakdown:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::SlotIntegrationResult",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 546,
+              "column": 1
+            }
+          },
+          "StabilityResult": {
+            "id": "StabilityResult",
+            "name": "StabilityResult",
+            "title": "StabilityResult",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class StabilityResult. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class StabilityResult.",
+            "signature": "class StabilityResult:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import StabilityResult\nhelp(StabilityResult)"
+              }
+            ],
+            "members": [
+              {
+                "name": "precision",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def precision(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "estimated_relative_accuracy",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def estimated_relative_accuracy(self) -> typing.Optional[builtins.float]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "status",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def status(self) -> builtins.str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "sample_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def sample_count(self) -> builtins.int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "total_time_seconds",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def total_time_seconds(self) -> builtins.float:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::StabilityResult",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 567,
+              "column": 1
+            }
+          },
+          "LogLevel": {
+            "id": "LogLevel",
+            "name": "LogLevel",
+            "title": "LogLevel",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Reachable generated Python class LogLevel. This export is outside the curated support catalog."
+            },
+            "summary": "Reachable generated Python class LogLevel.",
+            "signature": "class LogLevel(enum.Enum):",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import LogLevel\nhelp(LogLevel)"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop-python::LogLevel",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 580,
+              "column": 1
+            }
+          },
+          "atom_to_canonical_string": {
+            "id": "atom_to_canonical_string",
+            "name": "atom_to_canonical_string",
+            "title": "atom_to_canonical_string",
+            "kind": "python-function",
+            "supported": true,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Parse a Symbolica expression and return its canonical string form."
+            },
+            "summary": "Parse a Symbolica expression and return its canonical string form.",
+            "signature": "def atom_to_canonical_string(atom_str: builtins.str) -> builtins.str:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import atom_to_canonical_string\nhelp(atom_to_canonical_string)"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop-python::atom_to_canonical_string",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 606,
+              "column": 1
+            }
+          },
+          "evaluate_graph_overall_factor": {
+            "id": "evaluate_graph_overall_factor",
+            "name": "evaluate_graph_overall_factor",
+            "title": "evaluate_graph_overall_factor",
+            "kind": "python-function",
+            "supported": true,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Evaluate a graph's symbolic overall factor and return its canonical form."
+            },
+            "summary": "Evaluate a graph's symbolic overall factor and return its canonical form.",
+            "signature": "def evaluate_graph_overall_factor(overall_factor: builtins.str) -> builtins.str:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import evaluate_graph_overall_factor\nhelp(evaluate_graph_overall_factor)"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop-python::evaluate_graph_overall_factor",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 611,
+              "column": 1
+            }
+          },
+          "to_dots": {
+            "id": "to_dots",
+            "name": "to_dots",
+            "title": "to_dots",
+            "kind": "python-function",
+            "supported": true,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Rewrite a Symbolica tensor expression into Idenso dot-product notation."
+            },
+            "summary": "Rewrite a Symbolica tensor expression into Idenso dot-product notation.",
+            "signature": "def to_dots(atom_str: builtins.str) -> builtins.str:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Inspect the registered export",
+                "language": "python",
+                "code": "from gammaloop._gammaloop import to_dots\nhelp(to_dots)"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop-python::to_dots",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 616,
+              "column": 1
+            }
+          }
+        },
+        "scopes": {}
+      }
+    }
+  }
+}

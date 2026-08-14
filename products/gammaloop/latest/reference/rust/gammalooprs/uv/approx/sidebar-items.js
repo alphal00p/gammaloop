@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ApproxOp"],"mod":["final_integrand","integrated","local_3d","local_4d"],"struct":["Approximation","CutStructure","SimpleApprox","UVCtx"],"trait":["ApproxKernel","ApproximationKernel","ForestNodeLike","Rooted"]};

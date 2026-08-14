@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["FeynGenError","FeynGenFilter","GenerationType","NumeratorAwareGraphGroupingOption"],"mod":["diagram_generator"],"struct":["FeynGenFilters","GraphGroupingOptions","SelfEnergyFilterOptions","SewedFilterOptions","SnailFilterOptions","TadpolesFilterOptions"]};

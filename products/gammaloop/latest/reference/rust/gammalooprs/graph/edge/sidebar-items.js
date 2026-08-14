@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["EdgeMass","PossibleParticle"],"struct":["Edge","EdgeExtraData","ParseEdge"]};

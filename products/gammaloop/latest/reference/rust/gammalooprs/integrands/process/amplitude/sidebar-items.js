@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["export","load"],"struct":["AmplitudeGraphTerm","AmplitudeIntegrand","AmplitudeIntegrandData"]};

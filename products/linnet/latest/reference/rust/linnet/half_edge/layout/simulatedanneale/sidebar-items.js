@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["anneal"],"struct":["GeoSchedule","SAConfig","SAStats"],"trait":["Energy","Neighbor","Schedule"]};

@@ -1,0 +1,159 @@
+{
+  "schema": 2,
+  "product": "spenso",
+  "title": "Spenso",
+  "channel": "latest",
+  "snapshot_tag": null,
+  "git_commit": "a1a6e8d94b04bfcf905eaab96c68d02147714ba8",
+  "git_timestamp": 1786705529,
+  "route": "/products/spenso/latest/",
+  "components": [
+    {
+      "product": "gammaloop",
+      "id": "gammalooprs",
+      "package": "gammalooprs",
+      "kind": "library",
+      "module": null,
+      "version": "0.3.4",
+      "features": []
+    },
+    {
+      "product": "gammaloop",
+      "id": "gammaloop-api",
+      "package": "gammaloop-api",
+      "kind": "library-and-cli",
+      "module": null,
+      "version": "0.1.0",
+      "features": [
+        "cli"
+      ]
+    },
+    {
+      "product": "gammaloop",
+      "id": "gammaloop-python",
+      "package": "gammaloop",
+      "kind": "maturin-distribution",
+      "module": "gammaloop._gammaloop",
+      "version": "0.3.4",
+      "features": [
+        "python_api",
+        "python_abi",
+        "python_stubgen"
+      ]
+    },
+    {
+      "product": "linnet",
+      "id": "linnet",
+      "package": "linnet",
+      "kind": "library",
+      "module": null,
+      "version": "0.17.0",
+      "features": [
+        "nodestore-vec",
+        "serde",
+        "bincode",
+        "drawing",
+        "symbolica"
+      ]
+    },
+    {
+      "product": "linnet",
+      "id": "linnet-py",
+      "package": "linnet-py",
+      "kind": "maturin-distribution",
+      "module": "linnet_py",
+      "version": "0.1.0",
+      "features": [
+        "extension-module",
+        "abi3-py310"
+      ]
+    },
+    {
+      "product": "spenso",
+      "id": "spenso",
+      "package": "spenso",
+      "kind": "library",
+      "module": null,
+      "version": "0.6.0",
+      "features": [
+        "shadowing"
+      ]
+    },
+    {
+      "product": "spenso",
+      "id": "spenso-macros",
+      "package": "spenso-macros",
+      "kind": "proc-macro-library",
+      "module": null,
+      "version": "0.3.2",
+      "features": [
+        "shadowing"
+      ]
+    },
+    {
+      "product": "spenso",
+      "id": "spenso-hep-lib",
+      "package": "spenso-hep-lib",
+      "kind": "domain-library",
+      "module": null,
+      "version": "0.1.7",
+      "features": []
+    },
+    {
+      "product": "spenso",
+      "id": "spynso3",
+      "package": "spynso3",
+      "kind": "symbolica-community-module",
+      "module": "symbolica.community.spenso",
+      "version": "0.1.2",
+      "features": [
+        "python_stubgen"
+      ]
+    },
+    {
+      "product": "idenso",
+      "id": "idenso",
+      "package": "idenso",
+      "kind": "library",
+      "module": null,
+      "version": "0.3.0",
+      "features": [
+        "bincode",
+        "reference-cases"
+      ]
+    },
+    {
+      "product": "idenso",
+      "id": "idenso-community",
+      "package": "idenso",
+      "kind": "symbolica-community-module",
+      "module": "symbolica.community.idenso",
+      "version": "0.3.0",
+      "features": [
+        "python",
+        "python_stubgen"
+      ]
+    },
+    {
+      "product": "vakint",
+      "id": "vakint",
+      "package": "vakint",
+      "kind": "library",
+      "module": null,
+      "version": "0.1.2",
+      "features": []
+    },
+    {
+      "product": "vakint",
+      "id": "vakint-community",
+      "package": "vakint",
+      "kind": "symbolica-community-module",
+      "module": "symbolica.community.vakint",
+      "version": "0.1.2",
+      "features": [
+        "symbolica_community_module",
+        "python_stubgen"
+      ]
+    }
+  ]
+}

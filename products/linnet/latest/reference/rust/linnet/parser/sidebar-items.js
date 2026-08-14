@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["NodeIdOrDangling"],"mod":["edge","error","global","hedge","set","vertex"],"struct":["DotGraph"]};

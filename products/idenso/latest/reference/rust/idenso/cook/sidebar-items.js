@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CookMode","CookOutputTags","CookSourceFilter","CookTagFilter","CookingError"],"struct":["CookSettings"],"trait":["Cookable"]};

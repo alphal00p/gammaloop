@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["epsilon","epsilon4"],"static":["EPSILON_SYMBOL"],"trait":["EpsilonSimplifier"]};

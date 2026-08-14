@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ProcessCollection"],"struct":["Process","ProcessDefinition","ResolvedIntegrandRef"]};

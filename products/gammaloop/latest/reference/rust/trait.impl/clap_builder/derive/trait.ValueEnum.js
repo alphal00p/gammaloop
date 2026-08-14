@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["gammaloop_api",[["impl ValueEnum for <a class=\"enum\" href=\"gammaloop_api/commands/display/enum.IntegrandDisplayCategory.html\" title=\"enum gammaloop_api::commands::display::IntegrandDisplayCategory\">IntegrandDisplayCategory</a>",0],["impl ValueEnum for <a class=\"enum\" href=\"gammaloop_api/commands/generate/enum.GroupingChoice.html\" title=\"enum gammaloop_api::commands::generate::GroupingChoice\">GroupingChoice</a>",0],["impl ValueEnum for <a class=\"enum\" href=\"gammaloop_api/commands/integrate/enum.ContributionSortOption.html\" title=\"enum gammaloop_api::commands::integrate::ContributionSortOption\">ContributionSortOption</a>",0],["impl ValueEnum for <a class=\"enum\" href=\"gammaloop_api/commands/integrate/enum.RendererOption.html\" title=\"enum gammaloop_api::commands::integrate::RendererOption\">RendererOption</a>",0],["impl ValueEnum for <a class=\"enum\" href=\"gammaloop_api/commands/integrate/enum.ShowPhaseOption.html\" title=\"enum gammaloop_api::commands::integrate::ShowPhaseOption\">ShowPhaseOption</a>",0]]],["gammalooprs",[["impl ValueEnum for <a class=\"enum\" href=\"gammalooprs/utils/tracing/enum.LogFormat.html\" title=\"enum gammalooprs::utils::tracing::LogFormat\">LogFormat</a>",0],["impl ValueEnum for <a class=\"enum\" href=\"gammalooprs/utils/tracing/enum.LogLevel.html\" title=\"enum gammalooprs::utils::tracing::LogLevel\">LogLevel</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[1045,347]}

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["LmbError"],"struct":["LmbIndex","LoopMomentumBasis"],"trait":["LMBext","LMBwithEdges"],"type":["LmbResult"]};

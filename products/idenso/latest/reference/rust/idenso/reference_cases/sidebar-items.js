@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ReferenceDomain","ReferenceSimplification","ReferenceValidation"],"fn":["reference_cases"],"static":["REFERENCE_CASES"],"struct":["ReferenceCase"]};

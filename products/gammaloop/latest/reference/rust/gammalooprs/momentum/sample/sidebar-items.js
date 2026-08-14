@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["BareMomentumSample","ExternalIndex","LoopIndex","LoopMomenta","MomentumSample","SubspaceData"],"type":["ExternalFourMomenta","ExternalThreeMomenta","PolarizationVectors","Subspace"]};

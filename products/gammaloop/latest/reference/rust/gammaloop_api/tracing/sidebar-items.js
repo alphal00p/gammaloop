@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["clear_file_log_filter_override_on_settings_change","configure_file_log_boot_mode","file_log_boot_disabled_reason","get_file_log_filter","get_stderr_log_filter","get_stderr_log_filter_label","set_file_log_filter","set_file_log_filter_override","set_log_format_override","set_log_style","set_stderr_log_filter","set_stderr_log_filter_override"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["RealOrComplex","RealOrComplexMut","RealOrComplexRef"],"mod":["add","add_assign","div","div_assign","mul","mul_assign","neg","sub","sub_assign","symbolica_traits"],"struct":["Complex","RealOrComplexError","RealOrComplexMutError","RealOrComplexRefError"],"trait":["FloatDerived","NumTraitComplex","R","SymbolicaComplex"]};

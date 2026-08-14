@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["gammaloop_api",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.0/core/ops/drop/trait.Drop.html\" title=\"trait core::ops::drop::Drop\">Drop</a> for <a class=\"struct\" href=\"gammaloop_api/state/struct.SerializeCommandsAsStringsGuard.html\" title=\"struct gammaloop_api::state::SerializeCommandsAsStringsGuard\">SerializeCommandsAsStringsGuard</a>",0]]],["gammalooprs",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.0/core/ops/drop/trait.Drop.html\" title=\"trait core::ops::drop::Drop\">Drop</a> for <a class=\"struct\" href=\"gammalooprs/processes/struct.GenerationProgressModeGuard.html\" title=\"struct gammalooprs::processes::GenerationProgressModeGuard\">GenerationProgressModeGuard</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.0/core/ops/drop/trait.Drop.html\" title=\"trait core::ops::drop::Drop\">Drop</a> for <a class=\"struct\" href=\"gammalooprs/processes/struct.GenerationProgressObserverGuard.html\" title=\"struct gammalooprs::processes::GenerationProgressObserverGuard\">GenerationProgressObserverGuard</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.0/core/ops/drop/trait.Drop.html\" title=\"trait core::ops::drop::Drop\">Drop</a> for <a class=\"struct\" href=\"gammalooprs/utils/serde_utils/struct.ShowDefaultsGuard.html\" title=\"struct gammalooprs::utils::serde_utils::ShowDefaultsGuard\">ShowDefaultsGuard</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[372,1052]}

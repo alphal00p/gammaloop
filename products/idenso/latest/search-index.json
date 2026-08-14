@@ -1,0 +1,362 @@
+[
+  {
+    "title": "Idenso",
+    "summary": "Symbolic tensor identities for Spenso and Symbolica",
+    "href": "index.html",
+    "kind": "product"
+  },
+  {
+    "title": "Overview",
+    "summary": "Idenso manual section",
+    "href": "index.html#overview",
+    "kind": "section"
+  },
+  {
+    "title": "Syntax, indices, and algebra passes",
+    "summary": "Idenso manual section",
+    "href": "index.html#syntax-indices-and-algebra-passes",
+    "kind": "section"
+  },
+  {
+    "title": "Rust and Python API boundaries",
+    "summary": "Idenso manual section",
+    "href": "index.html#rust-and-python-api-boundaries",
+    "kind": "section"
+  },
+  {
+    "title": "Releases and change history",
+    "summary": "Idenso manual section",
+    "href": "index.html#releases-and-change-history",
+    "kind": "section"
+  },
+  {
+    "title": "idenso · Index tooling",
+    "summary": "Adds canonicalization, wrapping, conjugation, and dangling-index inspection to Symbolica atoms.",
+    "href": "reference/rust/idenso/trait.IndexTooling.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Index tooling.canonize",
+    "summary": "fn canonize < Aind : AbsInd + ParseableAind + DummyAind >\n(& self, new_dummy : impl FnMut(usize) -> Aind,) -> Atom;",
+    "href": "reference/rust/idenso/trait.IndexTooling.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Index tooling.wrap_indices",
+    "summary": "Wraps all abstract indices within the expression using a specified header symbol. This transforms indices like `mink(dim,idx)` into `mink(dim,header(idx))`. Useful for distinguishing between different copies of an expression, e.g., an amplitude and its complex conjugate. # Arguments * `header` - The [`Symbol`] to use as the wrapping function name. # Returns A new [`Atom`] with all indices wrapped.",
+    "href": "reference/rust/idenso/trait.IndexTooling.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Index tooling.spenso_conj",
+    "summary": "fn spenso_conj(& self) -> Atom;",
+    "href": "reference/rust/idenso/trait.IndexTooling.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Index tooling.spenso_print",
+    "summary": "fn spenso_print < 'a > (& 'a self, settings : & SpensoPrintSettings) ->\nAtomPrinter < 'a > ;",
+    "href": "reference/rust/idenso/trait.IndexTooling.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Index tooling.wrap_dummies",
+    "summary": "Wraps only the dummy (contracted) abstract indices within the expression using a header symbol. Identifies indices that appear contracted (e.g., one covariant, one contravariant) and wraps only those, leaving external indices unchanged. Transforms `idx -> header(idx)` for dummy indices `idx`. # Arguments * `header` - The [`Symbol`] to use as the wrapping function name for dummy indices. # Returns A new [`Atom`] with only dummy indices wrapped.",
+    "href": "reference/rust/idenso/trait.IndexTooling.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Index tooling.dirac_adjoint",
+    "summary": "Computes the physics-aware conjugate of the expression. Applies conjugation rules specific to physics objects like spinors, gamma matrices, color representations, and the imaginary unit `i`. See implementation details for specific rules applied. # Returns A new [`Atom`] representing the conjugated expression.",
+    "href": "reference/rust/idenso/trait.IndexTooling.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Index tooling.conjugate_transpose",
+    "summary": "fn conjugate_transpose(& self, rep : impl RepName) -> Atom;",
+    "href": "reference/rust/idenso/trait.IndexTooling.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Index tooling.list_dangling",
+    "summary": "Identifies and returns a list of dangling (external, uncontracted) indices. Analyzes the expression to find indices that are not summed over. Returns them as `Atom`s. Note that dual indices might be represented wrapped in a `dind` function. # Returns A `Vec<Atom>` where each `Atom` represents a dangling index.",
+    "href": "reference/rust/idenso/trait.IndexTooling.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Index tooling.alias_subtensors",
+    "summary": "fn alias_subtensors(& self, tensor_name : & str) -> AliasedAtom;",
+    "href": "reference/rust/idenso/trait.IndexTooling.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Index cooking settings",
+    "summary": "Controls reversible, flattened, and filtered encodings of tensor indices.",
+    "href": "reference/rust/idenso/cook/struct.CookSettings.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Index cooking settings.mode",
+    "summary": "CookMode",
+    "href": "reference/rust/idenso/cook/struct.CookSettings.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Index cooking settings.source",
+    "summary": "CookSourceFilter",
+    "href": "reference/rust/idenso/cook/struct.CookSettings.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Index cooking settings.output_tags",
+    "summary": "CookOutputTags",
+    "href": "reference/rust/idenso/cook/struct.CookSettings.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Cookable expressions",
+    "summary": "Applies or reverses index-cooking transformations on symbolic expressions.",
+    "href": "reference/rust/idenso/cook/trait.Cookable.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Cookable expressions.cook",
+    "summary": "Reversibly cook function-like subexpressions with the default cooked tag.",
+    "href": "reference/rust/idenso/cook/trait.Cookable.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Cookable expressions.cook_with_settings",
+    "summary": "Cook function-like subexpressions with explicit settings.",
+    "href": "reference/rust/idenso/cook/trait.Cookable.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Cookable expressions.uncook",
+    "summary": "Undo default reversible cooking.",
+    "href": "reference/rust/idenso/cook/trait.Cookable.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Cookable expressions.uncook_with_settings",
+    "summary": "Undo reversible cooking that used explicit settings.",
+    "href": "reference/rust/idenso/cook/trait.Cookable.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Cookable expressions.cook_indices",
+    "summary": "Flatten cook abstract-index payloads in recognized representation slots.",
+    "href": "reference/rust/idenso/cook/trait.Cookable.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Cookable expressions.cook_indices_with_settings",
+    "summary": "Cook representation-slot index payloads with explicit settings.",
+    "href": "reference/rust/idenso/cook/trait.Cookable.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Cookable expressions.cook_function",
+    "summary": "Flatten cook a single atom into one symbol.",
+    "href": "reference/rust/idenso/cook/trait.Cookable.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Cookable expressions.cook_function_with_settings",
+    "summary": "Cook a single atom into one symbol with explicit settings.",
+    "href": "reference/rust/idenso/cook/trait.Cookable.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Selective expansion",
+    "summary": "Expands only tensor families selected by their representation.",
+    "href": "reference/rust/idenso/selective_expand/trait.SelectiveExpand.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Selective expansion.expand_in_patterns",
+    "summary": "fn expand_in_patterns(& self, pats : & [Pattern]) -> Vec < (Atom, Atom) > ;",
+    "href": "reference/rust/idenso/selective_expand/trait.SelectiveExpand.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Selective expansion.expand_metrics",
+    "summary": "fn expand_metrics(& self) -> Vec < (Atom, Atom) >\n{\n    let metric_pat = function! (ETS.metric, RS.a__).to_pattern(); let id_pat =\n    function! (ETS.metric, RS.a__).to_pattern();\n    self.expand_in_patterns(& [metric_pat, id_pat])\n}",
+    "href": "reference/rust/idenso/selective_expand/trait.SelectiveExpand.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Selective expansion.expand_bis",
+    "summary": "fn expand_bis(& self) -> Vec < (Atom, Atom) >\n{\n    let bis = Bispinor {}; let bis_pat = function!\n    (RS.f_, RS.a___, bis.to_symbolic([RS.b__]), RS.c___).to_pattern();\n    self.expand_in_patterns(& [bis_pat])\n}",
+    "href": "reference/rust/idenso/selective_expand/trait.SelectiveExpand.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Selective expansion.expand_mink",
+    "summary": "fn expand_mink(& self) -> Vec < (Atom, Atom) >\n{\n    let mink = Minkowski {}; let mink_pat = function!\n    (RS.f_, RS.a___, mink.to_symbolic([RS.b__]), RS.c___).to_pattern();\n    self.expand_in_patterns(& [mink_pat])\n}",
+    "href": "reference/rust/idenso/selective_expand/trait.SelectiveExpand.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Selective expansion.expand_mink_bis",
+    "summary": "fn expand_mink_bis(& self) -> Vec < (Atom, Atom) >\n{\n    let mink = Minkowski {}; let mink_pat = function!\n    (RS.f_, RS.a___, mink.to_symbolic([RS.b__]), RS.c___).to_pattern(); let\n    bis = Bispinor {}; let bis_pat = function!\n    (RS.f_, RS.a___, bis.to_symbolic([RS.b__]), RS.c___).to_pattern();\n    self.expand_in_patterns(& [mink_pat, bis_pat])\n}",
+    "href": "reference/rust/idenso/selective_expand/trait.SelectiveExpand.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Bispinor representation macro",
+    "summary": "Builds stripped or indexed bispinor representation atoms in Spenso syntax.",
+    "href": "reference/rust/idenso/macro.bis.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Color-fundamental macro",
+    "summary": "Builds stripped or indexed color-fundamental representation atoms.",
+    "href": "reference/rust/idenso/macro.cof.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Color-adjoint representation macro",
+    "summary": "Builds stripped or indexed color-adjoint representation atoms.",
+    "href": "reference/rust/idenso/macro.coad.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Dirac gamma macro",
+    "summary": "Builds a Dirac gamma chain factor or an explicitly indexed gamma tensor.",
+    "href": "reference/rust/idenso/macro.gamma.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Gamma-zero macro",
+    "summary": "Builds a gamma-zero chain factor or an explicitly indexed gamma-zero tensor.",
+    "href": "reference/rust/idenso/macro.gamma0.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Gamma-five macro",
+    "summary": "Builds a gamma-five chain factor or an explicitly indexed gamma-five tensor.",
+    "href": "reference/rust/idenso/macro.gamma5.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Levi-Civita tensor macro",
+    "summary": "Builds an arbitrary-rank antisymmetric epsilon tensor from atom-like arguments.",
+    "href": "reference/rust/idenso/macro.epsilon.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Color-generator macro",
+    "summary": "Builds a color-generator chain factor or an explicitly indexed generator tensor.",
+    "href": "reference/rust/idenso/macro.color_t.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Color structure-constant macro",
+    "summary": "Builds an explicitly indexed adjoint color structure-constant tensor.",
+    "href": "reference/rust/idenso/macro.color_f.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso · Initialize representations",
+    "summary": "Initializes Idenso's standard representations and tensor symbols.",
+    "href": "reference/rust/idenso/representations/fn.initialize.html",
+    "kind": "rust-api"
+  },
+  {
+    "title": "idenso-community · cook_function",
+    "summary": "Convert a single function call into a flattened variable symbol.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · cook_indices",
+    "summary": "Convert complex nested index structures into flattened symbolic names.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · dirac_adjoint",
+    "summary": "Return the Dirac adjoint of a Symbolica tensor expression.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · expand_bis",
+    "summary": "Expands factorized terms containing Dirac bispinor indices.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · expand_color",
+    "summary": "Expands factorized terms containing SU(N) color indices.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · expand_metrics",
+    "summary": "Expands factorized terms containing metric tensors.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · expand_mink",
+    "summary": "Expands factorized terms containing Minkowski spacetime indices.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · expand_mink_bis",
+    "summary": "Expands factorized terms containing both Minkowski and bispinor indices.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · initialize",
+    "summary": "Register Idenso's built-in representations and algebra symbols with Symbolica.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · list_dangling",
+    "summary": "Lists the dangling (external, uncontracted) indices present in the expression.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · simplify_color",
+    "summary": "Applies SU(N) color algebra rules to simplify color group structures.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · simplify_gamma",
+    "summary": "Applies Clifford algebra rules and trace identities to simplify gamma matrix expressions.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · simplify_metrics",
+    "summary": "Simplifies contractions involving metric tensors and identity tensors.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · to_dots",
+    "summary": "Converts contracted Lorentz/Minkowski indices into dot product notation.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · wrap_dummies",
+    "summary": "Wraps only the dummy (contracted) indices within the expression using a header symbol.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  },
+  {
+    "title": "idenso-community · wrap_indices",
+    "summary": "Wrap all abstract indices with a header symbol # Arguments - `self_`: input expression containing tensor indices - `header`: symbol to use as the wrapper function for all indices # Returns Expression with all indices wrapped by the header symbol.",
+    "href": "reference/python/#idenso-community",
+    "kind": "python-api"
+  }
+]

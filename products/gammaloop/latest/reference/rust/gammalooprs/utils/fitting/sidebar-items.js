@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["constant_dropped_fit_points","log_log_slope_constant_dropped"],"struct":["SlopeFit"]};

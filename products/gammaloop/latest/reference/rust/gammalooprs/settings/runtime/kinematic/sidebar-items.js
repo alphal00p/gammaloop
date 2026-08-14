@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Externals","ExternalsValidationError","Polarizations"],"mod":["improvement"],"struct":["KinematicsSettings"]};

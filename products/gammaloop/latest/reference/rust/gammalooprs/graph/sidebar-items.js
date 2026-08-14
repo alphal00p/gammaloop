@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_cff_inverse_energy_product_impl"],"mod":["autogen","cuts","edge","ext","feynman_graph","global","hedge_data","lmb","parse","vertex"],"struct":["ExternalConnection","Graph","GraphGroup","GraphGroupPosition","GroupId","VertexOrder"]};

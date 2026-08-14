@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["SchoonschipContractionOrder","SchoonschipTraversal"],"struct":["SchoonschipSettings","Schoonschipify"],"trait":["Schoonschip"]};

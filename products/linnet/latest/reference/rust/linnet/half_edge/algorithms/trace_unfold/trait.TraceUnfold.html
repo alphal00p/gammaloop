@@ -1,0 +1,200 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Unfolds a graph of operations into a graph of trace keys."><title>TraceUnfold in linnet::half_edge::algorithms::trace_unfold - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="linnet" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc trait"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">TraceUnfold</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../linnet/index.html">linnet</a><span class="version">0.17.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Trace<wbr>Unfold</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#examples" title="Examples">Examples</a></li></ul><h3><a href="#required-associated-types">Required Associated Types</a></h3><ul class="block"><li><a href="#associatedtype.EdgeData" title="EdgeData">EdgeData</a></li><li><a href="#associatedtype.HedgeData" title="HedgeData">HedgeData</a></li><li><a href="#associatedtype.NodeData" title="NodeData">NodeData</a></li><li><a href="#associatedtype.NodeStorage" title="NodeStorage">NodeStorage</a></li></ul><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.graph" title="graph">graph</a></li><li><a href="#tymethod.key" title="key">key</a></li></ul><h3><a href="#provided-methods">Provided Methods</a></h3><ul class="block"><li><a href="#method.join_factors" title="join_factors">join_factors</a></li><li><a href="#method.realizations_for_op" title="realizations_for_op">realizations_for_op</a></li><li><a href="#method.trace_unfold" title="trace_unfold">trace_unfold</a></li><li><a href="#method.trace_unfold_of" title="trace_unfold_of">trace_unfold_of</a></li></ul><h3><a href="#dyn-compatibility">Dyn Compatibility</a></h3><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In linnet::<wbr>half_<wbr>edge::<wbr>algorithms::<wbr>trace_<wbr>unfold</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">linnet</a>::<wbr><a href="../../index.html">half_edge</a>::<wbr><a href="../index.html">algorithms</a>::<wbr><a href="index.html">trace_unfold</a></div><h1>Trait <span class="trait">Trace<wbr>Unfold</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#187-453">Source</a> </span></div><pre class="rust item-decl"><code>pub trait TraceUnfold&lt;Key&gt;: <a class="trait" href="trait.Independence.html" title="trait linnet::half_edge::algorithms::trace_unfold::Independence">Independence</a>&lt;<a class="struct" href="struct.HiddenData.html" title="struct linnet::half_edge::algorithms::trace_unfold::HiddenData">HiddenData</a>&lt;Key, <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>&gt;&gt; + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a><div class="where">where
+    Key: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/cmp/trait.Eq.html" title="trait core::cmp::Eq">Eq</a> + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/hash/trait.Hash.html" title="trait core::hash::Hash">Hash</a> + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a> + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/cmp/trait.Ord.html" title="trait core::cmp::Ord">Ord</a>,</div>{
+    type <a href="#associatedtype.EdgeData" class="associatedtype">EdgeData</a>: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/cmp/trait.Ord.html" title="trait core::cmp::Ord">Ord</a> + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/hash/trait.Hash.html" title="trait core::hash::Hash">Hash</a>;
+    type <a href="#associatedtype.NodeData" class="associatedtype">NodeData</a>;
+    type <a href="#associatedtype.NodeStorage" class="associatedtype">NodeStorage</a>: <a class="trait" href="../../nodestore/trait.NodeStorageOps.html" title="trait linnet::half_edge::nodestore::NodeStorageOps">NodeStorageOps</a>&lt;NodeData = Self::<a class="associatedtype" href="trait.TraceUnfold.html#associatedtype.NodeData" title="type linnet::half_edge::algorithms::trace_unfold::TraceUnfold::NodeData">NodeData</a>&gt;;
+    type <a href="#associatedtype.HedgeData" class="associatedtype">HedgeData</a>;
+
+    // Required methods
+    fn <a href="#tymethod.graph" class="fn">graph</a>(
+        &amp;self,
+    ) -&gt; &amp;<a class="struct" href="../../struct.HedgeGraph.html" title="struct linnet::half_edge::HedgeGraph">HedgeGraph</a>&lt;Self::<a class="associatedtype" href="trait.TraceUnfold.html#associatedtype.EdgeData" title="type linnet::half_edge::algorithms::trace_unfold::TraceUnfold::EdgeData">EdgeData</a>, Self::<a class="associatedtype" href="trait.TraceUnfold.html#associatedtype.NodeData" title="type linnet::half_edge::algorithms::trace_unfold::TraceUnfold::NodeData">NodeData</a>, Self::<a class="associatedtype" href="trait.TraceUnfold.html#associatedtype.HedgeData" title="type linnet::half_edge::algorithms::trace_unfold::TraceUnfold::HedgeData">HedgeData</a>, Self::<a class="associatedtype" href="trait.TraceUnfold.html#associatedtype.NodeStorage" title="type linnet::half_edge::algorithms::trace_unfold::TraceUnfold::NodeStorage">NodeStorage</a>&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.key" class="fn">key</a>(&amp;self, e: <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>) -&gt; Key;
+
+    // Provided methods
+    fn <a href="#method.realizations_for_op" class="fn">realizations_for_op</a>(
+        &amp;self,
+        op: <a class="struct" href="struct.HiddenData.html" title="struct linnet::half_edge::algorithms::trace_unfold::HiddenData">HiddenData</a>&lt;Key, <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>&gt;,
+    ) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="struct.HiddenData.html" title="struct linnet::half_edge::algorithms::trace_unfold::HiddenData">HiddenData</a>&lt;Key, <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>&gt;&gt;&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.join_factors" class="fn">join_factors</a>(&amp;self, _target: <a class="struct" href="../../struct.NodeIndex.html" title="struct linnet::half_edge::NodeIndex">NodeIndex</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/collections/btree/set/struct.BTreeSet.html" title="struct alloc::collections::btree::set::BTreeSet">BTreeSet</a>&lt;Key&gt;&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.trace_unfold_of" class="fn">trace_unfold_of</a>&lt;M: <a class="trait" href="../../nodestore/trait.NodeStorageOps.html" title="trait linnet::half_edge::nodestore::NodeStorageOps">NodeStorageOps</a>&lt;NodeData = <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.usize.html">usize</a>&gt;, S: <a class="trait" href="../../subgraph/trait.SubSetLike.html" title="trait linnet::half_edge::subgraph::SubSetLike">SubSetLike</a>&gt;(
+        &amp;self,
+        subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+        start: <a class="struct" href="../../struct.NodeIndex.html" title="struct linnet::half_edge::NodeIndex">NodeIndex</a>,
+    ) -&gt; <a class="struct" href="struct.UnfoldedTraceGraph.html" title="struct linnet::half_edge::algorithms::trace_unfold::UnfoldedTraceGraph">UnfoldedTraceGraph</a>&lt;Self, <a class="struct" href="struct.TraceKey.html" title="struct linnet::half_edge::algorithms::trace_unfold::TraceKey">TraceKey</a>&lt;Key, <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>&gt;, M::<a class="associatedtype" href="../../nodestore/trait.NodeStorageOps.html#associatedtype.OpStorage" title="type linnet::half_edge::nodestore::NodeStorageOps::OpStorage">OpStorage</a>&lt;<a class="struct" href="struct.TraceKey.html" title="struct linnet::half_edge::algorithms::trace_unfold::TraceKey">TraceKey</a>&lt;Key, <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>&gt;&gt;&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.trace_unfold" class="fn">trace_unfold</a>&lt;M: <a class="trait" href="../../nodestore/trait.NodeStorageOps.html" title="trait linnet::half_edge::nodestore::NodeStorageOps">NodeStorageOps</a>&lt;NodeData = <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.usize.html">usize</a>&gt;&gt;(
+        &amp;self,
+        start: <a class="struct" href="../../struct.NodeIndex.html" title="struct linnet::half_edge::NodeIndex">NodeIndex</a>,
+    ) -&gt; <a class="struct" href="struct.UnfoldedTraceGraph.html" title="struct linnet::half_edge::algorithms::trace_unfold::UnfoldedTraceGraph">UnfoldedTraceGraph</a>&lt;Self, <a class="struct" href="struct.TraceKey.html" title="struct linnet::half_edge::algorithms::trace_unfold::TraceKey">TraceKey</a>&lt;Key, <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>&gt;, M::<a class="associatedtype" href="../../nodestore/trait.NodeStorageOps.html#associatedtype.OpStorage" title="type linnet::half_edge::nodestore::NodeStorageOps::OpStorage">OpStorage</a>&lt;<a class="struct" href="struct.TraceKey.html" title="struct linnet::half_edge::algorithms::trace_unfold::TraceKey">TraceKey</a>&lt;Key, <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>&gt;&gt;&gt; { ... }
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Unfolds a graph of operations into a graph of trace keys.</p>
+<p>The trait separates three concerns:</p>
+<ul>
+<li><a href="trait.TraceUnfold.html#tymethod.key" title="method linnet::half_edge::algorithms::trace_unfold::TraceUnfold::key"><code>TraceUnfold::key</code></a> maps one traversed edge to its semantic operation label.</li>
+<li><a href="trait.Independence.html" title="trait linnet::half_edge::algorithms::trace_unfold::Independence"><code>Independence</code></a> decides when two labels commute and may live in the same Foata level.</li>
+<li><a href="trait.TraceUnfold.html#method.realizations_for_op" title="method linnet::half_edge::algorithms::trace_unfold::TraceUnfold::realizations_for_op"><code>TraceUnfold::realizations_for_op</code></a> optionally expands one traversed edge into several
+equivalent operation sequences before canonicalization.</li>
+</ul>
+<p>In the simplest case, each edge has exactly one realization and the unfolding merges paths
+that differ only by commuting independent operations.</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<p>A minimal unfold where the two ways of reaching <code>AB</code> collapse to the same trace key:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>linnet::half_edge::{
+    HedgeGraph, NoData, algorithms::trace_unfold::{HiddenData, Independence, TraceUnfold},
+    builder::HedgeGraphBuilder, involution::EdgeIndex, nodestore::DefaultNodeStore,
+};
+
+<span class="kw">struct </span>ExampleGraph {
+    graph: HedgeGraph&lt;String, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str, NoData, DefaultNodeStore&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt;&gt;,
+}
+
+<span class="kw">impl </span>Independence&lt;HiddenData&lt;String, EdgeIndex&gt;&gt; <span class="kw">for </span>ExampleGraph {
+    <span class="kw">fn </span>independent(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        a: <span class="kw-2">&amp;</span>HiddenData&lt;String, EdgeIndex&gt;,
+        b: <span class="kw-2">&amp;</span>HiddenData&lt;String, EdgeIndex&gt;,
+    ) -&gt; bool {
+        !a.order.chars().any(|c| b.order.contains(c))
+    }
+}
+
+<span class="kw">impl </span>TraceUnfold&lt;String&gt; <span class="kw">for </span>ExampleGraph {
+    <span class="kw">type </span>EdgeData = String;
+    <span class="kw">type </span>HedgeData = NoData;
+    <span class="kw">type </span>NodeData = <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str;
+    <span class="kw">type </span>NodeStorage = DefaultNodeStore&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt;;
+
+    <span class="kw">fn </span>graph(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+    ) -&gt; <span class="kw-2">&amp;</span>HedgeGraph&lt;<span class="self">Self</span>::EdgeData, <span class="self">Self</span>::NodeData, <span class="self">Self</span>::HedgeData, <span class="self">Self</span>::NodeStorage&gt; {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.graph
+    }
+
+    <span class="kw">fn </span>key(<span class="kw-2">&amp;</span><span class="self">self</span>, e: EdgeIndex) -&gt; String {
+        <span class="self">self</span>.graph[e].clone()
+    }
+}
+
+<span class="kw">let </span><span class="kw-2">mut </span>builder = HedgeGraphBuilder::&lt;String, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt;::new();
+<span class="kw">let </span>empty = builder.add_node(<span class="string">"empty"</span>);
+<span class="kw">let </span>a = builder.add_node(<span class="string">"A"</span>);
+<span class="kw">let </span>b = builder.add_node(<span class="string">"B"</span>);
+<span class="kw">let </span>ab = builder.add_node(<span class="string">"AB"</span>);
+
+builder.add_edge(empty, a, <span class="string">"A"</span>.to_string(), <span class="bool-val">true</span>);
+builder.add_edge(empty, b, <span class="string">"B"</span>.to_string(), <span class="bool-val">true</span>);
+builder.add_edge(a, ab, <span class="string">"B"</span>.to_string(), <span class="bool-val">true</span>);
+builder.add_edge(b, ab, <span class="string">"A"</span>.to_string(), <span class="bool-val">true</span>);
+
+<span class="kw">let </span>graph = ExampleGraph {
+    graph: builder.build::&lt;DefaultNodeStore&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt;&gt;(),
+};
+<span class="kw">let </span>unfolded = graph.trace_unfold::&lt;DefaultNodeStore&lt;usize&gt;&gt;(empty);
+<span class="kw">let </span>labels: Vec&lt;<span class="kw">_</span>&gt; = unfolded.iter_nodes().map(|(<span class="kw">_</span>, <span class="kw">_</span>, key)| key.to_string()).collect();
+
+<span class="macro">assert_eq!</span>(unfolded.n_nodes(), <span class="number">4</span>);
+<span class="macro">assert!</span>(labels.iter().any(|label| label == <span class="string">"∅"</span>));
+<span class="macro">assert!</span>(labels.iter().any(|label| label == <span class="string">"{A}"</span>));
+<span class="macro">assert!</span>(labels.iter().any(|label| label == <span class="string">"{B}"</span>));
+<span class="macro">assert!</span>(labels.iter().any(|label| label == <span class="string">"{A,B}"</span>));</code></pre></div></div></details><h2 id="required-associated-types" class="section-header">Required Associated Types<a href="#required-associated-types" class="anchor">§</a></h2><div class="methods"><section id="associatedtype.EdgeData" class="method"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#191">Source</a><h4 class="code-header">type <a href="#associatedtype.EdgeData" class="associatedtype">EdgeData</a>: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/cmp/trait.Ord.html" title="trait core::cmp::Ord">Ord</a> + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/hash/trait.Hash.html" title="trait core::hash::Hash">Hash</a></h4></section><section id="associatedtype.NodeData" class="method"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#192">Source</a><h4 class="code-header">type <a href="#associatedtype.NodeData" class="associatedtype">NodeData</a></h4></section><section id="associatedtype.NodeStorage" class="method"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#193">Source</a><h4 class="code-header">type <a href="#associatedtype.NodeStorage" class="associatedtype">NodeStorage</a>: <a class="trait" href="../../nodestore/trait.NodeStorageOps.html" title="trait linnet::half_edge::nodestore::NodeStorageOps">NodeStorageOps</a>&lt;NodeData = Self::<a class="associatedtype" href="trait.TraceUnfold.html#associatedtype.NodeData" title="type linnet::half_edge::algorithms::trace_unfold::TraceUnfold::NodeData">NodeData</a>&gt;</h4></section><section id="associatedtype.HedgeData" class="method"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#194">Source</a><h4 class="code-header">type <a href="#associatedtype.HedgeData" class="associatedtype">HedgeData</a></h4></section></div><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><section id="tymethod.graph" class="method"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#196-198">Source</a><h4 class="code-header">fn <a href="#tymethod.graph" class="fn">graph</a>(
+    &amp;self,
+) -&gt; &amp;<a class="struct" href="../../struct.HedgeGraph.html" title="struct linnet::half_edge::HedgeGraph">HedgeGraph</a>&lt;Self::<a class="associatedtype" href="trait.TraceUnfold.html#associatedtype.EdgeData" title="type linnet::half_edge::algorithms::trace_unfold::TraceUnfold::EdgeData">EdgeData</a>, Self::<a class="associatedtype" href="trait.TraceUnfold.html#associatedtype.NodeData" title="type linnet::half_edge::algorithms::trace_unfold::TraceUnfold::NodeData">NodeData</a>, Self::<a class="associatedtype" href="trait.TraceUnfold.html#associatedtype.HedgeData" title="type linnet::half_edge::algorithms::trace_unfold::TraceUnfold::HedgeData">HedgeData</a>, Self::<a class="associatedtype" href="trait.TraceUnfold.html#associatedtype.NodeStorage" title="type linnet::half_edge::algorithms::trace_unfold::TraceUnfold::NodeStorage">NodeStorage</a>&gt;</h4></section><section id="tymethod.key" class="method"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#200">Source</a><h4 class="code-header">fn <a href="#tymethod.key" class="fn">key</a>(&amp;self, e: <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>) -&gt; Key</h4></section></div><h2 id="provided-methods" class="section-header">Provided Methods<a href="#provided-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="method.realizations_for_op" class="method"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#289-294">Source</a><h4 class="code-header">fn <a href="#method.realizations_for_op" class="fn">realizations_for_op</a>(
+    &amp;self,
+    op: <a class="struct" href="struct.HiddenData.html" title="struct linnet::half_edge::algorithms::trace_unfold::HiddenData">HiddenData</a>&lt;Key, <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>&gt;,
+) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="struct.HiddenData.html" title="struct linnet::half_edge::algorithms::trace_unfold::HiddenData">HiddenData</a>&lt;Key, <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>&gt;&gt;&gt;</h4></section></summary><div class="docblock"><p>Returns all operation sequences represented by one traversed edge.</p>
+<p>The default is a single realization containing the edge’s own label unchanged. Override
+this when one graph transition may also be interpreted as a factorized sequence of more
+primitive operations.</p>
+<h5 id="examples-1"><a class="doc-anchor" href="#examples-1">§</a>Examples</h5>
+<p>Here one edge labeled <code>AB</code> is unfolded both atomically and as the commuting pair
+<code>A, B</code>, producing two distinct trace nodes over the same underlying graph node.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>linnet::half_edge::{
+    HedgeGraph, NoData, algorithms::trace_unfold::{HiddenData, Independence, TraceUnfold},
+    builder::HedgeGraphBuilder, involution::EdgeIndex, nodestore::DefaultNodeStore,
+};
+
+<span class="kw">struct </span>FactoringGraph {
+    graph: HedgeGraph&lt;String, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str, NoData, DefaultNodeStore&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt;&gt;,
+}
+
+<span class="kw">impl </span>Independence&lt;HiddenData&lt;String, EdgeIndex&gt;&gt; <span class="kw">for </span>FactoringGraph {
+    <span class="kw">fn </span>independent(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        a: <span class="kw-2">&amp;</span>HiddenData&lt;String, EdgeIndex&gt;,
+        b: <span class="kw-2">&amp;</span>HiddenData&lt;String, EdgeIndex&gt;,
+    ) -&gt; bool {
+        !a.order.chars().any(|c| b.order.contains(c))
+    }
+}
+
+<span class="kw">impl </span>TraceUnfold&lt;String&gt; <span class="kw">for </span>FactoringGraph {
+    <span class="kw">type </span>EdgeData = String;
+    <span class="kw">type </span>HedgeData = NoData;
+    <span class="kw">type </span>NodeData = <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str;
+    <span class="kw">type </span>NodeStorage = DefaultNodeStore&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt;;
+
+    <span class="kw">fn </span>graph(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+    ) -&gt; <span class="kw-2">&amp;</span>HedgeGraph&lt;<span class="self">Self</span>::EdgeData, <span class="self">Self</span>::NodeData, <span class="self">Self</span>::HedgeData, <span class="self">Self</span>::NodeStorage&gt; {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.graph
+    }
+
+    <span class="kw">fn </span>key(<span class="kw-2">&amp;</span><span class="self">self</span>, e: EdgeIndex) -&gt; String {
+        <span class="self">self</span>.graph[e].clone()
+    }
+
+    <span class="kw">fn </span>realizations_for_op(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        op: HiddenData&lt;String, EdgeIndex&gt;,
+    ) -&gt; Vec&lt;Vec&lt;HiddenData&lt;String, EdgeIndex&gt;&gt;&gt; {
+        <span class="kw">if </span>op.order != <span class="string">"AB" </span>{
+            <span class="kw">return </span><span class="macro">vec!</span>[<span class="macro">vec!</span>[op]];
+        }
+
+        <span class="macro">vec!</span>[
+            <span class="macro">vec!</span>[op.clone()],
+            <span class="macro">vec!</span>[
+                HiddenData {
+                    order: <span class="string">"A"</span>.to_string(),
+                    data: op.data,
+                },
+                HiddenData {
+                    order: <span class="string">"B"</span>.to_string(),
+                    data: op.data,
+                },
+            ],
+        ]
+    }
+}
+
+<span class="kw">let </span><span class="kw-2">mut </span>builder = HedgeGraphBuilder::&lt;String, <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt;::new();
+<span class="kw">let </span>empty = builder.add_node(<span class="string">"empty"</span>);
+<span class="kw">let </span>ab = builder.add_node(<span class="string">"AB"</span>);
+builder.add_edge(empty, ab, <span class="string">"AB"</span>.to_string(), <span class="bool-val">true</span>);
+
+<span class="kw">let </span>graph = FactoringGraph {
+    graph: builder.build::&lt;DefaultNodeStore&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt;&gt;(),
+};
+<span class="kw">let </span>unfolded = graph.trace_unfold::&lt;DefaultNodeStore&lt;usize&gt;&gt;(empty);
+<span class="kw">let </span>labels: Vec&lt;<span class="kw">_</span>&gt; = unfolded.iter_nodes().map(|(<span class="kw">_</span>, <span class="kw">_</span>, key)| key.to_string()).collect();
+
+<span class="macro">assert_eq!</span>(unfolded.n_nodes(), <span class="number">3</span>);
+<span class="macro">assert!</span>(labels.iter().any(|label| label == <span class="string">"∅"</span>));
+<span class="macro">assert!</span>(labels.iter().any(|label| label == <span class="string">"{AB}"</span>));
+<span class="macro">assert!</span>(labels.iter().any(|label| label == <span class="string">"{A,B}"</span>));</code></pre></div></div></details><details class="toggle method-toggle" open><summary><section id="method.join_factors" class="method"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#304-306">Source</a><h4 class="code-header">fn <a href="#method.join_factors" class="fn">join_factors</a>(&amp;self, _target: <a class="struct" href="../../struct.NodeIndex.html" title="struct linnet::half_edge::NodeIndex">NodeIndex</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.97.0/alloc/collections/btree/set/struct.BTreeSet.html" title="struct alloc::collections::btree::set::BTreeSet">BTreeSet</a>&lt;Key&gt;&gt;</h4></section></summary><div class="docblock"><p>Returns the required factors of <code>target</code> when reaching that join should combine
+independent branch histories.</p>
+<p>Most trace-unfolded graphs only merge paths that canonicalize to the same key by normal
+extension. Implement this hook for graphs where some target nodes are explicit disjoint
+joins of independently unfolded factors. The returned keys are used as factor labels: the
+unfold will synthesize joined histories only by selecting one incoming branch for each
+returned factor, and each selected branch must enter <code>target</code> through an edge with that key.</p>
+</div></details><section id="method.trace_unfold_of" class="method"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#309-443">Source</a><h4 class="code-header">fn <a href="#method.trace_unfold_of" class="fn">trace_unfold_of</a>&lt;M: <a class="trait" href="../../nodestore/trait.NodeStorageOps.html" title="trait linnet::half_edge::nodestore::NodeStorageOps">NodeStorageOps</a>&lt;NodeData = <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.usize.html">usize</a>&gt;, S: <a class="trait" href="../../subgraph/trait.SubSetLike.html" title="trait linnet::half_edge::subgraph::SubSetLike">SubSetLike</a>&gt;(
+    &amp;self,
+    subgraph: <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.reference.html">&amp;S</a>,
+    start: <a class="struct" href="../../struct.NodeIndex.html" title="struct linnet::half_edge::NodeIndex">NodeIndex</a>,
+) -&gt; <a class="struct" href="struct.UnfoldedTraceGraph.html" title="struct linnet::half_edge::algorithms::trace_unfold::UnfoldedTraceGraph">UnfoldedTraceGraph</a>&lt;Self, <a class="struct" href="struct.TraceKey.html" title="struct linnet::half_edge::algorithms::trace_unfold::TraceKey">TraceKey</a>&lt;Key, <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>&gt;, M::<a class="associatedtype" href="../../nodestore/trait.NodeStorageOps.html#associatedtype.OpStorage" title="type linnet::half_edge::nodestore::NodeStorageOps::OpStorage">OpStorage</a>&lt;<a class="struct" href="struct.TraceKey.html" title="struct linnet::half_edge::algorithms::trace_unfold::TraceKey">TraceKey</a>&lt;Key, <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>&gt;&gt;&gt;</h4></section><section id="method.trace_unfold" class="method"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#446-452">Source</a><h4 class="code-header">fn <a href="#method.trace_unfold" class="fn">trace_unfold</a>&lt;M: <a class="trait" href="../../nodestore/trait.NodeStorageOps.html" title="trait linnet::half_edge::nodestore::NodeStorageOps">NodeStorageOps</a>&lt;NodeData = <a class="primitive" href="https://doc.rust-lang.org/1.97.0/std/primitive.usize.html">usize</a>&gt;&gt;(
+    &amp;self,
+    start: <a class="struct" href="../../struct.NodeIndex.html" title="struct linnet::half_edge::NodeIndex">NodeIndex</a>,
+) -&gt; <a class="struct" href="struct.UnfoldedTraceGraph.html" title="struct linnet::half_edge::algorithms::trace_unfold::UnfoldedTraceGraph">UnfoldedTraceGraph</a>&lt;Self, <a class="struct" href="struct.TraceKey.html" title="struct linnet::half_edge::algorithms::trace_unfold::TraceKey">TraceKey</a>&lt;Key, <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>&gt;, M::<a class="associatedtype" href="../../nodestore/trait.NodeStorageOps.html#associatedtype.OpStorage" title="type linnet::half_edge::nodestore::NodeStorageOps::OpStorage">OpStorage</a>&lt;<a class="struct" href="struct.TraceKey.html" title="struct linnet::half_edge::algorithms::trace_unfold::TraceKey">TraceKey</a>&lt;Key, <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>&gt;&gt;&gt;</h4></section></div><h2 id="dyn-compatibility" class="section-header">Dyn Compatibility<a href="#dyn-compatibility" class="anchor">§</a></h2><div class="dyn-compatibility-info"><p>This trait is <b>not</b> <a href="https://doc.rust-lang.org/1.97.0/reference/items/traits.html#dyn-compatibility">dyn compatible</a>.</p><p><i>In older versions of Rust, dyn compatibility was called "object safety", so this trait is not object safe.</i></p></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"><div class="negative-marker"></div><details class="toggle implementors-toggle"><summary><section id="impl-TraceUnfold%3CK%3E-for-HedgeGraph%3CE,+V,+H,+N%3E" class="impl"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#786-806">Source</a><a href="#impl-TraceUnfold%3CK%3E-for-HedgeGraph%3CE,+V,+H,+N%3E" class="anchor">§</a><h3 class="code-header">impl&lt;E: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/cmp/trait.Ord.html" title="trait core::cmp::Ord">Ord</a> + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/hash/trait.Hash.html" title="trait core::hash::Hash">Hash</a>, H, V, N: <a class="trait" href="../../nodestore/trait.NodeStorageOps.html" title="trait linnet::half_edge::nodestore::NodeStorageOps">NodeStorageOps</a>&lt;NodeData = V&gt;, K: <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/cmp/trait.Eq.html" title="trait core::cmp::Eq">Eq</a> + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/hash/trait.Hash.html" title="trait core::hash::Hash">Hash</a> + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/clone/trait.Clone.html" title="trait core::clone::Clone">Clone</a> + <a class="trait" href="https://doc.rust-lang.org/1.97.0/core/cmp/trait.Ord.html" title="trait core::cmp::Ord">Ord</a>&gt; <a class="trait" href="trait.TraceUnfold.html" title="trait linnet::half_edge::algorithms::trace_unfold::TraceUnfold">TraceUnfold</a>&lt;K&gt; for <a class="struct" href="../../struct.HedgeGraph.html" title="struct linnet::half_edge::HedgeGraph">HedgeGraph</a>&lt;E, V, H, N&gt;<div class="where">where
+    Self: <a class="trait" href="trait.Independence.html" title="trait linnet::half_edge::algorithms::trace_unfold::Independence">Independence</a>&lt;<a class="struct" href="struct.HiddenData.html" title="struct linnet::half_edge::algorithms::trace_unfold::HiddenData">HiddenData</a>&lt;K, <a class="struct" href="../../involution/struct.EdgeIndex.html" title="struct linnet::half_edge::involution::EdgeIndex">EdgeIndex</a>&gt;&gt; + <a class="trait" href="trait.Key.html" title="trait linnet::half_edge::algorithms::trace_unfold::Key">Key</a>&lt;K&gt;,</div></h3></section></summary><div class="impl-items"><section id="associatedtype.EdgeData-1" class="associatedtype trait-impl"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#792">Source</a><a href="#associatedtype.EdgeData-1" class="anchor">§</a><h4 class="code-header">type <a href="#associatedtype.EdgeData" class="associatedtype">EdgeData</a> = E</h4></section><section id="associatedtype.NodeData-1" class="associatedtype trait-impl"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#793">Source</a><a href="#associatedtype.NodeData-1" class="anchor">§</a><h4 class="code-header">type <a href="#associatedtype.NodeData" class="associatedtype">NodeData</a> = V</h4></section><section id="associatedtype.NodeStorage-1" class="associatedtype trait-impl"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#794">Source</a><a href="#associatedtype.NodeStorage-1" class="anchor">§</a><h4 class="code-header">type <a href="#associatedtype.NodeStorage" class="associatedtype">NodeStorage</a> = N</h4></section><section id="associatedtype.HedgeData-1" class="associatedtype trait-impl"><a class="src rightside" href="../../../../src/linnet/half_edge/algorithms/trace_unfold.rs.html#795">Source</a><a href="#associatedtype.HedgeData-1" class="anchor">§</a><h4 class="code-header">type <a href="#associatedtype.HedgeData" class="associatedtype">HedgeData</a> = H</h4></section></div></details></div><script src="../../../../trait.impl/linnet/half_edge/algorithms/trace_unfold/trait.TraceUnfold.js" async></script></section></div></main></body></html>

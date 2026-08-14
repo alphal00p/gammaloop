@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["canonize_impl","list_dangling_impl","not_slot","not_wraped_aind","to_dots_impl","wrap_dummies_impl","wrap_indices_impl"],"static":["MS"],"struct":["MetricSymbols"],"trait":["MetricSimplifier","PermuteWithMetric"]};
