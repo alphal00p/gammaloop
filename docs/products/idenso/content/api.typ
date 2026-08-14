@@ -1,12 +1,7 @@
-#import "../../shared.typ": boundary, catalog-contract, source-link
+#import "../../shared.typ": boundary, source-link
 
 #let api = [
-= Rust and Python API boundaries
-
-#catalog-contract(
-  rust-scope: "idenso",
-  python-scope: "symbolica.community.idenso",
-)
+= Rust and Python APIs
 
 == Rust package
 
@@ -21,9 +16,9 @@ rewrite families:
 - `representations::initialize` installs the standard representation and tensor symbols.
 
 Representation helper macros such as `bis!`, `cof!`, and `coad!` construct the symbolic forms
-expected by Spenso and Idenso. Exact macro grammar and rewrite return types come from the
-generated Rust catalog. The optional `bincode`, `reference-cases`, `python`, and
-`python_stubgen` surfaces must be labeled by feature.
+expected by Spenso and Idenso. The Rust API reference gives their accepted forms and the return
+types of each rewrite. APIs behind `bincode`, `reference-cases`, `python`, and `python_stubgen`
+are available only when the matching Cargo feature is enabled.
 
 == Python community module
 
@@ -39,8 +34,8 @@ then verify the actual assembly with
 For a source build, add this crate to the external
 #link("https://github.com/benruijl/symbolica-community")[symbolica-community] assembly with the
 `python` feature and call `IdensoModule`'s `SymbolicaCommunityModule` registration when that
-extension is assembled. This documentation build validates the registration function but does
-not modify an installed Symbolica package.
+extension is assembled. Building the Rust crate alone does not add the community module to an
+already installed Symbolica package.
 
 The Python API operates on Symbolica expressions and groups naturally into four phases:
 
@@ -69,8 +64,7 @@ The example deliberately leaves expression construction to Symbolica and Spenso:
 not define a second parser syntax. Apply one transformation at a time while developing a
 pipeline so expression growth and convention changes remain observable.
 
-Python docstrings, signatures, and module names come from the binding descriptor and are
-rendered as plain text. Source starting points are
+For implementation details, start with
 #source-link("crates/idenso/src/lib.rs", label: "the Rust API") and
 #source-link("crates/idenso/src/python.rs", label: "the Python binding").
 ]

@@ -1,12 +1,7 @@
-#import "../../shared.typ": boundary, catalog-contract, source-link
+#import "../../shared.typ": boundary, source-link
 
 #let api = [
-= Rust, proc-macro, and Python API boundaries
-
-#catalog-contract(
-  rust-scope: "spenso, spenso-macros, spenso-hep-lib",
-  python-scope: "symbolica.community.spenso",
-)
+= Rust, macros, and Python APIs
 
 == Core Rust package
 
@@ -18,10 +13,10 @@ The `spenso` crate organizes its public surface into `structure`, `tensors`, `co
 - contraction traits perform pairwise or multi-tensor operations;
 - network stores and libraries bind symbolic tensor names to concrete data and execute a graph.
 
-The generated Rust reference must include trait implementations and generic constraints. They
-are essential to understanding which combinations of structure and data support an operation.
-The optional `shadowing` surface and symbolic parallelism policy must be marked with their
-feature gate.
+Trait implementations and generic constraints determine which combinations of structure and
+data support an operation. Consult the Rust API reference when a method is unavailable for a
+particular tensor type. The `shadowing` API and symbolic parallelism controls require their
+corresponding Cargo features.
 
 == Proc macros and HEP data
 
@@ -39,9 +34,9 @@ use spenso::structure::representation::RepName;
 struct Flavor {}
 ```
 
-Generated reference data for a derive macro must keep its helper attributes, allowed targets,
-feature conditions, and original doc comments. Macro expansion remains compile-time Rust;
-there is no Typst runtime scope inside a procedural macro.
+The proc-macro API reference lists the derive's helper attributes, allowed targets, and feature
+conditions. Macro expansion happens at compile time and produces ordinary Rust
+implementations.
 
 `spenso-hep-lib` supplies domain data and tensor-library construction for high-energy physics.
 It is intentionally separate from the generic core. Users who need gamma matrices or physics
@@ -59,11 +54,11 @@ projectors add that package; generic Spenso users do not inherit those conventio
 For a released Python assembly that includes Spenso, install the provider's Symbolica
 distribution with `python -m pip install symbolica`, then verify
 `python -c "import symbolica.community.spenso"`. Module availability follows the Symbolica
-assembly version, not the presence of this Rust workspace. Source embedders must add `spynso3`
+assembly version; a local Spenso source checkout does not add the module to an installed wheel.
+Source embedders must add `spynso3`
 to the external #link("https://github.com/benruijl/symbolica-community")[symbolica-community]
 assembly and invoke its `SymbolicaCommunityModule` registration while building that extension;
-this repository does not install or dynamically inject the module into an unrelated Symbolica
-wheel.
+building the Rust crate alone does not inject the module into another Symbolica wheel.
 
 ```python
 from symbolica.community.spenso import (
@@ -78,9 +73,9 @@ identity = Tensor.dense(indices, [1.0, 0.0, 0.0, 1.0])
 ```
 
 The Python surface includes tensor and structure types, tensor networks, execution modes,
-tensor libraries, expression evaluators, and symbolic-parallelism controls. Stub and reference
-generation belong to `spynso3`; the current Python signatures must not be reconstructed from
-the generic Rust core alone.
+tensor libraries, expression evaluators, and symbolic-parallelism controls. Its signatures can
+differ from the generic Rust API because `spynso3` provides the Python-specific conversions and
+defaults.
 
 Source starting points are #source-link("crates/spenso/src/spenso.rs", label: "the core crate"),
 #source-link("crates/spenso-macros/src/lib.rs", label: "the derive crate"),

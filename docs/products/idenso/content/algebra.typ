@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, boundary, product-link, source-link
+#import "../../shared.typ": callout, product-link, source-link
 
 #let algebra = [
 = Syntax, indices, and algebra passes
@@ -43,26 +43,17 @@ an all-at-once fixed-point loop can obscure which convention produced a sign or 
 == Schoonschip network parsing
 
 The Schoonschip path parses large gamma-chain expressions into the same Spenso-compatible
-network model before contraction. The maintained architecture note was checked against the
-current parser boundary: aliasing and normalization happen before network construction;
-contraction planning belongs to Spenso; Idenso supplies the representation and algebra rules.
-Use the exact-expression and unfiltered regression inputs when changing parsing or aliasing, as
-early scalar substitution can alter expression growth without changing the intended tensor
-network.
-
-#boundary("Validated design material", [
-  The detailed FORM/Symbolica notes under `docs/idenso` describe the conventions implemented by
-  the current representation registrations and rewrite tests. The architecture document for
-  Schoonschip parsing records the integration path. This manual extracts their supported user
-  workflow; experimental optimization observations remain developer material rather than API
-  promises.
-])
+network model before contraction. It resolves aliases and normalizes the expression before
+constructing the network. Spenso then plans and executes contractions, while Idenso supplies
+the representation and algebra rules. Avoid substituting scalar parameters too early: doing so
+can substantially increase intermediate expression size even when the resulting tensor network
+is unchanged.
 
 Concrete syntax and rewrite cases are documented in
 #source-link("docs/idenso/spenso_symbolica_syntax_and_rewrites.md", label: "the Spenso/Symbolica syntax note")
 and #source-link("docs/idenso/form_symbolica_color_and_dirac.typ", label: "the color and Dirac comparison").
-The larger parsing flow is tracked in
-#source-link("docs/architecture/schoonschip-net-parsing.html", label: "the Schoonschip architecture note").
+The #source-link("docs/architecture/schoonschip-net-parsing.html", label: "Schoonschip parsing guide")
+shows how normalization, network construction, and contraction fit together.
 
 Tensor storage and execution remain owned by #product-link("spenso", label: "Spenso").
 ]

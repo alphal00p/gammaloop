@@ -1,22 +1,28 @@
-#import "../../shared.typ": release-note, source-link
+#import "../../shared.typ": callout
 
 #let changelog = [
 = Releases and change history
 
-#release-note([
-  GammaLoop does not currently have a canonical root `CHANGELOG.md`. Product releases are
-  identified by the root Python version, the `gammalooprs` package version, and repository
-  tags. This manual must not synthesize detailed historical entries from commit messages or
-  reuse the changelogs of Linnet, Spenso, Idenso, or Vakint.
+GammaLoop versions are identified by repository tags together with the version of the Python
+distribution and the `gammalooprs` Rust package. These components can evolve independently, so
+record all of them when reporting a result or asking for support.
+
+== Choosing the matching documentation
+
+The `latest` channel follows current development. Documentation under `snapshots/<tag>` stays
+with a tagged release. Use the snapshot matching your checkout whenever command options, state
+files, or API signatures differ from `latest`.
+
+== Before upgrading
+
+Release notes currently live with repository tags and their linked pull requests rather than in
+one consolidated changelog. Review them before upgrading, especially when you depend on
+persisted states, CLI scripts, Python bindings, or numerical results. Keep a copy of valuable
+state directories and re-run validation samples after changing versions.
+
+#callout("Information to include in a report", [
+  Include the repository tag or commit, the Python distribution version, the `gammalooprs`
+  version, the run card, and any relevant settings overrides. This makes a calculation easier
+  to reproduce and distinguishes a software change from a configuration change.
 ])
-
-The documentation build may publish immutable snapshots for existing GammaLoop tags and a
-moving `latest` channel. A snapshot records the repository revision and all component versions
-from the registry. If release notes are curated later, they should describe user-visible CLI,
-state, Rust API, Python API, and physics-result changes, including migration requirements.
-
-Until a canonical changelog is added, consult the repository's tags and pull requests and
-verify behavior against the current source. The short README remains the installation and
-entry-point summary; architectural truth belongs in
-#source-link("docs/architecture/architecture-current.md", label: "architecture-current.md").
 ]

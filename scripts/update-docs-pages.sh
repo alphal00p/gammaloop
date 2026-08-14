@@ -31,6 +31,10 @@ require_bundle() {
         manual/releases/index.html \
         assets/site.css \
         assets/site.js \
+        assets/local-unitarity-light.svg \
+        assets/local-unitarity-dark.svg \
+        assets/gammalooplogo-light.svg \
+        assets/gammalooplogo-dark.svg \
         reference/rust/index.html \
         reference/python/index.html
     do
@@ -62,6 +66,14 @@ case "$mode" in
         [ -f "$build_root/.nojekyll" ] || fail "latest build has no .nojekyll marker"
         [ -f "$build_root/assets/site.css" ] || fail "latest build has no portal stylesheet"
         [ -f "$build_root/assets/site.js" ] || fail "latest build has no portal script"
+        [ -f "$build_root/assets/local-unitarity-light.svg" ] ||
+            fail "latest build has no light collaboration mark"
+        [ -f "$build_root/assets/local-unitarity-dark.svg" ] ||
+            fail "latest build has no dark collaboration mark"
+        [ -f "$build_root/assets/gammalooplogo-light.svg" ] ||
+            fail "latest build has no light project wordmark"
+        [ -f "$build_root/assets/gammalooplogo-dark.svg" ] ||
+            fail "latest build has no dark project wordmark"
 
         for product in "${products[@]}"; do
             require_bundle "$build_root/products/$product/latest"
@@ -74,6 +86,18 @@ case "$mode" in
         mkdir -p "$pages_root/assets"
         install -m 0644 "$build_root/assets/site.css" "$pages_root/assets/site.css"
         install -m 0644 "$build_root/assets/site.js" "$pages_root/assets/site.js"
+        install -m 0644 \
+            "$build_root/assets/local-unitarity-light.svg" \
+            "$pages_root/assets/local-unitarity-light.svg"
+        install -m 0644 \
+            "$build_root/assets/local-unitarity-dark.svg" \
+            "$pages_root/assets/local-unitarity-dark.svg"
+        install -m 0644 \
+            "$build_root/assets/gammalooplogo-light.svg" \
+            "$pages_root/assets/gammalooplogo-light.svg"
+        install -m 0644 \
+            "$build_root/assets/gammalooplogo-dark.svg" \
+            "$pages_root/assets/gammalooplogo-dark.svg"
         mkdir -p "$pages_root/products"
 
         for product in "${products[@]}"; do

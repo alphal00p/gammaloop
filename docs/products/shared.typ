@@ -1,11 +1,4 @@
-// Shared presentation and routing helpers for every product manual.
-//
-// Data ownership is deliberately split three ways:
-// - registry.toml owns product identity, component versions, feature gates, and relationships;
-// - generated Rust/Python catalogs own signatures and item-level API metadata;
-// - the files below docs/products/<product>/content own narrative guidance and examples.
-//
-// Product links climb from products/<current>/<channel>/ to the shared products root.
+// Shared presentation and routing helpers for every project manual.
 
 #let docs-channel = sys.inputs.at("channel", default: "latest")
 #let docs-snapshot-tag = sys.inputs.at("snapshot-tag", default: "")
@@ -60,28 +53,25 @@
 
 #let catalog-contract(rust-scope: none, python-scope: none) = {
   let rust-line = if rust-scope == none {
-    [No Rust catalog is mounted for this page.]
+    []
   } else {
-    [Rust scope: #raw(rust-scope)]
+    [Rust packages: #raw(rust-scope)]
   }
   let python-line = if python-scope == none {
-    [No Python catalog is mounted for this page.]
+    []
   } else {
-    [Python scope: #raw(python-scope)]
+    [Python modules: #raw(python-scope)]
   }
 
-  callout("Generated-reference contract", [
-    Signatures, fields, variants, defaults, feature gates, and source locations come from
-    ordered generated descriptors. Hand-written prose explains intent and workflow; it must
-    not duplicate a signature as a second source of truth. Rust documentation explicitly
-    marked as Typst markup may be evaluated as markup. Python docstrings and all other
-    external metadata are escaped as plain text.
+  callout("API reference", [
+    The reference for this version lists public items, signatures, fields, defaults, feature
+    requirements, and links to their source definitions.
 
     #rust-line  #linebreak() #python-line
   ])
 }
 
-#let release-note(body) = callout("Release-history policy", body)
+#let release-note(body) = callout("Release information", body)
 
 #let product-document(
   title: none,
@@ -114,8 +104,6 @@
     #text(size: 25pt, weight: "bold", fill: ink)[#title]
     #v(5pt)
     #text(size: 12pt, fill: muted)[#tagline]
-    #v(8pt)
-    #text(size: 8.5pt, fill: muted)[Version source: #raw(version) #h(1em) Owner: #owner]
   ]
 
   v(15pt)

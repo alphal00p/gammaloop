@@ -45,7 +45,7 @@ useful for typed tensors and contractions without that layer.
   `SimpleRepresentation` derive used to declare custom index representations.
   `spenso-hep-lib` owns concrete high-energy-physics tensor-library data such as gamma matrices
   and projectors. The `spynso3` adapter owns the Python community module. Their versions and
-  feature gates are tracked independently in the product registry.
+  feature gates are independent, so select and upgrade each component explicitly.
 ])
 
 Spenso uses #product-link("linnet", label: "Linnet") for the underlying network graph.
@@ -53,6 +53,7 @@ Spenso uses #product-link("linnet", label: "Linnet") for the underlying network 
 Symbolica expressions. #product-link("gammaloop", label: "GammaLoop") consumes these components
 inside a broader collider workflow.
 
-Start with the #source-link("crates/spenso/README.md", label: "Spenso README") for the package
-summary and use the generated catalog for the exact compiled surface.
+The #source-link("crates/spenso/README.md", label: "Spenso README") gives a compact package
+summary. The Rust and Python API sections list the public modules, traits, feature gates, and
+import paths.
 ]

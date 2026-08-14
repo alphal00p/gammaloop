@@ -1,11 +1,11 @@
-#import "../../shared.typ": boundary, callout, source-link
+#import "../../shared.typ": callout
 
 #let tutorial = [
 = Tutorial
 
-This tutorial constructs a half-edge graph in Rust, validates its invariants, finds its one
-independent cycle, and prints DOT. It deliberately starts with the builder instead of hiding
-Linnet's typed node and half-edge identities behind a generic graph adapter.
+In this tutorial, you will construct a half-edge graph in Rust, validate its invariants, find
+its one independent cycle, and print DOT. The builder returns Linnet's typed node and half-edge
+identifiers directly, so you can see where graph identity enters the workflow.
 
 == Prerequisites
 
@@ -79,12 +79,6 @@ plain DOT interchange.
   parsing or construction, before applying graph algorithms.
 - If a traversal includes an unexpected dangling edge, check the selected subgraph and the
   `Flow` assigned to each external edge.
-- Continue with the subgraph-and-algorithms manual, then consult the generated Rust reference
-  for the exact return mappings of mutating operations.
-
-#boundary("Ground truth for this walkthrough", [
-  The builder calls mirror the examples and tests in
-  #source-link("crates/linnet/src/half_edge/builder.rs", label: "HedgeGraphBuilder") and
-  #source-link("crates/linnet/src/half_edge/tests.rs", label: "the cycle-basis tests").
-])
+- Continue with the subgraph-and-algorithms manual, then consult the Rust API reference for the
+  exact return mappings of mutating operations and additional builder methods.
 ]

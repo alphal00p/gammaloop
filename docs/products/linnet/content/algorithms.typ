@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, boundary, source-link
+#import "../../shared.typ": callout, boundary
 
 #let algorithms = [
 = Subgraphs, traversal, cuts, and drawing
@@ -54,12 +54,9 @@ handle parser errors before running algorithms. The `drawing` feature adds layou
 Layout coordinates are presentation data and may vary without changing topology, subgraph
 membership, or edge flow.
 
-#boundary("Spenso owns contraction semantics", [
+#boundary("Tensor contraction uses Spenso", [
   Linnet determines connectivity and graph transformations. Tensor compatibility, contraction
   cost, and execution belong to Spenso even when a Spenso network delegates its graph
   algorithms to Linnet.
 ])
-
-Worked regression cases for cycles and cuts live in
-#source-link("crates/linnet/src/half_edge/tests.rs", label: "the half-edge test suite").
 ]

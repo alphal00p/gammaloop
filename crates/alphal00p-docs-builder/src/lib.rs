@@ -25,6 +25,7 @@ use tempfile::Builder as TempDirBuilder;
 use walkdir::WalkDir;
 
 const PRODUCT_IDS: [&str; 5] = ["gammaloop", "linnet", "spenso", "idenso", "vakint"];
+const PORTAL_SCHEMA_VERSION: u32 = 1;
 const STRICT_RUSTDOC_FLAGS: &str = "-D rustdoc::broken_intra_doc_links \
     -D rustdoc::invalid_html_tags -D rustdoc::bare_urls";
 
@@ -80,6 +81,45 @@ struct ProductConfig {
     rust_components: Vec<ComponentConfig>,
     #[serde(default)]
     python_components: Vec<ComponentConfig>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PortalConfig {
+    schema: u32,
+    eyebrow: String,
+    title: String,
+    summary: String,
+    funding: String,
+    funding_url: String,
+    #[serde(default)]
+    pillar: Vec<PortalPillar>,
+    #[serde(default)]
+    people: Vec<PortalPerson>,
+    #[serde(default)]
+    affiliation: Vec<PortalAffiliation>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PortalPillar {
+    label: String,
+    title: String,
+    summary: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PortalPerson {
+    name: String,
+    initials: String,
+    role: String,
+    url: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PortalAffiliation {
+    name: String,
+    location: String,
+    summary: String,
+    url: String,
 }
 
 /// One authored chapter in a product's ordered, durable book tree.
@@ -158,6 +198,14 @@ impl SitePage {
     }
 }
 
+fn supplemental_reference_title(product: &str) -> Option<&'static str> {
+    match product {
+        "gammaloop" => Some("CLI commands and settings"),
+        "vakint" => Some("Topologies and dependencies"),
+        _ => None,
+    }
+}
+
 #[derive(Clone, Debug)]
 struct HeadingLink {
     level: u8,
@@ -169,6 +217,7 @@ pub struct SiteBuilder {
     root: PathBuf,
     api_root: PathBuf,
     registry: ProductRegistry,
+    portal: PortalConfig,
 }
 
 impl SiteBuilder {
@@ -187,6 +236,11 @@ impl SiteBuilder {
             .wrap_err_with(|| format!("failed to read {}", registry_path.display()))?;
         let registry = toml::from_str(&source)
             .wrap_err_with(|| format!("failed to parse {}", registry_path.display()))?;
+        let portal_path = root.join("docs/portal.toml");
+        let source = fs::read_to_string(&portal_path)
+            .wrap_err_with(|| format!("failed to read {}", portal_path.display()))?;
+        let portal = toml::from_str(&source)
+            .wrap_err_with(|| format!("failed to parse {}", portal_path.display()))?;
         let api_root = env::var_os("ALPHAL00P_DOCS_API_ROOT")
             .map(PathBuf::from)
             .unwrap_or_else(|| root.join("docs/api"));
@@ -194,6 +248,7 @@ impl SiteBuilder {
             root,
             api_root,
             registry,
+            portal,
         })
     }
 
@@ -216,8 +271,48 @@ impl SiteBuilder {
             "registry must contain exactly: {}",
             PRODUCT_IDS.join(", ")
         );
+        ensure!(
+            self.portal.schema == PORTAL_SCHEMA_VERSION,
+            "portal schema {} does not match renderer schema {}",
+            self.portal.schema,
+            PORTAL_SCHEMA_VERSION
+        );
+        ensure!(
+            !self.portal.title.trim().is_empty()
+                && !self.portal.summary.trim().is_empty()
+                && !self.portal.eyebrow.trim().is_empty(),
+            "portal identity metadata must not be empty"
+        );
+        ensure!(
+            !self.portal.pillar.is_empty()
+                && !self.portal.people.is_empty()
+                && !self.portal.affiliation.is_empty(),
+            "portal must define research pillars, people, and affiliations"
+        );
+        for url in self
+            .portal
+            .people
+            .iter()
+            .map(|person| person.url.as_str())
+            .chain(
+                self.portal
+                    .affiliation
+                    .iter()
+                    .map(|affiliation| affiliation.url.as_str()),
+            )
+            .chain(std::iter::once(self.portal.funding_url.as_str()))
+        {
+            ensure!(
+                url.starts_with("https://"),
+                "portal URL must use HTTPS: {url}"
+            );
+        }
         self.require_file(Path::new("docs/assets/site.css"))?;
         self.require_file(Path::new("docs/assets/site.js"))?;
+        self.require_file(Path::new("docs/assets/local-unitarity-light.svg"))?;
+        self.require_file(Path::new("docs/assets/local-unitarity-dark.svg"))?;
+        self.require_file(Path::new("assets/gammalooplogo-light.svg"))?;
+        self.require_file(Path::new("assets/gammalooplogo-dark.svg"))?;
 
         let mut component_ids = BTreeSet::new();
         for product in &self.registry.product {
@@ -545,9 +640,22 @@ impl SiteBuilder {
     fn write_site_assets(&self, destination: &Path) -> Result<()> {
         let assets = destination.join("assets");
         fs::create_dir_all(&assets)?;
-        for name in ["site.css", "site.js"] {
-            fs::copy(self.root.join("docs/assets").join(name), assets.join(name))
-                .wrap_err_with(|| format!("failed to copy documentation asset {name}"))?;
+        for (source, name) in [
+            ("docs/assets/site.css", "site.css"),
+            ("docs/assets/site.js", "site.js"),
+            (
+                "docs/assets/local-unitarity-light.svg",
+                "local-unitarity-light.svg",
+            ),
+            (
+                "docs/assets/local-unitarity-dark.svg",
+                "local-unitarity-dark.svg",
+            ),
+            ("assets/gammalooplogo-light.svg", "gammalooplogo-light.svg"),
+            ("assets/gammalooplogo-dark.svg", "gammalooplogo-dark.svg"),
+        ] {
+            fs::copy(self.root.join(source), assets.join(name))
+                .wrap_err_with(|| format!("failed to copy documentation asset {source}"))?;
         }
         Ok(())
     }
@@ -782,8 +890,8 @@ impl SiteBuilder {
         site: &Path,
     ) -> Result<String> {
         let mut rendered = String::from(
-            "= Supported API catalog <supported-api-catalog>\n\
-             This curated catalog is generated from explicit ordered scopes. Links lead to the exhaustive language references.\n",
+            "= API reference <supported-api-catalog>\n\
+             The packages available in this version are listed below. Follow an item link for its complete language reference.\n",
         );
         for component in product
             .rust_components
@@ -986,7 +1094,7 @@ impl SiteBuilder {
                 &product.title,
                 "Rust API",
                 &format!(
-                    "<p>Exhaustive Rustdoc for this product's documented crates.</p><ul>{packages}</ul>"
+                    "<p>Choose a crate to browse its complete Rust API.</p><ul>{packages}</ul>"
                 ),
             ),
         )?;
@@ -1012,10 +1120,7 @@ impl SiteBuilder {
                 text
             } else {
                 let module = component.module.as_deref().unwrap_or(&component.package);
-                let text = format!(
-                    "# Registration catalog for {module}\n# Generated by the isolated {} exporter.\n",
-                    component.id
-                );
+                let text = format!("# Python interface for {module}\n");
                 fs::write(destination.join(&stub_name), &text)?;
                 text
             };
@@ -1052,7 +1157,7 @@ impl SiteBuilder {
                 &product.title,
                 "Python API",
                 &format!(
-                    "<p>Structured reference generated from the checked public catalogs. Each component page presents signatures, docstrings, parameters, members, examples, feature requirements, and source locations. The <code>.pyi</code> files remain available as type-checker inputs and downloads.</p><div class=\"api-component-grid\">{cards}</div>"
+                    "<p>Choose a Python module to browse classes, functions, signatures, parameters, examples, and feature requirements. Type-checker <code>.pyi</code> files are also available for download.</p><div class=\"api-component-grid\">{cards}</div>"
                 ),
             ),
         )?;
@@ -1154,12 +1259,8 @@ impl SiteBuilder {
             ));
         }
         pages.push(SitePage::new("reference/rust/", "Rust API", "Reference"));
-        if matches!(product.id.as_str(), "gammaloop" | "vakint") {
-            pages.push(SitePage::new(
-                "reference/generated/",
-                "Generated reference",
-                "Reference",
-            ));
+        if let Some(title) = supplemental_reference_title(&product.id) {
+            pages.push(SitePage::new("reference/generated/", title, "Reference"));
         }
         pages.retain(|page| site.join(&page.route).join("index.html").is_file());
 
@@ -1237,7 +1338,7 @@ impl SiteBuilder {
             )
         };
         let html = format!(
-            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\"><title>{} · {}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\"><script defer src=\"{}assets/site.js\"></script></head><body data-docs-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\"><span class=\"site-brand-mark\">α</span><span class=\"site-brand-name\">alphal00p docs</span></a><div class=\"site-header-tools\"><select class=\"product-select\" data-product-select aria-label=\"Select product\">{}</select><button class=\"header-button\" type=\"button\" data-search-open>Search <span class=\"header-button-label\">⌘K</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main\" id=\"main-content\"><nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"{}\">{}</a> / {} / {}</nav><article class=\"docs-article\">{body}</article>{page_navigation}<footer class=\"page-footer\">{} · <a href=\"{}manual.pdf\">Complete PDF manual</a> · <a href=\"https://github.com/alphal00p/gammaloop/tree/{}\">source {}</a></footer></main>{toc_markup}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search this product\" aria-label=\"Search documentation\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
+            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\"><title>{} · {}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\"><script defer src=\"{}assets/site.js\"></script></head><body data-docs-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\"><span class=\"site-brand-mark\">α</span><span class=\"site-brand-name\">αLoop docs</span></a><div class=\"site-header-tools\"><select class=\"product-select\" data-product-select aria-label=\"Select project\">{}</select><button class=\"header-button\" type=\"button\" data-search-open>Search <span class=\"header-button-label\">⌘K</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main\" id=\"main-content\"><nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"{}\">{}</a> / {} / {}</nav><article class=\"docs-article\">{body}</article>{page_navigation}<footer class=\"page-footer\">{} · <a href=\"{}manual.pdf\">Complete PDF manual</a> · <a href=\"https://github.com/alphal00p/gammaloop/tree/{}\">source {}</a></footer></main>{toc_markup}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search this project\" aria-label=\"Search documentation\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
             escape_html(&format!("{} — {}", product.tagline, page.title)),
             escape_html(&product.title),
             escape_html(&page.title),
@@ -1281,11 +1382,8 @@ impl SiteBuilder {
         let reference = groups.entry("Reference".to_owned()).or_default();
         reference.push(("reference/python/".to_owned(), "Python API".to_owned()));
         reference.push(("reference/rust/".to_owned(), "Rust API".to_owned()));
-        if matches!(product.id.as_str(), "gammaloop" | "vakint") {
-            reference.push((
-                "reference/generated/".to_owned(),
-                "Generated reference".to_owned(),
-            ));
+        if let Some(title) = supplemental_reference_title(&product.id) {
+            reference.push(("reference/generated/".to_owned(), title.to_owned()));
         }
 
         let mut navigation = String::new();
@@ -1494,38 +1592,111 @@ impl SiteBuilder {
                 tag.expect("snapshot tag was validated before rendering the portal")
             ),
         };
-        let cards = self
+        let projects = self
             .registry
             .product
             .iter()
-            .map(|product| {
+            .enumerate()
+            .map(|(index, product)| {
+                let packages = product
+                    .rust_components
+                    .iter()
+                    .chain(&product.python_components)
+                    .map(|component| component.package.as_str())
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .map(|package| {
+                        format!(
+                            "<span class=\"portal-package\">{}</span>",
+                            escape_html(package)
+                        )
+                    })
+                    .collect::<String>();
+                let manual_route = product
+                    .pages
+                    .iter()
+                    .find(|page| page.group == "Manual")
+                    .map(|page| {
+                        page.route
+                            .trim_start_matches("manual/")
+                            .trim_end_matches('/')
+                    })
+                    .unwrap_or_default();
                 format!(
-                    "<article class=\"portal-card\"><p class=\"product-eyebrow\">Product manual</p><h2><a href=\"products/{}/{}/\">{}</a></h2><p>{}</p><p class=\"portal-links\"><a href=\"products/{}/{}/tutorial/\">Tutorial</a><a href=\"products/{}/{}/manual/{}/\">Manual</a><a href=\"products/{}/{}/reference/python/\">Python API</a></p></article>",
+                    r#"<article class="portal-project-card"><div class="portal-project-meta"><span>{:02}</span><span>Research project</span></div><h3><a href="products/{}/{}/">{}</a></h3><p class="portal-project-summary">{}</p><div class="portal-packages" aria-label="{} crates and modules"><span class="portal-packages-label">Crates &amp; modules</span>{}</div><nav class="portal-card-links" aria-label="{} documentation"><a class="portal-card-primary" href="products/{}/{}/">Overview <span aria-hidden="true">↗</span></a><a href="products/{}/{}/tutorial/">Tutorial</a><a href="products/{}/{}/manual/{}/">Manual</a><a href="products/{}/{}/reference/python/">API</a></nav></article>"#,
+                    index + 1,
                     escape_html(&product.id),
                     escape_html(&channel_route),
                     escape_html(&product.title),
                     escape_html(&product.tagline),
+                    escape_html(&product.title),
+                    packages,
+                    escape_html(&product.title),
                     escape_html(&product.id),
                     escape_html(&channel_route),
                     escape_html(&product.id),
                     escape_html(&channel_route),
-                    escape_html(
-                        product
-                            .pages
-                            .iter()
-                            .find(|page| page.group == "Manual")
-                            .map(|page| page.route.trim_start_matches("manual/").trim_end_matches('/'))
-                            .unwrap_or_default()
-                    ),
                     escape_html(&product.id),
                     escape_html(&channel_route),
+                    escape_html(manual_route),
+                    escape_html(&product.id),
+                    escape_html(&channel_route),
+                )
+            })
+            .collect::<String>();
+        let pillars = self
+            .portal
+            .pillar
+            .iter()
+            .map(|pillar| {
+                format!(
+                    r#"<article class="portal-pillar"><p class="portal-kicker">{}</p><h3>{}</h3><p>{}</p></article>"#,
+                    escape_html(&pillar.label),
+                    escape_html(&pillar.title),
+                    escape_html(&pillar.summary),
+                )
+            })
+            .collect::<String>();
+        let people = self
+            .portal
+            .people
+            .iter()
+            .map(|person| {
+                format!(
+                    r#"<article class="portal-person"><a href="{}"><span class="portal-person-initials" aria-hidden="true">{}</span><span><strong>{}</strong><small>{}</small></span><span class="portal-person-arrow" aria-hidden="true">↗</span></a></article>"#,
+                    escape_html(&person.url),
+                    escape_html(&person.initials),
+                    escape_html(&person.name),
+                    escape_html(&person.role),
+                )
+            })
+            .collect::<String>();
+        let affiliations = self
+            .portal
+            .affiliation
+            .iter()
+            .map(|affiliation| {
+                format!(
+                    r#"<article class="portal-affiliation"><p class="portal-kicker">{}</p><h3><a href="{}">{}</a></h3><p>{}</p><a class="portal-text-link" href="{}">Visit institution <span aria-hidden="true">↗</span></a></article>"#,
+                    escape_html(&affiliation.location),
+                    escape_html(&affiliation.url),
+                    escape_html(&affiliation.name),
+                    escape_html(&affiliation.summary),
+                    escape_html(&affiliation.url),
                 )
             })
             .collect::<String>();
         fs::write(
             output.join("index.html"),
             format!(
-                "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"Tutorials, manuals, and generated API reference for the alphal00p scientific computing workspace.\"><title>alphal00p documentation</title><link rel=\"stylesheet\" href=\"assets/site.css\"><script defer src=\"assets/site.js\"></script></head><body class=\"portal-body\"><main class=\"portal-main\"><header class=\"portal-hero\"><span class=\"site-brand-mark\">α</span><p class=\"product-eyebrow\">Documentation suite</p><h1>alphal00p</h1><p>Five connected scientific-computing products, each with a guided tutorial, a multi-page manual, and generated Rust and Python references.</p></header><section class=\"portal-grid\" aria-label=\"Products\">{cards}</section><footer class=\"page-footer\"><a href=\"https://github.com/alphal00p/gammaloop\">Source on GitHub</a></footer></main></body></html>"
+                r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{}"><meta name="theme-color" content="#f9f6f0"><title>αLoop · Research software for collider physics</title><link rel="stylesheet" href="assets/site.css"><script defer src="assets/site.js"></script></head><body class="portal-body"><a class="skip-link" href="#main-content">Skip to content</a><header class="portal-header"><a class="portal-brand" href="#overview" aria-label="αLoop home"><span class="portal-brand-logo" aria-hidden="true"></span><span class="portal-brand-copy"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class="portal-nav" aria-label="Primary"><a href="#projects">Projects</a><a href="#people">People</a><a href="#affiliations">Affiliations</a></nav><div class="portal-header-actions"><a class="portal-source-link" href="https://github.com/alphal00p/gammaloop">GitHub <span aria-hidden="true">↗</span></a><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span aria-hidden="true">◐</span></button></div></header><main class="portal-main" id="main-content"><section class="portal-hero portal-section" id="overview"><div class="portal-hero-copy"><p class="portal-kicker">{}</p><h1>{}</h1><p class="portal-lede">{}</p><div class="portal-hero-actions"><a class="portal-button portal-button-primary" href="#projects">Explore the projects <span aria-hidden="true">↓</span></a><a class="portal-button" href="products/gammaloop/{}/tutorial/">Start with GammaLoop <span aria-hidden="true">↗</span></a></div><dl class="portal-facts"><div><dt>5</dt><dd>connected projects</dd></div><div><dt>2</dt><dd>language ecosystems</dd></div><div><dt>∞</dt><dd>open development</dd></div></dl></div><div class="portal-hero-art" aria-label="αLoop collaboration mark" role="img"><div class="portal-wordmark"></div><p>Local cancellation.<br>Global precision.</p></div></section><section class="portal-pillars" aria-label="Research areas">{pillars}</section><section class="portal-section portal-projects" id="projects" aria-labelledby="projects-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research software · 01—05</p><h2 id="projects-title">Projects &amp; crates</h2></div><p>Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.</p></div><div class="portal-project-grid">{projects}</div></section><section class="portal-section portal-people-section" id="people" aria-labelledby="people-title"><div class="portal-section-heading"><div><p class="portal-kicker">Collaboration</p><h2 id="people-title">People behind the workspace</h2></div><p>Researchers developing the physics, algorithms, and scientific software together.</p></div><div class="portal-people-grid">{people}<article class="portal-person portal-person-all"><a href="https://github.com/alphal00p/gammaloop/graphs/contributors"><span class="portal-person-initials" aria-hidden="true">+</span><span><strong>All contributors</strong><small>Code, ideas, and review</small></span><span class="portal-person-arrow" aria-hidden="true">↗</span></a></article></div></section><section class="portal-section portal-affiliations-section" id="affiliations" aria-labelledby="affiliations-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research affiliations</p><h2 id="affiliations-title">Built across institutions</h2></div><p>Our researchers work across CERN and the University of Bern, connecting precision phenomenology with open scientific software.</p></div><div class="portal-affiliations-grid">{affiliations}</div><aside class="portal-funding"><span class="portal-funding-mark" aria-hidden="true">α</span><div><p class="portal-kicker">Publicly funded research</p><p>{}</p></div><a class="portal-text-link" href="{}">Funding record <span aria-hidden="true">↗</span></a></aside></section></main><footer class="portal-footer"><div><span class="portal-footer-mark" aria-hidden="true"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label="Footer"><a href="#projects">Projects</a><a href="#people">People</a><a href="#affiliations">Affiliations</a><a href="https://github.com/alphal00p/gammaloop">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer></body></html>"##,
+                escape_html(&self.portal.summary),
+                escape_html(&self.portal.eyebrow),
+                escape_html(&self.portal.title),
+                escape_html(&self.portal.summary),
+                escape_html(&channel_route),
+                escape_html(&self.portal.funding),
+                escape_html(&self.portal.funding_url),
             ),
         )?;
         fs::write(output.join(".nojekyll"), b"")?;
@@ -1775,7 +1946,7 @@ fn product_hero(product: &ProductConfig) -> String {
         .map(|page| page.route.as_str())
         .unwrap_or("manual/");
     format!(
-        "<header class=\"product-hero\"><p class=\"product-eyebrow\">Scientific computing documentation</p><h1>{}</h1><p>{}</p><div class=\"hero-actions\"><a class=\"hero-action primary\" href=\"tutorial/\">Start the tutorial</a><a class=\"hero-action\" href=\"{}\">Read the manual</a><a class=\"hero-action\" href=\"reference/python/\">Browse Python API</a></div></header>",
+        "<header class=\"product-hero\"><p class=\"product-eyebrow\">Research software documentation</p><h1>{}</h1><p>{}</p><div class=\"hero-actions\"><a class=\"hero-action primary\" href=\"tutorial/\">Start the tutorial</a><a class=\"hero-action\" href=\"{}\">Read the manual</a><a class=\"hero-action\" href=\"reference/python/\">Browse Python API</a></div></header>",
         escape_html(&product.title),
         escape_html(&product.tagline),
         escape_html(first_manual),
@@ -2818,12 +2989,9 @@ fn provenance_typst(metadata: &SnapshotMetadata<'_>) -> String {
     let mut components = String::new();
     for component in &metadata.components {
         let features = if component.features.is_empty() {
-            "features: none (Cargo defaults disabled)".to_owned()
+            "no optional features".to_owned()
         } else {
-            format!(
-                "features: {} (Cargo defaults disabled; complete explicit matrix)",
-                component.features.join(", ")
-            )
+            format!("features: {}", component.features.join(", "))
         };
         components.push_str(&format!(
             "- #raw(\"{}/{}\") — #raw(\"{}\") (#raw(\"{}\"))\n",
@@ -2834,12 +3002,13 @@ fn provenance_typst(metadata: &SnapshotMetadata<'_>) -> String {
         ));
     }
     format!(
-        "= Snapshot and version metadata <snapshot-version-metadata>\n\
-         This manual was rendered from one immutable workspace identity.\n\n\
-         - *Channel:* #raw(\"{}\")\n\
-         - *Route:* #raw(\"{}\")\n\
-         - *Git commit:* #raw(\"{}\")\n\n\
-         == Workspace component versions\n\
+        "= Version information <snapshot-version-metadata>\n\
+         Save these identifiers with published results and include them in issue reports so that\n\
+         collaborators can reproduce the same software environment.\n\n\
+         - *Documentation channel:* #raw(\"{}\")\n\
+         - *Documentation route:* #raw(\"{}\")\n\
+         - *Source revision:* #raw(\"{}\")\n\n\
+         == Package versions and enabled features\n\
          {components}",
         typst_string(&channel),
         typst_string(&metadata.route),
@@ -2877,8 +3046,8 @@ fn generated_reference_typst(
                 ));
             }
             format!(
-                "= Generated CLI and settings reference <generated-cli-settings>\n\
-                 The following tables come from the compiled Clap command factory, Schemars, and real serialized defaults.\n\n\
+                "= CLI commands and settings <generated-cli-settings>\n\
+                 Commands and settings available in this version are listed below.\n\n\
                  == Command tree\n\
                  #table(columns: (2fr, 3fr), table.header([*Command*], [*Description*]), {commands})\n\n\
                  == Settings\n\
@@ -2889,10 +3058,9 @@ fn generated_reference_typst(
             let mut dependencies = String::new();
             for dependency in &vakint.dependencies {
                 dependencies.push_str(&format!(
-                    "[#raw(\"{}\")], [#raw(\"{}\")], [#raw(\"{}\")],\n",
+                    "[#raw(\"{}\")], [#raw(\"{}\")],\n",
                     typst_string(&dependency.name),
                     typst_string(&dependency.minimum_version),
-                    typst_string(&dependency.source_symbol),
                 ));
             }
             let mut topologies = String::new();
@@ -2905,10 +3073,10 @@ fn generated_reference_typst(
                 ));
             }
             format!(
-                "= Generated topology and dependency reference <generated-vakint-reference>\n\
-                 These tables come from Vakint's runtime topology generator and minimum-version constants.\n\n\
+                "= Topologies and dependencies <generated-vakint-reference>\n\
+                 This version supports the topology patterns and external-tool versions below.\n\n\
                  == External dependencies\n\
-                 #table(columns: (1fr, 1fr, 2fr), table.header([*Dependency*], [*Minimum*], [*Source constant*]), {dependencies})\n\n\
+                 #table(columns: (1fr, 1fr), table.header([*Dependency*], [*Minimum version*]), {dependencies})\n\n\
                  == Supported topology patterns\n\
                  #table(columns: (2fr, 1fr, 1fr), table.header([*Name*], [*Loops*], [*Propagator slots*]), {topologies})"
             )
@@ -2947,7 +3115,7 @@ fn reference_page(product: &str, title: &str, body: &str) -> String {
 
 fn render_gammaloop_generated_reference(product: &str, reference: &GammaLoopReference) -> String {
     let mut body = format!(
-        "<p>Generated from GammaLoop's compiled Clap command tree, Schemars schemas, and serialized real defaults. <a href=\"reference/generated/gammaloop-reference.json\">Download neutral JSON</a>.</p><p>{} commands · {} settings</p>",
+        "<p>Commands and settings available in this version are listed below. <a href=\"reference/generated/gammaloop-reference.json\">Download JSON for tooling</a>.</p><p>{} commands · {} settings</p>",
         reference.commands.len(),
         reference.settings.len()
     );
@@ -3020,17 +3188,16 @@ fn render_gammaloop_generated_reference(product: &str, reference: &GammaLoopRefe
         ));
     }
     body.push_str("</tbody></table>");
-    reference_page(product, "Generated CLI and settings", &body)
+    reference_page(product, "CLI commands and settings", &body)
 }
 
 fn render_vakint_generated_reference(product: &str, reference: &VakintReference) -> String {
-    let mut body = "<p>Generated from <code>Topologies::generate_topologies()</code> and the external-tool minimum-version constants. <a href=\"reference/generated/vakint-reference.json\">Download neutral JSON</a>.</p><h2 id=\"external-dependencies\">External dependencies</h2><table><thead><tr><th>Dependency</th><th>Minimum version</th><th>Source constant</th></tr></thead><tbody>".to_owned();
+    let mut body = "<p>This version supports the external tools and topology patterns below. <a href=\"reference/generated/vakint-reference.json\">Download JSON for tooling</a>.</p><h2 id=\"external-dependencies\">External dependencies</h2><table><thead><tr><th>Dependency</th><th>Minimum version</th></tr></thead><tbody>".to_owned();
     for dependency in &reference.dependencies {
         body.push_str(&format!(
-            "<tr><td>{}</td><td><code>{}</code></td><td><code>{}</code></td></tr>",
+            "<tr><td>{}</td><td><code>{}</code></td></tr>",
             escape_html(&dependency.name),
             escape_html(&dependency.minimum_version),
-            escape_html(&dependency.source_symbol),
         ));
     }
     body.push_str("</tbody></table><h2>Supported topology patterns</h2><table><thead><tr><th>Name</th><th>Loops</th><th>Top-level propagator slots</th></tr></thead><tbody>");
@@ -3044,11 +3211,7 @@ fn render_vakint_generated_reference(product: &str, reference: &VakintReference)
         ));
     }
     body.push_str("</tbody></table>");
-    reference_page(
-        product,
-        "Generated topology and dependency reference",
-        &body,
-    )
+    reference_page(product, "Topologies and dependencies", &body)
 }
 
 fn generated_anchor(kind: &str, key: &str) -> String {
@@ -3588,5 +3751,33 @@ mod tests {
     #[test]
     fn checked_in_registry_is_valid() {
         SiteBuilder::discover().unwrap().check().unwrap();
+    }
+
+    #[test]
+    fn portal_presents_research_projects_people_and_affiliations() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        builder
+            .write_portal(output.path(), BuildChannel::Latest, None)
+            .unwrap();
+
+        let html = fs::read_to_string(output.path().join("index.html")).unwrap();
+        assert_eq!(html.matches("class=\"portal-project-card\"").count(), 5);
+        for section in ["projects", "people", "affiliations"] {
+            assert!(html.contains(&format!("id=\"{section}\"")));
+        }
+        assert!(html.contains("Projects &amp; crates"));
+        assert!(html.contains("Publicly funded research"));
+        assert!(!html.contains("Product manual"));
+        assert!(!html.contains("scientific-computing products"));
+
+        for asset in [
+            "local-unitarity-light.svg",
+            "local-unitarity-dark.svg",
+            "gammalooplogo-light.svg",
+            "gammalooplogo-dark.svg",
+        ] {
+            assert!(output.path().join("assets").join(asset).is_file());
+        }
     }
 }

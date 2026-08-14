@@ -27,8 +27,8 @@ A Linnet workflow has four parts:
 
 The involution is the pairing map for half-edges. A paired entry represents an internal edge;
 an identity entry represents a dangling edge and records its flow. Edge orientation and flow
-are related concepts, but they are not interchangeable. Use the generated API descriptions for
-the exact variants and conversion rules in the selected release.
+are related concepts, but they are not interchangeable. Consult the API reference for the exact
+variants and conversion rules in your Linnet release.
 
 #boundary("Indexes belong to one graph", [
   `Hedge`, `NodeIndex`, and `EdgeIndex` are compact typed indexes, not durable object IDs.
@@ -54,15 +54,14 @@ typed graph invariants. Validate or handle parser errors before running algorith
 The `drawing` feature adds graph drawing and layout support. Layout is separate from graph
 identity: coordinates and rendering attributes may change without changing the topology.
 
-== Ecosystem ownership
+== Related crates
 
 #boundary("One graph layer, several consumers", [
-  #product-link("spenso", label: "Spenso") uses Linnet to represent tensor-network connectivity
-  and owns tensor contraction semantics. #product-link("gammaloop", label: "GammaLoop") uses
-  graph concepts in collider workflows and owns its process/state lifecycle. Those manuals link
-  here for graph operations instead of redefining half-edge behavior.
+  #product-link("spenso", label: "Spenso") uses Linnet for tensor-network connectivity and adds
+  tensor contraction semantics. #product-link("gammaloop", label: "GammaLoop") uses the graph
+  model in collider workflows and adds process generation, integration, and persistent state.
 ])
 
-The crate's maintained entry points are the
-#source-link("crates/linnet/README.md", label: "Linnet README") and generated Rust catalog.
+The #source-link("crates/linnet/README.md", label: "Linnet README") provides a compact crate
+summary; the Rust API reference covers individual types and methods.
 ]

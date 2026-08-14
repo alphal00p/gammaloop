@@ -4,9 +4,8 @@
 = Topology matching, reduction, and evaluation
 
 Vakint recognizes an integral only after its propagators, masses, powers, and momentum routing
-can be mapped to a supported topology pattern. The generated topology table in this manual is
-constructed from the engine's registered topology library, so it stays aligned with the build
-instead of being maintained as a second handwritten list.
+can be mapped to a supported topology pattern. The topology reference lists the patterns available
+in the selected version.
 
 == Parsing and topology matching
 
@@ -26,18 +25,17 @@ requested expansion depth. Set them before comparing results from different back
 canonicalization may rename loop variables and reorder propagators; compare canonical
 expressions rather than input spelling when testing equivalence.
 
-#callout("Canonicalization is a pure CI boundary", [
-  Parsing, matching, normalization, and canonical routing can be tested without FORM or
-  pySecDec when the evaluation order is empty. Keep these examples in the ordinary test tier so
-  topology regressions do not depend on external executables.
+#callout("Matching does not require an evaluation backend", [
+  Parsing, matching, normalization, and canonical routing work without FORM or pySecDec when the
+  evaluation order is empty. Use this configuration when you only need a canonical topology.
 ])
 
 == Tensor reduction
 
 Tensor numerators are reduced to scalar integrals before analytic evaluation where required.
 Reduction depends on the topology, Lorentz rank, dimension convention, and scalar-product
-normalization. FORM-backed reduction belongs to the provisioned integration tier; retain the
-generated FORM input and temporary directory when diagnosing a mismatch.
+normalization. Tensor reduction requires FORM. When diagnosing a mismatch, keep the FORM input
+and Vakint temporary directory so that the failing reduction can be inspected.
 
 == Evaluation order and backends
 
@@ -61,7 +59,7 @@ For reproducible comparisons record:
   Pass an empty evaluation order for pure matching work on machines without FORM/pySecDec.
 ])
 
-The supported topology definitions are registered by
-#source-link("crates/vakint/src/topologies.rs", label: "Vakint's topology source"), and minimum
-external versions are read directly into the generated dependency table.
+See the supported-topology and external-dependency reference for the patterns and minimum tool
+versions available here. Their Rust definitions begin in
+#source-link("crates/vakint/src/topologies.rs", label: "Vakint's topology module").
 ]

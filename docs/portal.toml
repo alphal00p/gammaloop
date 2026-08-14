@@ -1,0 +1,51 @@
+schema = 1
+eyebrow = "Public research software"
+title = "Open tools for precision collider physics."
+summary = "The αLoop collaboration develops theoretical and algorithmic methods for automated cross-section calculations in quantum field theory, centred on Local Unitarity."
+funding = "Research associated with Local Unitarity has been supported by the Swiss National Science Foundation."
+funding_url = "https://data.snf.ch/grants/grant/203335"
+
+[[pillar]]
+label = "01 · Physics"
+title = "Local Unitarity"
+summary = "Differential collider cross-sections with local cancellation of infrared singularities."
+
+[[pillar]]
+label = "02 · Structures"
+title = "Graphs and tensors"
+summary = "Half-edge graphs, typed tensors, symbolic identities, and executable contraction networks."
+
+[[pillar]]
+label = "03 · Integrals"
+title = "Symbolic evaluation"
+summary = "Controlled rewrite systems and vacuum-integral matching for reproducible calculations."
+
+[[people]]
+name = "Valentin Hirschi"
+initials = "VH"
+role = "Professor · theoretical particle physics"
+url = "https://www.itp.unibe.ch/about_us/people/professors/prof_dr_hirschi_valentin/index_eng.html"
+
+[[people]]
+name = "Mathijs Fraaije"
+initials = "MF"
+role = "PhD researcher · theoretical particle physics"
+url = "https://github.com/GraDje13"
+
+[[people]]
+name = "Lucien Huber"
+initials = "LH"
+role = "PhD researcher · theoretical particle physics"
+url = "https://github.com/lcnbr"
+
+[[affiliation]]
+name = "CERN"
+location = "Geneva, Switzerland"
+summary = "Collider-physics research for precision predictions at the Large Hadron Collider."
+url = "https://home.cern/"
+
+[[affiliation]]
+name = "University of Bern"
+location = "Bern, Switzerland"
+summary = "Theory research and scientific-software development at the Institute for Theoretical Physics."
+url = "https://www.itp.unibe.ch/"

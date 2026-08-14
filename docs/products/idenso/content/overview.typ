@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, boundary, product-link, source-link
+#import "../../shared.typ": callout, product-link, source-link
 
 #let overview = [
 = Overview
@@ -42,15 +42,8 @@ compact symbols and later reverse the operation. Use reversible settings when th
 expression must be recovered. A cooked symbol is an intermediate encoding, not a portable
 serialized physics result unless the associated mapping and settings are retained.
 
-#boundary("Specifications versus supported entry points", [
-  The files under `docs/idenso/` describe detailed FORM/Symbolica conventions and rewrite
-  investigations. Their representation names and supported rewrite boundaries were checked
-  against the current registrations and tests while preparing this manual. Experimental
-  performance observations remain developer notes and do not silently become compatibility
-  promises.
-])
-
 Idenso is consumed by #product-link("gammaloop", label: "GammaLoop") and its tensor conventions
 are shared with #product-link("spenso", label: "Spenso"). Start with the
-#source-link("crates/idenso/README.md", label: "Idenso README") and generated API catalog.
+#source-link("crates/idenso/README.md", label: "Idenso README"), then consult the Rust or Python
+API reference for supported functions, signatures, and feature gates.
 ]

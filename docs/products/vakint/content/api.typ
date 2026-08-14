@@ -1,7 +1,7 @@
 #import "../../shared.typ": boundary, catalog-contract, source-link
 
 #let api = [
-= Rust and Python API boundaries
+= Rust and Python APIs
 
 #catalog-contract(
   rust-scope: "vakint",
@@ -12,7 +12,7 @@
 
 The main Rust types make the workflow state explicit:
 
-- `Vakint` owns the generated topology library and matching/evaluation operations;
+- `Vakint` owns the topology library and matching/evaluation operations;
 - `VakintSettings` owns symbols, precision, normalization, tool paths, validation, and backend
   order;
 - `VakintExpression` and `VakintTerm` separate numerators from topology atoms;
@@ -32,25 +32,21 @@ let settings = VakintSettings {
 engine.validate_settings(&settings)?;
 ```
 
-Parsing macros and helpers build Vakint-namespaced Symbolica atoms. The generated catalog owns
-their exact grammar and error types. Do not interpolate untrusted input into a macro example;
-use the runtime parser path when the expression arrives dynamically.
+`vakint_parse!` and the related helpers parse Symbolica expressions in Vakint's namespace. Handle
+parse failures before passing a user-supplied expression to matching or evaluation.
 
 == Python community module
 
-#boundary("Community module and feature pairing", [
-  Python users import `symbolica.community.vakint`. It is not a standalone Vakint wheel. The
-  Rust build must include `symbolica_community_module`; `python_stubgen` generates type metadata
-  but does not, by itself, enable the community module in the current feature graph.
+#boundary("Python availability", [
+  Python users import `symbolica.community.vakint`; Vakint is not distributed as a standalone
+  Python package. Check that the installed Symbolica distribution includes the Vakint community
+  module before relying on this interface.
 ])
 
-Install a Symbolica Python distribution only when its release includes Vakint and verify it with
-`python -c "import symbolica.community.vakint"`; Vakint is not installed by a separate wheel in
-this repository. Source embedders add the crate to the external
-#link("https://github.com/benruijl/symbolica-community")[symbolica-community] assembly, enable
-`symbolica_community_module`, and invoke `VakintWrapper`'s `SymbolicaCommunityModule`
-registration while building the Symbolica extension. Stub generation describes that mounted
-surface but never mounts it into an existing Python installation.
+Verify availability with `python -c "import symbolica.community.vakint"`. Custom Symbolica builds
+can add Vakint to the
+#link("https://github.com/benruijl/symbolica-community")[symbolica-community] assembly, enable the
+`symbolica_community_module` feature, and register `VakintWrapper` while building the extension.
 
 The module exports four classes: `Vakint`, `VakintExpression`, `VakintEvaluationMethod`, and
 `VakintNumericalResult`. This example constructs a matching-only engine without probing external
@@ -69,9 +65,9 @@ and numerical conversion. `VakintEvaluationMethod` constructs configured backend
 `VakintNumericalResult` converts Laurent coefficients to Python tuples and compares results with
 thresholds and optional errors.
 
-Construct one engine and reuse it. When enabling pySecDec, give explicit numerical masses and
-external momenta and decide whether generated output may be reused. Do not run those heavy,
-external-tool examples as part of an ordinary documentation render.
+Construct one engine and reuse it. When enabling pySecDec, provide numerical masses and external
+momenta where the topology requires them. Reuse existing pySecDec output only while debugging,
+and remove it before evaluating changed inputs.
 
 Source starting points are #source-link("crates/vakint/src/lib.rs", label: "the Rust API") and
 #source-link("crates/vakint/src/symbolica_community_module/mod.rs", label: "the Python module").

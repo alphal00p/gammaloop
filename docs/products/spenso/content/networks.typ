@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, boundary, product-link, source-link
+#import "../../shared.typ": callout, boundary, product-link
 
 #let networks = [
 = Tensor data, contraction, and network execution
@@ -55,12 +55,12 @@ Spenso itself owns storage, contraction, and execution.
 
 `SimpleRepresentation` derives the repetitive representation plumbing for a user enum. The
 derive input still defines domain semantics: duality, dimension, slot compatibility, and any
-Symbolica tags must agree. Generated representations are ordinary Rust API and appear in the
-exhaustive `spenso-macros` sidecar.
+Symbolica tags must agree. The resulting representations implement the ordinary Rust traits
+used by the rest of Spenso; the `spenso-macros` API reference lists the supported derive
+attributes.
 
 `spenso-hep-lib` registers concrete high-energy-physics structures such as gamma matrices and
-projectors. Treat that library as shared domain data. GammaLoop links to it rather than copying
-its definitions into the application manual.
+projectors. Treat that library as shared domain data. GammaLoop uses the same definitions.
 
 #boundary("Graph and tensor ownership", [
   #product-link("linnet", label: "Linnet") owns connectivity, cuts, cycles, and graph mutation.
@@ -68,6 +68,4 @@ its definitions into the application manual.
   explicit prevents a graph rewrite from being mistaken for a tensor-algebra identity.
 ])
 
-Execution regression notes are maintained in
-#source-link("docs/architecture/spenso-network-execution-test-baseline.md", label: "the network execution baseline").
 ]

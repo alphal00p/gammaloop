@@ -3,9 +3,9 @@
 #let tutorial = [
 = Tutorial
 
-This tutorial builds the GammaLoop command-line interface and uses the maintained one-loop
-`g g -> h h h` run card to create a state that can be inspected and resumed. It is a real
-process-generation workflow, so expect compilation to take longer than a `--help` smoke test.
+This tutorial builds the GammaLoop command-line interface and uses the included one-loop
+`g g -> h h h` run card to create a state that can be inspected and resumed. Compilation and
+process generation can take longer than a `--help` smoke test.
 
 == Prerequisites
 
@@ -23,7 +23,7 @@ just build-cli
 The last command should print the one-shot CLI options and command tree. The `./gammaloop`
 wrapper selects the binary built under `target/dev-optim/`.
 
-== Generate one maintained process
+== Generate an example process
 
 The run card declares a state folder, settings, and named command blocks. Run its `generate`
 block and persist the result on exit:
@@ -36,17 +36,17 @@ block and persist the result on exit:
 
 #callout("`--clean-state` removes the resolved state first", [
   Use it only for this first, reproducible run. Omit it when resuming work you want to keep.
-  The maintained card resolves its state to `examples/cli/gg_hhh/1L/state` and requests ten
+  The example card resolves its state to `examples/cli/gg_hhh/1L/state` and requests ten
   worker cores; make a private copy of the card before changing either value.
 ])
 
 The block imports `sm-default.json`, generates the selected one-loop pentagon contribution,
 builds its integrand, saves DOT data, and writes the state. A successful run exits without an
 error and leaves at least `run.toml`, `global_settings.toml`,
-`default_runtime_settings.toml`, and `processes/` in the state folder. `run.toml` is the audit
-and replay description; it is not merely a log file.
+`default_runtime_settings.toml`, and `processes/` in the state folder. `run.toml` records the
+commands and settings needed to replay the run; it is not merely a log file.
 
-== Prove that the state is reusable
+== Resume the saved state
 
 Load the saved state and ask the active session to display its processes:
 
@@ -68,12 +68,12 @@ they request a substantial Monte Carlo integration.
   values under `cli_settings.global.n_cores`; do not edit a state midway through generation.
 - If startup reports a state fingerprint or settings mismatch, replay the card with a new
   state folder instead of transplanting only its `processes/` directory.
-- Use `./gammaloop help generate` for flags from the exact build you are running, then continue
-  with the process-generation manual and the generated CLI reference.
+- Use `./gammaloop help generate` to inspect the flags supported by your installed version,
+  then continue with the process-generation manual and the CLI reference.
 
-#boundary("Ground truth for this walkthrough", [
-  The complete card is #source-link("examples/cli/gg_hhh/1L/gg_hhh_1L.toml", label: "the maintained gg_hhh example").
-  The executable's parser and generated CLI catalog own option spelling; this tutorial owns the
-  sequence and the meaning of the resulting state.
+#boundary("Example run card", [
+  See the complete
+  #source-link("examples/cli/gg_hhh/1L/gg_hhh_1L.toml", label: "gg_hhh run card") before
+  adapting the process, state location, or resource settings for your own calculation.
 ])
 ]

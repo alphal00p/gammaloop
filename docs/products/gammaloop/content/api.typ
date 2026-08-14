@@ -1,27 +1,21 @@
-#import "../../shared.typ": boundary, catalog-contract, source-link
+#import "../../shared.typ": boundary
 
 #let api = [
-= Rust, Python, and CLI reference boundaries
+= CLI, Rust, and Python APIs
 
-#catalog-contract(
-  rust-scope: "gammaloop",
-  python-scope: "gammaloop",
-)
+== Rust packages
 
-== Rust ownership
-
-The Rust surface is split across two primary packages.
+The Rust API spans two primary packages.
 
 - `gammalooprs` contains the physics implementation, data model, integrands, integration,
   observables, and lower-level algorithms.
-- `gammaloop-api` owns the supported state-loading boundary, session/command integration,
+- `gammaloop-api` provides the supported state-loading API, session/command integration,
   CLI assembly, and the PyO3 extension used by the Python distribution.
 
-The stable conceptual entry point is `StateLoadOption::load()`. Load-time options select a
-state directory, boot card, logging overrides, read-only behavior, and optional settings
-overrides. Once loaded, callers can create a CLI-style session or use dedicated structured
-operations. A raw command string is the compatibility fallback, not a replacement for a
-typed operation where one exists.
+Load a state with `StateLoadOption::load()`. Its options select a state directory, boot card,
+logging overrides, read-only behavior, and optional settings overrides. Once loaded, callers
+can create a CLI-style session or use dedicated structured operations. A raw command string is
+the compatibility fallback, not a replacement for a typed operation where one exists.
 
 ```rust
 use std::path::PathBuf;
@@ -36,18 +30,18 @@ let command = CommandHistory::from_raw_string("display settings global")?;
 loaded.cli_session().execute_command(command)?;
 ```
 
-Generated Rust reference pages must distinguish public supported catalog entries from
-implementation-public types. Conventional Rustdoc remains available for the complete compiled
-surface and trait implementations.
+Some Rust types are public so that GammaLoop's packages can work together, but are not intended
+as stable integration points. Prefer the state-loading and structured-operation APIs described
+here; consult the full Rust API reference when you need lower-level types or trait
+implementations.
 
 == Python packaging
 
 #boundary("A standalone GammaLoop distribution", [
-  The repository root `pyproject.toml` builds the Python distribution named `gammaloop` with
-  Maturin. Users import the public package as `gammaloop`; its compiled implementation module
-  is `gammaloop._gammaloop`. This is separate from the `symbolica.community.*` modules used by
-  Spenso, Idenso, and Vakint. Building or installing GammaLoop does not install those community
-  modules as independent Python packages.
+  The Python distribution and import package are both named `gammaloop`. Its compiled backend
+  is `gammaloop._gammaloop`, which applications normally access through the public package.
+  This is separate from the `symbolica.community.*` modules used by Spenso, Idenso, and Vakint;
+  installing GammaLoop does not install those community modules as independent packages.
 ])
 
 The main Python entry point is `GammaLoopAPI`:
@@ -62,9 +56,8 @@ gl = GammaLoopAPI(
 gl.run("display settings global")
 ```
 
-The Python package requires Python 3.11 or newer. `just build-api` is the local development
-build. Distribution builds may enable the stable ABI feature; that choice changes binary
-compatibility, not the public module name.
+The Python package requires Python 3.11 or newer. Run `just build-api` when building the bindings
+from a source checkout.
 
 == Sample evaluation and precision
 
@@ -74,16 +67,9 @@ Both the ordinary Rust and Python endpoints expose numeric results through an `f
 even if arbitrary precision was used internally. Rust-only callers that must retain the active
 precision use `evaluate_sample_precise` and `evaluate_samples_precise`.
 
-The generated reference must present these as distinct contracts. It must not suggest that the
-Python API returns arbitrary-precision numeric values.
+== CLI and settings reference
 
-== CLI and settings metadata
-
-The executable command tree is generated from Clap and settings descriptions are generated
-from the existing schema/default machinery. These generated catalogs own command names,
-aliases, flags, positionals, defaults, possible values, and settings paths. Hand-written guides
-own sequencing, state effects, and examples.
-
-Source starting points are #source-link("crates/gammaloop-api/src", label: "gammaloop-api") and
-#source-link("crates/gammalooprs/src", label: "gammalooprs").
+Use `./gammaloop --help` and the CLI reference for command names, aliases, flags, positional
+arguments, defaults, and possible values. The settings reference lists available paths and
+defaults. The tutorials explain how commands and settings combine into a persistent workflow.
 ]

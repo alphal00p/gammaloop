@@ -35,9 +35,9 @@ preserve them, but evaluation still needs a backend that supports the resulting 
 #boundary("Construction validates the selected backends", [
   The default evaluation order includes AlphaLoop, MATAD, FMFT, and pySecDec. Settings validation
   therefore probes FORM and pySecDec even if a later example only canonicalizes an expression.
-  FORM 4.2.1 or newer and pySecDec 1.6.4 or newer are the minimum versions checked by the current
-  source. For a pure matching test, use an empty evaluation order in Rust; in Python, provide an
-  empty `evaluation_order` when constructing `Vakint`.
+  Vakint requires FORM 4.2.1 or newer and pySecDec 1.6.4 or newer. For matching without
+  evaluation, use an empty evaluation order in Rust; in Python, provide an empty
+  `evaluation_order` when constructing `Vakint`.
 ])
 
 Analytic AlphaLoop, MATAD, and FMFT methods depend on FORM. The pySecDec method depends on both
@@ -45,23 +45,21 @@ FORM and pySecDec and requires numerical masses and, where applicable, external 
 tool versions, normalization convention, epsilon depth, decimal precision, backend order, and
 temporary-output reuse policy with any result intended to be reproduced.
 
-== Test tiers and platform notes
+== Diagnostics and platform notes
 
-The ordinary fast suite excludes pySecDec work while retaining verbose diagnostics and generated
-temporary files for inspection:
+Matching with an empty evaluation order needs neither FORM nor pySecDec. For backend evaluation,
+check the configured executable paths first. Verbose logging and retained temporary files are
+useful when an external tool fails:
 
 ```sh
-VAKINT_SKIP_PYSECDEC_TESTS=true RUST_BACKTRACE=full VAKINT_NO_CLEAN_TMP_DIR=T \
-  RUST_LOG=DEBUG cargo test --package vakint --no-default-features
+VAKINT_NO_CLEAN_TMP_DIR=T RUST_LOG=DEBUG cargo run
 ```
 
-Pure parsing, matching, canonicalization, and settings tests belong in the normal CI tier.
-FORM-backed examples require a provisioned FORM job. pySecDec, MATAD, and FMFT comparisons are
-opt-in or scheduled because they depend on external installations and can be slow. On macOS,
-a GNU-compiler link failure mentioning missing `__emul...` symbols is handled by building with
-`EXTRA_MACOS_LIBS_FOR_GNU_GCC=T`, as consumed by Vakint's build script.
+On macOS, if a GNU-compiler link fails with missing `__emul...` symbols, retry the build with
+`EXTRA_MACOS_LIBS_FOR_GNU_GCC=T` set.
 
 Vakint is used by #product-link("gammaloop", label: "GammaLoop") for vacuum-integral work, but it
-owns its topology and evaluation conventions independently. Start with the
-#source-link("crates/vakint/README.md", label: "Vakint README") and generated catalogs.
+owns its topology and evaluation conventions independently. The
+#source-link("crates/vakint/README.md", label: "Vakint README") contains additional Rust examples;
+use the API and topology references in this manual for the selected version.
 ]

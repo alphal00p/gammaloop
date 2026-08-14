@@ -1,4 +1,4 @@
-#import "../../shared.typ": boundary, callout, source-link
+#import "../../shared.typ": callout
 
 #let tutorial = [
 = Tutorial
@@ -20,15 +20,8 @@ cargo add vakint --path ../gammaloop/crates/vakint
 ```
 
 Vakint uses Symbolica; ensure your use satisfies its license terms. External integration tools
-are unnecessary for the matching-only settings below. For a reproducible checkout, use the
-source revision shown in this page's footer.
-
-#callout("Crates.io 0.1.2 uses the previous settings API", [
-  The published `0.1.2` crate stores settings in `Vakint::new(Some(settings))` and calls
-  `to_canonical(input.as_view(), true)`. This manual follows the current workspace API, where
-  settings are passed explicitly to each operation; the versioned reference is authoritative for
-  whichever source revision you install.
-])
+are unnecessary for the matching-only settings below. The example targets the current repository
+API; check out a release tag before adding the path dependency when you need a fixed version.
 
 == Match a one-loop topology
 
@@ -86,16 +79,11 @@ construction has a cost.
 
 - An unrecognized-integral error means the propagators, powers, masses, or momentum routing did
   not match a registered topology and `allow_unknown_integrals` is false. Print the long form
-  and compare it with the generated topology table.
+  and compare it with the supported-topology reference.
 - A FORM or pySecDec version error means a nonempty evaluation order slipped into the settings;
   return to `EvaluationOrder::empty()` for pure canonicalization.
 - If two inputs look different after matching, compare their canonical forms rather than their
   original propagator numbering.
 - Continue with the topology-and-evaluation manual before enabling a backend or adding tensor
   numerators.
-
-#boundary("Ground truth for this walkthrough", [
-  The workflow follows #source-link("crates/vakint/README.md", label: "Vakint's maintained Rust example")
-  and the matching path in #source-link("crates/vakint/src/lib.rs", label: "Vakint::to_canonical").
-])
 ]

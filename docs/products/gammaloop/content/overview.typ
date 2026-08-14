@@ -11,7 +11,7 @@ and diagnostics meet in one stateful workflow.
 #callout("Primary interface", [
   The command-line interface is the primary user interface. A run card creates a state,
   executes commands, and leaves a reusable working directory. The Rust and Python APIs
-  expose the same loading boundary and selected structured operations; they do not define
+  load the same persisted state and expose selected structured operations; they do not define
   a second, independent execution model.
 ])
 
@@ -25,17 +25,16 @@ just build-cli-release
 ```
 
 The run card imports a model, generates the requested process, executes its command blocks,
-and records the resulting state. The state directory is the durable boundary for subsequent
-work. Resume it explicitly rather than reconstructing hidden in-memory context:
+and records the resulting state. Resume that directory explicitly for subsequent work:
 
 ```sh
 ./gammaloop -s ./examples/cli/gg_hhh/1L/state \
   run integrate_physical -c "quit -o"
 ```
 
-The persisted `run.toml` is an audit and replay description. The settings files describe
-global and default runtime configuration, while `processes/` contains process-specific
-state. Ordinary runs create `gammaloop_state/` unless a different state path is supplied.
+The persisted `run.toml` records how to replay the run. The settings files describe global and
+default runtime configuration, while `processes/` contains process-specific state. Ordinary
+runs create `gammaloop_state/` unless a different state path is supplied.
 
 == Installation and external tools
 
@@ -54,28 +53,27 @@ just build-api
 Diagram rendering is a separate concern and uses Clinnet and Typst. Building the CLI does
 not imply that these drawing tools are installed.
 
-== Ownership across the stack
+== Related crates
 
-#boundary("GammaLoop owns workflows, not every dependency concept", [
-  #product-link("linnet", label: "Linnet") owns the half-edge graph model and graph algorithms.
-  #product-link("spenso", label: "Spenso") owns typed tensors, tensor structures, and network
-  execution. #product-link("idenso", label: "Idenso") owns symbolic tensor identities and
-  algebraic simplification. #product-link("vakint", label: "Vakint") owns vacuum-integral
-  topology matching and evaluation. GammaLoop documents how these components participate in
-  a collider calculation and links to their API references instead of duplicating them.
+#boundary("How the crates fit together", [
+  #product-link("linnet", label: "Linnet") provides the half-edge graph model and graph
+  algorithms. #product-link("spenso", label: "Spenso") provides typed tensors, tensor
+  structures, and network execution. #product-link("idenso", label: "Idenso") handles symbolic
+  tensor identities and algebraic simplification. #product-link("vakint", label: "Vakint")
+  matches and evaluates vacuum-integral topologies. GammaLoop combines these components into a
+  collider-calculation workflow.
 ])
 
-The maintained implementation overview is
-#source-link("docs/architecture/architecture-current.md", label: "the current architecture note").
-Proposal and status documents are useful development records, but they are not promises about
-the supported user interface.
+For a deeper view of how the command layer, state, integrands, and external components fit
+together, see
+#source-link("docs/architecture/architecture-current.md", label: "the architecture overview").
 
 == Where to begin
 
-- Use built-in `--help` for the exact CLI surface in the current build.
-- Start with the maintained `gg_hhh` run card for a complete state lifecycle.
+- Use built-in `--help` for the CLI options supported by your installed version.
+- Start with the included `gg_hhh` run card for a complete state lifecycle.
 - Use the Rust or Python API only when a program needs structured access to loaded state or
   sample-evaluation results.
-- Keep expensive integrations and licensed/external tools out of ordinary documentation
-  rendering; examples should declare their prerequisites.
+- Check prerequisites before starting an expensive integration; some workflows require a
+  Symbolica license or external tools such as FORM.
 ]

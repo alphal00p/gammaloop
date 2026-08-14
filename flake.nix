@@ -2886,6 +2886,10 @@
               test -e "$out/.nojekyll"
               test -s "$out/assets/site.css"
               test -s "$out/assets/site.js"
+              test -s "$out/assets/local-unitarity-light.svg"
+              test -s "$out/assets/local-unitarity-dark.svg"
+              test -s "$out/assets/gammalooplogo-light.svg"
+              test -s "$out/assets/gammalooplogo-dark.svg"
               for product in gammaloop linnet spenso idenso vakint; do
                 product_root="$out/products/$product"
                 test -s "$product_root/index.html"
@@ -2899,6 +2903,10 @@
                 test -s "$product_root/latest/manual/releases/index.html"
                 test -s "$product_root/latest/assets/site.css"
                 test -s "$product_root/latest/assets/site.js"
+                test -s "$product_root/latest/assets/local-unitarity-light.svg"
+                test -s "$product_root/latest/assets/local-unitarity-dark.svg"
+                test -s "$product_root/latest/assets/gammalooplogo-light.svg"
+                test -s "$product_root/latest/assets/gammalooplogo-dark.svg"
                 test -s "$product_root/latest/reference/rust/index.html"
                 test -s "$product_root/latest/reference/python/index.html"
                 test -n "$(find "$product_root/latest/reference/python" \

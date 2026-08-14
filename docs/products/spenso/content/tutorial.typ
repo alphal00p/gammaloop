@@ -1,4 +1,4 @@
-#import "../../shared.typ": boundary, callout, source-link
+#import "../../shared.typ": callout
 
 #let tutorial = [
 = Tutorial
@@ -88,9 +88,4 @@ network must mix concrete data with Symbolica-backed parametric tensors.
 - Continue with the tensor-structures and networks manual before selecting an automatic
   contraction strategy.
 
-#boundary("Ground truth for this walkthrough", [
-  The code is reduced from Spenso's active multi-contraction regression in
-  #source-link("crates/spenso/src/contraction/multicontract.rs", label: "the contraction implementation tests").
-  Those tests cover dense and sparse storage plus multiple shared axes.
-])
 ]

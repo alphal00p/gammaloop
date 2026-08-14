@@ -1,4 +1,4 @@
-#import "../../shared.typ": boundary, callout, source-link
+#import "../../shared.typ": callout
 
 #let tutorial = [
 = Tutorial
@@ -49,8 +49,8 @@ print("free after:", list_dangling(reduced))
 
 Run `python metric_first.py`. Success means the metric is removed from the reduced expression,
 the contracted `mu` no longer appears as a free index, and the result is a rank-one expression
-carrying `nu`. The exact printer spelling is owned by the installed Symbolica version; inspect
-the structure rather than matching a decorative string.
+carrying `nu`. Printed output can vary with the installed Symbolica version; inspect the
+expression structure instead of comparing exact text.
 
 #callout("Initialize before parsing or rewriting", [
   `initialize()` installs Idenso's representation and tensor symbols. Calling it explicitly at
@@ -72,19 +72,12 @@ Keep transformations observable while developing:
 == Troubleshooting and next steps
 
 - `ModuleNotFoundError` for `symbolica.community.idenso` means the installed Symbolica build
-  does not include the module; a stub file or this repository checkout is not enough.
+  does not include the native module; a `.pyi` type stub or source checkout alone is not enough.
 - If the metric remains unchanged, construct its slots with the same `Representation` and
   abstract index objects as the vector. Plain Symbolica functions do not automatically carry
   Spenso tensor structure.
 - If a free index disappears unexpectedly, inspect repeated names and use `wrap_dummies` before
   combining separately constructed expressions.
-- Continue with the syntax-and-algebra manual, then use the generated Python and Rust references
-  for signatures and feature gates.
-
-#boundary("Ground truth for this walkthrough", [
-  The example follows the public binding documentation in
-  #source-link("crates/idenso/src/python.rs", label: "Idenso's Python functions").
-  Rust regression cases for the same metric and gamma rules live beside the algebra
-  implementations rather than in generated stubs.
-])
+- Continue with the syntax-and-algebra manual, then use the Python and Rust API references for
+  signatures and feature gates.
 ]
