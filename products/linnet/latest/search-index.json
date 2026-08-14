@@ -7,27 +7,111 @@
   },
   {
     "title": "Overview",
-    "summary": "Linnet manual section",
-    "href": "index.html#overview",
-    "kind": "section"
+    "summary": "Half-edge graphs, subgraph-first operations, typed indices, and the boundaries of the Linnet ecosystem.",
+    "href": "index.html",
+    "kind": "start here"
   },
   {
-    "title": "Subgraphs, traversal, cuts, and drawing",
-    "summary": "Linnet manual section",
-    "href": "index.html#subgraphs-traversal-cuts-and-drawing",
-    "kind": "section"
+    "title": "A working model",
+    "summary": "Linnet · Overview",
+    "href": "index.html#a-working-model",
+    "kind": "start here"
   },
   {
-    "title": "Rust and Python API boundaries",
-    "summary": "Linnet manual section",
-    "href": "index.html#rust-and-python-api-boundaries",
-    "kind": "section"
+    "title": "Construction and interchange",
+    "summary": "Linnet · Overview",
+    "href": "index.html#construction-and-interchange",
+    "kind": "start here"
   },
   {
-    "title": "Releases and change history",
-    "summary": "Linnet manual section",
-    "href": "index.html#releases-and-change-history",
-    "kind": "section"
+    "title": "Ecosystem ownership",
+    "summary": "Linnet · Overview",
+    "href": "index.html#ecosystem-ownership",
+    "kind": "start here"
+  },
+  {
+    "title": "Build and explore a graph",
+    "summary": "Construct a small graph, inspect its half-edges, and apply a first subgraph-aware operation.",
+    "href": "tutorial/",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Prerequisites",
+    "summary": "Linnet · Build and explore a graph",
+    "href": "tutorial/#prerequisites",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Build a graph with a boundary",
+    "summary": "Linnet · Build and explore a graph",
+    "href": "tutorial/#build-a-graph-with-a-boundary",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Make the first useful variation",
+    "summary": "Linnet · Build and explore a graph",
+    "href": "tutorial/#make-the-first-useful-variation",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Troubleshooting and next steps",
+    "summary": "Linnet · Build and explore a graph",
+    "href": "tutorial/#troubleshooting-and-next-steps",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Graph algorithms",
+    "summary": "Traversal, connectivity, cycles, cuts, mutation boundaries, DOT interchange, and drawing.",
+    "href": "manual/algorithms/",
+    "kind": "manual"
+  },
+  {
+    "title": "Traversal and connectivity",
+    "summary": "Linnet · Graph algorithms",
+    "href": "manual/algorithms/#traversal-and-connectivity",
+    "kind": "manual"
+  },
+  {
+    "title": "Cycles and cuts",
+    "summary": "Linnet · Graph algorithms",
+    "href": "manual/algorithms/#cycles-and-cuts",
+    "kind": "manual"
+  },
+  {
+    "title": "Mutation boundaries",
+    "summary": "Linnet · Graph algorithms",
+    "href": "manual/algorithms/#mutation-boundaries",
+    "kind": "manual"
+  },
+  {
+    "title": "DOT and drawing",
+    "summary": "Linnet · Graph algorithms",
+    "href": "manual/algorithms/#dot-and-drawing",
+    "kind": "manual"
+  },
+  {
+    "title": "Rust and Python interfaces",
+    "summary": "Supported package surfaces, feature gates, typed IDs, and Python distribution boundaries.",
+    "href": "manual/interfaces/",
+    "kind": "manual"
+  },
+  {
+    "title": "Rust package",
+    "summary": "Linnet · Rust and Python interfaces",
+    "href": "manual/interfaces/#rust-package",
+    "kind": "manual"
+  },
+  {
+    "title": "Standalone Python distribution",
+    "summary": "Linnet · Rust and Python interfaces",
+    "href": "manual/interfaces/#standalone-python-distribution",
+    "kind": "manual"
+  },
+  {
+    "title": "Releases and migration",
+    "summary": "Canonical package releases, compatibility boundaries, and migration notes.",
+    "href": "manual/releases/",
+    "kind": "manual"
   },
   {
     "title": "linnet · Half-edge graph",
@@ -122,2005 +206,2005 @@
   {
     "title": "linnet-py · Cycle",
     "summary": "Cycle represented as a subgraph and optional loop count.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-cycle",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Cycle.filter",
     "summary": "Subgraph filter for this cycle.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-cycle-filter-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Cycle.loop_count",
     "summary": "Optional loop count for this cycle.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-cycle-loop-count-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Cycle.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-cycle-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotEdgeData",
     "summary": "DOT edge data (attributes + optional edge id).",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotedgedata",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotEdgeData.statements",
     "summary": "Edge attributes as a dict-like proxy.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotedgedata-statements-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotEdgeData.local_statements",
     "summary": "Local edge attributes as a dict-like proxy.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotedgedata-local-statements-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotEdgeData.edge_id",
     "summary": "Optional edge id.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotedgedata-edge-id-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotEdgeData.__new__",
     "summary": "Create edge data from fields.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotedgedata-new-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotEdgeData.__new__.statements",
     "summary": "statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotedgedata-new-associatedfunction-statements-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotEdgeData.__new__.local_statements",
     "summary": "local_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotedgedata-new-associatedfunction-local-statements-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotEdgeData.__new__.edge_id",
     "summary": "edge_id: typing.Optional[builtins.int] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotedgedata-new-associatedfunction-edge-id-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotEdgeData.add_statement",
     "summary": "Insert or update an attribute statement.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotedgedata-add-statement-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotEdgeData.add_statement.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotedgedata-add-statement-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotEdgeData.add_statement.value",
     "summary": "value: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotedgedata-add-statement-method-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotEdgeData.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotedgedata-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph",
     "summary": "DOT-backed hedge graph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.global_data",
     "summary": "Global graph attributes.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-global-data-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.global_data",
     "summary": "def global_data(self, value: GlobalData) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-global-data-setter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.global_data.value",
     "summary": "value: GlobalData",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-global-data-setter-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.from_string",
     "summary": "Parse a DOT string into a graph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-from-string-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.from_string.s",
     "summary": "s: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-from-string-associatedfunction-s-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.from_string_set",
     "summary": "Parse a DOT string into multiple graphs.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-from-string-set-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.from_string_set.s",
     "summary": "s: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-from-string-set-associatedfunction-s-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.from_file",
     "summary": "Parse a DOT file into a graph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-from-file-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.from_file.path",
     "summary": "path: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-from-file-associatedfunction-path-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.debug_dot",
     "summary": "Serialize graph to DOT for debugging.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-debug-dot-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.dot",
     "summary": "Serialize the full graph to DOT.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-dot-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.dot_of",
     "summary": "Serialize a subgraph to DOT.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-dot-of-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.dot_of.subgraph",
     "summary": "subgraph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-dot-of-method-subgraph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.n_nodes",
     "summary": "Number of nodes.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-n-nodes-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.n_edges",
     "summary": "Number of edges.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-n-edges-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.n_hedges",
     "summary": "Number of hedges.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-n-hedges-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.n_externals",
     "summary": "Number of external hedges.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-n-externals-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.n_internals",
     "summary": "Number of internal hedges.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-n-internals-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.full_filter",
     "summary": "Subgraph including all hedges.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-full-filter-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.empty_subgraph",
     "summary": "Empty subgraph of this graph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-empty-subgraph-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.iter_edges",
     "summary": "Iterate edges in the full graph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-iter-edges-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.iter_edges_of",
     "summary": "Iterate edges within a subgraph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-iter-edges-of-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.iter_edges_of.subgraph",
     "summary": "subgraph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-iter-edges-of-method-subgraph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.iter_nodes",
     "summary": "Iterate nodes in the full graph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-iter-nodes-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.iter_nodes_of",
     "summary": "Iterate nodes within a subgraph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-iter-nodes-of-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.iter_nodes_of.subgraph",
     "summary": "subgraph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-iter-nodes-of-method-subgraph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.connected_components",
     "summary": "Connected components of a subgraph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-connected-components-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.connected_components.subgraph",
     "summary": "subgraph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-connected-components-method-subgraph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.count_connected_components",
     "summary": "Count connected components.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-count-connected-components-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.count_connected_components.subgraph",
     "summary": "subgraph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-count-connected-components-method-subgraph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.is_connected",
     "summary": "Whether a subgraph is connected.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-is-connected-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.is_connected.subgraph",
     "summary": "subgraph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-is-connected-method-subgraph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.depth_first_traverse",
     "summary": "Depth-first traversal from a root node.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-depth-first-traverse-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.depth_first_traverse.subgraph",
     "summary": "subgraph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-depth-first-traverse-method-subgraph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.depth_first_traverse.root_node",
     "summary": "root_node: NodeIndex",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-depth-first-traverse-method-root-node-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.depth_first_traverse.include_hedge",
     "summary": "include_hedge: typing.Optional[Hedge]",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-depth-first-traverse-method-include-hedge-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.breadth_first_traverse",
     "summary": "Breadth-first traversal from a root node.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-breadth-first-traverse-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.breadth_first_traverse.subgraph",
     "summary": "subgraph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-breadth-first-traverse-method-subgraph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.breadth_first_traverse.root_node",
     "summary": "root_node: NodeIndex",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-breadth-first-traverse-method-root-node-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.breadth_first_traverse.include_hedge",
     "summary": "include_hedge: typing.Optional[Hedge]",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-breadth-first-traverse-method-include-hedge-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.bridges",
     "summary": "Bridges in the full graph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-bridges-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.bridges_of",
     "summary": "Bridges within a subgraph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-bridges-of-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.bridges_of.subgraph",
     "summary": "subgraph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-bridges-of-method-subgraph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.cycle_basis",
     "summary": "Cycle basis of the full graph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-cycle-basis-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.cycle_basis_of",
     "summary": "Cycle basis of a subgraph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-cycle-basis-of-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.cycle_basis_of.subgraph",
     "summary": "subgraph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-cycle-basis-of-method-subgraph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.all_spanning_forests",
     "summary": "All spanning forests of the full graph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-all-spanning-forests-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.all_spanning_forests_of",
     "summary": "All spanning forests of a subgraph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-all-spanning-forests-of-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.all_spanning_forests_of.subgraph",
     "summary": "subgraph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-all-spanning-forests-of-method-subgraph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.combine_to_single_hedgenode",
     "summary": "Combine nodes into a single hedge node.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-combine-to-single-hedgenode-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.combine_to_single_hedgenode.nodes",
     "summary": "nodes: typing.Sequence[NodeIndex]",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-combine-to-single-hedgenode-method-nodes-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.all_cuts",
     "summary": "All cuts between two hedge nodes.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-all-cuts-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.all_cuts.source",
     "summary": "source: HedgeNode",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-all-cuts-method-source-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.all_cuts.target",
     "summary": "target: HedgeNode",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-all-cuts-method-target-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.all_cuts_from_ids",
     "summary": "All cuts between two sets of node indices.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-all-cuts-from-ids-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.all_cuts_from_ids.source",
     "summary": "source: typing.Sequence[NodeIndex]",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-all-cuts-from-ids-method-source-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.all_cuts_from_ids.target",
     "summary": "target: typing.Sequence[NodeIndex]",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-all-cuts-from-ids-method-target-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.contract_subgraph",
     "summary": "Contract a subgraph into a single node, deleting its edges.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-contract-subgraph-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.contract_subgraph.subgraph",
     "summary": "subgraph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-contract-subgraph-method-subgraph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.contract_subgraph.node_data_merge",
     "summary": "node_data_merge: typing.Optional[DotVertexData] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-contract-subgraph-method-node-data-merge-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.join",
     "summary": "Join two graphs, matching dangling edges via a Python callback.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-join-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.join.other",
     "summary": "other: DotGraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-join-method-other-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.join.matching_fn",
     "summary": "matching_fn: typing.Any",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-join-method-matching-fn-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.join.merge_fn",
     "summary": "merge_fn: typing.Any",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-join-method-merge-fn-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.join_mut",
     "summary": "In-place join, matching dangling edges via a Python callback.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-join-mut-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.join_mut.other",
     "summary": "other: DotGraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-join-mut-method-other-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.join_mut.matching_fn",
     "summary": "matching_fn: typing.Any",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-join-mut-method-matching-fn-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.join_mut.merge_fn",
     "summary": "merge_fn: typing.Any",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-join-mut-method-merge-fn-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.extract",
     "summary": "Extract a subgraph with Python callbacks to transform edge/node data.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-extract-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.extract.subgraph",
     "summary": "subgraph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-extract-method-subgraph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.extract.split_edge_fn",
     "summary": "split_edge_fn: typing.Any",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-extract-method-split-edge-fn-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.extract.internal_data",
     "summary": "internal_data: typing.Any",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-extract-method-internal-data-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.extract.split_node",
     "summary": "split_node: typing.Any",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-extract-method-split-node-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.extract.owned_node",
     "summary": "owned_node: typing.Any",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-extract-method-owned-node-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.__getitem__",
     "summary": "def __getitem__(self, key: Hedge) -> DotHedgeData:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-getitem-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.__getitem__.key",
     "summary": "key: Hedge",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-getitem-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.__getitem__",
     "summary": "def __getitem__(self, key: NodeIndex) -> DotVertexData:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-getitem-method-2",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.__getitem__.key",
     "summary": "key: NodeIndex",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-getitem-method-2-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.__getitem__",
     "summary": "def __getitem__(self, key: EdgeIndex) -> DotEdgeData:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-getitem-method-3",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraph.__getitem__.key",
     "summary": "key: EdgeIndex",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraph-getitem-method-3-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder",
     "summary": "Builder for constructing DOT graphs programmatically.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.__new__",
     "summary": "Create a new, empty graph builder.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-new-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_node",
     "summary": "Add a node and return its index.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-node-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_node.data",
     "summary": "data: typing.Optional[DotVertexData] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-node-method-data-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_edge",
     "summary": "Add an edge between two nodes.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-edge-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_edge.source",
     "summary": "source: NodeIndex",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-edge-method-source-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_edge.sink",
     "summary": "sink: NodeIndex",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-edge-method-sink-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_edge.data",
     "summary": "data: typing.Optional[DotEdgeData] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-edge-method-data-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_edge.orientation",
     "summary": "orientation: typing.Optional[Orientation] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-edge-method-orientation-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_edge.source_hedge",
     "summary": "source_hedge: typing.Optional[DotHedgeData] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-edge-method-source-hedge-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_edge.sink_hedge",
     "summary": "sink_hedge: typing.Optional[DotHedgeData] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-edge-method-sink-hedge-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_external_edge",
     "summary": "Add a dangling (external) edge incident to a node.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-external-edge-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_external_edge.source",
     "summary": "source: NodeIndex",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-external-edge-method-source-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_external_edge.data",
     "summary": "data: typing.Optional[DotEdgeData] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-external-edge-method-data-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_external_edge.orientation",
     "summary": "orientation: typing.Optional[Orientation] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-external-edge-method-orientation-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_external_edge.flow",
     "summary": "flow: typing.Optional[Flow] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-external-edge-method-flow-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.add_external_edge.hedge",
     "summary": "hedge: typing.Optional[DotHedgeData] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-add-external-edge-method-hedge-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotGraphBuilder.build",
     "summary": "Build the graph and reset the builder.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotgraphbuilder-build-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotHedgeData",
     "summary": "DOT hedge (half-edge) data.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dothedgedata",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotHedgeData.statement",
     "summary": "Optional statement string.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dothedgedata-statement-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotHedgeData.id",
     "summary": "Optional hedge id.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dothedgedata-id-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotHedgeData.port_label",
     "summary": "Optional port label.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dothedgedata-port-label-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotHedgeData.compasspt",
     "summary": "Optional compass point as a string.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dothedgedata-compasspt-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotHedgeData.__new__",
     "summary": "Create hedge data from fields.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dothedgedata-new-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotHedgeData.__new__.statement",
     "summary": "statement: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dothedgedata-new-associatedfunction-statement-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotHedgeData.__new__.id",
     "summary": "id: typing.Optional[builtins.int] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dothedgedata-new-associatedfunction-id-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotHedgeData.__new__.port_label",
     "summary": "port_label: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dothedgedata-new-associatedfunction-port-label-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotHedgeData.__new__.compasspt",
     "summary": "compasspt: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dothedgedata-new-associatedfunction-compasspt-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotHedgeData.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dothedgedata-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotVertexData",
     "summary": "DOT vertex data (name, optional index, and attribute statements).",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotvertexdata",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotVertexData.name",
     "summary": "Optional vertex name.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotvertexdata-name-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotVertexData.index",
     "summary": "Optional node index.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotvertexdata-index-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotVertexData.statements",
     "summary": "Attribute statements as a dict-like proxy.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotvertexdata-statements-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotVertexData.__new__",
     "summary": "Create vertex data from fields.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotvertexdata-new-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotVertexData.__new__.name",
     "summary": "name: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotvertexdata-new-associatedfunction-name-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotVertexData.__new__.index",
     "summary": "index: typing.Optional[builtins.int] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotvertexdata-new-associatedfunction-index-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotVertexData.__new__.statements",
     "summary": "statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotvertexdata-new-associatedfunction-statements-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotVertexData.add_statement",
     "summary": "Insert or update an attribute statement.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotvertexdata-add-statement-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotVertexData.add_statement.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotvertexdata-add-statement-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotVertexData.add_statement.value",
     "summary": "value: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotvertexdata-add-statement-method-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · DotVertexData.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-dotvertexdata-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeData",
     "summary": "Edge data with orientation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgedata",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeData.orientation",
     "summary": "Orientation of this edge.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgedata-orientation-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeData.data",
     "summary": "DOT edge data.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgedata-data-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeData.__new__",
     "summary": "Create edge data from orientation and DotEdgeData.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgedata-new-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeData.__new__.orientation",
     "summary": "orientation: typing.Any",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgedata-new-associatedfunction-orientation-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeData.__new__.data",
     "summary": "data: typing.Any",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgedata-new-associatedfunction-data-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeData.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgedata-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeIndex",
     "summary": "Edge index identifier.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgeindex",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeIndex.value",
     "summary": "Numeric value of this edge index.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgeindex-value-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeIndex.__new__",
     "summary": "Create an edge index from a zero-based index.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgeindex-new-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeIndex.__new__.value",
     "summary": "value: builtins.int",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgeindex-new-associatedfunction-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeIndex.__int__",
     "summary": "Convert to int.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgeindex-int-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeIndex.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgeindex-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements",
     "summary": "Dict-like proxy for edge attribute statements.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.__getitem__",
     "summary": "def __getitem__(self, key: builtins.str) -> builtins.str:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-getitem-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.__getitem__.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-getitem-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.__setitem__",
     "summary": "def __setitem__(self, key: builtins.str, value: builtins.str) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-setitem-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.__setitem__.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-setitem-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.__setitem__.value",
     "summary": "value: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-setitem-method-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.__delitem__",
     "summary": "def __delitem__(self, key: builtins.str) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-delitem-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.__delitem__.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-delitem-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.__contains__",
     "summary": "def __contains__(self, key: builtins.str) -> builtins.bool:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-contains-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.__contains__.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-contains-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.__len__",
     "summary": "def __len__(self) -> builtins.int:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-len-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.__iter__",
     "summary": "def __iter__(self) -> typing.Iterator[builtins.str]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-iter-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.get",
     "summary": "def get(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-get-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.get.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-get-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.get.default",
     "summary": "default: typing.Any = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-get-method-default-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.keys",
     "summary": "def keys(self) -> builtins.list[builtins.str]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-keys-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.values",
     "summary": "def values(self) -> builtins.list[builtins.str]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-values-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.items",
     "summary": "def items(self) -> builtins.list[tuple[builtins.str, builtins.str]]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-items-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.clear",
     "summary": "def clear(self) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-clear-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.update",
     "summary": "def update(self, other: typing.Mapping[builtins.str, builtins.str]) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-update-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.update.other",
     "summary": "other: typing.Mapping[builtins.str, builtins.str]",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-update-method-other-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.pop",
     "summary": "def pop(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-pop-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.pop.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-pop-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.pop.default",
     "summary": "default: typing.Any = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-pop-method-default-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.popitem",
     "summary": "def popitem(self) -> tuple[builtins.str, builtins.str]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-popitem-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.setdefault",
     "summary": "def setdefault(self, key: builtins.str, default: typing.Optional[builtins.str] = None) -> builtins.str:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-setdefault-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.setdefault.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-setdefault-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.setdefault.default",
     "summary": "default: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-setdefault-method-default-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · EdgeStatements.__repr__",
     "summary": "def __repr__(self) -> builtins.str:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-edgestatements-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Flow",
     "summary": "Flow direction (Source/Sink).",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-flow",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Flow.source",
     "summary": "Flow::Source.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-flow-source-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Flow.sink",
     "summary": "Flow::Sink.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-flow-sink-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Flow.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-flow-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData",
     "summary": "Global graph attributes (graph/node/edge statements).",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.name",
     "summary": "Graph name.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-name-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.name",
     "summary": "def name(self, value: builtins.str) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-name-setter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.name.value",
     "summary": "value: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-name-setter-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.statements",
     "summary": "Graph-level statements.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-statements-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.statements",
     "summary": "def statements(self, value: builtins.dict[builtins.str, builtins.str]) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-statements-setter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.statements.value",
     "summary": "value: builtins.dict[builtins.str, builtins.str]",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-statements-setter-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.edge_statements",
     "summary": "Default edge statements.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-edge-statements-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.edge_statements",
     "summary": "def edge_statements(self, value: builtins.dict[builtins.str, builtins.str]) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-edge-statements-setter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.edge_statements.value",
     "summary": "value: builtins.dict[builtins.str, builtins.str]",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-edge-statements-setter-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.node_statements",
     "summary": "Default node statements.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-node-statements-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.node_statements",
     "summary": "def node_statements(self, value: builtins.dict[builtins.str, builtins.str]) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-node-statements-setter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.node_statements.value",
     "summary": "value: builtins.dict[builtins.str, builtins.str]",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-node-statements-setter-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.__new__",
     "summary": "Create global data from fields.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-new-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.__new__.name",
     "summary": "name: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-new-associatedfunction-name-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.__new__.statements",
     "summary": "statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-new-associatedfunction-statements-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.__new__.edge_statements",
     "summary": "edge_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-new-associatedfunction-edge-statements-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.__new__.node_statements",
     "summary": "node_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-new-associatedfunction-node-statements-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.add_statement",
     "summary": "Insert or update a graph-level statement.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-add-statement-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.add_statement.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-add-statement-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.add_statement.value",
     "summary": "value: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-add-statement-method-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.add_edge_statement",
     "summary": "Insert or update a default edge statement.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-add-edge-statement-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.add_edge_statement.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-add-edge-statement-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.add_edge_statement.value",
     "summary": "value: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-add-edge-statement-method-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.add_node_statement",
     "summary": "Insert or update a default node statement.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-add-node-statement-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.add_node_statement.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-add-node-statement-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.add_node_statement.value",
     "summary": "value: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-add-node-statement-method-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalData.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globaldata-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements",
     "summary": "Dict-like proxy for global statements.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.__getitem__",
     "summary": "def __getitem__(self, key: builtins.str) -> builtins.str:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-getitem-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.__getitem__.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-getitem-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.__setitem__",
     "summary": "def __setitem__(self, key: builtins.str, value: builtins.str) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-setitem-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.__setitem__.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-setitem-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.__setitem__.value",
     "summary": "value: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-setitem-method-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.__delitem__",
     "summary": "def __delitem__(self, key: builtins.str) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-delitem-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.__delitem__.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-delitem-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.__contains__",
     "summary": "def __contains__(self, key: builtins.str) -> builtins.bool:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-contains-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.__contains__.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-contains-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.__len__",
     "summary": "def __len__(self) -> builtins.int:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-len-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.__iter__",
     "summary": "def __iter__(self) -> typing.Iterator[builtins.str]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-iter-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.get",
     "summary": "def get(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-get-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.get.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-get-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.get.default",
     "summary": "default: typing.Any = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-get-method-default-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.keys",
     "summary": "def keys(self) -> builtins.list[builtins.str]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-keys-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.values",
     "summary": "def values(self) -> builtins.list[builtins.str]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-values-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.items",
     "summary": "def items(self) -> builtins.list[tuple[builtins.str, builtins.str]]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-items-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.clear",
     "summary": "def clear(self) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-clear-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.update",
     "summary": "def update(self, other: typing.Mapping[builtins.str, builtins.str]) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-update-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.update.other",
     "summary": "other: typing.Mapping[builtins.str, builtins.str]",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-update-method-other-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.pop",
     "summary": "def pop(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-pop-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.pop.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-pop-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.pop.default",
     "summary": "default: typing.Any = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-pop-method-default-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.popitem",
     "summary": "def popitem(self) -> tuple[builtins.str, builtins.str]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-popitem-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.setdefault",
     "summary": "def setdefault(self, key: builtins.str, default: typing.Optional[builtins.str] = None) -> builtins.str:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-setdefault-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.setdefault.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-setdefault-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.setdefault.default",
     "summary": "default: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-setdefault-method-default-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · GlobalStatements.__repr__",
     "summary": "def __repr__(self) -> builtins.str:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-globalstatements-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Hedge",
     "summary": "Half-edge identifier.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedge",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Hedge.value",
     "summary": "Numeric value of this hedge.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedge-value-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Hedge.__new__",
     "summary": "Create a hedge from a zero-based index.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedge-new-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Hedge.__new__.value",
     "summary": "value: builtins.int",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedge-new-associatedfunction-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Hedge.__int__",
     "summary": "Convert to int.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedge-int-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Hedge.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedge-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgeNode",
     "summary": "Hedge node with internal graph and hairs.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgenode",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgeNode.internal_graph",
     "summary": "Internal subgraph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgenode-internal-graph-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgeNode.hairs",
     "summary": "Hair subgraph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgenode-hairs-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgeNode.__new__",
     "summary": "Create a hedge node from internal graph and hairs subgraphs.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgenode-new-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgeNode.__new__.internal_graph",
     "summary": "internal_graph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgenode-new-associatedfunction-internal-graph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgeNode.__new__.hairs",
     "summary": "hairs: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgenode-new-associatedfunction-hairs-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgeNode.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgenode-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgePair",
     "summary": "Hedge pairing (paired, unpaired, split).",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgepair",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgePair.kind",
     "summary": "Kind of hedge pair: \\\"paired\\\", \\\"unpaired\\\", or \\\"split\\\".",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgepair-kind-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgePair.source",
     "summary": "Source hedge (paired/split).",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgepair-source-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgePair.sink",
     "summary": "Sink hedge (paired/split).",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgepair-sink-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgePair.hedge",
     "summary": "Hedge (unpaired only).",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgepair-hedge-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgePair.flow",
     "summary": "Flow for unpaired hedge.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgepair-flow-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgePair.split",
     "summary": "Which side is split for split edges.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgepair-split-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · HedgePair.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-hedgepair-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeIndex",
     "summary": "Node index identifier.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodeindex",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeIndex.value",
     "summary": "Numeric value of this node index.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodeindex-value-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeIndex.__new__",
     "summary": "Create a node index from a zero-based index.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodeindex-new-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeIndex.__new__.value",
     "summary": "value: builtins.int",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodeindex-new-associatedfunction-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeIndex.__int__",
     "summary": "Convert to int.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodeindex-int-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeIndex.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodeindex-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements",
     "summary": "Dict-like proxy for node attribute statements.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.__getitem__",
     "summary": "def __getitem__(self, key: builtins.str) -> builtins.str:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-getitem-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.__getitem__.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-getitem-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.__setitem__",
     "summary": "def __setitem__(self, key: builtins.str, value: builtins.str) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-setitem-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.__setitem__.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-setitem-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.__setitem__.value",
     "summary": "value: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-setitem-method-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.__delitem__",
     "summary": "def __delitem__(self, key: builtins.str) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-delitem-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.__delitem__.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-delitem-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.__contains__",
     "summary": "def __contains__(self, key: builtins.str) -> builtins.bool:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-contains-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.__contains__.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-contains-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.__len__",
     "summary": "def __len__(self) -> builtins.int:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-len-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.__iter__",
     "summary": "def __iter__(self) -> typing.Iterator[builtins.str]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-iter-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.get",
     "summary": "def get(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-get-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.get.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-get-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.get.default",
     "summary": "default: typing.Any = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-get-method-default-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.keys",
     "summary": "def keys(self) -> builtins.list[builtins.str]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-keys-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.values",
     "summary": "def values(self) -> builtins.list[builtins.str]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-values-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.items",
     "summary": "def items(self) -> builtins.list[tuple[builtins.str, builtins.str]]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-items-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.clear",
     "summary": "def clear(self) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-clear-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.update",
     "summary": "def update(self, other: typing.Mapping[builtins.str, builtins.str]) -> None:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-update-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.update.other",
     "summary": "other: typing.Mapping[builtins.str, builtins.str]",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-update-method-other-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.pop",
     "summary": "def pop(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-pop-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.pop.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-pop-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.pop.default",
     "summary": "default: typing.Any = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-pop-method-default-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.popitem",
     "summary": "def popitem(self) -> tuple[builtins.str, builtins.str]:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-popitem-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.setdefault",
     "summary": "def setdefault(self, key: builtins.str, default: typing.Optional[builtins.str] = None) -> builtins.str:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-setdefault-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.setdefault.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-setdefault-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.setdefault.default",
     "summary": "default: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-setdefault-method-default-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · NodeStatements.__repr__",
     "summary": "def __repr__(self) -> builtins.str:",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-nodestatements-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Orientation",
     "summary": "Edge orientation (Default/Reversed/Undirected).",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-orientation",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Orientation.default",
     "summary": "Orientation::Default.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-orientation-default-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Orientation.reversed",
     "summary": "Orientation::Reversed.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-orientation-reversed-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Orientation.undirected",
     "summary": "Orientation::Undirected.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-orientation-undirected-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Orientation.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-orientation-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · OrientedCut",
     "summary": "Oriented cut represented by left/right subgraphs.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-orientedcut",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · OrientedCut.left",
     "summary": "Left side of the cut.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-orientedcut-left-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · OrientedCut.right",
     "summary": "Right side of the cut.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-orientedcut-right-getter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · OrientedCut.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-orientedcut-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph",
     "summary": "Subgraph represented as a bitset of hedges.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.empty",
     "summary": "Create an empty subgraph of the given size (number of hedges).",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-empty-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.empty.size",
     "summary": "size: builtins.int",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-empty-associatedfunction-size-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.full",
     "summary": "Create a full subgraph including all hedges.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-full-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.full.size",
     "summary": "size: builtins.int",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-full-associatedfunction-size-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.from_hedges",
     "summary": "Create a subgraph from a list of hedges.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-from-hedges-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.from_hedges.size",
     "summary": "size: builtins.int",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-from-hedges-associatedfunction-size-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.from_hedges.hedges",
     "summary": "hedges: typing.Sequence[Hedge]",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-from-hedges-associatedfunction-hedges-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.to_hedges",
     "summary": "List included hedges.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-to-hedges-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.size",
     "summary": "Total number of hedges in the parent graph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-size-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.n_included",
     "summary": "Number of included hedges.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-n-included-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.includes",
     "summary": "Whether a hedge is included.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-includes-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.includes.hedge",
     "summary": "hedge: typing.Any",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-includes-method-hedge-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.union",
     "summary": "Union with another subgraph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-union-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.union.other",
     "summary": "other: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-union-method-other-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.intersection",
     "summary": "Intersection with another subgraph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-intersection-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.intersection.other",
     "summary": "other: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-intersection-method-other-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.sym_diff",
     "summary": "Symmetric difference with another subgraph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-sym-diff-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.sym_diff.other",
     "summary": "other: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-sym-diff-method-other-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.subtract",
     "summary": "Subtract another subgraph.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-subtract-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.subtract.other",
     "summary": "other: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-subtract-method-other-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · Subgraph.__repr__",
     "summary": "Debug-style representation.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-subgraph-repr-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · TraversalTree",
     "summary": "Traversal tree produced by DFS/BFS.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-traversaltree",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · TraversalTree.tree_subgraph",
     "summary": "Subgraph corresponding to the tree edges.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-traversaltree-tree-subgraph-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · TraversalTree.node_order",
     "summary": "Node order from traversal.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-traversaltree-node-order-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · TraversalTree.covers",
     "summary": "Covers a subgraph with the traversal tree.",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-traversaltree-covers-method",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · TraversalTree.covers.subgraph",
     "summary": "subgraph: Subgraph",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-traversaltree-covers-method-subgraph-parameter",
     "kind": "python-api"
   },
   {
     "title": "linnet-py · TraversalTree.iter_hedges",
     "summary": "Iterate hedges as (hedge, kind, root_hedge).",
-    "href": "reference/python/#linnet-py",
+    "href": "reference/python/linnet-py/#exports-traversaltree-iter-hedges-method",
     "kind": "python-api"
   }
 ]

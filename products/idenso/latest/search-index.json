@@ -7,27 +7,105 @@
   },
   {
     "title": "Overview",
-    "summary": "Idenso manual section",
-    "href": "index.html#overview",
-    "kind": "section"
+    "summary": "Symbolic tensor identities, controlled rewrite stages, representation setup, and reversible cooking.",
+    "href": "index.html",
+    "kind": "start here"
   },
   {
-    "title": "Syntax, indices, and algebra passes",
-    "summary": "Idenso manual section",
-    "href": "index.html#syntax-indices-and-algebra-passes",
-    "kind": "section"
+    "title": "A controlled rewrite pipeline",
+    "summary": "Idenso · Overview",
+    "href": "index.html#a-controlled-rewrite-pipeline",
+    "kind": "start here"
   },
   {
-    "title": "Rust and Python API boundaries",
-    "summary": "Idenso manual section",
-    "href": "index.html#rust-and-python-api-boundaries",
-    "kind": "section"
+    "title": "Representations and cooking",
+    "summary": "Idenso · Overview",
+    "href": "index.html#representations-and-cooking",
+    "kind": "start here"
   },
   {
-    "title": "Releases and change history",
-    "summary": "Idenso manual section",
-    "href": "index.html#releases-and-change-history",
-    "kind": "section"
+    "title": "A controlled identity pass",
+    "summary": "Initialize representations, inspect indices, apply a focused rewrite, and verify the result.",
+    "href": "tutorial/",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Prerequisites",
+    "summary": "Idenso · A controlled identity pass",
+    "href": "tutorial/#prerequisites",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Simplify one metric contraction",
+    "summary": "Idenso · A controlled identity pass",
+    "href": "tutorial/#simplify-one-metric-contraction",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Grow this into an algebra pipeline",
+    "summary": "Idenso · A controlled identity pass",
+    "href": "tutorial/#grow-this-into-an-algebra-pipeline",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Troubleshooting and next steps",
+    "summary": "Idenso · A controlled identity pass",
+    "href": "tutorial/#troubleshooting-and-next-steps",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Algebra and rewrites",
+    "summary": "Index tooling, cooking, metric, epsilon, Dirac, color, and Schoonschip network operations.",
+    "href": "manual/algebra/",
+    "kind": "manual"
+  },
+  {
+    "title": "Indices and cooking",
+    "summary": "Idenso · Algebra and rewrites",
+    "href": "manual/algebra/#indices-and-cooking",
+    "kind": "manual"
+  },
+  {
+    "title": "Metric and epsilon operations",
+    "summary": "Idenso · Algebra and rewrites",
+    "href": "manual/algebra/#metric-and-epsilon-operations",
+    "kind": "manual"
+  },
+  {
+    "title": "Dirac and color algebra",
+    "summary": "Idenso · Algebra and rewrites",
+    "href": "manual/algebra/#dirac-and-color-algebra",
+    "kind": "manual"
+  },
+  {
+    "title": "Schoonschip network parsing",
+    "summary": "Idenso · Algebra and rewrites",
+    "href": "manual/algebra/#schoonschip-network-parsing",
+    "kind": "manual"
+  },
+  {
+    "title": "Rust and Python interfaces",
+    "summary": "Supported rewrite families, macros, features, and the Symbolica community-module boundary.",
+    "href": "manual/interfaces/",
+    "kind": "manual"
+  },
+  {
+    "title": "Rust package",
+    "summary": "Idenso · Rust and Python interfaces",
+    "href": "manual/interfaces/#rust-package",
+    "kind": "manual"
+  },
+  {
+    "title": "Python community module",
+    "summary": "Idenso · Rust and Python interfaces",
+    "href": "manual/interfaces/#python-community-module",
+    "kind": "manual"
+  },
+  {
+    "title": "Releases and migration",
+    "summary": "Canonical package releases, compatibility boundaries, and migration notes.",
+    "href": "manual/releases/",
+    "kind": "manual"
   },
   {
     "title": "idenso · Index tooling",
@@ -266,97 +344,97 @@
   {
     "title": "idenso-community · cook_function",
     "summary": "Convert a single function call into a flattened variable symbol.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-cook-function",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · cook_indices",
     "summary": "Convert complex nested index structures into flattened symbolic names.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-cook-indices",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · dirac_adjoint",
     "summary": "Return the Dirac adjoint of a Symbolica tensor expression.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-dirac-adjoint",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · expand_bis",
     "summary": "Expands factorized terms containing Dirac bispinor indices.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-expand-bis",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · expand_color",
     "summary": "Expands factorized terms containing SU(N) color indices.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-expand-color",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · expand_metrics",
     "summary": "Expands factorized terms containing metric tensors.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-expand-metrics",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · expand_mink",
     "summary": "Expands factorized terms containing Minkowski spacetime indices.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-expand-mink",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · expand_mink_bis",
     "summary": "Expands factorized terms containing both Minkowski and bispinor indices.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-expand-mink-bis",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · initialize",
     "summary": "Register Idenso's built-in representations and algebra symbols with Symbolica.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-initialize",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · list_dangling",
     "summary": "Lists the dangling (external, uncontracted) indices present in the expression.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-list-dangling",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · simplify_color",
     "summary": "Applies SU(N) color algebra rules to simplify color group structures.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-simplify-color",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · simplify_gamma",
     "summary": "Applies Clifford algebra rules and trace identities to simplify gamma matrix expressions.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-simplify-gamma",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · simplify_metrics",
     "summary": "Simplifies contractions involving metric tensors and identity tensors.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-simplify-metrics",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · to_dots",
     "summary": "Converts contracted Lorentz/Minkowski indices into dot product notation.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-to-dots",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · wrap_dummies",
     "summary": "Wraps only the dummy (contracted) indices within the expression using a header symbol.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-wrap-dummies",
     "kind": "python-api"
   },
   {
     "title": "idenso-community · wrap_indices",
     "summary": "Wrap all abstract indices with a header symbol # Arguments - `self_`: input expression containing tensor indices - `header`: symbol to use as the wrapper function for all indices # Returns Expression with all indices wrapped by the header symbol.",
-    "href": "reference/python/#idenso-community",
+    "href": "reference/python/idenso-community/#exports-wrap-indices",
     "kind": "python-api"
   }
 ]

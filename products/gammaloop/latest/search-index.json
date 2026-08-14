@@ -7,27 +7,129 @@
   },
   {
     "title": "Overview",
-    "summary": "GammaLoop manual section",
-    "href": "index.html#overview",
-    "kind": "section"
+    "summary": "What GammaLoop computes, how stateful runs fit together, and where the surrounding libraries begin.",
+    "href": "index.html",
+    "kind": "start here"
   },
   {
-    "title": "Process generation and state workflows",
-    "summary": "GammaLoop manual section",
-    "href": "index.html#process-generation-and-state-workflows",
-    "kind": "section"
+    "title": "A stateful run",
+    "summary": "GammaLoop · Overview",
+    "href": "index.html#a-stateful-run",
+    "kind": "start here"
   },
   {
-    "title": "Rust, Python, and CLI reference boundaries",
-    "summary": "GammaLoop manual section",
-    "href": "index.html#rust-python-and-cli-reference-boundaries",
-    "kind": "section"
+    "title": "Installation and external tools",
+    "summary": "GammaLoop · Overview",
+    "href": "index.html#installation-and-external-tools",
+    "kind": "start here"
+  },
+  {
+    "title": "Ownership across the stack",
+    "summary": "GammaLoop · Overview",
+    "href": "index.html#ownership-across-the-stack",
+    "kind": "start here"
+  },
+  {
+    "title": "Where to begin",
+    "summary": "GammaLoop · Overview",
+    "href": "index.html#where-to-begin",
+    "kind": "start here"
+  },
+  {
+    "title": "First calculation",
+    "summary": "Build GammaLoop, run a maintained card, inspect its state, and resume the calculation.",
+    "href": "tutorial/",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Prerequisites",
+    "summary": "GammaLoop · First calculation",
+    "href": "tutorial/#prerequisites",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Generate one maintained process",
+    "summary": "GammaLoop · First calculation",
+    "href": "tutorial/#generate-one-maintained-process",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Prove that the state is reusable",
+    "summary": "GammaLoop · First calculation",
+    "href": "tutorial/#prove-that-the-state-is-reusable",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Troubleshooting and next steps",
+    "summary": "GammaLoop · First calculation",
+    "href": "tutorial/#troubleshooting-and-next-steps",
+    "kind": "tutorial"
+  },
+  {
+    "title": "Process generation",
+    "summary": "Process grammar, generation modes, filters, grouping, and the path from diagrams to evaluation.",
+    "href": "manual/process-generation/",
+    "kind": "manual"
+  },
+  {
+    "title": "Choose a generation mode",
+    "summary": "GammaLoop · Process generation",
+    "href": "manual/process-generation/#choose-a-generation-mode",
+    "kind": "manual"
+  },
+  {
+    "title": "Process specification grammar",
+    "summary": "GammaLoop · Process generation",
+    "href": "manual/process-generation/#process-specification-grammar",
+    "kind": "manual"
+  },
+  {
+    "title": "Filters, grouping, and multiplicity",
+    "summary": "GammaLoop · Process generation",
+    "href": "manual/process-generation/#filters-grouping-and-multiplicity",
+    "kind": "manual"
+  },
+  {
+    "title": "From generation to evaluation",
+    "summary": "GammaLoop · Process generation",
+    "href": "manual/process-generation/#from-generation-to-evaluation",
+    "kind": "manual"
+  },
+  {
+    "title": "Interfaces and API boundaries",
+    "summary": "The supported CLI, Rust, and Python ownership boundaries and precision contracts.",
+    "href": "manual/interfaces/",
+    "kind": "manual"
+  },
+  {
+    "title": "Rust ownership",
+    "summary": "GammaLoop · Interfaces and API boundaries",
+    "href": "manual/interfaces/#rust-ownership",
+    "kind": "manual"
+  },
+  {
+    "title": "Python packaging",
+    "summary": "GammaLoop · Interfaces and API boundaries",
+    "href": "manual/interfaces/#python-packaging",
+    "kind": "manual"
+  },
+  {
+    "title": "Sample evaluation and precision",
+    "summary": "GammaLoop · Interfaces and API boundaries",
+    "href": "manual/interfaces/#sample-evaluation-and-precision",
+    "kind": "manual"
+  },
+  {
+    "title": "CLI and settings metadata",
+    "summary": "GammaLoop · Interfaces and API boundaries",
+    "href": "manual/interfaces/#cli-and-settings-metadata",
+    "kind": "manual"
   },
   {
     "title": "Releases and change history",
-    "summary": "GammaLoop manual section",
-    "href": "index.html#releases-and-change-history",
-    "kind": "section"
+    "summary": "Version ownership, immutable documentation snapshots, and the current release-history policy.",
+    "href": "manual/releases/",
+    "kind": "manual"
   },
   {
     "title": "gammalooprs · GammaLoopContext",
@@ -212,2401 +314,2401 @@
   {
     "title": "gammaloop-python · AdditionalWeight",
     "summary": "Reachable generated Python class AdditionalWeight.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-additionalweight",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · AdditionalWeight.key",
     "summary": "def key(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-additionalweight-key-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · AdditionalWeight.value",
     "summary": "def value(self) -> typing.Any:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-additionalweight-value-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · BatchEvaluationResult",
     "summary": "Reachable generated Python class BatchEvaluationResult.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-batchevaluationresult",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · BatchEvaluationResult.samples",
     "summary": "def samples(self) -> builtins.list[SampleEvaluationResult]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-batchevaluationresult-samples-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · BatchEvaluationResult.observables",
     "summary": "def observables(self) -> dict:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-batchevaluationresult-observables-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · BatchEvaluationResult.__str__",
     "summary": "def __str__(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-batchevaluationresult-str-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · BatchEvaluationResult.__repr__",
     "summary": "def __repr__(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-batchevaluationresult-repr-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · ComponentDiscreteBreakdown",
     "summary": "Reachable generated Python class ComponentDiscreteBreakdown.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-componentdiscretebreakdown",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · ComponentDiscreteBreakdown.re",
     "summary": "def re(self) -> typing.Optional[DiscreteBreakdown]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-componentdiscretebreakdown-re-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · ComponentDiscreteBreakdown.im",
     "summary": "def im(self) -> typing.Optional[DiscreteBreakdown]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-componentdiscretebreakdown-im-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · CutInfo",
     "summary": "Reachable generated Python class CutInfo.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-cutinfo",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · CutInfo.incoming_pdgs",
     "summary": "def incoming_pdgs(self) -> builtins.list[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-cutinfo-incoming-pdgs-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · CutInfo.outgoing_pdgs",
     "summary": "def outgoing_pdgs(self) -> builtins.list[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-cutinfo-outgoing-pdgs-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · CutInfo.cut_id",
     "summary": "def cut_id(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-cutinfo-cut-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · CutInfo.graph_id",
     "summary": "def graph_id(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-cutinfo-graph-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · CutInfo.graph_group_id",
     "summary": "def graph_group_id(self) -> typing.Optional[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-cutinfo-graph-group-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · CutInfo.orientation_id",
     "summary": "def orientation_id(self) -> typing.Optional[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-cutinfo-orientation-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · CutInfo.lmb_channel_id",
     "summary": "def lmb_channel_id(self) -> typing.Optional[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-cutinfo-lmb-channel-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · CutInfo.lmb_channel_edge_ids",
     "summary": "def lmb_channel_edge_ids(self) -> typing.Optional[builtins.list[builtins.int]]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-cutinfo-lmb-channel-edge-ids-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteBreakdown",
     "summary": "Reachable generated Python class DiscreteBreakdown.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretebreakdown",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteBreakdown.axis_label",
     "summary": "def axis_label(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretebreakdown-axis-label-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteBreakdown.fixed_coordinates",
     "summary": "def fixed_coordinates(self) -> builtins.list[DiscreteCoordinate]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretebreakdown-fixed-coordinates-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteBreakdown.entries",
     "summary": "def entries(self) -> builtins.list[DiscreteBreakdownEntry]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretebreakdown-entries-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteBreakdownEntry",
     "summary": "Reachable generated Python class DiscreteBreakdownEntry.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretebreakdownentry",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteBreakdownEntry.bin_index",
     "summary": "def bin_index(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretebreakdownentry-bin-index-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteBreakdownEntry.bin_label",
     "summary": "def bin_label(self) -> typing.Optional[builtins.str]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretebreakdownentry-bin-label-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteBreakdownEntry.pdf",
     "summary": "def pdf(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretebreakdownentry-pdf-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteBreakdownEntry.value",
     "summary": "def value(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretebreakdownentry-value-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteBreakdownEntry.error",
     "summary": "def error(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretebreakdownentry-error-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteBreakdownEntry.chi_sq",
     "summary": "def chi_sq(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretebreakdownentry-chi-sq-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteBreakdownEntry.processed_samples",
     "summary": "def processed_samples(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretebreakdownentry-processed-samples-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteCoordinate",
     "summary": "Reachable generated Python class DiscreteCoordinate.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretecoordinate",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteCoordinate.axis_label",
     "summary": "def axis_label(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretecoordinate-axis-label-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteCoordinate.bin_index",
     "summary": "def bin_index(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretecoordinate-bin-index-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DiscreteCoordinate.bin_label",
     "summary": "def bin_label(self) -> typing.Optional[builtins.str]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-discretecoordinate-bin-label-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings",
     "summary": "Reachable generated Python class DotExportSettings.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.combine_diagrams",
     "summary": "def combine_diagrams(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-combine-diagrams-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.combine_diagrams",
     "summary": "def combine_diagrams(self, value: builtins.bool) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-combine-diagrams-setter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.combine_diagrams.value",
     "summary": "value: builtins.bool",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-combine-diagrams-setter-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.with_uv",
     "summary": "def with_uv(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-with-uv-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.with_uv",
     "summary": "def with_uv(self, value: builtins.bool) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-with-uv-setter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.with_uv.value",
     "summary": "value: builtins.bool",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-with-uv-setter-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.output_full_numerator",
     "summary": "def output_full_numerator(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-output-full-numerator-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.output_full_numerator",
     "summary": "def output_full_numerator(self, value: builtins.bool) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-output-full-numerator-setter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.output_full_numerator.value",
     "summary": "value: builtins.bool",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-output-full-numerator-setter-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.split_xs_by_initial_states",
     "summary": "def split_xs_by_initial_states(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-split-xs-by-initial-states-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.split_xs_by_initial_states",
     "summary": "def split_xs_by_initial_states(self, value: builtins.bool) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-split-xs-by-initial-states-setter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.split_xs_by_initial_states.value",
     "summary": "value: builtins.bool",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-split-xs-by-initial-states-setter-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.do_gamma_algebra",
     "summary": "def do_gamma_algebra(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-do-gamma-algebra-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.do_gamma_algebra",
     "summary": "def do_gamma_algebra(self, value: builtins.bool) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-do-gamma-algebra-setter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.do_gamma_algebra.value",
     "summary": "value: builtins.bool",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-do-gamma-algebra-setter-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.do_color_algebra",
     "summary": "def do_color_algebra(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-do-color-algebra-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.do_color_algebra",
     "summary": "def do_color_algebra(self, value: builtins.bool) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-do-color-algebra-setter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.do_color_algebra.value",
     "summary": "value: builtins.bool",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-do-color-algebra-setter-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.include_autogenerated_fields",
     "summary": "def include_autogenerated_fields(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-include-autogenerated-fields-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.include_autogenerated_fields",
     "summary": "def include_autogenerated_fields(self, value: builtins.bool) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-include-autogenerated-fields-setter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.include_autogenerated_fields.value",
     "summary": "value: builtins.bool",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-include-autogenerated-fields-setter-value-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · DotExportSettings.__new__",
     "summary": "def __new__(cls) -> DotExportSettings:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-dotexportsettings-new-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EvaluationResult",
     "summary": "Reachable generated Python class EvaluationResult.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluationresult",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EvaluationResult.sample",
     "summary": "def sample(self) -> SampleEvaluationResult:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluationresult-sample-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EvaluationResult.integrand_result",
     "summary": "def integrand_result(self) -> complex:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluationresult-integrand-result-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EvaluationResult.integrator_weight",
     "summary": "def integrator_weight(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluationresult-integrator-weight-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EvaluationResult.generated_event_count",
     "summary": "def generated_event_count(self) -> typing.Optional[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluationresult-generated-event-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EvaluationResult.accepted_event_count",
     "summary": "def accepted_event_count(self) -> typing.Optional[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluationresult-accepted-event-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EvaluationResult.event_processing_time_seconds",
     "summary": "def event_processing_time_seconds(self) -> typing.Optional[builtins.float]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluationresult-event-processing-time-seconds-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EvaluationResult.parameterization_jacobian",
     "summary": "def parameterization_jacobian(self) -> typing.Optional[builtins.float]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluationresult-parameterization-jacobian-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EvaluationResult.is_nan",
     "summary": "def is_nan(self) -> typing.Optional[builtins.bool]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluationresult-is-nan-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EvaluationResult.stability_results",
     "summary": "def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluationresult-stability-results-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EvaluationResult.event_groups",
     "summary": "def event_groups(self) -> builtins.list[EventGroup]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluationresult-event-groups-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EvaluationResult.observables",
     "summary": "def observables(self) -> dict:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluationresult-observables-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EvaluationResult.__str__",
     "summary": "def __str__(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluationresult-str-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EvaluationResult.__repr__",
     "summary": "def __repr__(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluationresult-repr-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · Event",
     "summary": "Reachable generated Python class Event.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-event",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · Event.incoming_momenta",
     "summary": "def incoming_momenta(self) -> builtins.list[FourMomentum]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-event-incoming-momenta-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · Event.outgoing_momenta",
     "summary": "def outgoing_momenta(self) -> builtins.list[FourMomentum]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-event-outgoing-momenta-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · Event.cut_info",
     "summary": "def cut_info(self) -> CutInfo:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-event-cut-info-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · Event.weight",
     "summary": "def weight(self) -> typing.Any:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-event-weight-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · Event.additional_weights",
     "summary": "def additional_weights(self) -> builtins.list[AdditionalWeight]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-event-additional-weights-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · Event.__str__",
     "summary": "def __str__(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-event-str-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · Event.__repr__",
     "summary": "def __repr__(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-event-repr-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EventGroup",
     "summary": "Reachable generated Python class EventGroup.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-eventgroup",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EventGroup.events",
     "summary": "def events(self) -> builtins.list[Event]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-eventgroup-events-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EventGroup.__str__",
     "summary": "def __str__(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-eventgroup-str-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · EventGroup.__repr__",
     "summary": "def __repr__(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-eventgroup-repr-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · FourMomentum",
     "summary": "Reachable generated Python class FourMomentum.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-fourmomentum",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · FourMomentum.e",
     "summary": "def e(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-fourmomentum-e-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · FourMomentum.px",
     "summary": "def px(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-fourmomentum-px-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · FourMomentum.py",
     "summary": "def py(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-fourmomentum-py-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · FourMomentum.pz",
     "summary": "def pz(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-fourmomentum-pz-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI",
     "summary": "Stateful entry point for loading, evaluating, and integrating GammaLoop processes.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.__new__",
     "summary": "def __new__(cls, state_folder: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, boot_commands_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, model_file: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, trace_logs_filename: typing.Optional[builtins.str] = None, level: typing.Optional[LogLevel] = None, logfile_level: typing.Optional[LogLevel] = None, logging_prefix: builtins.object | None = None, read_only_state: builtins.bool = ..., settings_global_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, clean_state: builtins.bool = ...) -> GammaLoopAPI:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-new-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.__new__.state_folder",
     "summary": "state_folder: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-new-associatedfunction-state-folder-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.__new__.boot_commands_path",
     "summary": "boot_commands_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-new-associatedfunction-boot-commands-path-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.__new__.model_file",
     "summary": "model_file: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-new-associatedfunction-model-file-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.__new__.trace_logs_filename",
     "summary": "trace_logs_filename: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-new-associatedfunction-trace-logs-filename-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.__new__.level",
     "summary": "level: typing.Optional[LogLevel] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-new-associatedfunction-level-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.__new__.logfile_level",
     "summary": "logfile_level: typing.Optional[LogLevel] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-new-associatedfunction-logfile-level-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.__new__.logging_prefix",
     "summary": "logging_prefix: builtins.object | None = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-new-associatedfunction-logging-prefix-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.__new__.read_only_state",
     "summary": "read_only_state: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-new-associatedfunction-read-only-state-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.__new__.settings_global_path",
     "summary": "settings_global_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-new-associatedfunction-settings-global-path-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.__new__.settings_runtime_defaults_path",
     "summary": "settings_runtime_defaults_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-new-associatedfunction-settings-runtime-defaults-path-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.__new__.clean_state",
     "summary": "clean_state: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-new-associatedfunction-clean-state-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_sample",
     "summary": "def evaluate_sample(self, point: typing.Sequence[builtins.float], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = ..., minimal_output: builtins.bool = ..., return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = ..., integrator_weight: typing.Optional[builtins.float] = None, discrete_dim: typing.Optional[typing.Sequence[builtins.int]] = None, graph_name: typing.Optional[builtins.str] = None, orientation: typing.Optional[builtins.int] = None) -> EvaluationResult:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-sample-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_sample.point",
     "summary": "point: typing.Sequence[builtins.float]",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-sample-method-point-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_sample.process_id",
     "summary": "process_id: typing.Optional[builtins.int] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-sample-method-process-id-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_sample.integrand_name",
     "summary": "integrand_name: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-sample-method-integrand-name-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_sample.use_arb_prec",
     "summary": "use_arb_prec: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-sample-method-use-arb-prec-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_sample.minimal_output",
     "summary": "minimal_output: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-sample-method-minimal-output-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_sample.return_events",
     "summary": "return_events: typing.Optional[builtins.bool] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-sample-method-return-events-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_sample.momentum_space",
     "summary": "momentum_space: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-sample-method-momentum-space-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_sample.integrator_weight",
     "summary": "integrator_weight: typing.Optional[builtins.float] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-sample-method-integrator-weight-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_sample.discrete_dim",
     "summary": "discrete_dim: typing.Optional[typing.Sequence[builtins.int]] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-sample-method-discrete-dim-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_sample.graph_name",
     "summary": "graph_name: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-sample-method-graph-name-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_sample.orientation",
     "summary": "orientation: typing.Optional[builtins.int] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-sample-method-orientation-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_samples",
     "summary": "def evaluate_samples(self, points: numpy.typing.NDArray[numpy.float64], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = ..., minimal_output: builtins.bool = ..., return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = ..., integrator_weights: typing.Optional[numpy.typing.NDArray[numpy.float64]] = None, discrete_dims: numpy.typing.NDArray[numpy.unsignedinteger] | None = None, graph_names: typing.Optional[typing.Sequence[typing.Optional[builtins.str]]] = None, orientations: typing.Optional[typing.Sequence[typing.Optional[builtins.int]]] = None) -> BatchEvaluationResult:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-samples-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_samples.points",
     "summary": "points: numpy.typing.NDArray[numpy.float64]",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-samples-method-points-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_samples.process_id",
     "summary": "process_id: typing.Optional[builtins.int] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-samples-method-process-id-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_samples.integrand_name",
     "summary": "integrand_name: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-samples-method-integrand-name-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_samples.use_arb_prec",
     "summary": "use_arb_prec: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-samples-method-use-arb-prec-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_samples.minimal_output",
     "summary": "minimal_output: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-samples-method-minimal-output-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_samples.return_events",
     "summary": "return_events: typing.Optional[builtins.bool] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-samples-method-return-events-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_samples.momentum_space",
     "summary": "momentum_space: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-samples-method-momentum-space-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_samples.integrator_weights",
     "summary": "integrator_weights: typing.Optional[numpy.typing.NDArray[numpy.float64]] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-samples-method-integrator-weights-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_samples.discrete_dims",
     "summary": "discrete_dims: numpy.typing.NDArray[numpy.unsignedinteger] | None = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-samples-method-discrete-dims-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_samples.graph_names",
     "summary": "graph_names: typing.Optional[typing.Sequence[typing.Optional[builtins.str]]] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-samples-method-graph-names-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate_samples.orientations",
     "summary": "orientations: typing.Optional[typing.Sequence[typing.Optional[builtins.int]]] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-samples-method-orientations-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.import_graphs",
     "summary": "def import_graphs(self, graphs: builtins.str, process_name: typing.Optional[builtins.str] = None, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, format: builtins.str = ..., overwrite: builtins.bool = ..., append: builtins.bool = ...) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-import-graphs-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.import_graphs.graphs",
     "summary": "graphs: builtins.str",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-import-graphs-method-graphs-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.import_graphs.process_name",
     "summary": "process_name: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-import-graphs-method-process-name-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.import_graphs.process_id",
     "summary": "process_id: typing.Optional[builtins.int] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-import-graphs-method-process-id-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.import_graphs.integrand_name",
     "summary": "integrand_name: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-import-graphs-method-integrand-name-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.import_graphs.format",
     "summary": "format: builtins.str = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-import-graphs-method-format-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.import_graphs.overwrite",
     "summary": "overwrite: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-import-graphs-method-overwrite-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.import_graphs.append",
     "summary": "append: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-import-graphs-method-append-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_lmbs",
     "summary": "def get_lmbs(self, graphs: builtins.str, format: builtins.str = ...) -> builtins.list[builtins.list[tuple[builtins.list[builtins.int], builtins.list[builtins.int], builtins.dict[builtins.int, tuple[builtins.list[builtins.int], builtins.list[builtins.int]]]]]]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-lmbs-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_lmbs.graphs",
     "summary": "graphs: builtins.str",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-lmbs-method-graphs-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_lmbs.format",
     "summary": "format: builtins.str = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-lmbs-method-format-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_orientations",
     "summary": "def get_orientations(self, graph_name: builtins.str, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> builtins.list[builtins.dict[builtins.int, builtins.int]]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-orientations-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_orientations.graph_name",
     "summary": "graph_name: builtins.str",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-orientations-method-graph-name-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_orientations.process_id",
     "summary": "process_id: typing.Optional[builtins.int] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-orientations-method-process-id-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_orientations.integrand_name",
     "summary": "integrand_name: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-orientations-method-integrand-name-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_model",
     "summary": "def get_model(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-model-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate",
     "summary": "def evaluate(self, process_id: typing.Optional[builtins.int] = None, graphs_group_name: typing.Optional[builtins.str] = None, result_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, numerical: builtins.bool = ..., number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate.process_id",
     "summary": "process_id: typing.Optional[builtins.int] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-method-process-id-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate.graphs_group_name",
     "summary": "graphs_group_name: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-method-graphs-group-name-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate.result_path",
     "summary": "result_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-method-result-path-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate.numerical",
     "summary": "numerical: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-method-numerical-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.evaluate.number_of_terms_in_epsilon_expansion",
     "summary": "number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-method-number-of-terms-in-epsilon-expansion-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.import_model",
     "summary": "def import_model(self, model_specifier: builtins.str | os.PathLike | pathlib.Path, simplify_model: builtins.bool = ...) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-import-model-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.import_model.model_specifier",
     "summary": "model_specifier: builtins.str | os.PathLike | pathlib.Path",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-import-model-method-model-specifier-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.import_model.simplify_model",
     "summary": "simplify_model: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-import-model-method-simplify-model-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.list_outputs",
     "summary": "def list_outputs(self) -> tuple[builtins.dict[builtins.str, builtins.int], builtins.dict[builtins.str, builtins.int]]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-list-outputs-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_integrand_info",
     "summary": "def get_integrand_info(self, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> IntegrandInfo:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-integrand-info-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_integrand_info.process_id",
     "summary": "process_id: typing.Optional[builtins.int] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-integrand-info-method-process-id-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_integrand_info.integrand_name",
     "summary": "integrand_name: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-integrand-info-method-integrand-name-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_integrand_settings",
     "summary": "def get_integrand_settings(self, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> SettingsValue:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-integrand-settings-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_integrand_settings.process_id",
     "summary": "process_id: typing.Optional[builtins.int] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-integrand-settings-method-process-id-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_integrand_settings.integrand_name",
     "summary": "integrand_name: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-integrand-settings-method-integrand-name-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_run_history",
     "summary": "def get_run_history(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-run-history-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_global_settings",
     "summary": "def get_global_settings(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-global-settings-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_active_command_blocks",
     "summary": "def get_active_command_blocks(self) -> builtins.dict[builtins.str, builtins.list[builtins.str]]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-active-command-blocks-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_default_runtime_settings",
     "summary": "def get_default_runtime_settings(self) -> SettingsValue:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-default-runtime-settings-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_dot_files",
     "summary": "def get_dot_files(self, process: typing.Optional[builtins.int | builtins.str] = None, integrand_name: typing.Optional[builtins.str] = None, settings: DotExportSettings = ...) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-dot-files-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_dot_files.process",
     "summary": "process: typing.Optional[builtins.int | builtins.str] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-dot-files-method-process-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_dot_files.integrand_name",
     "summary": "integrand_name: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-dot-files-method-integrand-name-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.get_dot_files.settings",
     "summary": "settings: DotExportSettings = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-get-dot-files-method-settings-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.run",
     "summary": "def run(self, command: builtins.str) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-run-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.run.command",
     "summary": "command: builtins.str",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-run-method-command-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.generate_cff",
     "summary": "def generate_cff(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.list[tuple[builtins.dict[builtins.int, builtins.int], builtins.str]]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-generate-cff-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.generate_cff.dot_string",
     "summary": "dot_string: builtins.str",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-generate-cff-method-dot-string-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.generate_cff.subgraph_nodes",
     "summary": "subgraph_nodes: typing.Sequence[builtins.str]",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-generate-cff-method-subgraph-nodes-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.generate_cff.reverse_dangling",
     "summary": "reverse_dangling: typing.Sequence[builtins.int]",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-generate-cff-method-reverse-dangling-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.generate_cff.orientation_pattern",
     "summary": "orientation_pattern: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-generate-cff-method-orientation-pattern-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.generate_cff_as_json_string",
     "summary": "def generate_cff_as_json_string(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-generate-cff-as-json-string-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.generate_cff_as_json_string.dot_string",
     "summary": "dot_string: builtins.str",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-generate-cff-as-json-string-method-dot-string-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.generate_cff_as_json_string.subgraph_nodes",
     "summary": "subgraph_nodes: typing.Sequence[builtins.str]",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-generate-cff-as-json-string-method-subgraph-nodes-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.generate_cff_as_json_string.reverse_dangling",
     "summary": "reverse_dangling: typing.Sequence[builtins.int]",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-generate-cff-as-json-string-method-reverse-dangling-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · GammaLoopAPI.generate_cff_as_json_string.orientation_pattern",
     "summary": "orientation_pattern: typing.Optional[builtins.str] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-gammaloopapi-generate-cff-as-json-string-method-orientation-pattern-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator",
     "summary": "Reachable generated Python class HistogramAccumulator.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.continuous",
     "summary": "def continuous(title: builtins.str, x_min: builtins.float, x_max: builtins.float, n_bins: builtins.int, type_description: builtins.str = ..., phase: builtins.str = ..., value_transform: builtins.str = ..., log_x_axis: builtins.bool = ..., log_y_axis: builtins.bool = ...) -> HistogramAccumulator:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-continuous-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.continuous.title",
     "summary": "title: builtins.str",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-continuous-associatedfunction-title-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.continuous.x_min",
     "summary": "x_min: builtins.float",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-continuous-associatedfunction-x-min-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.continuous.x_max",
     "summary": "x_max: builtins.float",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-continuous-associatedfunction-x-max-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.continuous.n_bins",
     "summary": "n_bins: builtins.int",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-continuous-associatedfunction-n-bins-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.continuous.type_description",
     "summary": "type_description: builtins.str = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-continuous-associatedfunction-type-description-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.continuous.phase",
     "summary": "phase: builtins.str = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-continuous-associatedfunction-phase-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.continuous.value_transform",
     "summary": "value_transform: builtins.str = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-continuous-associatedfunction-value-transform-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.continuous.log_x_axis",
     "summary": "log_x_axis: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-continuous-associatedfunction-log-x-axis-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.continuous.log_y_axis",
     "summary": "log_y_axis: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-continuous-associatedfunction-log-y-axis-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.discrete",
     "summary": "def discrete(title: builtins.str, min_bin_id: builtins.int, max_bin_id: builtins.int, ordering: builtins.str = ..., labels: typing.Optional[typing.Sequence[builtins.str]] = None, type_description: builtins.str = ..., phase: builtins.str = ..., log_y_axis: builtins.bool = ...) -> HistogramAccumulator:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-discrete-associatedfunction",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.discrete.title",
     "summary": "title: builtins.str",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-discrete-associatedfunction-title-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.discrete.min_bin_id",
     "summary": "min_bin_id: builtins.int",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-discrete-associatedfunction-min-bin-id-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.discrete.max_bin_id",
     "summary": "max_bin_id: builtins.int",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-discrete-associatedfunction-max-bin-id-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.discrete.ordering",
     "summary": "ordering: builtins.str = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-discrete-associatedfunction-ordering-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.discrete.labels",
     "summary": "labels: typing.Optional[typing.Sequence[builtins.str]] = None",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-discrete-associatedfunction-labels-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.discrete.type_description",
     "summary": "type_description: builtins.str = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-discrete-associatedfunction-type-description-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.discrete.phase",
     "summary": "phase: builtins.str = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-discrete-associatedfunction-phase-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.discrete.log_y_axis",
     "summary": "log_y_axis: builtins.bool = ...",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-discrete-associatedfunction-log-y-axis-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.snapshot",
     "summary": "def snapshot(self) -> HistogramSnapshot:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-snapshot-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.merge_in_place",
     "summary": "def merge_in_place(self, other: HistogramAccumulator) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-merge-in-place-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.merge_in_place.other",
     "summary": "other: HistogramAccumulator",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-merge-in-place-method-other-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.rebin",
     "summary": "def rebin(self, contiguous_bins: builtins.int) -> HistogramAccumulator:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-rebin-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.rebin.contiguous_bins",
     "summary": "contiguous_bins: builtins.int",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-rebin-method-contiguous-bins-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.rescale",
     "summary": "def rescale(self, factor: builtins.float) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-rescale-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.rescale.factor",
     "summary": "factor: builtins.float",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-rescale-method-factor-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.change_bin_ordering",
     "summary": "def change_bin_ordering(self, ordering: builtins.str) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-change-bin-ordering-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.change_bin_ordering.ordering",
     "summary": "ordering: builtins.str",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-change-bin-ordering-method-ordering-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.update_results",
     "summary": "def update_results(self) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-update-results-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.fill_continuous_sample",
     "summary": "def fill_continuous_sample(self, entries: typing.Sequence[tuple[builtins.float, builtins.float]]) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-fill-continuous-sample-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.fill_continuous_sample.entries",
     "summary": "entries: typing.Sequence[tuple[builtins.float, builtins.float]]",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-fill-continuous-sample-method-entries-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.fill_discrete_sample",
     "summary": "def fill_discrete_sample(self, entries: typing.Sequence[tuple[builtins.int, builtins.float]]) -> None:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-fill-discrete-sample-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramAccumulator.fill_discrete_sample.entries",
     "summary": "entries: typing.Sequence[tuple[builtins.int, builtins.float]]",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramaccumulator-fill-discrete-sample-method-entries-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramBin",
     "summary": "Reachable generated Python class HistogramBin.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogrambin",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramBin.x_min",
     "summary": "def x_min(self) -> typing.Optional[builtins.float]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogrambin-x-min-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramBin.x_max",
     "summary": "def x_max(self) -> typing.Optional[builtins.float]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogrambin-x-max-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramBin.bin_id",
     "summary": "def bin_id(self) -> typing.Optional[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogrambin-bin-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramBin.label",
     "summary": "def label(self) -> typing.Optional[builtins.str]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogrambin-label-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramBin.entry_count",
     "summary": "def entry_count(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogrambin-entry-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramBin.sum_weights",
     "summary": "def sum_weights(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogrambin-sum-weights-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramBin.sum_weights_squared",
     "summary": "def sum_weights_squared(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogrambin-sum-weights-squared-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramBin.mitigated_fill_count",
     "summary": "def mitigated_fill_count(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogrambin-mitigated-fill-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramBin.average",
     "summary": "def average(self, sample_count: builtins.int) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogrambin-average-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramBin.average.sample_count",
     "summary": "sample_count: builtins.int",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogrambin-average-method-sample-count-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramBin.error",
     "summary": "def error(self, sample_count: builtins.int) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogrambin-error-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramBin.error.sample_count",
     "summary": "sample_count: builtins.int",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogrambin-error-method-sample-count-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot",
     "summary": "Reachable generated Python class HistogramSnapshot.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.kind",
     "summary": "def kind(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-kind-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.title",
     "summary": "def title(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-title-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.type_description",
     "summary": "def type_description(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-type-description-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.phase",
     "summary": "def phase(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-phase-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.value_transform",
     "summary": "def value_transform(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-value-transform-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.supports_misbinning_mitigation",
     "summary": "def supports_misbinning_mitigation(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-supports-misbinning-mitigation-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.x_min",
     "summary": "def x_min(self) -> typing.Optional[builtins.float]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-x-min-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.x_max",
     "summary": "def x_max(self) -> typing.Optional[builtins.float]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-x-max-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.sample_count",
     "summary": "def sample_count(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-sample-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.log_x_axis",
     "summary": "def log_x_axis(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-log-x-axis-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.log_y_axis",
     "summary": "def log_y_axis(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-log-y-axis-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.discrete_min_bin_id",
     "summary": "def discrete_min_bin_id(self) -> typing.Optional[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-discrete-min-bin-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.discrete_ordering",
     "summary": "def discrete_ordering(self) -> typing.Optional[builtins.str]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-discrete-ordering-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.bins",
     "summary": "def bins(self) -> builtins.list[HistogramBin]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-bins-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.underflow_bin",
     "summary": "def underflow_bin(self) -> HistogramBin:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-underflow-bin-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.overflow_bin",
     "summary": "def overflow_bin(self) -> HistogramBin:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-overflow-bin-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramSnapshot.statistics",
     "summary": "def statistics(self) -> HistogramStats:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramsnapshot-statistics-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramStats",
     "summary": "Reachable generated Python class HistogramStats.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramstats",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramStats.in_range_entry_count",
     "summary": "def in_range_entry_count(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramstats-in-range-entry-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramStats.nan_value_count",
     "summary": "def nan_value_count(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramstats-nan-value-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · HistogramStats.mitigated_pair_count",
     "summary": "def mitigated_pair_count(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-histogramstats-mitigated-pair-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegralEstimate",
     "summary": "Reachable generated Python class IntegralEstimate.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integralestimate",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegralEstimate.neval",
     "summary": "def neval(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integralestimate-neval-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegralEstimate.real_zero",
     "summary": "def real_zero(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integralestimate-real-zero-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegralEstimate.im_zero",
     "summary": "def im_zero(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integralestimate-im-zero-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegralEstimate.result",
     "summary": "def result(self) -> typing.Any:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integralestimate-result-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegralEstimate.error",
     "summary": "def error(self) -> typing.Any:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integralestimate-error-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegralEstimate.real_chisq",
     "summary": "def real_chisq(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integralestimate-real-chisq-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegralEstimate.im_chisq",
     "summary": "def im_chisq(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integralestimate-im-chisq-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandActiveThresholdCut",
     "summary": "Reachable generated Python class IntegrandActiveThresholdCut.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandactivethresholdcut",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandActiveThresholdCut.cut_id",
     "summary": "def cut_id(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandactivethresholdcut-cut-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandActiveThresholdCut.can_become_pinched",
     "summary": "def can_become_pinched(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandactivethresholdcut-can-become-pinched-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandCut",
     "summary": "Reachable generated Python class IntegrandCut.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandcut",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandCut.cut_id",
     "summary": "def cut_id(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandcut-cut-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandCut.edge_ids",
     "summary": "def edge_ids(self) -> builtins.list[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandcut-edge-ids-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandCut.raising_power",
     "summary": "def raising_power(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandcut-raising-power-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandCut.left_thresholds",
     "summary": "def left_thresholds(self) -> builtins.list[IntegrandCutThreshold]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandcut-left-thresholds-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandCut.right_thresholds",
     "summary": "def right_thresholds(self) -> builtins.list[IntegrandCutThreshold]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandcut-right-thresholds-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandCutThreshold",
     "summary": "Reachable generated Python class IntegrandCutThreshold.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandcutthreshold",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandCutThreshold.esurface_id",
     "summary": "def esurface_id(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandcutthreshold-esurface-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandCutThreshold.status",
     "summary": "def status(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandcutthreshold-status-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandCutThreshold.cut_boundary_edge_ids",
     "summary": "def cut_boundary_edge_ids(self) -> builtins.list[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandcutthreshold-cut-boundary-edge-ids-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandCutThreshold.threshold_boundary_edge_ids",
     "summary": "def threshold_boundary_edge_ids(self) -> builtins.list[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandcutthreshold-threshold-boundary-edge-ids-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandCutThreshold.invariant_bound_is_applicable",
     "summary": "def invariant_bound_is_applicable(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandcutthreshold-invariant-bound-is-applicable-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandGraph",
     "summary": "Reachable generated Python class IntegrandGraph.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandgraph",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandGraph.graph_id",
     "summary": "def graph_id(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandgraph-graph-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandGraph.name",
     "summary": "def name(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandgraph-name-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandGraph.is_master",
     "summary": "def is_master(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandgraph-is-master-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandGraphGroup",
     "summary": "Reachable generated Python class IntegrandGraphGroup.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandgraphgroup",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandGraphGroup.group_id",
     "summary": "def group_id(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandgraphgroup-group-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandGraphGroup.graphs",
     "summary": "def graphs(self) -> builtins.list[IntegrandGraph]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandgraphgroup-graphs-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandGraphGroup.orientation_edge_ids",
     "summary": "def orientation_edge_ids(self) -> builtins.list[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandgraphgroup-orientation-edge-ids-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandGraphGroup.orientations",
     "summary": "def orientations(self) -> builtins.list[IntegrandOrientation]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandgraphgroup-orientations-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandGraphGroup.loop_momentum_bases",
     "summary": "def loop_momentum_bases(self) -> builtins.list[IntegrandLoopMomentumBasis]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandgraphgroup-loop-momentum-bases-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandGraphGroup.threshold_esurface_ids",
     "summary": "def threshold_esurface_ids(self) -> builtins.list[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandgraphgroup-threshold-esurface-ids-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandGraphGroup.threshold_esurfaces",
     "summary": "def threshold_esurfaces(self) -> builtins.list[IntegrandThresholdEsurface]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandgraphgroup-threshold-esurfaces-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandGraphGroup.cuts",
     "summary": "def cuts(self) -> builtins.list[IntegrandCut]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandgraphgroup-cuts-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandInfo",
     "summary": "Reachable generated Python class IntegrandInfo.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandinfo",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandInfo.process_id",
     "summary": "def process_id(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandinfo-process-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandInfo.process_name",
     "summary": "def process_name(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandinfo-process-name-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandInfo.integrand_name",
     "summary": "def integrand_name(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandinfo-integrand-name-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandInfo.kind",
     "summary": "def kind(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandinfo-kind-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandInfo.generation_backend",
     "summary": "def generation_backend(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandinfo-generation-backend-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandInfo.generation_compile_options",
     "summary": "def generation_compile_options(self) -> typing.Optional[builtins.str]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandinfo-generation-compile-options-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandInfo.active_f64_backend",
     "summary": "def active_f64_backend(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandinfo-active-f64-backend-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandInfo.graph_count",
     "summary": "def graph_count(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandinfo-graph-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandInfo.graph_group_count",
     "summary": "def graph_group_count(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandinfo-graph-group-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandInfo.record_size_bytes",
     "summary": "def record_size_bytes(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandinfo-record-size-bytes-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandInfo.graph_groups",
     "summary": "def graph_groups(self) -> builtins.list[IntegrandGraphGroup]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandinfo-graph-groups-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandLoopMomentumBasis",
     "summary": "Reachable generated Python class IntegrandLoopMomentumBasis.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandloopmomentumbasis",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandLoopMomentumBasis.basis_id",
     "summary": "def basis_id(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandloopmomentumbasis-basis-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandLoopMomentumBasis.channel_id",
     "summary": "def channel_id(self) -> typing.Optional[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandloopmomentumbasis-channel-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandLoopMomentumBasis.edge_ids",
     "summary": "def edge_ids(self) -> builtins.list[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandloopmomentumbasis-edge-ids-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandLoopMomentumBasis.matches_generation_basis",
     "summary": "def matches_generation_basis(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandloopmomentumbasis-matches-generation-basis-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandOrientation",
     "summary": "Reachable generated Python class IntegrandOrientation.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandorientation",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandOrientation.orientation_id",
     "summary": "def orientation_id(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandorientation-orientation-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandOrientation.signature",
     "summary": "def signature(self) -> builtins.list[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandorientation-signature-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandThresholdEsurface",
     "summary": "Reachable generated Python class IntegrandThresholdEsurface.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandthresholdesurface",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandThresholdEsurface.esurface_id",
     "summary": "def esurface_id(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandthresholdesurface-esurface-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandThresholdEsurface.representative_graph_id",
     "summary": "def representative_graph_id(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandthresholdesurface-representative-graph-id-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandThresholdEsurface.edge_ids",
     "summary": "def edge_ids(self) -> builtins.list[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandthresholdesurface-edge-ids-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandThresholdEsurface.classification",
     "summary": "def classification(self) -> typing.Optional[builtins.str]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandthresholdesurface-classification-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrandThresholdEsurface.active_cuts",
     "summary": "def active_cuts(self) -> builtins.list[IntegrandActiveThresholdCut]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrandthresholdesurface-active-cuts-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationOutput",
     "summary": "Reachable generated Python class IntegrationOutput.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationoutput",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationOutput.workspace_path",
     "summary": "def workspace_path(self) -> pathlib.Path:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationoutput-workspace-path-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationOutput.result",
     "summary": "def result(self) -> IntegrationResult:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationoutput-result-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationOutput.observables",
     "summary": "def observables(self) -> dict:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationoutput-observables-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationOutput.__repr__",
     "summary": "def __repr__(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationoutput-repr-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationResult",
     "summary": "Reachable generated Python class IntegrationResult.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationresult",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationResult.slots",
     "summary": "def slots(self) -> builtins.list[SlotIntegrationResult]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationresult-slots-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationResult.slot",
     "summary": "def slot(self, key: builtins.str) -> typing.Optional[SlotIntegrationResult]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationresult-slot-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationResult.slot.key",
     "summary": "key: builtins.str",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationresult-slot-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationResult.single_slot",
     "summary": "def single_slot(self) -> typing.Optional[SlotIntegrationResult]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationresult-single-slot-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot",
     "summary": "Reachable generated Python class IntegrationStatisticsSnapshot.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.num_evals",
     "summary": "def num_evals(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-num-evals-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.average_total_time_seconds",
     "summary": "def average_total_time_seconds(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-average-total-time-seconds-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.average_parameterization_time_seconds",
     "summary": "def average_parameterization_time_seconds(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-average-parameterization-time-seconds-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.average_integrand_time_seconds",
     "summary": "def average_integrand_time_seconds(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-average-integrand-time-seconds-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.average_evaluator_time_seconds",
     "summary": "def average_evaluator_time_seconds(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-average-evaluator-time-seconds-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.average_observable_time_seconds",
     "summary": "def average_observable_time_seconds(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-average-observable-time-seconds-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.average_integrator_time_seconds",
     "summary": "def average_integrator_time_seconds(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-average-integrator-time-seconds-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.f64_percentage",
     "summary": "def f64_percentage(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-f64-percentage-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.f128_percentage",
     "summary": "def f128_percentage(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-f128-percentage-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.arb_percentage",
     "summary": "def arb_percentage(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-arb-percentage-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.nan_percentage",
     "summary": "def nan_percentage(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-nan-percentage-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.nan_or_unstable_percentage",
     "summary": "def nan_or_unstable_percentage(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-nan-or-unstable-percentage-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.generated_event_count",
     "summary": "def generated_event_count(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-generated-event-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.accepted_event_count",
     "summary": "def accepted_event_count(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-accepted-event-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationStatisticsSnapshot.selection_efficiency_percentage",
     "summary": "def selection_efficiency_percentage(self) -> typing.Optional[builtins.float]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationstatisticssnapshot-selection-efficiency-percentage-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationTableComponentResult",
     "summary": "Reachable generated Python class IntegrationTableComponentResult.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationtablecomponentresult",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationTableComponentResult.component",
     "summary": "def component(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationtablecomponentresult-component-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationTableComponentResult.value",
     "summary": "def value(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationtablecomponentresult-value-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationTableComponentResult.error",
     "summary": "def error(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationtablecomponentresult-error-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationTableComponentResult.relative_error_percent",
     "summary": "def relative_error_percent(self) -> typing.Optional[builtins.float]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationtablecomponentresult-relative-error-percent-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationTableComponentResult.chi_sq_per_dof",
     "summary": "def chi_sq_per_dof(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationtablecomponentresult-chi-sq-per-dof-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationTableComponentResult.target_delta_sigma",
     "summary": "def target_delta_sigma(self) -> typing.Optional[builtins.float]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationtablecomponentresult-target-delta-sigma-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationTableComponentResult.target_delta_percent",
     "summary": "def target_delta_percent(self) -> typing.Optional[builtins.float]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationtablecomponentresult-target-delta-percent-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · IntegrationTableComponentResult.max_weight_impact",
     "summary": "def max_weight_impact(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-integrationtablecomponentresult-max-weight-impact-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · MaxWeightInfoEntry",
     "summary": "Reachable generated Python class MaxWeightInfoEntry.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-maxweightinfoentry",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · MaxWeightInfoEntry.component",
     "summary": "def component(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-maxweightinfoentry-component-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · MaxWeightInfoEntry.sign",
     "summary": "def sign(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-maxweightinfoentry-sign-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · MaxWeightInfoEntry.max_eval",
     "summary": "def max_eval(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-maxweightinfoentry-max-eval-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · MaxWeightInfoEntry.coordinates",
     "summary": "def coordinates(self) -> typing.Optional[builtins.str]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-maxweightinfoentry-coordinates-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SampleEvaluationResult",
     "summary": "Reachable generated Python class SampleEvaluationResult.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-sampleevaluationresult",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SampleEvaluationResult.integrand_result",
     "summary": "def integrand_result(self) -> complex:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-sampleevaluationresult-integrand-result-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SampleEvaluationResult.integrator_weight",
     "summary": "def integrator_weight(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-sampleevaluationresult-integrator-weight-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SampleEvaluationResult.generated_event_count",
     "summary": "def generated_event_count(self) -> typing.Optional[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-sampleevaluationresult-generated-event-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SampleEvaluationResult.accepted_event_count",
     "summary": "def accepted_event_count(self) -> typing.Optional[builtins.int]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-sampleevaluationresult-accepted-event-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SampleEvaluationResult.event_processing_time_seconds",
     "summary": "def event_processing_time_seconds(self) -> typing.Optional[builtins.float]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-sampleevaluationresult-event-processing-time-seconds-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SampleEvaluationResult.parameterization_jacobian",
     "summary": "def parameterization_jacobian(self) -> typing.Optional[builtins.float]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-sampleevaluationresult-parameterization-jacobian-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SampleEvaluationResult.is_nan",
     "summary": "def is_nan(self) -> typing.Optional[builtins.bool]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-sampleevaluationresult-is-nan-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SampleEvaluationResult.stability_results",
     "summary": "def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-sampleevaluationresult-stability-results-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SampleEvaluationResult.event_groups",
     "summary": "def event_groups(self) -> builtins.list[EventGroup]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-sampleevaluationresult-event-groups-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SampleEvaluationResult.__str__",
     "summary": "def __str__(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-sampleevaluationresult-str-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SampleEvaluationResult.__repr__",
     "summary": "def __repr__(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-sampleevaluationresult-repr-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue",
     "summary": "Reachable generated Python class SettingsValue.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.path",
     "summary": "def path(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-path-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.kind",
     "summary": "def kind(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-kind-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.is_object",
     "summary": "def is_object(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-is-object-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.is_array",
     "summary": "def is_array(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-is-array-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.is_scalar",
     "summary": "def is_scalar(self) -> builtins.bool:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-is-scalar-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.keys",
     "summary": "def keys(self) -> builtins.list[builtins.str]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-keys-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.get",
     "summary": "def get(self, path: builtins.str) -> typing.Any:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-get-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.get.path",
     "summary": "path: builtins.str",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-get-method-path-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.to_dict",
     "summary": "def to_dict(self) -> typing.Any:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-to-dict-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.__getattr__",
     "summary": "def __getattr__(self, name: builtins.str) -> typing.Any:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-getattr-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.__getattr__.name",
     "summary": "name: builtins.str",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-getattr-method-name-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.__dir__",
     "summary": "def __dir__(self) -> builtins.list[builtins.str]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-dir-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.__len__",
     "summary": "def __len__(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-len-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.__str__",
     "summary": "def __str__(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-str-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.__repr__",
     "summary": "def __repr__(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-repr-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.__getitem__",
     "summary": "def __getitem__(self, key: typing.Any, /) -> typing.Any:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-getitem-method",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SettingsValue.__getitem__.key",
     "summary": "key: typing.Any",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-settingsvalue-getitem-method-key-parameter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SlotIntegrationResult",
     "summary": "Reachable generated Python class SlotIntegrationResult.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-slotintegrationresult",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SlotIntegrationResult.key",
     "summary": "def key(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-slotintegrationresult-key-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SlotIntegrationResult.process",
     "summary": "def process(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-slotintegrationresult-process-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SlotIntegrationResult.integrand",
     "summary": "def integrand(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-slotintegrationresult-integrand-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SlotIntegrationResult.target",
     "summary": "def target(self) -> typing.Optional[typing.Any]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-slotintegrationresult-target-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SlotIntegrationResult.integral",
     "summary": "def integral(self) -> IntegralEstimate:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-slotintegrationresult-integral-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SlotIntegrationResult.table_results",
     "summary": "def table_results(self) -> builtins.list[IntegrationTableComponentResult]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-slotintegrationresult-table-results-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SlotIntegrationResult.integration_statistics",
     "summary": "def integration_statistics(self) -> IntegrationStatisticsSnapshot:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-slotintegrationresult-integration-statistics-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SlotIntegrationResult.max_weight_info",
     "summary": "def max_weight_info(self) -> builtins.list[MaxWeightInfoEntry]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-slotintegrationresult-max-weight-info-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · SlotIntegrationResult.grid_breakdown",
     "summary": "def grid_breakdown(self) -> ComponentDiscreteBreakdown:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-slotintegrationresult-grid-breakdown-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · StabilityResult",
     "summary": "Reachable generated Python class StabilityResult.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-stabilityresult",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · StabilityResult.precision",
     "summary": "def precision(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-stabilityresult-precision-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · StabilityResult.estimated_relative_accuracy",
     "summary": "def estimated_relative_accuracy(self) -> typing.Optional[builtins.float]:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-stabilityresult-estimated-relative-accuracy-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · StabilityResult.status",
     "summary": "def status(self) -> builtins.str:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-stabilityresult-status-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · StabilityResult.sample_count",
     "summary": "def sample_count(self) -> builtins.int:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-stabilityresult-sample-count-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · StabilityResult.total_time_seconds",
     "summary": "def total_time_seconds(self) -> builtins.float:",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-stabilityresult-total-time-seconds-getter",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · LogLevel",
     "summary": "Reachable generated Python class LogLevel.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-loglevel",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · atom_to_canonical_string",
     "summary": "Parse a Symbolica expression and return its canonical string form.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-atom-to-canonical-string",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · evaluate_graph_overall_factor",
     "summary": "Evaluate a graph's symbolic overall factor and return its canonical form.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-evaluate-graph-overall-factor",
     "kind": "python-api"
   },
   {
     "title": "gammaloop-python · to_dots",
     "summary": "Rewrite a Symbolica tensor expression into Idenso dot-product notation.",
-    "href": "reference/python/#gammaloop-python",
+    "href": "reference/python/gammaloop-python/#exports-to-dots",
     "kind": "python-api"
   },
   {
