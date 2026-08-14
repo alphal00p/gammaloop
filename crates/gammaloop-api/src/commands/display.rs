@@ -54,7 +54,7 @@ pub enum Display {
         show_particles: bool,
         #[arg(short = 'a', long = "show-all", default_value_t = false)]
         show_all: bool,
-        /// Process reference: #<id>, name:<name>, or <id>/<name>
+        /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
         #[arg(
             short = 'p',
             long = "process",
@@ -76,7 +76,7 @@ pub enum Display {
     Processes,
     #[command(name = "integrand")]
     Integrands {
-        /// Process reference: #<id>, name:<name>, or <id>/<name>
+        /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
         #[arg(
             short = 'p',
             long = "process",

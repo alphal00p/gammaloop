@@ -25,7 +25,7 @@ use tracing::info;
 )]
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Renormalize {
-    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
     #[arg(
         short = 'p',
         long = "process",

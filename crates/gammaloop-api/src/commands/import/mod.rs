@@ -26,7 +26,7 @@ pub enum Import {
         #[arg(value_hint = clap::ValueHint::FilePath)]
         path: PathBuf,
 
-        /// Process reference: #<id>, name:<name>, or <id>/<name>
+        /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
         #[arg(
             short = 'p',
             long = "process",

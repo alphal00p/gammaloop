@@ -152,7 +152,7 @@ pub trait NodeStorage: Sized {
     type Storage<N>; // TODO: This might need better definition or usage clarification.
 
     /// The type used to represent the collection of half-edges incident to a single node.
-    /// This must implement the [`SubGraph`] trait.
+    /// This must implement the [`SubSetLike`] trait.
     type Neighbors: SubSetLike;
     /// An iterator that yields the [`Hedge`] identifiers incident to a node.
     /// It must be cloneable and provide an exact size hint.

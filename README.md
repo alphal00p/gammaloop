@@ -17,8 +17,10 @@
 *Computation of differential cross-sections using Local Unitarity.*
 
 See [www.alphaloop.ch](https://www.alphaloop.ch) for the broader project and related literature.
-See the [wiki](https://wiki.alphaloop.ch/) for command syntax and usage notes.
-Process-generation syntax is documented here: [gammaLoop/ProcessGeneration](https://wiki.alphaloop.ch/en/gammaLoop/ProcessGeneration).
+The maintained user manuals live under [docs/products](docs/products), with the GammaLoop
+process-generation guide in
+[docs/products/gammaloop/content/process-generation.typ](docs/products/gammaloop/content/process-generation.typ).
+The former wiki describes an older executable layout and is no longer the source of truth.
 Implemented architecture notes live in [docs/architecture/architecture-current.md](docs/architecture/architecture-current.md).
 
 ## Quick start

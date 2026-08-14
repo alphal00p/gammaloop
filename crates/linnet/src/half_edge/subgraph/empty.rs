@@ -16,7 +16,7 @@ use super::{Inclusion, SubSetLike};
 /// Represents an empty subgraph, containing no half-edges.
 ///
 /// This struct is used as a placeholder or a null object in subgraph operations.
-/// It implements the [`SubGraph`] trait, with most methods reflecting its emptiness
+/// It implements the [`SubGraphLike`] trait, with most methods reflecting its emptiness
 /// (e.g., `nhedges()` returns 0, `is_empty()` returns `true`).
 pub struct Empty {
     /// The total number of half-edges in the context of the parent graph

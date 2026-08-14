@@ -226,6 +226,7 @@ pub struct ProcessList {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[cfg_attr(
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
@@ -291,6 +292,7 @@ pub enum StandaloneNumericTarget {
 }
 
 #[cfg(feature = "python_api")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[cfg_attr(feature = "python_api", pyo3::pymethods)]
 impl DotExportSettings {
     #[new]

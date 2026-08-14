@@ -93,7 +93,7 @@ impl<V> HedgeNodeBuilder<V> {
 /// # Example
 ///
 /// ```rust,ignore
-/// use linnet::half_edge::HedgeGraphBuilder;
+/// use linnet::half_edge::builder::HedgeGraphBuilder;
 /// use linnet::half_edge::involution::{Flow, Orientation};
 ///
 /// let mut builder = HedgeGraphBuilder::<&str, &str>::new();

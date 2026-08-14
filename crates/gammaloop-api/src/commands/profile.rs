@@ -35,7 +35,7 @@ pub enum Profile {
 
 #[derive(Args, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct UltraVioletProfile {
-    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
     #[arg(
         short = 'p',
         long = "process",
@@ -106,7 +106,7 @@ pub struct UltraVioletProfile {
 
 #[derive(Args, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct InfraRedProfile {
-    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
     #[arg(
         short = 'p',
         long = "process",

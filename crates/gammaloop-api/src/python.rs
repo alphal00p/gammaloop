@@ -71,6 +71,8 @@ use pyo3::{
     wrap_pyfunction, FromPyObject, PyRef, Python,
 };
 
+/// Evaluate a graph's symbolic overall factor and return its canonical form.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "evaluate_graph_overall_factor")]
 pub(crate) fn evaluate_graph_overall_factor(overall_factor: &str) -> Result<String> {
@@ -79,12 +81,16 @@ pub(crate) fn evaluate_graph_overall_factor(overall_factor: &str) -> Result<Stri
     Ok(overall_factor_evaluated.to_canonical_string())
 }
 
+/// Parse a Symbolica expression and return its canonical string form.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "atom_to_canonical_string")]
 pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
     Ok(parse!(atom_str).to_canonical_string())
 }
 
+/// Rewrite a Symbolica tensor expression into Idenso dot-product notation.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "to_dots")]
 pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
@@ -106,6 +112,10 @@ pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
 fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     gammalooprs::initialisation::initialise().expect("initialization failed");
     gammalooprs::set_interrupt_handler();
+    register_python_api(m)
+}
+
+fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<GammaLoopAPI>()?;
     m.add_class::<LogLevel>()?;
     m.add_class::<DotExportSettings>()?;
@@ -162,6 +172,22 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+#[cfg(feature = "python_stubgen")]
+#[doc(hidden)]
+pub fn register_python_api_for_docs(m: &Bound<PyModule>) -> PyResult<()> {
+    register_python_api(m)
+}
+
+/// Gather the Python API registered for `gammaloop._gammaloop`.
+#[cfg(feature = "python_stubgen")]
+pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+    pyo3_stub_gen::StubInfo::from_project_root(
+        "gammaloop._gammaloop".to_owned(),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+    )
+}
+
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SettingsValue", skip_from_py_object)]
 #[derive(Clone)]
 pub struct PySettingsValue {
@@ -169,6 +195,8 @@ pub struct PySettingsValue {
     path: String,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PySettingsValue {
     #[getter]
@@ -227,6 +255,7 @@ impl PySettingsValue {
         py_builtin_from_settings_value(py, &self.value)
     }
 
+    #[gen_stub(skip)]
     fn __getitem__<'py>(
         &self,
         py: Python<'py>,
@@ -315,6 +344,16 @@ impl PySettingsValue {
             self.path,
             json_type_name(&self.value)
         )
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+pyo3_stub_gen::inventory::submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! {
+        r#"
+        class PySettingsValue:
+            def __getitem__(self, key: typing.Any, /) -> typing.Any: ...
+        "#
     }
 }
 
@@ -455,6 +494,30 @@ pub struct PyComplexValue {
     pub im: f64,
 }
 
+// `ComplexValue` is returned inside other records but is intentionally not
+// registered as a module-level constructor. Keep its generated annotations
+// honest by treating that opaque value as `Any` without adding a fake export.
+#[cfg(feature = "python_stubgen")]
+impl pyo3_stub_gen::PyStubType for PyComplexValue {
+    fn type_output() -> pyo3_stub_gen::TypeInfo {
+        pyo3_stub_gen::TypeInfo::any()
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+impl pyo3_stub_gen::PyStubType for ProcessRef {
+    fn type_output() -> pyo3_stub_gen::TypeInfo {
+        <i64 as pyo3_stub_gen::PyStubType>::type_output()
+            | <String as pyo3_stub_gen::PyStubType>::type_output()
+    }
+
+    fn type_input() -> pyo3_stub_gen::TypeInfo {
+        <i64 as pyo3_stub_gen::PyStubType>::type_input()
+            | <String as pyo3_stub_gen::PyStubType>::type_input()
+    }
+}
+
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "FourMomentum", get_all)]
 #[derive(Clone)]
 pub struct PyFourMomentum {
@@ -464,6 +527,7 @@ pub struct PyFourMomentum {
     pub pz: f64,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "AdditionalWeight", get_all)]
 #[derive(Clone)]
 pub struct PyAdditionalWeight {
@@ -471,6 +535,7 @@ pub struct PyAdditionalWeight {
     pub value: PyComplexValue,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "CutInfo", get_all)]
 #[derive(Clone)]
 pub struct PyCutInfo {
@@ -484,6 +549,7 @@ pub struct PyCutInfo {
     pub lmb_channel_edge_ids: Option<Vec<usize>>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandGraph", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandGraphInfo {
@@ -492,6 +558,7 @@ pub struct PyIntegrandGraphInfo {
     pub is_master: bool,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandOrientation", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandOrientationInfo {
@@ -499,6 +566,7 @@ pub struct PyIntegrandOrientationInfo {
     pub signature: Vec<i8>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandLoopMomentumBasis", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandLoopMomentumBasisInfo {
@@ -508,6 +576,7 @@ pub struct PyIntegrandLoopMomentumBasisInfo {
     pub matches_generation_basis: bool,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandCut", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandCutInfo {
@@ -518,6 +587,7 @@ pub struct PyIntegrandCutInfo {
     pub right_thresholds: Vec<PyIntegrandCutThresholdInfo>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandCutThreshold", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandCutThresholdInfo {
@@ -528,6 +598,7 @@ pub struct PyIntegrandCutThresholdInfo {
     pub invariant_bound_is_applicable: bool,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandActiveThresholdCut", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandActiveThresholdCutInfo {
@@ -535,6 +606,7 @@ pub struct PyIntegrandActiveThresholdCutInfo {
     pub can_become_pinched: bool,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandThresholdEsurface", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandThresholdEsurfaceInfo {
@@ -545,6 +617,7 @@ pub struct PyIntegrandThresholdEsurfaceInfo {
     pub active_cuts: Vec<PyIntegrandActiveThresholdCutInfo>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandGraphGroup", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandGraphGroupInfo {
@@ -558,6 +631,7 @@ pub struct PyIntegrandGraphGroupInfo {
     pub cuts: Vec<PyIntegrandCutInfo>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrandInfo", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrandInfo {
@@ -574,6 +648,7 @@ pub struct PyIntegrandInfo {
     pub graph_groups: Vec<PyIntegrandGraphGroupInfo>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "Event", get_all)]
 #[derive(Clone)]
 pub struct PyEvent {
@@ -584,21 +659,26 @@ pub struct PyEvent {
     pub additional_weights: Vec<PyAdditionalWeight>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "EventGroup", get_all)]
 #[derive(Clone)]
 pub struct PyEventGroup {
     pub events: Vec<PyEvent>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "HistogramAccumulator", skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyHistogramAccumulator {
     inner: HistogramAccumulatorState,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyHistogramAccumulator {
     #[staticmethod]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (title, x_min, x_max, n_bins, type_description="AL".to_string(), phase="real".to_string(), value_transform="identity".to_string(), log_x_axis=false, log_y_axis=true))]
     fn continuous(
         title: String,
@@ -627,6 +707,7 @@ impl PyHistogramAccumulator {
     }
 
     #[staticmethod]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (title, min_bin_id, max_bin_id, ordering="ascending_bin_id".to_string(), labels=None, type_description="AL".to_string(), phase="real".to_string(), log_y_axis=true))]
     fn discrete(
         title: String,
@@ -680,7 +761,11 @@ impl PyHistogramAccumulator {
         py_histogram_snapshot_from_snapshot(self.inner.snapshot())
     }
 
-    fn merge_in_place(&mut self, other: &mut PyHistogramAccumulator) -> PyResult<()> {
+    fn merge_in_place(
+        &mut self,
+        #[gen_stub(override_type(type_repr = "HistogramAccumulator"))]
+        other: &mut PyHistogramAccumulator,
+    ) -> PyResult<()> {
         self.inner
             .merge_in_place(&mut other.inner)
             .map_err(to_py_value_error)
@@ -720,6 +805,7 @@ impl PyHistogramAccumulator {
     }
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "HistogramBin", get_all)]
 #[derive(Clone)]
 pub struct PyHistogramBinSnapshot {
@@ -733,6 +819,7 @@ pub struct PyHistogramBinSnapshot {
     pub mitigated_fill_count: usize,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "HistogramStats", get_all)]
 #[derive(Clone)]
 pub struct PyHistogramStatisticsSnapshot {
@@ -741,6 +828,7 @@ pub struct PyHistogramStatisticsSnapshot {
     pub mitigated_pair_count: usize,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "HistogramSnapshot", get_all)]
 #[derive(Clone)]
 pub struct PyHistogramSnapshot {
@@ -763,12 +851,14 @@ pub struct PyHistogramSnapshot {
     pub statistics: PyHistogramStatisticsSnapshot,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "IntegrationOutput", skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyIntegrationOutput {
     inner: crate::commands::integrate::IntegrationOutput,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegralEstimate", get_all)]
 #[derive(Clone)]
 pub struct PyIntegralEstimate {
@@ -781,6 +871,7 @@ pub struct PyIntegralEstimate {
     pub im_chisq: f64,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrationTableComponentResult", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrationTableComponentResult {
@@ -794,6 +885,7 @@ pub struct PyIntegrationTableComponentResult {
     pub max_weight_impact: f64,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrationStatisticsSnapshot", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrationStatisticsSnapshot {
@@ -814,6 +906,7 @@ pub struct PyIntegrationStatisticsSnapshot {
     pub selection_efficiency_percentage: Option<f64>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "MaxWeightInfoEntry", get_all)]
 #[derive(Clone)]
 pub struct PyMaxWeightInfoEntry {
@@ -823,6 +916,7 @@ pub struct PyMaxWeightInfoEntry {
     pub coordinates: Option<String>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "DiscreteCoordinate", get_all)]
 #[derive(Clone)]
 pub struct PyDiscreteCoordinate {
@@ -831,6 +925,7 @@ pub struct PyDiscreteCoordinate {
     pub bin_label: Option<String>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "DiscreteBreakdownEntry", get_all)]
 #[derive(Clone)]
 pub struct PyDiscreteBreakdownEntry {
@@ -843,6 +938,7 @@ pub struct PyDiscreteBreakdownEntry {
     pub processed_samples: usize,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "DiscreteBreakdown", get_all)]
 #[derive(Clone)]
 pub struct PyDiscreteBreakdown {
@@ -851,6 +947,7 @@ pub struct PyDiscreteBreakdown {
     pub entries: Vec<PyDiscreteBreakdownEntry>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "ComponentDiscreteBreakdown", get_all)]
 #[derive(Clone)]
 pub struct PyComponentDiscreteBreakdown {
@@ -858,6 +955,7 @@ pub struct PyComponentDiscreteBreakdown {
     pub im: Option<PyDiscreteBreakdown>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "SlotIntegrationResult", get_all)]
 #[derive(Clone)]
 pub struct PySlotIntegrationResult {
@@ -872,12 +970,14 @@ pub struct PySlotIntegrationResult {
     pub grid_breakdown: PyComponentDiscreteBreakdown,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "IntegrationResult", get_all)]
 #[derive(Clone)]
 pub struct PyIntegrationResult {
     pub slots: Vec<PySlotIntegrationResult>,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyHistogramBinSnapshot {
     fn average(&self, sample_count: usize) -> f64 {
@@ -903,6 +1003,7 @@ impl PyHistogramBinSnapshot {
     }
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyIntegrationOutput {
     #[getter]
@@ -933,6 +1034,7 @@ impl PyIntegrationOutput {
     }
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyIntegrationResult {
     fn slot(&self, key: &str) -> Option<PySlotIntegrationResult> {
@@ -944,6 +1046,7 @@ impl PyIntegrationResult {
     }
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "StabilityResult", get_all)]
 #[derive(Clone)]
 pub struct PyStabilityResult {
@@ -954,12 +1057,14 @@ pub struct PyStabilityResult {
     pub total_time_seconds: f64,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "SampleEvaluationResult")]
 #[derive(Clone)]
 pub struct PySampleEvaluationResult {
     inner: SampleEvaluationResult,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySampleEvaluationResult {
     #[getter]
@@ -1062,12 +1167,14 @@ impl PySampleEvaluationResult {
     }
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "EvaluationResult")]
 #[derive(Clone)]
 pub struct PyEvaluationResult {
     inner: SingleSampleEvaluationResult,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyEvaluationResult {
     #[getter]
@@ -1140,12 +1247,14 @@ impl PyEvaluationResult {
     }
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "BatchEvaluationResult")]
 #[derive(Clone)]
 pub struct PyBatchEvaluationResult {
     inner: BatchSampleEvaluationResult,
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyBatchEvaluationResult {
     #[getter]
@@ -1172,6 +1281,7 @@ impl PyBatchEvaluationResult {
     }
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyEvent {
     fn __str__(&self) -> String {
@@ -1183,6 +1293,7 @@ impl PyEvent {
     }
 }
 
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyEventGroup {
     fn __str__(&self) -> String {
@@ -1792,6 +1903,7 @@ fn py_integrand_info_from_info(info: IntegrandInfo) -> PyIntegrandInfo {
     }
 }
 
+#[allow(dead_code)] // Retained with the currently disabled Python `integrate` binding.
 fn py_process_ref_from_any(process: &Bound<'_, PyAny>) -> PyResult<ProcessRef> {
     if let Ok(process_id) = process.extract::<usize>() {
         return Ok(ProcessRef::Id(process_id));
@@ -1805,6 +1917,7 @@ fn py_process_ref_from_any(process: &Bound<'_, PyAny>) -> PyResult<ProcessRef> {
     ProcessRef::from_str(&process).map_err(exceptions::PyValueError::new_err)
 }
 
+#[allow(dead_code)] // Retained with the currently disabled Python `integrate` binding.
 fn py_complex_target_from_any(
     target: &Bound<'_, PyAny>,
 ) -> PyResult<spenso::algebra::complex::Complex<gammalooprs::utils::F<f64>>> {
@@ -1827,6 +1940,7 @@ fn py_complex_target_from_any(
     ))
 }
 
+#[allow(dead_code)] // Retained with the currently disabled Python `integrate` binding.
 fn resolve_python_slot_key(
     state: &State,
     process: &ProcessRef,
@@ -1846,6 +1960,7 @@ fn resolve_python_slot_key(
     ))
 }
 
+#[allow(dead_code, clippy::too_many_arguments)] // Retained with the disabled Python `integrate` binding.
 fn build_python_integrate_command(
     state: &State,
     slots: Option<Vec<(ProcessRef, String)>>,
@@ -2210,6 +2325,8 @@ impl PyNumeratorAwareGroupingOption {
 }
 */
 
+/// Stateful entry point for loading, evaluating, and integrating GammaLoop processes.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[cfg_attr(
     feature = "python_api",
     pyo3::pyclass(unsendable, name = "GammaLoopAPI")
@@ -2223,9 +2340,12 @@ struct GammaLoopAPI {
 }
 
 // TODO: Improve error broadcasting to Python everywhere so as to show rust backtrace
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl GammaLoopAPI {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (
         state_folder=None,
         boot_commands_path=None,
@@ -2246,6 +2366,10 @@ impl GammaLoopAPI {
         trace_logs_filename: Option<String>,
         level: Option<LogLevel>,
         logfile_level: Option<LogLevel>,
+        #[gen_stub(override_type(
+            type_repr = "builtins.object | None",
+            imports = ("builtins")
+        ))]
         logging_prefix: Option<LogFormat>,
         read_only_state: bool,
         settings_global_path: Option<PathBuf>,
@@ -2288,6 +2412,7 @@ impl GammaLoopAPI {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(
         name = "evaluate_sample",
         signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, return_events=None, momentum_space=false, integrator_weight=None, discrete_dim=None, graph_name=None, orientation=None)
@@ -2347,6 +2472,7 @@ impl GammaLoopAPI {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(
         name = "evaluate_samples",
         signature = (points, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, return_events=None, momentum_space=false, integrator_weights=None, discrete_dims=None, graph_names=None, orientations=None)
@@ -2362,6 +2488,10 @@ impl GammaLoopAPI {
         return_events: Option<bool>,
         momentum_space: bool,
         integrator_weights: Option<PyReadonlyArray1<'py, f64>>,
+        #[gen_stub(override_type(
+            type_repr = "numpy.typing.NDArray[numpy.unsignedinteger] | None",
+            imports = ("numpy", "numpy.typing")
+        ))]
         discrete_dims: Option<PyReadonlyArray2<'py, usize>>,
         graph_names: Option<Vec<Option<String>>>,
         orientations: Option<Vec<Option<usize>>>,
@@ -2386,6 +2516,7 @@ impl GammaLoopAPI {
         Ok(PyBatchEvaluationResult { inner: res })
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(name="import_graphs", signature = (graphs, process_name=None, process_id=None, integrand_name=None, format="dot".into(), overwrite=false, append=false))]
     pub(crate) fn import_graphs_python(
         &mut self,
@@ -2445,6 +2576,7 @@ impl GammaLoopAPI {
         )
     }
 
+    #[allow(clippy::type_complexity)]
     #[pyo3(name="get_lmbs", signature = (graphs, format="dot".into()))]
     pub(crate) fn get_lmbs(
         &self,

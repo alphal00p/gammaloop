@@ -1,0 +1,27 @@
+[package]
+name = "alphal00p-docs-examples"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+build = "build.rs"
+
+[dependencies]
+eyre.workspace = true
+gammaloop-api = { path = "../gammaloop-api", default-features = false, features = ["cli"] }
+gammalooprs = { path = "../gammalooprs", default-features = false }
+idenso = { workspace = true, features = ["bincode", "reference-cases"] }
+linnet = { path = "../linnet", default-features = false, features = ["nodestore-vec", "bincode", "drawing", "serde", "symbolica"] }
+spenso = { workspace = true, features = ["shadowing"] }
+spenso-hep-lib.workspace = true
+spenso-macros = { workspace = true, features = ["shadowing"] }
+symbolica.workspace = true
+vakint = { path = "../vakint", default-features = false }
+
+[build-dependencies]
+alphal00p-docs-catalogs = { path = "../alphal00p-docs-catalogs" }
+alphal00p-docs-schema.workspace = true
+eyre.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+syn = { version = "2", features = ["full", "parsing"] }
+toml.workspace = true
