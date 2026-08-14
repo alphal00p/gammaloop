@@ -657,135 +657,170 @@ let
       "workspace_root": "."
     }
   '';
-  unique = values:
-    builtins.attrNames (builtins.listToAttrs (map (value: {
-        name = value;
-        value = true;
-      })
-      values));
+  unique =
+    values:
+    builtins.attrNames (
+      builtins.listToAttrs (
+        map (value: {
+          name = value;
+          value = true;
+        }) values
+      )
+    );
   workspacePackages = workspaceGraph.packages;
   cratePackageDepsAttr = package: "packages.${system}.crate-deps-${package}";
   cratePackageAttr = package: "packages.${system}.crate-${package}";
-  crateTestDependencyAttr = representative: "packages.${system}.crate-test-dependencies-${representative}";
+  crateTestDependencyAttr =
+    representative: "packages.${system}.crate-test-dependencies-${representative}";
   crateTestBinaryAttr = package: "packages.${system}.crate-test-binaries-${package}";
-  nextestContextualTestDependencyAttr = target: package:
-    "packages.${system}.crate-test-dependencies-${target}-${package}";
-  nextestContextualTestBinaryAttr = target: package:
-    "packages.${system}.crate-test-binaries-${target}-${package}";
+  nextestContextualTestDependencyAttr =
+    target: package: "packages.${system}.crate-test-dependencies-${target}-${package}";
+  nextestContextualTestBinaryAttr =
+    target: package: "packages.${system}.crate-test-binaries-${target}-${package}";
   workspaceHackPackage = "gammaloop-workspace-hack";
   # clinnet is binary-only: the flake exposes crate-clinnet, but no
   # crate-deps-clinnet artifact.
-  workspacePackagesWithDependencyArtifacts = builtins.filter (package: package != "clinnet") workspacePackages;
-  nonWorkspaceHackPackages = builtins.filter (package: package != workspaceHackPackage) workspacePackages;
+  workspacePackagesWithDependencyArtifacts = builtins.filter (
+    package: package != "clinnet"
+  ) workspacePackages;
+  nonWorkspaceHackPackages = builtins.filter (
+    package: package != workspaceHackPackage
+  ) workspacePackages;
   workspaceHackCacheAttr = cratePackageDepsAttr workspaceHackPackage;
   gammaloopApiPackageArtifactsAttr = "packages.${system}.gammaloopApiPackageArtifacts";
   workspacePackageGraphAttr = package: cratePackageAttr package;
-  mergeDependencySets = sets: let
-    attrs = unique (builtins.concatLists (map builtins.attrNames sets));
-  in
-    builtins.listToAttrs (map (attr: {
+  mergeDependencySets =
+    sets:
+    let
+      attrs = unique (builtins.concatLists (map builtins.attrNames sets));
+    in
+    builtins.listToAttrs (
+      map (attr: {
         name = attr;
-        value = unique (builtins.concatLists (map (set: set.${attr} or []) sets));
-      })
-      attrs);
-  workspaceDependencyNamesFor = package:
-    workspaceGraph.resolved_normal_dependencies.${package} or [];
-  workspaceTestDependencyNamesFor = package:
-    workspaceGraph.test_dependencies.${package} or (workspaceGraph.normal_dependencies.${package} or []);
-  workspaceDependencyClosureFor = dependencyNamesFor: package:
-    unique (map (entry: entry.key) (builtins.genericClosure {
-      startSet = [{key = package;}];
-      operator = entry: map (dependency: {key = dependency;}) (dependencyNamesFor entry.key);
-    }));
-  workspaceTestDependencyClosureFor =
-    workspaceDependencyClosureFor workspaceTestDependencyNamesFor;
-  workspaceTestComponentMembersFor = package:
-    unique (builtins.filter (
+        value = unique (builtins.concatLists (map (set: set.${attr} or [ ]) sets));
+      }) attrs
+    );
+  workspaceDependencyNamesFor =
+    package: workspaceGraph.resolved_normal_dependencies.${package} or [ ];
+  workspaceTestDependencyNamesFor =
+    package:
+    workspaceGraph.test_dependencies.${package}
+      or (workspaceGraph.normal_dependencies.${package} or [ ]);
+  workspaceDependencyClosureFor =
+    dependencyNamesFor: package:
+    unique (
+      map (entry: entry.key) (
+        builtins.genericClosure {
+          startSet = [ { key = package; } ];
+          operator = entry: map (dependency: { key = dependency; }) (dependencyNamesFor entry.key);
+        }
+      )
+    );
+  workspaceTestDependencyClosureFor = workspaceDependencyClosureFor workspaceTestDependencyNamesFor;
+  workspaceTestComponentMembersFor =
+    package:
+    unique (
+      builtins.filter (
         other:
-          builtins.elem other (workspaceTestDependencyClosureFor package)
-          && builtins.elem package (workspaceTestDependencyClosureFor other)
+        builtins.elem other (workspaceTestDependencyClosureFor package)
+        && builtins.elem package (workspaceTestDependencyClosureFor other)
+      ) workspacePackages
+    );
+  workspaceTestComponentRepresentativeFor =
+    package: builtins.head (workspaceTestComponentMembersFor package);
+  workspaceTestComponentRepresentatives = unique (
+    map workspaceTestComponentRepresentativeFor workspacePackages
+  );
+  workspaceTestDependencyComponentRepresentatives = builtins.filter (
+    representative: representative != workspaceHackPackage
+  ) workspaceTestComponentRepresentatives;
+  workspaceTestComponentMembers = builtins.listToAttrs (
+    map (representative: {
+      name = representative;
+      value = workspaceTestComponentMembersFor representative;
+    }) workspaceTestComponentRepresentatives
+  );
+  workspaceTestComponentDependencyRepresentativesFor =
+    representative:
+    unique (
+      builtins.filter (dependencyRepresentative: dependencyRepresentative != representative) (
+        map workspaceTestComponentRepresentativeFor (
+          builtins.concatLists (
+            map workspaceTestDependencyNamesFor workspaceTestComponentMembers.${representative}
+          )
+        )
       )
-      workspacePackages);
-  workspaceTestComponentRepresentativeFor = package:
-    builtins.head (workspaceTestComponentMembersFor package);
-  workspaceTestComponentRepresentatives =
-    unique (map workspaceTestComponentRepresentativeFor workspacePackages);
-  workspaceTestDependencyComponentRepresentatives =
-    builtins.filter (representative: representative != workspaceHackPackage) workspaceTestComponentRepresentatives;
-  workspaceTestComponentMembers =
-    builtins.listToAttrs (map (representative: {
-        name = representative;
-        value = workspaceTestComponentMembersFor representative;
-      })
-      workspaceTestComponentRepresentatives);
-  workspaceTestComponentDependencyRepresentativesFor = representative:
-    unique (builtins.filter (dependencyRepresentative: dependencyRepresentative != representative) (
-      map workspaceTestComponentRepresentativeFor (
-        builtins.concatLists (map workspaceTestDependencyNamesFor workspaceTestComponentMembers.${representative})
-      )
-    ));
+    );
   workspaceCratePackageDependencies = builtins.listToAttrs (
-    builtins.filter (entry: entry.value != []) (map (package: {
+    builtins.filter (entry: entry.value != [ ]) (
+      map (package: {
         name = workspacePackageGraphAttr package;
         value = map workspacePackageGraphAttr (workspaceDependencyNamesFor package);
-      })
-      workspacePackages)
+      }) workspacePackages
+    )
   );
-  workspaceCratePackageDependencyEdges = builtins.concatLists (map (dependent:
+  workspaceCratePackageDependencyEdges = builtins.concatLists (
+    map (
+      dependent:
       map (dependency: {
         inherit dependency dependent;
-      })
-      (workspaceCratePackageDependencies.${dependent} or []))
-    (builtins.attrNames workspaceCratePackageDependencies));
-  workspaceCratePackageCacheDependencies = builtins.listToAttrs (map (package: {
+      }) (workspaceCratePackageDependencies.${dependent} or [ ])
+    ) (builtins.attrNames workspaceCratePackageDependencies)
+  );
+  workspaceCratePackageCacheDependencies = builtins.listToAttrs (
+    map (package: {
       name = workspacePackageGraphAttr package;
-      value = [(cratePackageDepsAttr package)];
-    })
-    workspacePackagesWithDependencyArtifacts);
+      value = [ (cratePackageDepsAttr package) ];
+    }) workspacePackagesWithDependencyArtifacts
+  );
   workspaceCratePackageCacheArtifactDependencies = builtins.listToAttrs (
-    builtins.filter (entry: entry.value != []) (map (package: {
+    builtins.filter (entry: entry.value != [ ]) (
+      map (package: {
         name = cratePackageDepsAttr package;
         value =
-          (
-            if package == workspaceHackPackage
-            then []
-            else ["packages.${system}.cargoArtifacts"]
-          )
+          (if package == workspaceHackPackage then [ ] else [ "packages.${system}.cargoArtifacts" ])
           ++ map cratePackageDepsAttr (workspaceDependencyNamesFor package)
           ++ (
-            if package != workspaceHackPackage && (workspaceDependencyNamesFor package) == [] && builtins.elem package workspaceGraph.symbolica_normal_packages
-            then [workspaceHackCacheAttr]
-            else []
+            if
+              package != workspaceHackPackage
+              && (workspaceDependencyNamesFor package) == [ ]
+              && builtins.elem package workspaceGraph.symbolica_normal_packages
+            then
+              [ workspaceHackCacheAttr ]
+            else
+              [ ]
           );
-      })
-      workspacePackagesWithDependencyArtifacts)
+      }) workspacePackagesWithDependencyArtifacts
+    )
   );
-  workspaceCratePackageCacheArtifactDependencyEdges = builtins.concatLists (map (dependent:
+  workspaceCratePackageCacheArtifactDependencyEdges = builtins.concatLists (
+    map (
+      dependent:
       map (dependency: {
         inherit dependency dependent;
-      })
-      (workspaceCratePackageCacheArtifactDependencies.${dependent} or []))
-    (builtins.attrNames workspaceCratePackageCacheArtifactDependencies));
-  workspaceTestDependencyArtifactDependencies = builtins.listToAttrs (map (representative: {
+      }) (workspaceCratePackageCacheArtifactDependencies.${dependent} or [ ])
+    ) (builtins.attrNames workspaceCratePackageCacheArtifactDependencies)
+  );
+  workspaceTestDependencyArtifactDependencies = builtins.listToAttrs (
+    map (representative: {
       name = crateTestDependencyAttr representative;
-      value =
-        [
-          "packages.${system}.cargoArtifacts"
-          workspaceHackCacheAttr
-        ]
-        ++ map crateTestDependencyAttr (
-          builtins.filter (
-            dependencyRepresentative: dependencyRepresentative != workspaceHackPackage
-          )
-          (workspaceTestComponentDependencyRepresentativesFor representative)
-        );
-    })
-    workspaceTestDependencyComponentRepresentatives);
-  workspaceTestBinaryArtifactDependencies = builtins.listToAttrs (map (package: {
+      value = [
+        "packages.${system}.cargoArtifacts"
+        workspaceHackCacheAttr
+      ]
+      ++ map crateTestDependencyAttr (
+        builtins.filter (dependencyRepresentative: dependencyRepresentative != workspaceHackPackage) (
+          workspaceTestComponentDependencyRepresentativesFor representative
+        )
+      );
+    }) workspaceTestDependencyComponentRepresentatives
+  );
+  workspaceTestBinaryArtifactDependencies = builtins.listToAttrs (
+    map (package: {
       name = crateTestBinaryAttr package;
-      value = [(crateTestDependencyAttr (workspaceTestComponentRepresentativeFor package))];
-    })
-    nonWorkspaceHackPackages);
+      value = [ (crateTestDependencyAttr (workspaceTestComponentRepresentativeFor package)) ];
+    }) nonWorkspaceHackPackages
+  );
   nextestPackageGroups = {
     core = [
       "gammaloop-api"
@@ -793,9 +828,9 @@ let
       "gammaloop-tracing-filter-macros"
       "gammalooprs"
     ];
-    integration = ["gammaloop-integration-tests"];
-    "python-api" = ["gammaloop-integration-tests"];
-    clinnet = ["clinnet"];
+    integration = [ "gammaloop-integration-tests" ];
+    "python-api" = [ "gammaloop-integration-tests" ];
+    clinnet = [ "clinnet" ];
     linnet = [
       "linnet"
       "linnet-py"
@@ -808,21 +843,20 @@ let
       "spenso-macros"
       "symbolica-utils"
     ];
-    vakint = ["vakint"];
+    vakint = [ "vakint" ];
   };
   nextestArchiveAttr = target: "checks.${system}.gammaloop-nextest-binaries-${target}";
-  nextestPackageArtifactAttrFor = target: package:
-    if target == "python-api"
-    then nextestContextualTestBinaryAttr target package
-    else crateTestBinaryAttr package;
-  nextestArchiveDependenciesFor = target:
-    ["packages.${system}.cargoArtifacts"]
+  nextestPackageArtifactAttrFor =
+    target: package:
+    if target == "python-api" then
+      nextestContextualTestBinaryAttr target package
+    else
+      crateTestBinaryAttr package;
+  nextestArchiveDependenciesFor =
+    target:
+    [ "packages.${system}.cargoArtifacts" ]
     ++ unique (map (nextestPackageArtifactAttrFor target) nextestPackageGroups.${target})
-    ++ (
-      if target == "python-api"
-      then ["packages.${system}.gammaloop-python-module"]
-      else []
-    );
+    ++ (if target == "python-api" then [ "packages.${system}.gammaloop-python-module" ] else [ ]);
   # The Hakari workspace-hack deps artifact is the root for the
   # Symbolica-containing cache DAG. Higher-level crate cache jobs reach it
   # through their Guppy-resolved workspace cache dependencies.
@@ -838,41 +872,47 @@ let
         gammaloopApiPackageArtifactsAttr
         "checks.${system}.gammaloop-fmt"
       ];
-      "checks.${system}.gammaloop" = ["packages.${system}.gammaloop"];
-      "packages.${system}.default" = ["packages.${system}.gammaloop"];
+      "checks.${system}.gammaloop" = [ "packages.${system}.gammaloop" ];
+      "packages.${system}.default" = [ "packages.${system}.gammaloop" ];
       "packages.${system}.gammaloop-python-module" =
-        workspaceCratePackageDependencies.${cratePackageAttr "gammaloop-api"} or [];
-      ${gammaloopApiPackageArtifactsAttr} = [(cratePackageAttr "gammaloop-api")];
-      "packages.${system}.cargoArtifacts" = [workspaceHackCacheAttr];
+        workspaceCratePackageDependencies.${cratePackageAttr "gammaloop-api"} or [ ];
+      ${gammaloopApiPackageArtifactsAttr} = [ (cratePackageAttr "gammaloop-api") ];
+      "packages.${system}.cargoArtifacts" = [ workspaceHackCacheAttr ];
       ${nextestContextualTestDependencyAttr "python-api" "gammaloop-integration-tests"} =
         workspaceTestDependencyArtifactDependencies.${crateTestDependencyAttr (workspaceTestComponentRepresentativeFor "gammaloop-integration-tests")}
-        ++ ["packages.${system}.gammaloop-python-module"];
+        ++ [ "packages.${system}.gammaloop-python-module" ];
       ${nextestContextualTestBinaryAttr "python-api" "gammaloop-integration-tests"} = [
         (nextestContextualTestDependencyAttr "python-api" "gammaloop-integration-tests")
         "packages.${system}.gammaloop-python-module"
       ];
-      "checks.${system}.gammaloop-check" = ["packages.${system}.cargoArtifacts"];
-      "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoArtifacts"];
-      "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoArtifacts"];
-      "checks.${system}.gammaloop-doctest" = ["packages.${system}.cargoArtifacts"];
-      "packages.${system}.workspaceBuildArtifacts" = ["packages.${system}.cargoArtifacts"];
+      "checks.${system}.gammaloop-check" = [ "packages.${system}.cargoArtifacts" ];
+      "checks.${system}.gammaloop-clippy" = [ "packages.${system}.cargoArtifacts" ];
+      "checks.${system}.gammaloop-doc" = [ "packages.${system}.cargoArtifacts" ];
+      "checks.${system}.gammaloop-doctest" = [ "packages.${system}.cargoArtifacts" ];
+      "packages.${system}.workspaceBuildArtifacts" = [ "packages.${system}.cargoArtifacts" ];
       "checks.${system}.gammaloop-nextest-binaries-core" = nextestArchiveDependenciesFor "core";
       "checks.${system}.gammaloop-nextest-binaries-clinnet" = nextestArchiveDependenciesFor "clinnet";
-      "checks.${system}.gammaloop-nextest-binaries-integration" = nextestArchiveDependenciesFor "integration";
-      "checks.${system}.gammaloop-nextest-binaries-python-api" = nextestArchiveDependenciesFor "python-api";
+      "checks.${system}.gammaloop-nextest-binaries-integration" =
+        nextestArchiveDependenciesFor "integration";
+      "checks.${system}.gammaloop-nextest-binaries-python-api" =
+        nextestArchiveDependenciesFor "python-api";
       "checks.${system}.gammaloop-nextest-binaries-linnet" = nextestArchiveDependenciesFor "linnet";
       "checks.${system}.gammaloop-nextest-binaries-spenso" = nextestArchiveDependenciesFor "spenso";
       "checks.${system}.gammaloop-nextest-binaries-vakint" = nextestArchiveDependenciesFor "vakint";
       "checks.${system}.gammaloop-nextest-binaries" = nextestBinaryChecks;
-      "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];
-      "checks.${system}.linnest-wasm" = ["packages.${system}.linnest-wasm"];
-      "packages.${system}.gammaloop-llvm-coverage" = ["packages.${system}.gammaloop"];
-      "packages.${system}.nix-ci-check-gammaloop-doctest" = ["packages.${system}.cargoArtifacts"];
-      "packages.${system}.nix-ci-check-gammaloop-nextest" =
-        nextestBinaryChecks
-        ++ ["packages.${system}.gammaloop-python-module"];
-      "packages.${system}.nix-ci-check-gammaloop-nextest-clinnet" = ["checks.${system}.gammaloop-nextest-binaries-clinnet"];
-      "packages.${system}.nix-ci-check-gammaloop-nextest-core" = ["checks.${system}.gammaloop-nextest-binaries-core"];
+      "packages.${system}.linnest-wasm" = [ "packages.${system}.linnestWasmCargoArtifacts" ];
+      "checks.${system}.linnest-wasm" = [ "packages.${system}.linnest-wasm" ];
+      "packages.${system}.gammaloop-llvm-coverage" = [ "packages.${system}.gammaloop" ];
+      "packages.${system}.nix-ci-check-gammaloop-doctest" = [ "packages.${system}.cargoArtifacts" ];
+      "packages.${system}.nix-ci-check-gammaloop-nextest" = nextestBinaryChecks ++ [
+        "packages.${system}.gammaloop-python-module"
+      ];
+      "packages.${system}.nix-ci-check-gammaloop-nextest-clinnet" = [
+        "checks.${system}.gammaloop-nextest-binaries-clinnet"
+      ];
+      "packages.${system}.nix-ci-check-gammaloop-nextest-core" = [
+        "checks.${system}.gammaloop-nextest-binaries-core"
+      ];
       "packages.${system}.nix-ci-check-gammaloop-nextest-integration" = [
         "checks.${system}.gammaloop-nextest-binaries-integration"
       ];
@@ -880,42 +920,44 @@ let
         "checks.${system}.gammaloop-nextest-binaries-python-api"
         "packages.${system}.gammaloop-python-module"
       ];
-      "packages.${system}.nix-ci-check-gammaloop-nextest-linnet" = ["checks.${system}.gammaloop-nextest-binaries-linnet"];
-      "packages.${system}.nix-ci-check-gammaloop-nextest-spenso" = ["checks.${system}.gammaloop-nextest-binaries-spenso"];
-      "packages.${system}.nix-ci-check-gammaloop-nextest-vakint" = ["checks.${system}.gammaloop-nextest-binaries-vakint"];
+      "packages.${system}.nix-ci-check-gammaloop-nextest-linnet" = [
+        "checks.${system}.gammaloop-nextest-binaries-linnet"
+      ];
+      "packages.${system}.nix-ci-check-gammaloop-nextest-spenso" = [
+        "checks.${system}.gammaloop-nextest-binaries-spenso"
+      ];
+      "packages.${system}.nix-ci-check-gammaloop-nextest-vakint" = [
+        "checks.${system}.gammaloop-nextest-binaries-vakint"
+      ];
     }
   ];
-  missingWorkspaceCratePackageEdges =
-    builtins.filter (
-      edge: !(builtins.elem edge.dependency (dependencies.${edge.dependent} or []))
-    )
-    workspaceCratePackageDependencyEdges;
-  missingWorkspaceCratePackageCacheArtifactEdges =
-    builtins.filter (
-      edge: !(builtins.elem edge.dependency (dependencies.${edge.dependent} or []))
-    )
-    workspaceCratePackageCacheArtifactDependencyEdges;
-  reciprocalWorkspaceCratePackageEdges =
-    builtins.filter (
-      edge: builtins.elem edge.dependent (workspaceCratePackageDependencies.${edge.dependency} or [])
-    )
-    workspaceCratePackageDependencyEdges;
+  missingWorkspaceCratePackageEdges = builtins.filter (
+    edge: !(builtins.elem edge.dependency (dependencies.${edge.dependent} or [ ]))
+  ) workspaceCratePackageDependencyEdges;
+  missingWorkspaceCratePackageCacheArtifactEdges = builtins.filter (
+    edge: !(builtins.elem edge.dependency (dependencies.${edge.dependent} or [ ]))
+  ) workspaceCratePackageCacheArtifactDependencyEdges;
+  reciprocalWorkspaceCratePackageEdges = builtins.filter (
+    edge: builtins.elem edge.dependent (workspaceCratePackageDependencies.${edge.dependency} or [ ])
+  ) workspaceCratePackageDependencyEdges;
   formatDependencyEdge = edge: "${edge.dependency} -> ${edge.dependent}";
-  selfDependencies =
-    builtins.filter (
-      attr: builtins.elem attr (dependencies.${attr} or [])
-    )
-    (builtins.attrNames dependencies);
+  selfDependencies = builtins.filter (attr: builtins.elem attr (dependencies.${attr} or [ ])) (
+    builtins.attrNames dependencies
+  );
   validatedDependencies =
-    assert missingWorkspaceCratePackageEdges == []
-    || builtins.throw "manual NixCI dependency graph is missing workspace crate package dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge missingWorkspaceCratePackageEdges)}";
-    assert missingWorkspaceCratePackageCacheArtifactEdges == []
-    || builtins.throw "manual NixCI dependency graph is missing workspace crate package cache dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge missingWorkspaceCratePackageCacheArtifactEdges)}";
-    assert reciprocalWorkspaceCratePackageEdges == []
-    || builtins.throw "manual NixCI dependency graph contains reciprocal workspace crate package dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge reciprocalWorkspaceCratePackageEdges)}";
-    assert selfDependencies == []
-    || builtins.throw "manual NixCI dependency graph contains self dependencies: ${builtins.concatStringsSep ", " selfDependencies}";
-      dependencies;
+    assert
+      missingWorkspaceCratePackageEdges == [ ]
+      || builtins.throw "manual NixCI dependency graph is missing workspace crate package dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge missingWorkspaceCratePackageEdges)}";
+    assert
+      missingWorkspaceCratePackageCacheArtifactEdges == [ ]
+      || builtins.throw "manual NixCI dependency graph is missing workspace crate package cache dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge missingWorkspaceCratePackageCacheArtifactEdges)}";
+    assert
+      reciprocalWorkspaceCratePackageEdges == [ ]
+      || builtins.throw "manual NixCI dependency graph contains reciprocal workspace crate package dependency edges: ${builtins.concatStringsSep ", " (map formatDependencyEdge reciprocalWorkspaceCratePackageEdges)}";
+    assert
+      selfDependencies == [ ]
+      || builtins.throw "manual NixCI dependency graph contains self dependencies: ${builtins.concatStringsSep ", " selfDependencies}";
+    dependencies;
   doNotBuild = unique (
     [
       "checks.${system}.gammaloop"
@@ -944,8 +986,7 @@ let
     ++ map cratePackageDepsAttr (
       builtins.filter (
         package: package != workspaceHackPackage && package != "gammalooprs"
-      )
-      workspacePackagesWithDependencyArtifacts
+      ) workspacePackagesWithDependencyArtifacts
     )
     ++ map cratePackageAttr nonWorkspaceHackPackages
   );
@@ -954,46 +995,61 @@ let
   # The manual graph above is constructed over the full crate/artifact DAG
   # (which keeps the drift and cycle asserts meaningful); here hidden paths are
   # contracted to their nearest built dependency so their ordering is retained.
-  doNotBuildSet = builtins.listToAttrs (map (job: {
+  doNotBuildSet = builtins.listToAttrs (
+    map (job: {
       name = job;
       value = true;
-    })
-    doNotBuild);
+    }) doNotBuild
+  );
   isBuiltJob = job: !(doNotBuildSet ? ${job});
-  builtDependencyFrontierFor = deps: dependent:
-    unique (map (entry: entry.key) (builtins.filter (
-        entry: isBuiltJob entry.key
-      ) (builtins.genericClosure {
-        startSet = map (dependency: {key = dependency;}) (deps.${dependent} or []);
-        operator = entry:
-          if isBuiltJob entry.key
-          then []
-          else map (dependency: {key = dependency;}) (deps.${entry.key} or []);
-      })));
-  buildableDependencies = deps:
+  builtDependencyFrontierFor =
+    deps: dependent:
+    unique (
+      map (entry: entry.key) (
+        builtins.filter (entry: isBuiltJob entry.key) (
+          builtins.genericClosure {
+            startSet = map (dependency: { key = dependency; }) (deps.${dependent} or [ ]);
+            operator =
+              entry:
+              if isBuiltJob entry.key then
+                [ ]
+              else
+                map (dependency: { key = dependency; }) (deps.${entry.key} or [ ]);
+          }
+        )
+      )
+    );
+  buildableDependencies =
+    deps:
     builtins.listToAttrs (
-      builtins.filter (entry: entry.value != []) (map (dependent: {
+      builtins.filter (entry: entry.value != [ ]) (
+        map (dependent: {
           name = dependent;
           value = builtDependencyFrontierFor deps dependent;
-        })
-        (builtins.filter isBuiltJob (builtins.attrNames deps)))
+        }) (builtins.filter isBuiltJob (builtins.attrNames deps))
+      )
     );
   projectedDependencies = buildableDependencies validatedDependencies;
-  projectedDependencyClosureFor = dependent:
-    map (entry: entry.key) (builtins.genericClosure {
-      startSet = map (dependency: {key = dependency;}) (projectedDependencies.${dependent} or []);
-      operator = entry:
-        map (dependency: {key = dependency;}) (projectedDependencies.${entry.key} or []);
-    });
+  projectedDependencyClosureFor =
+    dependent:
+    map (entry: entry.key) (
+      builtins.genericClosure {
+        startSet = map (dependency: { key = dependency; }) (projectedDependencies.${dependent} or [ ]);
+        operator =
+          entry: map (dependency: { key = dependency; }) (projectedDependencies.${entry.key} or [ ]);
+      }
+    );
   projectedDependencyCycles = builtins.filter (
     attr: builtins.elem attr (projectedDependencyClosureFor attr)
   ) (builtins.attrNames projectedDependencies);
   validatedProjectedDependencies =
-    assert projectedDependencyCycles == []
-    || builtins.throw "projected NixCI dependency graph contains cycles through: ${builtins.concatStringsSep ", " projectedDependencyCycles}";
-      projectedDependencies;
-in {
-  systems = [system];
+    assert
+      projectedDependencyCycles == [ ]
+      || builtins.throw "projected NixCI dependency graph contains cycles through: ${builtins.concatStringsSep ", " projectedDependencyCycles}";
+    projectedDependencies;
+in
+{
+  systems = [ system ];
   inherit doNotBuild;
   fail-fast = false;
   fail-on-dangling-dependencies = true;
@@ -1020,56 +1076,56 @@ in {
       package = "packages.${system}.nix-ci-check-gammaloop-doctest";
       system = system;
       in-repo = true;
-      secrets = ["SYMBOLICA_LICENSE"];
+      secrets = [ "SYMBOLICA_LICENSE" ];
     };
 
     gammaloop-nextest-core = {
       package = "packages.${system}.nix-ci-check-gammaloop-nextest-core";
       system = system;
       in-repo = true;
-      secrets = ["SYMBOLICA_LICENSE"];
+      secrets = [ "SYMBOLICA_LICENSE" ];
     };
 
     gammaloop-nextest-clinnet = {
       package = "packages.${system}.nix-ci-check-gammaloop-nextest-clinnet";
       system = system;
       in-repo = true;
-      secrets = ["SYMBOLICA_LICENSE"];
+      secrets = [ "SYMBOLICA_LICENSE" ];
     };
 
     gammaloop-nextest-integration = {
       package = "packages.${system}.nix-ci-check-gammaloop-nextest-integration";
       system = system;
       in-repo = true;
-      secrets = ["SYMBOLICA_LICENSE"];
+      secrets = [ "SYMBOLICA_LICENSE" ];
     };
 
     gammaloop-nextest-python-api = {
       package = "packages.${system}.nix-ci-check-gammaloop-nextest-python-api";
       system = system;
       in-repo = true;
-      secrets = ["SYMBOLICA_LICENSE"];
+      secrets = [ "SYMBOLICA_LICENSE" ];
     };
 
     gammaloop-nextest-linnet = {
       package = "packages.${system}.nix-ci-check-gammaloop-nextest-linnet";
       system = system;
       in-repo = true;
-      secrets = ["SYMBOLICA_LICENSE"];
+      secrets = [ "SYMBOLICA_LICENSE" ];
     };
 
     gammaloop-nextest-spenso = {
       package = "packages.${system}.nix-ci-check-gammaloop-nextest-spenso";
       system = system;
       in-repo = true;
-      secrets = ["SYMBOLICA_LICENSE"];
+      secrets = [ "SYMBOLICA_LICENSE" ];
     };
 
     gammaloop-nextest-vakint = {
       package = "packages.${system}.nix-ci-check-gammaloop-nextest-vakint";
       system = system;
       in-repo = true;
-      secrets = ["SYMBOLICA_LICENSE"];
+      secrets = [ "SYMBOLICA_LICENSE" ];
     };
   };
   deploy = {
