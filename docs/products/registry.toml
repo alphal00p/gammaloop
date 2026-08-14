@@ -5,11 +5,12 @@ id = "gammaloop"
 title = "GammaLoop"
 tagline = "Differential cross-sections with Local Unitarity"
 source = "docs/products/gammaloop/main.typ"
-content = [
-  "docs/products/gammaloop/content/overview.typ",
-  "docs/products/gammaloop/content/process-generation.typ",
-  "docs/products/gammaloop/content/api.typ",
-  "docs/products/gammaloop/content/changelog.typ",
+pages = [
+  { id = "overview", title = "Overview", summary = "What GammaLoop computes, how stateful runs fit together, and where the surrounding libraries begin.", source = "docs/products/gammaloop/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
+  { id = "tutorial", title = "First calculation", summary = "Build GammaLoop, run a maintained card, inspect its state, and resume the calculation.", source = "docs/products/gammaloop/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
+  { id = "process-generation", title = "Process generation", summary = "Process grammar, generation modes, filters, grouping, and the path from diagrams to evaluation.", source = "docs/products/gammaloop/content/process-generation.typ", symbol = "process-generation", route = "manual/process-generation/", group = "Manual" },
+  { id = "interfaces", title = "Interfaces and API boundaries", summary = "The supported CLI, Rust, and Python ownership boundaries and precision contracts.", source = "docs/products/gammaloop/content/api.typ", symbol = "api", route = "manual/interfaces/", group = "Manual" },
+  { id = "releases", title = "Releases and change history", summary = "Version ownership, immutable documentation snapshots, and the current release-history policy.", source = "docs/products/gammaloop/content/changelog.typ", symbol = "changelog", route = "manual/releases/", group = "Manual" },
 ]
 related = ["linnet", "spenso", "idenso", "vakint"]
 rust_components = [
@@ -25,11 +26,12 @@ id = "linnet"
 title = "Linnet"
 tagline = "Half-edge graphs and subgraph-first algorithms"
 source = "docs/products/linnet/main.typ"
-content = [
-  "docs/products/linnet/content/overview.typ",
-  "docs/products/linnet/content/algorithms.typ",
-  "docs/products/linnet/content/api.typ",
-  "docs/products/linnet/content/changelog.typ",
+pages = [
+  { id = "overview", title = "Overview", summary = "Half-edge graphs, subgraph-first operations, typed indices, and the boundaries of the Linnet ecosystem.", source = "docs/products/linnet/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
+  { id = "tutorial", title = "Build and explore a graph", summary = "Construct a small graph, inspect its half-edges, and apply a first subgraph-aware operation.", source = "docs/products/linnet/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
+  { id = "algorithms", title = "Graph algorithms", summary = "Traversal, connectivity, cycles, cuts, mutation boundaries, DOT interchange, and drawing.", source = "docs/products/linnet/content/algorithms.typ", symbol = "algorithms", route = "manual/algorithms/", group = "Manual" },
+  { id = "interfaces", title = "Rust and Python interfaces", summary = "Supported package surfaces, feature gates, typed IDs, and Python distribution boundaries.", source = "docs/products/linnet/content/api.typ", symbol = "api", route = "manual/interfaces/", group = "Manual" },
+  { id = "releases", title = "Releases and migration", summary = "Canonical package releases, compatibility boundaries, and migration notes.", source = "docs/products/linnet/content/changelog.typ", symbol = "changelog", route = "manual/releases/", group = "Manual" },
 ]
 changelog = "crates/linnet/CHANGELOG.md"
 related = ["spenso", "gammaloop"]
@@ -45,11 +47,12 @@ id = "spenso"
 title = "Spenso"
 tagline = "Typed tensors, symbolic structures, and executable tensor networks"
 source = "docs/products/spenso/main.typ"
-content = [
-  "docs/products/spenso/content/overview.typ",
-  "docs/products/spenso/content/networks.typ",
-  "docs/products/spenso/content/api.typ",
-  "docs/products/spenso/content/changelog.typ",
+pages = [
+  { id = "overview", title = "Overview", summary = "Typed tensor structures, data representations, contractions, networks, and companion packages.", source = "docs/products/spenso/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
+  { id = "tutorial", title = "Your first tensor workflow", summary = "Define tensor structure, attach data, and inspect a first pairwise contraction before moving to networks.", source = "docs/products/spenso/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
+  { id = "networks", title = "Tensor networks", summary = "Dense and sparse data, contraction planning, Symbolica shadowing, representations, and HEP helpers.", source = "docs/products/spenso/content/networks.typ", symbol = "networks", route = "manual/networks/", group = "Manual" },
+  { id = "interfaces", title = "Rust, macros, and Python", summary = "Core Rust APIs, procedural macros, HEP data, feature gates, and community-module boundaries.", source = "docs/products/spenso/content/api.typ", symbol = "api", route = "manual/interfaces/", group = "Manual" },
+  { id = "releases", title = "Releases and migration", summary = "Canonical package releases, compatibility boundaries, and migration notes.", source = "docs/products/spenso/content/changelog.typ", symbol = "changelog", route = "manual/releases/", group = "Manual" },
 ]
 changelog = "crates/spenso/CHANGELOG.md"
 related = ["linnet", "idenso", "gammaloop"]
@@ -67,11 +70,12 @@ id = "idenso"
 title = "Idenso"
 tagline = "Symbolic tensor identities for Spenso and Symbolica"
 source = "docs/products/idenso/main.typ"
-content = [
-  "docs/products/idenso/content/overview.typ",
-  "docs/products/idenso/content/algebra.typ",
-  "docs/products/idenso/content/api.typ",
-  "docs/products/idenso/content/changelog.typ",
+pages = [
+  { id = "overview", title = "Overview", summary = "Symbolic tensor identities, controlled rewrite stages, representation setup, and reversible cooking.", source = "docs/products/idenso/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
+  { id = "tutorial", title = "A controlled identity pass", summary = "Initialize representations, inspect indices, apply a focused rewrite, and verify the result.", source = "docs/products/idenso/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
+  { id = "algebra", title = "Algebra and rewrites", summary = "Index tooling, cooking, metric, epsilon, Dirac, color, and Schoonschip network operations.", source = "docs/products/idenso/content/algebra.typ", symbol = "algebra", route = "manual/algebra/", group = "Manual" },
+  { id = "interfaces", title = "Rust and Python interfaces", summary = "Supported rewrite families, macros, features, and the Symbolica community-module boundary.", source = "docs/products/idenso/content/api.typ", symbol = "api", route = "manual/interfaces/", group = "Manual" },
+  { id = "releases", title = "Releases and migration", summary = "Canonical package releases, compatibility boundaries, and migration notes.", source = "docs/products/idenso/content/changelog.typ", symbol = "changelog", route = "manual/releases/", group = "Manual" },
 ]
 changelog = "crates/idenso/CHANGELOG.md"
 related = ["spenso", "gammaloop"]
@@ -87,11 +91,12 @@ id = "vakint"
 title = "Vakint"
 tagline = "Single-scale vacuum-integral matching and evaluation"
 source = "docs/products/vakint/main.typ"
-content = [
-  "docs/products/vakint/content/overview.typ",
-  "docs/products/vakint/content/evaluation.typ",
-  "docs/products/vakint/content/api.typ",
-  "docs/products/vakint/content/changelog.typ",
+pages = [
+  { id = "overview", title = "Overview", summary = "Topology matching, canonicalization, tensor reduction, evaluation backends, and reproducibility.", source = "docs/products/vakint/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
+  { id = "tutorial", title = "Match your first integral", summary = "Configure a dependency-free engine, parse a vacuum integral, canonicalize it, and inspect the match.", source = "docs/products/vakint/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
+  { id = "evaluation", title = "Matching and evaluation", summary = "Parsing, topology matching, normalization, tensor reduction, and backend selection.", source = "docs/products/vakint/content/evaluation.typ", symbol = "evaluation", route = "manual/evaluation/", group = "Manual" },
+  { id = "interfaces", title = "Rust and Python interfaces", summary = "Supported engine types, settings, expression forms, and the community-module boundary.", source = "docs/products/vakint/content/api.typ", symbol = "api", route = "manual/interfaces/", group = "Manual" },
+  { id = "releases", title = "Releases and migration", summary = "Canonical package releases, compatibility boundaries, and migration notes.", source = "docs/products/vakint/content/changelog.typ", symbol = "changelog", route = "manual/releases/", group = "Manual" },
 ]
 related = ["gammaloop"]
 rust_components = [

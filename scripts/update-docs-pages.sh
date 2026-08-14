@@ -21,15 +21,23 @@ require_bundle() {
     local bundle=$1
     local required
     for required in \
+        .note \
         index.html \
         manual.pdf \
         snapshot.json \
         search-index.json \
+        tutorial/index.html \
+        manual/interfaces/index.html \
+        manual/releases/index.html \
+        assets/site.css \
+        assets/site.js \
         reference/rust/index.html \
         reference/python/index.html
     do
         [ -f "$bundle/$required" ] || fail "incomplete product bundle: $bundle/$required is missing"
     done
+    find "$bundle/reference/python" -mindepth 2 -maxdepth 2 -name index.html -print -quit |
+        grep -q . || fail "incomplete product bundle: $bundle has no structured Python component page"
 }
 
 [ "$#" -ge 3 ] && [ "$#" -le 4 ] || usage

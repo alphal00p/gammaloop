@@ -7,8 +7,11 @@ index, PDF, Rust reference, Python reference, and changelog.
 
 ## Authoring model
 
-- Put long-form product material in `products/<product>/content/*.typ` and
-  register its order in `products/registry.toml`.
+- Put long-form product material in `products/<product>/content/*.typ`. Every
+  chapter exports one named content value; register that symbol, its durable
+  route, navigation group, title, and search summary in
+  `products/registry.toml`. Each product must provide a tutorial and at least
+  two manual chapters.
 - Keep package `README.md` and `CHANGELOG.md` files concise. The builder may
   import them as explicitly typed Markdown; they are never evaluated as Typst.
 - Link to the product that owns a concept instead of copying its explanation.
@@ -18,8 +21,12 @@ index, PDF, Rust reference, Python reference, and changelog.
   through the exporters and commit the result; do not hand-edit snapshots.
 
 The builder passes authored Typst to the standard Typst 0.15 CLI. It does not
-link Typst's internal Rust crates. The shared theme lives in
-`products/shared.typ`.
+link Typst's internal Rust crates. Typst emits one semantic HTML document per
+registered chapter plus the complete PDF manual. The Rust builder adds the
+responsive book shell, navigation, heading anchors, local table of contents,
+search, and previous/next links. Paged colors and components live in
+`products/shared.typ`; the web theme and behavior live in `assets/site.css` and
+`assets/site.js`.
 
 ## Rust metadata
 
@@ -82,6 +89,11 @@ Vakint document their registered `symbolica.community.*` modules and declared
 opaque return types. These community modules require the external Symbolica
 assembly and are not standalone Python distributions.
 
+The checked `.pyi` files are inputs and optional downloads, not the visible
+reference. The site renders each neutral Python catalog as structured module,
+class, function, parameter, return, member, example, feature, and source
+documentation under `reference/python/<component>/`.
+
 ## Commands
 
 ```text
@@ -121,6 +133,25 @@ Typst rendering, filesystem watching, and HTTP/SSE serving are all Rust-native
 and do not use Python. A Python interpreter is needed only when validating or
 regenerating an actual PyO3 binding surface. The existing `just doc` command
 remains the workspace Rustdoc build.
+
+Every product bundle has stable chapter routes:
+
+```text
+products/<product>/<channel>/
+  .note
+  index.html
+  tutorial/index.html
+  manual/<chapter>/index.html
+  reference/python/<component>/index.html
+  reference/rust/
+  manual.pdf
+```
+
+The same tree is used for the moving `latest` channel and immutable tagged
+snapshots. All authored internal links are interpreted relative to the product
+root and rebased by the builder for nested chapter routes.
+The plain-text `.note` file is the stable deployment probe for each product and
+channel; it records the product, channel, tag, commit, and canonical route.
 
 Normal CI runs deterministic pure Vakint examples. FORM-backed examples use
 `just docs-vakint-form-check`; pySecDec comparisons are explicit or scheduled

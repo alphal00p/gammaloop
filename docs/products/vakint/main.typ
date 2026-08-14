@@ -1,5 +1,6 @@
 #import "../shared.typ": *
 #import "content/overview.typ": overview
+#import "content/tutorial.typ": tutorial
 #import "content/evaluation.typ": evaluation
 #import "content/api.typ": api
 #import "content/changelog.typ": changelog
@@ -11,6 +12,7 @@
   owner: "Vakint project",
   body: [
     #overview
+    #tutorial
     #evaluation
     #api
     #changelog

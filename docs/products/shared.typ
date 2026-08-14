@@ -11,12 +11,13 @@
 #let docs-snapshot-tag = sys.inputs.at("snapshot-tag", default: "")
 #let source-revision = sys.inputs.at("git-commit", default: "main")
 
-#let ink = rgb("#172033")
-#let muted = rgb("#586174")
-#let accent = rgb("#5b4bdb")
-#let accent-soft = rgb("#efedff")
-#let rule = rgb("#d9dce5")
-#let paper = rgb("#fbfbfd")
+#let ink = rgb("#3d2645")
+#let muted = rgb("#625b63")
+#let accent = rgb("#745080")
+#let accent-soft = rgb("#eadff0")
+#let rule = rgb("#d9cfd9")
+#let paper = rgb("#ffffff")
+#let canvas = rgb("#f9f6f0")
 
 #let product-link(id, label: none) = {
   let shown = if label == none { id } else { label }
@@ -41,7 +42,7 @@
   radius: 2pt,
 )[
   #text(fill: ink, weight: "bold")[#title]
-  #v(3pt)
+  #linebreak()
   #body
 ]
 
@@ -53,7 +54,7 @@
   radius: 3pt,
 )[
   #text(fill: ink, weight: "bold")[#title]
-  #v(4pt)
+  #linebreak()
   #body
 ]
 
@@ -90,7 +91,7 @@
   body: [],
 ) = {
   set document(title: title)
-  set page(paper: "a4", margin: (x: 20mm, y: 18mm))
+  set page(paper: "a4", margin: (x: 20mm, y: 18mm), fill: canvas)
   set text(size: 10.5pt, fill: ink)
   set par(justify: true, leading: .66em)
   set heading(numbering: "1.1")
@@ -103,9 +104,10 @@
   show link: set text(fill: accent)
   show raw.where(block: true): it => block(
     width: 100%,
-    fill: rgb("#f1f3f7"),
+    fill: paper,
+    stroke: .7pt + ink,
     inset: 9pt,
-    radius: 2pt,
+    radius: 3pt,
   )[#it]
 
   align(center)[

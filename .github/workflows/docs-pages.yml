@@ -109,6 +109,15 @@ jobs:
           set -euo pipefail
           git check-ref-format "refs/tags/$SNAPSHOT_TAG"
           git rev-parse --verify "refs/tags/$SNAPSHOT_TAG^{commit}"
+          for required in \
+            crates/alphal00p-docs-builder/Cargo.toml \
+            docs/products/registry.toml \
+            justfile; do
+            if ! git cat-file -e "$SNAPSHOT_TAG^{commit}:$required"; then
+              echo "::error::Snapshot tag $SNAPSHOT_TAG predates the five-product documentation toolchain and cannot be rebuilt faithfully." >&2
+              exit 2
+            fi
+          done
           git checkout --detach "refs/tags/$SNAPSHOT_TAG"
 
       - name: Build all five sites
