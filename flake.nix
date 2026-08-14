@@ -423,6 +423,12 @@
         "gammaloop-api" = [
           "assets/embedded"
           "assets/models"
+          "crates/kurvst/typst/kurvst.wasm"
+          "crates/kurvst/typst/src"
+          "crates/kurvst/typst/typst.toml"
+          "crates/linnest/typst/linnest.wasm"
+          "crates/linnest/typst/src"
+          "crates/linnest/typst/typst.toml"
         ];
         gammalooprs = [
           "assets/models/json"
@@ -432,6 +438,12 @@
         ];
         clinnet = [
           "crates/clinnet/templates"
+          "crates/kurvst/typst/kurvst.wasm"
+          "crates/kurvst/typst/src"
+          "crates/kurvst/typst/typst.toml"
+          "crates/linnest/typst/linnest.wasm"
+          "crates/linnest/typst/src"
+          "crates/linnest/typst/typst.toml"
         ];
         vakint = [
           "crates/vakint/form_src"
