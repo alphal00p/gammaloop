@@ -64,6 +64,12 @@ jobs:
 
       - uses: NixOS/nix-installer-action@main
 
+      - uses: Mic92/hestia@v3
+        with:
+          version: v3.0.0
+          no-closure: true
+          upstream-cache-filter: true
+
       - id: release
         name: Select publication channel
         shell: bash
@@ -131,7 +137,6 @@ jobs:
           else
             git worktree add --detach "$pages_root" HEAD
             git -C "$pages_root" switch --orphan gh-pages
-            git -C "$pages_root" rm -rf .
           fi
 
           publish_args=(
