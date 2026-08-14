@@ -215,10 +215,10 @@
     <h2>Entry Points</h2>
     <p>
       There are two Schoonschip paths in
-      <a href="../../crates/idenso/src/schoonschip/api.rs">crates/idenso/src/schoonschip/api.rs</a>.
+      <a href="../../crates/idenso/src/shorthands/schoonschip/api.rs">crates/idenso/src/shorthands/schoonschip/api.rs</a>.
       <code>schoonschip_with_settings</code> calls the older pattern-based
       implementation in
-      <a href="../../crates/idenso/src/schoonschip/with_settings.rs">with_settings.rs</a>.
+      <a href="../../crates/idenso/src/shorthands/schoonschip/with_settings.rs">with_settings.rs</a>.
       <code>schoonschip_with_net</code> calls the symbolic-network
       implementation. <code>schoonschip_net</code> is a convenience wrapper: it
       runs the default network pass and then runs the pattern pass as a final
@@ -263,7 +263,7 @@
 
     <p>
       The parser settings are built in
-      <a href="../../crates/idenso/src/schoonschip/api.rs">NetworkSchoonschip::run_once</a>.
+      <a href="../../crates/idenso/src/shorthands/schoonschip/api.rs">NetworkSchoonschip::run_once</a>.
       The important convention is that tensorial shorthand is never expanded by
       the parser in this path:
     </p>
@@ -296,7 +296,7 @@ apply(expr):
       slots becomes a symbolic tensor leaf with inferred structure. That keeps
       graph construction structural; algebraic meaning is assigned later by the
       contraction code in
-      <a href="../../crates/idenso/src/schoonschip/contraction.rs">contraction.rs</a>.
+      <a href="../../crates/idenso/src/shorthands/schoonschip/contraction.rs">contraction.rs</a>.
     </p>
 
     <h2>Settings</h2>
@@ -394,7 +394,7 @@ apply(expr):
     <h2>Pattern Path</h2>
     <p>
       The pattern implementation in
-      <a href="../../crates/idenso/src/schoonschip/with_settings.rs">with_settings.rs</a>
+      <a href="../../crates/idenso/src/shorthands/schoonschip/with_settings.rs">with_settings.rs</a>
       is a fixed point over global Symbolica replacements. One pass applies:
       metric-function contractions, dot-product contractions, self-dual powers,
       rank-one products, bare rank-one into tensor products, optional

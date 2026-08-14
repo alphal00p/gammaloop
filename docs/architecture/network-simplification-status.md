@@ -8,10 +8,10 @@ algebra benchmarks and the knobs available for further investigation.
 
 The relevant implementation is mainly in:
 
-- `crates/idenso/src/schoonschip/api.rs`
-- `crates/idenso/src/schoonschip/contraction.rs`
-- `crates/idenso/src/schoonschip/settings.rs`
-- `crates/idenso/src/schoonschip/utils.rs`
+- `crates/idenso/src/shorthands/schoonschip/api.rs`
+- `crates/idenso/src/shorthands/schoonschip/contraction.rs`
+- `crates/idenso/src/shorthands/schoonschip/settings.rs`
+- `crates/idenso/src/shorthands/schoonschip/utils.rs`
 - `crates/idenso/benches/vertex_algebra_once.rs`
 
 ## Current Model
@@ -299,4 +299,3 @@ For each candidate ordering or boundary rewrite:
 4. If it succeeds, compare output terms and bytes against the bare symbolic
    result.
 5. Only then run 8 vertices.
-

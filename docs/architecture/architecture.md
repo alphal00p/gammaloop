@@ -1,17 +1,10 @@
-# Architecture Docs
+# Architecture notes
 
-The maintained architecture documentation is split by scope:
+This directory contains contributor-facing implementation notes, proposals,
+diagrams, performance investigations, and build-system records. The public
+index at `/developers/` is generated from `docs/developers.toml`; that registry
+gives every published note an explicit section, summary, and status.
 
-- `architecture-current.md`: the current implemented architecture.
-- `uv-renormalization.md`: the current UV orchestrators, sign and projection
-  conventions, and disconnected-composition invariants.
-- `architecture-ideas.md`: proposals and roadmap items that are not yet the
-  implemented design.
-- `../../differential_lu.md`: the PR-level implementation note for the
-  differential LU / selector / observable / event pipeline, including
-  validation status, API behavior, and temporary hack-removal steps.
-
-For concrete API usage, also see the maintained examples under:
-
-- `../../examples/api/python/epem_a_ddxg_xs_LO/`
-- `../../examples/api/rust/epem_a_ddxg_xs_LO/`
+Project tutorials and manuals remain under `/products/<project>/latest/`.
+Architecture notes may explain internal ownership and execution flow, but they
+do not replace the supported interfaces documented in those manuals.

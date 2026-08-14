@@ -18,6 +18,7 @@ use alphal00p_docs_schema::{
 };
 use clap::ValueEnum;
 use eyre::{Context, ContextCompat, Result, bail, ensure};
+use pulldown_cmark::{Event, Options, Parser, html};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -26,6 +27,7 @@ use walkdir::WalkDir;
 
 const PRODUCT_IDS: [&str; 5] = ["gammaloop", "linnet", "spenso", "idenso", "vakint"];
 const PORTAL_SCHEMA_VERSION: u32 = 1;
+const DEVELOPER_SCHEMA_VERSION: u32 = 1;
 const STRICT_RUSTDOC_FLAGS: &str = "-D rustdoc::broken_intra_doc_links \
     -D rustdoc::invalid_html_tags -D rustdoc::bare_urls";
 
@@ -120,6 +122,34 @@ struct PortalAffiliation {
     location: String,
     summary: String,
     url: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct DeveloperConfig {
+    schema: u32,
+    title: String,
+    summary: String,
+    #[serde(default)]
+    section: Vec<DeveloperSection>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct DeveloperSection {
+    id: String,
+    title: String,
+    summary: String,
+    #[serde(default)]
+    note: Vec<DeveloperNote>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct DeveloperNote {
+    id: String,
+    title: String,
+    summary: String,
+    source: PathBuf,
+    kind: String,
+    status: String,
 }
 
 /// One authored chapter in a product's ordered, durable book tree.
@@ -218,6 +248,7 @@ pub struct SiteBuilder {
     api_root: PathBuf,
     registry: ProductRegistry,
     portal: PortalConfig,
+    developers: DeveloperConfig,
 }
 
 impl SiteBuilder {
@@ -241,6 +272,11 @@ impl SiteBuilder {
             .wrap_err_with(|| format!("failed to read {}", portal_path.display()))?;
         let portal = toml::from_str(&source)
             .wrap_err_with(|| format!("failed to parse {}", portal_path.display()))?;
+        let developers_path = root.join("docs/developers.toml");
+        let source = fs::read_to_string(&developers_path)
+            .wrap_err_with(|| format!("failed to read {}", developers_path.display()))?;
+        let developers = toml::from_str(&source)
+            .wrap_err_with(|| format!("failed to parse {}", developers_path.display()))?;
         let api_root = env::var_os("ALPHAL00P_DOCS_API_ROOT")
             .map(PathBuf::from)
             .unwrap_or_else(|| root.join("docs/api"));
@@ -249,6 +285,7 @@ impl SiteBuilder {
             api_root,
             registry,
             portal,
+            developers,
         })
     }
 
@@ -276,6 +313,92 @@ impl SiteBuilder {
             "portal schema {} does not match renderer schema {}",
             self.portal.schema,
             PORTAL_SCHEMA_VERSION
+        );
+        ensure!(
+            self.developers.schema == DEVELOPER_SCHEMA_VERSION,
+            "developer schema {} does not match renderer schema {}",
+            self.developers.schema,
+            DEVELOPER_SCHEMA_VERSION
+        );
+        ensure!(
+            !self.developers.title.trim().is_empty()
+                && !self.developers.summary.trim().is_empty()
+                && !self.developers.section.is_empty(),
+            "developer documentation metadata must not be empty"
+        );
+        let mut developer_section_ids = BTreeSet::new();
+        let mut developer_note_ids = BTreeSet::new();
+        let mut developer_sources = BTreeSet::new();
+        for section in &self.developers.section {
+            validate_route_segment(&section.id)?;
+            ensure!(
+                developer_section_ids.insert(&section.id),
+                "duplicate developer section {}",
+                section.id
+            );
+            ensure!(
+                !section.title.trim().is_empty()
+                    && !section.summary.trim().is_empty()
+                    && !section.note.is_empty(),
+                "developer section {} is incomplete",
+                section.id
+            );
+            for note in &section.note {
+                validate_route_segment(&note.id)?;
+                ensure!(
+                    developer_note_ids.insert(&note.id),
+                    "duplicate developer note {}",
+                    note.id
+                );
+                ensure!(
+                    developer_sources.insert(note.source.clone()),
+                    "developer source {} is registered more than once",
+                    note.source.display()
+                );
+                ensure!(
+                    !note.title.trim().is_empty()
+                        && !note.summary.trim().is_empty()
+                        && !note.kind.trim().is_empty()
+                        && !note.status.trim().is_empty(),
+                    "developer note {} is incomplete",
+                    note.id
+                );
+                ensure!(
+                    matches!(
+                        note.source
+                            .extension()
+                            .and_then(|extension| extension.to_str()),
+                        Some("md" | "html")
+                    ),
+                    "developer note {} must be Markdown or HTML",
+                    note.source.display()
+                );
+                self.require_file(&note.source)?;
+            }
+        }
+        let architecture_root = self.root.join("docs/architecture");
+        let mut architecture_sources = BTreeSet::new();
+        for entry in fs::read_dir(&architecture_root)? {
+            let path = entry?.path();
+            if path.is_file()
+                && matches!(
+                    path.extension().and_then(|extension| extension.to_str()),
+                    Some("md" | "html")
+                )
+                && path.file_name().and_then(|name| name.to_str()) != Some("architecture.md")
+            {
+                architecture_sources.insert(path.strip_prefix(&self.root)?.to_path_buf());
+            }
+        }
+        ensure!(
+            architecture_sources == developer_sources,
+            "docs/architecture notes and docs/developers.toml differ; unclassified: {:?}; missing: {:?}",
+            architecture_sources
+                .difference(&developer_sources)
+                .collect::<Vec<_>>(),
+            developer_sources
+                .difference(&architecture_sources)
+                .collect::<Vec<_>>()
         );
         ensure!(
             !self.portal.title.trim().is_empty()
@@ -493,6 +616,7 @@ impl SiteBuilder {
             self.build_product(product, &options)?;
         }
 
+        self.write_developer_docs(&output)?;
         self.write_portal(&output, request.channel, tag)?;
         if request.product == "all" {
             self.validate_generated_links(&output, request.include_rustdoc)?;
@@ -1421,6 +1545,13 @@ impl SiteBuilder {
                 escape_html(&group)
             ));
         }
+        if metadata.channel == BuildChannel::Latest {
+            let portal = format!("{docs_root}../../../");
+            navigation.push_str(&format!(
+                "<section class=\"sidebar-group sidebar-developer-group\"><p class=\"sidebar-group-title\">For developers</p><a class=\"sidebar-link\" href=\"{}developers/\">Architecture &amp; engineering notes</a></section>",
+                escape_html(&portal),
+            ));
+        }
         let version = match metadata.channel {
             BuildChannel::Latest => "latest".to_owned(),
             BuildChannel::Snapshot => metadata.snapshot_tag.unwrap_or("unknown").to_owned(),
@@ -1583,6 +1714,275 @@ impl SiteBuilder {
         Ok(())
     }
 
+    fn write_developer_docs(&self, output: &Path) -> Result<()> {
+        let staging_root = output.join(".staging");
+        fs::create_dir_all(&staging_root)?;
+        let staging = TempDirBuilder::new()
+            .prefix("developers-")
+            .tempdir_in(&staging_root)?;
+        let developer_root = staging.path().join("developers");
+        fs::create_dir_all(&developer_root)?;
+        self.write_site_assets(&developer_root)?;
+
+        let commit = self.git_commit();
+        ensure!(
+            commit != "unknown",
+            "cannot determine the documented Git commit; set ALPHAL00P_DOCS_GIT_COMMIT"
+        );
+        let notes = self
+            .developers
+            .section
+            .iter()
+            .flat_map(|section| section.note.iter())
+            .collect::<Vec<_>>();
+        let note_routes = notes
+            .iter()
+            .map(|note| (note.source.clone(), note.id.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let pages = self
+            .developers
+            .section
+            .iter()
+            .flat_map(|section| {
+                section.note.iter().map(|note| {
+                    SitePage::new(
+                        format!("architecture/{}/", note.id),
+                        &note.title,
+                        &section.title,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut search = Vec::new();
+
+        for (index, note) in notes.iter().enumerate() {
+            let page = &pages[index];
+            let docs_root = page_root_prefix(&page.route);
+            let destination = developer_root.join(&page.route);
+            fs::create_dir_all(&destination)?;
+            let source = fs::read_to_string(self.root.join(&note.source))?;
+            let source_url = format!(
+                "https://github.com/alphal00p/gammaloop/blob/{}/{}",
+                commit,
+                note.source.to_string_lossy()
+            );
+            let body = match note
+                .source
+                .extension()
+                .and_then(|extension| extension.to_str())
+            {
+                Some("md") => {
+                    let markdown = strip_first_markdown_title(&source)?;
+                    let rendered = render_developer_markdown(markdown);
+                    rewrite_developer_source_links(
+                        &rendered,
+                        &note.source,
+                        &commit,
+                        &note_routes,
+                        &self.root,
+                    )?
+                }
+                Some("html") => {
+                    validate_developer_html_note(&source)?;
+                    let diagram = rewrite_developer_source_links(
+                        &source,
+                        &note.source,
+                        &commit,
+                        &note_routes,
+                        &self.root,
+                    )?;
+                    let diagram = decorate_developer_diagram(&diagram, &note.title, &source_url)?;
+                    fs::write(destination.join("diagram.html"), diagram)?;
+                    format!(
+                        "<div class=\"developer-diagram\"><iframe title=\"{}\" src=\"diagram.html\" loading=\"lazy\" sandbox></iframe><p><a class=\"hero-action\" href=\"diagram.html\">Open the full-page diagram <span aria-hidden=\"true\">↗</span></a></p></div>",
+                        escape_html(&note.title)
+                    )
+                }
+                _ => unreachable!("developer note extensions are validated"),
+            };
+            let status_class = slug(&note.status);
+            let article = format!(
+                "<header class=\"developer-note-hero\"><p class=\"product-eyebrow\">For developers</p><div class=\"developer-note-title\"><h1>{}</h1><div class=\"developer-note-badges\"><span class=\"developer-status developer-status-{}\">{}</span><span class=\"developer-kind\">{}</span></div></div><p>{}</p><p class=\"developer-source\"><a href=\"{}\">View the source note <span aria-hidden=\"true\">↗</span></a></p></header>{body}",
+                escape_html(&note.title),
+                escape_html(&status_class),
+                escape_html(&note.status),
+                escape_html(&note.kind),
+                escape_html(&note.summary),
+                escape_html(&source_url),
+            );
+            let (article, headings) = inject_heading_ids(&article)?;
+            let toc = developer_toc(&headings);
+            let inline_toc = developer_inline_toc(&headings);
+            let sidebar = self.developer_sidebar(Some(&note.id), &docs_root);
+            let page_navigation = render_page_navigation(
+                index
+                    .checked_sub(1)
+                    .and_then(|previous| pages.get(previous)),
+                pages.get(index + 1),
+                &docs_root,
+            )
+            .replace("Manual pagination", "Developer note pagination");
+            let portal_root = format!("{docs_root}../");
+            let main = format!(
+                "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"{}\">αLoop</a> / <a href=\"{}\">Developers</a> / {}</nav>{inline_toc}<article class=\"docs-article developer-article\">{article}</article>{page_navigation}<footer class=\"page-footer\">Developer architecture · <a href=\"{}\">source {}</a></footer>",
+                escape_html(&portal_root),
+                escape_html(&docs_root),
+                escape_html(&note.title),
+                escape_html(&source_url),
+                escape_html(&commit.chars().take(12).collect::<String>()),
+            );
+            fs::write(
+                destination.join("index.html"),
+                developer_document(
+                    &format!("{} · Developer architecture", note.title),
+                    &note.summary,
+                    &docs_root,
+                    &portal_root,
+                    &sidebar,
+                    &main,
+                    &toc,
+                ),
+            )?;
+
+            search.push(SearchEntry {
+                title: note.title.clone(),
+                summary: note.summary.clone(),
+                href: page.route.clone(),
+                kind: format!("developer {}", note.status.to_lowercase()),
+            });
+            search.extend(
+                headings
+                    .into_iter()
+                    .filter(|heading| matches!(heading.level, 2 | 3))
+                    .map(|heading| SearchEntry {
+                        title: heading.title,
+                        summary: note.title.clone(),
+                        href: format!("{}#{}", page.route, heading.id),
+                        kind: "developer heading".to_owned(),
+                    }),
+            );
+        }
+
+        fs::write(
+            developer_root.join("search-index.json"),
+            serde_json::to_vec_pretty(&search)?,
+        )?;
+        self.write_developer_hub(&developer_root, &commit)?;
+        fs::write(
+            developer_root.join(".note"),
+            format!(
+                "alphal00p developer architecture\ncommit={commit}\nnotes={}\nroute=developers/\n",
+                notes.len()
+            ),
+        )?;
+        replace_generated_tree(&developer_root, &output.join("developers"))?;
+        Ok(())
+    }
+
+    fn write_developer_hub(&self, developer_root: &Path, commit: &str) -> Result<()> {
+        let sections = self
+            .developers
+            .section
+            .iter()
+            .map(|section| {
+                let notes = section
+                    .note
+                    .iter()
+                    .map(|note| {
+                        format!(
+                            "<article class=\"developer-card\"><div class=\"developer-card-meta\"><span class=\"developer-status developer-status-{}\">{}</span><span>{}</span></div><h3><a href=\"architecture/{}/\">{}</a></h3><p>{}</p><a class=\"portal-text-link\" href=\"architecture/{}/\">Read note <span aria-hidden=\"true\">→</span></a></article>",
+                            escape_html(&slug(&note.status)),
+                            escape_html(&note.status),
+                            escape_html(&note.kind),
+                            escape_html(&note.id),
+                            escape_html(&note.title),
+                            escape_html(&note.summary),
+                            escape_html(&note.id),
+                        )
+                    })
+                    .collect::<String>();
+                format!(
+                    "<section class=\"developer-section\" id=\"{}\"><div class=\"developer-section-heading\"><p class=\"portal-kicker\">Developer notes</p><h2>{}</h2><p>{}</p></div><div class=\"developer-card-grid\">{notes}</div></section>",
+                    escape_html(&section.id),
+                    escape_html(&section.title),
+                    escape_html(&section.summary),
+                )
+            })
+            .collect::<String>();
+        let sidebar = self.developer_sidebar(None, "");
+        let source_url =
+            format!("https://github.com/alphal00p/gammaloop/tree/{commit}/docs/architecture");
+        let main = format!(
+            "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"../\">αLoop</a> / Developers</nav><article class=\"docs-article developer-article\"><header class=\"developer-hero\"><p class=\"product-eyebrow\">For developers</p><h1>{}</h1><p>{}</p><aside class=\"developer-audience\"><strong>Looking for usage documentation?</strong><span>Tutorials and manuals live with each research project. This area documents implementation details, design work, and engineering investigations for contributors.</span><a href=\"../#projects\">Browse project documentation <span aria-hidden=\"true\">→</span></a></aside></header>{sections}</article><footer class=\"page-footer\">{} classified notes · <a href=\"{}\">architecture sources at {}</a></footer>",
+            escape_html(&self.developers.title),
+            escape_html(&self.developers.summary),
+            self.developers
+                .section
+                .iter()
+                .map(|section| section.note.len())
+                .sum::<usize>(),
+            escape_html(&source_url),
+            escape_html(&commit.chars().take(12).collect::<String>()),
+        );
+        fs::write(
+            developer_root.join("index.html"),
+            developer_document(
+                &self.developers.title,
+                &self.developers.summary,
+                "",
+                "../",
+                &sidebar,
+                &main,
+                "",
+            ),
+        )?;
+        Ok(())
+    }
+
+    fn developer_sidebar(&self, current: Option<&str>, docs_root: &str) -> String {
+        let overview_current = if current.is_none() {
+            " aria-current=\"page\""
+        } else {
+            ""
+        };
+        let mut navigation = format!(
+            "<section class=\"sidebar-group\"><p class=\"sidebar-group-title\">Developer area</p><a class=\"sidebar-link\" href=\"{}\"{}>Overview</a></section>",
+            if docs_root.is_empty() {
+                "./"
+            } else {
+                docs_root
+            },
+            overview_current,
+        );
+        for section in &self.developers.section {
+            let links = section
+                .note
+                .iter()
+                .map(|note| {
+                    format!(
+                        "<a class=\"sidebar-link\" href=\"{}architecture/{}/\"{}>{}</a>",
+                        escape_html(docs_root),
+                        escape_html(&note.id),
+                        if current == Some(note.id.as_str()) {
+                            " aria-current=\"page\""
+                        } else {
+                            ""
+                        },
+                        escape_html(&note.title),
+                    )
+                })
+                .collect::<String>();
+            navigation.push_str(&format!(
+                "<section class=\"sidebar-group\"><p class=\"sidebar-group-title\">{}</p>{links}</section>",
+                escape_html(&section.title),
+            ));
+        }
+        format!(
+            "<aside class=\"docs-sidebar developer-sidebar\" id=\"docs-sidebar\" aria-label=\"Developer architecture\">{navigation}<p class=\"sidebar-meta\"><strong>For developers</strong><br>Implementation and engineering notes.<br><a href=\"{}../#projects\">Tutorials &amp; manuals</a></p></aside>",
+            escape_html(docs_root),
+        )
+    }
+
     fn write_portal(&self, output: &Path, channel: BuildChannel, tag: Option<&str>) -> Result<()> {
         self.write_site_assets(output)?;
         let channel_route = match channel {
@@ -1686,10 +2086,16 @@ impl SiteBuilder {
                 )
             })
             .collect::<String>();
+        let developer_count = self
+            .developers
+            .section
+            .iter()
+            .map(|section| section.note.len())
+            .sum::<usize>();
         fs::write(
             output.join("index.html"),
             format!(
-                r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{}"><meta name="theme-color" content="#f9f6f0"><title>αLoop · Research software for collider physics</title><link rel="stylesheet" href="assets/site.css"><script defer src="assets/site.js"></script></head><body class="portal-body"><a class="skip-link" href="#main-content">Skip to content</a><header class="portal-header"><a class="portal-brand" href="#overview" aria-label="αLoop home"><span class="portal-brand-logo" aria-hidden="true"></span><span class="portal-brand-copy"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class="portal-nav" aria-label="Primary"><a href="#projects">Projects</a><a href="#people">People</a><a href="#affiliations">Affiliations</a></nav><div class="portal-header-actions"><a class="portal-source-link" href="https://github.com/alphal00p/gammaloop">GitHub <span aria-hidden="true">↗</span></a><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span aria-hidden="true">◐</span></button></div></header><main class="portal-main" id="main-content"><section class="portal-hero portal-section" id="overview"><div class="portal-hero-copy"><p class="portal-kicker">{}</p><h1>{}</h1><p class="portal-lede">{}</p><div class="portal-hero-actions"><a class="portal-button portal-button-primary" href="#projects">Explore the projects <span aria-hidden="true">↓</span></a><a class="portal-button" href="products/gammaloop/{}/tutorial/">Start with GammaLoop <span aria-hidden="true">↗</span></a></div><dl class="portal-facts"><div><dt>5</dt><dd>connected projects</dd></div><div><dt>2</dt><dd>language ecosystems</dd></div><div><dt>∞</dt><dd>open development</dd></div></dl></div><div class="portal-hero-art" aria-label="αLoop collaboration mark" role="img"><div class="portal-wordmark"></div><p>Local cancellation.<br>Global precision.</p></div></section><section class="portal-pillars" aria-label="Research areas">{pillars}</section><section class="portal-section portal-projects" id="projects" aria-labelledby="projects-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research software · 01—05</p><h2 id="projects-title">Projects &amp; crates</h2></div><p>Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.</p></div><div class="portal-project-grid">{projects}</div></section><section class="portal-section portal-people-section" id="people" aria-labelledby="people-title"><div class="portal-section-heading"><div><p class="portal-kicker">Collaboration</p><h2 id="people-title">People behind the workspace</h2></div><p>Researchers developing the physics, algorithms, and scientific software together.</p></div><div class="portal-people-grid">{people}<article class="portal-person portal-person-all"><a href="https://github.com/alphal00p/gammaloop/graphs/contributors"><span class="portal-person-initials" aria-hidden="true">+</span><span><strong>All contributors</strong><small>Code, ideas, and review</small></span><span class="portal-person-arrow" aria-hidden="true">↗</span></a></article></div></section><section class="portal-section portal-affiliations-section" id="affiliations" aria-labelledby="affiliations-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research affiliations</p><h2 id="affiliations-title">Built across institutions</h2></div><p>Our researchers work across CERN and the University of Bern, connecting precision phenomenology with open scientific software.</p></div><div class="portal-affiliations-grid">{affiliations}</div><aside class="portal-funding"><span class="portal-funding-mark" aria-hidden="true">α</span><div><p class="portal-kicker">Publicly funded research</p><p>{}</p></div><a class="portal-text-link" href="{}">Funding record <span aria-hidden="true">↗</span></a></aside></section></main><footer class="portal-footer"><div><span class="portal-footer-mark" aria-hidden="true"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label="Footer"><a href="#projects">Projects</a><a href="#people">People</a><a href="#affiliations">Affiliations</a><a href="https://github.com/alphal00p/gammaloop">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer></body></html>"##,
+                r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{}"><meta name="theme-color" content="#f9f6f0"><title>αLoop · Research software for collider physics</title><link rel="stylesheet" href="assets/site.css"><script defer src="assets/site.js"></script></head><body class="portal-body"><a class="skip-link" href="#main-content">Skip to content</a><header class="portal-header"><a class="portal-brand" href="#overview" aria-label="αLoop home"><span class="portal-brand-logo" aria-hidden="true"></span><span class="portal-brand-copy"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class="portal-nav" aria-label="Primary"><a href="#projects">Projects</a><a href="developers/">Developers</a><a href="#people">People</a><a href="#affiliations">Affiliations</a></nav><div class="portal-header-actions"><a class="portal-source-link" href="https://github.com/alphal00p/gammaloop">GitHub <span aria-hidden="true">↗</span></a><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span aria-hidden="true">◐</span></button></div></header><main class="portal-main" id="main-content"><section class="portal-hero portal-section" id="overview"><div class="portal-hero-copy"><p class="portal-kicker">{}</p><h1>{}</h1><p class="portal-lede">{}</p><div class="portal-hero-actions"><a class="portal-button portal-button-primary" href="#projects">Explore the projects <span aria-hidden="true">↓</span></a><a class="portal-button" href="products/gammaloop/{}/tutorial/">Start with GammaLoop <span aria-hidden="true">↗</span></a></div><dl class="portal-facts"><div><dt>5</dt><dd>connected projects</dd></div><div><dt>2</dt><dd>language ecosystems</dd></div><div><dt>∞</dt><dd>open development</dd></div></dl></div><div class="portal-hero-art" aria-label="αLoop collaboration mark" role="img"><div class="portal-wordmark"></div><p>Local cancellation.<br>Global precision.</p></div></section><section class="portal-pillars" aria-label="Research areas">{pillars}</section><section class="portal-section portal-projects" id="projects" aria-labelledby="projects-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research software · 01—05</p><h2 id="projects-title">Projects &amp; crates</h2></div><p>Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.</p></div><div class="portal-project-grid">{projects}</div></section><section class="portal-section portal-developers" id="developers" aria-labelledby="developers-title"><div><p class="portal-kicker">Contributor documentation</p><h2 id="developers-title">Architecture, proposals, and engineering records</h2><p>The developer area keeps implementation notes distinct from project tutorials and manuals. Each note is labelled as implemented architecture, a proposal, a dated investigation, or an engineering record.</p><a class="portal-button portal-button-primary" href="developers/">Explore {developer_count} developer notes <span aria-hidden="true">↗</span></a></div><dl><div><dt>Current</dt><dd>Implemented system architecture</dd></div><div><dt>Proposed</dt><dd>Designs under consideration</dd></div><div><dt>Dated</dt><dd>Investigations with explicit context</dd></div></dl></section><section class="portal-section portal-people-section" id="people" aria-labelledby="people-title"><div class="portal-section-heading"><div><p class="portal-kicker">Collaboration</p><h2 id="people-title">People behind the workspace</h2></div><p>Researchers developing the physics, algorithms, and scientific software together.</p></div><div class="portal-people-grid">{people}<article class="portal-person portal-person-all"><a href="https://github.com/alphal00p/gammaloop/graphs/contributors"><span class="portal-person-initials" aria-hidden="true">+</span><span><strong>All contributors</strong><small>Code, ideas, and review</small></span><span class="portal-person-arrow" aria-hidden="true">↗</span></a></article></div></section><section class="portal-section portal-affiliations-section" id="affiliations" aria-labelledby="affiliations-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research affiliations</p><h2 id="affiliations-title">Built across institutions</h2></div><p>Our researchers work across CERN and the University of Bern, connecting precision phenomenology with open scientific software.</p></div><div class="portal-affiliations-grid">{affiliations}</div><aside class="portal-funding"><span class="portal-funding-mark" aria-hidden="true">α</span><div><p class="portal-kicker">Publicly funded research</p><p>{}</p></div><a class="portal-text-link" href="{}">Funding record <span aria-hidden="true">↗</span></a></aside></section></main><footer class="portal-footer"><div><span class="portal-footer-mark" aria-hidden="true"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label="Footer"><a href="#projects">Projects</a><a href="developers/">Developers</a><a href="#people">People</a><a href="#affiliations">Affiliations</a><a href="https://github.com/alphal00p/gammaloop">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer></body></html>"##,
                 escape_html(&self.portal.summary),
                 escape_html(&self.portal.eyebrow),
                 escape_html(&self.portal.title),
@@ -1914,6 +2320,250 @@ impl SiteBuilder {
             .and_then(|timestamp| timestamp.trim().parse().ok())
             .unwrap_or(0)
     }
+}
+
+fn strip_first_markdown_title(source: &str) -> Result<&str> {
+    let source = source.strip_prefix('\u{feff}').unwrap_or(source);
+    let title_end = source
+        .find('\n')
+        .map(|index| index + 1)
+        .unwrap_or(source.len());
+    let title = source[..title_end].trim();
+    ensure!(
+        title.starts_with("# ") && !title.starts_with("## "),
+        "developer Markdown note must begin with one H1 title"
+    );
+    Ok(&source[title_end..])
+}
+
+fn render_developer_markdown(source: &str) -> String {
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_TABLES);
+    options.insert(Options::ENABLE_FOOTNOTES);
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TASKLISTS);
+    options.insert(Options::ENABLE_SMART_PUNCTUATION);
+    let events = Parser::new_ext(source, options).map(|event| match event {
+        Event::Html(value) | Event::InlineHtml(value) => Event::Text(value),
+        event => event,
+    });
+    let mut rendered = String::new();
+    html::push_html(&mut rendered, events);
+    rendered
+}
+
+fn rewrite_developer_source_links(
+    html: &str,
+    source: &Path,
+    commit: &str,
+    note_routes: &BTreeMap<PathBuf, String>,
+    repository_root: &Path,
+) -> Result<String> {
+    let attribute = Regex::new(r#"(?P<name>href|src)=\"(?P<target>[^\"]+)\""#)?;
+    Ok(attribute
+        .replace_all(html, |captures: &regex::Captures<'_>| {
+            let name = captures.name("name").expect("attribute name").as_str();
+            let target = captures.name("target").expect("attribute target").as_str();
+            let external = target.is_empty()
+                || target.starts_with('#')
+                || target.starts_with('/')
+                || target.starts_with("//")
+                || target
+                    .split(':')
+                    .next()
+                    .is_some_and(|scheme| matches!(scheme, "http" | "https" | "mailto" | "data"));
+            if external {
+                return format!("{name}=\"{target}\"");
+            }
+
+            let suffix_start = target.find(['?', '#']).unwrap_or(target.len());
+            let (path, suffix) = target.split_at(suffix_start);
+            let Some(parent) = source.parent() else {
+                return captures[0].to_owned();
+            };
+            let Some(resolved) = normalize_repository_path(&parent.join(path)) else {
+                return captures[0].to_owned();
+            };
+            let rewritten = if let Some(route) = note_routes.get(&resolved) {
+                format!("../{route}/{suffix}")
+            } else if repository_root.join(&resolved).exists() {
+                let kind = if repository_root.join(&resolved).is_dir() {
+                    "tree"
+                } else {
+                    "blob"
+                };
+                if name == "src" && kind == "blob" {
+                    format!(
+                        "https://raw.githubusercontent.com/alphal00p/gammaloop/{commit}/{}{suffix}",
+                        resolved.to_string_lossy()
+                    )
+                } else {
+                    format!(
+                        "https://github.com/alphal00p/gammaloop/{kind}/{commit}/{}{suffix}",
+                        resolved.to_string_lossy()
+                    )
+                }
+            } else {
+                target.to_owned()
+            };
+            format!("{name}=\"{}\"", escape_html(&rewritten))
+        })
+        .into_owned())
+}
+
+fn normalize_repository_path(path: &Path) -> Option<PathBuf> {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !normalized.pop() {
+                    return None;
+                }
+            }
+            Component::Normal(part) => normalized.push(part),
+            Component::Prefix(_) | Component::RootDir => return None,
+        }
+    }
+    Some(normalized)
+}
+
+fn validate_developer_html_note(source: &str) -> Result<()> {
+    let active_element = Regex::new(r"(?is)<\s*(script|iframe|object|embed|form|base|link)\b")?;
+    let event_handler = Regex::new(r"(?is)[\s/]on[a-z0-9_-]+\s*=")?;
+    let active_meta = Regex::new(r"(?is)<\s*meta\b[^>]*\bhttp-equiv\s*=")?;
+    let active_css = Regex::new(r"(?is)(?:@import|url\s*\()")?;
+    let url_assignment = Regex::new(r"(?is)\b(?:href|src)\s*=")?;
+    let quoted_url = Regex::new(r#"(?is)\b(?:href|src)\s*=\s*\"([^\"]*)\""#)?;
+    let character_reference = Regex::new(r"(?is)&(?:#[x]?[0-9a-f]+|[a-z][a-z0-9]+);")?;
+    ensure!(
+        !active_element.is_match(source)
+            && !event_handler.is_match(source)
+            && !active_meta.is_match(source)
+            && !active_css.is_match(source),
+        "developer HTML notes cannot contain scripts, active embeds, forms, external styles, event handlers, active CSS, or HTTP-equivalent metadata"
+    );
+    ensure!(
+        url_assignment.find_iter(source).count() == quoted_url.find_iter(source).count(),
+        "developer HTML note href and src attributes must use double-quoted values"
+    );
+    for capture in quoted_url.captures_iter(source) {
+        let target = capture.get(1).expect("URL attribute capture").as_str();
+        ensure!(
+            !character_reference.is_match(target) && !target.chars().any(char::is_control),
+            "developer HTML note URLs cannot contain character references or control characters"
+        );
+        let browser_normalized_target =
+            target.trim_start_matches(|character: char| character <= ' ');
+        if let Some((scheme, _)) = browser_normalized_target.split_once(':')
+            && !scheme.is_empty()
+            && scheme.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
+            })
+        {
+            ensure!(
+                matches!(
+                    scheme.to_ascii_lowercase().as_str(),
+                    "http" | "https" | "mailto"
+                ),
+                "developer HTML note uses a forbidden URL scheme: {scheme}"
+            );
+        }
+    }
+    Ok(())
+}
+
+fn decorate_developer_diagram(source: &str, title: &str, source_url: &str) -> Result<String> {
+    ensure!(
+        source.contains("</head>"),
+        "developer HTML note has no head"
+    );
+    let banner_style = r#"<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:"><style>.developer-diagram-banner{position:sticky;top:0;z-index:1000;display:flex;flex-wrap:wrap;align-items:center;gap:.65rem 1rem;padding:.7rem 1rem;border-bottom:1px solid #b893c7;background:#3d2645;color:#f9f6f0;font:600 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em}.developer-diagram-banner strong{text-transform:uppercase}.developer-diagram-banner a{color:#eadff0}.developer-diagram-banner a:first-of-type{margin-left:auto}@media(max-width:38rem){.developer-diagram-banner a:first-of-type{margin-left:0}}</style></head>"#;
+    let mut rendered = source.replacen("</head>", banner_style, 1);
+    let body = rendered
+        .find("<body")
+        .context("developer HTML note has no body")?;
+    let body_start = rendered[body..]
+        .find('>')
+        .map(|offset| body + offset + 1)
+        .context("developer HTML note has an unterminated body")?;
+    let banner = format!(
+        "<aside class=\"developer-diagram-banner\" aria-label=\"Developer note\"><strong>For developers</strong><span>{}</span><a href=\"../../\">All architecture notes</a><a href=\"{}\">Source ↗</a></aside>",
+        escape_html(title),
+        escape_html(source_url),
+    );
+    rendered.insert_str(body_start, &banner);
+    Ok(rendered)
+}
+
+fn developer_toc(headings: &[HeadingLink]) -> String {
+    let links = headings
+        .iter()
+        .filter(|heading| matches!(heading.level, 2 | 3))
+        .map(|heading| {
+            format!(
+                "<a class=\"toc-link\" data-level=\"{}\" href=\"#{}\">{}</a>",
+                heading.level,
+                escape_html(&heading.id),
+                escape_html(&heading.title),
+            )
+        })
+        .collect::<String>();
+    if links.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<aside class=\"docs-toc\" aria-label=\"On this page\"><p class=\"toc-title\">On this page</p>{links}</aside>"
+        )
+    }
+}
+
+fn developer_inline_toc(headings: &[HeadingLink]) -> String {
+    let links = headings
+        .iter()
+        .filter(|heading| matches!(heading.level, 2 | 3))
+        .map(|heading| {
+            format!(
+                "<a data-level=\"{}\" href=\"#{}\">{}</a>",
+                heading.level,
+                escape_html(&heading.id),
+                escape_html(&heading.title),
+            )
+        })
+        .collect::<String>();
+    if links.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<details class=\"developer-inline-toc\"><summary>On this page</summary><nav aria-label=\"On this page\">{links}</nav></details>"
+        )
+    }
+}
+
+fn developer_document(
+    title: &str,
+    description: &str,
+    docs_root: &str,
+    portal_root: &str,
+    sidebar: &str,
+    main: &str,
+    toc: &str,
+) -> String {
+    let home = if docs_root.is_empty() {
+        "./"
+    } else {
+        docs_root
+    };
+    format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\"><meta name=\"theme-color\" content=\"#f9f6f0\"><title>{}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\"><script defer src=\"{}assets/site.js\"></script></head><body class=\"developer-body\" data-docs-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\"><span class=\"site-brand-mark\">α</span><span class=\"site-brand-name\">Developer notes</span></a><div class=\"site-header-tools\"><a class=\"header-button header-link\" href=\"{}\" aria-label=\"Research documentation\"><span class=\"header-link-label\">Research docs</span><span aria-hidden=\"true\">←</span></a><button class=\"header-button\" type=\"button\" data-search-open aria-label=\"Search developer documentation\"><span class=\"header-search-label\">Search</span> <span class=\"header-button-label\">⌘K</span><span class=\"header-search-icon\" aria-hidden=\"true\">⌕</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main developer-main\" id=\"main-content\">{main}</main>{toc}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search developer architecture\" aria-label=\"Search developer architecture\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
+        escape_html(description),
+        escape_html(title),
+        escape_html(docs_root),
+        escape_html(docs_root),
+        escape_html(docs_root),
+        escape_html(home),
+        escape_html(portal_root),
+    )
 }
 
 fn extract_html_body(html: &str) -> Result<&str> {
@@ -3266,6 +3916,25 @@ fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
+fn replace_generated_tree(source: &Path, destination: &Path) -> Result<()> {
+    let metadata = match fs::symlink_metadata(destination) {
+        Ok(metadata) => Some(metadata),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
+    if let Some(metadata) = metadata {
+        if metadata.is_dir() && !metadata.file_type().is_symlink() {
+            fs::remove_dir_all(destination)
+        } else if metadata.file_type().is_symlink() {
+            remove_symlink(destination)
+        } else {
+            fs::remove_file(destination)
+        }
+        .wrap_err_with(|| format!("failed to replace {}", destination.display()))?;
+    }
+    copy_tree(source, destination)
+}
+
 fn directory_files(root: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
     let mut files = BTreeMap::new();
     for entry in WalkDir::new(root) {
@@ -3379,6 +4048,27 @@ mod tests {
     }
 
     #[test]
+    fn immutable_snapshot_navigation_does_not_link_mutable_developer_notes() {
+        let builder = SiteBuilder::discover().unwrap();
+        let product = &builder.registry.product[0];
+        let current = SitePage::new("", &product.title, "Overview");
+        let metadata = SnapshotMetadata {
+            schema: SCHEMA_VERSION,
+            product: &product.id,
+            title: &product.title,
+            channel: BuildChannel::Snapshot,
+            snapshot_tag: Some("v0.3.4"),
+            git_commit: "0123456789abcdef".to_owned(),
+            git_timestamp: 1,
+            route: "products/gammaloop/snapshots/v0.3.4/".to_owned(),
+            components: Vec::new(),
+        };
+        let sidebar = builder.site_sidebar(product, &metadata, &current, "");
+        assert!(!sidebar.contains("developers/"));
+        assert!(!sidebar.contains("For developers"));
+    }
+
+    #[test]
     fn every_registered_component_tag_family_matches_its_manifest_version() {
         let builder = SiteBuilder::discover().unwrap();
         for product in &builder.registry.product {
@@ -3425,6 +4115,36 @@ mod tests {
         assert!(rendered.contains("=== #link(\"https://example.test/release\")[#raw(\"1.2.3\")]"));
         assert!(rendered.contains("- #raw(\"fixed it\")"));
         assert!(rendered.contains("block: true, lang: \"rust\""));
+    }
+
+    #[test]
+    fn developer_markdown_renders_tables_and_escapes_raw_html() {
+        let rendered = render_developer_markdown(
+            "## Shape\n\n| input | result |\n| --- | --- |\n| tensor | scalar |\n\n<script>alert('no')</script>\n",
+        );
+        assert!(rendered.contains("<table>"));
+        assert!(rendered.contains("<th>input</th>"));
+        assert!(rendered.contains("&lt;script&gt;alert('no')&lt;/script&gt;"));
+        assert!(!rendered.contains("<script>"));
+    }
+
+    #[test]
+    fn developer_html_diagrams_reject_active_content() {
+        assert!(validate_developer_html_note("<main><a href=\"guide\">Guide</a></main>").is_ok());
+        for source in [
+            "<script>alert(1)</script>",
+            "<main onload=\"alert(1)\"></main>",
+            "<svg/onload=alert(1)></svg>",
+            "<a href=\"javascript:alert(1)\">Open</a>",
+            "<a href=\"   javascript:alert(1)\">Open</a>",
+            "<a href=javascript:alert(1)>Open</a>",
+            "<a href=\"java&#x73;cript:alert(1)\">Open</a>",
+            "<iframe src=\"page.html\"></iframe>",
+            "<meta http-equiv=\"refresh\" content=\"0; url=/\">",
+            "<style>main { background: url(javascript:alert(1)); }</style>",
+        ] {
+            assert!(validate_developer_html_note(source).is_err(), "{source}");
+        }
     }
 
     #[test]
@@ -3754,7 +4474,7 @@ mod tests {
     }
 
     #[test]
-    fn portal_presents_research_projects_people_and_affiliations() {
+    fn portal_presents_projects_developers_people_and_affiliations() {
         let builder = SiteBuilder::discover().unwrap();
         let output = tempfile::tempdir().unwrap();
         builder
@@ -3763,10 +4483,12 @@ mod tests {
 
         let html = fs::read_to_string(output.path().join("index.html")).unwrap();
         assert_eq!(html.matches("class=\"portal-project-card\"").count(), 5);
-        for section in ["projects", "people", "affiliations"] {
+        for section in ["projects", "developers", "people", "affiliations"] {
             assert!(html.contains(&format!("id=\"{section}\"")));
         }
         assert!(html.contains("Projects &amp; crates"));
+        assert!(html.contains("developer notes"));
+        assert!(html.contains("href=\"developers/\""));
         assert!(html.contains("Publicly funded research"));
         assert!(!html.contains("Product manual"));
         assert!(!html.contains("scientific-computing products"));
@@ -3779,5 +4501,66 @@ mod tests {
         ] {
             assert!(output.path().join("assets").join(asset).is_file());
         }
+    }
+
+    #[test]
+    fn developer_architecture_is_classified_searchable_and_source_backed() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let stale = output
+            .path()
+            .join("developers/architecture/removed-note/index.html");
+        fs::create_dir_all(stale.parent().unwrap()).unwrap();
+        fs::write(&stale, "stale route").unwrap();
+        builder.write_developer_docs(output.path()).unwrap();
+
+        let developer_root = output.path().join("developers");
+        assert!(!stale.exists());
+        let hub = fs::read_to_string(developer_root.join("index.html")).unwrap();
+        assert!(hub.contains("For developers"));
+        assert!(hub.contains("Implemented architecture"));
+        assert!(hub.contains("Design proposals"));
+        assert!(hub.contains("Investigation record"));
+        assert!(hub.contains("Performance investigation"));
+        assert_eq!(hub.matches("class=\"developer-card\"").count(), 11);
+
+        let current = fs::read_to_string(
+            developer_root.join("architecture/gammaloop-architecture/index.html"),
+        )
+        .unwrap();
+        assert!(current.contains("developer-status-implemented"));
+        assert!(current.contains("href=\"../uv-renormalization/\""));
+        assert!(current.contains("View the source note"));
+        assert!(current.contains("class=\"docs-toc\""));
+        assert!(current.contains("class=\"developer-inline-toc\""));
+        assert!(current.contains("aria-label=\"Developer note pagination\""));
+
+        let investigation = fs::read_to_string(
+            developer_root.join("architecture/spenso-improvement-effects/index.html"),
+        )
+        .unwrap();
+        assert!(investigation.contains("<table>"));
+        assert!(investigation.contains("developer-status-investigation-record"));
+
+        let diagram = fs::read_to_string(
+            developer_root.join("architecture/schoonschip-network/diagram.html"),
+        )
+        .unwrap();
+        assert!(diagram.contains("developer-diagram-banner"));
+        assert!(diagram.contains("For developers"));
+        assert!(diagram.contains("/blob/"));
+        assert!(!diagram.contains("../../crates/idenso/src/"));
+
+        let search = serde_json::from_slice::<Vec<SearchEntry>>(
+            &fs::read(developer_root.join("search-index.json")).unwrap(),
+        )
+        .unwrap();
+        assert!(search.iter().any(|entry| {
+            entry.href == "architecture/gammaloop-architecture/"
+                && entry.kind == "developer implemented"
+        }));
+        assert!(search.iter().any(|entry| {
+            entry.href == "architecture/gammaloop-architecture/#configuration-architecture"
+        }));
     }
 }

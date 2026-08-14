@@ -74,6 +74,20 @@ case "$mode" in
             fail "latest build has no light project wordmark"
         [ -f "$build_root/assets/gammalooplogo-dark.svg" ] ||
             fail "latest build has no dark project wordmark"
+        [ -f "$build_root/developers/.note" ] ||
+            fail "latest build has no developer publication note"
+        [ -f "$build_root/developers/index.html" ] ||
+            fail "latest build has no developer architecture landing"
+        [ -f "$build_root/developers/search-index.json" ] ||
+            fail "latest build has no developer search index"
+        [ -f "$build_root/developers/assets/site.css" ] ||
+            fail "latest build has no developer stylesheet"
+        [ -f "$build_root/developers/assets/site.js" ] ||
+            fail "latest build has no developer script"
+        [ -f "$build_root/developers/architecture/gammaloop-architecture/index.html" ] ||
+            fail "latest build has no implemented GammaLoop architecture note"
+        [ -f "$build_root/developers/architecture/spenso-parsing-flow/diagram.html" ] ||
+            fail "latest build has no Spenso parsing diagram"
 
         for product in "${products[@]}"; do
             require_bundle "$build_root/products/$product/latest"
@@ -98,6 +112,8 @@ case "$mode" in
         install -m 0644 \
             "$build_root/assets/gammalooplogo-dark.svg" \
             "$pages_root/assets/gammalooplogo-dark.svg"
+        rm -rf -- "$pages_root/developers"
+        cp -a "$build_root/developers" "$pages_root/developers"
         mkdir -p "$pages_root/products"
 
         for product in "${products[@]}"; do

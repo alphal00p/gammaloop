@@ -80,12 +80,12 @@ The command model is stateful by design: commands mutate a long-lived `State` th
   - `crates/gammalooprs/src/integrands/mod.rs`
   - `crates/gammalooprs/src/integrands/process/mod.rs`
   - `crates/gammalooprs/src/integrands/process/amplitude/mod.rs`
-  - `crates/gammalooprs/src/integrands/process/cross_section_integrand.rs`
+  - `crates/gammalooprs/src/integrands/process/cross_section/mod.rs`
 - Integration engine: `crates/gammalooprs/src/integrate/mod.rs`.
 - Global/runtime settings: `crates/gammalooprs/src/settings/mod.rs`, `crates/gammalooprs/src/settings/global.rs`, `crates/gammalooprs/src/settings/runtime.rs`.
 - Differential event/observable pipeline:
   - `crates/gammalooprs/src/observables/events.rs`
-  - `crates/gammalooprs/src/observables/observables.rs`
+  - `crates/gammalooprs/src/observables/mod.rs`
   - `crates/gammalooprs/src/observables/clustering/*`
   - `crates/gammalooprs/src/integrands/evaluation.rs`
 

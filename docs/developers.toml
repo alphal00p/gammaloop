@@ -1,0 +1,111 @@
+schema = 1
+title = "Developer architecture"
+summary = "Implementation notes, design proposals, performance investigations, and build-system records for contributors working on the αLoop codebase."
+
+[[section]]
+id = "implemented"
+title = "Implemented architecture"
+summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
+
+[[section.note]]
+id = "gammaloop-architecture"
+title = "GammaLoop architecture"
+summary = "Application shell, domain core, state lifecycle, integration and event pipelines, persistence, concurrency, and tests."
+source = "docs/architecture/architecture-current.md"
+kind = "System architecture"
+status = "Implemented"
+
+[[section.note]]
+id = "uv-renormalization"
+title = "UV renormalization architecture"
+summary = "Orchestrator ownership, sign conventions, projections, disconnected composition, and current boundaries."
+source = "docs/architecture/uv-renormalization.md"
+kind = "System architecture"
+status = "Implemented"
+
+[[section.note]]
+id = "spenso-parsing-flow"
+title = "Spenso parsing flow"
+summary = "Dispatch, shorthand modes, structure inference, materialization, chain and trace expansion, and parser edge cases."
+source = "docs/architecture/parsing-flow.html"
+kind = "Architecture diagram"
+status = "Implemented"
+
+[[section.note]]
+id = "schoonschip-network"
+title = "Schoonschip network architecture"
+summary = "Entry points, fixed-point execution, opaque parsing, contraction, settings, and comparison with pattern rewriting."
+source = "docs/architecture/schoonschip-net-parsing.html"
+kind = "Architecture diagram"
+status = "Implemented"
+
+[[section]]
+id = "proposals"
+title = "Design proposals"
+summary = "Possible changes that are deliberately kept separate from the implemented architecture."
+
+[[section.note]]
+id = "gammaloop-roadmap"
+title = "GammaLoop architecture roadmap"
+summary = "Candidate service boundaries, cache sessions, pipeline unification, error handling, orchestration, and observability improvements."
+source = "docs/architecture/architecture-ideas.md"
+kind = "Design proposal"
+status = "Proposal"
+
+[[section.note]]
+id = "cff-surface-cache-ownership"
+title = "CFF surface-cache ownership"
+summary = "A proposal for expression-local surface ownership, its migration path, invariants, and rejected alternatives."
+source = "docs/architecture/cff-surface-cache-ownership.md"
+kind = "Design proposal"
+status = "Proposal"
+
+[[section]]
+id = "investigations"
+title = "Engineering investigations"
+summary = "Dated measurements and diagnostic records. Treat their results as experiment context, not timeless API guarantees."
+
+[[section.note]]
+id = "network-simplification"
+title = "Network simplification status"
+summary = "Direct sum contraction behavior, profiling controls, current bottlenecks, reproduction commands, and open experiments."
+source = "docs/architecture/network-simplification-status.md"
+kind = "Performance investigation"
+status = "Investigation record"
+
+[[section.note]]
+id = "spenso-large-expressions"
+title = "Spenso large-expression pathology"
+summary = "Parsing and execution shape, contraction order, scalar aliasing, Hornering, and unresolved materialization pressure."
+source = "docs/architecture/spenso-large-expression-pathology.md"
+kind = "Performance investigation"
+status = "Investigation record"
+
+[[section.note]]
+id = "spenso-improvement-effects"
+title = "Spenso large-input improvement effects"
+summary = "A timing matrix for sparse tensors, selector contraction, lazy terms, distribution caps, and combined optimizations."
+source = "docs/architecture/spenso-large-input-improvement-effects.md"
+kind = "Performance investigation"
+status = "Investigation record"
+
+[[section.note]]
+id = "spenso-test-baseline"
+title = "Spenso network execution test baseline"
+summary = "A preserved test and timeout baseline for comparing later network-execution work."
+source = "docs/architecture/spenso-network-execution-test-baseline.md"
+kind = "Test baseline · 2026-05-05"
+status = "Archived baseline"
+
+[[section]]
+id = "build-system"
+title = "Build system"
+summary = "Contributor-facing architecture for reproducible builds and continuous integration."
+
+[[section.note]]
+id = "nix-crane-cache-reuse"
+title = "Nix and Crane artifact reuse"
+summary = "Cache contracts, package and test artifact ownership, feature contexts, and CI producer barriers."
+source = "docs/architecture/nix-crane-cache-reuse.md"
+kind = "Build engineering"
+status = "Engineering record"

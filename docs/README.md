@@ -19,6 +19,10 @@ index, PDF, Rust reference, Python reference, and changelog.
   representation and algebra identities.
 - Generated API material under `api/` is deterministic input. Regenerate it
   through the exporters and commit the result; do not hand-edit snapshots.
+- Classify every note under `architecture/` in `developers.toml`. The explicit
+  section, summary, document type, and status keep implemented designs,
+  proposals, dated investigations, diagrams, and archived baselines visibly
+  distinct. The builder rejects an unclassified architecture note.
 
 The builder passes authored Typst to the standard Typst 0.15 CLI. It does not
 link Typst's internal Rust crates. Typst emits one semantic HTML document per
@@ -152,6 +156,23 @@ snapshots. All authored internal links are interpreted relative to the product
 root and rebased by the builder for nested chapter routes.
 The plain-text `.note` file is the stable deployment probe for each product and
 channel; it records the product, channel, tag, commit, and canonical route.
+
+Contributor-facing architecture is published separately from the project
+manuals:
+
+```text
+developers/
+  .note
+  index.html
+  search-index.json
+  architecture/<note>/index.html
+```
+
+Markdown notes use the shared responsive shell, navigation, search, and table
+of contents. Standalone architecture diagrams retain their purpose-built
+layout inside a clearly labelled developer page. Source links are pinned to
+the documented commit. Latest publication replaces only the `developers/`
+tree and product `latest/` trees; historical product snapshots remain intact.
 
 Normal CI runs deterministic pure Vakint examples. FORM-backed examples use
 `just docs-vakint-form-check`; pySecDec comparisons are explicit or scheduled

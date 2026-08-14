@@ -147,6 +147,7 @@
             cargoSources
             nonCargoBuildSources
             ./docs
+            ./scripts/update-docs-pages.sh
             ./README.md
             ./pyproject.toml
             ./crates/linnet/README.md
@@ -2879,6 +2880,27 @@
                 --output "$docs_snapshot" \
                 --rustdoc-target-root "$docs_rustdoc"
 
+              docs_pages_test="$TMPDIR/alphal00p-docs-pages-test"
+              mkdir -p "$docs_pages_test/products/gammaloop/snapshots/legacy"
+              mkdir -p "$docs_pages_test/developers"
+              mkdir -p "$docs_pages_test/.git"
+              printf 'historical snapshot\n' > "$docs_pages_test/products/gammaloop/snapshots/legacy/.note"
+              printf 'removed developer route\n' > "$docs_pages_test/developers/old.txt"
+              bash scripts/update-docs-pages.sh latest "$docs_first" "$docs_pages_test"
+              test -s "$docs_pages_test/products/gammaloop/snapshots/legacy/.note"
+              test ! -e "$docs_pages_test/developers/old.txt"
+              test -s "$docs_pages_test/developers/architecture/gammaloop-architecture/index.html"
+              cp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
+              cp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
+              cp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
+              bash scripts/update-docs-pages.sh snapshot "$docs_snapshot" "$docs_pages_test" v0.3.4
+              cmp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
+              cmp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
+              cmp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
+              for product in gammaloop linnet spenso idenso vakint; do
+                test -s "$docs_pages_test/products/$product/snapshots/v0.3.4/.note"
+              done
+
               mkdir -p "$out"
               cp -R "$docs_first"/. "$out"/
 
@@ -2890,6 +2912,14 @@
               test -s "$out/assets/local-unitarity-dark.svg"
               test -s "$out/assets/gammalooplogo-light.svg"
               test -s "$out/assets/gammalooplogo-dark.svg"
+              test -s "$out/developers/.note"
+              test -s "$out/developers/index.html"
+              test -s "$out/developers/search-index.json"
+              test -s "$out/developers/assets/site.css"
+              test -s "$out/developers/assets/site.js"
+              test -s "$out/developers/architecture/gammaloop-architecture/index.html"
+              test -s "$out/developers/architecture/spenso-parsing-flow/index.html"
+              test -s "$out/developers/architecture/spenso-parsing-flow/diagram.html"
               for product in gammaloop linnet spenso idenso vakint; do
                 product_root="$out/products/$product"
                 test -s "$product_root/index.html"
