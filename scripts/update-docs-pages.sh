@@ -60,6 +60,8 @@ case "$mode" in
         [ "$#" -eq 3 ] || usage
         [ -f "$build_root/index.html" ] || fail "latest build has no repository portal"
         [ -f "$build_root/.nojekyll" ] || fail "latest build has no .nojekyll marker"
+        [ -f "$build_root/assets/site.css" ] || fail "latest build has no portal stylesheet"
+        [ -f "$build_root/assets/site.js" ] || fail "latest build has no portal script"
 
         for product in "${products[@]}"; do
             require_bundle "$build_root/products/$product/latest"
@@ -69,6 +71,9 @@ case "$mode" in
 
         install -m 0644 "$build_root/index.html" "$pages_root/index.html"
         install -m 0644 "$build_root/.nojekyll" "$pages_root/.nojekyll"
+        mkdir -p "$pages_root/assets"
+        install -m 0644 "$build_root/assets/site.css" "$pages_root/assets/site.css"
+        install -m 0644 "$build_root/assets/site.js" "$pages_root/assets/site.js"
         mkdir -p "$pages_root/products"
 
         for product in "${products[@]}"; do

@@ -2510,6 +2510,8 @@
 
             test -s "$out/index.html"
             test -e "$out/.nojekyll"
+            test -s "$out/assets/site.css"
+            test -s "$out/assets/site.js"
             for product in gammaloop linnet spenso idenso vakint; do
               product_root="$out/products/$product"
               test -s "$product_root/index.html"
