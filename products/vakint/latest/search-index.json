@@ -116,169 +116,169 @@
   {
     "title": "vakint · Vakint expression parser",
     "summary": "Parses a Symbolica expression using Vakint's namespace by default or a caller-supplied namespace.",
-    "href": "reference/rust/vakint/macro.vakint_parse.html",
+    "href": "reference/rust/supported/vakint/#supported-vakint-parse",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint symbol parser",
     "summary": "Resolves a symbol name in Vakint's namespace while preserving an explicit namespace.",
-    "href": "reference/rust/vakint/macro.vakint_symbol.html",
+    "href": "reference/rust/supported/vakint/#supported-vakint-symbol",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint engine",
     "summary": "Owns supported topology matching, canonicalization, reduction, and evaluation operations.",
-    "href": "reference/rust/vakint/struct.Vakint.html",
+    "href": "reference/rust/supported/vakint/#supported-vakint",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint engine.topologies",
     "summary": "Topologies",
-    "href": "reference/rust/vakint/struct.Vakint.html",
+    "href": "reference/rust/supported/vakint/#supported-vakint-topologies-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings",
     "summary": "Controls symbols, precision, normalization, external tools, and backend evaluation order.",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.epsilon_symbol",
     "summary": "String",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings-epsilon-symbol-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.mu_r_sq_symbol",
     "summary": "String",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings-mu-r-sq-symbol-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.form_exe_path",
     "summary": "String",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings-form-exe-path-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.python_exe_path",
     "summary": "String",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings-python-exe-path-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.verify_numerator_identification",
     "summary": "bool",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings-verify-numerator-identification-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.integral_normalization_factor",
     "summary": "LoopNormalizationFactor",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings-integral-normalization-factor-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.run_time_decimal_precision",
     "summary": "u32",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings-run-time-decimal-precision-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.allow_unknown_integrals",
     "summary": "bool",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings-allow-unknown-integrals-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.clean_tmp_dir",
     "summary": "bool",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings-clean-tmp-dir-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.evaluation_order",
     "summary": "EvaluationOrder",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings-evaluation-order-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.number_of_terms_in_epsilon_expansion",
     "summary": "i64",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings-number-of-terms-in-epsilon-expansion-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.precision_for_input_float_rationalization",
     "summary": "InputFloatRationalizationPrecision",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings-precision-for-input-float-rationalization-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.use_dot_product_notation",
     "summary": "bool",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings-use-dot-product-notation-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.temporary_directory",
     "summary": "Option < String >",
-    "href": "reference/rust/vakint/struct.VakintSettings.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintsettings-temporary-directory-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint expression",
     "summary": "Stores a sum of matched vacuum-integral terms with separate numerators.",
-    "href": "reference/rust/vakint/struct.VakintExpression.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintexpression",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint expression.0",
     "summary": "Vec < VakintTerm >",
-    "href": "reference/rust/vakint/struct.VakintExpression.html",
+    "href": "reference/rust/supported/vakint/#supported-vakintexpression-0-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Evaluation order",
     "summary": "Defines the ordered analytic and numerical backends available to an evaluation.",
-    "href": "reference/rust/vakint/struct.EvaluationOrder.html",
+    "href": "reference/rust/supported/vakint/#supported-evaluationorder",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Evaluation order.0",
     "summary": "Vec < EvaluationMethod >",
-    "href": "reference/rust/vakint/struct.EvaluationOrder.html",
+    "href": "reference/rust/supported/vakint/#supported-evaluationorder-0-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Canonicalize an expression",
     "summary": "Matches and rewrites each integral into Vakint's canonical topology representation.",
-    "href": "reference/rust/vakint/struct.VakintExpression.html#method.canonicalize",
+    "href": "reference/rust/supported/vakint/#supported-vakintexpression-canonicalize",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Tensor-reduce an expression",
     "summary": "Reduces tensor numerators to scalar-integral combinations.",
-    "href": "reference/rust/vakint/struct.VakintExpression.html#method.tensor_reduce",
+    "href": "reference/rust/supported/vakint/#supported-vakintexpression-tensor-reduce",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Evaluate an expression",
     "summary": "Evaluates canonical scalar integrals using the configured ordered backend policy.",
-    "href": "reference/rust/vakint/struct.VakintExpression.html#method.evaluate_integral",
+    "href": "reference/rust/supported/vakint/#supported-vakintexpression-evaluate-integral",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Numerical Laurent result",
     "summary": "Stores numerical Laurent coefficients by power of the dimensional regulator.",
-    "href": "reference/rust/vakint/struct.NumericalEvaluationResult.html",
+    "href": "reference/rust/supported/vakint/#supported-numericalevaluationresult",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Numerical Laurent result.0",
     "summary": "Vec < (i64, Complex < Float >) >",
-    "href": "reference/rust/vakint/struct.NumericalEvaluationResult.html",
+    "href": "reference/rust/supported/vakint/#supported-numericalevaluationresult-0-field",
     "kind": "rust-api"
   },
   {
@@ -680,175 +680,175 @@
   {
     "title": "I1L",
     "summary": "1-loop Vakint topology with 1 propagator slots",
-    "href": "reference/generated/#topology-i1l-40f4e919c8f4a459",
+    "href": "reference/topologies/#topology-i1l-40f4e919c8f4a459",
     "kind": "topology"
   },
   {
     "title": "I2L",
     "summary": "2-loop Vakint topology with 3 propagator slots",
-    "href": "reference/generated/#topology-i2l-40f7e719c8f6d6ca",
+    "href": "reference/topologies/#topology-i2l-40f7e719c8f6d6ca",
     "kind": "topology"
   },
   {
     "title": "I2L_pinch_3",
     "summary": "2-loop Vakint topology with 3 propagator slots",
-    "href": "reference/generated/#topology-i2l-pinch-3-36f8737ab773f5b7",
+    "href": "reference/topologies/#topology-i2l-pinch-3-36f8737ab773f5b7",
     "kind": "topology"
   },
   {
     "title": "I3L",
     "summary": "3-loop Vakint topology with 6 propagator slots",
-    "href": "reference/generated/#topology-i3l-40fb4519c8f9ac5b",
+    "href": "reference/topologies/#topology-i3l-40fb4519c8f9ac5b",
     "kind": "topology"
   },
   {
     "title": "I3L_pinch_6",
     "summary": "3-loop Vakint topology with 6 propagator slots",
-    "href": "reference/generated/#topology-i3l-pinch-6-1dadae612a7a75b1",
+    "href": "reference/topologies/#topology-i3l-pinch-6-1dadae612a7a75b1",
     "kind": "topology"
   },
   {
     "title": "I3L_pinch_1_6",
     "summary": "3-loop Vakint topology with 6 propagator slots",
-    "href": "reference/generated/#topology-i3l-pinch-1-6-53494c2f53ccc535",
+    "href": "reference/topologies/#topology-i3l-pinch-1-6-53494c2f53ccc535",
     "kind": "topology"
   },
   {
     "title": "I3L_pinch_3_6",
     "summary": "3-loop Vakint topology with 6 propagator slots",
-    "href": "reference/generated/#topology-i3l-pinch-3-6-64732e2f5d799b7b",
+    "href": "reference/topologies/#topology-i3l-pinch-3-6-64732e2f5d799b7b",
     "kind": "topology"
   },
   {
     "title": "I3L_pinch_1_3_6",
     "summary": "3-loop Vakint topology with 6 propagator slots",
-    "href": "reference/generated/#topology-i3l-pinch-1-3-6-a939cd7c711ec487",
+    "href": "reference/topologies/#topology-i3l-pinch-1-3-6-a939cd7c711ec487",
     "kind": "topology"
   },
   {
     "title": "I4L_H",
     "summary": "4-loop Vakint topology with 9 propagator slots",
-    "href": "reference/generated/#topology-i4l-h-79ab98122b7c221b",
+    "href": "reference/topologies/#topology-i4l-h-79ab98122b7c221b",
     "kind": "topology"
   },
   {
     "title": "I4L_X",
     "summary": "4-loop Vakint topology with 9 propagator slots",
-    "href": "reference/generated/#topology-i4l-x-79ab88122b7c06eb",
+    "href": "reference/topologies/#topology-i4l-x-79ab88122b7c06eb",
     "kind": "topology"
   },
   {
     "title": "I4L_BMW",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-bmw-7b7c7f702f1ebb81",
+    "href": "reference/topologies/#topology-i4l-bmw-7b7c7f702f1ebb81",
     "kind": "topology"
   },
   {
     "title": "I4L_FG",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-3aaef2dfe3e89536",
+    "href": "reference/topologies/#topology-i4l-fg-3aaef2dfe3e89536",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_2",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-2-825de62b72e794d8",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-2-825de62b72e794d8",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_3",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-3-825de72b72e7968b",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-3-825de72b72e7968b",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_4",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-4-825dec2b72e79f0a",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-4-825dec2b72e79f0a",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_7",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-7-825deb2b72e79d57",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-7-825deb2b72e79d57",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_8",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-8-825de02b72e78aa6",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-8-825de02b72e78aa6",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_1_8",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-1-8-0d6800a7f7b8be16",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-1-8-0d6800a7f7b8be16",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_2_4",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-2-4-f33bffa7e8d85ca3",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-2-4-f33bffa7e8d85ca3",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_4_7",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-4-7-294706a8080abc88",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-4-7-294706a8080abc88",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_4_8",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-4-8-294705a8080abad5",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-4-8-294705a8080abad5",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_7_8",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-7-8-1e924ea801664be0",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-7-8-1e924ea801664be0",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_2_4_7",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-2-4-7-739dde0cdf120519",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-2-4-7-739dde0cdf120519",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_3_4_8",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-3-4-8-a75a4b3a9b3c0a47",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-3-4-8-a75a4b3a9b3c0a47",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_4_7_8",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-4-7-8-2259e22048d90c37",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-4-7-8-2259e22048d90c37",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_6_7_8",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-6-7-8-19829830cc4ff0cd",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-6-7-8-19829830cc4ff0cd",
     "kind": "topology"
   },
   {
     "title": "I4L_FG_pinch_4_6_7_8",
     "summary": "4-loop Vakint topology with 8 propagator slots",
-    "href": "reference/generated/#topology-i4l-fg-pinch-4-6-7-8-833c1063223ff0c6",
+    "href": "reference/topologies/#topology-i4l-fg-pinch-4-6-7-8-833c1063223ff0c6",
     "kind": "topology"
   },
   {
     "title": "FORM",
     "summary": "Minimum supported version 4.2.1",
-    "href": "reference/generated/#external-dependencies",
+    "href": "reference/topologies/#external-dependencies",
     "kind": "dependency"
   },
   {
     "title": "pySecDec",
     "summary": "Minimum supported version 1.6.4",
-    "href": "reference/generated/#external-dependencies",
+    "href": "reference/topologies/#external-dependencies",
     "kind": "dependency"
   }
 ]

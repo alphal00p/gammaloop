@@ -138,4 +138,67 @@
     }, { rootMargin: "-20% 0px -70%" });
     headings.forEach((heading) => observer.observe(heading));
   }
+
+  const publicationFilters = document.querySelector("[data-publication-filters]");
+  if (publicationFilters) {
+    const search = publicationFilters.querySelector("[data-publication-search]");
+    const author = publicationFilters.querySelector("[data-publication-author]");
+    const year = publicationFilters.querySelector("[data-publication-year]");
+    const type = publicationFilters.querySelector("[data-publication-type]");
+    const sort = publicationFilters.querySelector("[data-publication-sort]");
+    const count = publicationFilters.querySelector("[data-publication-count]");
+    const list = document.querySelector("[data-publication-list]");
+    const cards = [...document.querySelectorAll("[data-publication]")];
+    const params = new URLSearchParams(location.search);
+    search.value = params.get("q") || "";
+    author.value = params.get("author") || "";
+    year.value = params.get("year") || "";
+    type.value = params.get("type") || "";
+    sort.value = params.get("sort") || "newest";
+
+    const updatePublications = () => {
+      const query = search.value.trim().toLowerCase();
+      const matches = cards.filter((card) => {
+        const people = card.dataset.people.split(/\s+/);
+        const types = card.dataset.types.split("|");
+        return (!query || card.textContent.toLowerCase().includes(query)) &&
+          (!author.value || people.includes(author.value)) &&
+          (!year.value || card.dataset.year === year.value) &&
+          (!type.value || types.includes(type.value));
+      });
+      const visible = new Set(matches);
+      cards.forEach((card) => card.hidden = !visible.has(card));
+      const ordered = [...cards].sort((left, right) => sort.value === "cited"
+        ? Number(right.dataset.citations) - Number(left.dataset.citations) || right.dataset.date.localeCompare(left.dataset.date)
+        : right.dataset.date.localeCompare(left.dataset.date));
+      ordered.forEach((card) => list.append(card));
+      count.textContent = `${matches.length} publication${matches.length === 1 ? "" : "s"}`;
+
+      const next = new URLSearchParams();
+      if (query) next.set("q", search.value.trim());
+      if (author.value) next.set("author", author.value);
+      if (year.value) next.set("year", year.value);
+      if (type.value) next.set("type", type.value);
+      if (sort.value !== "newest") next.set("sort", sort.value);
+      history.replaceState(null, "", `${location.pathname}${next.size ? `?${next}` : ""}${location.hash}`);
+    };
+    publicationFilters.addEventListener("input", updatePublications);
+    publicationFilters.addEventListener("change", updatePublications);
+    updatePublications();
+  }
+
+  document.querySelectorAll("[data-copy-target]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const target = document.getElementById(button.dataset.copyTarget);
+      if (!target) return;
+      try {
+        await navigator.clipboard.writeText(target.textContent.trim());
+        const label = button.textContent;
+        button.textContent = "Copied";
+        setTimeout(() => button.textContent = label, 1500);
+      } catch {
+        target.focus?.();
+      }
+    });
+  });
 })();

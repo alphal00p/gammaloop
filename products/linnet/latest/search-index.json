@@ -122,91 +122,91 @@
   {
     "title": "linnet · Half-edge graph",
     "summary": "Stores graph topology as paired half-edges with independent edge, vertex, and half-edge payloads.",
-    "href": "reference/rust/linnet/half_edge/struct.HedgeGraph.html",
+    "href": "reference/rust/supported/linnet/#supported-hedgegraph",
     "kind": "rust-api"
   },
   {
     "title": "linnet · Half-edge graph.hedge_data",
     "summary": "HedgeVec < H >",
-    "href": "reference/rust/linnet/half_edge/struct.HedgeGraph.html",
+    "href": "reference/rust/supported/linnet/#supported-hedgegraph-hedge-data-field",
     "kind": "rust-api"
   },
   {
     "title": "linnet · Half-edge graph.edge_store",
     "summary": "Internal storage for all half-edges, their data, and their topological relationships (e.g., opposite half-edge, next half-edge around a node). This is typically a [`SmartHedgeVec<E>`].",
-    "href": "reference/rust/linnet/half_edge/struct.HedgeGraph.html",
+    "href": "reference/rust/supported/linnet/#supported-hedgegraph-edge-store-field",
     "kind": "rust-api"
   },
   {
     "title": "linnet · Half-edge graph.node_store",
     "summary": "Storage for all nodes in the graph, including their data (`V`) and information about the half-edges incident to them. The specific implementation is determined by the `S` type parameter.",
-    "href": "reference/rust/linnet/half_edge/struct.HedgeGraph.html",
+    "href": "reference/rust/supported/linnet/#supported-hedgegraph-node-store-field",
     "kind": "rust-api"
   },
   {
     "title": "linnet · Graph builder",
     "summary": "Builds a valid half-edge graph while assigning typed node, edge, and hedge identifiers.",
-    "href": "reference/rust/linnet/half_edge/builder/struct.HedgeGraphBuilder.html",
+    "href": "reference/rust/supported/linnet/#supported-hedgegraphbuilder",
     "kind": "rust-api"
   },
   {
     "title": "linnet · Graph builder.hedge_data",
     "summary": "HedgeVec < H >",
-    "href": "reference/rust/linnet/half_edge/builder/struct.HedgeGraphBuilder.html",
+    "href": "reference/rust/supported/linnet/#supported-hedgegraphbuilder-hedge-data-field",
     "kind": "rust-api"
   },
   {
     "title": "linnet · Graph builder.nodes",
     "summary": "A list of nodes currently being built, stored as [`HedgeNodeBuilder`] instances.",
-    "href": "reference/rust/linnet/half_edge/builder/struct.HedgeGraphBuilder.html",
+    "href": "reference/rust/supported/linnet/#supported-hedgegraphbuilder-nodes-field",
     "kind": "rust-api"
   },
   {
     "title": "linnet · Graph builder.involution",
     "summary": "The [`Involution`] structure managing the half-edges being added to the graph.",
-    "href": "reference/rust/linnet/half_edge/builder/struct.HedgeGraphBuilder.html",
+    "href": "reference/rust/supported/linnet/#supported-hedgegraphbuilder-involution-field",
     "kind": "rust-api"
   },
   {
     "title": "linnet · Bit-vector subgraph",
     "summary": "Represents a subgraph as an efficient half-edge inclusion filter.",
-    "href": "reference/rust/linnet/half_edge/subgraph/subset/type.SuBitGraph.html",
+    "href": "reference/rust/supported/linnet/#supported-subitgraph",
     "kind": "rust-api"
   },
   {
     "title": "linnet · Traversal tree",
     "summary": "Records parent, root, and traversal information produced by breadth-first or depth-first graph walks.",
-    "href": "reference/rust/linnet/half_edge/tree/struct.SimpleTraversalTree.html",
+    "href": "reference/rust/supported/linnet/#supported-simpletraversaltree",
     "kind": "rust-api"
   },
   {
     "title": "linnet · Traversal tree.forest",
     "summary": "The underlying forest structure representing the traversal tree(s). Each root in this forest is a graph node, and its data is its [`TTRoot`] status. Nodes within each tree of this forest represent half-edges.",
-    "href": "reference/rust/linnet/half_edge/tree/struct.SimpleTraversalTree.html",
+    "href": "reference/rust/supported/linnet/#supported-simpletraversaltree-forest-field",
     "kind": "rust-api"
   },
   {
     "title": "linnet · Traversal tree.tree_subgraph",
     "summary": "A bitmask representing the set of half-edges that constitute the actual edges of this traversal tree.",
-    "href": "reference/rust/linnet/half_edge/tree/struct.SimpleTraversalTree.html",
+    "href": "reference/rust/supported/linnet/#supported-simpletraversaltree-tree-subgraph-field",
     "kind": "rust-api"
   },
   {
     "title": "linnet · DOT-backed graph",
     "summary": "Combines a half-edge graph with DOT attributes and parser/serializer support.",
-    "href": "reference/rust/linnet/parser/struct.DotGraph.html",
+    "href": "reference/rust/supported/linnet/#supported-dotgraph",
     "kind": "rust-api"
   },
   {
     "title": "linnet · DOT-backed graph.global_data",
     "summary": "GlobalData",
-    "href": "reference/rust/linnet/parser/struct.DotGraph.html",
+    "href": "reference/rust/supported/linnet/#supported-dotgraph-global-data-field",
     "kind": "rust-api"
   },
   {
     "title": "linnet · DOT-backed graph.graph",
     "summary": "HedgeGraph < DotEdgeData, DotVertexData, DotHedgeData, N >",
-    "href": "reference/rust/linnet/parser/struct.DotGraph.html",
+    "href": "reference/rust/supported/linnet/#supported-dotgraph-graph-field",
     "kind": "rust-api"
   },
   {

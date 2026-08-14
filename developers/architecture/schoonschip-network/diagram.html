@@ -203,7 +203,7 @@
     }
   </style>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:"><style>.developer-diagram-banner{position:sticky;top:0;z-index:1000;display:flex;flex-wrap:wrap;align-items:center;gap:.65rem 1rem;padding:.7rem 1rem;border-bottom:1px solid #b893c7;background:#3d2645;color:#f9f6f0;font:600 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em}.developer-diagram-banner strong{text-transform:uppercase}.developer-diagram-banner a{color:#eadff0}.developer-diagram-banner a:first-of-type{margin-left:auto}@media(max-width:38rem){.developer-diagram-banner a:first-of-type{margin-left:0}}</style></head>
-<body><aside class="developer-diagram-banner" aria-label="Developer note"><strong>For developers</strong><span>Schoonschip network architecture</span><a href="../../">All architecture notes</a><a href="https://github.com/alphal00p/gammaloop/blob/48fc407aa1384729cf17a6a35715290bb3de1986/docs/architecture/schoonschip-net-parsing.html">Source ↗</a></aside>
+<body><aside class="developer-diagram-banner" aria-label="Developer note"><strong>For developers</strong><span>Schoonschip network architecture</span><a href="../../">All architecture notes</a><a href="https://github.com/alphal00p/gammaloop/blob/443385022748108accf0f1963bc67ce58591e8ed/docs/architecture/schoonschip-net-parsing.html">Source ↗</a></aside>
   <main>
     <h1>Schoonschip Network Parsing</h1>
     <p class="lead">
@@ -215,10 +215,10 @@
     <h2>Entry Points</h2>
     <p>
       There are two Schoonschip paths in
-      <a href="https://github.com/alphal00p/gammaloop/blob/48fc407aa1384729cf17a6a35715290bb3de1986/crates/idenso/src/shorthands/schoonschip/api.rs">crates/idenso/src/shorthands/schoonschip/api.rs</a>.
+      <a href="https://github.com/alphal00p/gammaloop/blob/443385022748108accf0f1963bc67ce58591e8ed/crates/idenso/src/shorthands/schoonschip/api.rs">crates/idenso/src/shorthands/schoonschip/api.rs</a>.
       <code>schoonschip_with_settings</code> calls the older pattern-based
       implementation in
-      <a href="https://github.com/alphal00p/gammaloop/blob/48fc407aa1384729cf17a6a35715290bb3de1986/crates/idenso/src/shorthands/schoonschip/with_settings.rs">with_settings.rs</a>.
+      <a href="https://github.com/alphal00p/gammaloop/blob/443385022748108accf0f1963bc67ce58591e8ed/crates/idenso/src/shorthands/schoonschip/with_settings.rs">with_settings.rs</a>.
       <code>schoonschip_with_net</code> calls the symbolic-network
       implementation. <code>schoonschip_net</code> is a convenience wrapper: it
       runs the default network pass and then runs the pattern pass as a final
@@ -263,7 +263,7 @@
 
     <p>
       The parser settings are built in
-      <a href="https://github.com/alphal00p/gammaloop/blob/48fc407aa1384729cf17a6a35715290bb3de1986/crates/idenso/src/shorthands/schoonschip/api.rs">NetworkSchoonschip::run_once</a>.
+      <a href="https://github.com/alphal00p/gammaloop/blob/443385022748108accf0f1963bc67ce58591e8ed/crates/idenso/src/shorthands/schoonschip/api.rs">NetworkSchoonschip::run_once</a>.
       The important convention is that tensorial shorthand is never expanded by
       the parser in this path:
     </p>
@@ -296,7 +296,7 @@ apply(expr):
       slots becomes a symbolic tensor leaf with inferred structure. That keeps
       graph construction structural; algebraic meaning is assigned later by the
       contraction code in
-      <a href="https://github.com/alphal00p/gammaloop/blob/48fc407aa1384729cf17a6a35715290bb3de1986/crates/idenso/src/shorthands/schoonschip/contraction.rs">contraction.rs</a>.
+      <a href="https://github.com/alphal00p/gammaloop/blob/443385022748108accf0f1963bc67ce58591e8ed/crates/idenso/src/shorthands/schoonschip/contraction.rs">contraction.rs</a>.
     </p>
 
     <h2>Settings</h2>
@@ -394,7 +394,7 @@ apply(expr):
     <h2>Pattern Path</h2>
     <p>
       The pattern implementation in
-      <a href="https://github.com/alphal00p/gammaloop/blob/48fc407aa1384729cf17a6a35715290bb3de1986/crates/idenso/src/shorthands/schoonschip/with_settings.rs">with_settings.rs</a>
+      <a href="https://github.com/alphal00p/gammaloop/blob/443385022748108accf0f1963bc67ce58591e8ed/crates/idenso/src/shorthands/schoonschip/with_settings.rs">with_settings.rs</a>
       is a fixed point over global Symbolica replacements. One pass applies:
       metric-function contractions, dot-product contractions, self-dual powers,
       rank-one products, bare rank-one into tensor products, optional

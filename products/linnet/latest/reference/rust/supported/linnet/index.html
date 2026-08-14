@@ -1,0 +1,134 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Half-edge graphs and subgraph-first algorithms — linnet supported Rust API"><title>Linnet · linnet supported Rust API</title><link rel="stylesheet" href="../../../../assets/site.css"><script defer src="../../../../assets/site.js"></script></head><body data-docs-root="../../../../"><a class="skip-link" href="#main-content">Skip to content</a><header class="site-header"><button class="header-button menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-controls="docs-sidebar" aria-expanded="false">☰</button><a class="site-brand" href="../../../../../../../"><span class="site-brand-mark">α</span><span class="site-brand-name">αLoop docs</span></a><div class="site-header-tools"><select class="product-select" data-product-select aria-label="Select project"><option value="../../../../../../gammaloop/latest/">GammaLoop</option><option value="../../../../../../linnet/latest/" selected>Linnet</option><option value="../../../../../../spenso/latest/">Spenso</option><option value="../../../../../../idenso/latest/">Idenso</option><option value="../../../../../../vakint/latest/">Vakint</option></select><button class="header-button" type="button" data-search-open>Search <span class="header-button-label">⌘K</span></button><button class="header-button" type="button" data-theme-toggle aria-label="Toggle color theme">◐</button></div></header><div class="docs-shell"><aside class="docs-sidebar" id="docs-sidebar" aria-label="Linnet manual"><section class="sidebar-group"><p class="sidebar-group-title">Start here</p><a class="sidebar-link" href="../../../../">Overview</a></section><section class="sidebar-group"><p class="sidebar-group-title">Tutorial</p><a class="sidebar-link" href="../../../../tutorial/">Build and explore a graph</a></section><section class="sidebar-group"><p class="sidebar-group-title">Manual</p><a class="sidebar-link" href="../../../../manual/algorithms/">Graph algorithms</a><a class="sidebar-link" href="../../../../manual/interfaces/">Rust and Python interfaces</a><a class="sidebar-link" href="../../../../manual/releases/">Releases and change history</a></section><section class="sidebar-group"><p class="sidebar-group-title">Reference</p><a class="sidebar-link" href="../../../../reference/">Reference overview</a><a class="sidebar-link" href="../../../../reference/python/">Python API</a><a class="sidebar-link" href="../../../../reference/rust/" aria-current="page">Rust API</a></section><section class="sidebar-group sidebar-developer-group"><p class="sidebar-group-title">For developers</p><a class="sidebar-link" href="../../../../../../../developers/">Architecture &amp; engineering notes</a></section><p class="sidebar-meta"><strong>Linnet</strong><br><code>latest</code><br><a href="../../../../manual.pdf">Download PDF</a></p></aside><main class="docs-main" id="main-content"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../">Linnet</a> / Reference / linnet supported Rust API</nav><article class="docs-article"><h1 id="linnet-linnet-supported-rust-api">Linnet · linnet supported Rust API</h1><p><code>linnet</code> · 5 curated entries · version 0.17.0</p><p><a href="../../../../reference/rust/linnet/">Open the complete generated Rustdoc</a>. The source-backed catalog below highlights the supported public surface with signatures, feature gates, examples, and source links.</p><section class="api-item" id="supported-hedgegraph"><h3 id="hedgegraph"><code>HedgeGraph</code></h3><span class="api-kind">Type</span><div class="api-docstring"><p>The main graph data structure, representing a graph using the half-edge<br>(or doubly connected edge list - DCEL) principle.</p><p>A `HedgeGraph` stores nodes and edges (represented as pairs of half-edges).<br>It is generic over the data associated with edges (`E`), nodes/vertices (`V`),<br>and the specific storage strategy used for nodes (`S`).</p><p>The half-edge representation allows for efficient traversal of graph topology,<br>such as iterating around faces (in planar embeddings), finding incident edges<br>to a node, or quickly accessing an edge's opposite half-edge.</p><p># Type Parameters</p><p>- `E`: The type of data associated with each edge (or pair of half-edges).<br>- `V`: The type of data associated with each node (vertex).<br>- `S`: The node storage strategy, implementing the [`NodeStorage`] trait.<br>This determines how node data and their connectivity to half-edges<br>are stored. Defaults to [`DefaultNodeStore&lt;V&gt;`] (feature-selected; `nodestore-vec` uses<br>[`nodestore::NodeStorageVec&lt;V&gt;`]).</p></div><pre class="api-signature"><code>#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = &quot;serde&quot;, derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = &quot;bincode&quot;,
+derive(bincode_trait_derive::Encode, bincode_trait_derive::Decode))]
+#[doc =
+&quot; The main graph data structure, representing a graph using the half-edge&quot;]
+#[doc = &quot; (or doubly connected edge list - DCEL) principle.&quot;] #[doc = &quot;&quot;]
+#[doc =
+&quot; A `HedgeGraph` stores nodes and edges (represented as pairs of half-edges).&quot;]
+#[doc =
+&quot; It is generic over the data associated with edges (`E`), nodes/vertices (`V`),&quot;]
+#[doc = &quot; and the specific storage strategy used for nodes (`S`).&quot;]
+#[doc = &quot;&quot;]
+#[doc =
+&quot; The half-edge representation allows for efficient traversal of graph topology,&quot;]
+#[doc =
+&quot; such as iterating around faces (in planar embeddings), finding incident edges&quot;]
+#[doc = &quot; to a node, or quickly accessing an edge\'s opposite half-edge.&quot;]
+#[doc = &quot;&quot;] #[doc = &quot; # Type Parameters&quot;] #[doc = &quot;&quot;]
+#[doc =
+&quot; - `E`: The type of data associated with each edge (or pair of half-edges).&quot;]
+#[doc = &quot; - `V`: The type of data associated with each node (vertex).&quot;]
+#[doc =
+&quot; - `S`: The node storage strategy, implementing the [`NodeStorage`] trait.&quot;]
+#[doc =
+&quot;   This determines how node data and their connectivity to half-edges&quot;]
+#[doc =
+&quot;   are stored. Defaults to [`DefaultNodeStore&lt;V&gt;`] (feature-selected; `nodestore-vec` uses&quot;]
+#[doc = &quot;   [`nodestore::NodeStorageVec&lt;V&gt;`]).&quot;] pub struct HedgeGraph &lt; E, V,
+H = NoData, S : NodeStorage &lt; NodeData = V &gt; = DefaultNodeStore &lt; V &gt; &gt;
+{
+    hedge_data : HedgeVec &lt; H &gt; ,
+    #[doc =
+    &quot; Internal storage for all half-edges, their data, and their topological&quot;]
+    #[doc =
+    &quot; relationships (e.g., opposite half-edge, next half-edge around a node).&quot;]
+    #[doc = &quot; This is typically a [`SmartHedgeVec&lt;E&gt;`].&quot;] edge_store :
+    SmartEdgeVec &lt; E &gt; ,
+    #[doc =
+    &quot; Storage for all nodes in the graph, including their data (`V`) and&quot;]
+    #[doc = &quot; information about the half-edges incident to them.&quot;]
+    #[doc =
+    &quot; The specific implementation is determined by the `S` type parameter.&quot;]
+    pub node_store : S,
+}</code></pre><h4 id="supported-usage">Supported usage</h4><pre><code data-lang="rust">use linnet::half_edge::HedgeGraph;</code></pre><section class="api-member" id="supported-hedgegraph-hedge-data-field"><h4 id="hedge-data"><code>hedge_data</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>HedgeVec &lt; H &gt;</code></pre></section><section class="api-member" id="supported-hedgegraph-edge-store-field"><h4 id="edge-store"><code>edge_store</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>SmartEdgeVec &lt; E &gt;</code></pre><div class="api-docstring"><p>Internal storage for all half-edges, their data, and their topological<br>relationships (e.g., opposite half-edge, next half-edge around a node).<br>This is typically a [`SmartHedgeVec&lt;E&gt;`].</p></div></section><section class="api-member" id="supported-hedgegraph-node-store-field"><h4 id="node-store"><code>node_store</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>S</code></pre><div class="api-docstring"><p>Storage for all nodes in the graph, including their data (`V`) and<br>information about the half-edges incident to them.<br>The specific implementation is determined by the `S` type parameter.</p></div></section><p><a href="https://github.com/alphal00p/gammaloop/blob/443385022748108accf0f1963bc67ce58591e8ed/crates/linnet/src/half_edge.rs#L251">Source: <code>crates/linnet/src/half_edge.rs:251</code></a></p></section><section class="api-item" id="supported-hedgegraphbuilder"><h3 id="hedgegraphbuilder"><code>HedgeGraphBuilder</code></h3><span class="api-kind">Type</span><div class="api-docstring"><p>A builder for programmatically constructing [`HedgeGraph`] instances.</p><p>This builder allows for the incremental addition of nodes and edges (both<br>paired and external/dangling) before finalizing the graph structure.</p><p># Type Parameters</p><p>- `E`: The type of data to be associated with edges.<br>- `V`: The type of data to be associated with nodes.</p><p># Example</p><p>```rust,ignore<br>use linnet::half_edge::builder::HedgeGraphBuilder;<br>use linnet::half_edge::involution::{Flow, Orientation};</p><p>let mut builder = HedgeGraphBuilder::&lt;&amp;str, &amp;str&gt;::new();</p><p>let node0 = builder.add_node(&quot;Node_0_Data&quot;);<br>let node1 = builder.add_node(&quot;Node_1_Data&quot;);<br>let node2 = builder.add_node(&quot;Node_2_Data&quot;);</p><p>builder.add_edge(node0, node1, &quot;Edge_01_Data&quot;, Orientation::Default);<br>builder.add_external_edge(node2, &quot;External_Edge_Data&quot;, Orientation::Undirected, Flow::Source);</p><p>// Assuming a NodeStorage type MyNodeStore is defined and implements NodeStorageOps<br>// let graph: HedgeGraph&lt;&amp;str, &amp;str, MyNodeStore&gt; = builder.build();<br>```</p></div><pre class="api-signature"><code>#[derive(Clone, Debug)]
+#[doc =
+&quot; A builder for programmatically constructing [`HedgeGraph`] instances.&quot;]
+#[doc = &quot;&quot;]
+#[doc =
+&quot; This builder allows for the incremental addition of nodes and edges (both&quot;]
+#[doc =
+&quot; paired and external/dangling) before finalizing the graph structure.&quot;]
+#[doc = &quot;&quot;] #[doc = &quot; # Type Parameters&quot;] #[doc = &quot;&quot;]
+#[doc = &quot; - `E`: The type of data to be associated with edges.&quot;]
+#[doc = &quot; - `V`: The type of data to be associated with nodes.&quot;] #[doc = &quot;&quot;]
+#[doc = &quot; # Example&quot;] #[doc = &quot;&quot;] #[doc = &quot; ```rust,ignore&quot;]
+#[doc = &quot; use linnet::half_edge::builder::HedgeGraphBuilder;&quot;]
+#[doc = &quot; use linnet::half_edge::involution::{Flow, Orientation};&quot;]
+#[doc = &quot;&quot;]
+#[doc = &quot; let mut builder = HedgeGraphBuilder::&lt;&amp;str, &amp;str&gt;::new();&quot;]
+#[doc = &quot;&quot;] #[doc = &quot; let node0 = builder.add_node(\&quot;Node_0_Data\&quot;);&quot;]
+#[doc = &quot; let node1 = builder.add_node(\&quot;Node_1_Data\&quot;);&quot;]
+#[doc = &quot; let node2 = builder.add_node(\&quot;Node_2_Data\&quot;);&quot;] #[doc = &quot;&quot;]
+#[doc =
+&quot; builder.add_edge(node0, node1, \&quot;Edge_01_Data\&quot;, Orientation::Default);&quot;]
+#[doc =
+&quot; builder.add_external_edge(node2, \&quot;External_Edge_Data\&quot;, Orientation::Undirected, Flow::Source);&quot;]
+#[doc = &quot;&quot;]
+#[doc =
+&quot; // Assuming a NodeStorage type MyNodeStore is defined and implements NodeStorageOps&quot;]
+#[doc =
+&quot; // let graph: HedgeGraph&lt;&amp;str, &amp;str, MyNodeStore&gt; = builder.build();&quot;]
+#[doc = &quot; ```&quot;] pub struct HedgeGraphBuilder &lt; E, V, H = NoData &gt;
+{
+    hedge_data : HedgeVec &lt; H &gt; ,
+    #[doc =
+    &quot; A list of nodes currently being built, stored as [`HedgeNodeBuilder`] instances.&quot;]
+    nodes : Vec &lt; HedgeNodeBuilder &lt; V &gt; &gt; ,
+    #[doc =
+    &quot; The [`Involution`] structure managing the half-edges being added to the graph.&quot;]
+    pub(crate) involution : Involution &lt; E &gt; ,
+}</code></pre><h4 id="example-1">Example 1</h4><pre><code data-lang="rust,ignore">use linnet::half_edge::builder::HedgeGraphBuilder;
+use linnet::half_edge::involution::{Flow, Orientation};
+
+let mut builder = HedgeGraphBuilder::&lt;&amp;str, &amp;str&gt;::new();
+
+let node0 = builder.add_node(&quot;Node_0_Data&quot;);
+let node1 = builder.add_node(&quot;Node_1_Data&quot;);
+let node2 = builder.add_node(&quot;Node_2_Data&quot;);
+
+builder.add_edge(node0, node1, &quot;Edge_01_Data&quot;, Orientation::Default);
+builder.add_external_edge(node2, &quot;External_Edge_Data&quot;, Orientation::Undirected, Flow::Source);
+
+// Assuming a NodeStorage type MyNodeStore is defined and implements NodeStorageOps
+// let graph: HedgeGraph&lt;&amp;str, &amp;str, MyNodeStore&gt; = builder.build();</code></pre><h4 id="supported-usage-2">Supported usage</h4><pre><code data-lang="rust">use linnet::half_edge::builder::HedgeGraphBuilder;</code></pre><section class="api-member" id="supported-hedgegraphbuilder-hedge-data-field"><h4 id="hedge-data-2"><code>hedge_data</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>HedgeVec &lt; H &gt;</code></pre></section><section class="api-member" id="supported-hedgegraphbuilder-nodes-field"><h4 id="nodes"><code>nodes</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>Vec &lt; HedgeNodeBuilder &lt; V &gt; &gt;</code></pre><div class="api-docstring"><p>A list of nodes currently being built, stored as [`HedgeNodeBuilder`] instances.</p></div></section><section class="api-member" id="supported-hedgegraphbuilder-involution-field"><h4 id="involution"><code>involution</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>Involution &lt; E &gt;</code></pre><div class="api-docstring"><p>The [`Involution`] structure managing the half-edges being added to the graph.</p></div></section><p><a href="https://github.com/alphal00p/gammaloop/blob/443385022748108accf0f1963bc67ce58591e8ed/crates/linnet/src/half_edge/builder.rs#L111">Source: <code>crates/linnet/src/half_edge/builder.rs:111</code></a></p></section><section class="api-item" id="supported-subitgraph"><h3 id="subitgraph"><code>SuBitGraph</code></h3><span class="api-kind">Type</span><div class="api-docstring"><p>Represents a subgraph as an efficient half-edge inclusion filter.</p></div><pre class="api-signature"><code>pub type SuBitGraph = SubSet &lt; Hedge &gt; ;</code></pre><h4 id="supported-usage-3">Supported usage</h4><pre><code data-lang="rust">use linnet::half_edge::subgraph::SuBitGraph;</code></pre><p><a href="https://github.com/alphal00p/gammaloop/blob/443385022748108accf0f1963bc67ce58591e8ed/crates/linnet/src/half_edge/subgraph/subset.rs#L24">Source: <code>crates/linnet/src/half_edge/subgraph/subset.rs:24</code></a></p></section><section class="api-item" id="supported-simpletraversaltree"><h3 id="simpletraversaltree"><code>SimpleTraversalTree</code></h3><span class="api-kind">Type</span><div class="api-docstring"><p>Represents a traversal tree (e.g., DFS or BFS tree) derived from a [`HedgeGraph`].</p><p>This structure uses a generic [`Forest`] to store the tree topology. Each &quot;root&quot; in the<br>`Forest` corresponds to a node in the original `HedgeGraph`, and its data is a [`TTRoot`]<br>enum indicating its role (Root, Child, or None) in this specific traversal. The nodes<br>within each tree of the `Forest` typically represent the half-edges that form the<br>traversal path.</p><p># Type Parameters</p><p>- `P`: The type of [`ForestNodeStore`] used by the underlying `Forest`.<br>It stores `()` as `NodeData` because the tree nodes (representing half-edges)<br>don't need additional data beyond their structural role in the traversal tree.<br>Defaults to [`ParentPointerStore&lt;()&gt;`].</p></div><pre class="api-signature"><code>#[derive(Debug, Clone)]
+#[cfg_attr(feature = &quot;serde&quot;, derive(serde::Serialize, serde::Deserialize))]
+#[doc =
+&quot; Represents a traversal tree (e.g., DFS or BFS tree) derived from a [`HedgeGraph`].&quot;]
+#[doc = &quot;&quot;]
+#[doc =
+&quot; This structure uses a generic [`Forest`] to store the tree topology. Each \&quot;root\&quot; in the&quot;]
+#[doc =
+&quot; `Forest` corresponds to a node in the original `HedgeGraph`, and its data is a [`TTRoot`]&quot;]
+#[doc =
+&quot; enum indicating its role (Root, Child, or None) in this specific traversal. The nodes&quot;]
+#[doc =
+&quot; within each tree of the `Forest` typically represent the half-edges that form the&quot;]
+#[doc = &quot; traversal path.&quot;] #[doc = &quot;&quot;] #[doc = &quot; # Type Parameters&quot;]
+#[doc = &quot;&quot;]
+#[doc =
+&quot; - `P`: The type of [`ForestNodeStore`] used by the underlying `Forest`.&quot;]
+#[doc =
+&quot;   It stores `()` as `NodeData` because the tree nodes (representing half-edges)&quot;]
+#[doc =
+&quot;   don\'t need additional data beyond their structural role in the traversal tree.&quot;]
+#[doc = &quot;   Defaults to [`ParentPointerStore&lt;()&gt;`].&quot;] pub struct
+SimpleTraversalTree &lt; P : ForestNodeStore &lt; NodeData = () &gt; =
+ParentPointerStore &lt; () &gt; &gt;
+{
+    #[doc =
+    &quot; The underlying forest structure representing the traversal tree(s).&quot;]
+    #[doc =
+    &quot; Each root in this forest is a graph node, and its data is its [`TTRoot`] status.&quot;]
+    #[doc = &quot; Nodes within each tree of this forest represent half-edges.&quot;]
+    forest : Forest &lt; TTRoot, P &gt; ,
+    #[doc =
+    &quot; A bitmask representing the set of half-edges that constitute the actual&quot;]
+    #[doc = &quot; edges of this traversal tree.&quot;] pub tree_subgraph : SuBitGraph,
+}</code></pre><h4 id="supported-usage-4">Supported usage</h4><pre><code data-lang="rust">use linnet::half_edge::tree::SimpleTraversalTree;</code></pre><section class="api-member" id="supported-simpletraversaltree-forest-field"><h4 id="forest"><code>forest</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>Forest &lt; TTRoot, P &gt;</code></pre><div class="api-docstring"><p>The underlying forest structure representing the traversal tree(s).<br>Each root in this forest is a graph node, and its data is its [`TTRoot`] status.<br>Nodes within each tree of this forest represent half-edges.</p></div></section><section class="api-member" id="supported-simpletraversaltree-tree-subgraph-field"><h4 id="tree-subgraph"><code>tree_subgraph</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>SuBitGraph</code></pre><div class="api-docstring"><p>A bitmask representing the set of half-edges that constitute the actual<br>edges of this traversal tree.</p></div></section><p><a href="https://github.com/alphal00p/gammaloop/blob/443385022748108accf0f1963bc67ce58591e8ed/crates/linnet/src/half_edge/tree.rs#L106">Source: <code>crates/linnet/src/half_edge/tree.rs:106</code></a></p></section><section class="api-item" id="supported-dotgraph"><h3 id="dotgraph"><code>DotGraph</code></h3><span class="api-kind">Type</span><div class="api-docstring"><p>Combines a half-edge graph with DOT attributes and parser/serializer support.</p></div><pre class="api-signature"><code>#[derive(Debug, Clone, PartialEq, Eq)] pub struct DotGraph &lt; N : NodeStorage &lt;
+NodeData = DotVertexData &gt; = DefaultNodeStore &lt; DotVertexData &gt; &gt;
+{
+    pub global_data : GlobalData, pub graph : HedgeGraph &lt; DotEdgeData,
+    DotVertexData, DotHedgeData, N &gt; ,
+}</code></pre><h4 id="supported-usage-5">Supported usage</h4><pre><code data-lang="rust">use linnet::parser::DotGraph;</code></pre><section class="api-member" id="supported-dotgraph-global-data-field"><h4 id="global-data"><code>global_data</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>GlobalData</code></pre></section><section class="api-member" id="supported-dotgraph-graph-field"><h4 id="graph"><code>graph</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>HedgeGraph &lt; DotEdgeData, DotVertexData, DotHedgeData, N &gt;</code></pre></section><p><a href="https://github.com/alphal00p/gammaloop/blob/443385022748108accf0f1963bc67ce58591e8ed/crates/linnet/src/parser/mod.rs#L136">Source: <code>crates/linnet/src/parser/mod.rs:136</code></a></p></section></article><nav class="page-nav" aria-label="Manual pagination"><a class="page-nav-link" href="../../../../reference/rust/"><span class="page-nav-label">← Previous</span>Rust API</a><span></span></nav><footer class="page-footer">latest · <a href="../../../../manual.pdf">Complete PDF manual</a> · <a href="https://github.com/alphal00p/gammaloop/tree/443385022748108accf0f1963bc67ce58591e8ed">source 443385022748</a></footer></main><aside class="docs-toc" aria-label="On this page"><p class="toc-title">On this page</p><a class="toc-link" data-level="3" href="#hedgegraph">HedgeGraph</a><a class="toc-link" data-level="3" href="#hedgegraphbuilder">HedgeGraphBuilder</a><a class="toc-link" data-level="3" href="#subitgraph">SuBitGraph</a><a class="toc-link" data-level="3" href="#simpletraversaltree">SimpleTraversalTree</a><a class="toc-link" data-level="3" href="#dotgraph">DotGraph</a></aside></div><button class="sidebar-backdrop" type="button" data-sidebar-backdrop aria-label="Close navigation"></button><dialog class="search-dialog" data-search-dialog><form class="search-form" method="dialog"><input class="search-input" type="search" data-search-input placeholder="Search this project" aria-label="Search documentation"><button class="header-button" value="close">Close</button></form><ul class="search-results" data-search-results aria-live="polite"></ul></dialog></body></html>

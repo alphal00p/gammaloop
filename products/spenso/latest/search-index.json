@@ -116,361 +116,361 @@
   {
     "title": "spenso · Tensor structure",
     "summary": "Describes ordered slots, dimensions, representations, and contraction compatibility independently of data.",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.Slot",
     "summary": "type Slot : IsAbstractSlot + DualSlotTo < Dual = Self :: Slot > ;",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-slot-associatedtype",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.Indexed",
     "summary": "type Indexed : TensorStructure < Indexed = Self :: Indexed, Slot = Self ::\nSlot > ;",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-indexed-associatedtype",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.reindex",
     "summary": "fn reindex(self, indices : & [< Self :: Slot as IsAbstractSlot > :: Aind],) ->\nResult < PermutedStructure < Self :: Indexed > , StructureError > ;",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-reindex-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.dual",
     "summary": "fn dual(self) -> Self;",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-dual-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.string_rep",
     "summary": "fn string_rep(& self) -> String\n{\n    self.external_structure_iter().map(| s | s.to_string()).collect :: < Vec <\n    _ > > ().join(\"\")\n}",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-string-rep-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.external_structure_iter",
     "summary": "fn external_structure_iter(& self) -> impl Iterator < Item = Self :: Slot > ;",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-external-structure-iter-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.external_dims_iter",
     "summary": "fn external_dims_iter(& self) -> impl Iterator < Item = Dimension > ;",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-external-dims-iter-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.external_reps_iter",
     "summary": "fn external_reps_iter(& self,) -> impl Iterator < Item = Representation < <\nSelf :: Slot as IsAbstractSlot > :: R > > ;",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-external-reps-iter-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.external_indices_iter",
     "summary": "fn external_indices_iter(& self) -> impl Iterator < Item = < Self :: Slot as\nIsAbstractSlot > :: Aind > ;",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-external-indices-iter-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.get_aind",
     "summary": "fn get_aind(& self, i : impl Into < SlotIndex >) -> Option < < Self :: Slot as\nIsAbstractSlot > :: Aind > ;",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-get-aind-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.get_rep",
     "summary": "fn get_rep(& self, i : impl Into < SlotIndex > ,) -> Option < Representation <\n< Self :: Slot as IsAbstractSlot > :: R > > ;",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-get-rep-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.get_dim",
     "summary": "fn get_dim(& self, i : impl Into < SlotIndex >) -> Option < Dimension > ;",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-get-dim-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.get_slot",
     "summary": "fn get_slot(& self, i : impl Into < SlotIndex >) -> Option < Self :: Slot > ;",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-get-slot-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.order",
     "summary": "fn order(& self) -> usize;",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-order-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.external_structure",
     "summary": "returns the list of slots that are the external indices of the tensor",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-external-structure-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.to_shell",
     "summary": "fn to_shell(self) -> TensorShell < Self > where Self : Sized,\n{ TensorShell :: new(self) }",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-to-shell-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.contains_matching",
     "summary": "fn contains_matching(& self, slot : & Self :: Slot) -> bool\n{ self.external_structure_iter().any(| s | s.matches(slot)) }",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-contains-matching-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.external_reps",
     "summary": "fn external_reps(& self) -> Vec < Representation < < Self :: Slot as\nIsAbstractSlot > :: R > > { self.external_reps_iter().collect() }",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-external-reps-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.external_indices",
     "summary": "fn external_indices(& self) -> Vec < < Self :: Slot as IsAbstractSlot > ::\nAind > { self.external_indices_iter().collect() }",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-external-indices-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.same_content",
     "summary": "checks if the tensor has the same exact structure as another tensor",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-same-content-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.match_index",
     "summary": "Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-match-index-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.match_indices",
     "summary": "Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-match-indices-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.traces",
     "summary": "Identify the repeated slots in the external index list",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-traces-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.shape",
     "summary": "yields the (outwards facing) shape of the tensor as a list of dimensions",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-shape-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.reps",
     "summary": "fn reps(& self) -> Vec < Representation < < Self :: Slot as IsAbstractSlot >\n:: R > > { self.external_reps_iter().collect() }",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-reps-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.same_external",
     "summary": "checks if externally, the two tensors are the same",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-same-external-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.find_permutation",
     "summary": "find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-find-permutation-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.strides_column_major",
     "summary": "yields the strides of the tensor in column major order",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-strides-column-major-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.strides_row_major",
     "summary": "yields the strides of the tensor in row major order",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-strides-row-major-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.strides",
     "summary": "By default, the strides are row major",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-strides-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.verify_indices",
     "summary": "Verifies that the list of indices provided are valid for the tensor # Errors `Mismatched order` = if the length of the indices is different from the order of the tensor, `Index out of bounds` = if the index is out of bounds for the dimension of that index",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-verify-indices-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.flat_index",
     "summary": "yields the flat index of the tensor given a list of indices # Errors Same as [`Self::verify_indices`]",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-flat-index-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.expanded_index",
     "summary": "yields the expanded index of the tensor given a flat index # Errors `Index out of bounds` = if the flat index is out of bounds for the tensor",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-expanded-index-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.co_expanded_index",
     "summary": "fn co_expanded_index(& self, flat_index : FlatIndex) -> Result <\nDualConciousExpandedIndex >\n{\n    let mut indices = vec! []; for (r, i) in\n    self.external_reps_iter().zip(self.expanded_index(flat_index) ? .iter())\n    {\n        if r.rep.is_base() && r.rep.is_dual()\n        { indices.push(DualConciousIndex :: SelfDual(* i)); } else if\n        r.rep.is_base() { indices.push(DualConciousIndex :: Up(* i)); } else\n        { indices.push(DualConciousIndex :: Down(* i)); }\n    } Ok(indices.into())\n}",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-co-expanded-index-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.index_iter",
     "summary": "yields an iterator over the indices of the tensor",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-index-iter-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.is_scalar",
     "summary": "if the tensor has no (external) indices, it is a scalar",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-is-scalar-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.is_fully_self_dual",
     "summary": "fn is_fully_self_dual(& self) -> bool;",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-is-fully-self-dual-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.size",
     "summary": "yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor",
-    "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
+    "href": "reference/rust/supported/spenso/#supported-tensorstructure-size-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Dense tensor",
     "summary": "Stores every tensor component in structure-defined flat order.",
-    "href": "reference/rust/spenso/tensors/data/dense/struct.DenseTensor.html",
+    "href": "reference/rust/supported/spenso/#supported-densetensor",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Dense tensor.data",
     "summary": "Vec < T >",
-    "href": "reference/rust/spenso/tensors/data/dense/struct.DenseTensor.html",
+    "href": "reference/rust/supported/spenso/#supported-densetensor-data-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Dense tensor.structure",
     "summary": "S",
-    "href": "reference/rust/spenso/tensors/data/dense/struct.DenseTensor.html",
+    "href": "reference/rust/supported/spenso/#supported-densetensor-structure-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Sparse tensor",
     "summary": "Stores only explicit tensor components keyed by flat index.",
-    "href": "reference/rust/spenso/tensors/data/sparse/struct.SparseTensor.html",
+    "href": "reference/rust/supported/spenso/#supported-sparsetensor",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Sparse tensor.elements",
     "summary": "std :: collections :: HashMap < FlatIndex, T >",
-    "href": "reference/rust/spenso/tensors/data/sparse/struct.SparseTensor.html",
+    "href": "reference/rust/supported/spenso/#supported-sparsetensor-elements-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Sparse tensor.zero",
     "summary": "T",
-    "href": "reference/rust/spenso/tensors/data/sparse/struct.SparseTensor.html",
+    "href": "reference/rust/supported/spenso/#supported-sparsetensor-zero-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Sparse tensor.structure",
     "summary": "I",
-    "href": "reference/rust/spenso/tensors/data/sparse/struct.SparseTensor.html",
+    "href": "reference/rust/supported/spenso/#supported-sparsetensor-structure-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Pairwise contraction",
     "summary": "Defines pairwise tensor contraction with an explicit settings type and output.",
-    "href": "reference/rust/spenso/contraction/trait.Contract.html",
+    "href": "reference/rust/supported/spenso/#supported-contract",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Pairwise contraction.LCM",
     "summary": "type LCM;",
-    "href": "reference/rust/spenso/contraction/trait.Contract.html",
+    "href": "reference/rust/supported/spenso/#supported-contract-lcm-associatedtype",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Pairwise contraction.contract",
     "summary": "fn contract(& self, other : & T) -> Result < Self :: LCM, ContractionError > ;",
-    "href": "reference/rust/spenso/contraction/trait.Contract.html",
+    "href": "reference/rust/supported/spenso/#supported-contract-contract-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor network",
     "summary": "Binds symbolic tensor expressions to libraries and an executable contraction graph.",
-    "href": "reference/rust/spenso/network/struct.Network.html",
+    "href": "reference/rust/supported/spenso/#supported-network",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor network.graph",
     "summary": "NetworkGraph < LibKey, FunKey, Aind >",
-    "href": "reference/rust/spenso/network/struct.Network.html",
+    "href": "reference/rust/supported/spenso/#supported-network-graph-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor network.store",
     "summary": "S",
-    "href": "reference/rust/spenso/network/struct.Network.html",
+    "href": "reference/rust/supported/spenso/#supported-network-store-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor network.state",
     "summary": "NetworkState",
-    "href": "reference/rust/spenso/network/struct.Network.html",
+    "href": "reference/rust/supported/spenso/#supported-network-state-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Parametric tensor",
     "summary": "Stores tensor components as parameter-dependent symbolic coefficients.",
-    "href": "reference/rust/spenso/tensors/parametric/struct.ParamTensor.html",
+    "href": "reference/rust/supported/spenso/#supported-paramtensor",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Parametric tensor.tensor",
     "summary": "DataTensor < Atom, S >",
-    "href": "reference/rust/spenso/tensors/parametric/struct.ParamTensor.html",
+    "href": "reference/rust/supported/spenso/#supported-paramtensor-tensor-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Parametric tensor.param_type",
     "summary": "ParamOrComposite",
-    "href": "reference/rust/spenso/tensors/parametric/struct.ParamTensor.html",
+    "href": "reference/rust/supported/spenso/#supported-paramtensor-param-type-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso-macros · SimpleRepresentation derive",
     "summary": "Derives representation naming and duality boilerplate from the representation helper attribute.",
-    "href": "reference/rust/spenso_macros/derive.SimpleRepresentation.html",
+    "href": "reference/rust/supported/spenso-macros/#supported-simplerepresentation",
     "kind": "rust-api"
   },
   {
     "title": "spenso-hep-lib · HEP tensor library",
     "summary": "Constructs the standard high-energy-physics tensor library for a chosen scalar data type.",
-    "href": "reference/rust/spenso_hep_lib/fn.hep_lib.html",
+    "href": "reference/rust/supported/spenso-hep-lib/#supported-hep-lib",
     "kind": "rust-api"
   },
   {
     "title": "spenso-hep-lib · Dirac gamma data",
     "summary": "Creates sparse Dirac-basis gamma-matrix data for the supplied tensor structure.",
-    "href": "reference/rust/spenso_hep_lib/fn.gamma_data_dirac.html",
+    "href": "reference/rust/supported/spenso-hep-lib/#supported-gamma-data-dirac",
     "kind": "rust-api"
   },
   {
     "title": "spenso-hep-lib · SU(3) generator data",
     "summary": "Creates the standard sparse SU(3) fundamental-generator tensor.",
-    "href": "reference/rust/spenso_hep_lib/fn.su3_generator_data.html",
+    "href": "reference/rust/supported/spenso-hep-lib/#supported-su3-generator-data",
     "kind": "rust-api"
   },
   {

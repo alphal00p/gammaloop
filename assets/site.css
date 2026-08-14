@@ -199,6 +199,7 @@ button, select { color: inherit; }
 .docs-article p { margin: 0.8rem 0 1.1rem; }
 .docs-article > p:first-of-type { color: var(--ink-muted); font-size: 1.08rem; }
 .product-hero {
+  position: relative;
   margin: -0.4rem 0 3rem;
   padding: clamp(1.4rem, 4vw, 2.3rem);
   border: 1px solid var(--border);
@@ -208,6 +209,10 @@ button, select { color: inherit; }
     var(--surface);
   box-shadow: 0.45rem 0.45rem 0 var(--accent-soft);
 }
+.product-hero-logo { display: block; width: min(18rem, 70%); height: 5rem; margin-bottom: 1.25rem; background-position: left center; background-repeat: no-repeat; background-size: contain; }
+.product-logo-gammaloop { background-image: url("gammalooplogo-light.svg"); }
+:root[data-theme="dark"] .product-logo-gammaloop { background-image: url("gammalooplogo-dark.svg"); }
+.product-logo-spenso { height: 4.4rem; border-radius: 1rem; background-color: #d9d9d9; background-image: url("spensologo.svg"); }
 .product-hero h1 { max-width: 12ch; margin: 0.25rem 0 0.7rem; }
 .product-hero > p:not(.product-eyebrow) { max-width: 42rem; color: var(--ink-muted); font-size: 1.08rem; }
 .product-eyebrow { margin: 0; color: var(--link); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
@@ -297,6 +302,10 @@ button, select { color: inherit; }
 .api-member { margin: 0.8rem 0; padding: 0.8rem 0 0 1rem; border-left: 2px solid var(--accent); }
 .api-docstring { white-space: pre-wrap; }
 .stub-source summary { cursor: pointer; color: var(--link); }
+.reference-hub-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); margin: 1.5rem 0; border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
+.reference-hub-card { min-height: 14rem; padding: 1.25rem; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface); }
+.reference-hub-card h2 { margin: 1.4rem 0 0.6rem; font-family: var(--font-serif); }
+.reference-hub-card h2 a { color: var(--ink-strong); text-decoration: none; }
 
 .search-dialog { width: min(42rem, calc(100vw - 2rem)); max-height: min(42rem, calc(100vh - 2rem)); padding: 0; border: 1px solid var(--border); border-radius: 0.5rem; background: var(--canvas); color: var(--ink); box-shadow: var(--shadow); }
 .search-dialog::backdrop { background: rgb(33 21 38 / 55%); backdrop-filter: blur(3px); }
@@ -525,8 +534,8 @@ button, select { color: inherit; }
   background-size: 2rem 2rem;
 }
 .portal-hero-art::before { content: ""; position: absolute; inset: 10% -25% auto auto; width: 22rem; aspect-ratio: 1; border: 1px solid var(--border); border-radius: 50%; background: var(--accent-soft); opacity: 0.7; }
-.portal-wordmark { position: relative; z-index: 1; width: 100%; min-height: 18rem; background: center / contain no-repeat url("gammalooplogo-light.svg"); }
-:root[data-theme="dark"] .portal-wordmark { background-image: url("gammalooplogo-dark.svg"); }
+.portal-wordmark { position: relative; z-index: 1; width: 100%; min-height: 18rem; background: center / contain no-repeat url("local-unitarity-light.svg"); }
+:root[data-theme="dark"] .portal-wordmark { background-image: url("local-unitarity-dark.svg"); }
 .portal-hero-art > p { position: relative; z-index: 1; margin: 0; color: var(--ink-strong); font-family: var(--font-serif); font-size: clamp(1.6rem, 3vw, 2.3rem); line-height: 1.05; letter-spacing: -0.025em; }
 .portal-pillars { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--border); }
 .portal-pillar { min-height: 14rem; padding: clamp(1.5rem, 3vw, 2.6rem); }
@@ -571,6 +580,7 @@ button, select { color: inherit; }
 .portal-person a { min-height: 9rem; display: grid; grid-template-columns: auto 1fr auto; gap: 1rem; align-items: center; padding: 1.4rem; color: var(--ink-strong); text-decoration: none; transition: background-color 180ms ease, box-shadow 180ms ease; }
 .portal-person a:hover, .portal-person a:focus-visible { background: var(--accent-soft); box-shadow: inset 0 -4px var(--accent); }
 .portal-person-initials { display: grid; place-items: center; width: 3rem; aspect-ratio: 1; border: 1px solid var(--border); border-radius: 50%; background: var(--canvas); font-family: var(--font-mono); font-size: 0.72rem; font-weight: 600; }
+.portal-person-portrait { width: 3.4rem; aspect-ratio: 1; border: 1px solid var(--border); border-radius: 50%; object-fit: cover; }
 .portal-person strong, .portal-person small { display: block; }
 .portal-person strong { font-family: var(--font-serif); font-size: 1.25rem; font-weight: 600; line-height: 1.1; }
 .portal-person small { margin-top: 0.35rem; color: var(--ink-muted); font-size: 0.68rem; line-height: 1.35; }
@@ -594,6 +604,53 @@ button, select { color: inherit; }
 .portal-footer nav a { width: fit-content; font-family: var(--font-mono); font-size: 0.7rem; text-decoration: none; text-transform: uppercase; }
 .portal-footer > p { text-align: right; }
 
+.portal-subpage-main { min-height: 65vh; }
+.portal-page-hero { padding: clamp(4rem, 9vw, 8rem) clamp(1.5rem, 7vw, 7rem); border-bottom: 1px solid var(--border); background: var(--surface-soft); }
+.portal-page-hero h1 { max-width: 12ch; margin: 1rem 0 1.5rem; color: var(--ink-strong); font-family: var(--font-serif); font-size: clamp(3.5rem, 8vw, 7rem); font-weight: 500; line-height: 0.9; letter-spacing: -0.05em; }
+.portal-page-hero > p:not(.portal-kicker) { max-width: 52rem; color: var(--ink-muted); font-size: 1.05rem; }
+.portal-page-note { padding: 1.5rem clamp(1.5rem, 5vw, 5rem); border-top: 1px solid var(--border); background: var(--accent-soft); }
+.portal-page-note p { max-width: 60rem; margin-bottom: 0; color: var(--ink-muted); }
+
+.people-page-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.people-card { min-height: 24rem; display: grid; grid-template-columns: minmax(10rem, 0.85fr) minmax(14rem, 1.15fr); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--canvas); }
+.people-card:nth-child(2n) { border-right: 0; }
+.people-card-portrait, .people-card-initials { width: 100%; height: 100%; min-height: 24rem; border-right: 1px solid var(--border); object-fit: cover; }
+.people-card-initials { display: grid; place-items: center; background: var(--accent-soft); color: var(--ink-strong); font-family: var(--font-serif); font-size: 4rem; }
+.people-card-copy { display: flex; flex-direction: column; padding: clamp(1.4rem, 3vw, 2.5rem); }
+.people-card h2 { margin: 1.5rem 0 0.65rem; color: var(--ink-strong); font-family: var(--font-serif); font-size: clamp(2rem, 3vw, 3rem); font-weight: 600; line-height: 1; }
+.people-card-copy > p:not(.portal-kicker) { color: var(--ink-muted); }
+.people-card nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: auto; padding-top: 1.5rem; }
+.people-card nav a { padding: 0.3rem 0.5rem; border: 1px solid var(--hairline); background: var(--surface); font-family: var(--font-mono); font-size: 0.65rem; text-decoration: none; }
+.people-card nav a:hover, .people-card nav a:focus-visible { border-color: var(--border); background: var(--accent-soft); }
+.people-photo-source { width: fit-content; margin-top: 0.7rem; color: var(--ink-muted) !important; font-family: var(--font-mono); font-size: 0.58rem; }
+
+.publication-provenance { font-family: var(--font-mono); font-size: 0.7rem !important; }
+.publication-filters { position: sticky; top: var(--portal-header-height); z-index: 20; display: grid; grid-template-columns: minmax(13rem, 2fr) repeat(4, minmax(8rem, 1fr)) auto; gap: 0; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--canvas) 96%, transparent); backdrop-filter: blur(12px); }
+.publication-filters label { display: grid; gap: 0.25rem; padding: 0.65rem; border-right: 1px solid var(--hairline); color: var(--ink-muted); font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; }
+.publication-filters input, .publication-filters select { min-width: 0; height: 2.35rem; padding: 0.35rem 0.5rem; border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); font-family: var(--font-sans); font-size: 0.78rem; text-transform: none; }
+.publication-filters output { align-self: stretch; display: grid; place-items: center; min-width: 9rem; padding: 0.7rem; color: var(--ink-strong); font-family: var(--font-mono); font-size: 0.65rem; }
+.publication-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.publication-card { min-height: 18rem; display: flex; flex-direction: column; padding: clamp(1.25rem, 3vw, 2.2rem); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.publication-card:nth-child(2n) { border-right: 0; }
+.publication-card[hidden] { display: none; }
+.publication-card-meta { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; color: var(--link); font-family: var(--font-mono); font-size: 0.62rem; text-transform: uppercase; }
+.publication-card h2 { margin: 1.4rem 0 0.8rem; color: var(--ink-strong); font-family: var(--font-serif); font-size: clamp(1.5rem, 2.6vw, 2.1rem); line-height: 1.08; }
+.publication-card h2 a { text-decoration: none; }
+.publication-authors { margin: 0; color: var(--ink-muted); font-size: 0.82rem; }
+.publication-card nav { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: auto; padding-top: 1.5rem; font-family: var(--font-mono); font-size: 0.65rem; text-transform: uppercase; }
+
+.citation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.citation-card { min-width: 0; padding: clamp(1.5rem, 4vw, 3.5rem); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.citation-card:nth-child(2n) { border-right: 0; }
+.citation-card:last-child { grid-column: 1 / -1; border-right: 0; }
+.citation-card h2 { margin: 1rem 0; color: var(--ink-strong); font-family: var(--font-serif); font-size: 2.8rem; }
+.citation-card h3 { margin-top: 2rem; }
+.citation-card pre { max-width: 100%; overflow-x: auto; padding: 1rem; border: 1px solid var(--hairline); background: var(--surface); white-space: pre-wrap; }
+.citation-card details { margin-top: 1.5rem; }
+.citation-card summary { color: var(--link); cursor: pointer; }
+.citation-card .portal-button { margin-top: 0.6rem; cursor: pointer; }
+.citation-status { color: var(--ink-muted); font-size: 0.82rem; }
+
 @media (max-width: 72rem) {
   .docs-shell { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
   .docs-toc { display: none; }
@@ -611,6 +668,8 @@ button, select { color: inherit; }
   .portal-people-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .portal-person:nth-child(2n) { border-right: 0; }
   .portal-person:nth-child(n + 3) { border-top: 1px solid var(--border); }
+  .publication-filters { grid-template-columns: repeat(3, 1fr); }
+  .publication-filters output { border-top: 1px solid var(--hairline); }
 }
 
 @media (max-width: 52rem) {
@@ -666,6 +725,10 @@ button, select { color: inherit; }
   .portal-funding > .portal-text-link { grid-column: 2; margin-top: 0; }
   .portal-footer { grid-template-columns: 1fr; min-height: auto; }
   .portal-footer > p { text-align: left; }
+  .people-page-grid, .publication-list, .citation-grid { grid-template-columns: 1fr; }
+  .people-card, .publication-card, .citation-card, .citation-card:last-child { grid-column: auto; border-right: 0; }
+  .publication-filters { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .publication-filters output { min-height: 3rem; }
 }
 
 @media (max-width: 34rem) {
@@ -684,6 +747,10 @@ button, select { color: inherit; }
   .portal-facts div + div { padding-left: 0.5rem; }
   .portal-facts dt { font-size: 1.65rem; }
   .portal-facts dd { font-size: 0.55rem; }
+  .people-card { grid-template-columns: 1fr; }
+  .people-card-portrait, .people-card-initials { min-height: 19rem; max-height: 24rem; border-right: 0; border-bottom: 1px solid var(--border); }
+  .publication-filters { grid-template-columns: 1fr; }
+  .publication-filters label { border-right: 0; border-bottom: 1px solid var(--hairline); }
 }
 
 @media (prefers-reduced-motion: reduce) {
