@@ -146,10 +146,19 @@ products/<product>/<channel>/
   index.html
   tutorial/index.html
   manual/<chapter>/index.html
+  reference/index.html
   reference/python/<component>/index.html
-  reference/rust/
+  reference/rust/index.html
+  reference/rust/supported/<component>/index.html
+  reference/rust/<crate>/...  # exhaustive Rustdoc sidecar
   manual.pdf
 ```
+
+GammaLoop additionally publishes its generated Clap command tree and settings schema at
+`reference/cli/`; Vakint publishes its compiled topology and dependency inventory at
+`reference/topologies/`. The neutral catalogs are the primary human-facing API reference.
+Checked `.pyi` files and exhaustive Rustdoc remain downloadable implementation artifacts rather
+than substitutes for tutorials or manuals.
 
 The same tree is used for the moving `latest` channel and immutable tagged
 snapshots. All authored internal links are interpreted relative to the product

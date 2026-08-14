@@ -19,6 +19,7 @@ canonical_directory() {
 
 require_bundle() {
     local bundle=$1
+    local product=$2
     local required
     for required in \
         .note \
@@ -33,8 +34,10 @@ require_bundle() {
         assets/site.js \
         assets/local-unitarity-light.svg \
         assets/local-unitarity-dark.svg \
+        assets/spensologo.svg \
         assets/gammalooplogo-light.svg \
         assets/gammalooplogo-dark.svg \
+        reference/index.html \
         reference/rust/index.html \
         reference/python/index.html
     do
@@ -42,6 +45,23 @@ require_bundle() {
     done
     find "$bundle/reference/python" -mindepth 2 -maxdepth 2 -name index.html -print -quit |
         grep -q . || fail "incomplete product bundle: $bundle has no structured Python component page"
+    find "$bundle/reference/rust/supported" -mindepth 2 -maxdepth 2 -name index.html -print -quit |
+        grep -q . || fail "incomplete product bundle: $bundle has no structured Rust component page"
+
+    case "$product" in
+        gammaloop)
+            [ -f "$bundle/reference/cli/index.html" ] ||
+                fail "incomplete product bundle: $bundle has no generated CLI reference"
+            [ -f "$bundle/reference/generated/gammaloop-reference.json" ] ||
+                fail "incomplete product bundle: $bundle has no machine-readable CLI catalogue"
+            ;;
+        vakint)
+            [ -f "$bundle/reference/topologies/index.html" ] ||
+                fail "incomplete product bundle: $bundle has no generated topology reference"
+            [ -f "$bundle/reference/generated/vakint-reference.json" ] ||
+                fail "incomplete product bundle: $bundle has no machine-readable topology catalogue"
+            ;;
+    esac
 }
 
 [ "$#" -ge 3 ] && [ "$#" -le 4 ] || usage
@@ -74,6 +94,18 @@ case "$mode" in
             fail "latest build has no light project wordmark"
         [ -f "$build_root/assets/gammalooplogo-dark.svg" ] ||
             fail "latest build has no dark project wordmark"
+        [ -f "$build_root/assets/spensologo.svg" ] ||
+            fail "latest build has no Spenso project wordmark"
+        [ -f "$build_root/assets/publications.json" ] ||
+            fail "latest build has no publication cache"
+        [ -f "$build_root/assets/people/valentin.webp" ] ||
+            fail "latest build has no people portraits"
+        [ -f "$build_root/people/index.html" ] ||
+            fail "latest build has no people page"
+        [ -f "$build_root/publications/index.html" ] ||
+            fail "latest build has no publications page"
+        [ -f "$build_root/citations/index.html" ] ||
+            fail "latest build has no citations page"
         [ -f "$build_root/developers/.note" ] ||
             fail "latest build has no developer publication note"
         [ -f "$build_root/developers/index.html" ] ||
@@ -90,28 +122,19 @@ case "$mode" in
             fail "latest build has no Spenso parsing diagram"
 
         for product in "${products[@]}"; do
-            require_bundle "$build_root/products/$product/latest"
+            require_bundle "$build_root/products/$product/latest" "$product"
             [ -f "$build_root/products/$product/index.html" ] ||
                 fail "latest build has no redirect for $product"
         done
 
         install -m 0644 "$build_root/index.html" "$pages_root/index.html"
         install -m 0644 "$build_root/.nojekyll" "$pages_root/.nojekyll"
-        mkdir -p "$pages_root/assets"
-        install -m 0644 "$build_root/assets/site.css" "$pages_root/assets/site.css"
-        install -m 0644 "$build_root/assets/site.js" "$pages_root/assets/site.js"
-        install -m 0644 \
-            "$build_root/assets/local-unitarity-light.svg" \
-            "$pages_root/assets/local-unitarity-light.svg"
-        install -m 0644 \
-            "$build_root/assets/local-unitarity-dark.svg" \
-            "$pages_root/assets/local-unitarity-dark.svg"
-        install -m 0644 \
-            "$build_root/assets/gammalooplogo-light.svg" \
-            "$pages_root/assets/gammalooplogo-light.svg"
-        install -m 0644 \
-            "$build_root/assets/gammalooplogo-dark.svg" \
-            "$pages_root/assets/gammalooplogo-dark.svg"
+        rm -rf -- "$pages_root/assets"
+        cp -a "$build_root/assets" "$pages_root/assets"
+        for portal_page in people publications citations; do
+            rm -rf -- "$pages_root/$portal_page"
+            cp -a "$build_root/$portal_page" "$pages_root/$portal_page"
+        done
         rm -rf -- "$pages_root/developers"
         cp -a "$build_root/developers" "$pages_root/developers"
         mkdir -p "$pages_root/products"
@@ -136,7 +159,7 @@ case "$mode" in
         for product in "${products[@]}"; do
             source_bundle="$build_root/products/$product/snapshots/$snapshot_tag"
             destination_bundle="$pages_root/products/$product/snapshots/$snapshot_tag"
-            require_bundle "$source_bundle"
+            require_bundle "$source_bundle" "$product"
             if [ -e "$destination_bundle" ] &&
                 ! diff -qr "$source_bundle" "$destination_bundle" >/dev/null
             then

@@ -4,7 +4,9 @@ schema = 2
 id = "gammaloop"
 title = "GammaLoop"
 tagline = "Differential cross-sections with Local Unitarity"
+logo = "gammaloop"
 source = "docs/products/gammaloop/main.typ"
+citation = { title = "γLoop: Automated numerical calculations in perturbative quantum field theory with Local Unitarity", creators = ["Zeno Capatti", "Mathijs Fraaije", "Valentin Hirschi", "Lucien Huber", "Ben Ruijl"], year = 2023, repository = "https://github.com/alphal00p/gammaloop" }
 pages = [
   { id = "overview", title = "Overview", summary = "What GammaLoop computes, how stateful runs fit together, and where the surrounding libraries begin.", source = "docs/products/gammaloop/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
   { id = "tutorial", title = "First calculation", summary = "Build GammaLoop, run a maintained card, inspect its state, and resume the calculation.", source = "docs/products/gammaloop/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
@@ -26,6 +28,7 @@ id = "linnet"
 title = "Linnet"
 tagline = "Half-edge graphs and subgraph-first algorithms"
 source = "docs/products/linnet/main.typ"
+citation = { title = "Linnet", creators = ["Lucien Huber", "Mathijs Fraaije"], year = 2026, repository = "https://github.com/alphal00p/linnet", doi = "10.5281/zenodo.18429583" }
 pages = [
   { id = "overview", title = "Overview", summary = "Half-edge graphs, subgraph-first operations, typed indices, and the boundaries of the Linnet ecosystem.", source = "docs/products/linnet/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
   { id = "tutorial", title = "Build and explore a graph", summary = "Construct a small graph, inspect its half-edges, and apply a first subgraph-aware operation.", source = "docs/products/linnet/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
@@ -46,7 +49,9 @@ python_components = [
 id = "spenso"
 title = "Spenso"
 tagline = "Typed tensors, symbolic structures, and executable tensor networks"
+logo = "spenso"
 source = "docs/products/spenso/main.typ"
+citation = { title = "Spenso", creators = ["Lucien Huber", "Valentin Hirschi", "Ben Ruijl", "Mathijs Fraaije"], year = 2026, repository = "https://github.com/alphal00p/spenso", doi = "10.5281/zenodo.18248388" }
 pages = [
   { id = "overview", title = "Overview", summary = "Typed tensor structures, data representations, contractions, networks, and companion packages.", source = "docs/products/spenso/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
   { id = "tutorial", title = "Your first tensor workflow", summary = "Define tensor structure, attach data, and inspect a first pairwise contraction before moving to networks.", source = "docs/products/spenso/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
@@ -70,6 +75,7 @@ id = "idenso"
 title = "Idenso"
 tagline = "Symbolic tensor identities for Spenso and Symbolica"
 source = "docs/products/idenso/main.typ"
+citation = { title = "Idenso", creators = ["Lucien Huber", "Valentin Hirschi", "Ben Ruijl", "Mathijs Fraaije"], year = 2026, repository = "https://github.com/alphal00p/spenso", doi = "10.5281/zenodo.18248409" }
 pages = [
   { id = "overview", title = "Overview", summary = "Symbolic tensor identities, controlled rewrite stages, representation setup, and reversible cooking.", source = "docs/products/idenso/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
   { id = "tutorial", title = "A controlled identity pass", summary = "Initialize representations, inspect indices, apply a focused rewrite, and verify the result.", source = "docs/products/idenso/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
@@ -91,6 +97,7 @@ id = "vakint"
 title = "Vakint"
 tagline = "Single-scale vacuum-integral matching and evaluation"
 source = "docs/products/vakint/main.typ"
+citation = { title = "Vakint", creators = ["Lucien Huber", "Valentin Hirschi"], year = 2026, repository = "https://github.com/alphal00p/vakint" }
 pages = [
   { id = "overview", title = "Overview", summary = "Topology matching, canonicalization, tensor reduction, evaluation backends, and reproducibility.", source = "docs/products/vakint/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
   { id = "tutorial", title = "Match your first integral", summary = "Configure a dependency-free engine, parse a vacuum integral, canonicalize it, and inspect the match.", source = "docs/products/vakint/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },

@@ -1,6 +1,8 @@
 name: Documentation Pages
 
 on:
+  schedule:
+    - cron: '17 4 * * 1'
   push:
     branches:
       - main
@@ -119,6 +121,13 @@ jobs:
             fi
           done
           git checkout --detach "refs/tags/$SNAPSHOT_TAG"
+
+      - name: Refresh publication catalogue
+        if: steps.release.outputs.channel == 'latest'
+        run: |
+          set -euo pipefail
+          nix develop --command \
+            python3 scripts/update-publications.py --keep-existing-on-error
 
       - name: Build all five sites
         env:

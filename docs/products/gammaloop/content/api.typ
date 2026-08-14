@@ -32,8 +32,8 @@ loaded.cli_session().execute_command(command)?;
 
 Some Rust types are public so that GammaLoop's packages can work together, but are not intended
 as stable integration points. Prefer the state-loading and structured-operation APIs described
-here; consult the full Rust API reference when you need lower-level types or trait
-implementations.
+here; start with the #link("reference/rust/")[curated Rust API] and use its Rustdoc links when
+you need lower-level types or trait implementations.
 
 == Python packaging
 
@@ -69,7 +69,7 @@ precision use `evaluate_sample_precise` and `evaluate_samples_precise`.
 
 == CLI and settings reference
 
-Use `./gammaloop --help` and the CLI reference for command names, aliases, flags, positional
-arguments, defaults, and possible values. The settings reference lists available paths and
-defaults. The tutorials explain how commands and settings combine into a persistent workflow.
+Use `./gammaloop --help` and the generated #link("reference/cli/")[CLI and settings reference]
+for command names, aliases, flags, positional arguments, defaults, possible values, and setting
+paths. The tutorials explain how commands and settings combine into a persistent workflow.
 ]

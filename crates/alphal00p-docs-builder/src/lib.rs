@@ -26,8 +26,9 @@ use tempfile::Builder as TempDirBuilder;
 use walkdir::WalkDir;
 
 const PRODUCT_IDS: [&str; 5] = ["gammaloop", "linnet", "spenso", "idenso", "vakint"];
-const PORTAL_SCHEMA_VERSION: u32 = 1;
+const PORTAL_SCHEMA_VERSION: u32 = 2;
 const DEVELOPER_SCHEMA_VERSION: u32 = 1;
+const PUBLICATION_SCHEMA_VERSION: u32 = 1;
 const STRICT_RUSTDOC_FLAGS: &str = "-D rustdoc::broken_intra_doc_links \
     -D rustdoc::invalid_html_tags -D rustdoc::bare_urls";
 
@@ -73,7 +74,9 @@ struct ProductConfig {
     id: String,
     title: String,
     tagline: String,
+    logo: Option<String>,
     source: PathBuf,
+    citation: CitationConfig,
     #[serde(default)]
     pages: Vec<PageConfig>,
     changelog: Option<PathBuf>,
@@ -83,6 +86,15 @@ struct ProductConfig {
     rust_components: Vec<ComponentConfig>,
     #[serde(default)]
     python_components: Vec<ComponentConfig>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct CitationConfig {
+    title: String,
+    creators: Vec<String>,
+    year: u16,
+    repository: String,
+    doi: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -110,10 +122,21 @@ struct PortalPillar {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct PortalPerson {
+    id: String,
     name: String,
     initials: String,
     role: String,
     url: String,
+    github: String,
+    portrait: Option<String>,
+    portrait_source: Option<String>,
+    inspire_recid: Option<u64>,
+    inspire_bai: Option<String>,
+    orcid: Option<String>,
+    #[serde(default)]
+    publications: bool,
+    #[serde(default)]
+    featured: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -150,6 +173,40 @@ struct DeveloperNote {
     source: PathBuf,
     kind: String,
     status: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PublicationCache {
+    schema: u32,
+    source: String,
+    updated: String,
+    api_url: String,
+    authors: Vec<PublicationAuthor>,
+    publications: Vec<Publication>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PublicationAuthor {
+    id: String,
+    name: String,
+    inspire_bai: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct Publication {
+    id: u64,
+    title: String,
+    date: String,
+    year: u16,
+    authors: Vec<String>,
+    people: Vec<String>,
+    venue: Option<String>,
+    doi: Option<String>,
+    arxiv: Option<String>,
+    citations: u64,
+    types: Vec<String>,
+    url: String,
+    bibtex_url: String,
 }
 
 /// One authored chapter in a product's ordered, durable book tree.
@@ -228,10 +285,10 @@ impl SitePage {
     }
 }
 
-fn supplemental_reference_title(product: &str) -> Option<&'static str> {
+fn supplemental_reference(product: &str) -> Option<(&'static str, &'static str)> {
     match product {
-        "gammaloop" => Some("CLI commands and settings"),
-        "vakint" => Some("Topologies and dependencies"),
+        "gammaloop" => Some(("reference/cli/", "CLI commands and settings")),
+        "vakint" => Some(("reference/topologies/", "Topologies and dependencies")),
         _ => None,
     }
 }
@@ -249,6 +306,7 @@ pub struct SiteBuilder {
     registry: ProductRegistry,
     portal: PortalConfig,
     developers: DeveloperConfig,
+    publications: PublicationCache,
 }
 
 impl SiteBuilder {
@@ -277,6 +335,12 @@ impl SiteBuilder {
             .wrap_err_with(|| format!("failed to read {}", developers_path.display()))?;
         let developers = toml::from_str(&source)
             .wrap_err_with(|| format!("failed to parse {}", developers_path.display()))?;
+        let publications_path = root.join("docs/data/publications.json");
+        let publications = serde_json::from_slice(
+            &fs::read(&publications_path)
+                .wrap_err_with(|| format!("failed to read {}", publications_path.display()))?,
+        )
+        .wrap_err_with(|| format!("failed to parse {}", publications_path.display()))?;
         let api_root = env::var_os("ALPHAL00P_DOCS_API_ROOT")
             .map(PathBuf::from)
             .unwrap_or_else(|| root.join("docs/api"));
@@ -286,6 +350,7 @@ impl SiteBuilder {
             registry,
             portal,
             developers,
+            publications,
         })
     }
 
@@ -412,6 +477,101 @@ impl SiteBuilder {
                 && !self.portal.affiliation.is_empty(),
             "portal must define research pillars, people, and affiliations"
         );
+        ensure!(
+            self.publications.schema == PUBLICATION_SCHEMA_VERSION,
+            "publication schema {} does not match renderer schema {}",
+            self.publications.schema,
+            PUBLICATION_SCHEMA_VERSION
+        );
+        ensure!(
+            self.publications
+                .source
+                .starts_with("https://inspirehep.net")
+                && self
+                    .publications
+                    .api_url
+                    .starts_with("https://inspirehep.net/api/literature"),
+            "publication metadata must come from INSPIRE HEP"
+        );
+        let mut person_ids = BTreeSet::new();
+        let mut scholarly_people = BTreeSet::new();
+        for person in &self.portal.people {
+            validate_route_segment(&person.id)?;
+            ensure!(
+                person_ids.insert(&person.id),
+                "duplicate person {}",
+                person.id
+            );
+            ensure!(
+                !person.name.trim().is_empty()
+                    && !person.initials.trim().is_empty()
+                    && !person.role.trim().is_empty(),
+                "person {} is incomplete",
+                person.id
+            );
+            ensure!(
+                person.url.starts_with("https://")
+                    && person.github.starts_with("https://github.com/"),
+                "person {} must have HTTPS profile and GitHub URLs",
+                person.id
+            );
+            ensure!(
+                person.portrait.is_some() == person.portrait_source.is_some(),
+                "person {} must pair portrait and portrait_source",
+                person.id
+            );
+            if let Some(portrait) = &person.portrait {
+                validate_route_segment(portrait.trim_end_matches(".webp"))?;
+                ensure!(
+                    portrait.ends_with(".webp"),
+                    "person portrait must be WebP: {portrait}"
+                );
+                self.require_file(&PathBuf::from("docs/assets/people").join(portrait))?;
+            }
+            if person.publications {
+                ensure!(
+                    person.inspire_recid.is_some() && person.inspire_bai.is_some(),
+                    "scholarly person {} needs stable INSPIRE identifiers",
+                    person.id
+                );
+                scholarly_people.insert(person.id.as_str());
+            }
+        }
+        let cached_authors = self
+            .publications
+            .authors
+            .iter()
+            .map(|author| author.id.as_str())
+            .collect::<BTreeSet<_>>();
+        ensure!(
+            cached_authors == scholarly_people,
+            "publication cache authors differ from portal scholarly people"
+        );
+        let mut publication_ids = BTreeSet::new();
+        for publication in &self.publications.publications {
+            ensure!(
+                publication_ids.insert(publication.id),
+                "duplicate INSPIRE publication {}",
+                publication.id
+            );
+            ensure!(
+                !publication.title.trim().is_empty()
+                    && !publication.authors.is_empty()
+                    && !publication.people.is_empty()
+                    && publication
+                        .people
+                        .iter()
+                        .all(|person| scholarly_people.contains(person.as_str()))
+                    && publication
+                        .url
+                        .starts_with("https://inspirehep.net/literature/")
+                    && publication
+                        .bibtex_url
+                        .starts_with("https://inspirehep.net/api/literature/"),
+                "publication {} is incomplete",
+                publication.id
+            );
+        }
         for url in self
             .portal
             .people
@@ -434,6 +594,7 @@ impl SiteBuilder {
         self.require_file(Path::new("docs/assets/site.js"))?;
         self.require_file(Path::new("docs/assets/local-unitarity-light.svg"))?;
         self.require_file(Path::new("docs/assets/local-unitarity-dark.svg"))?;
+        self.require_file(Path::new("docs/assets/spensologo.svg"))?;
         self.require_file(Path::new("assets/gammalooplogo-light.svg"))?;
         self.require_file(Path::new("assets/gammalooplogo-dark.svg"))?;
 
@@ -443,6 +604,28 @@ impl SiteBuilder {
             ensure!(
                 !product.title.trim().is_empty() && !product.tagline.trim().is_empty(),
                 "{} has empty product identity metadata",
+                product.id
+            );
+            ensure!(
+                !product.citation.title.trim().is_empty()
+                    && !product.citation.creators.is_empty()
+                    && product.citation.repository.starts_with("https://"),
+                "{} has incomplete citation metadata",
+                product.id
+            );
+            if let Some(doi) = &product.citation.doi {
+                ensure!(
+                    doi.starts_with("10."),
+                    "{} has invalid DOI {doi}",
+                    product.id
+                );
+            }
+            ensure!(
+                product
+                    .logo
+                    .as_deref()
+                    .is_none_or(|logo| matches!(logo, "gammaloop" | "spenso")),
+                "{} has an unknown product logo",
                 product.id
             );
             self.require_file(&product.source)?;
@@ -684,6 +867,8 @@ impl SiteBuilder {
         } else {
             self.write_rustdoc_placeholder(product, &site)?;
         }
+        self.write_rust_reference(product, &metadata, &site)?;
+        self.write_reference_hub(product, &site)?;
         self.write_search_index(product, &site)?;
         self.decorate_site_pages(product, &metadata, &site)?;
 
@@ -775,12 +960,32 @@ impl SiteBuilder {
                 "docs/assets/local-unitarity-dark.svg",
                 "local-unitarity-dark.svg",
             ),
+            ("docs/assets/spensologo.svg", "spensologo.svg"),
             ("assets/gammalooplogo-light.svg", "gammalooplogo-light.svg"),
             ("assets/gammalooplogo-dark.svg", "gammalooplogo-dark.svg"),
         ] {
             fs::copy(self.root.join(source), assets.join(name))
                 .wrap_err_with(|| format!("failed to copy documentation asset {source}"))?;
         }
+        Ok(())
+    }
+
+    fn write_portal_assets(&self, destination: &Path) -> Result<()> {
+        let people = destination.join("assets/people");
+        fs::create_dir_all(&people)?;
+        for person in &self.portal.people {
+            if let Some(portrait) = &person.portrait {
+                fs::copy(
+                    self.root.join("docs/assets/people").join(portrait),
+                    people.join(portrait),
+                )
+                .wrap_err_with(|| format!("failed to copy portrait for {}", person.name))?;
+            }
+        }
+        fs::copy(
+            self.root.join("docs/data/publications.json"),
+            destination.join("assets/publications.json"),
+        )?;
         Ok(())
     }
 
@@ -896,6 +1101,12 @@ impl SiteBuilder {
                 )?;
                 fs::write(
                     destination.join("index.html"),
+                    generated_reference_redirect(&product.title, "../cli/", "CLI reference"),
+                )?;
+                let first_class = site.join("reference/cli");
+                fs::create_dir_all(&first_class)?;
+                fs::write(
+                    first_class.join("index.html"),
                     render_gammaloop_generated_reference(&product.title, &reference),
                 )?;
             }
@@ -908,6 +1119,16 @@ impl SiteBuilder {
                 )?;
                 fs::write(
                     destination.join("index.html"),
+                    generated_reference_redirect(
+                        &product.title,
+                        "../topologies/",
+                        "topology reference",
+                    ),
+                )?;
+                let first_class = site.join("reference/topologies");
+                fs::create_dir_all(&first_class)?;
+                fs::write(
+                    first_class.join("index.html"),
                     render_vakint_generated_reference(&product.title, &reference),
                 )?;
             }
@@ -1288,6 +1509,97 @@ impl SiteBuilder {
         Ok(())
     }
 
+    fn write_rust_reference(
+        &self,
+        product: &ProductConfig,
+        metadata: &SnapshotMetadata<'_>,
+        site: &Path,
+    ) -> Result<()> {
+        let destination = site.join("reference/rust");
+        let supported = destination.join("supported");
+        fs::create_dir_all(&supported)?;
+        let mut cards = String::new();
+        for component in &product.rust_components {
+            let catalog_path = site.join("catalogs").join(format!("{}.json", component.id));
+            let catalog = serde_json::from_slice::<DocCatalog>(&fs::read(&catalog_path)?)
+                .wrap_err_with(|| format!("failed to parse {}", catalog_path.display()))?;
+            catalog.validate()?;
+            let count = count_catalog_items(&catalog.root);
+            let crate_name = component.package.replace('-', "_");
+            cards.push_str(&format!(
+                "<article class=\"api-component-card\"><h2><a href=\"reference/rust/supported/{}/\"><code>{}</code></a></h2><p>{count} curated entries · version {}</p><p>{}</p><a href=\"reference/rust/{crate_name}/\">Full Rustdoc</a></article>",
+                escape_html(&component.id),
+                escape_html(&component.package),
+                escape_html(&self.component_version(component)?),
+                escape_html(&catalog.root.summary.clone().unwrap_or_else(|| {
+                    format!("Supported Rust surface for {}.", component.id)
+                })),
+            ));
+            let mut body = format!(
+                "<p><code>{}</code> · {count} curated entries · version {}</p><p><a href=\"reference/rust/{crate_name}/\">Open the complete generated Rustdoc</a>. The source-backed catalog below highlights the supported public surface with signatures, feature gates, examples, and source links.</p>",
+                escape_html(&component.package),
+                escape_html(&catalog.component.version),
+            );
+            let mut path = Vec::new();
+            render_python_scope(
+                &catalog,
+                &catalog.root,
+                &mut path,
+                &metadata.git_commit,
+                2,
+                &mut body,
+            );
+            let component_page = supported.join(&component.id);
+            fs::create_dir_all(&component_page)?;
+            fs::write(
+                component_page.join("index.html"),
+                reference_page(
+                    &product.title,
+                    &format!("{} supported Rust API", component.id),
+                    &body,
+                ),
+            )?;
+        }
+        fs::write(
+            destination.join("index.html"),
+            reference_page(
+                &product.title,
+                "Rust API",
+                &format!(
+                    "<p>Browse curated, source-backed API catalogs first; use the complete Rustdoc sidecars for implementation-level detail.</p><div class=\"api-component-grid\">{cards}</div>"
+                ),
+            ),
+        )?;
+        Ok(())
+    }
+
+    fn write_reference_hub(&self, product: &ProductConfig, site: &Path) -> Result<()> {
+        let mut cards = format!(
+            "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Curated + exhaustive</p><h2><a href=\"reference/rust/\">Rust API</a></h2><p>{} source-backed components with complete Rustdoc sidecars.</p></article><article class=\"reference-hub-card\"><p class=\"portal-kicker\">Generated signatures</p><h2><a href=\"reference/python/\">Python API</a></h2><p>{} modules rendered from checked runtime inventories; stubs remain downloadable for type checkers.</p></article>",
+            product.rust_components.len(),
+            product.python_components.len(),
+        );
+        if let Some((route, title)) = supplemental_reference(&product.id) {
+            cards.push_str(&format!(
+                "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Generated from the implementation</p><h2><a href=\"{route}\">{}</a></h2><p>Version-specific reference data, also available as JSON for tooling.</p></article>",
+                escape_html(title),
+            ));
+        }
+        let destination = site.join("reference");
+        fs::create_dir_all(&destination)?;
+        fs::write(
+            destination.join("index.html"),
+            reference_page(
+                &product.title,
+                "Reference",
+                &format!(
+                    "<p>Generated catalogs make the supported interfaces searchable without asking raw source files or Rustdoc to serve as the manual.</p><div class=\"reference-hub-grid\">{cards}</div>"
+                ),
+            ),
+        )?;
+        Ok(())
+    }
+
     fn python_stub_source(&self, component: &ComponentConfig) -> Option<PathBuf> {
         let checked_in = self
             .api_root
@@ -1370,6 +1682,7 @@ impl SiteBuilder {
                 group: page.group.clone(),
             })
             .collect::<Vec<_>>();
+        pages.push(SitePage::new("reference/", "Reference", "Reference"));
         pages.push(SitePage::new(
             "reference/python/",
             "Python API",
@@ -1383,8 +1696,15 @@ impl SiteBuilder {
             ));
         }
         pages.push(SitePage::new("reference/rust/", "Rust API", "Reference"));
-        if let Some(title) = supplemental_reference_title(&product.id) {
-            pages.push(SitePage::new("reference/generated/", title, "Reference"));
+        for component in &product.rust_components {
+            pages.push(SitePage::new(
+                format!("reference/rust/supported/{}/", component.id),
+                format!("{} supported Rust API", component.id),
+                "Reference",
+            ));
+        }
+        if let Some((route, title)) = supplemental_reference(&product.id) {
+            pages.push(SitePage::new(route, title, "Reference"));
         }
         pages.retain(|page| site.join(&page.route).join("index.html").is_file());
 
@@ -1504,10 +1824,11 @@ impl SiteBuilder {
         }
         group_order.push("Reference".to_owned());
         let reference = groups.entry("Reference".to_owned()).or_default();
+        reference.push(("reference/".to_owned(), "Reference overview".to_owned()));
         reference.push(("reference/python/".to_owned(), "Python API".to_owned()));
         reference.push(("reference/rust/".to_owned(), "Rust API".to_owned()));
-        if let Some(title) = supplemental_reference_title(&product.id) {
-            reference.push(("reference/generated/".to_owned(), title.to_owned()));
+        if let Some((route, title)) = supplemental_reference(&product.id) {
+            reference.push((route.to_owned(), title.to_owned()));
         }
 
         let mut navigation = String::new();
@@ -1530,7 +1851,9 @@ impl SiteBuilder {
                         "<a class=\"sidebar-link\" href=\"{}\"{}>{}</a>",
                         escape_html(&href),
                         if route == &current.route
-                            || (route == "reference/python/" && current.route.starts_with(route))
+                            || (matches!(route.as_str(), "reference/python/" | "reference/rust/")
+                                && current.route.starts_with(route)
+                                && current.route != "reference/")
                         {
                             " aria-current=\"page\""
                         } else {
@@ -1656,7 +1979,7 @@ impl SiteBuilder {
                     title: command.path.clone(),
                     summary: command.about,
                     href: format!(
-                        "reference/generated/#{}",
+                        "reference/cli/#{}",
                         generated_anchor("command", &command.path)
                     ),
                     kind: "command".to_owned(),
@@ -1665,7 +1988,7 @@ impl SiteBuilder {
                     title: setting.path.clone(),
                     summary: setting.description,
                     href: format!(
-                        "reference/generated/#{}",
+                        "reference/cli/#{}",
                         generated_anchor("setting", &setting.path)
                     ),
                     kind: "setting".to_owned(),
@@ -1684,7 +2007,7 @@ impl SiteBuilder {
                                 topology.loops, topology.propagator_slots
                             ),
                             href: format!(
-                                "reference/generated/#{}",
+                                "reference/topologies/#{}",
                                 generated_anchor("topology", &topology.name)
                             ),
                             kind: "topology".to_owned(),
@@ -1700,7 +2023,7 @@ impl SiteBuilder {
                                 "Minimum supported version {}",
                                 dependency.minimum_version
                             ),
-                            href: "reference/generated/#external-dependencies".to_owned(),
+                            href: "reference/topologies/#external-dependencies".to_owned(),
                             kind: "dependency".to_owned(),
                         }),
                 );
@@ -1985,6 +2308,7 @@ impl SiteBuilder {
 
     fn write_portal(&self, output: &Path, channel: BuildChannel, tag: Option<&str>) -> Result<()> {
         self.write_site_assets(output)?;
+        self.write_portal_assets(output)?;
         let channel_route = match channel {
             BuildChannel::Latest => "latest".to_owned(),
             BuildChannel::Snapshot => format!(
@@ -2023,7 +2347,7 @@ impl SiteBuilder {
                     })
                     .unwrap_or_default();
                 format!(
-                    r#"<article class="portal-project-card"><div class="portal-project-meta"><span>{:02}</span><span>Research project</span></div><h3><a href="products/{}/{}/">{}</a></h3><p class="portal-project-summary">{}</p><div class="portal-packages" aria-label="{} crates and modules"><span class="portal-packages-label">Crates &amp; modules</span>{}</div><nav class="portal-card-links" aria-label="{} documentation"><a class="portal-card-primary" href="products/{}/{}/">Overview <span aria-hidden="true">↗</span></a><a href="products/{}/{}/tutorial/">Tutorial</a><a href="products/{}/{}/manual/{}/">Manual</a><a href="products/{}/{}/reference/python/">API</a></nav></article>"#,
+                    r#"<article class="portal-project-card"><div class="portal-project-meta"><span>{:02}</span><span>Research project</span></div><h3><a href="products/{}/{}/">{}</a></h3><p class="portal-project-summary">{}</p><div class="portal-packages" aria-label="{} crates and modules"><span class="portal-packages-label">Crates &amp; modules</span>{}</div><nav class="portal-card-links" aria-label="{} documentation"><a class="portal-card-primary" href="products/{}/{}/">Overview <span aria-hidden="true">↗</span></a><a href="products/{}/{}/tutorial/">Tutorial</a><a href="products/{}/{}/manual/{}/">Manual</a><a href="products/{}/{}/reference/">Reference</a><a class="portal-card-cite" href="citations/#{}">Cite</a></nav></article>"#,
                     index + 1,
                     escape_html(&product.id),
                     escape_html(&channel_route),
@@ -2041,6 +2365,7 @@ impl SiteBuilder {
                     escape_html(manual_route),
                     escape_html(&product.id),
                     escape_html(&channel_route),
+                    escape_html(&product.id),
                 )
             })
             .collect::<String>();
@@ -2061,11 +2386,26 @@ impl SiteBuilder {
             .portal
             .people
             .iter()
+            .filter(|person| person.featured)
             .map(|person| {
+                let portrait = person.portrait.as_ref().map_or_else(
+                    || {
+                        format!(
+                            "<span class=\"portal-person-initials\" aria-hidden=\"true\">{}</span>",
+                            escape_html(&person.initials),
+                        )
+                    },
+                    |portrait| {
+                        format!(
+                            "<img class=\"portal-person-portrait\" src=\"assets/people/{}\" alt=\"\" width=\"720\" height=\"720\">",
+                            escape_html(portrait),
+                        )
+                    },
+                );
                 format!(
-                    r#"<article class="portal-person"><a href="{}"><span class="portal-person-initials" aria-hidden="true">{}</span><span><strong>{}</strong><small>{}</small></span><span class="portal-person-arrow" aria-hidden="true">↗</span></a></article>"#,
-                    escape_html(&person.url),
-                    escape_html(&person.initials),
+                    r#"<article class="portal-person"><a href="people/#{}">{}<span><strong>{}</strong><small>{}</small></span><span class="portal-person-arrow" aria-hidden="true">→</span></a></article>"#,
+                    escape_html(&person.id),
+                    portrait,
                     escape_html(&person.name),
                     escape_html(&person.role),
                 )
@@ -2095,7 +2435,7 @@ impl SiteBuilder {
         fs::write(
             output.join("index.html"),
             format!(
-                r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{}"><meta name="theme-color" content="#f9f6f0"><title>αLoop · Research software for collider physics</title><link rel="stylesheet" href="assets/site.css"><script defer src="assets/site.js"></script></head><body class="portal-body"><a class="skip-link" href="#main-content">Skip to content</a><header class="portal-header"><a class="portal-brand" href="#overview" aria-label="αLoop home"><span class="portal-brand-logo" aria-hidden="true"></span><span class="portal-brand-copy"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class="portal-nav" aria-label="Primary"><a href="#projects">Projects</a><a href="developers/">Developers</a><a href="#people">People</a><a href="#affiliations">Affiliations</a></nav><div class="portal-header-actions"><a class="portal-source-link" href="https://github.com/alphal00p/gammaloop">GitHub <span aria-hidden="true">↗</span></a><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span aria-hidden="true">◐</span></button></div></header><main class="portal-main" id="main-content"><section class="portal-hero portal-section" id="overview"><div class="portal-hero-copy"><p class="portal-kicker">{}</p><h1>{}</h1><p class="portal-lede">{}</p><div class="portal-hero-actions"><a class="portal-button portal-button-primary" href="#projects">Explore the projects <span aria-hidden="true">↓</span></a><a class="portal-button" href="products/gammaloop/{}/tutorial/">Start with GammaLoop <span aria-hidden="true">↗</span></a></div><dl class="portal-facts"><div><dt>5</dt><dd>connected projects</dd></div><div><dt>2</dt><dd>language ecosystems</dd></div><div><dt>∞</dt><dd>open development</dd></div></dl></div><div class="portal-hero-art" aria-label="αLoop collaboration mark" role="img"><div class="portal-wordmark"></div><p>Local cancellation.<br>Global precision.</p></div></section><section class="portal-pillars" aria-label="Research areas">{pillars}</section><section class="portal-section portal-projects" id="projects" aria-labelledby="projects-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research software · 01—05</p><h2 id="projects-title">Projects &amp; crates</h2></div><p>Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.</p></div><div class="portal-project-grid">{projects}</div></section><section class="portal-section portal-developers" id="developers" aria-labelledby="developers-title"><div><p class="portal-kicker">Contributor documentation</p><h2 id="developers-title">Architecture, proposals, and engineering records</h2><p>The developer area keeps implementation notes distinct from project tutorials and manuals. Each note is labelled as implemented architecture, a proposal, a dated investigation, or an engineering record.</p><a class="portal-button portal-button-primary" href="developers/">Explore {developer_count} developer notes <span aria-hidden="true">↗</span></a></div><dl><div><dt>Current</dt><dd>Implemented system architecture</dd></div><div><dt>Proposed</dt><dd>Designs under consideration</dd></div><div><dt>Dated</dt><dd>Investigations with explicit context</dd></div></dl></section><section class="portal-section portal-people-section" id="people" aria-labelledby="people-title"><div class="portal-section-heading"><div><p class="portal-kicker">Collaboration</p><h2 id="people-title">People behind the workspace</h2></div><p>Researchers developing the physics, algorithms, and scientific software together.</p></div><div class="portal-people-grid">{people}<article class="portal-person portal-person-all"><a href="https://github.com/alphal00p/gammaloop/graphs/contributors"><span class="portal-person-initials" aria-hidden="true">+</span><span><strong>All contributors</strong><small>Code, ideas, and review</small></span><span class="portal-person-arrow" aria-hidden="true">↗</span></a></article></div></section><section class="portal-section portal-affiliations-section" id="affiliations" aria-labelledby="affiliations-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research affiliations</p><h2 id="affiliations-title">Built across institutions</h2></div><p>Our researchers work across CERN and the University of Bern, connecting precision phenomenology with open scientific software.</p></div><div class="portal-affiliations-grid">{affiliations}</div><aside class="portal-funding"><span class="portal-funding-mark" aria-hidden="true">α</span><div><p class="portal-kicker">Publicly funded research</p><p>{}</p></div><a class="portal-text-link" href="{}">Funding record <span aria-hidden="true">↗</span></a></aside></section></main><footer class="portal-footer"><div><span class="portal-footer-mark" aria-hidden="true"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label="Footer"><a href="#projects">Projects</a><a href="developers/">Developers</a><a href="#people">People</a><a href="#affiliations">Affiliations</a><a href="https://github.com/alphal00p/gammaloop">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer></body></html>"##,
+                r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{}"><meta name="theme-color" content="#f9f6f0"><title>αLoop · Research software for collider physics</title><link rel="stylesheet" href="assets/site.css"><script defer src="assets/site.js"></script></head><body class="portal-body"><a class="skip-link" href="#main-content">Skip to content</a><header class="portal-header"><a class="portal-brand" href="#overview" aria-label="αLoop home"><span class="portal-brand-logo" aria-hidden="true"></span><span class="portal-brand-copy"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class="portal-nav" aria-label="Primary"><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="developers/">Developers</a></nav><div class="portal-header-actions"><a class="portal-source-link" href="https://github.com/alphal00p/gammaloop">GitHub <span aria-hidden="true">↗</span></a><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span aria-hidden="true">◐</span></button></div></header><main class="portal-main" id="main-content"><section class="portal-hero portal-section" id="overview"><div class="portal-hero-copy"><p class="portal-kicker">{}</p><h1>{}</h1><p class="portal-lede">{}</p><div class="portal-hero-actions"><a class="portal-button portal-button-primary" href="#projects">Explore the projects <span aria-hidden="true">↓</span></a><a class="portal-button" href="products/gammaloop/{}/tutorial/">Start with GammaLoop <span aria-hidden="true">↗</span></a><a class="portal-button" href="citations/">Cite the software <span aria-hidden="true">↗</span></a></div><dl class="portal-facts"><div><dt>5</dt><dd>connected projects</dd></div><div><dt>2</dt><dd>language ecosystems</dd></div><div><dt>∞</dt><dd>open development</dd></div></dl></div><div class="portal-hero-art" aria-label="αLoop collaboration mark" role="img"><div class="portal-wordmark"></div><p>Local cancellation.<br>Global precision.</p></div></section><section class="portal-pillars" aria-label="Research areas">{pillars}</section><section class="portal-section portal-projects" id="projects" aria-labelledby="projects-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research software · 01—05</p><h2 id="projects-title">Projects &amp; crates</h2></div><p>Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.</p></div><div class="portal-project-grid">{projects}</div></section><section class="portal-section portal-developers" id="developers" aria-labelledby="developers-title"><div><p class="portal-kicker">Contributor documentation</p><h2 id="developers-title">Architecture, proposals, and engineering records</h2><p>The developer area keeps implementation notes distinct from project tutorials and manuals. Each note is labelled as implemented architecture, a proposal, a dated investigation, or an engineering record.</p><a class="portal-button portal-button-primary" href="developers/">Explore {developer_count} developer notes <span aria-hidden="true">↗</span></a></div><dl><div><dt>Current</dt><dd>Implemented system architecture</dd></div><div><dt>Proposed</dt><dd>Designs under consideration</dd></div><div><dt>Dated</dt><dd>Investigations with explicit context</dd></div></dl></section><section class="portal-section portal-people-section" id="people" aria-labelledby="people-title"><div class="portal-section-heading"><div><p class="portal-kicker">Collaboration</p><h2 id="people-title">People behind the workspace</h2></div><p>Researchers and contributors developing the physics, algorithms, and scientific software together.</p></div><div class="portal-people-grid">{people}<article class="portal-person portal-person-all"><a href="people/"><span class="portal-person-initials" aria-hidden="true">7</span><span><strong>Meet the collaboration</strong><small>Profiles, affiliations, and contributor links</small></span><span class="portal-person-arrow" aria-hidden="true">→</span></a></article></div></section><section class="portal-section portal-affiliations-section" id="affiliations" aria-labelledby="affiliations-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research affiliations</p><h2 id="affiliations-title">Built across institutions</h2></div><p>Our researchers work across CERN and the University of Bern, connecting precision phenomenology with open scientific software.</p></div><div class="portal-affiliations-grid">{affiliations}</div><aside class="portal-funding"><span class="portal-funding-mark" aria-hidden="true">α</span><div><p class="portal-kicker">Publicly funded research</p><p>{}</p></div><a class="portal-text-link" href="{}">Funding record <span aria-hidden="true">↗</span></a></aside></section></main><footer class="portal-footer"><div><span class="portal-footer-mark" aria-hidden="true"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label="Footer"><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="citations/">Cite</a><a href="developers/">Developers</a><a href="#affiliations">Affiliations</a><a href="https://github.com/alphal00p/gammaloop">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer></body></html>"##,
                 escape_html(&self.portal.summary),
                 escape_html(&self.portal.eyebrow),
                 escape_html(&self.portal.title),
@@ -2105,7 +2445,234 @@ impl SiteBuilder {
                 escape_html(&self.portal.funding_url),
             ),
         )?;
+        self.write_people_page(output)?;
+        self.write_publications_page(output)?;
+        self.write_citations_page(output)?;
         fs::write(output.join(".nojekyll"), b"")?;
+        Ok(())
+    }
+
+    fn write_people_page(&self, output: &Path) -> Result<()> {
+        let cards = self
+            .portal
+            .people
+            .iter()
+            .map(|person| {
+                let portrait = person.portrait.as_ref().map_or_else(
+                    || {
+                        format!(
+                            "<span class=\"people-card-initials\" aria-hidden=\"true\">{}</span>",
+                            escape_html(&person.initials),
+                        )
+                    },
+                    |portrait| {
+                        format!(
+                            "<img class=\"people-card-portrait\" src=\"../assets/people/{}\" alt=\"\" width=\"720\" height=\"720\" loading=\"lazy\">",
+                            escape_html(portrait),
+                        )
+                    },
+                );
+                let mut links = format!(
+                    "<a href=\"{}\">Professional profile <span aria-hidden=\"true\">↗</span></a><a href=\"{}\">GitHub <span aria-hidden=\"true\">↗</span></a>",
+                    escape_html(&person.url),
+                    escape_html(&person.github),
+                );
+                if let Some(recid) = person.inspire_recid {
+                    links.push_str(&format!(
+                        "<a href=\"https://inspirehep.net/authors/{recid}\">INSPIRE HEP <span aria-hidden=\"true\">↗</span></a>"
+                    ));
+                }
+                if let Some(orcid) = &person.orcid {
+                    links.push_str(&format!(
+                        "<a href=\"https://orcid.org/{}\">ORCID <span aria-hidden=\"true\">↗</span></a>",
+                        escape_html(orcid),
+                    ));
+                }
+                let source = person.portrait_source.as_ref().map_or_else(String::new, |url| {
+                    format!(
+                        "<a class=\"people-photo-source\" href=\"{}\">Portrait source</a>",
+                        escape_html(url),
+                    )
+                });
+                format!(
+                    "<article class=\"people-card\" id=\"{}\">{portrait}<div class=\"people-card-copy\"><p class=\"portal-kicker\">Contributor</p><h2>{}</h2><p>{}</p><nav aria-label=\"{} profiles\">{links}</nav>{source}</div></article>",
+                    escape_html(&person.id),
+                    escape_html(&person.name),
+                    escape_html(&person.role),
+                    escape_html(&person.name),
+                )
+            })
+            .collect::<String>();
+        let body = format!(
+            "<header class=\"portal-page-hero\"><p class=\"portal-kicker\">Collaboration</p><h1>People building αLoop</h1><p>Researchers and software contributors behind the five connected projects. Institutional and professional profiles are primary; GitHub links show the public development record.</p></header><section class=\"people-page-grid\">{cards}</section><aside class=\"portal-page-note\"><strong>Contributor scope</strong><p>This page follows the people currently shown by GitHub for the repository's default branch. Bots and malformed commit identities are excluded. Portraits are public professional images; source links are retained with every image.</p></aside>"
+        );
+        let directory = output.join("people");
+        fs::create_dir_all(&directory)?;
+        fs::write(
+            directory.join("index.html"),
+            portal_subpage_document(
+                "People",
+                "Researchers and contributors behind αLoop research software.",
+                "people",
+                &body,
+            ),
+        )?;
+        Ok(())
+    }
+
+    fn write_publications_page(&self, output: &Path) -> Result<()> {
+        let author_options = self
+            .publications
+            .authors
+            .iter()
+            .map(|author| {
+                format!(
+                    "<option value=\"{}\">{}</option>",
+                    escape_html(&author.id),
+                    escape_html(&author.name),
+                )
+            })
+            .collect::<String>();
+        let years = self
+            .publications
+            .publications
+            .iter()
+            .map(|publication| publication.year)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .rev()
+            .map(|year| format!("<option value=\"{year}\">{year}</option>"))
+            .collect::<String>();
+        let types = self
+            .publications
+            .publications
+            .iter()
+            .flat_map(|publication| publication.types.iter())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|kind| {
+                format!(
+                    "<option value=\"{}\">{}</option>",
+                    escape_html(kind),
+                    escape_html(&publication_type_label(kind)),
+                )
+            })
+            .collect::<String>();
+        let cards = self
+            .publications
+            .publications
+            .iter()
+            .map(|publication| {
+                let people = publication.people.join(" ");
+                let kinds = publication.types.join("|");
+                let venue = publication.venue.as_ref().map_or_else(String::new, |venue| {
+                    format!("<span>{}</span>", escape_html(venue))
+                });
+                let doi = publication.doi.as_ref().map_or_else(String::new, |doi| {
+                    format!(
+                        "<a href=\"https://doi.org/{}\">DOI <span aria-hidden=\"true\">↗</span></a>",
+                        escape_html(doi),
+                    )
+                });
+                let arxiv = publication.arxiv.as_ref().map_or_else(String::new, |arxiv| {
+                    format!(
+                        "<a href=\"https://arxiv.org/abs/{}\">arXiv <span aria-hidden=\"true\">↗</span></a>",
+                        escape_html(arxiv),
+                    )
+                });
+                format!(
+                    "<article class=\"publication-card\" data-publication data-title=\"{}\" data-people=\"{}\" data-year=\"{}\" data-date=\"{}\" data-types=\"{}\" data-citations=\"{}\"><div class=\"publication-card-meta\"><time datetime=\"{}\">{}</time>{venue}<span>{} citations</span></div><h2><a href=\"{}\">{}</a></h2><p class=\"publication-authors\">{}</p><nav aria-label=\"Citation links\"><a href=\"{}\">INSPIRE</a>{doi}{arxiv}<a href=\"{}\">BibTeX</a></nav></article>",
+                    escape_html(&publication.title.to_lowercase()),
+                    escape_html(&people),
+                    publication.year,
+                    escape_html(&publication.date),
+                    escape_html(&kinds),
+                    publication.citations,
+                    escape_html(&publication.date),
+                    publication.year,
+                    publication.citations,
+                    escape_html(&publication.url),
+                    escape_html(&publication.title),
+                    escape_html(&compact_authors(&publication.authors)),
+                    escape_html(&publication.url),
+                    escape_html(&publication.bibtex_url),
+                )
+            })
+            .collect::<String>();
+        let count = self.publications.publications.len();
+        let body = format!(
+            "<header class=\"portal-page-hero\"><p class=\"portal-kicker\">Research output</p><h1>Publications</h1><p>Automatically assembled from stable INSPIRE HEP author identifiers, deduplicated across coauthors, and cached for a reproducible documentation build.</p><p class=\"publication-provenance\">Updated {} · <a href=\"{}\">Open the live INSPIRE query</a></p></header><form class=\"publication-filters\" data-publication-filters><label>Search<input type=\"search\" data-publication-search placeholder=\"Title or author\"></label><label>Author<select data-publication-author><option value=\"\">All authors</option>{author_options}</select></label><label>Year<select data-publication-year><option value=\"\">All years</option>{years}</select></label><label>Type<select data-publication-type><option value=\"\">All types</option>{types}</select></label><label>Sort<select data-publication-sort><option value=\"newest\">Newest</option><option value=\"cited\">Most cited</option></select></label><output data-publication-count aria-live=\"polite\">{count} publications</output></form><section class=\"publication-list\" data-publication-list>{cards}</section><noscript><p class=\"portal-page-note\">All records are shown above. Enable JavaScript only if you want to filter or sort them in the browser.</p></noscript>",
+            escape_html(&self.publications.updated),
+            escape_html(&self.publications.api_url),
+        );
+        let directory = output.join("publications");
+        fs::create_dir_all(&directory)?;
+        fs::write(
+            directory.join("index.html"),
+            portal_subpage_document(
+                "Publications",
+                "Filterable publications by verified αLoop contributors, sourced from INSPIRE HEP.",
+                "publications",
+                &body,
+            ),
+        )?;
+        Ok(())
+    }
+
+    fn write_citations_page(&self, output: &Path) -> Result<()> {
+        let cards = self
+            .registry
+            .product
+            .iter()
+            .map(|product| {
+                let version = self.component_version(
+                    product
+                        .rust_components
+                        .first()
+                        .expect("validated product has a Rust component"),
+                )?;
+                let citation = software_citation(product, &version);
+                let bibtex = software_bibtex(product, &version);
+                let persistent = product.citation.doi.as_ref().map_or_else(
+                    || {
+                        "<p class=\"citation-status\">No registered software DOI is currently configured; this citation uses the versioned source repository.</p>".to_owned()
+                    },
+                    |doi| {
+                        format!(
+                            "<p class=\"citation-status\"><a href=\"https://doi.org/{}\">doi:{}</a></p>",
+                            escape_html(doi),
+                            escape_html(doi),
+                        )
+                    },
+                );
+                Ok::<_, eyre::Report>(format!(
+                    "<article class=\"citation-card\" id=\"{}\"><p class=\"portal-kicker\">Version {}</p><h2>{}</h2>{persistent}<h3>Suggested citation</h3><pre id=\"citation-{}\"><code>{}</code></pre><button class=\"portal-button\" type=\"button\" data-copy-target=\"citation-{}\">Copy citation</button><details><summary>BibTeX</summary><pre id=\"bibtex-{}\"><code>{}</code></pre><button class=\"portal-button\" type=\"button\" data-copy-target=\"bibtex-{}\">Copy BibTeX</button></details></article>",
+                    escape_html(&product.id),
+                    escape_html(&version),
+                    escape_html(&product.title),
+                    escape_html(&product.id),
+                    escape_html(&citation),
+                    escape_html(&product.id),
+                    escape_html(&product.id),
+                    escape_html(&bibtex),
+                    escape_html(&product.id),
+                ))
+            })
+            .collect::<Result<String>>()?;
+        let body = format!(
+            "<header class=\"portal-page-hero\"><p class=\"portal-kicker\">Credit the software</p><h1>Cite αLoop projects</h1><p>Use the version-specific records below. Where a Zenodo DOI exists, it is the persistent citation target; otherwise the citation names the versioned source repository without inventing an identifier.</p></header><section class=\"citation-grid\">{cards}</section>"
+        );
+        let directory = output.join("citations");
+        fs::create_dir_all(&directory)?;
+        fs::write(
+            directory.join("index.html"),
+            portal_subpage_document(
+                "Citations",
+                "Version-specific citations for αLoop research software.",
+                "",
+                &body,
+            ),
+        )?;
         Ok(())
     }
 
@@ -2320,6 +2887,79 @@ impl SiteBuilder {
             .and_then(|timestamp| timestamp.trim().parse().ok())
             .unwrap_or(0)
     }
+}
+
+fn portal_subpage_document(title: &str, description: &str, active: &str, body: &str) -> String {
+    let current = |item: &str| {
+        if item == active {
+            " aria-current=\"page\""
+        } else {
+            ""
+        }
+    };
+    format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\"><meta name=\"theme-color\" content=\"#f9f6f0\"><title>{} · αLoop</title><link rel=\"stylesheet\" href=\"../assets/site.css\"><script defer src=\"../assets/site.js\"></script></head><body class=\"portal-body portal-subpage-body\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"portal-header\"><a class=\"portal-brand\" href=\"../\" aria-label=\"αLoop home\"><span class=\"portal-brand-logo\" aria-hidden=\"true\"></span><span class=\"portal-brand-copy\"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class=\"portal-nav\" aria-label=\"Primary\"><a href=\"../#projects\">Projects</a><a href=\"../people/\"{}>People</a><a href=\"../publications/\"{}>Publications</a><a href=\"../developers/\">Developers</a></nav><div class=\"portal-header-actions\"><a class=\"portal-source-link\" href=\"https://github.com/alphal00p/gammaloop\">GitHub <span aria-hidden=\"true\">↗</span></a><button class=\"portal-theme-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\"><span aria-hidden=\"true\">◐</span></button></div></header><main class=\"portal-main portal-subpage-main\" id=\"main-content\">{body}</main><footer class=\"portal-footer\"><div><span class=\"portal-footer-mark\" aria-hidden=\"true\"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label=\"Footer\"><a href=\"../#projects\">Projects</a><a href=\"../people/\">People</a><a href=\"../publications/\">Publications</a><a href=\"../citations/\">Cite</a><a href=\"../developers/\">Developers</a><a href=\"https://github.com/alphal00p/gammaloop\">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer></body></html>",
+        escape_html(description),
+        escape_html(title),
+        current("people"),
+        current("publications"),
+    )
+}
+
+fn compact_authors(authors: &[String]) -> String {
+    if authors.len() <= 8 {
+        authors.join(", ")
+    } else {
+        format!("{}, et al.", authors[..6].join(", "))
+    }
+}
+
+fn publication_type_label(kind: &str) -> String {
+    kind.split(['-', '_'])
+        .filter(|word| !word.is_empty())
+        .map(|word| {
+            let mut characters = word.chars();
+            characters.next().map_or_else(String::new, |first| {
+                first.to_uppercase().collect::<String>() + characters.as_str()
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn software_citation(product: &ProductConfig, version: &str) -> String {
+    let target = product.citation.doi.as_ref().map_or_else(
+        || product.citation.repository.clone(),
+        |doi| format!("https://doi.org/{doi}"),
+    );
+    format!(
+        "{} ({}). {} (Version {}) [Computer software]. {}",
+        product.citation.creators.join(", "),
+        product.citation.year,
+        product.citation.title,
+        version,
+        target,
+    )
+}
+
+fn software_bibtex(product: &ProductConfig, version: &str) -> String {
+    let doi = product
+        .citation
+        .doi
+        .as_ref()
+        .map_or_else(String::new, |doi| format!("  doi = {{{doi}}},\n"));
+    let url = product.citation.doi.as_ref().map_or_else(
+        || product.citation.repository.clone(),
+        |doi| format!("https://doi.org/{doi}"),
+    );
+    format!(
+        "@software{{{}{},\n  author = {{{}}},\n  title = {{{}}},\n  version = {{{version}}},\n  year = {{{}}},\n{doi}  url = {{{url}}}\n}}",
+        product.id,
+        product.citation.year,
+        product.citation.creators.join(" and "),
+        product.citation.title,
+        product.citation.year,
+    )
 }
 
 fn strip_first_markdown_title(source: &str) -> Result<&str> {
@@ -2595,8 +3235,15 @@ fn product_hero(product: &ProductConfig) -> String {
         .find(|page| page.group == "Manual")
         .map(|page| page.route.as_str())
         .unwrap_or("manual/");
+    let logo = product.logo.as_deref().map_or_else(String::new, |logo| {
+        format!(
+            "<span class=\"product-hero-logo product-logo-{}\" role=\"img\" aria-label=\"{} logo\"></span>",
+            escape_html(logo),
+            escape_html(&product.title),
+        )
+    });
     format!(
-        "<header class=\"product-hero\"><p class=\"product-eyebrow\">Research software documentation</p><h1>{}</h1><p>{}</p><div class=\"hero-actions\"><a class=\"hero-action primary\" href=\"tutorial/\">Start the tutorial</a><a class=\"hero-action\" href=\"{}\">Read the manual</a><a class=\"hero-action\" href=\"reference/python/\">Browse Python API</a></div></header>",
+        "<header class=\"product-hero\">{logo}<p class=\"product-eyebrow\">Research software documentation</p><h1>{}</h1><p>{}</p><div class=\"hero-actions\"><a class=\"hero-action primary\" href=\"tutorial/\">Start the tutorial</a><a class=\"hero-action\" href=\"{}\">Read the manual</a><a class=\"hero-action\" href=\"reference/\">Browse reference</a></div></header>",
         escape_html(&product.title),
         escape_html(&product.tagline),
         escape_html(first_manual),
@@ -3065,7 +3712,17 @@ fn append_catalog_search_at(
 ) {
     for item in scope.items.values() {
         let (href, kind, member_anchor) = match catalog.component.language {
-            ApiLanguage::Rust => (rustdoc_href(catalog, item), "rust-api", None),
+            ApiLanguage::Rust => {
+                let anchor = python_item_anchor(path, item);
+                (
+                    format!(
+                        "reference/rust/supported/{}/#{anchor}",
+                        catalog.component.id
+                    ),
+                    "rust-api",
+                    Some(anchor),
+                )
+            }
             ApiLanguage::Python => {
                 let anchor = python_item_anchor(path, item);
                 (
@@ -3751,6 +4408,19 @@ fn slug(value: &str) -> String {
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join("-")
+}
+
+fn generated_reference_redirect(product: &str, target: &str, label: &str) -> String {
+    format!(
+        "<!doctype html><meta charset=\"utf-8\"><meta http-equiv=\"refresh\" content=\"0; url={}\"><link rel=\"canonical\" href=\"{}\"><title>{} · {}</title><a href=\"{}\">Open the {} for {}</a>",
+        escape_html(target),
+        escape_html(target),
+        escape_html(product),
+        escape_html(label),
+        escape_html(target),
+        escape_html(label),
+        escape_html(product),
+    )
 }
 
 fn reference_page(product: &str, title: &str, body: &str) -> String {
@@ -4489,6 +5159,8 @@ mod tests {
         assert!(html.contains("Projects &amp; crates"));
         assert!(html.contains("developer notes"));
         assert!(html.contains("href=\"developers/\""));
+        assert!(html.contains("href=\"publications/\""));
+        assert_eq!(html.matches("portal-card-cite").count(), 5);
         assert!(html.contains("Publicly funded research"));
         assert!(!html.contains("Product manual"));
         assert!(!html.contains("scientific-computing products"));
@@ -4498,9 +5170,88 @@ mod tests {
             "local-unitarity-dark.svg",
             "gammalooplogo-light.svg",
             "gammalooplogo-dark.svg",
+            "spensologo.svg",
+            "publications.json",
         ] {
             assert!(output.path().join("assets").join(asset).is_file());
         }
+        assert!(output.path().join("assets/people/valentin.webp").is_file());
+
+        let people = fs::read_to_string(output.path().join("people/index.html")).unwrap();
+        assert_eq!(people.matches("class=\"people-card\"").count(), 7);
+        assert!(people.contains("https://symbolica.io/about.html"));
+        assert!(people.contains("id=\"cedric-sigrist\""));
+
+        let publications =
+            fs::read_to_string(output.path().join("publications/index.html")).unwrap();
+        assert_eq!(
+            publications.matches("data-publication data-title").count(),
+            builder.publications.publications.len()
+        );
+        assert!(publications.contains("data-publication-author"));
+        assert!(publications.contains("Open the live INSPIRE query"));
+
+        let citations = fs::read_to_string(output.path().join("citations/index.html")).unwrap();
+        assert_eq!(citations.matches("class=\"citation-card\"").count(), 5);
+        assert!(citations.contains("10.5281/zenodo.18429583"));
+        assert!(citations.contains("No registered software DOI is currently configured"));
+    }
+
+    #[test]
+    fn every_product_has_first_class_structured_references() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        for product in &builder.registry.product {
+            let site = output.path().join(&product.id);
+            fs::create_dir_all(&site).unwrap();
+            builder.write_site_assets(&site).unwrap();
+            builder.write_component_catalogs(product, &site).unwrap();
+            builder.write_generated_reference(product, &site).unwrap();
+            let metadata = builder
+                .metadata(product, BuildChannel::Latest, None, Path::new("latest"))
+                .unwrap();
+            builder
+                .write_python_reference(product, &metadata, &site)
+                .unwrap();
+            builder.write_rustdoc_placeholder(product, &site).unwrap();
+            builder
+                .write_rust_reference(product, &metadata, &site)
+                .unwrap();
+            builder.write_reference_hub(product, &site).unwrap();
+
+            let hub = fs::read_to_string(site.join("reference/index.html")).unwrap();
+            assert!(hub.contains("Rust API"), "{}", product.id);
+            assert!(hub.contains("Python API"), "{}", product.id);
+            for component in &product.rust_components {
+                let structured = site
+                    .join("reference/rust/supported")
+                    .join(&component.id)
+                    .join("index.html");
+                assert!(structured.is_file(), "{}:{}", product.id, component.id);
+                assert!(
+                    fs::read_to_string(structured)
+                        .unwrap()
+                        .contains("class=\"api-item\""),
+                    "{}:{}",
+                    product.id,
+                    component.id
+                );
+            }
+        }
+        assert!(
+            output
+                .path()
+                .join("gammaloop/reference/cli/index.html")
+                .is_file()
+        );
+        assert!(
+            output
+                .path()
+                .join("vakint/reference/topologies/index.html")
+                .is_file()
+        );
+        assert!(product_hero(&builder.registry.product[0]).contains("product-logo-gammaloop"));
+        assert!(product_hero(&builder.registry.product[2]).contains("product-logo-spenso"));
     }
 
     #[test]

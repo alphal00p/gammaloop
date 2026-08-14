@@ -35,6 +35,10 @@ engine.validate_settings(&settings)?;
 `vakint_parse!` and the related helpers parse Symbolica expressions in Vakint's namespace. Handle
 parse failures before passing a user-supplied expression to matching or evaluation.
 
+The #link("reference/rust/")[curated Rust API] presents the supported entry points before the
+full Rustdoc, while the generated #link("reference/topologies/")[topology reference] records the
+runtime topology library and supported external-tool versions for this release.
+
 == Python community module
 
 #boundary("Python availability", [
@@ -48,7 +52,8 @@ can add Vakint to the
 #link("https://github.com/benruijl/symbolica-community")[symbolica-community] assembly, enable the
 `symbolica_community_module` feature, and register `VakintWrapper` while building the extension.
 
-The module exports four classes: `Vakint`, `VakintExpression`, `VakintEvaluationMethod`, and
+The structured #link("reference/python/")[Python reference] covers the four exported classes:
+`Vakint`, `VakintExpression`, `VakintEvaluationMethod`, and
 `VakintNumericalResult`. This example constructs a matching-only engine without probing external
 backends:
 

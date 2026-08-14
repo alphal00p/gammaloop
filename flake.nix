@@ -448,6 +448,38 @@
           );
 
         workspacePackageProductionExtraSourceRoots = {
+          "alphal00p-docs-catalogs" = [
+            "crates/gammaloop-api/src/lib.rs"
+            "crates/gammalooprs/src/lib.rs"
+            "crates/idenso/src/color/macros.rs"
+            "crates/idenso/src/cook.rs"
+            "crates/idenso/src/dirac/macros.rs"
+            "crates/idenso/src/epsilon.rs"
+            "crates/idenso/src/lib.rs"
+            "crates/idenso/src/representations.rs"
+            "crates/idenso/src/selective_expand.rs"
+            "crates/linnet/src/half_edge.rs"
+            "crates/linnet/src/half_edge/builder.rs"
+            "crates/linnet/src/half_edge/subgraph/subset.rs"
+            "crates/linnet/src/half_edge/tree.rs"
+            "crates/linnet/src/parser/mod.rs"
+            "crates/spenso-hep-lib/src/lib.rs"
+            "crates/spenso-macros/src/lib.rs"
+            "crates/spenso/src/contraction.rs"
+            "crates/spenso/src/network/mod.rs"
+            "crates/spenso/src/structure.rs"
+            "crates/spenso/src/tensors/data/dense.rs"
+            "crates/spenso/src/tensors/data/sparse.rs"
+            "crates/spenso/src/tensors/parametric.rs"
+            "crates/vakint/src/lib.rs"
+            "crates/vakint/src/utils.rs"
+          ];
+          "alphal00p-docs-examples" = [
+            "crates/linnet-py/pyproject.toml"
+            "docs/api/python"
+            "docs/products"
+            "pyproject.toml"
+          ];
           "gammaloop-api" = [
             "assets/embedded"
             "assets/models"
@@ -483,12 +515,19 @@
           "alphal00p-docs-macros" = [
             "crates/alphal00p-docs-macros/tests/ui"
           ];
+          "alphal00p-docs-python-exporter" = [
+            "crates/linnet-py/linnet_py.pyi"
+            "docs/api/python"
+          ];
           gammalooprs = [
             "tests/resources/graphs/scalar/dod2_bubble.dot"
           ];
         };
 
         workspacePackageRuntimeTestExtraSourceRoots = {
+          "alphal00p-docs-catalogs" = [
+            "docs/api/python"
+          ];
           "gammaloop-api" = [
             "tests/resources/graphs/scalar_bubble.dot"
           ];

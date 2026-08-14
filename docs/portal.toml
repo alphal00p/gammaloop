@@ -1,4 +1,4 @@
-schema = 1
+schema = 2
 eyebrow = "Public research software"
 title = "Open tools for precision collider physics."
 summary = "The αLoop collaboration develops theoretical and algorithmic methods for automated cross-section calculations in quantum field theory, centred on Local Unitarity."
@@ -21,22 +21,104 @@ title = "Symbolic evaluation"
 summary = "Controlled rewrite systems and vacuum-integral matching for reproducible calculations."
 
 [[people]]
+id = "valentin-hirschi"
 name = "Valentin Hirschi"
 initials = "VH"
-role = "Professor · theoretical particle physics"
-url = "https://www.itp.unibe.ch/about_us/people/professors/prof_dr_hirschi_valentin/index_eng.html"
+role = "Professor · ITP, University of Bern"
+url = "https://www.itp.unibe.ch/about_us/people/people/index_eng.html?id=248"
+github = "https://github.com/ValentinHirschi"
+portrait = "valentin.webp"
+portrait_source = "https://itpcenter.itp.unibe.ch/ajax/proxy.php/people/Hirschi_Valentin.jpg"
+inspire_recid = 1074931
+inspire_bai = "V.Hirschi.1"
+orcid = "0000-0002-8908-6300"
+publications = true
+featured = true
 
 [[people]]
+id = "mathijs-fraaije"
 name = "Mathijs Fraaije"
 initials = "MF"
-role = "PhD researcher · theoretical particle physics"
-url = "https://github.com/GraDje13"
+role = "PhD student · ITP, University of Bern"
+url = "https://www.itp.unibe.ch/about_us/people/people/index_eng.html?id=250"
+github = "https://github.com/GraDje13"
+portrait = "mathijs.webp"
+portrait_source = "https://itpcenter.itp.unibe.ch/ajax/proxy.php/people/Fraaije_Mathijs.jpg"
+inspire_recid = 2099425
+inspire_bai = "M.Fraaije.1"
+orcid = "0000-0003-2968-8112"
+publications = true
+featured = true
 
 [[people]]
+id = "lucien-huber"
 name = "Lucien Huber"
 initials = "LH"
-role = "PhD researcher · theoretical particle physics"
-url = "https://github.com/lcnbr"
+role = "PhD student · ITP, University of Bern"
+url = "https://www.itp.unibe.ch/about_us/people/people/index_eng.html?id=260"
+github = "https://github.com/lcnbr"
+portrait = "lucien.webp"
+portrait_source = "https://itpcenter.itp.unibe.ch/ajax/proxy.php/people/Huber_Lucien.jpg"
+inspire_recid = 2972350
+inspire_bai = "L.Huber.1"
+orcid = "0009-0003-5074-7313"
+publications = true
+featured = true
+
+[[people]]
+id = "ben-ruijl"
+name = "Ben Ruijl"
+initials = "BR"
+role = "Founder and principal researcher · Symbolica"
+url = "https://symbolica.io/about.html"
+github = "https://github.com/benruijl"
+portrait = "ben.webp"
+portrait_source = "https://symbolica.io/ben.jpg"
+inspire_recid = 1459220
+inspire_bai = "B.Ruijl.1"
+orcid = "0000-0003-0514-1163"
+publications = true
+featured = false
+
+[[people]]
+id = "kaapo-seppanen"
+name = "Kaapo Seppänen"
+initials = "KS"
+role = "Postdoctoral researcher · ITP, University of Bern"
+url = "https://www.itp.unibe.ch/about_us/people/people/index_eng.html?id=290"
+github = "https://github.com/kaapos"
+portrait = "kaapo.webp"
+portrait_source = "https://itpcenter.itp.unibe.ch/ajax/proxy.php/people/Sepp%C3%A4nen_Kaapo.jpg"
+inspire_recid = 2835294
+inspire_bai = "Kaapo.Seppanen.1"
+orcid = "0000-0002-7931-5720"
+publications = true
+featured = false
+
+[[people]]
+id = "zeno-capatti"
+name = "Zeno Capatti"
+initials = "ZC"
+role = "Postdoctoral researcher · ITP, University of Bern"
+url = "https://www.itp.unibe.ch/about_us/people/people/index_eng.html?id=262"
+github = "https://github.com/ZenoCapatti"
+portrait = "zeno.webp"
+portrait_source = "https://itpcenter.itp.unibe.ch/ajax/proxy.php/people/Capatti_Zeno.jpg"
+inspire_recid = 1831308
+inspire_bai = "Zeno.Capatti.1"
+orcid = "0000-0001-8693-4258"
+publications = true
+featured = false
+
+[[people]]
+id = "cedric-sigrist"
+name = "Cedric Sigrist"
+initials = "CS"
+role = "Contributor · ITP, University of Bern"
+url = "https://www.itp.unibe.ch/about_us/people/people/index_eng.html?id=299"
+github = "https://github.com/SecretGmG"
+publications = false
+featured = false
 
 [[affiliation]]
 name = "CERN"

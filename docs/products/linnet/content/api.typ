@@ -14,9 +14,9 @@ The `linnet` package is organized into these principal areas:
 - `permutation`, `tree`, and `union_find` provide supporting algorithms and stores.
 
 The generic graph types separate edge, vertex, and half-edge payloads from the node-storage
-implementation. Consult the Rust API reference for complete generic bounds and method
-signatures; choose a concrete storage type according to the workflow and mutation behavior you
-need.
+implementation. Start with the #link("reference/rust/")[curated Rust API], then follow its
+Rustdoc links for complete generic bounds and method signatures; choose a concrete storage type
+according to the workflow and mutation behavior you need.
 
 Cargo features enable optional capabilities:
 
@@ -56,7 +56,7 @@ The exported classes include `Hedge`, `NodeIndex`, `EdgeIndex`, `Flow`, `Orienta
 attribute wrappers, `HedgePair`, `Subgraph`, `Cycle`, `OrientedCut`, `TraversalTree`,
 `DotGraph`, and `DotGraphBuilder`.
 
-Mutable statement wrappers expose mapping-like access to DOT attributes. Consult the Python API
-reference for their lifetime and write-through behavior, and do not assume that a copied mapping
-remains attached to its graph.
+Mutable statement wrappers expose mapping-like access to DOT attributes. Consult the structured
+#link("reference/python/")[Python API] for their lifetime and write-through behavior, and do not
+assume that a copied mapping remains attached to its graph.
 ]

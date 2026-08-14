@@ -16,9 +16,10 @@ rewrite families:
 - `representations::initialize` installs the standard representation and tensor symbols.
 
 Representation helper macros such as `bis!`, `cof!`, and `coad!` construct the symbolic forms
-expected by Spenso and Idenso. The Rust API reference gives their accepted forms and the return
-types of each rewrite. APIs behind `bincode`, `reference-cases`, `python`, and `python_stubgen`
-are available only when the matching Cargo feature is enabled.
+expected by Spenso and Idenso. The #link("reference/rust/")[curated Rust API] gives their
+accepted forms, return types, feature gates, and source locations. APIs behind `bincode`,
+`reference-cases`, `python`, and `python_stubgen` are available only when the matching Cargo
+feature is enabled.
 
 == Python community module
 
@@ -37,7 +38,8 @@ For a source build, add this crate to the external
 extension is assembled. Building the Rust crate alone does not add the community module to an
 already installed Symbolica package.
 
-The Python API operates on Symbolica expressions and groups naturally into four phases:
+The generated #link("reference/python/")[Python API] records exact signatures and defaults. Its
+operations group naturally into four phases:
 
 - setup: `initialize`;
 - expansion: `expand_bis`, `expand_mink`, `expand_mink_bis`, `expand_metrics`, and
