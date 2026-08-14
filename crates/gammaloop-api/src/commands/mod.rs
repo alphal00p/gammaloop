@@ -132,7 +132,7 @@ pub enum Commands {
         /// Number of random samples to evaluate
         #[arg(short = 's', long, value_name = "SAMPLES")]
         samples: usize,
-        /// Process reference: #<id>, name:<name>, or <id>/<name>
+        /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
         #[arg(
             short = 'p',
             long = "process",

@@ -5,6 +5,9 @@ use pyo3::{
     prelude::*,
 };
 
+#[cfg(not(feature = "python_stubgen"))]
+use pyo3_stub_gen_derive::remove_gen_stub;
+
 use spenso::{
     iterators::IteratableTensor,
     network::{
@@ -208,6 +211,7 @@ impl PyStubType for ConvertibleToSpensoNet {
 // #[gen_stub_pymethods]
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
 impl SpensoNet {
     #[new]
@@ -498,6 +502,8 @@ impl SpensoNet {
     /// ----------
     /// library : TensorLibrary, optional
     ///     Optional tensor library for resolving tensor operations
+    /// function_library : None, optional
+    ///     Reserved for an internally supplied function library
     /// n_steps : int, optional
     ///     Maximum number of execution steps (None for complete execution)
     /// mode : ExecutionMode, optional
@@ -516,7 +522,9 @@ impl SpensoNet {
     fn execute(
         &mut self,
         library: Option<&SpensorLibrary>,
-        function_library: Option<&SpensorFunctionLibrary>,
+        #[gen_stub(override_type(type_repr = "None"))] function_library: Option<
+            &SpensorFunctionLibrary,
+        >,
         n_steps: Option<usize>,
         mode: ExecutionMode,
     ) -> PyResult<()> {

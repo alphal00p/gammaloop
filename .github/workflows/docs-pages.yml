@@ -1,0 +1,166 @@
+name: Documentation Pages
+
+on:
+  push:
+    branches:
+      - main
+      - docs
+    tags:
+      - 'v*'
+      - 'gammaloop-v*'
+      - 'gammalooprs-v*'
+      - 'gammaloop-api-v*'
+      - 'gammaloop-python-v*'
+      - 'linnet-v*'
+      - 'linnet-py-v*'
+      - 'spenso-v*'
+      - 'spenso-macros-v*'
+      - 'spenso-hep-lib-v*'
+      - 'spynso3-v*'
+      - 'idenso-v*'
+      - 'idenso-community-v*'
+      - 'vakint-v*'
+      - 'vakint-community-v*'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Documentation channel to publish
+        required: true
+        default: latest
+        type: choice
+        options:
+          - latest
+          - snapshot
+      snapshot_tag:
+        description: Existing release tag (required for a manual snapshot)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: documentation-pages
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE || 'GAMMALOOP_USER' }}
+
+jobs:
+  publish:
+    name: Build and publish all product documentation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: NixOS/nix-installer-action@main
+
+      - id: release
+        name: Select publication channel
+        shell: bash
+        env:
+          MANUAL_CHANNEL: ${{ inputs.channel }}
+          MANUAL_SNAPSHOT_TAG: ${{ inputs.snapshot_tag }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            channel=snapshot
+            snapshot_tag=$GITHUB_REF_NAME
+          elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            channel=$MANUAL_CHANNEL
+            snapshot_tag=$MANUAL_SNAPSHOT_TAG
+          else
+            channel=latest
+            snapshot_tag=
+          fi
+
+          if [ "$channel" = snapshot ] && [ -z "$snapshot_tag" ]; then
+            echo "A snapshot tag is required for a snapshot publication" >&2
+            exit 2
+          fi
+          if [ "$channel" = latest ] && [ -n "$snapshot_tag" ]; then
+            echo "A snapshot tag cannot be supplied for a latest publication" >&2
+            exit 2
+          fi
+
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          echo "snapshot_tag=$snapshot_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Check out manual snapshot tag
+        if: github.event_name == 'workflow_dispatch' && steps.release.outputs.channel == 'snapshot'
+        env:
+          SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
+        run: |
+          set -euo pipefail
+          git check-ref-format "refs/tags/$SNAPSHOT_TAG"
+          git rev-parse --verify "refs/tags/$SNAPSHOT_TAG^{commit}"
+          git checkout --detach "refs/tags/$SNAPSHOT_TAG"
+
+      - name: Build all five sites
+        env:
+          CHANNEL: ${{ steps.release.outputs.channel }}
+          SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
+        run: |
+          set -euo pipefail
+          ALPHAL00P_DOCS_GIT_COMMIT="$(git rev-parse HEAD)"
+          ALPHAL00P_DOCS_GIT_TIMESTAMP="$(git log -1 --format=%ct)"
+          export ALPHAL00P_DOCS_GIT_COMMIT ALPHAL00P_DOCS_GIT_TIMESTAMP
+          nix develop --command \
+            just docs-site all "$CHANNEL" "$SNAPSHOT_TAG" target/alphal00p-docs
+
+      - id: history
+        name: Merge into persistent Pages history
+        env:
+          CHANNEL: ${{ steps.release.outputs.channel }}
+          SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
+        run: |
+          set -euo pipefail
+          pages_root=$RUNNER_TEMP/gh-pages
+
+          if git fetch origin gh-pages:refs/remotes/origin/gh-pages; then
+            git worktree add --detach "$pages_root" refs/remotes/origin/gh-pages
+          else
+            git worktree add --detach "$pages_root" HEAD
+            git -C "$pages_root" switch --orphan gh-pages
+            git -C "$pages_root" rm -rf .
+          fi
+
+          publish_args=(
+            "$CHANNEL"
+            target/alphal00p-docs
+            "$pages_root"
+          )
+          if [ "$CHANNEL" = snapshot ]; then
+            publish_args+=("$SNAPSHOT_TAG")
+          fi
+          scripts/update-docs-pages.sh "${publish_args[@]}"
+
+          git -C "$pages_root" config user.name github-actions[bot]
+          git -C "$pages_root" config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C "$pages_root" add -A
+          if ! git -C "$pages_root" diff --cached --quiet; then
+            git -C "$pages_root" commit -m "publish documentation ($CHANNEL${SNAPSHOT_TAG:+: $SNAPSHOT_TAG})"
+          fi
+          git -C "$pages_root" push origin HEAD:gh-pages
+          echo "path=$pages_root" >> "$GITHUB_OUTPUT"
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ steps.history.outputs.path }}
+
+      - id: deployment
+        name: Deploy GitHub Pages
+        uses: actions/deploy-pages@v4

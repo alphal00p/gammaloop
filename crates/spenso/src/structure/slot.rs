@@ -96,7 +96,8 @@ pub enum SlotError {
 }
 
 #[cfg(feature = "shadowing")]
-/// Can possibly constuct a Slot from an `AtomView`, if it is of the form: <representation>(<dimension>,<index>)
+/// Can construct a `Slot` from an `AtomView` of the form
+/// `<representation>(<dimension>, <index>)`.
 ///
 impl<'a, T: RepName, Aind> TryFrom<AtomView<'a>> for Slot<T, Aind>
 where

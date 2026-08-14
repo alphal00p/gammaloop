@@ -21,6 +21,10 @@ use symbolica::atom::Symbol;
 
 use symbolica::api::python::PythonExpression;
 
+/// Return the Dirac adjoint of a Symbolica tensor expression.
+///
+/// This reverses the spinor chain and applies the representation-aware adjoint
+/// rules used by Idenso's Dirac algebra.
 #[cfg_attr(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
@@ -602,6 +606,19 @@ pub fn simplify_color(self_: &PythonExpression) -> PythonExpression {
 
 pub struct IdensoModule;
 
+macro_rules! define_idenso_python_surface {
+    ($($function:ident),+ $(,)?) => {
+        pub(crate) fn initialize_alg_simp(m: &Bound<'_, PyModule>) -> PyResult<()> {
+            $(m.add_function(wrap_pyfunction!($function, m)?)?;)+
+            Ok(())
+        }
+
+        /// The functions registered on `symbolica.community.idenso`.
+        #[cfg(feature = "python_stubgen")]
+        pub const PYTHON_STUB_SURFACE: &[&str] = &[$(stringify!($function),)+];
+    };
+}
+
 impl symbolica::api::python::SymbolicaCommunityModule for IdensoModule {
     fn get_name() -> String {
         "idenso".into()
@@ -617,23 +634,21 @@ impl symbolica::api::python::SymbolicaCommunityModule for IdensoModule {
     }
 }
 
-pub(crate) fn initialize_alg_simp(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(initialize, m)?)?;
-    m.add_function(wrap_pyfunction!(simplify_gamma, m)?)?;
-    m.add_function(wrap_pyfunction!(to_dots, m)?)?;
-    m.add_function(wrap_pyfunction!(simplify_metrics, m)?)?;
-    m.add_function(wrap_pyfunction!(simplify_color, m)?)?;
-    m.add_function(wrap_pyfunction!(wrap_indices, m)?)?;
-    m.add_function(wrap_pyfunction!(cook_indices, m)?)?;
-    m.add_function(wrap_pyfunction!(cook_function, m)?)?;
-    m.add_function(wrap_pyfunction!(wrap_dummies, m)?)?;
-    m.add_function(wrap_pyfunction!(list_dangling, m)?)?;
-    m.add_function(wrap_pyfunction!(dirac_adjoint, m)?)?;
-    m.add_function(wrap_pyfunction!(expand_bis, m)?)?;
-    m.add_function(wrap_pyfunction!(expand_mink_bis, m)?)?;
-    m.add_function(wrap_pyfunction!(expand_mink, m)?)?;
-    m.add_function(wrap_pyfunction!(expand_metrics, m)?)?;
-    m.add_function(wrap_pyfunction!(expand_color, m)?)?;
-
-    Ok(())
+define_idenso_python_surface! {
+    initialize,
+    simplify_gamma,
+    to_dots,
+    simplify_metrics,
+    simplify_color,
+    wrap_indices,
+    cook_indices,
+    cook_function,
+    wrap_dummies,
+    list_dangling,
+    dirac_adjoint,
+    expand_bis,
+    expand_mink_bis,
+    expand_mink,
+    expand_metrics,
+    expand_color,
 }

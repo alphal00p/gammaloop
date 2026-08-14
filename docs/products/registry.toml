@@ -1,0 +1,102 @@
+schema = 2
+
+[[product]]
+id = "gammaloop"
+title = "GammaLoop"
+tagline = "Differential cross-sections with Local Unitarity"
+source = "docs/products/gammaloop/main.typ"
+content = [
+  "docs/products/gammaloop/content/overview.typ",
+  "docs/products/gammaloop/content/process-generation.typ",
+  "docs/products/gammaloop/content/api.typ",
+  "docs/products/gammaloop/content/changelog.typ",
+]
+related = ["linnet", "spenso", "idenso", "vakint"]
+rust_components = [
+  { id = "gammalooprs", package = "gammalooprs", kind = "library", version_source = "crates/gammalooprs/Cargo.toml" },
+  { id = "gammaloop-api", package = "gammaloop-api", kind = "library-and-cli", version_source = "crates/gammaloop-api/Cargo.toml", features = ["cli"] },
+]
+python_components = [
+  { id = "gammaloop-python", package = "gammaloop", kind = "maturin-distribution", version_source = "pyproject.toml", module = "gammaloop._gammaloop", features = ["python_api", "python_abi", "python_stubgen"] },
+]
+
+[[product]]
+id = "linnet"
+title = "Linnet"
+tagline = "Half-edge graphs and subgraph-first algorithms"
+source = "docs/products/linnet/main.typ"
+content = [
+  "docs/products/linnet/content/overview.typ",
+  "docs/products/linnet/content/algorithms.typ",
+  "docs/products/linnet/content/api.typ",
+  "docs/products/linnet/content/changelog.typ",
+]
+changelog = "crates/linnet/CHANGELOG.md"
+related = ["spenso", "gammaloop"]
+rust_components = [
+  { id = "linnet", package = "linnet", kind = "library", version_source = "crates/linnet/Cargo.toml", features = ["nodestore-vec", "serde", "bincode", "drawing", "symbolica"] },
+]
+python_components = [
+  { id = "linnet-py", package = "linnet-py", kind = "maturin-distribution", version_source = "crates/linnet-py/pyproject.toml", module = "linnet_py", features = ["extension-module", "abi3-py310"] },
+]
+
+[[product]]
+id = "spenso"
+title = "Spenso"
+tagline = "Typed tensors, symbolic structures, and executable tensor networks"
+source = "docs/products/spenso/main.typ"
+content = [
+  "docs/products/spenso/content/overview.typ",
+  "docs/products/spenso/content/networks.typ",
+  "docs/products/spenso/content/api.typ",
+  "docs/products/spenso/content/changelog.typ",
+]
+changelog = "crates/spenso/CHANGELOG.md"
+related = ["linnet", "idenso", "gammaloop"]
+rust_components = [
+  { id = "spenso", package = "spenso", kind = "library", version_source = "crates/spenso/Cargo.toml", features = ["shadowing"] },
+  { id = "spenso-macros", package = "spenso-macros", kind = "proc-macro-library", version_source = "crates/spenso-macros/Cargo.toml", features = ["shadowing"] },
+  { id = "spenso-hep-lib", package = "spenso-hep-lib", kind = "domain-library", version_source = "crates/spenso-hep-lib/Cargo.toml" },
+]
+python_components = [
+  { id = "spynso3", package = "spynso3", kind = "symbolica-community-module", version_source = "crates/spynso3/Cargo.toml", module = "symbolica.community.spenso", features = ["python_stubgen"] },
+]
+
+[[product]]
+id = "idenso"
+title = "Idenso"
+tagline = "Symbolic tensor identities for Spenso and Symbolica"
+source = "docs/products/idenso/main.typ"
+content = [
+  "docs/products/idenso/content/overview.typ",
+  "docs/products/idenso/content/algebra.typ",
+  "docs/products/idenso/content/api.typ",
+  "docs/products/idenso/content/changelog.typ",
+]
+changelog = "crates/idenso/CHANGELOG.md"
+related = ["spenso", "gammaloop"]
+rust_components = [
+  { id = "idenso", package = "idenso", kind = "library", version_source = "crates/idenso/Cargo.toml", features = ["bincode", "reference-cases"] },
+]
+python_components = [
+  { id = "idenso-community", package = "idenso", kind = "symbolica-community-module", version_source = "crates/idenso/Cargo.toml", module = "symbolica.community.idenso", features = ["python", "python_stubgen"] },
+]
+
+[[product]]
+id = "vakint"
+title = "Vakint"
+tagline = "Single-scale vacuum-integral matching and evaluation"
+source = "docs/products/vakint/main.typ"
+content = [
+  "docs/products/vakint/content/overview.typ",
+  "docs/products/vakint/content/evaluation.typ",
+  "docs/products/vakint/content/api.typ",
+  "docs/products/vakint/content/changelog.typ",
+]
+related = ["gammaloop"]
+rust_components = [
+  { id = "vakint", package = "vakint", kind = "library", version_source = "crates/vakint/Cargo.toml" },
+]
+python_components = [
+  { id = "vakint-community", package = "vakint", kind = "symbolica-community-module", version_source = "crates/vakint/Cargo.toml", module = "symbolica.community.vakint", features = ["symbolica_community_module", "python_stubgen"] },
+]

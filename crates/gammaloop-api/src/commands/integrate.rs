@@ -65,7 +65,7 @@ use crate::{
 )]
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Integrate {
-    /// Process reference: #<id>, name:<name>, or <id>/<name>; repeat with -i to select multiple integrands
+    /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`; repeat with `-i` to select multiple integrands
     #[arg(
         short = 'p',
         long = "process",

@@ -158,6 +158,8 @@ pub struct SpensoName {
     // pub args: Vec<Atom>,
 }
 
+impl ModuleInit for SpensoName {}
+
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
@@ -498,16 +500,7 @@ impl From<ShadowedStructure<AbstractIndex>> for SpensoIndices {
     }
 }
 
-impl ModuleInit for SpensoIndices {
-    fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
-        m.add_class::<SpensoIndices>()?;
-        m.add_class::<SpensoName>()?;
-        m.add_class::<SpensoSlot>()?;
-        m.add_class::<SpensoStructure>()?;
-        m.add_class::<SpensoRepresentation>()?;
-        Ok(())
-    }
-}
+impl ModuleInit for SpensoIndices {}
 
 pub enum ArithmeticStructure {
     Convertible(ConvertibleToExpression),
@@ -881,6 +874,8 @@ impl SpensoIndices {
 pub struct SpensoStructure {
     pub structure: PermutedStructure<ExplicitKey<AbstractIndex>>,
 }
+
+impl ModuleInit for SpensoStructure {}
 
 impl Deref for SpensoStructure {
     type Target = ExplicitKey<AbstractIndex>;
@@ -1417,6 +1412,8 @@ pub struct SpensoRepresentation {
     pub representation: Representation<LibraryRep>,
 }
 
+impl ModuleInit for SpensoRepresentation {}
+
 pub enum ConvertibleToAbstractIndex {
     Aind(AbstractIndex),
     Atom(PythonExpression),
@@ -1809,6 +1806,8 @@ impl SpensoRepresentation {
 pub struct SpensoSlot {
     pub slot: Slot<LibraryRep>,
 }
+
+impl ModuleInit for SpensoSlot {}
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]

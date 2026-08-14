@@ -37,6 +37,12 @@
       pkgs = nixpkgs.legacyPackages.${system};
       inherit (pkgs) lib;
 
+      typst015 =
+        assert lib.assertMsg
+          (lib.versionAtLeast pkgs.typst.version "0.15" && lib.versionOlder pkgs.typst.version "0.16")
+          "the documentation build requires Typst 0.15, but nixpkgs provides ${pkgs.typst.version}";
+        pkgs.typst;
+
       nixCiBarrierRevision =
         if self ? dirtyRev
         then self.dirtyRev
@@ -127,6 +133,29 @@
         ./crates/vakint/form_src
         ./crates/vakint/templates
       ];
+
+      documentationSrc = lib.fileset.toSource {
+        root = workspaceRoot;
+        fileset = lib.fileset.unions [
+          cargoSources
+          nonCargoBuildSources
+          ./docs
+          ./README.md
+          ./pyproject.toml
+          ./crates/linnet/README.md
+          ./crates/linnet/CHANGELOG.md
+          ./crates/linnet-py/pyproject.toml
+          ./crates/linnet-py/linnet_py.pyi
+          ./crates/spenso/README.md
+          ./crates/spenso/CHANGELOG.md
+          ./crates/spenso-macros/README.md
+          ./crates/spenso-hep-lib/README.md
+          ./crates/spynso3/README.md
+          ./crates/idenso/README.md
+          ./crates/idenso/CHANGELOG.md
+          ./crates/vakint/README.md
+        ];
+      };
 
       snapshotSources = lib.fileset.unions [
         ./crates/gammalooprs
@@ -452,6 +481,9 @@
       };
 
       workspacePackageTestCompileTimeExtraSourceRoots = {
+        "alphal00p-docs-macros" = [
+          "crates/alphal00p-docs-macros/tests/ui"
+        ];
         gammalooprs = [
           "tests/resources/graphs/scalar/dod2_bubble.dot"
         ];
@@ -774,6 +806,7 @@
       };
 
       workspaceFeatureUnificationExcludedPackages = [
+        "alphal00p-docs-python-exporter"
         "linnet-py"
         "spynso3"
       ];
@@ -1464,7 +1497,7 @@
           gnum4
           nickel
           nls
-          typst
+          typst015
           cargo-nextest
           pkg-config
           cargo-deny
@@ -2533,6 +2566,94 @@
           installPhaseCommand = "";
         });
 
+      alphal00pDocsCheck = craneLib.mkCargoDerivation (commonArgs
+        // {
+          cargoArtifacts = null;
+          pname = "alphal00p-docs";
+          src = documentationSrc;
+          nativeBuildInputs = (commonArgs.nativeBuildInputs or []) ++ [typst015];
+          ALPHAL00P_DOCS_GIT_COMMIT = nixCiBarrierRevision;
+          ALPHAL00P_DOCS_GIT_TIMESTAMP = toString self.lastModified;
+          ALPHAL00P_DOCS_CARGO_PROFILE = ciCargoProfile;
+          doInstallCargoArtifacts = false;
+          buildPhaseCargoCommand = ''
+            docs_rustdoc="$TMPDIR/alphal00p-docs-rustdoc"
+            export CARGO_TARGET_DIR="$docs_rustdoc/cargo-target-v1"
+
+            cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check
+            cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference -- --check
+            cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
+            cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-py docs/api/python/linnet-py.pyi --check
+            cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
+            cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
+            cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
+            cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter
+            cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
+            cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-examples
+            cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- check
+            docs_first="$TMPDIR/alphal00p-docs-first"
+            docs_second="$TMPDIR/alphal00p-docs-second"
+            docs_snapshot="$TMPDIR/alphal00p-docs-snapshot"
+            cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- \
+              build \
+              --product all \
+              --channel latest \
+              --output "$docs_first" \
+              --rustdoc-target-root "$docs_rustdoc"
+            cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- \
+              build \
+              --product all \
+              --channel latest \
+              --output "$docs_second" \
+              --rustdoc-target-root "$docs_rustdoc"
+            diff --recursive --brief "$docs_first" "$docs_second"
+
+            cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- \
+              build \
+              --product all \
+              --channel snapshot \
+              --snapshot-tag v0.3.4 \
+              --output "$docs_snapshot" \
+              --rustdoc-target-root "$docs_rustdoc"
+            cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- \
+              build \
+              --product all \
+              --channel snapshot \
+              --snapshot-tag v0.3.4 \
+              --output "$docs_snapshot" \
+              --rustdoc-target-root "$docs_rustdoc"
+
+            mkdir -p "$out"
+            cp -R "$docs_first"/. "$out"/
+
+            test -s "$out/index.html"
+            test -e "$out/.nojekyll"
+            for product in gammaloop linnet spenso idenso vakint; do
+              product_root="$out/products/$product"
+              test -s "$product_root/index.html"
+              test -s "$product_root/latest/index.html"
+              test -s "$product_root/latest/manual.pdf"
+              test -s "$product_root/latest/search-index.json"
+              test -s "$product_root/latest/snapshot.json"
+              test -s "$product_root/latest/reference/rust/index.html"
+              test -s "$product_root/latest/reference/python/index.html"
+              ! grep -q "Rustdoc generation was skipped" \
+                "$product_root/latest/reference/rust/index.html"
+            done
+            test -s "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"
+            test -s "$out/products/gammaloop/latest/reference/rust/gammaloop_api/index.html"
+            test -s "$out/products/linnet/latest/reference/rust/linnet/index.html"
+            test -s "$out/products/spenso/latest/reference/rust/spenso/index.html"
+            test -s "$out/products/spenso/latest/reference/rust/spenso_macros/index.html"
+            test -s "$out/products/spenso/latest/reference/rust/spenso_hep_lib/index.html"
+            test -s "$out/products/idenso/latest/reference/rust/idenso/index.html"
+            test -s "$out/products/vakint/latest/reference/rust/vakint/index.html"
+          '';
+          checkPhaseCargoCommand = "";
+          doCheck = false;
+          installPhaseCommand = "";
+        });
+
       workspaceDoctestCheck = craneLib.mkCargoDerivation (ciArgs
         // {
           cargoArtifacts = cargoArtifacts;
@@ -2685,6 +2806,17 @@
             "gammaloop-tracing-filter"
             "gammaloop-tracing-filter-macros"
             "gammalooprs"
+          ];
+        }
+        {
+          name = "docs";
+          packages = [
+            "alphal00p-docs-builder"
+            "alphal00p-docs-catalogs"
+            "alphal00p-docs-examples"
+            "alphal00p-docs-macros"
+            "alphal00p-docs-python-exporter"
+            "alphal00p-docs-schema"
           ];
         }
         {
@@ -3051,6 +3183,8 @@
           gammaloop-clippy = workspaceClippyCheck;
 
           gammaloop-doc = workspaceDocCheck;
+
+          alphal00p-docs = alphal00pDocsCheck;
 
           gammaloop-doctest = workspaceDoctestCheck;
 

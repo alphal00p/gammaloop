@@ -47,12 +47,24 @@ impl ModuleInit for NumericalEvaluationResultWrapper {}
 impl ModuleInit for VakintExpressionWrapper {}
 impl ModuleInit for VakintEvaluationMethodWrapper {}
 
-pub(crate) fn initialize_vakint(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    VakintWrapper::init(m)?;
-    NumericalEvaluationResultWrapper::init(m)?;
-    VakintExpressionWrapper::init(m)?;
-    VakintEvaluationMethodWrapper::init(m)?;
-    Ok(())
+macro_rules! define_vakint_python_surface {
+    ($($class:ty),+ $(,)?) => {
+        pub(crate) fn initialize_vakint(m: &Bound<'_, PyModule>) -> PyResult<()> {
+            $(<$class as ModuleInit>::init(m)?;)+
+            Ok(())
+        }
+
+        /// The classes registered on `symbolica.community.vakint`.
+        #[cfg(feature = "python_stubgen")]
+        pub const PYTHON_STUB_SURFACE: &[&str] = &[$(<$class as PyClass>::NAME,)+];
+    };
+}
+
+define_vakint_python_surface! {
+    VakintWrapper,
+    NumericalEvaluationResultWrapper,
+    VakintExpressionWrapper,
+    VakintEvaluationMethodWrapper,
 }
 
 fn vakint_to_python_error(vakint_error: VakintError) -> PyErr {
@@ -215,6 +227,9 @@ impl NumericalEvaluationResultWrapper {
     }
 }
 
+/// A Vakint integral split into its numerator and normalized topology structure.
+///
+/// Construct this wrapper from a Symbolica expression before applying Vakint operations.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(name = "VakintExpression", module = "symbolica.community.vakint")]
 pub struct VakintExpressionWrapper {

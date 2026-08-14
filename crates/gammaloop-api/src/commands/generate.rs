@@ -181,7 +181,7 @@ pub struct SpecArgs {
     #[arg(long = "only-diagrams", short = 'o', default_value_t = false)]
     pub only_diagrams: bool,
 
-    /// Topology filters (Option<bool> to enable smart defaults)
+    /// Topology filters (`Option<bool>` enables smart defaults)
     #[arg(long = "filter-selfenergies")]
     pub filter_selfenergies: Option<bool>,
     #[arg(long = "filter-snails")]
@@ -253,7 +253,7 @@ pub struct SpecArgs {
     #[arg(long = "n-cut-spectators", short = 'S', num_args = 2)]
     pub n_cut_spectators: Option<Vec<usize>>,
 
-    /// Symmetrization (Option<bool> for smart defaults depending on generation type)
+    /// Symmetrization (`Option<bool>` selects smart defaults based on the generation type)
     #[arg(
         long = "allow-symmetrization-of-external-fermions-in-amplitudes",
         alias = "symferm"
@@ -842,7 +842,7 @@ impl Generate {
 
 #[derive(Args, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct ProcessArgs {
-    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
     #[arg(
         long = "process",
         short = 'p',
@@ -912,7 +912,7 @@ pub struct ProcessSpec {
     /// XS graph-level coupling ranges: QED^2==2, QCD^2<=4  (power is dropped when building filters)
     pub xs_couplings: BTreeMap<CouplingKey, OrderRange>,
 
-    /// [{1} {{2}} QCD=2 QED=1] or [QCD]
+    /// For example, `[{1} {{2}} QCD=2 QED=1]` or `[QCD]`.
     pub pert: Perturbative,
 
     /// XS-only: final-state alternative sets `{ A, B, ... }`

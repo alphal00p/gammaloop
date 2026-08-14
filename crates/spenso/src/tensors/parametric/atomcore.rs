@@ -360,7 +360,7 @@ pub trait TensorAtomMaps {
     ) -> Result<Self::ContainerData<N>, SolveError>;
 
     /// Evaluate a (nested) expression a single time.
-    /// For repeated evaluations, use [Self::evaluator()] and convert
+    /// For repeated evaluations, use [`TensorAtomOps::evaluator`] and convert
     /// to an optimized version or generate a compiled version of your expression.
     ///
     /// All variables and all user functions in the expression must occur in the map.
@@ -1134,7 +1134,7 @@ impl<S: StorageTensor<Data = Atom>> TensorAtomMaps for S {
     }
 
     /// Evaluate a (nested) expression a single time.
-    /// For repeated evaluations, use [Self::evaluator()] and convert
+    /// For repeated evaluations, use [`TensorAtomOps::evaluator`] and convert
     /// to an optimized version or generate a compiled version of your expression.
     ///
     /// All variables and all user functions in the expression must occur in the map.

@@ -107,6 +107,10 @@ impl From<LogStyle> for gammaloop_tracing_filter::LogStyle {
     Decode,
     JsonSchema,
 )]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum
+)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Default)]
 pub enum LogLevel {

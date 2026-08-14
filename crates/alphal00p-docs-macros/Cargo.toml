@@ -1,0 +1,18 @@
+[package]
+name = "alphal00p-docs-macros"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+[lib]
+name = "alphal00p_docs"
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full", "parsing"] }
+
+[dev-dependencies]
+alphal00p-docs-schema = { path = "../alphal00p-docs-schema" }
+trybuild = "1"

@@ -27,7 +27,7 @@ use crate::{
 )]
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Evaluate {
-    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
     #[arg(
         short = 'p',
         long = "process",

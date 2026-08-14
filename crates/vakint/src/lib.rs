@@ -44,6 +44,15 @@ use symbolica::{
 #[cfg(feature = "symbolica_community_module")]
 pub mod symbolica_community_module;
 
+/// Gather the Python API registered for the Vakint Symbolica community module.
+#[cfg(feature = "python_stubgen")]
+pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+    pyo3_stub_gen::StubInfo::from_project_root(
+        "symbolica.community.vakint".to_owned(),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+    )
+}
+
 use crate::alphaloop_numerics::DIRECT_SUBSTITUTIONS;
 
 #[allow(unused)]

@@ -13,7 +13,7 @@ use eyre::eyre;
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Remove {
     Processes {
-        /// Process reference: #<id>, name:<name>, or <id>/<name>
+        /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
         #[arg(
             short = 'p',
             long = "process",

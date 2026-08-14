@@ -256,7 +256,7 @@ pub mod swap;
 /// - `S`: The node storage strategy, implementing the [`NodeStorage`] trait.
 ///   This determines how node data and their connectivity to half-edges
 ///   are stored. Defaults to [`DefaultNodeStore<V>`] (feature-selected; `nodestore-vec` uses
-///   [`NodeStorageVec<V>`]).
+///   [`nodestore::NodeStorageVec<V>`]).
 pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {
     pub(crate) hedge_data: HedgeVec<H>,
     /// Internal storage for all half-edges, their data, and their topological
@@ -2348,8 +2348,11 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
 
 // Cycles
 impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
-    ///Gives all subgraphs corresponding to all the spanning trees of the graph
-    ///Winter, Pawel. “An Algorithm for the Enumeration of Spanning Trees.” BIT Numerical Mathematics 26, no. 1 (March 1, 1986): 44–62. https://doi.org/10.1007/BF01939361.
+    /// Gives all subgraphs corresponding to all the spanning trees of the graph.
+    ///
+    /// See Winter, Pawel, “An Algorithm for the Enumeration of Spanning Trees,”
+    /// *BIT Numerical Mathematics* 26, no. 1 (1986): 44–62,
+    /// <https://doi.org/10.1007/BF01939361>.
     pub fn all_spanning_forests_of<S: SubGraphLike>(&self, subgraph: &S) -> Vec<S::Base>
     where
         for<'a> N::OpStorage<&'a V>: Clone,
