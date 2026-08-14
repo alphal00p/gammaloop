@@ -200,6 +200,9 @@
             snapshotSources
             ./tests
             ./examples/cli
+            ./docs/api/python
+            ./docs/products
+            ./crates/linnet-py/linnet_py.pyi
           ];
         };
 
