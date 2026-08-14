@@ -2514,11 +2514,19 @@
               product_root="$out/products/$product"
               test -s "$product_root/index.html"
               test -s "$product_root/latest/index.html"
+              test -s "$product_root/latest/.note"
               test -s "$product_root/latest/manual.pdf"
               test -s "$product_root/latest/search-index.json"
               test -s "$product_root/latest/snapshot.json"
+              test -s "$product_root/latest/tutorial/index.html"
+              test -s "$product_root/latest/manual/interfaces/index.html"
+              test -s "$product_root/latest/manual/releases/index.html"
+              test -s "$product_root/latest/assets/site.css"
+              test -s "$product_root/latest/assets/site.js"
               test -s "$product_root/latest/reference/rust/index.html"
               test -s "$product_root/latest/reference/python/index.html"
+              test -n "$(find "$product_root/latest/reference/python" \
+                -mindepth 2 -maxdepth 2 -name index.html -print -quit)"
               ! grep -q "Rustdoc generation was skipped" \
                 "$product_root/latest/reference/rust/index.html"
             done

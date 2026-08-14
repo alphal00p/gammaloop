@@ -553,7 +553,7 @@ pub fn to_dots(self_: &PythonExpression) -> PythonExpression {
 /// from symbolica.community.idenso import simplify_metrics, to_dots
 /// from symbolica.community.spenso import Representation, TensorName
 /// q = TensorName("q")
-/// g = TensorName.g
+/// g = TensorName.g()
 /// rep = Representation.euc(3)
 /// # With slots (creates TensorIndices)
 /// mu = rep("mu")

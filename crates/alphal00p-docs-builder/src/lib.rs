@@ -72,7 +72,7 @@ struct ProductConfig {
     tagline: String,
     source: PathBuf,
     #[serde(default)]
-    content: Vec<PathBuf>,
+    pages: Vec<PageConfig>,
     changelog: Option<PathBuf>,
     #[serde(default)]
     related: Vec<String>,
@@ -80,6 +80,22 @@ struct ProductConfig {
     rust_components: Vec<ComponentConfig>,
     #[serde(default)]
     python_components: Vec<ComponentConfig>,
+}
+
+/// One authored chapter in a product's ordered, durable book tree.
+///
+/// The Typst file owns prose while the registry owns navigation and URLs. This
+/// mirrors the separation used by book-oriented Typst sites without coupling
+/// the renderer to a particular theme package.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PageConfig {
+    id: String,
+    title: String,
+    summary: String,
+    source: PathBuf,
+    symbol: String,
+    route: String,
+    group: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -123,6 +139,30 @@ struct SearchEntry {
     summary: String,
     href: String,
     kind: String,
+}
+
+#[derive(Clone, Debug)]
+struct SitePage {
+    route: String,
+    title: String,
+    group: String,
+}
+
+impl SitePage {
+    fn new(route: impl Into<String>, title: impl Into<String>, group: impl Into<String>) -> Self {
+        Self {
+            route: route.into(),
+            title: title.into(),
+            group: group.into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct HeadingLink {
+    level: u8,
+    title: String,
+    id: String,
 }
 
 pub struct SiteBuilder {
@@ -176,6 +216,8 @@ impl SiteBuilder {
             "registry must contain exactly: {}",
             PRODUCT_IDS.join(", ")
         );
+        self.require_file(Path::new("docs/assets/site.css"))?;
+        self.require_file(Path::new("docs/assets/site.js"))?;
 
         let mut component_ids = BTreeSet::new();
         for product in &self.registry.product {
@@ -186,9 +228,60 @@ impl SiteBuilder {
                 product.id
             );
             self.require_file(&product.source)?;
-            for path in &product.content {
-                self.require_file(path)?;
+            ensure!(
+                !product.pages.is_empty(),
+                "{} has no authored documentation pages",
+                product.id
+            );
+            let mut page_ids = BTreeSet::new();
+            let mut page_routes = BTreeSet::new();
+            let mut root_pages = 0;
+            let mut tutorial_pages = 0;
+            let mut manual_pages = 0;
+            for page in &product.pages {
+                validate_route_segment(&page.id)?;
+                ensure!(
+                    page_ids.insert(&page.id),
+                    "{} has duplicate page id {}",
+                    product.id,
+                    page.id
+                );
+                ensure!(
+                    page_routes.insert(&page.route),
+                    "{} has duplicate page route {}",
+                    product.id,
+                    page.route
+                );
+                ensure!(
+                    !page.title.trim().is_empty()
+                        && !page.summary.trim().is_empty()
+                        && !page.group.trim().is_empty(),
+                    "{}:{} has incomplete page metadata",
+                    product.id,
+                    page.id
+                );
+                validate_typst_symbol(&page.symbol)?;
+                validate_page_route(&page.route)?;
+                self.require_file(&page.source)?;
+                root_pages += usize::from(page.route.is_empty());
+                tutorial_pages += usize::from(page.group == "Tutorial");
+                manual_pages += usize::from(page.group == "Manual");
             }
+            ensure!(
+                root_pages == 1,
+                "{} must have exactly one root page",
+                product.id
+            );
+            ensure!(
+                tutorial_pages >= 1,
+                "{} must have at least one tutorial page",
+                product.id
+            );
+            ensure!(
+                manual_pages >= 2,
+                "{} must have a manual with subpages",
+                product.id
+            );
             if let Some(path) = &product.changelog {
                 self.require_file(path)?;
             }
@@ -305,11 +398,9 @@ impl SiteBuilder {
             self.build_product(product, &options)?;
         }
 
-        if request.channel == BuildChannel::Latest {
-            self.write_portal(&output)?;
-        }
+        self.write_portal(&output, request.channel, tag)?;
         if request.product == "all" {
-            self.validate_generated_links(&output, request.channel, tag, request.include_rustdoc)?;
+            self.validate_generated_links(&output, request.include_rustdoc)?;
         }
         Ok(())
     }
@@ -337,11 +428,27 @@ impl SiteBuilder {
             .tempdir_in(&staging_root)?;
         let site = staging.path().join("site");
         fs::create_dir_all(&site)?;
+        self.write_site_assets(&site)?;
 
         let metadata = self.metadata(product, options.channel, options.tag, &channel_path)?;
         fs::write(
             site.join("snapshot.json"),
             serde_json::to_vec_pretty(&metadata)?,
+        )?;
+        let channel_label = match metadata.channel {
+            BuildChannel::Latest => "latest",
+            BuildChannel::Snapshot => "snapshot",
+        };
+        fs::write(
+            site.join(".note"),
+            format!(
+                "alphal00p documentation\nproduct={}\nchannel={}\ntag={}\ncommit={}\nroute={}\n",
+                product.id,
+                channel_label,
+                metadata.snapshot_tag.unwrap_or(""),
+                metadata.git_commit,
+                metadata.route,
+            ),
         )?;
         self.write_component_catalogs(product, &site)?;
         self.write_generated_reference(product, &site)?;
@@ -349,17 +456,17 @@ impl SiteBuilder {
 
         if options.include_typst {
             self.render_typst(product, &metadata, &site, options.dependency_output)?;
-            self.inject_site_navigation(product, &metadata, &site.join("index.html"))?;
         } else {
             self.write_fallback_page(product, &metadata, &site)?;
         }
-        self.write_python_reference(product, &site)?;
+        self.write_python_reference(product, &metadata, &site)?;
         if options.include_rustdoc {
             self.build_rustdoc(product, &site, options.rustdoc_target_root)?;
         } else {
             self.write_rustdoc_placeholder(product, &site)?;
         }
         self.write_search_index(product, &site)?;
+        self.decorate_site_pages(product, &metadata, &site)?;
 
         if options.channel == BuildChannel::Snapshot && destination.exists() {
             ensure!(
@@ -433,6 +540,16 @@ impl SiteBuilder {
             route,
             components,
         })
+    }
+
+    fn write_site_assets(&self, destination: &Path) -> Result<()> {
+        let assets = destination.join("assets");
+        fs::create_dir_all(&assets)?;
+        for name in ["site.css", "site.js"] {
+            fs::copy(self.root.join("docs/assets").join(name), assets.join(name))
+                .wrap_err_with(|| format!("failed to copy documentation asset {name}"))?;
+        }
+        Ok(())
     }
 
     fn write_component_catalogs(&self, product: &ProductConfig, site: &Path) -> Result<()> {
@@ -707,6 +824,17 @@ impl SiteBuilder {
         let (gamma_reference, vakint_reference) = self.generated_references()?;
         let generated_reference =
             generated_reference_typst(&product.id, &gamma_reference, &vakint_reference);
+        let mut page_imports = String::new();
+        let mut page_documents = String::new();
+        for (index, page) in product.pages.iter().enumerate() {
+            let page_source = page.source.to_string_lossy().replace('\\', "/");
+            let page_title = typst_string(&format!("{} · {}", product.title, page.title));
+            page_imports.push_str(&format!("#import \"/{page_source}\" as chapter{index}\n"));
+            page_documents.push_str(&format!(
+                "#document(\"{}index.html\", title: [{page_title}])[#chapter{index}.{}]\n",
+                page.route, page.symbol
+            ));
+        }
         let mut document_sections = vec!["#manual", "#catalog-reference"];
         if !generated_reference.is_empty() {
             document_sections.push("#generated-reference");
@@ -720,11 +848,12 @@ impl SiteBuilder {
             &wrapper,
             format!(
                 "#import \"/{source}\": manual\n\
+                 {page_imports}\
                  #let catalog-reference = [{catalog_reference}]\n\
                  #let generated-reference = [{generated_reference}]\n\
                  #let canonical-changelog = [{canonical_changelog}]\n\
                  #let provenance = [{provenance}]\n\
-                 #document(\"index.html\", title: [{title}])[{document_body}]\n\
+                 {page_documents}\
                  #document(\"manual.pdf\", title: [{title}])[{document_body}]\n"
             ),
         )?;
@@ -773,6 +902,14 @@ impl SiteBuilder {
             bundle.join("manual.pdf").is_file(),
             "Typst emitted no manual.pdf"
         );
+        for page in &product.pages {
+            ensure!(
+                bundle.join(&page.route).join("index.html").is_file(),
+                "Typst emitted no page {} for {}",
+                page.route,
+                product.id
+            );
+        }
         copy_tree(&bundle, site)
     }
 
@@ -836,7 +973,7 @@ impl SiteBuilder {
                 component.package
             );
             packages.push_str(&format!(
-                "<li><a href=\"{crate_name}/index.html\"><code>{}</code></a></li>",
+                "<li><a href=\"reference/rust/{crate_name}/index.html\"><code>{}</code></a></li>",
                 escape_html(&component.package)
             ));
         }
@@ -856,10 +993,15 @@ impl SiteBuilder {
         Ok(())
     }
 
-    fn write_python_reference(&self, product: &ProductConfig, site: &Path) -> Result<()> {
+    fn write_python_reference(
+        &self,
+        product: &ProductConfig,
+        metadata: &SnapshotMetadata<'_>,
+        site: &Path,
+    ) -> Result<()> {
         let destination = site.join("reference/python");
         fs::create_dir_all(&destination)?;
-        let mut sections = String::new();
+        let mut cards = String::new();
         for component in &product.python_components {
             let stub = self.python_stub_source(component);
             let stub_name = format!("{}.pyi", component.id);
@@ -877,19 +1019,42 @@ impl SiteBuilder {
                 fs::write(destination.join(&stub_name), &text)?;
                 text
             };
-            sections.push_str(&format!(
-                "<section id=\"{}\"><h2>{}</h2><p><code>{}</code> · version {}</p><p><a href=\"{}\">Download stub</a></p><pre>{}</pre></section>",
+            let catalog_path = site.join("catalogs").join(format!("{}.json", component.id));
+            let catalog = serde_json::from_slice::<DocCatalog>(&fs::read(&catalog_path)?)
+                .wrap_err_with(|| format!("failed to parse {}", catalog_path.display()))?;
+            catalog.validate()?;
+            let export_count = count_catalog_items(&catalog.root);
+            let module = component.module.as_deref().unwrap_or(&component.package);
+            cards.push_str(&format!(
+                "<article class=\"api-component-card\"><h2><a href=\"reference/python/{}/\"><code>{}</code></a></h2><p>{} documented exports · version {}</p><p>{}</p></article>",
                 escape_html(&component.id),
-                escape_html(&component.id),
-                escape_html(component.module.as_deref().unwrap_or(&component.package)),
+                escape_html(module),
+                export_count,
                 escape_html(&self.component_version(component)?),
-                escape_html(&stub_name),
-                escape_html(&stub_text),
+                escape_html(&catalog.root.summary.clone().unwrap_or_else(|| {
+                    format!("Supported Python surface for {}.", component.id)
+                })),
             ));
+            let component_page = destination.join(&component.id);
+            fs::create_dir_all(&component_page)?;
+            fs::write(
+                component_page.join("index.html"),
+                reference_page(
+                    &product.title,
+                    &format!("{} Python API", component.id),
+                    &render_python_catalog(&catalog, &stub_name, &stub_text, &metadata.git_commit),
+                ),
+            )?;
         }
         fs::write(
             destination.join("index.html"),
-            reference_page(&product.title, "Python API", &sections),
+            reference_page(
+                &product.title,
+                "Python API",
+                &format!(
+                    "<p>Structured reference generated from the checked public catalogs. Each component page presents signatures, docstrings, parameters, members, examples, feature requirements, and source locations. The <code>.pyi</code> files remain available as type-checker inputs and downloads.</p><div class=\"api-component-grid\">{cards}</div>"
+                ),
+            ),
         )?;
         Ok(())
     }
@@ -961,125 +1126,248 @@ impl SiteBuilder {
         Ok(())
     }
 
-    fn inject_site_navigation(
+    fn decorate_site_pages(
         &self,
         product: &ProductConfig,
         metadata: &SnapshotMetadata<'_>,
-        path: &Path,
+        site: &Path,
     ) -> Result<()> {
-        let mut html = fs::read_to_string(path)?;
-        self.inject_section_ids(product, &mut html)?;
-        let switcher = self
-            .registry
-            .product
+        let mut pages = product
+            .pages
             .iter()
-            .map(|candidate| {
-                let route = match metadata.channel {
-                    BuildChannel::Latest => {
-                        format!("../../{}/latest/", escape_html(&candidate.id))
-                    }
-                    BuildChannel::Snapshot => format!(
-                        "../../../{}/snapshots/{}/",
-                        escape_html(&candidate.id),
-                        escape_html(metadata.snapshot_tag.unwrap_or_default())
-                    ),
-                };
+            .map(|page| SitePage {
+                route: page.route.clone(),
+                title: page.title.clone(),
+                group: page.group.clone(),
+            })
+            .collect::<Vec<_>>();
+        pages.push(SitePage::new(
+            "reference/python/",
+            "Python API",
+            "Reference",
+        ));
+        for component in &product.python_components {
+            pages.push(SitePage::new(
+                format!("reference/python/{}/", component.id),
+                format!("{} Python API", component.id),
+                "Reference",
+            ));
+        }
+        pages.push(SitePage::new("reference/rust/", "Rust API", "Reference"));
+        if matches!(product.id.as_str(), "gammaloop" | "vakint") {
+            pages.push(SitePage::new(
+                "reference/generated/",
+                "Generated reference",
+                "Reference",
+            ));
+        }
+        pages.retain(|page| site.join(&page.route).join("index.html").is_file());
+
+        for (index, page) in pages.iter().enumerate() {
+            self.decorate_html_page(
+                product,
+                metadata,
+                site,
+                page,
+                index
+                    .checked_sub(1)
+                    .and_then(|previous| pages.get(previous)),
+                pages.get(index + 1),
+            )?;
+        }
+        Ok(())
+    }
+
+    fn decorate_html_page(
+        &self,
+        product: &ProductConfig,
+        metadata: &SnapshotMetadata<'_>,
+        site: &Path,
+        page: &SitePage,
+        previous: Option<&SitePage>,
+        next: Option<&SitePage>,
+    ) -> Result<()> {
+        let path = site.join(&page.route).join("index.html");
+        let source = fs::read_to_string(&path)?;
+        let mut body = extract_html_body(&source)?.to_owned();
+        body = body.replace("<nav><a href=\"../../\">Manual</a></nav>", "");
+        if page.route.is_empty() {
+            body = format!("{}{body}", product_hero(product));
+        } else {
+            promote_heading_hierarchy(&mut body);
+        }
+        let docs_root = page_root_prefix(&page.route);
+        body = rewrite_page_links(&body, &docs_root)?;
+        let (body, headings) = inject_heading_ids(&body)?;
+        let toc = headings
+            .iter()
+            .filter(|heading| matches!(heading.level, 2 | 3))
+            .map(|heading| {
                 format!(
-                    "<a href=\"{}\">{}</a>",
-                    route,
-                    escape_html(&candidate.title)
+                    "<a class=\"toc-link\" data-level=\"{}\" href=\"#{}\">{}</a>",
+                    heading.level,
+                    escape_html(&heading.id),
+                    escape_html(&heading.title)
                 )
             })
-            .collect::<Vec<_>>()
-            .join(" · ");
-        let navigation = format!(
-            "<nav class=\"alphal00p-docs-nav\"><strong>{}</strong> · <a href=\"reference/rust/\">Rust API</a> · <a href=\"reference/python/\">Python API</a>{} · <a href=\"manual.pdf\">PDF</a><span>{switcher}</span></nav><div class=\"alphal00p-search\"><label>Search <input id=\"alphal00p-search\" type=\"search\" placeholder=\"Guides and APIs\"></label><ul id=\"alphal00p-search-results\"></ul></div>",
-            escape_html(&product.title),
-            if matches!(product.id.as_str(), "gammaloop" | "vakint") {
-                " · <a href=\"reference/generated/\">Generated reference</a>"
-            } else {
-                ""
-            }
-        );
-        if let Some(body) = html.find("<body")
-            && let Some(offset) = html[body..].find('>')
-        {
-            html.insert_str(body + offset + 1, &navigation);
-        }
-        let script = r#"<style>.alphal00p-docs-nav{position:sticky;top:0;z-index:20;padding:.8rem 1rem;background:#172033;color:white;font:14px system-ui}.alphal00p-docs-nav a{color:#d8d2ff}.alphal00p-docs-nav span{float:right}.alphal00p-search{display:block;margin:1rem auto;max-width:70rem;font:14px system-ui}.alphal00p-search input{margin-left:.5rem;padding:.4rem .6rem}.alphal00p-search-results:empty{display:none}#alphal00p-search-results{padding:.75rem 1.5rem;border:1px solid #d9dce5;border-radius:.4rem}#alphal00p-search-results li{margin:.35rem 0}</style><script>(()=>{const input=document.querySelector('#alphal00p-search');const results=document.querySelector('#alphal00p-search-results');const index=fetch('search-index.json').then(response=>response.json()).catch(()=>[]);input?.addEventListener('input',async event=>{const query=event.target.value.trim().toLowerCase();for(const section of document.querySelectorAll('section'))section.hidden=query&&!section.textContent.toLowerCase().includes(query);results.replaceChildren();if(!query)return;for(const entry of (await index).filter(entry=>(entry.title+' '+entry.summary).toLowerCase().includes(query)).slice(0,15)){const item=document.createElement('li');const link=document.createElement('a');link.href=entry.href;link.textContent=entry.title;item.append(link,document.createTextNode(' · '+entry.kind));results.append(item);}});})();</script>"#;
-        if let Some(body_end) = html.rfind("</body>") {
-            html.insert_str(body_end, script);
+            .collect::<String>();
+        let sidebar = self.site_sidebar(product, metadata, page, &docs_root);
+        let product_options = self.product_options(product, metadata, &docs_root);
+        let page_navigation = render_page_navigation(previous, next, &docs_root);
+        let product_root = if docs_root.is_empty() {
+            "./"
         } else {
-            html.push_str(script);
-        }
+            &docs_root
+        };
+        let portal = match metadata.channel {
+            BuildChannel::Latest => format!("{docs_root}../../../"),
+            BuildChannel::Snapshot => format!("{docs_root}../../../../"),
+        };
+        let version = match metadata.channel {
+            BuildChannel::Latest => "latest".to_owned(),
+            BuildChannel::Snapshot => {
+                format!("snapshot {}", metadata.snapshot_tag.unwrap_or("unknown"))
+            }
+        };
+        let toc_markup = if toc.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "<aside class=\"docs-toc\" aria-label=\"On this page\"><p class=\"toc-title\">On this page</p>{toc}</aside>"
+            )
+        };
+        let html = format!(
+            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\"><title>{} · {}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\"><script defer src=\"{}assets/site.js\"></script></head><body data-docs-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\"><span class=\"site-brand-mark\">α</span><span class=\"site-brand-name\">alphal00p docs</span></a><div class=\"site-header-tools\"><select class=\"product-select\" data-product-select aria-label=\"Select product\">{}</select><button class=\"header-button\" type=\"button\" data-search-open>Search <span class=\"header-button-label\">⌘K</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main\" id=\"main-content\"><nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"{}\">{}</a> / {} / {}</nav><article class=\"docs-article\">{body}</article>{page_navigation}<footer class=\"page-footer\">{} · <a href=\"{}manual.pdf\">Complete PDF manual</a> · <a href=\"https://github.com/alphal00p/gammaloop/tree/{}\">source {}</a></footer></main>{toc_markup}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search this product\" aria-label=\"Search documentation\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
+            escape_html(&format!("{} — {}", product.tagline, page.title)),
+            escape_html(&product.title),
+            escape_html(&page.title),
+            escape_html(&docs_root),
+            escape_html(&docs_root),
+            escape_html(&docs_root),
+            escape_html(&portal),
+            product_options,
+            escape_html(product_root),
+            escape_html(&product.title),
+            escape_html(&page.group),
+            escape_html(&page.title),
+            escape_html(&version),
+            escape_html(&docs_root),
+            escape_html(&metadata.git_commit),
+            escape_html(&metadata.git_commit.chars().take(12).collect::<String>()),
+        );
         fs::write(path, html)?;
         Ok(())
     }
 
-    fn inject_section_ids(&self, product: &ProductConfig, html: &mut String) -> Result<()> {
-        let mut sections = BTreeMap::new();
-        for path in &product.content {
-            let source = fs::read_to_string(self.root.join(path))?;
-            for line in source.lines() {
-                if let Some(title) = line.trim().strip_prefix("= ") {
-                    let title = title.trim();
-                    ensure!(
-                        sections.insert(title.to_owned(), slug(title)).is_none(),
-                        "{} contains duplicate section title {title}",
-                        product.id
-                    );
-                }
+    fn site_sidebar(
+        &self,
+        product: &ProductConfig,
+        metadata: &SnapshotMetadata<'_>,
+        current: &SitePage,
+        docs_root: &str,
+    ) -> String {
+        let mut groups = BTreeMap::<String, Vec<(String, String)>>::new();
+        let mut group_order = Vec::new();
+        for page in &product.pages {
+            if !groups.contains_key(&page.group) {
+                group_order.push(page.group.clone());
             }
+            groups
+                .entry(page.group.clone())
+                .or_default()
+                .push((page.route.clone(), page.title.clone()));
+        }
+        group_order.push("Reference".to_owned());
+        let reference = groups.entry("Reference".to_owned()).or_default();
+        reference.push(("reference/python/".to_owned(), "Python API".to_owned()));
+        reference.push(("reference/rust/".to_owned(), "Rust API".to_owned()));
+        if matches!(product.id.as_str(), "gammaloop" | "vakint") {
+            reference.push((
+                "reference/generated/".to_owned(),
+                "Generated reference".to_owned(),
+            ));
         }
 
-        let heading = Regex::new(r"(?s)<h(?P<level>[1-6])(?P<attrs>[^>]*)>(?P<body>.*?)</h[1-6]>")?;
-        let tags = Regex::new(r"<[^>]+>")?;
-        let mut matched = BTreeSet::new();
-        let mut rendered = String::with_capacity(html.len() + sections.len() * 24);
-        let mut cursor = 0;
-        for captures in heading.captures_iter(html) {
-            let whole = captures.get(0).expect("heading capture exists");
-            let body = captures.name("body").expect("heading body exists").as_str();
-            let text = decode_html_text(tags.replace_all(body, "").trim());
-            let Some((_, id)) = sections
-                .iter()
-                .find(|(title, _)| text.ends_with(title.as_str()))
-            else {
-                continue;
-            };
-            ensure!(
-                matched.insert(id.clone()),
-                "duplicate rendered section id {id}"
-            );
-            let level = captures
-                .name("level")
-                .expect("heading level exists")
-                .as_str();
-            let attrs = captures
-                .name("attrs")
-                .expect("heading attrs exist")
-                .as_str();
-            ensure!(
-                !attrs.contains(" id="),
-                "Typst emitted an unexpected section id for {id}"
-            );
-            rendered.push_str(&html[cursor..whole.start()]);
-            rendered.push_str(&format!(
-                "<h{level}{attrs} id=\"{}\">{body}</h{level}>",
-                escape_html(id)
+        let mut navigation = String::new();
+        for group in group_order {
+            let links = groups
+                .get(&group)
+                .into_iter()
+                .flatten()
+                .map(|(route, title)| {
+                    let href = if route.is_empty() {
+                        if docs_root.is_empty() {
+                            "./".to_owned()
+                        } else {
+                            docs_root.to_owned()
+                        }
+                    } else {
+                        format!("{docs_root}{route}")
+                    };
+                    format!(
+                        "<a class=\"sidebar-link\" href=\"{}\"{}>{}</a>",
+                        escape_html(&href),
+                        if route == &current.route
+                            || (route == "reference/python/" && current.route.starts_with(route))
+                        {
+                            " aria-current=\"page\""
+                        } else {
+                            ""
+                        },
+                        escape_html(title)
+                    )
+                })
+                .collect::<String>();
+            navigation.push_str(&format!(
+                "<section class=\"sidebar-group\"><p class=\"sidebar-group-title\">{}</p>{links}</section>",
+                escape_html(&group)
             ));
-            cursor = whole.end();
         }
-        rendered.push_str(&html[cursor..]);
-        ensure!(
-            matched.len() == sections.len(),
-            "{} rendered {}/{} searchable manual sections",
-            product.id,
-            matched.len(),
-            sections.len()
-        );
-        *html = rendered;
-        Ok(())
+        let version = match metadata.channel {
+            BuildChannel::Latest => "latest".to_owned(),
+            BuildChannel::Snapshot => metadata.snapshot_tag.unwrap_or("unknown").to_owned(),
+        };
+        format!(
+            "<aside class=\"docs-sidebar\" id=\"docs-sidebar\" aria-label=\"{} manual\">{navigation}<p class=\"sidebar-meta\"><strong>{}</strong><br><code>{}</code><br><a href=\"{}manual.pdf\">Download PDF</a></p></aside>",
+            escape_html(&product.title),
+            escape_html(&product.title),
+            escape_html(&version),
+            escape_html(docs_root)
+        )
+    }
+
+    fn product_options(
+        &self,
+        current: &ProductConfig,
+        metadata: &SnapshotMetadata<'_>,
+        docs_root: &str,
+    ) -> String {
+        self.registry
+            .product
+            .iter()
+            .map(|product| {
+                let route = match metadata.channel {
+                    BuildChannel::Latest => {
+                        format!("{docs_root}../../{}/latest/", product.id)
+                    }
+                    BuildChannel::Snapshot => format!(
+                        "{docs_root}../../../{}/snapshots/{}/",
+                        product.id,
+                        metadata.snapshot_tag.unwrap_or_default()
+                    ),
+                };
+                format!(
+                    "<option value=\"{}\"{}>{}</option>",
+                    escape_html(&route),
+                    if product.id == current.id {
+                        " selected"
+                    } else {
+                        ""
+                    },
+                    escape_html(&product.title)
+                )
+            })
+            .collect()
     }
 
     fn write_search_index(&self, product: &ProductConfig, site: &Path) -> Result<()> {
@@ -1089,16 +1377,35 @@ impl SiteBuilder {
             href: "index.html".to_owned(),
             kind: "product".to_owned(),
         }];
-        for path in &product.content {
-            let source = fs::read_to_string(self.root.join(path))?;
+        for page in &product.pages {
+            let page_href = if page.route.is_empty() {
+                "index.html".to_owned()
+            } else {
+                page.route.clone()
+            };
+            entries.push(SearchEntry {
+                title: page.title.clone(),
+                summary: page.summary.clone(),
+                href: page_href.clone(),
+                kind: page.group.to_lowercase(),
+            });
+            let source = fs::read_to_string(self.root.join(&page.source))?;
             for line in source.lines() {
                 let trimmed = line.trim();
-                if let Some(title) = trimmed.strip_prefix("= ") {
+                let level = trimmed
+                    .chars()
+                    .take_while(|character| *character == '=')
+                    .count();
+                if level >= 2
+                    && let Some(title) = trimmed
+                        .get(level..)
+                        .and_then(|title| title.strip_prefix(' '))
+                {
                     entries.push(SearchEntry {
                         title: title.trim().to_owned(),
-                        summary: format!("{} manual section", product.title),
-                        href: format!("index.html#{}", slug(title)),
-                        kind: "section".to_owned(),
+                        summary: format!("{} · {}", product.title, page.title),
+                        href: format!("{page_href}#{}", slug(title)),
+                        kind: page.group.to_lowercase(),
                     });
                 }
             }
@@ -1178,24 +1485,47 @@ impl SiteBuilder {
         Ok(())
     }
 
-    fn write_portal(&self, output: &Path) -> Result<()> {
+    fn write_portal(&self, output: &Path, channel: BuildChannel, tag: Option<&str>) -> Result<()> {
+        self.write_site_assets(output)?;
+        let channel_route = match channel {
+            BuildChannel::Latest => "latest".to_owned(),
+            BuildChannel::Snapshot => format!(
+                "snapshots/{}",
+                tag.expect("snapshot tag was validated before rendering the portal")
+            ),
+        };
         let cards = self
             .registry
             .product
             .iter()
             .map(|product| {
                 format!(
-                    "<article><h2><a href=\"products/{}/latest/\">{}</a></h2><p>{}</p></article>",
+                    "<article class=\"portal-card\"><p class=\"product-eyebrow\">Product manual</p><h2><a href=\"products/{}/{}/\">{}</a></h2><p>{}</p><p class=\"portal-links\"><a href=\"products/{}/{}/tutorial/\">Tutorial</a><a href=\"products/{}/{}/manual/{}/\">Manual</a><a href=\"products/{}/{}/reference/python/\">Python API</a></p></article>",
                     escape_html(&product.id),
+                    escape_html(&channel_route),
                     escape_html(&product.title),
-                    escape_html(&product.tagline)
+                    escape_html(&product.tagline),
+                    escape_html(&product.id),
+                    escape_html(&channel_route),
+                    escape_html(&product.id),
+                    escape_html(&channel_route),
+                    escape_html(
+                        product
+                            .pages
+                            .iter()
+                            .find(|page| page.group == "Manual")
+                            .map(|page| page.route.trim_start_matches("manual/").trim_end_matches('/'))
+                            .unwrap_or_default()
+                    ),
+                    escape_html(&product.id),
+                    escape_html(&channel_route),
                 )
             })
             .collect::<String>();
         fs::write(
             output.join("index.html"),
             format!(
-                "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>alphal00p documentation</title><style>body{{max-width:70rem;margin:auto;padding:3rem 1.5rem;background:#fbfbfd;color:#172033;font:17px/1.5 system-ui}}main{{display:grid;grid-template-columns:repeat(auto-fit,minmax(17rem,1fr));gap:1rem}}article{{border:1px solid #d9dce5;border-radius:.5rem;padding:1rem}}a{{color:#5b4bdb}}</style></head><body><h1>alphal00p documentation</h1><p>Five independently built manuals from one workspace snapshot.</p><main>{cards}</main></body></html>"
+                "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"Tutorials, manuals, and generated API reference for the alphal00p scientific computing workspace.\"><title>alphal00p documentation</title><link rel=\"stylesheet\" href=\"assets/site.css\"><script defer src=\"assets/site.js\"></script></head><body class=\"portal-body\"><main class=\"portal-main\"><header class=\"portal-hero\"><span class=\"site-brand-mark\">α</span><p class=\"product-eyebrow\">Documentation suite</p><h1>alphal00p</h1><p>Five connected scientific-computing products, each with a guided tutorial, a multi-page manual, and generated Rust and Python references.</p></header><section class=\"portal-grid\" aria-label=\"Products\">{cards}</section><footer class=\"page-footer\"><a href=\"https://github.com/alphal00p/gammaloop\">Source on GitHub</a></footer></main></body></html>"
             ),
         )?;
         fs::write(output.join(".nojekyll"), b"")?;
@@ -1216,28 +1546,9 @@ impl SiteBuilder {
         Ok(())
     }
 
-    fn validate_generated_links(
-        &self,
-        output: &Path,
-        channel: BuildChannel,
-        tag: Option<&str>,
-        include_rustdoc: bool,
-    ) -> Result<()> {
+    fn validate_generated_links(&self, output: &Path, include_rustdoc: bool) -> Result<()> {
         let href = Regex::new(r#"(?:href|src)=["']([^"']+)["']"#)?;
-        let mut roots = vec![];
-        if channel == BuildChannel::Latest {
-            roots.push(output.to_path_buf());
-        } else {
-            for product in &self.registry.product {
-                roots.push(
-                    output
-                        .join("products")
-                        .join(&product.id)
-                        .join("snapshots")
-                        .join(tag.expect("snapshot tag was validated")),
-                );
-            }
-        }
+        let roots = [output.to_path_buf()];
         let mut failures = vec![];
         for root in roots {
             for entry in WalkDir::new(&root) {
@@ -1434,6 +1745,161 @@ impl SiteBuilder {
     }
 }
 
+fn extract_html_body(html: &str) -> Result<&str> {
+    let body = html.find("<body").context("rendered page has no body")?;
+    let start = html[body..]
+        .find('>')
+        .map(|offset| body + offset + 1)
+        .context("rendered page has an unterminated body tag")?;
+    let end = html
+        .rfind("</body>")
+        .context("rendered page has no body end")?;
+    ensure!(start <= end, "rendered page body is malformed");
+    Ok(&html[start..end])
+}
+
+fn page_root_prefix(route: &str) -> String {
+    "../".repeat(
+        route
+            .split('/')
+            .filter(|segment| !segment.is_empty())
+            .count(),
+    )
+}
+
+fn product_hero(product: &ProductConfig) -> String {
+    let first_manual = product
+        .pages
+        .iter()
+        .find(|page| page.group == "Manual")
+        .map(|page| page.route.as_str())
+        .unwrap_or("manual/");
+    format!(
+        "<header class=\"product-hero\"><p class=\"product-eyebrow\">Scientific computing documentation</p><h1>{}</h1><p>{}</p><div class=\"hero-actions\"><a class=\"hero-action primary\" href=\"tutorial/\">Start the tutorial</a><a class=\"hero-action\" href=\"{}\">Read the manual</a><a class=\"hero-action\" href=\"reference/python/\">Browse Python API</a></div></header>",
+        escape_html(&product.title),
+        escape_html(&product.tagline),
+        escape_html(first_manual),
+    )
+}
+
+fn promote_heading_hierarchy(body: &mut String) {
+    if body.contains("<h1") {
+        return;
+    }
+    for level in 2..=6 {
+        *body = body
+            .replace(&format!("<h{level}"), &format!("<h{}", level - 1))
+            .replace(&format!("</h{level}>"), &format!("</h{}>", level - 1));
+    }
+}
+
+fn rewrite_page_links(body: &str, docs_root: &str) -> Result<String> {
+    if docs_root.is_empty() {
+        return Ok(body.to_owned());
+    }
+    let attribute = Regex::new(r#"(?P<name>href|src)=\"(?P<target>[^\"]+)\""#)?;
+    Ok(attribute
+        .replace_all(body, |captures: &regex::Captures<'_>| {
+            let name = captures.name("name").expect("attribute name").as_str();
+            let target = captures.name("target").expect("attribute target").as_str();
+            let external = target.starts_with('#')
+                || target.starts_with('/')
+                || target.starts_with("//")
+                || target
+                    .split(':')
+                    .next()
+                    .is_some_and(|scheme| matches!(scheme, "http" | "https" | "mailto" | "data"));
+            if external {
+                format!("{name}=\"{target}\"")
+            } else {
+                format!("{name}=\"{docs_root}{target}\"")
+            }
+        })
+        .into_owned())
+}
+
+fn inject_heading_ids(body: &str) -> Result<(String, Vec<HeadingLink>)> {
+    let heading = Regex::new(r"(?s)<h(?P<level>[1-6])(?P<attrs>[^>]*)>(?P<body>.*?)</h[1-6]>")?;
+    let id_attribute = Regex::new(r#"\sid=\"(?P<id>[^\"]+)\""#)?;
+    let tags = Regex::new(r"<[^>]+>")?;
+    let mut used = BTreeSet::new();
+    let mut headings = Vec::new();
+    let mut rendered = String::with_capacity(body.len() + 256);
+    let mut cursor = 0;
+    for captures in heading.captures_iter(body) {
+        let whole = captures.get(0).expect("heading capture exists");
+        let level = captures
+            .name("level")
+            .expect("heading level exists")
+            .as_str()
+            .parse::<u8>()?;
+        let attrs = captures
+            .name("attrs")
+            .expect("heading attributes exist")
+            .as_str();
+        let heading_body = captures.name("body").expect("heading body exists").as_str();
+        let title = decode_html_text(tags.replace_all(heading_body, "").trim());
+        let mut id = id_attribute
+            .captures(attrs)
+            .and_then(|captures| captures.name("id").map(|id| id.as_str().to_owned()))
+            .unwrap_or_else(|| slug(&title));
+        if id.is_empty() {
+            id = "section".to_owned();
+        }
+        if !used.insert(id.clone()) {
+            let base = id.clone();
+            let mut suffix = 2;
+            while !used.insert(format!("{base}-{suffix}")) {
+                suffix += 1;
+            }
+            id = format!("{base}-{suffix}");
+        }
+        rendered.push_str(&body[cursor..whole.start()]);
+        if id_attribute.is_match(attrs) {
+            rendered.push_str(whole.as_str());
+        } else {
+            rendered.push_str(&format!(
+                "<h{level}{attrs} id=\"{}\">{heading_body}</h{level}>",
+                escape_html(&id)
+            ));
+        }
+        headings.push(HeadingLink { level, title, id });
+        cursor = whole.end();
+    }
+    rendered.push_str(&body[cursor..]);
+    Ok((rendered, headings))
+}
+
+fn render_page_navigation(
+    previous: Option<&SitePage>,
+    next: Option<&SitePage>,
+    docs_root: &str,
+) -> String {
+    let previous = previous.map_or_else(
+        || "<span></span>".to_owned(),
+        |page| {
+            format!(
+                "<a class=\"page-nav-link\" href=\"{}{}\"><span class=\"page-nav-label\">← Previous</span>{}</a>",
+                escape_html(docs_root),
+                escape_html(&page.route),
+                escape_html(&page.title)
+            )
+        },
+    );
+    let next = next.map_or_else(
+        || "<span></span>".to_owned(),
+        |page| {
+            format!(
+                "<a class=\"page-nav-link next\" href=\"{}{}\"><span class=\"page-nav-label\">Next →</span>{}</a>",
+                escape_html(docs_root),
+                escape_html(&page.route),
+                escape_html(&page.title)
+            )
+        },
+    );
+    format!("<nav class=\"page-nav\" aria-label=\"Manual pagination\">{previous}{next}</nav>")
+}
+
 fn markdown_changelog_to_typst(markdown: &str) -> String {
     let mut output = String::new();
     let mut code_language = None::<String>;
@@ -1536,14 +2002,257 @@ fn markdown_inline_to_typst(line: &str) -> String {
     rendered
 }
 
-fn append_catalog_search(catalog: &DocCatalog, scope: &DocScope, entries: &mut Vec<SearchEntry>) {
+fn count_catalog_items(scope: &DocScope) -> usize {
+    scope.items.len()
+        + scope
+            .scopes
+            .values()
+            .map(count_catalog_items)
+            .sum::<usize>()
+}
+
+fn render_python_catalog(
+    catalog: &DocCatalog,
+    stub_name: &str,
+    stub_text: &str,
+    git_commit: &str,
+) -> String {
+    let mut body = format!(
+        "<p><code>{}</code> · {} documented exports · version {}</p>",
+        escape_html(&catalog.component.package),
+        count_catalog_items(&catalog.root),
+        escape_html(&catalog.component.version)
+    );
+    if let Some(summary) = &catalog.root.summary {
+        body.push_str(&format!("<p>{}</p>", escape_html(summary)));
+    }
+    if let Some(docs) = &catalog.root.docs {
+        body.push_str(&render_doc_text(docs));
+    }
+    let mut scope_path = Vec::new();
+    render_python_scope(
+        catalog,
+        &catalog.root,
+        &mut scope_path,
+        git_commit,
+        2,
+        &mut body,
+    );
+    body.push_str(&format!(
+        "<details class=\"stub-source\"><summary>Type-checker stub source</summary><p><a href=\"reference/python/{}\">Download <code>{}</code></a>. This source is retained for type checkers; the structured reference above is the human-facing documentation.</p><pre><code>{}</code></pre></details>",
+        escape_html(stub_name),
+        escape_html(stub_name),
+        escape_html(stub_text)
+    ));
+    body
+}
+
+fn render_python_scope(
+    catalog: &DocCatalog,
+    scope: &DocScope,
+    path: &mut Vec<String>,
+    git_commit: &str,
+    level: usize,
+    body: &mut String,
+) {
     for item in scope.items.values() {
-        let (href, kind) = match catalog.component.language {
-            ApiLanguage::Rust => (rustdoc_href(catalog, item), "rust-api"),
-            ApiLanguage::Python => (
-                format!("reference/python/#{}", catalog.component.id),
-                "python-api",
-            ),
+        let anchor = python_item_anchor(path, item);
+        let heading = level.clamp(2, 6);
+        body.push_str(&format!(
+            "<section class=\"api-item\" id=\"{}\"><h{heading}><code>{}</code></h{heading}><span class=\"api-kind\">{}</span>{}",
+            escape_html(&anchor),
+            escape_html(&item.name),
+            escape_html(&format!("{:?}", item.kind)),
+            if item.supported {
+                ""
+            } else {
+                "<span class=\"api-kind\">implementation detail</span>"
+            }
+        ));
+        if let Some(docs) = &item.docs {
+            body.push_str(&render_doc_text(docs));
+        } else if let Some(summary) = &item.summary {
+            body.push_str(&format!("<p>{}</p>", escape_html(summary)));
+        }
+        if let Some(signature) = &item.signature {
+            body.push_str(&format!(
+                "<pre class=\"api-signature\"><code>{}</code></pre>",
+                escape_html(signature)
+            ));
+        }
+        if !item.required_features.is_empty() {
+            body.push_str("<p><strong>Requires:</strong> ");
+            for feature in &item.required_features {
+                body.push_str(&format!(
+                    "<span class=\"api-feature\">{}</span>",
+                    escape_html(feature)
+                ));
+            }
+            body.push_str("</p>");
+        }
+        if !item.params.is_empty() {
+            body.push_str("<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>");
+            for parameter in &item.params {
+                let docs = parameter
+                    .docs
+                    .as_ref()
+                    .map(|docs| escape_html(&docs.body))
+                    .unwrap_or_default();
+                body.push_str(&format!(
+                    "<tr><td><code>{}</code>{}</td><td><code>{}</code></td><td><code>{}</code></td><td>{}</td></tr>",
+                    escape_html(&parameter.name),
+                    if parameter.required { " <span class=\"api-kind\">required</span>" } else { "" },
+                    escape_html(parameter.ty.as_deref().unwrap_or("—")),
+                    escape_html(parameter.default.as_deref().unwrap_or("—")),
+                    docs,
+                ));
+            }
+            body.push_str("</tbody></table>");
+        }
+        if let Some(returns) = &item.returns {
+            body.push_str("<h4>Returns</h4>");
+            body.push_str(&render_doc_text(returns));
+        }
+        for example in &item.examples {
+            body.push_str(&format!(
+                "<h4>{}</h4><pre><code data-lang=\"{}\">{}</code></pre>",
+                escape_html(&example.title),
+                escape_html(&example.language),
+                escape_html(&example.code)
+            ));
+        }
+        render_python_members(&item.members, &anchor, 4, body);
+        if let Some(source) = &item.source {
+            body.push_str(&format!(
+                "<p><a href=\"https://github.com/alphal00p/gammaloop/blob/{}/{}#L{}\">Source: <code>{}:{}</code></a></p>",
+                escape_html(git_commit),
+                escape_html(&source.file),
+                source.line,
+                escape_html(&source.file),
+                source.line,
+            ));
+        }
+        body.push_str("</section>");
+    }
+    for child in scope.scopes.values() {
+        path.push(child.id.clone());
+        if child.id != "supported" {
+            let heading = level.clamp(2, 6);
+            body.push_str(&format!(
+                "<h{heading}>{}</h{heading}>",
+                escape_html(&child.title)
+            ));
+            if let Some(summary) = &child.summary {
+                body.push_str(&format!("<p>{}</p>", escape_html(summary)));
+            }
+            if let Some(docs) = &child.docs {
+                body.push_str(&render_doc_text(docs));
+            }
+        }
+        render_python_scope(catalog, child, path, git_commit, level + 1, body);
+        path.pop();
+    }
+    let _ = catalog;
+}
+
+fn render_python_members(
+    members: &[DocMember],
+    parent_anchor: &str,
+    level: usize,
+    body: &mut String,
+) {
+    let mut anchor_counts = BTreeMap::new();
+    for member in members {
+        let anchor = next_python_member_anchor(parent_anchor, member, &mut anchor_counts);
+        let heading = level.clamp(3, 6);
+        body.push_str(&format!(
+            "<section class=\"api-member\" id=\"{}\"><h{heading}><code>{}</code></h{heading}><span class=\"api-kind\">{:?}</span>",
+            escape_html(&anchor),
+            escape_html(&member.name),
+            member.kind,
+        ));
+        if let Some(signature) = &member.signature {
+            body.push_str(&format!(
+                "<pre class=\"api-member-signature\"><code>{}</code></pre>",
+                escape_html(signature)
+            ));
+        }
+        if let Some(docs) = &member.docs {
+            body.push_str(&render_doc_text(docs));
+        }
+        if let Some(default) = &member.default {
+            body.push_str(&format!(
+                "<p><strong>Default:</strong> <code>{}</code></p>",
+                escape_html(default)
+            ));
+        }
+        render_python_members(&member.members, &anchor, level + 1, body);
+        body.push_str("</section>");
+    }
+}
+
+fn render_doc_text(docs: &alphal00p_docs_schema::DocText) -> String {
+    let paragraphs = docs
+        .body
+        .split("\n\n")
+        .filter(|paragraph| !paragraph.trim().is_empty())
+        .map(|paragraph| {
+            escape_html(paragraph.trim())
+                .replace("\r\n", "<br>")
+                .replace('\n', "<br>")
+        })
+        .map(|paragraph| format!("<p>{paragraph}</p>"))
+        .collect::<String>();
+    format!("<div class=\"api-docstring\">{paragraphs}</div>")
+}
+
+fn python_item_anchor(path: &[String], item: &DocItem) -> String {
+    let mut parts = path.iter().map(String::as_str).collect::<Vec<_>>();
+    parts.push(&item.id);
+    slug(&parts.join("-"))
+}
+
+fn next_python_member_anchor(
+    parent_anchor: &str,
+    member: &DocMember,
+    counts: &mut BTreeMap<String, usize>,
+) -> String {
+    let base = format!(
+        "{parent_anchor}-{}-{}",
+        slug(&member.name),
+        slug(&format!("{:?}", member.kind))
+    );
+    let occurrence = counts.entry(base.clone()).or_default();
+    *occurrence += 1;
+    if *occurrence == 1 {
+        base
+    } else {
+        format!("{base}-{occurrence}")
+    }
+}
+
+fn append_catalog_search(catalog: &DocCatalog, scope: &DocScope, entries: &mut Vec<SearchEntry>) {
+    let mut path = Vec::new();
+    append_catalog_search_at(catalog, scope, &mut path, entries);
+}
+
+fn append_catalog_search_at(
+    catalog: &DocCatalog,
+    scope: &DocScope,
+    path: &mut Vec<String>,
+    entries: &mut Vec<SearchEntry>,
+) {
+    for item in scope.items.values() {
+        let (href, kind, member_anchor) = match catalog.component.language {
+            ApiLanguage::Rust => (rustdoc_href(catalog, item), "rust-api", None),
+            ApiLanguage::Python => {
+                let anchor = python_item_anchor(path, item);
+                (
+                    format!("reference/python/{}/#{anchor}", catalog.component.id),
+                    "python-api",
+                    Some(anchor),
+                )
+            }
             _ => continue,
         };
         entries.push(SearchEntry {
@@ -1557,12 +2266,15 @@ fn append_catalog_search(catalog: &DocCatalog, scope: &DocScope, entries: &mut V
             &item.title,
             &href,
             kind,
+            member_anchor.as_deref(),
             &item.members,
             entries,
         );
     }
     for child in scope.scopes.values() {
-        append_catalog_search(catalog, child, entries);
+        path.push(child.id.clone());
+        append_catalog_search_at(catalog, child, path, entries);
+        path.pop();
     }
 }
 
@@ -1571,11 +2283,19 @@ fn append_member_search(
     parent: &str,
     href: &str,
     kind: &str,
+    parent_anchor: Option<&str>,
     members: &[DocMember],
     entries: &mut Vec<SearchEntry>,
 ) {
+    let mut anchor_counts = BTreeMap::new();
     for member in members {
         let title = format!("{parent}.{}", member.name);
+        let member_anchor = parent_anchor
+            .map(|anchor| next_python_member_anchor(anchor, member, &mut anchor_counts));
+        let member_href = member_anchor.as_ref().map_or_else(
+            || href.to_owned(),
+            |anchor| format!("{}#{anchor}", href.split('#').next().unwrap_or(href)),
+        );
         let summary = member
             .docs
             .as_ref()
@@ -1586,10 +2306,18 @@ fn append_member_search(
         entries.push(SearchEntry {
             title: format!("{component} · {title}"),
             summary,
-            href: href.to_owned(),
+            href: member_href.clone(),
             kind: kind.to_owned(),
         });
-        append_member_search(component, &title, href, kind, &member.members, entries);
+        append_member_search(
+            component,
+            &title,
+            &member_href,
+            kind,
+            member_anchor.as_deref(),
+            &member.members,
+            entries,
+        );
     }
 }
 
@@ -2021,6 +2749,46 @@ fn validate_route_segment(value: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_page_route(route: &str) -> Result<()> {
+    if route.is_empty() {
+        return Ok(());
+    }
+    ensure!(
+        route.ends_with('/'),
+        "page route must end with '/': {route}"
+    );
+    ensure!(
+        !route.starts_with('/'),
+        "page route must be relative: {route}"
+    );
+    for segment in route.trim_end_matches('/').split('/') {
+        validate_route_segment(segment)?;
+    }
+    ensure!(
+        !route.contains(".."),
+        "page route cannot contain '..': {route}"
+    );
+    Ok(())
+}
+
+fn validate_typst_symbol(symbol: &str) -> Result<()> {
+    ensure!(!symbol.is_empty(), "Typst export symbol cannot be empty");
+    ensure!(
+        symbol
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_ascii_alphabetic() || character == '_'),
+        "unsafe Typst export symbol {symbol}"
+    );
+    ensure!(
+        symbol.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '_' | '-')
+        }),
+        "unsafe Typst export symbol {symbol}"
+    );
+    Ok(())
+}
+
 fn looks_like_version(value: &str) -> bool {
     let core = value.split(['+', '-']).next().unwrap_or(value);
     let parts = core.split('.').collect::<Vec<_>>();
@@ -2179,7 +2947,7 @@ fn reference_page(product: &str, title: &str, body: &str) -> String {
 
 fn render_gammaloop_generated_reference(product: &str, reference: &GammaLoopReference) -> String {
     let mut body = format!(
-        "<p>Generated from GammaLoop's compiled Clap command tree, Schemars schemas, and serialized real defaults. <a href=\"gammaloop-reference.json\">Download neutral JSON</a>.</p><p>{} commands · {} settings</p>",
+        "<p>Generated from GammaLoop's compiled Clap command tree, Schemars schemas, and serialized real defaults. <a href=\"reference/generated/gammaloop-reference.json\">Download neutral JSON</a>.</p><p>{} commands · {} settings</p>",
         reference.commands.len(),
         reference.settings.len()
     );
@@ -2256,7 +3024,7 @@ fn render_gammaloop_generated_reference(product: &str, reference: &GammaLoopRefe
 }
 
 fn render_vakint_generated_reference(product: &str, reference: &VakintReference) -> String {
-    let mut body = "<p>Generated from <code>Topologies::generate_topologies()</code> and the external-tool minimum-version constants. <a href=\"vakint-reference.json\">Download neutral JSON</a>.</p><h2 id=\"external-dependencies\">External dependencies</h2><table><thead><tr><th>Dependency</th><th>Minimum version</th><th>Source constant</th></tr></thead><tbody>".to_owned();
+    let mut body = "<p>Generated from <code>Topologies::generate_topologies()</code> and the external-tool minimum-version constants. <a href=\"reference/generated/vakint-reference.json\">Download neutral JSON</a>.</p><h2 id=\"external-dependencies\">External dependencies</h2><table><thead><tr><th>Dependency</th><th>Minimum version</th><th>Source constant</th></tr></thead><tbody>".to_owned();
     for dependency in &reference.dependencies {
         body.push_str(&format!(
             "<tr><td>{}</td><td><code>{}</code></td><td><code>{}</code></td></tr>",
@@ -2667,6 +3435,117 @@ mod tests {
             output.join("products/linnet/latest/index.html")
         );
         assert!(resolve_local_link(output, &source, "https://example.com").is_none());
+    }
+
+    #[test]
+    fn nested_pages_rebase_product_relative_links() {
+        assert_eq!(page_root_prefix(""), "");
+        assert_eq!(page_root_prefix("tutorial/"), "../");
+        assert_eq!(page_root_prefix("manual/interfaces/"), "../../");
+        assert_eq!(page_root_prefix("reference/python/component/"), "../../../");
+        let rendered = rewrite_page_links(
+            r##"<a href="reference/python/">API</a><a href="#local">Local</a><a href="https://example.test">External</a>"##,
+            "../../",
+        )
+        .unwrap();
+        assert!(rendered.contains(r#"href="../../reference/python/""#));
+        assert!(rendered.contains(r##"href="#local""##));
+        assert!(rendered.contains(r#"href="https://example.test""#));
+
+        let mut headings = "<h2>Tutorial</h2><h3>Step</h3><h4>Detail</h4>".to_owned();
+        promote_heading_hierarchy(&mut headings);
+        assert_eq!(headings, "<h1>Tutorial</h1><h2>Step</h2><h3>Detail</h3>");
+    }
+
+    #[test]
+    fn python_catalogs_render_as_structured_reference() {
+        use alphal00p_docs_schema::{
+            DocComponent, DocMemberKind, DocProduct, DocText, SCHEMA_VERSION,
+        };
+
+        let mut root = DocScope::new("module", "Module exports");
+        let mut item = DocItem::new(
+            "Engine",
+            "Engine",
+            "Engine",
+            alphal00p_docs_schema::DocItemKind::PythonClass,
+        );
+        item.summary = Some("Runs the documented workflow.".to_owned());
+        item.docs = Some(DocText::new(
+            DocFormat::PythonDocstring,
+            "Runs the documented workflow.\n\nConstruct one engine and reuse it.",
+        ));
+        item.signature = Some("class Engine:".to_owned());
+        let mut method = DocMember::new("run", DocMemberKind::Method);
+        method.signature = Some("def run(self, value: int) -> int:".to_owned());
+        item.members.push(method);
+        let mut overload = DocMember::new("run", DocMemberKind::Method);
+        overload.signature = Some("def run(self, value: str) -> str:".to_owned());
+        item.members.push(overload);
+        item.members
+            .push(DocMember::new("global_data", DocMemberKind::Getter));
+        item.members
+            .push(DocMember::new("global_data", DocMemberKind::Setter));
+        root.define_item(item).unwrap();
+        let catalog = DocCatalog {
+            schema_version: SCHEMA_VERSION,
+            product: DocProduct::new("example", "Example"),
+            component: DocComponent::new(
+                "example-python",
+                "example",
+                "Example Python",
+                "1.0.0",
+                ApiLanguage::Python,
+            ),
+            root,
+        };
+
+        let rendered = render_python_catalog(
+            &catalog,
+            "example-python.pyi",
+            "class Engine: ...",
+            "0123456789abcdef",
+        );
+        assert!(rendered.contains("class=\"api-item\""));
+        assert!(rendered.contains("class Engine:"));
+        assert!(rendered.contains("Construct one engine and reuse it."));
+        assert_eq!(rendered.matches("Runs the documented workflow.").count(), 1);
+        assert!(rendered.contains("def run(self, value: int)"));
+        assert!(rendered.contains("Type-checker stub source"));
+        assert_eq!(rendered.matches("id=\"engine-run-method\"").count(), 1);
+        assert_eq!(rendered.matches("id=\"engine-run-method-2\"").count(), 1);
+        assert_eq!(
+            rendered.matches("id=\"engine-global-data-getter\"").count(),
+            1
+        );
+        assert_eq!(
+            rendered.matches("id=\"engine-global-data-setter\"").count(),
+            1
+        );
+
+        let mut entries = Vec::new();
+        append_catalog_search(&catalog, &catalog.root, &mut entries);
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry.href == "reference/python/example-python/#engine")
+        );
+        assert!(
+            entries.iter().any(|entry| {
+                entry.href == "reference/python/example-python/#engine-run-method"
+            })
+        );
+        assert!(
+            entries.iter().any(|entry| {
+                entry.href == "reference/python/example-python/#engine-run-method-2"
+            })
+        );
+        assert!(entries.iter().any(|entry| {
+            entry.href == "reference/python/example-python/#engine-global-data-getter"
+        }));
+        assert!(entries.iter().any(|entry| {
+            entry.href == "reference/python/example-python/#engine-global-data-setter"
+        }));
     }
 
     #[test]
