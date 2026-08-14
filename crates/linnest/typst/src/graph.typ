@@ -470,7 +470,7 @@
   /// -> string | array
   eval-node-fields: (),
   /// Default data merged into every edge data. Captured edge data fields override it, but bare dot statements don't set data fields. To turn statements into data fields, use `eval-edge-fields`.
-  /// 
+  ///
   /// -> any
   default-edge-data: none,
   /// Edge statement fields to evaluate into `graph.edges(g).at(i).data`. The eval

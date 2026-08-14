@@ -1208,6 +1208,9 @@ fn test_graph_structural_patch_updates_edge_position() {
     }))
     .unwrap();
 
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
+    assert_eq!(edges[0].pos, Some(crate::TypstPoint { x: 0.5, y: 0.0 }));
+
     let patched = graph_apply_structural_patches_bytes(
         &graph,
         &encode_cbor(&TestStructuralPatch {

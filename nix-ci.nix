@@ -46,6 +46,7 @@ let
           "spenso-macros",
           "symbolica-utils"
         ],
+        "kurvst": [],
         "linnest": [
           "linnet"
         ],
@@ -144,9 +145,11 @@ let
           "spenso-macros": [],
           "symbolica-utils": []
         },
+        "kurvst": {},
         "linnest": {
           "linnet": [
             "drawing",
+            "rkyv",
             "serde"
           ]
         },
@@ -198,6 +201,7 @@ let
         "gammaloop-workspace-hack": "crates/gammaloop-workspace-hack",
         "gammalooprs": "crates/gammalooprs",
         "idenso": "crates/idenso",
+        "kurvst": "crates/kurvst",
         "linnest": "crates/linnest",
         "linnet": "crates/linnet",
         "linnet-py": "crates/linnet-py",
@@ -217,6 +221,7 @@ let
         "gammaloop-workspace-hack",
         "gammalooprs",
         "idenso",
+        "kurvst",
         "linnest",
         "linnet",
         "linnet-py",
@@ -285,6 +290,7 @@ let
           "spenso-macros",
           "symbolica-utils"
         ],
+        "kurvst": [],
         "linnest": [
           "gammaloop-workspace-hack",
           "linnet"
@@ -382,6 +388,7 @@ let
           "spenso-macros",
           "symbolica-utils"
         ],
+        "kurvst": [],
         "linnest": [
           "gammaloop-workspace-hack",
           "linnet"
@@ -503,6 +510,7 @@ let
           "spenso-macros",
           "symbolica-utils"
         ],
+        "kurvst": [],
         "linnest": [
           "linnet"
         ],
@@ -605,9 +613,11 @@ let
           "spenso-macros": [],
           "symbolica-utils": []
         },
+        "kurvst": {},
         "linnest": {
           "linnet": [
             "drawing",
+            "rkyv",
             "serde"
           ]
         },
@@ -797,6 +807,7 @@ let
     "python-api" = ["gammaloop-integration-tests"];
     clinnet = ["clinnet"];
     linnet = [
+      "kurvst"
       "linnet"
       "linnet-py"
       "linnest"

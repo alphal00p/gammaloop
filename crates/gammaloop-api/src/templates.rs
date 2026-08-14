@@ -92,6 +92,10 @@ mod tests {
         assert!(templates.join("grid.typ").is_file());
         assert!(templates.join("layout.typ").is_file());
         assert!(fs::read_to_string(templates.join("grid.typ"))?.contains("page_format"));
+        assert!(fs::read_to_string(templates.join("figure.typ"))?.contains("amplitude-mode"));
+        assert!(fs::read_to_string(templates.join("figure.typ"))?.contains("cross-section-mode"));
+        assert!(fs::read_to_string(templates.join("layout.typ"))?
+            .contains("autogen-external-edge-fields"));
 
         assert!(templates
             .join("crates/linnest/typst/linnest.wasm")
@@ -105,6 +109,10 @@ mod tests {
         assert!(!templates.join("linnest.wasm").exists());
         assert!(!templates.join("kurvst.wasm").exists());
         assert!(!templates.join("curve.typ").exists());
+
+        Assets::extract_justfile(tempdir.path())?;
+        assert!(fs::read_to_string(tempdir.path().join("justfile"))?
+            .contains("momentum_line_mark := \"auto\""));
 
         Ok(())
     }

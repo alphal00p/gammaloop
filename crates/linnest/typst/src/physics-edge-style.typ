@@ -492,7 +492,7 @@
 ///   sink-style:   sink-style,
 ///   edge-label: edge-label,
 /// )
-/// #let g = parse(a.text).at(0) 
+/// #let g = parse(a.text).at(0)
 /// #draw(
 ///   layout(layout(g,beta: 100,epochs:300,steps:200),subgraph: subgraph.bits(g,(false,false,false,false,false,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true))),
 ///   source-style: source-style,

@@ -1086,7 +1086,30 @@ fn add_edge_to_builder(
         .map(parse_orientation)
         .transpose()?
         .unwrap_or(Orientation::Default);
-    let placement = resolve_placement(edge.pos.as_ref(), node_positions, "edge")?;
+    let has_statement_position = statement_map_value(&edge.statements, "pos").is_some()
+        || statement_map_value(&global_data.edge_statements, "pos").is_some();
+    let placement = resolve_placement(edge.pos.as_ref(), node_positions, "edge")?.or_else(|| {
+        if has_statement_position {
+            return None;
+        }
+        let (Some(source), Some(sink)) = (&edge.source, &edge.sink) else {
+            return None;
+        };
+        let (source, sink) = (
+            node_positions.get(source.node)?,
+            node_positions.get(sink.node)?,
+        );
+        (source.x_set && source.y_set && sink.x_set && sink.y_set).then_some(ResolvedPlacement {
+            point: ResolvedPoint {
+                x: (source.x + sink.x) / 2.0,
+                y: (source.y + sink.y) / 2.0,
+                x_set: true,
+                y_set: true,
+            },
+            pin: None,
+            mode: PlacementMode::Start,
+        })
+    });
     let local_statements = apply_placement_statements(edge.statements, placement.as_ref());
     let edge_data = DotEdgeData {
         payload: edge.data,

@@ -1658,7 +1658,7 @@ dependencies = [
 name = "gammaloop-workspace-hack"
 version = "0.1.0"
 dependencies = [
- "ahash",
+ "ahash 0.8.12",
  "anstream",
  "arrayvec",
  "bincode 2.0.1",

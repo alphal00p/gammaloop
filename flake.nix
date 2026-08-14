@@ -2693,6 +2693,7 @@
         {
           name = "linnet";
           packages = [
+            "kurvst"
             "linnet"
             "linnet-py"
             "linnest"

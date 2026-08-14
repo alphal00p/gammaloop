@@ -504,11 +504,11 @@ test-release TEST_NAME="":
 
 # Run tests in release mode (faster execution)
 test-ci TEST_NAME="":
-    just _test-ci "{{ TEST_NAME }}" ""
+    just --unstable _test-ci "{{ TEST_NAME }}" ""
 
 # Run tests in release mode on GitHub macOS runners.
 test-ci-mac TEST_NAME="":
-    just _test-ci "{{ TEST_NAME }}" 'not test(/^aa_aa::important::aa_aa_local_inspect_backend_consistency$/)'
+    just --unstable _test-ci "{{ TEST_NAME }}" 'not test(/^aa_aa::important::aa_aa_local_inspect_backend_consistency$/)'
 
 _test-ci TEST_NAME="" NEXTEST_FILTERSET="":
     #!/usr/bin/env bash

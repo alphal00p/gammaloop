@@ -61,9 +61,31 @@
   }
   options
 }
+#let path-mode(input, directory) = {
+  let value = sys.inputs.at(input, default: "auto")
+  if str(value).trim("\"") == "auto" {
+    let path = str(data-path)
+    data-path != none and (
+      path.contains("/processes/" + directory + "/")
+        or path.starts-with("processes/" + directory + "/")
+        or path.starts-with("./processes/" + directory + "/")
+    )
+  } else {
+    bool-input(value)
+  }
+}
+#let amplitude-mode = path-mode("amplitude-mode", "amplitudes")
+#let cross-section-mode = path-mode("cross-section-mode", "cross_sections")
 
 #show raw: it => if it.at("lang") == "dot" {
-  layout(it.at("text"), columns: 1, typst-fields: typst-fields, edge-style-options: edge-style-options)
+  layout(
+    it.at("text"),
+    columns: 1,
+    typst-fields: typst-fields,
+    edge-style-options: edge-style-options,
+    amplitude-mode: amplitude-mode,
+    cross-section-mode: cross-section-mode,
+  )
 } else {
   it
 }
