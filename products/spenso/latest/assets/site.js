@@ -3,6 +3,7 @@
   const body = document.body;
   const docsRoot = body.dataset.docsRoot || "";
   const menu = document.querySelector("[data-menu-toggle]");
+  const sidebar = document.querySelector(".docs-sidebar");
   const backdrop = document.querySelector("[data-sidebar-backdrop]");
   const searchDialog = document.querySelector("[data-search-dialog]");
   const searchInput = document.querySelector("[data-search-input]");
@@ -11,14 +12,29 @@
   const themeButton = document.querySelector("[data-theme-toggle]");
   const productSelect = document.querySelector("[data-product-select]");
   const themeColor = document.querySelector('meta[name="theme-color"]');
+  const mobileNavigation = matchMedia("(max-width: 52rem)");
 
-  const setMenuOpen = (open) => {
+  const setMenuOpen = (requestedOpen, focusNavigation = false) => {
+    const open = requestedOpen && mobileNavigation.matches;
+    const hidden = mobileNavigation.matches && !open;
     body.classList.toggle("sidebar-open", open);
+    sidebar?.toggleAttribute("inert", hidden);
+    if (hidden) sidebar?.setAttribute("aria-hidden", "true");
+    else sidebar?.removeAttribute("aria-hidden");
     menu?.setAttribute("aria-expanded", String(open));
+    menu?.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
+    if (open && focusNavigation) {
+      requestAnimationFrame(() => sidebar?.querySelector("[aria-current], a")?.focus());
+    }
   };
   const closeMenu = () => setMenuOpen(false);
-  menu?.addEventListener("click", () => setMenuOpen(!body.classList.contains("sidebar-open")));
-  backdrop?.addEventListener("click", closeMenu);
+  setMenuOpen(false);
+  mobileNavigation.addEventListener("change", () => setMenuOpen(false));
+  menu?.addEventListener("click", () => setMenuOpen(!body.classList.contains("sidebar-open"), true));
+  backdrop?.addEventListener("click", () => {
+    closeMenu();
+    menu?.focus();
+  });
   document.querySelectorAll(".docs-sidebar a").forEach((link) => link.addEventListener("click", closeMenu));
 
   const storedTheme = localStorage.getItem("alphal00p-docs-theme");
@@ -53,7 +69,9 @@
     if (!normalized) {
       const hint = document.createElement("li");
       hint.className = "search-empty";
-      hint.textContent = "Search tutorials, manual headings, and API entries.";
+      hint.textContent = body.classList.contains("developer-body")
+        ? "Search architecture, proposals, and engineering investigations."
+        : "Search tutorials, manual headings, and API entries.";
       searchResults.append(hint);
       return;
     }
@@ -98,6 +116,11 @@
     if (event.target === searchDialog) searchDialog.close();
   });
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && body.classList.contains("sidebar-open")) {
+      closeMenu();
+      menu?.focus();
+      return;
+    }
     const shortcut = (event.key === "/" && !/input|textarea/i.test(document.activeElement?.tagName)) ||
       (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey));
     if (shortcut && openSearch()) {

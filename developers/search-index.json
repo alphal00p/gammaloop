@@ -1,0 +1,752 @@
+[
+  {
+    "title": "GammaLoop architecture",
+    "summary": "Application shell, domain core, state lifecycle, integration and event pipelines, persistence, concurrency, and tests.",
+    "href": "architecture/gammaloop-architecture/",
+    "kind": "developer implemented"
+  },
+  {
+    "title": "Scope",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#scope",
+    "kind": "developer heading"
+  },
+  {
+    "title": "High-Level Architecture",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#high-level-architecture",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Main Components",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#main-components",
+    "kind": "developer heading"
+  },
+  {
+    "title": "1. Entry Points and Interfaces",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#1-entry-points-and-interfaces",
+    "kind": "developer heading"
+  },
+  {
+    "title": "1.1 CLI architecture",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#1-1-cli-architecture",
+    "kind": "developer heading"
+  },
+  {
+    "title": "2. Application State and Command Model",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#2-application-state-and-command-model",
+    "kind": "developer heading"
+  },
+  {
+    "title": "3. Domain Core (gammalooprs)",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#3-domain-core-gammalooprs",
+    "kind": "developer heading"
+  },
+  {
+    "title": "3.1 UV renormalization",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#3-1-uv-renormalization",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Lifecycle and Data Flow",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#lifecycle-and-data-flow",
+    "kind": "developer heading"
+  },
+  {
+    "title": "1. Startup",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#1-startup",
+    "kind": "developer heading"
+  },
+  {
+    "title": "2. Process Generation Flow",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#2-process-generation-flow",
+    "kind": "developer heading"
+  },
+  {
+    "title": "3. Evaluation and Integration Flow",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#3-evaluation-and-integration-flow",
+    "kind": "developer heading"
+  },
+  {
+    "title": "3.1 Differential event-processing runtime",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#3-1-differential-event-processing-runtime",
+    "kind": "developer heading"
+  },
+  {
+    "title": "3.2 Differential event model",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#3-2-differential-event-model",
+    "kind": "developer heading"
+  },
+  {
+    "title": "3.3 Event generation policy",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#3-3-event-generation-policy",
+    "kind": "developer heading"
+  },
+  {
+    "title": "3.4 Observable architecture",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#3-4-observable-architecture",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Persistence and Runtime Artifacts",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#persistence-and-runtime-artifacts",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Persistence Compatibility Contract",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#persistence-compatibility-contract",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Configuration Architecture",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#configuration-architecture",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Concurrency Model",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#concurrency-model",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Testing Architecture",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#testing-architecture",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Architectural Strengths",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#architectural-strengths",
+    "kind": "developer heading"
+  },
+  {
+    "title": "UV renormalization architecture",
+    "summary": "Orchestrator ownership, sign conventions, projections, disconnected composition, and current boundaries.",
+    "href": "architecture/uv-renormalization/",
+    "kind": "developer implemented"
+  },
+  {
+    "title": "Scope",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#scope",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Orchestrators",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#orchestrators",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Scheme and Computation Ownership",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#scheme-and-computation-ownership",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Signs and Integrated Projections",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#signs-and-integrated-projections",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Disconnected Composition",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#disconnected-composition",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Four-dimensional local terms",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#four-dimensional-local-terms",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Integrated terms",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#integrated-terms",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Three-dimensional local terms",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#three-dimensional-local-terms",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Marker Representation",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#marker-representation",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Current Boundaries",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#current-boundaries",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Spenso parsing flow",
+    "summary": "Dispatch, shorthand modes, structure inference, materialization, chain and trace expansion, and parser edge cases.",
+    "href": "architecture/spenso-parsing-flow/",
+    "kind": "developer implemented"
+  },
+  {
+    "title": "Schoonschip network architecture",
+    "summary": "Entry points, fixed-point execution, opaque parsing, contraction, settings, and comparison with pattern rewriting.",
+    "href": "architecture/schoonschip-network/",
+    "kind": "developer implemented"
+  },
+  {
+    "title": "GammaLoop architecture roadmap",
+    "summary": "Candidate service boundaries, cache sessions, pipeline unification, error handling, orchestration, and observability improvements.",
+    "href": "architecture/gammaloop-roadmap/",
+    "kind": "developer proposal"
+  },
+  {
+    "title": "Proposed Improvements",
+    "summary": "GammaLoop architecture roadmap",
+    "href": "architecture/gammaloop-roadmap/#proposed-improvements",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P1: Introduce a dedicated application service layer",
+    "summary": "GammaLoop architecture roadmap",
+    "href": "architecture/gammaloop-roadmap/#p1-introduce-a-dedicated-application-service-layer",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P1: Replace manual cache-ID protocol with typed cache sessions",
+    "summary": "GammaLoop architecture roadmap",
+    "href": "architecture/gammaloop-roadmap/#p1-replace-manual-cache-id-protocol-with-typed-cache-sessions",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P1: Unify amplitude/cross-section integrand pipeline shape",
+    "summary": "GammaLoop architecture roadmap",
+    "href": "architecture/gammaloop-roadmap/#p1-unify-amplitude-cross-section-integrand-pipeline-shape",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P2: Harden unsupported and partially-implemented runtime paths",
+    "summary": "GammaLoop architecture roadmap",
+    "href": "architecture/gammaloop-roadmap/#p2-harden-unsupported-and-partially-implemented-runtime-paths",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P2: Remove panic-oriented error paths in sampling/inspect",
+    "summary": "GammaLoop architecture roadmap",
+    "href": "architecture/gammaloop-roadmap/#p2-remove-panic-oriented-error-paths-in-sampling-inspect",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P3: Process-level orchestration parallelism",
+    "summary": "GammaLoop architecture roadmap",
+    "href": "architecture/gammaloop-roadmap/#p3-process-level-orchestration-parallelism",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P3: Improve observability for long-running pipelines",
+    "summary": "GammaLoop architecture roadmap",
+    "href": "architecture/gammaloop-roadmap/#p3-improve-observability-for-long-running-pipelines",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Suggested Implementation Order",
+    "summary": "GammaLoop architecture roadmap",
+    "href": "architecture/gammaloop-roadmap/#suggested-implementation-order",
+    "kind": "developer heading"
+  },
+  {
+    "title": "CFF surface-cache ownership",
+    "summary": "A proposal for expression-local surface ownership, its migration path, invariants, and rejected alternatives.",
+    "href": "architecture/cff-surface-cache-ownership/",
+    "kind": "developer proposal"
+  },
+  {
+    "title": "Status",
+    "summary": "CFF surface-cache ownership",
+    "href": "architecture/cff-surface-cache-ownership/#status",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Problem",
+    "summary": "CFF surface-cache ownership",
+    "href": "architecture/cff-surface-cache-ownership/#problem",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Ownership Invariant",
+    "summary": "CFF surface-cache ownership",
+    "href": "architecture/cff-surface-cache-ownership/#ownership-invariant",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Proposed Design",
+    "summary": "CFF surface-cache ownership",
+    "href": "architecture/cff-surface-cache-ownership/#proposed-design",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Immediate Correction",
+    "summary": "CFF surface-cache ownership",
+    "href": "architecture/cff-surface-cache-ownership/#immediate-correction",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Migration",
+    "summary": "CFF surface-cache ownership",
+    "href": "architecture/cff-surface-cache-ownership/#migration",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Validation",
+    "summary": "CFF surface-cache ownership",
+    "href": "architecture/cff-surface-cache-ownership/#validation",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Rejected Alternative",
+    "summary": "CFF surface-cache ownership",
+    "href": "architecture/cff-surface-cache-ownership/#rejected-alternative",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Network simplification status",
+    "summary": "Direct sum contraction behavior, profiling controls, current bottlenecks, reproduction commands, and open experiments.",
+    "href": "architecture/network-simplification/",
+    "kind": "developer investigation record"
+  },
+  {
+    "title": "Scope",
+    "summary": "Network simplification status",
+    "href": "architecture/network-simplification/#scope",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Current Model",
+    "summary": "Network simplification status",
+    "href": "architecture/network-simplification/#current-model",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Current Direct Sum Contraction Path",
+    "summary": "Network simplification status",
+    "href": "architecture/network-simplification/#current-direct-sum-contraction-path",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Current Findings",
+    "summary": "Network simplification status",
+    "href": "architecture/network-simplification/#current-findings",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Known Reproduction Commands",
+    "summary": "Network simplification status",
+    "href": "architecture/network-simplification/#known-reproduction-commands",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Public Settings Knobs",
+    "summary": "Network simplification status",
+    "href": "architecture/network-simplification/#public-settings-knobs",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Contraction Ordering Knobs",
+    "summary": "Network simplification status",
+    "href": "architecture/network-simplification/#contraction-ordering-knobs",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Direct Sum and Boundary Knobs",
+    "summary": "Network simplification status",
+    "href": "architecture/network-simplification/#direct-sum-and-boundary-knobs",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Trace and Profiling Knobs",
+    "summary": "Network simplification status",
+    "href": "architecture/network-simplification/#trace-and-profiling-knobs",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Current Bottleneck Shape",
+    "summary": "Network simplification status",
+    "href": "architecture/network-simplification/#current-bottleneck-shape",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Open Directions",
+    "summary": "Network simplification status",
+    "href": "architecture/network-simplification/#open-directions",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Practical Checklist for Next Experiments",
+    "summary": "Network simplification status",
+    "href": "architecture/network-simplification/#practical-checklist-for-next-experiments",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Spenso large-expression pathology",
+    "summary": "Parsing and execution shape, contraction order, scalar aliasing, Hornering, and unresolved materialization pressure.",
+    "href": "architecture/spenso-large-expressions/",
+    "kind": "developer investigation record"
+  },
+  {
+    "title": "Current Status",
+    "summary": "Spenso large-expression pathology",
+    "href": "architecture/spenso-large-expressions/#current-status",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Rerun Context",
+    "summary": "Spenso large-expression pathology",
+    "href": "architecture/spenso-large-expressions/#rerun-context",
+    "kind": "developer heading"
+  },
+  {
+    "title": "spenso_eval_input_0.txt",
+    "summary": "Spenso large-expression pathology",
+    "href": "architecture/spenso-large-expressions/#spenso-eval-input-0-txt",
+    "kind": "developer heading"
+  },
+  {
+    "title": "symbolica_expression.txt",
+    "summary": "Spenso large-expression pathology",
+    "href": "architecture/spenso-large-expressions/#symbolica-expression-txt",
+    "kind": "developer heading"
+  },
+  {
+    "title": "BNL Four-Term MWE",
+    "summary": "Spenso large-expression pathology",
+    "href": "architecture/spenso-large-expressions/#bnl-four-term-mwe",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Contraction Order",
+    "summary": "Spenso large-expression pathology",
+    "href": "architecture/spenso-large-expressions/#contraction-order",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Component-Level Hornering",
+    "summary": "Spenso large-expression pathology",
+    "href": "architecture/spenso-large-expressions/#component-level-hornering",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Staged Disconnection",
+    "summary": "Spenso large-expression pathology",
+    "href": "architecture/spenso-large-expressions/#staged-disconnection",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Lazy Tensor Sums",
+    "summary": "Spenso large-expression pathology",
+    "href": "architecture/spenso-large-expressions/#lazy-tensor-sums",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Current Diagnosis",
+    "summary": "Spenso large-expression pathology",
+    "href": "architecture/spenso-large-expressions/#current-diagnosis",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Spenso large-input improvement effects",
+    "summary": "A timing matrix for sparse tensors, selector contraction, lazy terms, distribution caps, and combined optimizations.",
+    "href": "architecture/spenso-improvement-effects/",
+    "kind": "developer investigation record"
+  },
+  {
+    "title": "Term 18 Baseline Shape",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#term-18-baseline-shape",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Five Minute Timing Matrix",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#five-minute-timing-matrix",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Individual Improvements",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#individual-improvements",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Sparse Shadow Tensors",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#sparse-shadow-tensors",
+    "kind": "developer heading"
+  },
+  {
+    "title": "One-Hot Selector Contraction",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#one-hot-selector-contraction",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Fast Sparse Tensor Sum Materialization",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#fast-sparse-tensor-sum-materialization",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Lazy Scaled Tensor Terms",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#lazy-scaled-tensor-terms",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Fused Numeric Tensor-Sum Contraction",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#fused-numeric-tensor-sum-contraction",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Grouped Sparse Atom Contraction",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#grouped-sparse-atom-contraction",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Lazy Distribution Cap",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#lazy-distribution-cap",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Horner Contract Entries",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#horner-contract-entries",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Metric Prepass Diagnostic",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#metric-prepass-diagnostic",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Synergies",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#synergies",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Sparse Shadows + One-Hot Selectors",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#sparse-shadows-one-hot-selectors",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Sparse Shadows + Fast Sparse Sums",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#sparse-shadows-fast-sparse-sums",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Sparse Shadows + Lazy Tensor Terms + Fused Numeric Contraction",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#sparse-shadows-lazy-tensor-terms-fused-numeric-contraction",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Metric Prepass + Sparse Shadows",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#metric-prepass-sparse-shadows",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Current Conclusion",
+    "summary": "Spenso large-input improvement effects",
+    "href": "architecture/spenso-improvement-effects/#current-conclusion",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Spenso network execution test baseline",
+    "summary": "A preserved test and timeout baseline for comparing later network-execution work.",
+    "href": "architecture/spenso-test-baseline/",
+    "kind": "developer archived baseline"
+  },
+  {
+    "title": "Nix and Crane artifact reuse",
+    "summary": "Cache contracts, package and test artifact ownership, feature contexts, and CI producer barriers.",
+    "href": "architecture/nix-crane-cache-reuse/",
+    "kind": "developer engineering record"
+  },
+  {
+    "title": "Sources checked",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#sources-checked",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Tested MWEs",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#tested-mwes",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Source path alone was not enough to force rebuilds",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#source-path-alone-was-not-enough-to-force-rebuilds",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Feature mismatch does force a second crate variant",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#feature-mismatch-does-force-a-second-crate-variant",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Local audit findings",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#local-audit-findings",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Artifact merge and freshness fixes",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#artifact-merge-and-freshness-fixes",
+    "kind": "developer heading"
+  },
+  {
+    "title": "What is fixed locally",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#what-is-fixed-locally",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Follow-up audit: workspace crate reuse is context-sensitive",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#follow-up-audit-workspace-crate-reuse-is-context-sensitive",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Current focused verification",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#current-focused-verification",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Remaining caveats",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#remaining-caveats",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Feature-context anchors",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#feature-context-anchors",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Rejected experiment",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#rejected-experiment",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Follow-up audit: archive and dependency-closure reuse",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#follow-up-audit-archive-and-dependency-closure-reuse",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Stripped archives must be flattened after Crane installs them",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#stripped-archives-must-be-flattened-after-crane-installs-them",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Synthetic consumers need artifacts for the same closure they select",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#synthetic-consumers-need-artifacts-for-the-same-closure-they-select",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Plain integration must not depend on the Python module",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#plain-integration-must-not-depend-on-the-python-module",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Nextest needs a generated feature anchor",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#nextest-needs-a-generated-feature-anchor",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Python remains a separate feature family",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#python-remains-a-separate-feature-family",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Historical audit: nextest package boundaries (superseded)",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#historical-audit-nextest-package-boundaries-superseded",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Follow-up audit: package artifacts preserve workspace crates",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#follow-up-audit-package-artifacts-preserve-workspace-crates",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Historical strict reuse audit (superseded)",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#historical-strict-reuse-audit-superseded",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Source and test-artifact ownership split",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#source-and-test-artifact-ownership-split",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Follow-up audit: crate-level check splits",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#follow-up-audit-crate-level-check-splits",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Follow-up: cross-job producer barriers",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#follow-up-cross-job-producer-barriers",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Remaining caveats",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#remaining-caveats-2",
+    "kind": "developer heading"
+  }
+]

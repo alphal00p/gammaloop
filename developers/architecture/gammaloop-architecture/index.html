@@ -1,0 +1,495 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Application shell, domain core, state lifecycle, integration and event pipelines, persistence, concurrency, and tests."><meta name="theme-color" content="#f9f6f0"><title>GammaLoop architecture · Developer architecture</title><link rel="stylesheet" href="../../assets/site.css"><script defer src="../../assets/site.js"></script></head><body class="developer-body" data-docs-root="../../"><a class="skip-link" href="#main-content">Skip to content</a><header class="site-header"><button class="header-button menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-controls="docs-sidebar" aria-expanded="false">☰</button><a class="site-brand" href="../../"><span class="site-brand-mark">α</span><span class="site-brand-name">Developer notes</span></a><div class="site-header-tools"><a class="header-button header-link" href="../../../" aria-label="Research documentation"><span class="header-link-label">Research docs</span><span aria-hidden="true">←</span></a><button class="header-button" type="button" data-search-open aria-label="Search developer documentation"><span class="header-search-label">Search</span> <span class="header-button-label">⌘K</span><span class="header-search-icon" aria-hidden="true">⌕</span></button><button class="header-button" type="button" data-theme-toggle aria-label="Toggle color theme">◐</button></div></header><div class="docs-shell"><aside class="docs-sidebar developer-sidebar" id="docs-sidebar" aria-label="Developer architecture"><section class="sidebar-group"><p class="sidebar-group-title">Developer area</p><a class="sidebar-link" href="../../">Overview</a></section><section class="sidebar-group"><p class="sidebar-group-title">Implemented architecture</p><a class="sidebar-link" href="../../architecture/gammaloop-architecture/" aria-current="page">GammaLoop architecture</a><a class="sidebar-link" href="../../architecture/uv-renormalization/">UV renormalization architecture</a><a class="sidebar-link" href="../../architecture/spenso-parsing-flow/">Spenso parsing flow</a><a class="sidebar-link" href="../../architecture/schoonschip-network/">Schoonschip network architecture</a></section><section class="sidebar-group"><p class="sidebar-group-title">Design proposals</p><a class="sidebar-link" href="../../architecture/gammaloop-roadmap/">GammaLoop architecture roadmap</a><a class="sidebar-link" href="../../architecture/cff-surface-cache-ownership/">CFF surface-cache ownership</a></section><section class="sidebar-group"><p class="sidebar-group-title">Engineering investigations</p><a class="sidebar-link" href="../../architecture/network-simplification/">Network simplification status</a><a class="sidebar-link" href="../../architecture/spenso-large-expressions/">Spenso large-expression pathology</a><a class="sidebar-link" href="../../architecture/spenso-improvement-effects/">Spenso large-input improvement effects</a><a class="sidebar-link" href="../../architecture/spenso-test-baseline/">Spenso network execution test baseline</a></section><section class="sidebar-group"><p class="sidebar-group-title">Build system</p><a class="sidebar-link" href="../../architecture/nix-crane-cache-reuse/">Nix and Crane artifact reuse</a></section><p class="sidebar-meta"><strong>For developers</strong><br>Implementation and engineering notes.<br><a href="../../../#projects">Tutorials &amp; manuals</a></p></aside><main class="docs-main developer-main" id="main-content"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../">αLoop</a> / <a href="../../">Developers</a> / GammaLoop architecture</nav><details class="developer-inline-toc"><summary>On this page</summary><nav aria-label="On this page"><a data-level="2" href="#scope">Scope</a><a data-level="2" href="#high-level-architecture">High-Level Architecture</a><a data-level="2" href="#main-components">Main Components</a><a data-level="3" href="#1-entry-points-and-interfaces">1. Entry Points and Interfaces</a><a data-level="3" href="#1-1-cli-architecture">1.1 CLI architecture</a><a data-level="3" href="#2-application-state-and-command-model">2. Application State and Command Model</a><a data-level="3" href="#3-domain-core-gammalooprs">3. Domain Core (gammalooprs)</a><a data-level="3" href="#3-1-uv-renormalization">3.1 UV renormalization</a><a data-level="2" href="#lifecycle-and-data-flow">Lifecycle and Data Flow</a><a data-level="3" href="#1-startup">1. Startup</a><a data-level="3" href="#2-process-generation-flow">2. Process Generation Flow</a><a data-level="3" href="#3-evaluation-and-integration-flow">3. Evaluation and Integration Flow</a><a data-level="3" href="#3-1-differential-event-processing-runtime">3.1 Differential event-processing runtime</a><a data-level="3" href="#3-2-differential-event-model">3.2 Differential event model</a><a data-level="3" href="#3-3-event-generation-policy">3.3 Event generation policy</a><a data-level="3" href="#3-4-observable-architecture">3.4 Observable architecture</a><a data-level="2" href="#persistence-and-runtime-artifacts">Persistence and Runtime Artifacts</a><a data-level="3" href="#persistence-compatibility-contract">Persistence Compatibility Contract</a><a data-level="2" href="#configuration-architecture">Configuration Architecture</a><a data-level="2" href="#concurrency-model">Concurrency Model</a><a data-level="2" href="#testing-architecture">Testing Architecture</a><a data-level="2" href="#architectural-strengths">Architectural Strengths</a></nav></details><article class="docs-article developer-article"><header class="developer-note-hero"><p class="product-eyebrow">For developers</p><div class="developer-note-title"><h1 id="gammaloop-architecture">GammaLoop architecture</h1><div class="developer-note-badges"><span class="developer-status developer-status-implemented">Implemented</span><span class="developer-kind">System architecture</span></div></div><p>Application shell, domain core, state lifecycle, integration and event pipelines, persistence, concurrency, and tests.</p><p class="developer-source"><a href="https://github.com/alphal00p/gammaloop/blob/48fc407aa1384729cf17a6a35715290bb3de1986/docs/architecture/architecture-current.md">View the source note <span aria-hidden="true">↗</span></a></p></header><h2 id="scope">Scope</h2>
+<p>This document describes the current, implemented architecture of this repository.</p>
+<p>The workspace is organized around two main Rust crates:</p>
+<ul>
+<li><code>gammalooprs</code> (<code>crates/gammalooprs</code>): core physics/domain logic, graph processing, integrand construction, evaluation, and integration.</li>
+<li><code>gammaloop-api</code> (<code>crates/gammaloop-api</code>): CLI, REPL, Python bindings, command parsing, and persisted state orchestration.</li>
+</ul>
+<h2 id="high-level-architecture">High-Level Architecture</h2>
+<p>At a high level, gammaLoop uses a layered architecture with a stateful application shell.</p>
+<pre><code class="language-text">User / Automation
+  -&gt; CLI binary (`gammaloop`) and REPL
+  -&gt; Python module (`_gammaloop` via pyo3)
+  -&gt; run cards (`run.toml`)
+
+Application Layer (`gammaloop-api`)
+  -&gt; clap command parsing
+  -&gt; command execution against mutable `State`
+  -&gt; state/load/save and logging control
+
+Domain Layer (`gammalooprs`)
+  -&gt; model + parameter cards
+  -&gt; graph and process representations (amplitude/cross-section)
+  -&gt; preprocessing and CFF generation
+  -&gt; GL integrand construction + evaluator stacks
+  -&gt; differential event generation, selectors, and observables
+  -&gt; Monte Carlo integration and stability checks
+
+Infrastructure
+  -&gt; filesystem persistence (`gammaloop_state/`)
+  -&gt; optional local scratch persistence (`.local/scratch/...`)
+  -&gt; Symbolica state import/export
+  -&gt; tracing/logging
+</code></pre>
+<h2 id="main-components">Main Components</h2>
+<h3 id="1-entry-points-and-interfaces">1. Entry Points and Interfaces</h3>
+<ul>
+<li>CLI entry point: <code>crates/gammaloop-api/src/cli.rs</code>.</li>
+<li>Main app orchestration: <code>crates/gammaloop-api/src/lib.rs</code> (<code>OneShot::load</code>, <code>OneShot::run</code>).</li>
+<li>Python module entry: <code>crates/gammaloop-api/src/python.rs</code> (<code>#[pymodule(name = "_gammaloop")]</code>).</li>
+<li>Python package shim: <code>crates/gammaloop-api/python/gammaloop/__init__.py</code>.</li>
+</ul>
+<h3 id="1-1-cli-architecture">1.1 CLI architecture</h3>
+<ul>
+<li>The CLI is state-centric: every session operates on one active state folder and one active in-memory <code>RunHistory</code>.</li>
+<li>Startup is orchestrated by <code>OneShot</code>:
+<ul>
+<li>resolve the state folder from CLI / boot card / defaults</li>
+<li>load or create the state</li>
+<li>load persisted settings and run history</li>
+<li>optionally apply a boot card before entering the REPL or running a one-shot subcommand</li>
+</ul>
+</li>
+<li>Command execution is centralized in <code>crates/gammaloop-api/src/session.rs</code> (<code>CliSession</code>):
+<ul>
+<li>top-level commands</li>
+<li>boot-card replay</li>
+<li>nested <code>run</code> execution</li>
+<li>command-history recording policy</li>
+<li>command-block-definition mode</li>
+</ul>
+</li>
+<li>The REPL layer in <code>crates/gammaloop-api/src/repl.rs</code> is state-aware:
+<ul>
+<li>prompt text reflects the active state settings</li>
+<li>tab completion is driven from the active state, active command blocks, and clap argument metadata</li>
+</ul>
+</li>
+</ul>
+<h3 id="2-application-state-and-command-model">2. Application State and Command Model</h3>
+<ul>
+<li>Central mutable app state: <code>crates/gammaloop-api/src/state.rs</code> (<code>State</code>).</li>
+<li>Command history and run cards: <code>CommandHistory</code>, <code>RunHistory</code>.</li>
+<li>Command dispatch: <code>crates/gammaloop-api/src/commands/mod.rs</code> with concrete subcommands in <code>commands/*</code>.</li>
+</ul>
+<p>The command model is stateful by design: commands mutate a long-lived <code>State</code> that can be saved and resumed.</p>
+<h3 id="3-domain-core-gammalooprs">3. Domain Core (gammalooprs)</h3>
+<ul>
+<li>Root module wiring: <code>crates/gammalooprs/src/lib.rs</code>.</li>
+<li>Model and parameters: <code>crates/gammalooprs/src/model/mod.rs</code>.</li>
+<li>Graph domain: <code>crates/gammalooprs/src/graph/mod.rs</code> and submodules.</li>
+<li>Process orchestration: <code>crates/gammalooprs/src/processes/mod.rs</code>, <code>crates/gammalooprs/src/processes/process.rs</code>.</li>
+<li>Amplitude and cross-section pipelines:
+<ul>
+<li><code>crates/gammalooprs/src/processes/amplitude.rs</code></li>
+<li><code>crates/gammalooprs/src/processes/cross_section.rs</code></li>
+</ul>
+</li>
+<li>Integrand abstraction and implementations:
+<ul>
+<li><code>crates/gammalooprs/src/integrands/mod.rs</code></li>
+<li><code>crates/gammalooprs/src/integrands/process/mod.rs</code></li>
+<li><code>crates/gammalooprs/src/integrands/process/amplitude/mod.rs</code></li>
+<li><code>crates/gammalooprs/src/integrands/process/cross_section/mod.rs</code></li>
+</ul>
+</li>
+<li>Integration engine: <code>crates/gammalooprs/src/integrate/mod.rs</code>.</li>
+<li>Global/runtime settings: <code>crates/gammalooprs/src/settings/mod.rs</code>, <code>crates/gammalooprs/src/settings/global.rs</code>, <code>crates/gammalooprs/src/settings/runtime.rs</code>.</li>
+<li>Differential event/observable pipeline:
+<ul>
+<li><code>crates/gammalooprs/src/observables/events.rs</code></li>
+<li><code>crates/gammalooprs/src/observables/mod.rs</code></li>
+<li><code>crates/gammalooprs/src/observables/clustering/*</code></li>
+<li><code>crates/gammalooprs/src/integrands/evaluation.rs</code></li>
+</ul>
+</li>
+</ul>
+<h3 id="3-1-uv-renormalization">3.1 UV renormalization</h3>
+<p>UV generation defaults to the disconnected-capable hedge-poset backend and
+also supports a legacy DAG-forest backend and a comparison mode. Scheme policy
+remains on each Spinney while compute nodes store typed local, integrated, and
+cut-dependent results. Four-dimensional disconnected counterterms factorize
+over complete component counterterms; three-dimensional disconnected terms
+replay component-local operations from their common root so CFF structure is not
+multiplied as though it were scalar. The maintained sign, projection, marker,
+and backend-boundary invariants are documented in
+<a href="../uv-renormalization/"><code>uv-renormalization.md</code></a>.</p>
+<h2 id="lifecycle-and-data-flow">Lifecycle and Data Flow</h2>
+<h3 id="1-startup">1. Startup</h3>
+<ol>
+<li>CLI parses command input (<code>OneShot::parse_env_with_capture</code>).</li>
+<li>Initialization runs (<code>initialise()</code>), installs hooks and symbol registries.</li>
+<li>State is loaded from state folder if available (<code>State::load</code>), otherwise default state is created.</li>
+<li>CLI settings/runtime defaults are loaded and synchronized with tracing filters.</li>
+</ol>
+<h3 id="2-process-generation-flow">2. Process Generation Flow</h3>
+<ol>
+<li><code>generate</code> command builds <code>ProcessDefinition</code> (from syntax or graph import).</li>
+<li><code>State::generate_integrand(s)</code> creates a generation thread pool.</li>
+<li><code>ProcessList::preprocess</code> delegates to amplitude/cross-section preprocessors.</li>
+<li><code>ProcessList::generate_integrands</code> builds <code>ProcessIntegrand</code> instances from preprocessed graphs.</li>
+<li>Optional compile/export steps persist compiled evaluator artifacts and DOT/standalone outputs.</li>
+<li>Each generated integrand now embeds its frozen f64 backend choice in <code>integrand.bin</code>:
+<ul>
+<li><code>eager</code></li>
+<li><code>symjit</code></li>
+<li>external <code>c++</code> / <code>assembly</code> plus the external compile options used</li>
+</ul>
+</li>
+<li>Runtime-only evaluator backends are then activated from that frozen metadata:
+<ul>
+<li>eager uses the saved eager evaluator directly</li>
+<li>symjit is rebuilt after generation/load from the saved Symbolica evaluator</li>
+<li>external compiled backends load their saved shared-library artifacts lazily</li>
+<li>if external loading fails and startup globals explicitly opt into symjit,
+GammaLoop falls back to symjit for that integrand and logs it</li>
+</ul>
+</li>
+</ol>
+<h3 id="3-evaluation-and-integration-flow">3. Evaluation and Integration Flow</h3>
+<ol>
+<li>Commands (<code>inspect</code>, <code>evaluate</code>, <code>integrate</code>) resolve process + integrand references.</li>
+<li>Integrand is warmed up (<code>ProcessIntegrand::warm_up</code>) to initialize rotations and caches.</li>
+<li>Sampling path parameterizes points and evaluates graph terms.</li>
+<li>Stability checks may escalate precision (<code>f64 -&gt; f128 -&gt; arbitrary</code>) and rotate kinematics.</li>
+<li>Process graph evaluation returns a rich <code>GraphEvaluationResult&lt;T&gt;</code> rather
+than only a complex weight. This carries:
+<ul>
+<li>the graph contribution</li>
+<li>grouped generated events</li>
+<li>event-processing timing</li>
+<li>generated / accepted event counts</li>
+</ul>
+</li>
+<li>A shared process-layer prepared-event helper is used by both cross-section
+and amplitude graph evaluation:
+<ul>
+<li>it decides whether an event must be built for the current rotation</li>
+<li>runs selectors immediately on that candidate event</li>
+<li>retains only accepted identity-rotation events when buffering is needed</li>
+<li>reports generated / accepted event counts and event-processing timing
+Failed selector events zero the local contribution and do not survive into
+the final retained result.</li>
+</ul>
+</li>
+<li>Stability selection still compares only the complex graph weight, but the
+retained branch also carries the final grouped event payload.</li>
+<li>The final <code>EvaluationResult</code> contains:
+<ul>
+<li>the stable <code>integrand_result</code>, before any parameterization Jacobian is
+applied</li>
+<li>the top-level <code>parameterization_jacobian</code> when the sample came from
+x-space parameterization (<code>None</code> for direct momentum-space evaluation)</li>
+<li>the separate <code>integrator_weight</code>, i.e. the Monte Carlo/grid weight only</li>
+<li>grouped accepted events</li>
+<li>event-processing timing in <code>evaluation_metadata</code></li>
+<li>generated / accepted event counts in <code>evaluation_metadata</code></li>
+<li>ordered per-level stability results, each with relative-accuracy and total
+time spent in that stability level</li>
+<li>evaluation metadata</li>
+</ul>
+</li>
+<li>Observable filling happens only from the final stable <code>EvaluationResult</code>
+payload. Unstable branches do not contribute events or observables.</li>
+<li><code>havana_integrate</code> runs iterative Monte Carlo updates, merges worker-local
+observable accumulators, and writes integration artifacts.</li>
+</ol>
+<h3 id="3-1-differential-event-processing-runtime">3.1 Differential event-processing runtime</h3>
+<p>The differential pipeline is split into three layers:</p>
+<ul>
+<li>Declarative settings in <code>RuntimeSettings</code>:
+<ul>
+<li><code>quantities</code></li>
+<li><code>selectors</code></li>
+<li><code>observables</code></li>
+</ul>
+</li>
+<li>A compiled runtime-only cache:
+<ul>
+<li><code>EventProcessingRuntime</code></li>
+<li>owned by the process integrand</li>
+<li>built in <code>warm_up()</code></li>
+<li>invalidated when runtime settings are mutated</li>
+</ul>
+</li>
+<li>Per-sample / per-integration results:
+<ul>
+<li><code>GraphEvaluationResult&lt;T&gt;</code></li>
+<li><code>EvaluationResult</code></li>
+<li>observable accumulator state / snapshots</li>
+</ul>
+</li>
+</ul>
+<p>The runtime-only cache is intentionally not serialized in binary state dumps.
+It is wrapped in a no-op <code>Encode</code> / default-empty <code>Decode</code> container and is
+always rebuilt from settings at warm-up time.</p>
+<p>The same pattern is now also used for evaluator execution backends:</p>
+<ul>
+<li>per-integrand frozen backend metadata lives inside <code>integrand.bin</code></li>
+<li>loaded external <code>.so</code> evaluators are runtime-only</li>
+<li>symjit evaluators are runtime-only</li>
+<li>the saved portable representation remains centered on eager Symbolica
+evaluators</li>
+</ul>
+<h3 id="3-2-differential-event-model">3.2 Differential event model</h3>
+<p>Events are stored in precision-homogeneous containers:</p>
+<ul>
+<li><code>GenericEvent&lt;T&gt;</code></li>
+<li><code>GenericEventGroup&lt;T&gt;</code></li>
+<li><code>GenericEventGroupList&lt;T&gt;</code></li>
+</ul>
+<p>This avoids enum-based mixed-precision layouts that would otherwise force
+storage to be sized by the largest precision variant.</p>
+<p>Each event carries:</p>
+<ul>
+<li>kinematics</li>
+<li>cut metadata</li>
+<li>one fully normalized event <code>weight</code></li>
+<li><code>additional_weights</code></li>
+</ul>
+<p>Observable-specific entry reweighting remains internal to the observable
+runtime; it is not stored on the event.</p>
+<p><code>additional_weights</code> is a generic <code>BTreeMap</code> keyed by lightweight identifiers
+such as:</p>
+<ul>
+<li><code>FullMultiplicativeFactor</code></li>
+<li><code>Original</code></li>
+<li><code>ThresholdCounterterm { subset_index }</code></li>
+</ul>
+<p>When threshold-counterterm weights are stored, they are stored with the same sign
+with which they contribute to the final event weight. This means the fully
+normalized event weight is reconstructed as:</p>
+<p><code>(Original + sum(ThresholdCounterterm { subset_index })) * FullMultiplicativeFactor</code>.</p>
+<p>This is populated only when
+<code>settings.general.store_additional_weights_in_event = true</code>.</p>
+<h3 id="3-3-event-generation-policy">3.3 Event generation policy</h3>
+<p>Event generation is controlled by three related runtime decisions:</p>
+<ul>
+<li><code>should_generate_events()</code>
+<ul>
+<li>true when <code>general.generate_events = true</code></li>
+<li>or active selectors exist</li>
+<li>or observables exist</li>
+</ul>
+</li>
+<li><code>should_buffer_generated_events()</code>
+<ul>
+<li>true when <code>general.generate_events = true</code></li>
+<li>or observables exist</li>
+</ul>
+</li>
+<li><code>should_return_generated_events()</code>
+<ul>
+<li>true only when <code>general.generate_events = true</code></li>
+</ul>
+</li>
+</ul>
+<p>This means:</p>
+<ul>
+<li><code>general.generate_events = false</code>
+<ul>
+<li>selector-only evaluations still build temporary events for selector checks</li>
+<li>selector+observable evaluations still build temporary events and buffer
+accepted identity-rotation events long enough to fill observables</li>
+<li>those temporary events are cleared from returned sample results and
+integration event outputs afterwards</li>
+</ul>
+</li>
+<li><code>general.generate_events = true</code>
+<ul>
+<li>events are built, buffered, and returned even when no selector or
+observable is configured</li>
+</ul>
+</li>
+</ul>
+<p>The standard Rust/Python sample-evaluation helpers may temporarily override the
+returned-event behavior per call, but internal event generation still follows
+this same policy after that override is applied.</p>
+<p>Accepted LU events are retained as grouped event lists:</p>
+<ul>
+<li>one <code>EventGroup</code> per graph-group evaluation</li>
+<li>all accepted cuts from graphs sharing the same <code>group_id</code> are merged into the
+same retained event group</li>
+<li>each event stores its concrete <code>graph_id</code> and <code>cut_id</code></li>
+<li>incoming PDGs are sourced from the initial-state cut edges</li>
+</ul>
+<p>This preserves the correlation structure needed by downstream observables.</p>
+<h3 id="3-4-observable-architecture">3.4 Observable architecture</h3>
+<p>Observable definitions are shared between selector and histogram use-cases:</p>
+<ul>
+<li>one quantity definition extracts zero or more <code>ObservableEntry&lt;T&gt;</code> values from
+an event</li>
+<li>selectors consume those entries on a single event</li>
+<li>histogram observables consume grouped events and fill per-group contributions</li>
+</ul>
+<p>Histogram accumulation is based on:</p>
+<ul>
+<li>a histogram-level <code>sample_count</code></li>
+<li>sparse per-bin sufficient statistics:
+<ul>
+<li><code>entry_count</code></li>
+<li><code>sum_weights</code></li>
+<li><code>sum_weights_squared</code></li>
+<li><code>mitigated_fill_count</code></li>
+</ul>
+</li>
+<li><code>HistogramAccumulatorState</code> / <code>ObservableAccumulatorBundle</code> for mergeable
+runtime state</li>
+<li><code>ObservableSnapshotBundle</code> for JSON / HwU output and API responses</li>
+</ul>
+<p>Each Monte Carlo sample contributes exactly one statistical sample to a
+histogram. Contributions from all retained event groups are summed first per
+bin, and untouched bins are handled implicitly through the histogram-level
+<code>sample_count</code> rather than explicit zero fills.</p>
+<p>Histogram snapshots therefore remain fully mergeable and re-constructible into
+live accumulator state. The Rust-facing histogram API exposes <code>merge(...)</code>,
+<code>merge_in_place(...)</code>, and <code>rebin(...)</code>.</p>
+<p>Current built-in quantities include:</p>
+<ul>
+<li><code>particle</code> with <code>computation = scalar | count | pair</code></li>
+<li><code>jet</code> with <code>computation = scalar | count | pair</code></li>
+<li><code>afb</code></li>
+<li><code>cross_section</code></li>
+</ul>
+<p>Current pair quantities include <code>DeltaR</code>. Current scalar projections include
+<code>E</code>, <code>CosTheta</code>, <code>PT</code>, <code>y</code>, <code>eta</code>, <code>Px</code>, <code>Py</code>, <code>Pz</code>, and <code>Mass</code>.</p>
+<p>Object and pair quantities are ordered before <code>entry_selection</code> is applied.
+The ordering contract is configurable per quantity through:</p>
+<ul>
+<li><code>ordering = PT | Energy | AbsRapidity | Quantity</code></li>
+<li><code>order = Ascending | Descending</code></li>
+</ul>
+<p>Family defaults are:</p>
+<ul>
+<li>particle scalar quantities: <code>ordering = Quantity</code></li>
+<li>jet scalar quantities: <code>ordering = PT</code></li>
+<li>pair quantities: <code>ordering = Quantity</code></li>
+</ul>
+<p><code>leading_only</code> and <code>nth_only</code> therefore operate on this explicit ordered list,
+not on incidental source/event enumeration order.</p>
+<p>Jet clustering is implemented natively in Rust with IRC-safe algorithms:</p>
+<ul>
+<li><code>kt</code></li>
+<li><code>cambridge_aachen</code></li>
+<li><code>anti_kt</code></li>
+</ul>
+<p>and is validated against <code>fjcore</code> in tests.</p>
+<h2 id="persistence-and-runtime-artifacts">Persistence and Runtime Artifacts</h2>
+<p>Primary persisted state lives under <code>gammaloop_state/</code> (default):</p>
+<ul>
+<li><code>state_manifest.toml</code> (state schema/version marker)</li>
+<li><code>model.json</code>, <code>model_parameters.json</code></li>
+<li><code>symbolica_state.bin</code></li>
+<li><code>processes/</code> (amplitudes/cross_sections + integrands)</li>
+<li><code>run.toml</code></li>
+<li><code>default_runtime_settings.toml</code></li>
+<li><code>global_settings.toml</code></li>
+<li><code>logs/</code></li>
+</ul>
+<p>For local experimentation, prefer an isolated path such as <code>.local/scratch/&lt;run&gt;/gammaloop_state</code> to keep repository root output minimal.</p>
+<p>The persistence model is file-system based and intentionally human-editable for settings/run cards, mixed with binary artifacts for performance-heavy data.</p>
+<h3 id="persistence-compatibility-contract">Persistence Compatibility Contract</h3>
+<ul>
+<li>State format is versioned with <code>state_manifest.toml</code> (<code>version = 1</code> currently).</li>
+<li><code>State::load</code> validates the manifest version and rejects states from newer binaries.</li>
+<li>If no manifest is present, load falls back to a legacy compatibility path (<code>version = 0</code>) and runs migration checks on required layout entries before loading.</li>
+<li>Process settings history now uses <code>settings_history.toml</code> consistently; loader still accepts legacy <code>settings_history.yaml</code> for backward compatibility and migration.</li>
+</ul>
+<h2 id="configuration-architecture">Configuration Architecture</h2>
+<p>Configuration is split into:</p>
+<ul>
+<li>Global settings (<code>GlobalSettings</code>): generation, logging directives, parallelism.</li>
+<li>Runtime settings (<code>RuntimeSettings</code>): kinematics, integrator behavior, sampling, stability, subtraction, and differential event-processing configuration.</li>
+</ul>
+<p>Differential runtime configuration currently includes:</p>
+<ul>
+<li><code>general.generate_events</code></li>
+<li><code>general.store_additional_weights_in_event</code></li>
+<li>named <code>quantities</code></li>
+<li>named <code>selectors</code></li>
+<li>named <code>observables</code></li>
+<li><code>integrator.observables_output</code></li>
+</ul>
+<p>This split is good: generation-time and evaluation-time concerns are separated and independently serializable.</p>
+<h2 id="concurrency-model">Concurrency Model</h2>
+<p>Concurrency is explicit and use-case scoped:</p>
+<ul>
+<li>Generation and compile thread pools use configurable thread counts.</li>
+<li>Integrator parallelism is controlled via runtime/global settings.</li>
+<li>Some loops over processes/integrands remain sequential at orchestration level while heavy operations inside are parallelized.</li>
+</ul>
+<p>For the differential pipeline:</p>
+<ul>
+<li>each worker/integrand clone owns its own mutable observable accumulator state</li>
+<li>local worker results are merged back into the master integrand after chunk
+evaluation</li>
+<li>distributed batch mode can return either grouped events or serializable
+observable accumulator bundles</li>
+<li>observable snapshots are written only from the merged master state</li>
+</ul>
+<h2 id="testing-architecture">Testing Architecture</h2>
+<p>Testing is organized into layers:</p>
+<ul>
+<li>Unit tests in modules across <code>crates/gammalooprs/src/</code>.</li>
+<li>Integration test crate: <code>tests/</code> with reusable harness (<code>tests/src/lib.rs</code>).</li>
+<li>Additional Rust integration tests in <code>crates/gammalooprs/tests/</code>.</li>
+<li>Snapshot-heavy coverage for symbolic outputs and numerics.</li>
+</ul>
+<p>Differential coverage is currently split into:</p>
+<ul>
+<li><code>tests/tests/test_clustering.rs</code>
+<ul>
+<li>compares the native jet clustering implementation against <code>fjcore</code></li>
+</ul>
+</li>
+<li><code>tests/tests/test_differential.rs</code>
+<ul>
+<li>validates grouped event propagation</li>
+<li>selector behavior</li>
+<li>observable filling and merge semantics</li>
+<li>JSON / HwU snapshot output</li>
+<li>API-facing result shaping using handcrafted fixtures</li>
+</ul>
+</li>
+<li><code>tests/tests/test_evaluation_api.rs</code>
+<ul>
+<li>real generated-process end-to-end coverage for Rust <code>evaluate_sample(s)</code></li>
+<li>graph/cut grouping and incoming-PDG propagation checks</li>
+<li>selectors / observables / event-group retention</li>
+<li>batch-global observable snapshots for <code>evaluate_samples</code></li>
+<li>per-sample evaluation metadata</li>
+<li>x-space vs momentum-space Jacobian behavior</li>
+<li>minimal-output mode</li>
+</ul>
+</li>
+<li><code>tests/tests/test_runs.rs</code>
+<ul>
+<li>real generated-process end-to-end coverage for <code>integrate</code></li>
+<li>integration-workspace observable output in JSON / HwU formats</li>
+<li>repeated <code>save dot</code> overwrite behavior</li>
+</ul>
+</li>
+<li><code>tests/tests/test_python_api.rs</code>
+<ul>
+<li>subprocess-based end-to-end coverage for the public Python API</li>
+<li>returned event grouping / ids / incoming PDGs</li>
+<li>selectors / observables / returned metadata</li>
+<li>minimal-output mode</li>
+<li>x-space batch and momentum-space sample coverage</li>
+<li>requires a separately prepared Python environment where
+<code>import gammaloop</code> already works</li>
+</ul>
+</li>
+</ul>
+<h2 id="architectural-strengths">Architectural Strengths</h2>
+<ul>
+<li>Clear separation between application shell (<code>gammaloop-api</code>) and domain core (<code>gammalooprs</code>).</li>
+<li>Rich, serializable settings model with schema generation hooks.</li>
+<li>Strong process abstraction (<code>Process</code>, <code>ProcessCollection</code>, <code>ProcessIntegrand</code>) that supports amplitude and cross-section workflows.</li>
+<li>Robust stability pipeline with multi-precision escalation and rotation checks.</li>
+<li>Differential event-processing is now integrated into the core evaluation path
+without compromising the stable-weight selection logic.</li>
+<li>Observable accumulation is mergeable across rayon workers and distributed
+batch outputs.</li>
+</ul>
+</article><nav class="page-nav" aria-label="Developer note pagination"><span></span><a class="page-nav-link next" href="../../architecture/uv-renormalization/"><span class="page-nav-label">Next →</span>UV renormalization architecture</a></nav><footer class="page-footer">Developer architecture · <a href="https://github.com/alphal00p/gammaloop/blob/48fc407aa1384729cf17a6a35715290bb3de1986/docs/architecture/architecture-current.md">source 48fc407aa138</a></footer></main><aside class="docs-toc" aria-label="On this page"><p class="toc-title">On this page</p><a class="toc-link" data-level="2" href="#scope">Scope</a><a class="toc-link" data-level="2" href="#high-level-architecture">High-Level Architecture</a><a class="toc-link" data-level="2" href="#main-components">Main Components</a><a class="toc-link" data-level="3" href="#1-entry-points-and-interfaces">1. Entry Points and Interfaces</a><a class="toc-link" data-level="3" href="#1-1-cli-architecture">1.1 CLI architecture</a><a class="toc-link" data-level="3" href="#2-application-state-and-command-model">2. Application State and Command Model</a><a class="toc-link" data-level="3" href="#3-domain-core-gammalooprs">3. Domain Core (gammalooprs)</a><a class="toc-link" data-level="3" href="#3-1-uv-renormalization">3.1 UV renormalization</a><a class="toc-link" data-level="2" href="#lifecycle-and-data-flow">Lifecycle and Data Flow</a><a class="toc-link" data-level="3" href="#1-startup">1. Startup</a><a class="toc-link" data-level="3" href="#2-process-generation-flow">2. Process Generation Flow</a><a class="toc-link" data-level="3" href="#3-evaluation-and-integration-flow">3. Evaluation and Integration Flow</a><a class="toc-link" data-level="3" href="#3-1-differential-event-processing-runtime">3.1 Differential event-processing runtime</a><a class="toc-link" data-level="3" href="#3-2-differential-event-model">3.2 Differential event model</a><a class="toc-link" data-level="3" href="#3-3-event-generation-policy">3.3 Event generation policy</a><a class="toc-link" data-level="3" href="#3-4-observable-architecture">3.4 Observable architecture</a><a class="toc-link" data-level="2" href="#persistence-and-runtime-artifacts">Persistence and Runtime Artifacts</a><a class="toc-link" data-level="3" href="#persistence-compatibility-contract">Persistence Compatibility Contract</a><a class="toc-link" data-level="2" href="#configuration-architecture">Configuration Architecture</a><a class="toc-link" data-level="2" href="#concurrency-model">Concurrency Model</a><a class="toc-link" data-level="2" href="#testing-architecture">Testing Architecture</a><a class="toc-link" data-level="2" href="#architectural-strengths">Architectural Strengths</a></aside></div><button class="sidebar-backdrop" type="button" data-sidebar-backdrop aria-label="Close navigation"></button><dialog class="search-dialog" data-search-dialog><form class="search-form" method="dialog"><input class="search-input" type="search" data-search-input placeholder="Search developer architecture" aria-label="Search developer architecture"><button class="header-button" value="close">Close</button></form><ul class="search-results" data-search-results aria-live="polite"></ul></dialog></body></html>
