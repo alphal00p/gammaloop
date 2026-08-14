@@ -94,8 +94,10 @@ mod tests {
         assert!(fs::read_to_string(templates.join("grid.typ"))?.contains("page_format"));
         assert!(fs::read_to_string(templates.join("figure.typ"))?.contains("amplitude-mode"));
         assert!(fs::read_to_string(templates.join("figure.typ"))?.contains("cross-section-mode"));
-        assert!(fs::read_to_string(templates.join("layout.typ"))?
-            .contains("autogen-external-edge-fields"));
+        let layout = fs::read_to_string(templates.join("layout.typ"))?;
+        assert!(layout.contains("autogen-external-edge-fields"));
+        assert!(layout.contains("g-center: 0.01"));
+        assert!(layout.contains("directional-force: 0"));
 
         assert!(templates
             .join("crates/linnest/typst/linnest.wasm")

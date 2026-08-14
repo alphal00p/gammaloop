@@ -161,12 +161,15 @@
     let layout-options = if amplitude-mode {
       (
         k-spring: 4.5,
+        g-center: 0.01,
         eps: 1e-7,
         step: 0.6,
         gamma-dangling: 2.3,
         label-length-scale: 1.2,
         label-steps: 100,
-        directional-force: 4.5,
+        // Side groups already constrain external columns; an outward bias makes
+        // asymmetric external-leg counts translate the internal graph.
+        directional-force: 0,
         label-layout: "dangling-tangent",
       ) + additional-data
     } else if cross-section-mode {
