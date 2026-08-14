@@ -12,7 +12,12 @@
   }
 }
 
-#let _particle-label(edge, index, typst-fields) = {
+#let _node-index-label(node) = {
+  let index = node.vid
+  [$n_#index$]
+}
+
+#let _particle-label(edge, index, typst-fields, include-index: true) = {
   let scope = edge.fields + (edge: edge.edge)
   let entry = physics.edge-entry(scope, map: edge-style.map, default: (label: none))
   let label = physics.label-content(
@@ -25,7 +30,42 @@
   if label == none {
     return none
   }
-  label + [$(p_#index)$]
+  if include-index {
+    label + [$(p_#index)$]
+  } else {
+    label
+  }
+}
+
+#let _momentum-edge-label(edge, typst-fields, edge-style-options) = {
+  let momentum-arrows = edge-style-options.at("momentum-arrows", default: false)
+  let show-momentum-index = momentum-arrows and edge-style-options.at(
+    "show-edge-index",
+    default: true,
+  )
+  let label-options = if show-momentum-index {
+    edge-style-options + (
+      show-edge-index: false,
+    )
+  } else {
+    edge-style-options
+  }
+  let label = edge-style.edge-label(
+    edge,
+    typst-fields: typst-fields,
+    ..label-options,
+  )
+  if not show-momentum-index {
+    return label
+  }
+  let index = edge.at("momentum-index", default: physics.edge-index(edge))
+  if index == none {
+    label
+  } else if label == none {
+    [$p_#index$]
+  } else {
+    label + [$(p_#index)$]
+  }
 }
 
 #let _rank(ids, id) = {
@@ -52,6 +92,7 @@
   match-field: none,
   place: true,
   y-scale: 10,
+  include-index: true,
 ) = {
   let left = ()
   let right = ()
@@ -101,8 +142,10 @@
     if rank == none {
       return none
     }
+    let index = if match-field == none { edge.edge } else { rank }
     let patch = (
       "label-anchor": if side == "left" { "east" } else { "west" },
+      "momentum-index": index,
     )
     if place {
       let x = if side == "left" {
@@ -120,8 +163,12 @@
       default: edge.fields.at("label", default: none),
     )
     if explicit-label == none {
-      let index = if match-field == none { edge.edge } else { rank }
-      let label = _particle-label(edge, index, typst-fields)
+      let label = _particle-label(
+        edge,
+        index,
+        typst-fields,
+        include-index: include-index,
+      )
       if label != none {
         patch.insert("label", label)
       }
@@ -138,6 +185,7 @@
   unit: 1,
   typst-fields: "plain",
   edge-style-options: (:),
+  show-node-index: false,
   amplitude-mode: false,
   cross-section-mode: false,
   additional-data: (:),
@@ -145,10 +193,12 @@
   let graphs = graph.parse(input)
   let diags = ()
   for graph-bytes in graphs {
+    let momentum-arrows = edge-style-options.at("momentum-arrows", default: false)
     if amplitude-mode {
       graph-bytes = autogen-external-edge-fields(
         graph-bytes,
         typst-fields: typst-fields,
+        include-index: not momentum-arrows,
       )
     } else if cross-section-mode {
       graph-bytes = autogen-external-edge-fields(
@@ -156,6 +206,7 @@
         typst-fields: typst-fields,
         match-field: "is_cut",
         place: false,
+        include-index: not momentum-arrows,
       )
     }
     let layout-options = if amplitude-mode {
@@ -180,9 +231,14 @@
       scope: scope,
       unit: unit,
       title: auto,
+      node-label: if show-node-index { _node-index-label } else { auto },
       source-style: edge => edge-style.source-style(edge, typst-fields: typst-fields, ..edge-style-options),
       sink-style: edge => edge-style.sink-style(edge, typst-fields: typst-fields, ..edge-style-options),
-      edge-label: edge => edge-style.edge-label(edge, typst-fields: typst-fields, ..edge-style-options),
+      edge-label: edge => _momentum-edge-label(
+        edge,
+        typst-fields,
+        edge-style-options,
+      ),
       edge-label-style: edge-label-style,
     ))
   }

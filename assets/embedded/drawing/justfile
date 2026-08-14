@@ -21,6 +21,7 @@ momentum_mark := "auto"
 momentum_paint := "black"
 momentum_thickness := "0.55pt"
 show_edge_index := "true"
+show_node_index := "true"
 show_half_edge_index := "false"
 show_particle := "true"
 
@@ -53,7 +54,7 @@ draw *EXTRA_INPUTS:
 draw-default *EXTRA_INPUTS:
 	just _draw-output {{draw_default_output}} {{EXTRA_INPUTS}}
 
-# Generate drawings with source-to-sink momentum arrows.
+# Generate drawings with source-to-sink momentum arrows and p_i/n_i identifiers.
 draw-momentum *EXTRA_INPUTS:
 	linnet \
 	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
@@ -61,6 +62,7 @@ draw-momentum *EXTRA_INPUTS:
 	  --input 'momentum-arrow-mark={{momentum_mark}}' \
 	  --input 'momentum-arrow-paint={{momentum_paint}}' \
 	  --input 'momentum-arrow-thickness={{momentum_thickness}}' \
+	  --input 'show-node-index={{show_node_index}}' \
 	  {{drawing_styles}} \
 	  --input steps={{steps}} \
 	  --input seed={{seed}} \
@@ -68,7 +70,7 @@ draw-momentum *EXTRA_INPUTS:
 	  --input rows={{rows}} \
 	  -o {{draw_momentum_output}}
 
-# Generate drawings with momentum arrows plus particle and edge-index labels.
+# Generate drawings with momentum arrows plus particle and p_i/n_i labels.
 draw-momentum-labels *EXTRA_INPUTS:
 	linnet \
 	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
@@ -77,6 +79,7 @@ draw-momentum-labels *EXTRA_INPUTS:
 	  --input 'momentum-arrow-paint={{momentum_paint}}' \
 	  --input 'momentum-arrow-thickness={{momentum_thickness}}' \
 	  --input 'show-edge-index={{show_edge_index}}' \
+	  --input 'show-node-index={{show_node_index}}' \
 	  --input 'show-half-edge-index={{show_half_edge_index}}' \
 	  --input 'show-particle={{show_particle}}' \
 	  {{drawing_styles}} \
@@ -86,7 +89,7 @@ draw-momentum-labels *EXTRA_INPUTS:
 	  --input rows={{rows}} \
 	  -o {{draw_momentum_labels_output}}
 
-# Generate drawings with highlighted offset momentum lines and arrowheads.
+# Generate drawings with highlighted momentum lines, arrowheads, and p_i/n_i identifiers.
 draw-momentum-lines *EXTRA_INPUTS:
 	linnet \
 	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
@@ -94,6 +97,7 @@ draw-momentum-lines *EXTRA_INPUTS:
 	  --input 'momentum-arrow-mark={{momentum_line_mark}}' \
 	  --input 'momentum-arrow-paint={{momentum_line_paint}}' \
 	  --input 'momentum-arrow-thickness={{momentum_line_thickness}}' \
+	  --input 'show-node-index={{show_node_index}}' \
 	  {{drawing_styles}} \
 	  --input steps={{steps}} \
 	  --input seed={{seed}} \

@@ -61,6 +61,7 @@
   }
   options
 }
+#let show-node-index = bool-input(sys.inputs.at("show-node-index", default: false))
 #let path-mode(input, directory) = {
   let value = sys.inputs.at(input, default: "auto")
   if str(value).trim("\"") == "auto" {
@@ -83,6 +84,7 @@
     columns: 1,
     typst-fields: typst-fields,
     edge-style-options: edge-style-options,
+    show-node-index: show-node-index,
     amplitude-mode: amplitude-mode,
     cross-section-mode: cross-section-mode,
   )

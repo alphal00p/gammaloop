@@ -92,10 +92,15 @@ mod tests {
         assert!(templates.join("grid.typ").is_file());
         assert!(templates.join("layout.typ").is_file());
         assert!(fs::read_to_string(templates.join("grid.typ"))?.contains("page_format"));
-        assert!(fs::read_to_string(templates.join("figure.typ"))?.contains("amplitude-mode"));
-        assert!(fs::read_to_string(templates.join("figure.typ"))?.contains("cross-section-mode"));
-        assert!(fs::read_to_string(templates.join("layout.typ"))?
-            .contains("autogen-external-edge-fields"));
+        let figure = fs::read_to_string(templates.join("figure.typ"))?;
+        assert!(figure.contains("amplitude-mode"));
+        assert!(figure.contains("cross-section-mode"));
+        assert!(figure.contains("show-node-index"));
+        let layout = fs::read_to_string(templates.join("layout.typ"))?;
+        assert!(layout.contains("autogen-external-edge-fields"));
+        assert!(layout.contains("momentum-index"));
+        assert!(layout.contains("$(p_#index)$"));
+        assert!(layout.contains("$n_#index$"));
 
         assert!(templates
             .join("crates/linnest/typst/linnest.wasm")
@@ -111,8 +116,9 @@ mod tests {
         assert!(!templates.join("curve.typ").exists());
 
         Assets::extract_justfile(tempdir.path())?;
-        assert!(fs::read_to_string(tempdir.path().join("justfile"))?
-            .contains("momentum_line_mark := \"auto\""));
+        let justfile = fs::read_to_string(tempdir.path().join("justfile"))?;
+        assert!(justfile.contains("momentum_line_mark := \"auto\""));
+        assert!(justfile.contains("show_node_index := \"true\""));
 
         Ok(())
     }
