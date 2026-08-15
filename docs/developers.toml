@@ -60,6 +60,14 @@ source = "docs/architecture/cff-surface-cache-ownership.md"
 kind = "Design proposal"
 status = "Proposal"
 
+[[section.note]]
+id = "gammaloop-draw-style-migration"
+title = "GammaLoop drawing style migration"
+summary = "Model-specific particle styles expressed as regular Typst callbacks for Linnest and CeTZ graph rendering."
+source = "docs/architecture/gammaloop-draw-style-migration-example.md"
+kind = "Drawing architecture"
+status = "Design example"
+
 [[section]]
 id = "investigations"
 title = "Engineering investigations"

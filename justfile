@@ -264,6 +264,34 @@ check:
 doc:
     cargo doc --workspace --no-deps --locked --profile {{ ci_cargo_profile }}
 
+# Regenerate the light and dark landing-page graph artwork with Typst/Linnest.
+docs-portal-graphs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    source=docs/assets/typst/portal-graphs.typ
+    output=docs/assets/graphs
+    mkdir -p "$output"
+
+    render() {
+        variant=$1
+        name=$2
+        theme=$3
+        typst compile \
+            --root . \
+            --creation-timestamp 0 \
+            --input "variant=$variant" \
+            --input "theme=$theme" \
+            "$source" \
+            "$output/$name-$theme.svg"
+    }
+
+    for theme in light dark; do
+        render amplitude portal-amplitude "$theme"
+        render cross-section portal-cross-section "$theme"
+        render field portal-topology-field "$theme"
+    done
+
 # Build one product documentation site, or all five sites.
 docs-site PRODUCT="all" CHANNEL="latest" SNAPSHOT_TAG="" OUTPUT="target/alphal00p-docs":
     #!/usr/bin/env bash
