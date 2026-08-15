@@ -2369,80 +2369,15 @@ impl SiteBuilder {
                 )
             })
             .collect::<String>();
-        let pillars = self
-            .portal
-            .pillar
-            .iter()
-            .map(|pillar| {
-                format!(
-                    r#"<article class="portal-pillar"><p class="portal-kicker">{}</p><h3>{}</h3><p>{}</p></article>"#,
-                    escape_html(&pillar.label),
-                    escape_html(&pillar.title),
-                    escape_html(&pillar.summary),
-                )
-            })
-            .collect::<String>();
-        let people = self
-            .portal
-            .people
-            .iter()
-            .filter(|person| person.featured)
-            .map(|person| {
-                let portrait = person.portrait.as_ref().map_or_else(
-                    || {
-                        format!(
-                            "<span class=\"portal-person-initials\" aria-hidden=\"true\">{}</span>",
-                            escape_html(&person.initials),
-                        )
-                    },
-                    |portrait| {
-                        format!(
-                            "<img class=\"portal-person-portrait\" src=\"assets/people/{}\" alt=\"\" width=\"720\" height=\"720\">",
-                            escape_html(portrait),
-                        )
-                    },
-                );
-                format!(
-                    r#"<article class="portal-person"><a href="people/#{}">{}<span><strong>{}</strong><small>{}</small></span><span class="portal-person-arrow" aria-hidden="true">→</span></a></article>"#,
-                    escape_html(&person.id),
-                    portrait,
-                    escape_html(&person.name),
-                    escape_html(&person.role),
-                )
-            })
-            .collect::<String>();
-        let affiliations = self
-            .portal
-            .affiliation
-            .iter()
-            .map(|affiliation| {
-                format!(
-                    r#"<article class="portal-affiliation"><p class="portal-kicker">{}</p><h3><a href="{}">{}</a></h3><p>{}</p><a class="portal-text-link" href="{}">Visit institution <span aria-hidden="true">↗</span></a></article>"#,
-                    escape_html(&affiliation.location),
-                    escape_html(&affiliation.url),
-                    escape_html(&affiliation.name),
-                    escape_html(&affiliation.summary),
-                    escape_html(&affiliation.url),
-                )
-            })
-            .collect::<String>();
-        let developer_count = self
-            .developers
-            .section
-            .iter()
-            .map(|section| section.note.len())
-            .sum::<usize>();
         fs::write(
             output.join("index.html"),
             format!(
-                r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{}"><meta name="theme-color" content="#f9f6f0"><title>αLoop · Research software for collider physics</title><link rel="stylesheet" href="assets/site.css"><script defer src="assets/site.js"></script></head><body class="portal-body"><a class="skip-link" href="#main-content">Skip to content</a><header class="portal-header"><a class="portal-brand" href="#overview" aria-label="αLoop home"><span class="portal-brand-logo" aria-hidden="true"></span><span class="portal-brand-copy"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class="portal-nav" aria-label="Primary"><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="developers/">Developers</a></nav><div class="portal-header-actions"><a class="portal-source-link" href="https://github.com/alphal00p/gammaloop">GitHub <span aria-hidden="true">↗</span></a><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span aria-hidden="true">◐</span></button></div></header><main class="portal-main" id="main-content"><section class="portal-hero portal-section" id="overview"><div class="portal-hero-copy"><p class="portal-kicker">{}</p><h1>{}</h1><p class="portal-lede">{}</p><div class="portal-hero-actions"><a class="portal-button portal-button-primary" href="#projects">Explore the projects <span aria-hidden="true">↓</span></a><a class="portal-button" href="products/gammaloop/{}/tutorial/">Start with GammaLoop <span aria-hidden="true">↗</span></a><a class="portal-button" href="citations/">Cite the software <span aria-hidden="true">↗</span></a></div><dl class="portal-facts"><div><dt>5</dt><dd>connected projects</dd></div><div><dt>2</dt><dd>language ecosystems</dd></div><div><dt>∞</dt><dd>open development</dd></div></dl></div><div class="portal-hero-art" aria-label="αLoop collaboration mark" role="img"><div class="portal-wordmark"></div><p>Local cancellation.<br>Global precision.</p></div></section><section class="portal-pillars" aria-label="Research areas">{pillars}</section><section class="portal-section portal-projects" id="projects" aria-labelledby="projects-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research software · 01—05</p><h2 id="projects-title">Projects &amp; crates</h2></div><p>Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.</p></div><div class="portal-project-grid">{projects}</div></section><section class="portal-section portal-developers" id="developers" aria-labelledby="developers-title"><div><p class="portal-kicker">Contributor documentation</p><h2 id="developers-title">Architecture, proposals, and engineering records</h2><p>The developer area keeps implementation notes distinct from project tutorials and manuals. Each note is labelled as implemented architecture, a proposal, a dated investigation, or an engineering record.</p><a class="portal-button portal-button-primary" href="developers/">Explore {developer_count} developer notes <span aria-hidden="true">↗</span></a></div><dl><div><dt>Current</dt><dd>Implemented system architecture</dd></div><div><dt>Proposed</dt><dd>Designs under consideration</dd></div><div><dt>Dated</dt><dd>Investigations with explicit context</dd></div></dl></section><section class="portal-section portal-people-section" id="people" aria-labelledby="people-title"><div class="portal-section-heading"><div><p class="portal-kicker">Collaboration</p><h2 id="people-title">People behind the workspace</h2></div><p>Researchers and contributors developing the physics, algorithms, and scientific software together.</p></div><div class="portal-people-grid">{people}<article class="portal-person portal-person-all"><a href="people/"><span class="portal-person-initials" aria-hidden="true">7</span><span><strong>Meet the collaboration</strong><small>Profiles, affiliations, and contributor links</small></span><span class="portal-person-arrow" aria-hidden="true">→</span></a></article></div></section><section class="portal-section portal-affiliations-section" id="affiliations" aria-labelledby="affiliations-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research affiliations</p><h2 id="affiliations-title">Built across institutions</h2></div><p>Our researchers work across CERN and the University of Bern, connecting precision phenomenology with open scientific software.</p></div><div class="portal-affiliations-grid">{affiliations}</div><aside class="portal-funding"><span class="portal-funding-mark" aria-hidden="true">α</span><div><p class="portal-kicker">Publicly funded research</p><p>{}</p></div><a class="portal-text-link" href="{}">Funding record <span aria-hidden="true">↗</span></a></aside></section></main><footer class="portal-footer"><div><span class="portal-footer-mark" aria-hidden="true"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label="Footer"><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="citations/">Cite</a><a href="developers/">Developers</a><a href="#affiliations">Affiliations</a><a href="https://github.com/alphal00p/gammaloop">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer></body></html>"##,
+                r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{}"><meta name="theme-color" content="#f9f6f0"><title>αLoop · Research software for collider physics</title><link rel="stylesheet" href="assets/site.css"><script defer src="assets/site.js"></script></head><body class="portal-body"><a class="skip-link" href="#main-content">Skip to content</a><header class="portal-header"><a class="portal-brand" href="#overview" aria-label="αLoop home"><span class="portal-brand-logo" aria-hidden="true"></span><span class="portal-brand-copy"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class="portal-nav" aria-label="Primary"><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="developers/">Developers</a></nav><div class="portal-header-actions"><a class="portal-source-link" href="https://github.com/alphal00p/gammaloop">GitHub <span aria-hidden="true">↗</span></a><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span aria-hidden="true">◐</span></button></div></header><main class="portal-main" id="main-content"><section class="portal-hero portal-section" id="overview"><div class="portal-hero-copy"><p class="portal-kicker">{}</p><h1>{}</h1><p class="portal-lede">{}</p><div class="portal-hero-actions"><a class="portal-button portal-button-primary" href="#projects">Explore the projects <span aria-hidden="true">↓</span></a><a class="portal-button" href="products/gammaloop/{}/tutorial/">Start with GammaLoop <span aria-hidden="true">↗</span></a><a class="portal-button" href="citations/">Cite the software <span aria-hidden="true">↗</span></a></div><dl class="portal-facts"><div><dt>5</dt><dd>connected projects</dd></div><div><dt>2</dt><dd>language ecosystems</dd></div><div><dt>∞</dt><dd>open development</dd></div></dl></div><div class="portal-hero-art" aria-label="αLoop collaboration mark" role="img"><div class="portal-wordmark"></div><p>Local cancellation.<br>Global precision.</p></div></section><section class="portal-section portal-projects" id="projects" aria-labelledby="projects-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research software · 01—05</p><h2 id="projects-title">Projects &amp; crates</h2></div><p>Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.</p></div><div class="portal-project-grid">{projects}</div></section></main><footer class="portal-footer"><div><span class="portal-footer-mark" aria-hidden="true"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label="Footer"><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="citations/">Cite</a><a href="developers/">Developers</a><a href="https://github.com/alphal00p/gammaloop">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer></body></html>"##,
                 escape_html(&self.portal.summary),
                 escape_html(&self.portal.eyebrow),
                 escape_html(&self.portal.title),
                 escape_html(&self.portal.summary),
                 escape_html(&channel_route),
-                escape_html(&self.portal.funding),
-                escape_html(&self.portal.funding_url),
             ),
         )?;
         self.write_people_page(output)?;
@@ -2488,14 +2423,8 @@ impl SiteBuilder {
                         escape_html(orcid),
                     ));
                 }
-                let source = person.portrait_source.as_ref().map_or_else(String::new, |url| {
-                    format!(
-                        "<a class=\"people-photo-source\" href=\"{}\">Portrait source</a>",
-                        escape_html(url),
-                    )
-                });
                 format!(
-                    "<article class=\"people-card\" id=\"{}\">{portrait}<div class=\"people-card-copy\"><p class=\"portal-kicker\">Contributor</p><h2>{}</h2><p>{}</p><nav aria-label=\"{} profiles\">{links}</nav>{source}</div></article>",
+                    "<article class=\"people-card\" id=\"{}\">{portrait}<div class=\"people-card-copy\"><p class=\"portal-kicker\">Collaboration</p><h2>{}</h2><p>{}</p><nav aria-label=\"{} profiles\">{links}</nav></div></article>",
                     escape_html(&person.id),
                     escape_html(&person.name),
                     escape_html(&person.role),
@@ -2504,7 +2433,7 @@ impl SiteBuilder {
             })
             .collect::<String>();
         let body = format!(
-            "<header class=\"portal-page-hero\"><p class=\"portal-kicker\">Collaboration</p><h1>People building αLoop</h1><p>Researchers and software contributors behind the five connected projects. Institutional and professional profiles are primary; GitHub links show the public development record.</p></header><section class=\"people-page-grid\">{cards}</section><aside class=\"portal-page-note\"><strong>Contributor scope</strong><p>This page follows the people currently shown by GitHub for the repository's default branch. Bots and malformed commit identities are excluded. Portraits are public professional images; source links are retained with every image.</p></aside>"
+            "<header class=\"portal-page-hero\"><p class=\"portal-kicker\">People</p><h1>People building αLoop</h1><p>Researchers and collaborators developing Local Unitarity methods and the scientific software that supports them.</p></header><section class=\"people-page-grid\">{cards}</section>"
         );
         let directory = output.join("people");
         fs::create_dir_all(&directory)?;
@@ -5144,7 +5073,7 @@ mod tests {
     }
 
     #[test]
-    fn portal_presents_projects_developers_people_and_affiliations() {
+    fn portal_focuses_on_projects_and_keeps_dedicated_routes() {
         let builder = SiteBuilder::discover().unwrap();
         let output = tempfile::tempdir().unwrap();
         builder
@@ -5153,15 +5082,26 @@ mod tests {
 
         let html = fs::read_to_string(output.path().join("index.html")).unwrap();
         assert_eq!(html.matches("class=\"portal-project-card\"").count(), 5);
-        for section in ["projects", "developers", "people", "affiliations"] {
-            assert!(html.contains(&format!("id=\"{section}\"")));
-        }
+        assert!(html.contains("id=\"projects\""));
         assert!(html.contains("Projects &amp; crates"));
-        assert!(html.contains("developer notes"));
+        assert!(html.contains("αLoop"));
+        assert!(html.contains("href=\"people/\""));
         assert!(html.contains("href=\"developers/\""));
         assert!(html.contains("href=\"publications/\""));
         assert_eq!(html.matches("portal-card-cite").count(), 5);
-        assert!(html.contains("Publicly funded research"));
+        for removed in [
+            "class=\"portal-pillars\"",
+            "id=\"developers\"",
+            "id=\"people\"",
+            "id=\"affiliations\"",
+            "href=\"#affiliations\"",
+            "Publicly funded research",
+        ] {
+            assert!(
+                !html.contains(removed),
+                "unexpected landing-page copy: {removed}"
+            );
+        }
         assert!(!html.contains("Product manual"));
         assert!(!html.contains("scientific-computing products"));
 
@@ -5181,6 +5121,26 @@ mod tests {
         assert_eq!(people.matches("class=\"people-card\"").count(), 7);
         assert!(people.contains("https://symbolica.io/about.html"));
         assert!(people.contains("id=\"cedric-sigrist\""));
+        assert!(people.contains("Researchers and collaborators developing Local Unitarity"));
+        for internal_copy in [
+            "Contributor scope",
+            "default branch",
+            "malformed commit identities",
+            "Portrait source",
+        ] {
+            assert!(
+                !people.contains(internal_copy),
+                "unexpected process copy: {internal_copy}"
+            );
+        }
+
+        let css = fs::read_to_string(output.path().join("assets/site.css")).unwrap();
+        assert!(css.contains(".publication-card:nth-child(2n of :not([hidden]))"));
+        assert!(!css.contains(".publication-card:nth-child(2n) {"));
+        assert!(css.contains(".people-card-portrait { object-position: left center; }"));
+        assert!(css.contains("#ben-ruijl > .people-card-portrait"));
+        assert!(css.contains(".product-logo-gammaloop { aspect-ratio:"));
+        assert!(css.contains(".product-logo-spenso { aspect-ratio: 637 / 189;"));
 
         let publications =
             fs::read_to_string(output.path().join("publications/index.html")).unwrap();
