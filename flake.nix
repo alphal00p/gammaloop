@@ -43,8 +43,8 @@
 
         typst015 =
           assert lib.assertMsg (
-            lib.versionAtLeast pkgs.typst.version "0.15" && lib.versionOlder pkgs.typst.version "0.16"
-          ) "the documentation build requires Typst 0.15, but nixpkgs provides ${pkgs.typst.version}";
+            pkgs.typst.version == "0.15.0"
+          ) "the documentation build requires Typst 0.15.0, but nixpkgs provides ${pkgs.typst.version}";
           pkgs.typst;
 
         docsTypst = typst015.withPackages (
@@ -53,6 +53,8 @@
             mitex_0_2_6
           ]
         );
+
+        docsFontPath = "${pkgs.roboto}/share/fonts/truetype";
 
         nixCiBarrierRevision =
           if self ? dirtyRev then
@@ -154,7 +156,7 @@
             cargoSources
             nonCargoBuildSources
             ./docs
-            ./scripts/render-docs-portal-graphs.sh
+            ./scripts/render-docs-svg-assets.sh
             ./scripts/update-docs-pages.sh
             ./examples/cli/aa_aa/2L/graphs/GL00.dot
             ./examples/cli/aa_aa/2L/graphs/GL08.dot
@@ -1726,6 +1728,7 @@
             nickel
             nls
             docsTypst
+            roboto
             cargo-nextest
             pkg-config
             cargo-deny
@@ -1759,6 +1762,7 @@
 
             RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
             GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
+            TYPST_FONT_PATHS = docsFontPath;
 
             CC = nixCc;
             CXX = nixCxx;
@@ -2889,7 +2893,11 @@
             cargoArtifacts = null;
             pname = "alphal00p-docs";
             src = documentationSrc;
-            nativeBuildInputs = (commonArgs.nativeBuildInputs or [ ]) ++ [ docsTypst ];
+            nativeBuildInputs = (commonArgs.nativeBuildInputs or [ ]) ++ [
+              docsTypst
+              pkgs.roboto
+            ];
+            TYPST_FONT_PATHS = docsFontPath;
             ALPHAL00P_DOCS_GIT_COMMIT = nixCiBarrierRevision;
             ALPHAL00P_DOCS_GIT_TIMESTAMP = toString self.lastModified;
             ALPHAL00P_DOCS_CARGO_PROFILE = ciCargoProfile;
@@ -2909,14 +2917,24 @@
               cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
               cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-examples
               cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- check
-              portal_graphs="$TMPDIR/alphal00p-portal-graphs"
-              bash scripts/render-docs-portal-graphs.sh "$portal_graphs"
-              checked_graphs=(docs/assets/graphs/portal-*.svg)
-              generated_graphs=("$portal_graphs"/portal-*.svg)
-              test "''${#checked_graphs[@]}" -eq 22
-              test "''${#generated_graphs[@]}" -eq 22
-              for checked_graph in "''${checked_graphs[@]}"; do
-                cmp "$checked_graph" "$portal_graphs/$(basename -- "$checked_graph")"
+              svg_assets="$TMPDIR/alphal00p-svg-assets"
+              bash scripts/render-docs-svg-assets.sh "$svg_assets"
+              checked_assets=(
+                docs/assets/graphs/portal-*.svg
+                docs/assets/local-unitarity-*.svg
+                docs/assets/spensologo.svg
+                assets/gammalooplogo*.svg
+              )
+              generated_assets=(
+                "$svg_assets"/docs/assets/graphs/portal-*.svg
+                "$svg_assets"/docs/assets/local-unitarity-*.svg
+                "$svg_assets"/docs/assets/spensologo.svg
+                "$svg_assets"/assets/gammalooplogo*.svg
+              )
+              test "''${#checked_assets[@]}" -eq 28
+              test "''${#generated_assets[@]}" -eq 28
+              for checked_asset in "''${checked_assets[@]}"; do
+                cmp "$checked_asset" "$svg_assets/$checked_asset"
               done
               docs_first="$TMPDIR/alphal00p-docs-first"
               docs_second="$TMPDIR/alphal00p-docs-second"

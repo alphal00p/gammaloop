@@ -264,33 +264,42 @@ check:
 doc:
     cargo doc --workspace --no-deps --locked --profile {{ ci_cargo_profile }}
 
-# Regenerate landing-page artwork from real process graphs with the templates
-# and Standard Model edge styles produced by GammaLoop's `save dot` command.
-docs-portal-graphs:
-    scripts/render-docs-portal-graphs.sh
+# Regenerate every SVG used by the website from its committed Typst source.
+docs-svg-assets:
+    scripts/render-docs-svg-assets.sh
 
-# Fail when checked-in portal artwork is stale relative to GammaLoop's current
-# save-dot templates, model styles, renderer packages, or source graph data.
-docs-portal-graphs-check:
+# Fail when any checked-in website SVG is stale relative to its Typst source,
+# Linnest renderer, palette, or real process/test graph data.
+docs-svg-assets-check:
     #!/usr/bin/env bash
     set -euo pipefail
 
     temp_base=${TMPDIR:-/tmp}
-    check_root=$(mktemp -d "$temp_base/alphal00p-docs-graphs.XXXXXX")
+    check_root=$(mktemp -d "$temp_base/alphal00p-docs-svg.XXXXXX")
     cleanup() {
         case "$check_root" in
-            "$temp_base"/alphal00p-docs-graphs.*) rm -rf -- "$check_root" ;;
+            "$temp_base"/alphal00p-docs-svg.*) rm -rf -- "$check_root" ;;
         esac
     }
     trap cleanup EXIT
 
-    scripts/render-docs-portal-graphs.sh "$check_root"
-    checked_assets=(docs/assets/graphs/portal-*.svg)
-    generated_assets=("$check_root"/portal-*.svg)
-    [ "${#checked_assets[@]}" -eq 22 ]
-    [ "${#generated_assets[@]}" -eq 22 ]
+    scripts/render-docs-svg-assets.sh "$check_root"
+    checked_assets=(
+        docs/assets/graphs/portal-*.svg
+        docs/assets/local-unitarity-*.svg
+        docs/assets/spensologo.svg
+        assets/gammalooplogo*.svg
+    )
+    generated_assets=(
+        "$check_root"/docs/assets/graphs/portal-*.svg
+        "$check_root"/docs/assets/local-unitarity-*.svg
+        "$check_root"/docs/assets/spensologo.svg
+        "$check_root"/assets/gammalooplogo*.svg
+    )
+    [ "${#checked_assets[@]}" -eq 28 ]
+    [ "${#generated_assets[@]}" -eq 28 ]
     for checked in "${checked_assets[@]}"; do
-        cmp "$checked" "$check_root/$(basename -- "$checked")"
+        cmp "$checked" "$check_root/$checked"
     done
 
 # Build one product documentation site, or all five sites.
@@ -344,7 +353,7 @@ docs-check:
     cargo test --locked -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
     cargo test --locked -p alphal00p-docs-examples
     cargo run --locked -p alphal00p-docs-builder -- check
-    just docs-portal-graphs-check
+    just docs-svg-assets-check
     just docs-linnet-python-check
 
 # Build Linnet's extension and compare its real import surface with the checked-in stub.

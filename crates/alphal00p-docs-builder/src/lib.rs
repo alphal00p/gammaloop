@@ -613,8 +613,27 @@ impl SiteBuilder {
         }
         self.require_file(Path::new("docs/assets/site.css"))?;
         self.require_file(Path::new("docs/assets/site.js"))?;
+        self.require_file(Path::new("scripts/render-docs-svg-assets.sh"))?;
+        for source in [
+            "docs/assets/typst/theme.typ",
+            "docs/assets/typst/marks/local-unitarity.typ",
+            "docs/assets/typst/marks/gammaloop.typ",
+            "docs/assets/typst/marks/spenso.typ",
+            "assets/embedded/drawing/templates/layout-core.typ",
+            "docs/assets/typst/portal-graphs/figure.typ",
+            "docs/assets/typst/portal-graphs/layout.typ",
+            "docs/assets/typst/portal-graphs/edge-style.typ",
+        ] {
+            self.require_file(Path::new(source))?;
+        }
         self.require_file(Path::new("docs/assets/local-unitarity-light.svg"))?;
         self.require_file(Path::new("docs/assets/local-unitarity-dark.svg"))?;
+        for graph in PORTAL_GRAPH_IDS {
+            self.require_file(
+                &Path::new("docs/assets/typst/portal-graphs/graphs")
+                    .join(format!("portal-graph-{graph}.typ")),
+            )?;
+        }
         for graph in portal_graph_assets() {
             self.require_file(&Path::new("docs/assets/graphs").join(&graph))?;
         }
@@ -5202,14 +5221,36 @@ mod tests {
         ] {
             assert!(output.path().join("assets").join(asset).is_file());
         }
-        for graph in portal_graph_assets() {
-            let svg = fs::read_to_string(output.path().join("assets/graphs").join(&graph)).unwrap();
-            assert!(svg.contains("<svg"), "missing SVG root in {graph}");
-            assert!(svg.contains("viewBox="), "missing SVG viewBox in {graph}");
+        let mut svg_assets = portal_graph_assets()
+            .map(|graph| output.path().join("assets/graphs").join(graph))
+            .collect::<Vec<_>>();
+        svg_assets.extend(
+            [
+                "local-unitarity-light.svg",
+                "local-unitarity-dark.svg",
+                "gammalooplogo-light.svg",
+                "gammalooplogo-dark.svg",
+                "spensologo.svg",
+            ]
+            .map(|asset| output.path().join("assets").join(asset)),
+        );
+        for asset in svg_assets {
+            let svg = fs::read_to_string(&asset).unwrap();
+            assert!(
+                svg.contains("<svg"),
+                "missing SVG root in {}",
+                asset.display()
+            );
+            assert!(
+                svg.contains("viewBox="),
+                "missing SVG viewBox in {}",
+                asset.display()
+            );
             for forbidden in ["<script", "<foreignObject", "<image", "href=\"http"] {
                 assert!(
                     !svg.contains(forbidden),
-                    "unsafe or external SVG content in {graph}: {forbidden}"
+                    "unsafe or external SVG content in {}: {forbidden}",
+                    asset.display()
                 );
             }
         }
@@ -5242,8 +5283,8 @@ mod tests {
         assert!(!css.contains(".publication-card:nth-child(2n) {"));
         assert!(css.contains(".people-card-portrait { object-position: left center; }"));
         assert!(css.contains("#ben-ruijl > .people-card-portrait"));
-        assert!(css.contains(".product-logo-gammaloop { aspect-ratio: 1.98 / 1;"));
-        assert!(css.contains("background-size: 120% auto;"));
+        assert!(css.contains(".product-logo-gammaloop { aspect-ratio: 2.016 / 1;"));
+        assert!(css.contains("background-size: contain;"));
         assert!(!css.contains("background-size: 137.2% auto;"));
         assert!(css.contains(".product-logo-spenso { aspect-ratio: 637 / 189;"));
         assert!(css.contains(".portal-graph-field"));
@@ -5254,14 +5295,78 @@ mod tests {
         assert!(!css.contains(".portal-graph-card"));
 
         let renderer =
-            fs::read_to_string(builder.root.join("scripts/render-docs-portal-graphs.sh")).unwrap();
-        assert!(renderer.contains("save dot \\\"$command_export_dir\\\""));
-        for graph in PORTAL_GRAPH_IDS {
+            fs::read_to_string(builder.root.join("scripts/render-docs-svg-assets.sh")).unwrap();
+        assert!(renderer.contains("typst compile"));
+        for forbidden in ["cargo run", "save dot", "linnet draw", "dot -", "sed -i"] {
             assert!(
-                renderer.contains(graph),
-                "missing real graph source for {graph}"
+                !renderer.contains(forbidden),
+                "website SVG renderer uses external generation: {forbidden}"
             );
         }
+        for graph in PORTAL_GRAPH_IDS {
+            let source = builder
+                .root
+                .join("docs/assets/typst/portal-graphs/graphs")
+                .join(format!("portal-graph-{graph}.typ"));
+            let typst = fs::read_to_string(&source).unwrap();
+            assert!(
+                typst.contains("#render(") && typst.contains("read(") && typst.contains(".dot\""),
+                "missing editable Linnest source for {graph}"
+            );
+        }
+
+        let shared_layout = fs::read_to_string(
+            builder
+                .root
+                .join("assets/embedded/drawing/templates/layout-core.typ"),
+        )
+        .unwrap();
+        let canonical_layout = fs::read_to_string(
+            builder
+                .root
+                .join("assets/embedded/drawing/templates/layout.typ"),
+        )
+        .unwrap();
+        let portal_layout = fs::read_to_string(
+            builder
+                .root
+                .join("docs/assets/typst/portal-graphs/layout.typ"),
+        )
+        .unwrap();
+        for structural_contract in [
+            "#let edge-label-style(edge)",
+            "#let autogen-external-edge-fields(",
+            "#let layout(",
+            "#let bind-layout(",
+            "graph.parse(input)",
+            "graph.style(",
+            "apply-layout(graph-bytes, ..layout-options)",
+            "draw(",
+        ] {
+            assert!(
+                shared_layout.contains(structural_contract),
+                "shared GammaLoop layout lost {structural_contract}"
+            );
+        }
+        assert!(canonical_layout.contains("#import \"layout-core.typ\": bind-layout"));
+        assert!(portal_layout.contains(
+            "#import \"../../../../assets/embedded/drawing/templates/layout-core.typ\": ("
+        ));
+        for (name, adapter) in [
+            ("save-dot", canonical_layout.as_str()),
+            ("website", portal_layout.as_str()),
+        ] {
+            assert!(
+                adapter.contains("#let layout = bind-layout("),
+                "{name} adapter does not bind the shared layout"
+            );
+            assert!(
+                !adapter.contains("graph.parse(input)"),
+                "{name} adapter duplicated the shared layout algorithm"
+            );
+        }
+        assert!(portal_layout.contains("diagram-options: ("));
+        assert!(portal_layout.contains("node-stroke: palette.ink + 1.1pt"));
 
         let publications =
             fs::read_to_string(output.path().join("publications/index.html")).unwrap();

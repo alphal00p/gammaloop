@@ -1,6 +1,6 @@
 # Documentation image provenance
 
-The portraits below are size-optimized WebP derivatives of public professional profile images. The Spenso logo is vendored byte-for-byte from its canonical upstream repository.
+The portraits below are size-optimized WebP derivatives of public professional profile images. Every SVG used by the website is generated from editable Typst under `docs/assets/typst/`, with graph layout shared from GammaLoop's `assets/embedded/drawing/templates/layout-core.typ`; run `nix develop --command just docs-svg-assets` after changing them.
 
 | Local asset | Subject | Public source |
 | --- | --- | --- |
@@ -10,6 +10,8 @@ The portraits below are size-optimized WebP derivatives of public professional p
 | `people/kaapo.webp` | Kaapo Seppänen | [University of Bern profile](https://www.itp.unibe.ch/about_us/people/people/index_eng.html?id=290) · [original portrait](https://itpcenter.itp.unibe.ch/ajax/proxy.php/people/Sepp%C3%A4nen_Kaapo.jpg) |
 | `people/zeno.webp` | Zeno Capatti | [University of Bern profile](https://www.itp.unibe.ch/about_us/people/people/index_eng.html?id=262) · [original portrait](https://itpcenter.itp.unibe.ch/ajax/proxy.php/people/Capatti_Zeno.jpg) |
 | `people/ben.webp` | Ben Ruijl | [Symbolica profile](https://symbolica.io/about.html) · [original portrait](https://symbolica.io/ben.jpg) |
-| `spensologo.svg` | Spenso | [canonical logo at pinned upstream revision](https://github.com/alphal00p/spenso/blob/c052f22dc98a18535e114eede758674befc2758f/spensologo.svg) |
+| `spensologo.svg` | Spenso | Native Typst reconstruction of the [canonical logo at the pinned upstream revision](https://github.com/alphal00p/spenso/blob/c052f22dc98a18535e114eede758674befc2758f/spensologo.svg) |
 
-These are public professional portraits and a public project logo. No explicit public redistribution license was found for these source images; preserve this provenance and obtain permission where required before reusing them elsewhere.
+The graph sources read the real generated-process and test-resource DOT files directly and pass them to Linnest from Typst; no Graphviz, `just draw`, or generated template bundle is part of the website build. Four sources enable Linnest momentum arrows explicitly, and the shared edge style owns the website-specific line weights and light/dark palette.
+
+The portraits and referenced project design are public professional/project material. No explicit public redistribution license was found for the portrait sources; preserve this provenance and obtain permission where required before reusing them elsewhere.

@@ -114,9 +114,11 @@ jobs:
           for required in \
             crates/alphal00p-docs-builder/Cargo.toml \
             docs/products/registry.toml \
+            docs/assets/typst/portal-graphs/figure.typ \
+            scripts/render-docs-svg-assets.sh \
             justfile; do
             if ! git cat-file -e "$SNAPSHOT_TAG^{commit}:$required"; then
-              echo "::error::Snapshot tag $SNAPSHOT_TAG predates the five-product documentation toolchain and cannot be rebuilt faithfully." >&2
+              echo "::error::Snapshot tag $SNAPSHOT_TAG predates the five-product Typst documentation toolchain and cannot be rebuilt faithfully." >&2
               exit 2
             fi
           done
