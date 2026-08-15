@@ -13121,13 +13121,13 @@ endobj
 <</Type/Annot/Subtype/Link/Rect[67.69292 710.1096 95.93791 723.94867]/Border[0 0 0]/A<</Type/Action/S/URI/URI(../../vakint/latest/)>>/F 4/StructParent 4/Contents(../../vakint/latest/)>>
 endobj
 4374 0 obj
-<</Type/Annot/Subtype/Link/Rect[524.9222 665.76166 538.5827 679.60065]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/docs/architecture/architecture-current.md)>>/F 4/StructParent 5/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/docs/architecture/architecture-current.md)>>
+<</Type/Annot/Subtype/Link/Rect[524.9222 665.76166 538.5827 679.60065]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/docs/architecture/architecture-current.md)>>/F 4/StructParent 5/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/docs/architecture/architecture-current.md)>>
 endobj
 4375 0 obj
-<</Type/Annot/Subtype/Link/Rect[56.692913 651.92267 150.55241 665.76166]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/docs/architecture/architecture-current.md)>>/F 4/StructParent 6/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/docs/architecture/architecture-current.md)>>
+<</Type/Annot/Subtype/Link/Rect[56.692913 651.92267 150.55241 665.76166]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/docs/architecture/architecture-current.md)>>/F 4/StructParent 6/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/docs/architecture/architecture-current.md)>>
 endobj
 4376 0 obj
-<</Type/Annot/Subtype/Link/Rect[143.4229 401.73358 215.24556 415.57257]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/examples/cli/gg_hhh/1L/gg_hhh_1L.toml)>>/F 4/StructParent 8/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/examples/cli/gg_hhh/1L/gg_hhh_1L.toml)>>
+<</Type/Annot/Subtype/Link/Rect[143.4229 401.73358 215.24556 415.57257]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/examples/cli/gg_hhh/1L/gg_hhh_1L.toml)>>/F 4/StructParent 8/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/examples/cli/gg_hhh/1L/gg_hhh_1L.toml)>>
 endobj
 4377 0 obj
 <</Type/Annot/Subtype/Link/Rect[506.41068 340.68533 538.5827 354.52432]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/)>>/F 4/StructParent 11/Contents(reference/rust/)>>
@@ -13145,19 +13145,19 @@ endobj
 <</Type/Annot/Subtype/Link/Rect[70.86614 541.3278 164.71814 555.7158]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/gammalooprs/trait.GammaLoopContext.html)>>/F 4/StructParent 17/Contents(reference/rust/gammalooprs/trait.GammaLoopContext.html)>>
 endobj
 4382 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 541.3278 203.31714 555.7158]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammalooprs/src/lib.rs#L44)>>/F 4/StructParent 18/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammalooprs/src/lib.rs#L44)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 541.3278 203.31714 555.7158]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammalooprs/src/lib.rs#L44)>>/F 4/StructParent 18/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammalooprs/src/lib.rs#L44)>>
 endobj
 4383 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 350.85526 164.71814 365.24326]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/gammalooprs/trait.HasModel.html)>>/F 4/StructParent 19/Contents(reference/rust/gammalooprs/trait.HasModel.html)>>
 endobj
 4384 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 350.85526 203.31714 365.24326]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammalooprs/src/lib.rs#L46)>>/F 4/StructParent 20/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammalooprs/src/lib.rs#L46)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 350.85526 203.31714 365.24326]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammalooprs/src/lib.rs#L46)>>/F 4/StructParent 20/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammalooprs/src/lib.rs#L46)>>
 endobj
 4385 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 218.2826 164.71814 232.6706]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/gammalooprs/fn.set_interrupt_handler.html)>>/F 4/StructParent 21/Contents(reference/rust/gammalooprs/fn.set_interrupt_handler.html)>>
 endobj
 4386 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 218.2826 203.31714 232.6706]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammalooprs/src/lib.rs#L81)>>/F 4/StructParent 22/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammalooprs/src/lib.rs#L81)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 218.2826 203.31714 232.6706]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammalooprs/src/lib.rs#L81)>>/F 4/StructParent 22/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammalooprs/src/lib.rs#L81)>>
 endobj
 4387 0 obj
 <</Type/Annot/Subtype/Link/Rect[137.84514 164.54346 191.61314 178.93146]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/)>>/F 4/StructParent 23/Contents(reference/rust/)>>
@@ -13166,55 +13166,55 @@ endobj
 <</Type/Annot/Subtype/Link/Rect[70.86614 647.0509 164.71814 661.43884]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/gammaloop_api/struct.StateLoadOption.html)>>/F 4/StructParent 26/Contents(reference/rust/gammaloop_api/struct.StateLoadOption.html)>>
 endobj
 4389 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 647.0509 203.31714 661.43884]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammaloop-api/src/lib.rs#L463)>>/F 4/StructParent 27/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammaloop-api/src/lib.rs#L463)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 647.0509 203.31714 661.43884]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammaloop-api/src/lib.rs#L463)>>/F 4/StructParent 27/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammaloop-api/src/lib.rs#L463)>>
 endobj
 4390 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 426.62125 164.71814 441.00925]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/gammaloop_api/struct.StateLoadOption.html#method.load)>>/F 4/StructParent 28/Contents(reference/rust/gammaloop_api/struct.StateLoadOption.html#method.load)>>
 endobj
 4391 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 426.62125 203.31714 441.00925]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammaloop-api/src/lib.rs#L530)>>/F 4/StructParent 29/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammaloop-api/src/lib.rs#L530)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 426.62125 203.31714 441.00925]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammaloop-api/src/lib.rs#L530)>>/F 4/StructParent 29/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammaloop-api/src/lib.rs#L530)>>
 endobj
 4392 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 193.7857 164.71814 208.1737]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/gammaloop_api/struct.LoadedState.html#method.cli_session)>>/F 4/StructParent 30/Contents(reference/rust/gammaloop_api/struct.LoadedState.html#method.cli_session)>>
 endobj
 4393 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 193.7857 203.31714 208.1737]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammaloop-api/src/lib.rs#L487)>>/F 4/StructParent 31/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammaloop-api/src/lib.rs#L487)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 193.7857 203.31714 208.1737]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammaloop-api/src/lib.rs#L487)>>/F 4/StructParent 31/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammaloop-api/src/lib.rs#L487)>>
 endobj
 4394 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 340.58264 164.71814 354.97064]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/gammaloop_api/struct.CLISettings.html)>>/F 4/StructParent 33/Contents(reference/rust/gammaloop_api/struct.CLISettings.html)>>
 endobj
 4395 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 340.58264 203.31714 354.97064]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammaloop-api/src/lib.rs#L290)>>/F 4/StructParent 34/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammaloop-api/src/lib.rs#L290)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 340.58264 203.31714 354.97064]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammaloop-api/src/lib.rs#L290)>>/F 4/StructParent 34/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammaloop-api/src/lib.rs#L290)>>
 endobj
 4396 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 589.151 164.71814 603.539]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/gammaloop_api/index.html)>>/F 4/StructParent 36/Contents(reference/rust/gammaloop_api/index.html)>>
 endobj
 4397 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 589.151 203.31714 603.539]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammaloop-api/src/lib.rs#L290)>>/F 4/StructParent 37/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/crates/gammaloop-api/src/lib.rs#L290)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 589.151 203.31714 603.539]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammaloop-api/src/lib.rs#L290)>>/F 4/StructParent 37/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/crates/gammaloop-api/src/lib.rs#L290)>>
 endobj
 4398 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 546.1871 164.71814 560.5751]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#gammaloop-python)>>/F 4/StructParent 48/Contents(reference/python/#gammaloop-python)>>
 endobj
 4399 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 546.1871 203.31714 560.5751]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/docs/api/python/gammaloop-python.pyi#L182)>>/F 4/StructParent 49/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/docs/api/python/gammaloop-python.pyi#L182)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 546.1871 203.31714 560.5751]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/docs/api/python/gammaloop-python.pyi#L182)>>/F 4/StructParent 49/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/docs/api/python/gammaloop-python.pyi#L182)>>
 endobj
 4400 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 380.77045 164.71814 395.15845]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#gammaloop-python)>>/F 4/StructParent 50/Contents(reference/python/#gammaloop-python)>>
 endobj
 4401 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 380.77045 203.31714 395.15845]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/docs/api/python/gammaloop-python.pyi#L606)>>/F 4/StructParent 51/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/docs/api/python/gammaloop-python.pyi#L606)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 380.77045 203.31714 395.15845]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/docs/api/python/gammaloop-python.pyi#L606)>>/F 4/StructParent 51/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/docs/api/python/gammaloop-python.pyi#L606)>>
 endobj
 4402 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 215.35382 164.71814 229.74182]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#gammaloop-python)>>/F 4/StructParent 52/Contents(reference/python/#gammaloop-python)>>
 endobj
 4403 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 215.35382 203.31714 229.74182]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/docs/api/python/gammaloop-python.pyi#L611)>>/F 4/StructParent 53/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/docs/api/python/gammaloop-python.pyi#L611)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 215.35382 203.31714 229.74182]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/docs/api/python/gammaloop-python.pyi#L611)>>/F 4/StructParent 53/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/docs/api/python/gammaloop-python.pyi#L611)>>
 endobj
 4404 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 760.21063 164.71814 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#gammaloop-python)>>/F 4/StructParent 55/Contents(reference/python/#gammaloop-python)>>
 endobj
 4405 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 760.21063 203.31714 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/docs/api/python/gammaloop-python.pyi#L616)>>/F 4/StructParent 56/Contents(https://github.com/alphal00p/gammaloop/blob/7e841ca618e462c31f349352023971274472fdd6/docs/api/python/gammaloop-python.pyi#L616)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 760.21063 203.31714 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/docs/api/python/gammaloop-python.pyi#L616)>>/F 4/StructParent 56/Contents(https://github.com/alphal00p/gammaloop/blob/e4bb64ae8b86ac93bd6b11bb79bdfebe65a8a317/docs/api/python/gammaloop-python.pyi#L616)>>
 endobj
 4406 0 obj
 [/ICCBased 4700 0 R]
@@ -14784,22 +14784,22 @@ jkëˆ$ î§€áTRÊ‡<’¼í{ŞÏrB)Æ§m7"İÇç}mûñWŒÄÀ“g–’Ø‚W‡Õ?P>Á?A–>^Ê5={hªD­
 endstream
 endobj
 4699 0 obj
-<</Length 2183/Filter/FlateDecode>>
+<</Length 2185/Filter/FlateDecode>>
 stream
-xœÕœİkä6ÀßóW¸Ê-4Ê|èÊµôBËõ¡\.=¸ëCs4…Â-mšÿŸ²»¶×úğØk«—äeµ%<ıf4ÒæâÍß¿o¿ùæâçW?şĞÀË—ßÿğêìŸh 9ÇÆòÖ¢nœE¬n>~ºøÍÇhşı¸=ûşºæúşâ4J7×wÇÚ»Ëõ§÷/> €ÛxØÿña»ÿäÃ•Üşzwø¦½‹í†Oû»—îÚ‚îJm9*·½ùíú§³Ëë³_Î.~u1T
-*ĞFY kGU€â¸öÂo]`·ñm è¡VÚbİ{wOï‹eÛ·ä¸,€ÛjËm’RfĞr7&q´7m)²ÑÈ´şÕ½Oßcsî^DıíŞÂ¤ª¸šïšuYwoã×Mš¥øik"I×á„A 2‚„øî}áMR)Ù‹Ù^K‰Í^ÿ~P®ÜñÛèn<ïîêxˆL“7ç
- €Á”:7?k;8>ÁH˜`ŒŠP/œ_ı›Åf!);}t·9·*„lh_¼7n{ÒÌ1˜á8İF&T*±Wäe4oÇ:¿-ÏxNçïñÕâ‚I72d°€HFA9w:!÷}ô›ë¿ÊõÅëß·¾øc»ÉD{PDnhŒçh
-=¥H'ˆàˆ'¢y'¶CÛ_$U1º¶‚xÿÍŒ‡ÉtBÀJÏSŠ4¶£b2­B7K&5^ùñiÜÚ<Ú¢ì§ß¸BÜ¸}Ú`{_Û>ıûœı”ìù“€b«™&0€BX=
-‚Ub¿b åÍ,¡f™Ìİ>"-Å>©—èÍ¶oc#ïF©»¶÷;ŸÁÉU—¼üÔ„éê±¯üZO» öÌAš3u¦d‹S‡Êv<0ñVŸİÌÉ
-l7íœ{ˆF^X·s÷‰&(6°VËÒÌĞ¹PK
-a–Pyf¼=šÛ»ªzšçÕğá»cÍãC=¬v·uonú
-¿ö_¯ûªoú¿nú"o‡Íèşí?ö_;—ûÏ+a40eŒSVË	+’ÚnJwxØwñëáÍ/¦ûĞîI+í4†MÂ©“ø™Cé¯Ú¢m3XòÅ•;”%+©ùí¤9a(¬0ššê~ ­)‘“ş¦¦¨ÓZg9,Œ‚/ø`TÚ[äÅÃğ~`WSLÌC£Pû9=GåÍpuv3üb…o–£²ìÙUQÉ·‚ìÜ¥;e­#{ÊDÛÄO–K°ƒ\ü¼«_ï©‡)4¼é˜q;‚&òÄkV–Ür»Ü«á»Q<°R¶ä”sÕã)Ò‘¦D>C"m“6zC¡´`&ËI„¢ÂòrZ­¥ˆPOºÿşFèSîÊH“"ÖÚTÑŠ©ÜgöŠ,Í‘=	©Ùw8¦Q’\”,w@ŒN!;X®Ê	Ô°°uc‘{ªF5S"Ÿj„\hîUĞƒò€+ş$˜pa=´2†æôàw8wAD¨@¹**HÂ¶“Sà`ìÏD’>q—DG4uû¹“Û]Ïë6oTj<MB¥{síül•ÆBÇ¹ëÔ;k–Ï·)¶
-	e¼
-AWg«gë¤Èyùõ~§'³x£¹¼‘8ZG·B>X…€Î,VâIœÔ…ä°%å,ÏéÁ‚ ëíÌÈK£ ğªx©s÷E ÊøûZkhµx™¬2Äôöps{°YŞD=áÛÚ–†›êIiát»´[Èv5n J$sYnñ€Ær_Yµ”§I¬wç­óhÂ +´Ú¯cİ8^µğêµ²P?Ùxùxx=šóĞƒ™;K´Z…`ÂbÍÆÜÜs¢óÊ7£ÿÏ:W{!;XC)m™ID…n—]kw•h{_<ÒGf	uËqß6Ye•¶HoGÙZDoÊÆ|Ôš€0ô& 4’2€Ö‘fnFØR5aõM	CÜ¦DNY¿‘-ÚE¿r†Ój	cÇRü¸P‘'±Ìh)~\§×fW3Ifr'†>(2|•$3ÏŒ"sd¦¸±·+5Ô e1êŞ½)F­Ãº)-PÄ1Fy®¾‘`‚@‘)‘K‘’êŒ(:üzÜ·ÈcëFoz~±òO"--ƒòæô`i†Oˆ+maÕHV±¦**ÈcsG@LŠ­Ÿ#ûy“Çæ.ˆ™0Òr½O Ç
-\ŒF¥uõkôL‰|Bè‰l)Ú¯LÖ{R6İ:á<ÅÒ8?âŠiİxˆ«¸·BŸ‚p¤¢†V9T¬¶Ïçt¤Âáø‘ŠUlÇ‘~>bv;=¦z.Ş±€£)‘ŸG}°\ïFÁÂ¢ÆhÅaÆ/TçIpq…EŒõ
-,ÎèÀ
-¶H?°R>¾‚R$¶8)¿ÖØyÿ²Ş. Ë]ïÎU0£Y‡<A ÒÿÕVy¦DN’gxÌy.wfÕ7Rg¡Oâ')‹³N§ãk)!‹ãYÊâTP‰@¯¥,ÎZ«µ–Z¹ÕIˆú?‰›ÇTñV¡!ùÜ½±3J£±ë 1Î)/ƒ×Á+rŞrmP	çà§e>IRyT‹Õxª‚€ªµZ]Äª «ª(E€U@VëìQb£'w¼*É[­<†V?¬ œ’×wg)-UVÉOË”m©šĞë²óŠ÷ÿçÕFÍH°ZªÂ“`¬«•]º’NâU½H¼ò¯Vjäyå‰Bá@< "MVNñq¬ GâµÊ Uç
-‚p(~ZèSIdYªÄÓ~Î,¡e¥N—¢AKl©¡-F‚ËJTß[zL1r’_ö#ş¿a%‡“úßu'ÿögáñ$zô ¡pŞr4¯D[ÄÓÿ LË;
+xœÕœİkÜFÀßıW¨Jêõ|ì'„´$¡%y(qÒ@Ò‡8Ô…BÖñÿO¹;I§ıĞH'mbûÅÊV;«™ÙßÌÎîåâõ¿·_¼zöë/<yòô—ggÿ5Ø@Í96”·uã,*`uóéóÅ'h>}i ùòi{öô²æòæâ4J7—×Ç§w—ËÏï}  ·ñ°ÿÇ‡íş/ ®äö×ëÃ'0í·Ø^ax·ÿ–ãÖ]_Ğ]©mGå¾7^şvöüòì÷³ç¯]U€‚
+´QÈÚQ`ƒ8®€½ğ«ÃØmüA z¨•¶Y÷Şİİ›bÛö-9n`ã¾Úv›¤•ôÜÙ$~"MÛŠld9àƒÖo£goÒ÷Øœ»GÑx»·0©*n¢î»n]6Ü«øu“n)¾ÛºÈm2t8Á@F{Sx“TJöâ@¶×Râ³…×¿´+ü*ú6w×uÜF®É›s À`Jƒ‰»ïµŸ`$L0FE¨Î¯şÍb·”ŞºŞœ[B6´/Ş;HgÂ4sfh§«È…J-öŠ|MÄ«±ÁoË3Óù{|µ¸a2Œ, ’"(çN'ä~Œ~sùOY¢¾xùqû÷£¿¶›L´EäæˆÉy®ĞSŠt‚ØE"šqbÿ8ôı]ò(F×Vï?™qs˜L'¬ô<¥Höø°5ˆ-È´
+İ,™ÔxåÇ§qëóh‹°Ÿ~ã
+qãşiƒUì}mÿô3üsRô}òOä#pLB:Š¼2dšÀ 
+aµ¯Ä<Å@Ê›YB'Ü2™»}FZÊ}Ò(Ñ»mßÆNŞY©»¶ßw1ƒ“«.Eù©	Ó=#ä¾Bòk=íR‚Ú3iÎÔ™’-N*ûñÀÅ[}v3'k°İ´sî6²¼°n&æáMPl`­–¥™¡s¡–Â,¡3cïióE×ƒ;­{î¿6z×·<úğaşü±ûó6êøvĞ8Éû ŒÆğ¦ï)î¤O–º‰2ß^ÀåpHï†Şå½Lm„ùdœ²ZNWX‘”ív¯IC/şqøå÷¿¾í½ú¤exšà&9ÇHJ‚Ğ¡õmÓ6½¬ã‡;Î%Ë¬ùî¤9ÁV0…&…¦zR€N Ú”ÈÉ`T3€Ôé­ó¬à•öy±ŞœàÅÔêó¼„À(Ô~Îd«¼n•åŒ8|°Âr8ÏYˆQYöìª¨ä'Avï‰²ÖÎ‘=å¢mU(«Õ¥NØçH.¾ß=;_Æ#x'¹OÇŒë84‘W%X³²ä–ûå^?â„e´%§œ«l‘ˆ4%òi›ôÑ;šà¥Õ4)ğD¸Ø,'Š
+kk4ÊiM´ÖJ¡‘tÿùµ0¦<”‘&E¬µ©¢	RyÌ íYš#{R0²pL£¤ò(9X€Bv°\•¨aa_Ç"+öT5Œj¦D>,Ô…Ò<ª å /VüI0áÂb3heÍÁWHw8AD¨@¹**HÂ¶“Sà`ìoD’¾ª—dG4’u›yÛ]ÏëvïTê<­P¥wíül•ÆBÇyèÔ;k–Ï·)¶
+Õf¼
+AWg«gë¤ÈyÅ÷~(¶Y¼]Şe}F°[¡X¬ƒB@g+ñ$NêBåØ’r–çŒ`AÒõffæ¥Q xÕ¼Ôyø" eü.|­u´Z¼LV™·bí{¸ó=ØIo¢‘pmmOÃ÷¤´qº—Ú-dG‡wU™Šy^îñ€ÆòXUµ”§I®…à­ólÂ +´Ú¯cİ8^µğêµ²P³Ùxywx=ºó0ÆÌƒ%Z­B0a±fOcn9Ñye›1€¯³ÎÕ^¨ÖPŠDÛBeQ¡ÛÕF×ú]%ÚŞô™YBİrŞ·MVY¥ıÓ«Q¶–3Ñ·eç?Şj]@0½É3 ¤` u¤‡›ö[EX}SÂ ·)‘SNÖïr‹~Ñ¯œá´§Û±”?.TäI,3ZÊ×é5‚Ù‹™$3yC¾ŠJ’™Bd	F‘Ç9²¿QŞØûU—ÿD[ÃÍº„w/TJƒQAë°nJñEŒQ«o$˜ PdJäİR¤ƒâSÉÉqßÈÖŞ*ôübåŸD[Z åÌÁÒ
+ŸWÚÂª‘¬bLUT"Çæ€˜[?GöÃ&ÍC3+`¤åzŸ@¸JëêÖ
+è™yĞùR´_™¬÷¤jºuÂyŠ¥8?âŠi=ÄUœpìÊáHE­r ©XíŸéH…Ãñ#«Ø0#'ü¶ÄìvzLõZ¼cGS"¿	ú:`ù¹·‚‹£‡]¿P'ÁÅ1Ö+°8c +Ø"ı¶ÀJõø
+J‘Øâ¤züZg»ãıËz»€.I¼;WÁŒfò<H;şWÿÍ	ä™9IáO/çrgÖ3ãvó(Uq*ñ$Şx’ª8ët:¾–ª8¥*N•´ñZªâ¬u°Zk©•[m‘„hLñ¸Ûø'ÓqNoŠ’ÏÃ;£4»ãœòÂ1x¼"ç-×•p~Zæ½$•HµX§¡*¨Z«ÕE¬
+ °ªŠRX`µŞÉî$7ºwÇ«Bá¼ÕÊcXáõÀ
+Â)yíyw–ÒRe`á˜ü´LÙ—š¡½,¯xÿŞ‚ÕŒ«¥*<	VÁJ°Z©Ñ¥+¹à$^ÕĞ‹Ä+/ñj¥FV(Ä*ÒhåÇ
+‚p$^Û Pu® ‡â§…Ş7° D–¥J<íç|ÀZVêt)Z´Ä–šØ‚`$¸¬ÔIõm°¥Çã,'Yğe?âèÿ«¬äpR7ì~vÕñ$ºó$¡pŞr4¯D[ÄÓÿµ±B€
 endstream
 endobj
 4700 0 obj
@@ -14820,12 +14820,12 @@ F§ëMkŠIˆ¹‘RŸB|êê&Ø¥n‚à¤‹¸º(¸H¹rëTÅ³üË9ğ`ùÕ¨a”&åÊº»ãî:Ùl
 endstream
 endobj
 4702 0 obj
-<</Title(GammaLoop)/Creator(Typst 0.15.0)/ModDate(D:20260815081605Z)/CreationDate(D:20260815081605Z)>>
+<</Title(GammaLoop)/Creator(Typst 0.15.0)/ModDate(D:20260815092157Z)/CreationDate(D:20260815092157Z)>>
 endobj
 4703 0 obj
 <</Length 1084/Type/Metadata/Subtype/XML>>
 stream
-<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="xmp-writer"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"  xmlns:xmp="http://ns.adobe.com/xap/1.0/"  xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"  xmlns:xmpTPg="http://ns.adobe.com/xap/1.0/t/pg/"  xmlns:pdf="http://ns.adobe.com/pdf/1.3/" ><dc:title><rdf:Alt><rdf:li xml:lang="x-default">GammaLoop</rdf:li></rdf:Alt></dc:title><xmp:CreatorTool>Typst 0.15.0</xmp:CreatorTool><dc:language><rdf:Bag><rdf:li>en</rdf:li></rdf:Bag></dc:language><xmp:ModifyDate>2026-08-15T08:16:05+00:00</xmp:ModifyDate><xmp:CreateDate>2026-08-15T08:16:05+00:00</xmp:CreateDate><xmpTPg:NPages>38</xmpTPg:NPages><dc:format>application/pdf</dc:format><xmpMM:InstanceID>wL6QlGtQox37oTH/WiSNew==</xmpMM:InstanceID><xmpMM:DocumentID>wL6QlGtQox37oTH/WiSNew==</xmpMM:DocumentID><xmpMM:RenditionClass>proof</xmpMM:RenditionClass><pdf:PDFVersion>1.7</pdf:PDFVersion></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="r"?>
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="xmp-writer"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"  xmlns:xmp="http://ns.adobe.com/xap/1.0/"  xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"  xmlns:xmpTPg="http://ns.adobe.com/xap/1.0/t/pg/"  xmlns:pdf="http://ns.adobe.com/pdf/1.3/" ><dc:title><rdf:Alt><rdf:li xml:lang="x-default">GammaLoop</rdf:li></rdf:Alt></dc:title><xmp:CreatorTool>Typst 0.15.0</xmp:CreatorTool><dc:language><rdf:Bag><rdf:li>en</rdf:li></rdf:Bag></dc:language><xmp:ModifyDate>2026-08-15T09:21:57+00:00</xmp:ModifyDate><xmp:CreateDate>2026-08-15T09:21:57+00:00</xmp:CreateDate><xmpTPg:NPages>38</xmpTPg:NPages><dc:format>application/pdf</dc:format><xmpMM:InstanceID>HhIaEL+7Ws2l4rCBB/TmRQ==</xmpMM:InstanceID><xmpMM:DocumentID>HhIaEL+7Ws2l4rCBB/TmRQ==</xmpMM:DocumentID><xmpMM:RenditionClass>proof</xmpMM:RenditionClass><pdf:PDFVersion>1.7</pdf:PDFVersion></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="r"?>
 endstream
 endobj
 4704 0 obj
@@ -19533,13 +19533,13 @@ xref
 0000590953 00000 n
 0000593871 00000 n
 0000595054 00000 n
-0000597309 00000 n
-0000597717 00000 n
-0000598061 00000 n
-0000598182 00000 n
-0000599345 00000 n
+0000597311 00000 n
+0000597719 00000 n
+0000598063 00000 n
+0000598184 00000 n
+0000599347 00000 n
 trailer
-<</Size 4705/Root 4704 0 R/Info 4702 0 R/ID[(wL6QlGtQox37oTH/WiSNew==)(wL6QlGtQox37oTH/WiSNew==)]>>
+<</Size 4705/Root 4704 0 R/Info 4702 0 R/ID[(HhIaEL+7Ws2l4rCBB/TmRQ==)(HhIaEL+7Ws2l4rCBB/TmRQ==)]>>
 startxref
-599662
+599664
 %%EOF

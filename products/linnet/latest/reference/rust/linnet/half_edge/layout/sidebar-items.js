@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["force","simulatedanneale","spring"]};
+window.SIDEBAR_ITEMS = {"mod":["force","layered","simulatedanneale","spring"]};

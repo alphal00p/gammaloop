@@ -636,7 +636,7 @@
 <a href=#636 id=636 data-nosnippet>636</a>    <span class="kw">pub fn </span>cut(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; OrientedCut {
 <a href=#637 id=637 data-nosnippet>637</a>        <span class="kw">let </span><span class="kw-2">mut </span>cut = OrientedCut::empty(<span class="self">self</span>.n_hedges());
 <a href=#638 id=638 data-nosnippet>638</a>        <span class="kw">for </span>(h, <span class="kw">_</span>, d) <span class="kw">in </span><span class="self">self</span>.iter_edges() {
-<a href=#639 id=639 data-nosnippet>639</a>            <span class="kw">match </span>d.data.flow {
+<a href=#639 id=639 data-nosnippet>639</a>            <span class="kw">match </span>d.data.orientation {
 <a href=#640 id=640 data-nosnippet>640</a>                Orientation::Default =&gt; cut.set(h, Flow::Source),
 <a href=#641 id=641 data-nosnippet>641</a>                Orientation::Reversed =&gt; cut.set(h, Flow::Sink),
 <a href=#642 id=642 data-nosnippet>642</a>                Orientation::Undirected =&gt; {}
@@ -656,7 +656,7 @@
 <a href=#656 id=656 data-nosnippet>656</a>        )
 <a href=#657 id=657 data-nosnippet>657</a>    }
 <a href=#658 id=658 data-nosnippet>658</a>
-<a href=#659 id=659 data-nosnippet>659</a>    <span class="doccomment">/// glues_back a cut graph. only matches edges with the same cut data, reversed cut flow, and compatible orientation and flow.
+<a href=#659 id=659 data-nosnippet>659</a>    <span class="doccomment">/// glues_back a cut graph. only matches edges with the same cut data, reversed cut orientation, and compatible orientation and flow.
 <a href=#660 id=660 data-nosnippet>660</a>    </span><span class="kw">pub fn </span>glue_back_strict(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
 <a href=#661 id=661 data-nosnippet>661</a>        <span class="self">self</span>.sew(
 <a href=#662 id=662 data-nosnippet>662</a>            |lf, ld, rf, rd| {
@@ -671,8 +671,8 @@
 <a href=#671 id=671 data-nosnippet>671</a>                </span>}
 <a href=#672 id=672 data-nosnippet>672</a>            },
 <a href=#673 id=673 data-nosnippet>673</a>            |lf, ld, rf, rd| {
-<a href=#674 id=674 data-nosnippet>674</a>                <span class="kw">let </span>lo: Flow = ld.data.flow.try_into().unwrap();
-<a href=#675 id=675 data-nosnippet>675</a>                <span class="kw">let </span>ro: Flow = rd.data.flow.try_into().unwrap();
+<a href=#674 id=674 data-nosnippet>674</a>                <span class="kw">let </span>lo: Flow = ld.data.orientation.try_into().unwrap();
+<a href=#675 id=675 data-nosnippet>675</a>                <span class="kw">let </span>ro: Flow = rd.data.orientation.try_into().unwrap();
 <a href=#676 id=676 data-nosnippet>676</a>                <span class="comment">// println!("lf{lf:?},lo{lo:?},rf{rf:?},ro{ro:?}");
 <a href=#677 id=677 data-nosnippet>677</a>                </span><span class="macro">debug_assert_eq!</span>(lo, -ro);
 <a href=#678 id=678 data-nosnippet>678</a>                <span class="macro">debug_assert_eq!</span>(lf, -rf);
@@ -715,7 +715,7 @@
 <a href=#715 id=715 data-nosnippet>715</a>        .unwrap()
 <a href=#716 id=716 data-nosnippet>716</a>    }
 <a href=#717 id=717 data-nosnippet>717</a>
-<a href=#718 id=718 data-nosnippet>718</a>    <span class="doccomment">/// glues_back a cut graph. only matches edges with the same cut data, reversed cut flow, and compatible orientation and without flow matching.
+<a href=#718 id=718 data-nosnippet>718</a>    <span class="doccomment">/// glues_back a cut graph. only matches edges with the same cut data, reversed cut orientation, and compatible orientation and without flow matching.
 <a href=#719 id=719 data-nosnippet>719</a>    </span><span class="kw">pub fn </span>glue_back_lenient(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
 <a href=#720 id=720 data-nosnippet>720</a>        <span class="self">self</span>.sew(
 <a href=#721 id=721 data-nosnippet>721</a>            |lf, ld, rf, rd| {
@@ -732,8 +732,8 @@
 <a href=#732 id=732 data-nosnippet>732</a>                </span>}
 <a href=#733 id=733 data-nosnippet>733</a>            },
 <a href=#734 id=734 data-nosnippet>734</a>            |lf, ld, <span class="kw">_</span>, rd| {
-<a href=#735 id=735 data-nosnippet>735</a>                <span class="kw">let </span>lo: Flow = ld.data.flow.try_into().unwrap();
-<a href=#736 id=736 data-nosnippet>736</a>                <span class="kw">let </span>ro: Flow = rd.data.flow.try_into().unwrap();
+<a href=#735 id=735 data-nosnippet>735</a>                <span class="kw">let </span>lo: Flow = ld.data.orientation.try_into().unwrap();
+<a href=#736 id=736 data-nosnippet>736</a>                <span class="kw">let </span>ro: Flow = rd.data.orientation.try_into().unwrap();
 <a href=#737 id=737 data-nosnippet>737</a>                <span class="macro">debug_assert_eq!</span>(lo, -ro);
 <a href=#738 id=738 data-nosnippet>738</a>                <span class="comment">// debug_assert_eq!(lf, -rf);
 <a href=#739 id=739 data-nosnippet>739</a>
@@ -795,9 +795,9 @@
 <a href=#795 id=795 data-nosnippet>795</a>    </span>data: <span class="prelude-ty">Option</span>&lt;E&gt;,
 <a href=#796 id=796 data-nosnippet>796</a>    <span class="doccomment">/// The orientation of this edge relative to a cut.
 <a href=#797 id=797 data-nosnippet>797</a>    /// - [`Orientation::Undirected`]: The edge is not part of the cut.
-<a href=#798 id=798 data-nosnippet>798</a>    /// - [`Orientation::Default`]: The edge crosses the cut in one direction (e.g., "left to right", or "source side").
-<a href=#799 id=799 data-nosnippet>799</a>    /// - [`Orientation::Reversed`]: The edge crosses the cut in the opposite direction (e.g., "right to left", or "sink side").
-<a href=#800 id=800 data-nosnippet>800</a>    </span>flow: Orientation,
+<a href=#798 id=798 data-nosnippet>798</a>    /// - [`Orientation::Default`]: The edge is aligned with the oriented cut.
+<a href=#799 id=799 data-nosnippet>799</a>    /// - [`Orientation::Reversed`]: The edge is opposite to the oriented cut.
+<a href=#800 id=800 data-nosnippet>800</a>    </span>orientation: Orientation,
 <a href=#801 id=801 data-nosnippet>801</a>    <span class="doccomment">/// The original [`EdgeIndex`] of this edge in the graph before any cut operations.
 <a href=#802 id=802 data-nosnippet>802</a>    /// This helps in identifying the edge across different graph representations or
 <a href=#803 id=803 data-nosnippet>803</a>    /// after operations like splitting and gluing.
@@ -816,7 +816,7 @@
 <a href=#816 id=816 data-nosnippet>816</a>
 <a href=#817 id=817 data-nosnippet>817</a>        statements.add_statement(
 <a href=#818 id=818 data-nosnippet>818</a>            <span class="string">"cut_flow"</span>,
-<a href=#819 id=819 data-nosnippet>819</a>            <span class="kw">match </span>value.flow {
+<a href=#819 id=819 data-nosnippet>819</a>            <span class="kw">match </span>value.orientation {
 <a href=#820 id=820 data-nosnippet>820</a>                Orientation::Default =&gt; <span class="string">"aligned"</span>,
 <a href=#821 id=821 data-nosnippet>821</a>                Orientation::Reversed =&gt; <span class="string">"reversed"</span>,
 <a href=#822 id=822 data-nosnippet>822</a>                Orientation::Undirected =&gt; <span class="string">"uncut"</span>,
@@ -833,12 +833,12 @@
 <a href=#833 id=833 data-nosnippet>833</a><span class="kw">impl</span>&lt;E: TryFrom&lt;DotEdgeData&gt;&gt; TryFrom&lt;DotEdgeData&gt; <span class="kw">for </span>PossiblyCutEdge&lt;E&gt; {
 <a href=#834 id=834 data-nosnippet>834</a>    <span class="kw">type </span>Error = String;
 <a href=#835 id=835 data-nosnippet>835</a>    <span class="kw">fn </span>try_from(dot_edge_data: DotEdgeData) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
-<a href=#836 id=836 data-nosnippet>836</a>        <span class="kw">let </span>flow = dot_edge_data
+<a href=#836 id=836 data-nosnippet>836</a>        <span class="kw">let </span>orientation = dot_edge_data
 <a href=#837 id=837 data-nosnippet>837</a>            .statements
 <a href=#838 id=838 data-nosnippet>838</a>            .get(<span class="string">"cut_flow"</span>)
 <a href=#839 id=839 data-nosnippet>839</a>            .ok_or(<span class="string">"Missing 'cut_flow' attribute"</span>)<span class="question-mark">?</span>;
 <a href=#840 id=840 data-nosnippet>840</a>
-<a href=#841 id=841 data-nosnippet>841</a>        <span class="kw">let </span>flow = <span class="kw">match </span>flow.as_str() {
+<a href=#841 id=841 data-nosnippet>841</a>        <span class="kw">let </span>orientation = <span class="kw">match </span>orientation.as_str() {
 <a href=#842 id=842 data-nosnippet>842</a>            <span class="string">"aligned" </span>=&gt; Orientation::Default,
 <a href=#843 id=843 data-nosnippet>843</a>            <span class="string">"reversed" </span>=&gt; Orientation::Reversed,
 <a href=#844 id=844 data-nosnippet>844</a>            <span class="string">"uncut" </span>=&gt; Orientation::Undirected,
@@ -857,7 +857,7 @@
 <a href=#857 id=857 data-nosnippet>857</a>
 <a href=#858 id=858 data-nosnippet>858</a>        <span class="prelude-val">Ok</span>(PossiblyCutEdge {
 <a href=#859 id=859 data-nosnippet>859</a>            data,
-<a href=#860 id=860 data-nosnippet>860</a>            flow,
+<a href=#860 id=860 data-nosnippet>860</a>            orientation,
 <a href=#861 id=861 data-nosnippet>861</a>            index: edge_id.into(),
 <a href=#862 id=862 data-nosnippet>862</a>        })
 <a href=#863 id=863 data-nosnippet>863</a>    }
@@ -865,25 +865,25 @@
 <a href=#865 id=865 data-nosnippet>865</a>
 <a href=#866 id=866 data-nosnippet>866</a><span class="kw">impl</span>&lt;E: Hash&gt; Hash <span class="kw">for </span>PossiblyCutEdge&lt;E&gt; {
 <a href=#867 id=867 data-nosnippet>867</a>    <span class="kw">fn </span>hash&lt;H: std::hash::Hasher&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, state: <span class="kw-2">&amp;mut </span>H) {
-<a href=#868 id=868 data-nosnippet>868</a>        (<span class="kw-2">&amp;</span><span class="self">self</span>.data, <span class="self">self</span>.flow).hash(state);
+<a href=#868 id=868 data-nosnippet>868</a>        (<span class="kw-2">&amp;</span><span class="self">self</span>.data, <span class="self">self</span>.orientation).hash(state);
 <a href=#869 id=869 data-nosnippet>869</a>    }
 <a href=#870 id=870 data-nosnippet>870</a>}
 <a href=#871 id=871 data-nosnippet>871</a>
 <a href=#872 id=872 data-nosnippet>872</a><span class="kw">impl</span>&lt;E: PartialOrd&gt; PartialOrd <span class="kw">for </span>PossiblyCutEdge&lt;E&gt; {
 <a href=#873 id=873 data-nosnippet>873</a>    <span class="kw">fn </span>partial_cmp(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span><span class="self">Self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Ordering&gt; {
-<a href=#874 id=874 data-nosnippet>874</a>        (<span class="kw-2">&amp;</span><span class="self">self</span>.data, <span class="self">self</span>.flow).partial_cmp(<span class="kw-2">&amp;</span>(<span class="kw-2">&amp;</span>other.data, other.flow))
+<a href=#874 id=874 data-nosnippet>874</a>        (<span class="kw-2">&amp;</span><span class="self">self</span>.data, <span class="self">self</span>.orientation).partial_cmp(<span class="kw-2">&amp;</span>(<span class="kw-2">&amp;</span>other.data, other.orientation))
 <a href=#875 id=875 data-nosnippet>875</a>    }
 <a href=#876 id=876 data-nosnippet>876</a>}
 <a href=#877 id=877 data-nosnippet>877</a>
 <a href=#878 id=878 data-nosnippet>878</a><span class="kw">impl</span>&lt;E: Ord&gt; Ord <span class="kw">for </span>PossiblyCutEdge&lt;E&gt; {
 <a href=#879 id=879 data-nosnippet>879</a>    <span class="kw">fn </span>cmp(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span><span class="self">Self</span>) -&gt; Ordering {
-<a href=#880 id=880 data-nosnippet>880</a>        (<span class="kw-2">&amp;</span><span class="self">self</span>.data, <span class="self">self</span>.flow).cmp(<span class="kw-2">&amp;</span>(<span class="kw-2">&amp;</span>other.data, other.flow))
+<a href=#880 id=880 data-nosnippet>880</a>        (<span class="kw-2">&amp;</span><span class="self">self</span>.data, <span class="self">self</span>.orientation).cmp(<span class="kw-2">&amp;</span>(<span class="kw-2">&amp;</span>other.data, other.orientation))
 <a href=#881 id=881 data-nosnippet>881</a>    }
 <a href=#882 id=882 data-nosnippet>882</a>}
 <a href=#883 id=883 data-nosnippet>883</a>
 <a href=#884 id=884 data-nosnippet>884</a><span class="kw">impl</span>&lt;E: PartialEq&gt; PartialEq <span class="kw">for </span>PossiblyCutEdge&lt;E&gt; {
 <a href=#885 id=885 data-nosnippet>885</a>    <span class="kw">fn </span>eq(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span><span class="self">Self</span>) -&gt; bool {
-<a href=#886 id=886 data-nosnippet>886</a>        (<span class="kw-2">&amp;</span><span class="self">self</span>.data, <span class="self">self</span>.flow).eq(<span class="kw-2">&amp;</span>(<span class="kw-2">&amp;</span>other.data, other.flow))
+<a href=#886 id=886 data-nosnippet>886</a>        (<span class="kw-2">&amp;</span><span class="self">self</span>.data, <span class="self">self</span>.orientation).eq(<span class="kw-2">&amp;</span>(<span class="kw-2">&amp;</span>other.data, other.orientation))
 <a href=#887 id=887 data-nosnippet>887</a>    }
 <a href=#888 id=888 data-nosnippet>888</a>}
 <a href=#889 id=889 data-nosnippet>889</a>
@@ -902,7 +902,7 @@
 <a href=#902 id=902 data-nosnippet>902</a>    {
 <a href=#903 id=903 data-nosnippet>903</a>        PossiblyCutEdge {
 <a href=#904 id=904 data-nosnippet>904</a>            data: <span class="self">self</span>.data.map(f),
-<a href=#905 id=905 data-nosnippet>905</a>            flow: <span class="self">self</span>.flow,
+<a href=#905 id=905 data-nosnippet>905</a>            orientation: <span class="self">self</span>.orientation,
 <a href=#906 id=906 data-nosnippet>906</a>            index: <span class="self">self</span>.index,
 <a href=#907 id=907 data-nosnippet>907</a>        }
 <a href=#908 id=908 data-nosnippet>908</a>    }
@@ -910,7 +910,7 @@
 <a href=#910 id=910 data-nosnippet>910</a>    <span class="kw">pub fn </span>as_ref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; PossiblyCutEdge&lt;<span class="kw-2">&amp;</span>E&gt; {
 <a href=#911 id=911 data-nosnippet>911</a>        PossiblyCutEdge {
 <a href=#912 id=912 data-nosnippet>912</a>            data: <span class="self">self</span>.data.as_ref(),
-<a href=#913 id=913 data-nosnippet>913</a>            flow: <span class="self">self</span>.flow,
+<a href=#913 id=913 data-nosnippet>913</a>            orientation: <span class="self">self</span>.orientation,
 <a href=#914 id=914 data-nosnippet>914</a>            index: <span class="self">self</span>.index,
 <a href=#915 id=915 data-nosnippet>915</a>        }
 <a href=#916 id=916 data-nosnippet>916</a>    }
@@ -918,32 +918,32 @@
 <a href=#918 id=918 data-nosnippet>918</a>    <span class="kw">pub fn </span>duplicate_without_data(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
 <a href=#919 id=919 data-nosnippet>919</a>        <span class="self">Self </span>{
 <a href=#920 id=920 data-nosnippet>920</a>            data: <span class="prelude-val">None</span>,
-<a href=#921 id=921 data-nosnippet>921</a>            flow: <span class="self">self</span>.flow,
+<a href=#921 id=921 data-nosnippet>921</a>            orientation: <span class="self">self</span>.orientation,
 <a href=#922 id=922 data-nosnippet>922</a>            index: <span class="self">self</span>.index,
 <a href=#923 id=923 data-nosnippet>923</a>        }
 <a href=#924 id=924 data-nosnippet>924</a>    }
 <a href=#925 id=925 data-nosnippet>925</a>
 <a href=#926 id=926 data-nosnippet>926</a>    <span class="kw">pub fn </span>reverse_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#927 id=927 data-nosnippet>927</a>        <span class="self">self</span>.flow = <span class="self">self</span>.flow.reverse();
+<a href=#927 id=927 data-nosnippet>927</a>        <span class="self">self</span>.orientation = <span class="self">self</span>.orientation.reverse();
 <a href=#928 id=928 data-nosnippet>928</a>    }
 <a href=#929 id=929 data-nosnippet>929</a>
 <a href=#930 id=930 data-nosnippet>930</a>    <span class="kw">pub fn </span>reverse(<span class="self">self</span>) -&gt; <span class="self">Self </span>{
 <a href=#931 id=931 data-nosnippet>931</a>        <span class="self">Self </span>{
 <a href=#932 id=932 data-nosnippet>932</a>            data: <span class="self">self</span>.data,
-<a href=#933 id=933 data-nosnippet>933</a>            flow: <span class="self">self</span>.flow.reverse(),
+<a href=#933 id=933 data-nosnippet>933</a>            orientation: <span class="self">self</span>.orientation.reverse(),
 <a href=#934 id=934 data-nosnippet>934</a>            index: <span class="self">self</span>.index,
 <a href=#935 id=935 data-nosnippet>935</a>        }
 <a href=#936 id=936 data-nosnippet>936</a>    }
 <a href=#937 id=937 data-nosnippet>937</a>
 <a href=#938 id=938 data-nosnippet>938</a>    <span class="kw">pub fn </span>matches(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span><span class="self">Self</span>) -&gt; bool {
-<a href=#939 id=939 data-nosnippet>939</a>        <span class="self">self</span>.flow == other.flow.reverse() &amp;&amp; <span class="self">self</span>.index == other.index
+<a href=#939 id=939 data-nosnippet>939</a>        <span class="self">self</span>.orientation == other.orientation.reverse() &amp;&amp; <span class="self">self</span>.index == other.index
 <a href=#940 id=940 data-nosnippet>940</a>    }
 <a href=#941 id=941 data-nosnippet>941</a>
 <a href=#942 id=942 data-nosnippet>942</a>    <span class="kw">pub fn </span>merge(<span class="self">self</span>, other: <span class="self">Self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt; {
 <a href=#943 id=943 data-nosnippet>943</a>        <span class="kw">if </span><span class="self">self</span>.matches(<span class="kw-2">&amp;</span>other) {
 <a href=#944 id=944 data-nosnippet>944</a>            <span class="prelude-val">Some</span>(<span class="self">Self </span>{
 <a href=#945 id=945 data-nosnippet>945</a>                data: <span class="prelude-val">Some</span>(<span class="self">self</span>.data.or(other.data)<span class="question-mark">?</span>),
-<a href=#946 id=946 data-nosnippet>946</a>                flow: <span class="self">self</span>.flow,
+<a href=#946 id=946 data-nosnippet>946</a>                orientation: <span class="self">self</span>.orientation,
 <a href=#947 id=947 data-nosnippet>947</a>                index: <span class="self">self</span>.index,
 <a href=#948 id=948 data-nosnippet>948</a>            })
 <a href=#949 id=949 data-nosnippet>949</a>        } <span class="kw">else </span>{
@@ -951,18 +951,18 @@
 <a href=#951 id=951 data-nosnippet>951</a>        </span>}
 <a href=#952 id=952 data-nosnippet>952</a>    }
 <a href=#953 id=953 data-nosnippet>953</a>
-<a href=#954 id=954 data-nosnippet>954</a>    <span class="kw">pub fn </span>flow(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Flow&gt; {
-<a href=#955 id=955 data-nosnippet>955</a>        <span class="self">self</span>.flow.try_into().ok()
+<a href=#954 id=954 data-nosnippet>954</a>    <span class="kw">pub fn </span>orientation(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Orientation {
+<a href=#955 id=955 data-nosnippet>955</a>        <span class="self">self</span>.orientation
 <a href=#956 id=956 data-nosnippet>956</a>    }
 <a href=#957 id=957 data-nosnippet>957</a>
 <a href=#958 id=958 data-nosnippet>958</a>    <span class="kw">pub fn </span>is_cut(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#959 id=959 data-nosnippet>959</a>        !<span class="macro">matches!</span>(<span class="self">self</span>.flow, Orientation::Undirected)
+<a href=#959 id=959 data-nosnippet>959</a>        !<span class="macro">matches!</span>(<span class="self">self</span>.orientation, Orientation::Undirected)
 <a href=#960 id=960 data-nosnippet>960</a>    }
 <a href=#961 id=961 data-nosnippet>961</a>
 <a href=#962 id=962 data-nosnippet>962</a>    <span class="kw">pub fn </span>label(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; String {
 <a href=#963 id=963 data-nosnippet>963</a>        <span class="kw">let </span><span class="kw-2">mut </span>label = <span class="macro">format!</span>(<span class="string">"{}"</span>, <span class="self">self</span>.index);
 <a href=#964 id=964 data-nosnippet>964</a>
-<a href=#965 id=965 data-nosnippet>965</a>        <span class="kw">match </span><span class="self">self</span>.flow {
+<a href=#965 id=965 data-nosnippet>965</a>        <span class="kw">match </span><span class="self">self</span>.orientation {
 <a href=#966 id=966 data-nosnippet>966</a>            Orientation::Default =&gt; label.push_str(<span class="string">"(left)"</span>),
 <a href=#967 id=967 data-nosnippet>967</a>            Orientation::Reversed =&gt; label.push_str(<span class="string">"(right)"</span>),
 <a href=#968 id=968 data-nosnippet>968</a>            <span class="kw">_ </span>=&gt; {}
@@ -973,13 +973,13 @@
 <a href=#973 id=973 data-nosnippet>973</a>    <span class="kw">pub fn </span>uncut(data: E, index: EdgeIndex) -&gt; <span class="self">Self </span>{
 <a href=#974 id=974 data-nosnippet>974</a>        <span class="self">Self </span>{
 <a href=#975 id=975 data-nosnippet>975</a>            data: <span class="prelude-val">Some</span>(data),
-<a href=#976 id=976 data-nosnippet>976</a>            flow: Orientation::Undirected,
+<a href=#976 id=976 data-nosnippet>976</a>            orientation: Orientation::Undirected,
 <a href=#977 id=977 data-nosnippet>977</a>            index,
 <a href=#978 id=978 data-nosnippet>978</a>        }
 <a href=#979 id=979 data-nosnippet>979</a>    }
 <a href=#980 id=980 data-nosnippet>980</a>
 <a href=#981 id=981 data-nosnippet>981</a>    <span class="kw">pub fn </span>cut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, flow: Flow) {
-<a href=#982 id=982 data-nosnippet>982</a>        <span class="self">self</span>.flow = flow.into();
+<a href=#982 id=982 data-nosnippet>982</a>        <span class="self">self</span>.orientation = flow.into();
 <a href=#983 id=983 data-nosnippet>983</a>    }
 <a href=#984 id=984 data-nosnippet>984</a>}
 <a href=#985 id=985 data-nosnippet>985</a>
@@ -1069,7 +1069,7 @@
 <a href=#1069 id=1069 data-nosnippet>1069</a>
 <a href=#1070 id=1070 data-nosnippet>1070</a>            data.add_statement(
 <a href=#1071 id=1071 data-nosnippet>1071</a>                <span class="string">"cut_flow"</span>,
-<a href=#1072 id=1072 data-nosnippet>1072</a>                <span class="kw">match </span>e.flow {
+<a href=#1072 id=1072 data-nosnippet>1072</a>                <span class="kw">match </span>e.orientation {
 <a href=#1073 id=1073 data-nosnippet>1073</a>                    Orientation::Default =&gt; <span class="string">"aligned"</span>,
 <a href=#1074 id=1074 data-nosnippet>1074</a>                    Orientation::Reversed =&gt; <span class="string">"reversed"</span>,
 <a href=#1075 id=1075 data-nosnippet>1075</a>                    Orientation::Undirected =&gt; <span class="string">"uncut"</span>,

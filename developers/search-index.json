@@ -330,6 +330,24 @@
     "kind": "developer heading"
   },
   {
+    "title": "GammaLoop drawing style migration",
+    "summary": "Model-specific particle styles expressed as regular Typst callbacks for Linnest and CeTZ graph rendering.",
+    "href": "architecture/gammaloop-draw-style-migration/",
+    "kind": "developer design example"
+  },
+  {
+    "title": "Generated edge-style.typ",
+    "summary": "GammaLoop drawing style migration",
+    "href": "architecture/gammaloop-draw-style-migration/#generated-edge-style-typ",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Embedded layout.typ Wiring",
+    "summary": "GammaLoop drawing style migration",
+    "href": "architecture/gammaloop-draw-style-migration/#embedded-layout-typ-wiring",
+    "kind": "developer heading"
+  },
+  {
     "title": "Network simplification status",
     "summary": "Direct sum contraction behavior, profiling controls, current bottlenecks, reproduction commands, and open experiments.",
     "href": "architecture/network-simplification/",

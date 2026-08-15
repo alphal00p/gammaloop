@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["LayeredProfile","LayeredRankAlign","LayeredRouteExit"],"struct":["LayeredConfig","LayeredEdgeRoute","LayeredGeometry","LayeredOutput"]};
