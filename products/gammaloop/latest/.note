@@ -2,5 +2,5 @@ alphal00p documentation
 product=gammaloop
 channel=latest
 tag=
-commit=5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff
+commit=39599203fb7b6c3f5af7556a7e0951eea8e5687a
 route=/products/gammaloop/latest/

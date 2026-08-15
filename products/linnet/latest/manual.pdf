@@ -14237,7 +14237,7 @@ endobj
 <</Type/Annot/Subtype/Link/Rect[472.5522 737.78766 527.5827 751.62665]/Border[0 0 0]/A<</Type/Action/S/URI/URI(../../gammaloop/latest/)>>/F 4/StructParent 2/Contents(../../gammaloop/latest/)>>
 endobj
 4746 0 obj
-<</Type/Annot/Subtype/Link/Rect[77.0365 693.43964 149.88008 707.2787]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/crates/linnet/README.md)>>/F 4/StructParent 3/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/crates/linnet/README.md)>>
+<</Type/Annot/Subtype/Link/Rect[77.0365 693.43964 149.88008 707.2787]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/crates/linnet/README.md)>>/F 4/StructParent 3/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/crates/linnet/README.md)>>
 endobj
 4747 0 obj
 <</Type/Annot/Subtype/Link/Rect[117.131645 252.83063 189.01164 266.66968]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/)>>/F 4/StructParent 6/Contents(reference/rust/)>>
@@ -14246,7 +14246,7 @@ endobj
 <</Type/Annot/Subtype/Link/Rect[475.0828 480.51437 524.17346 494.35336]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/)>>/F 4/StructParent 8/Contents(reference/python/)>>
 endobj
 4749 0 obj
-<</Type/Annot/Subtype/Link/Rect[75.083336 411.50986 148.53575 425.34888]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/crates/linnet/CHANGELOG.md)>>/F 4/StructParent 9/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/crates/linnet/CHANGELOG.md)>>
+<</Type/Annot/Subtype/Link/Rect[75.083336 411.50986 148.53575 425.34888]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/crates/linnet/CHANGELOG.md)>>/F 4/StructParent 9/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/crates/linnet/CHANGELOG.md)>>
 endobj
 4750 0 obj
 <</Type/Annot/Subtype/Link/Rect[90.17114 673.9005 143.93915 688.2885]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/)>>/F 4/StructParent 11/Contents(reference/rust/)>>
@@ -14255,157 +14255,157 @@ endobj
 <</Type/Annot/Subtype/Link/Rect[70.86614 146.97784 164.71814 161.36584]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/linnet/half_edge/struct.HedgeGraph.html)>>/F 4/StructParent 13/Contents(reference/rust/linnet/half_edge/struct.HedgeGraph.html)>>
 endobj
 4752 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 146.97784 203.31714 161.36584]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/crates/linnet/src/half_edge.rs#L251)>>/F 4/StructParent 14/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/crates/linnet/src/half_edge.rs#L251)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 146.97784 203.31714 161.36584]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/crates/linnet/src/half_edge.rs#L251)>>/F 4/StructParent 14/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/crates/linnet/src/half_edge.rs#L251)>>
 endobj
 4753 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 94.39093 164.71814 108.77893]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/linnet/half_edge/builder/struct.HedgeGraphBuilder.html)>>/F 4/StructParent 17/Contents(reference/rust/linnet/half_edge/builder/struct.HedgeGraphBuilder.html)>>
 endobj
 4754 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 94.39093 203.31714 108.77893]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/crates/linnet/src/half_edge/builder.rs#L111)>>/F 4/StructParent 18/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/crates/linnet/src/half_edge/builder.rs#L111)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 94.39093 203.31714 108.77893]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/crates/linnet/src/half_edge/builder.rs#L111)>>/F 4/StructParent 18/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/crates/linnet/src/half_edge/builder.rs#L111)>>
 endobj
 4755 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 615.88995 164.71814 630.27795]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/linnet/half_edge/subgraph/subset/type.SuBitGraph.html)>>/F 4/StructParent 20/Contents(reference/rust/linnet/half_edge/subgraph/subset/type.SuBitGraph.html)>>
 endobj
 4756 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 615.88995 203.31714 630.27795]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/crates/linnet/src/half_edge/subgraph/subset.rs#L24)>>/F 4/StructParent 21/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/crates/linnet/src/half_edge/subgraph/subset.rs#L24)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 615.88995 203.31714 630.27795]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/crates/linnet/src/half_edge/subgraph/subset.rs#L24)>>/F 4/StructParent 21/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/crates/linnet/src/half_edge/subgraph/subset.rs#L24)>>
 endobj
 4757 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 279.3133 164.71814 293.7013]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/linnet/half_edge/tree/struct.SimpleTraversalTree.html)>>/F 4/StructParent 23/Contents(reference/rust/linnet/half_edge/tree/struct.SimpleTraversalTree.html)>>
 endobj
 4758 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 279.3133 203.31714 293.7013]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/crates/linnet/src/half_edge/tree.rs#L106)>>/F 4/StructParent 24/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/crates/linnet/src/half_edge/tree.rs#L106)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 279.3133 203.31714 293.7013]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/crates/linnet/src/half_edge/tree.rs#L106)>>/F 4/StructParent 24/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/crates/linnet/src/half_edge/tree.rs#L106)>>
 endobj
 4759 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 647.0509 164.71814 661.43884]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/linnet/parser/struct.DotGraph.html)>>/F 4/StructParent 26/Contents(reference/rust/linnet/parser/struct.DotGraph.html)>>
 endobj
 4760 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 647.0509 203.31714 661.43884]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/crates/linnet/src/parser/mod.rs#L136)>>/F 4/StructParent 27/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/crates/linnet/src/parser/mod.rs#L136)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 647.0509 203.31714 661.43884]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/crates/linnet/src/parser/mod.rs#L136)>>/F 4/StructParent 27/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/crates/linnet/src/parser/mod.rs#L136)>>
 endobj
 4761 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 217.39777 164.71814 231.78577]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 28/Contents(reference/python/#linnet-py)>>
 endobj
 4762 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 217.39777 203.31714 231.78577]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L32)>>/F 4/StructParent 29/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L32)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 217.39777 203.31714 231.78577]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L32)>>/F 4/StructParent 29/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L32)>>
 endobj
 4763 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 629.80493 164.71814 644.19293]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 32/Contents(reference/python/#linnet-py)>>
 endobj
 4764 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 629.80493 203.31714 644.19293]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L52)>>/F 4/StructParent 33/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L52)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 629.80493 203.31714 644.19293]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L52)>>/F 4/StructParent 33/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L52)>>
 endobj
 4765 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 624.52496 164.71814 638.91296]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 42/Contents(reference/python/#linnet-py)>>
 endobj
 4766 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 624.52496 203.31714 638.91296]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L85)>>/F 4/StructParent 43/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L85)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 624.52496 203.31714 638.91296]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L85)>>/F 4/StructParent 43/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L85)>>
 endobj
 4767 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 531.02905 164.71814 545.41705]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 46/Contents(reference/python/#linnet-py)>>
 endobj
 4768 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 531.02905 203.31714 545.41705]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L247)>>/F 4/StructParent 47/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L247)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 531.02905 203.31714 545.41705]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L247)>>/F 4/StructParent 47/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L247)>>
 endobj
 4769 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 274.39563 164.71814 288.78363]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 49/Contents(reference/python/#linnet-py)>>
 endobj
 4770 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 274.39563 203.31714 288.78363]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L273)>>/F 4/StructParent 50/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L273)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 274.39563 203.31714 288.78363]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L273)>>/F 4/StructParent 50/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L273)>>
 endobj
 4771 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 687.70483 164.71814 702.09283]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 53/Contents(reference/python/#linnet-py)>>
 endobj
 4772 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 687.70483 203.31714 702.09283]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L307)>>/F 4/StructParent 54/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L307)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 687.70483 203.31714 702.09283]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L307)>>/F 4/StructParent 54/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L307)>>
 endobj
 4773 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 105.90521 164.71814 120.29321]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 55/Contents(reference/python/#linnet-py)>>
 endobj
 4774 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 105.90521 203.31714 120.29321]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L340)>>/F 4/StructParent 56/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L340)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 105.90521 203.31714 120.29321]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L340)>>/F 4/StructParent 56/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L340)>>
 endobj
 4775 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 291.57074 164.71814 305.95874]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 58/Contents(reference/python/#linnet-py)>>
 endobj
 4776 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 291.57074 203.31714 305.95874]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L364)>>/F 4/StructParent 59/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L364)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 291.57074 203.31714 305.95874]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L364)>>/F 4/StructParent 59/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L364)>>
 endobj
 4777 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 533.7811 164.71814 548.1691]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 63/Contents(reference/python/#linnet-py)>>
 endobj
 4778 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 533.7811 203.31714 548.1691]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L387)>>/F 4/StructParent 64/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L387)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 533.7811 203.31714 548.1691]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L387)>>/F 4/StructParent 64/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L387)>>
 endobj
 4779 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 142.92706 164.71814 157.31506]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 65/Contents(reference/python/#linnet-py)>>
 endobj
 4780 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 142.92706 203.31714 157.31506]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L409)>>/F 4/StructParent 66/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L409)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 142.92706 203.31714 157.31506]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L409)>>/F 4/StructParent 66/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L409)>>
 endobj
 4781 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 247.91382 164.71814 262.30182]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 70/Contents(reference/python/#linnet-py)>>
 endobj
 4782 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 247.91382 203.31714 262.30182]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L429)>>/F 4/StructParent 71/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L429)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 247.91382 203.31714 262.30182]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L429)>>/F 4/StructParent 71/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L429)>>
 endobj
 4783 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 475.88126 164.71814 490.26926]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 75/Contents(reference/python/#linnet-py)>>
 endobj
 4784 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 475.88126 203.31714 490.26926]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L483)>>/F 4/StructParent 76/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L483)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 475.88126 203.31714 490.26926]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L483)>>/F 4/StructParent 76/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L483)>>
 endobj
 4785 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 647.9329 164.71814 662.3209]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 78/Contents(reference/python/#linnet-py)>>
 endobj
 4786 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 647.9329 203.31714 662.3209]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L505)>>/F 4/StructParent 79/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L505)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 647.9329 203.31714 662.3209]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L505)>>/F 4/StructParent 79/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L505)>>
 endobj
 4787 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 760.21063 164.71814 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 81/Contents(reference/python/#linnet-py)>>
 endobj
 4788 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 760.21063 203.31714 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L528)>>/F 4/StructParent 82/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L528)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 760.21063 203.31714 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L528)>>/F 4/StructParent 82/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L528)>>
 endobj
 4789 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 68.773315 164.71814 83.161316]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 83/Contents(reference/python/#linnet-py)>>
 endobj
 4790 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 68.773315 203.31714 83.161316]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L552)>>/F 4/StructParent 84/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L552)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 68.773315 203.31714 83.161316]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L552)>>/F 4/StructParent 84/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L552)>>
 endobj
 4791 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 259.38885 164.71814 273.77686]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 86/Contents(reference/python/#linnet-py)>>
 endobj
 4792 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 259.38885 203.31714 273.77686]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L592)>>/F 4/StructParent 87/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L592)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 259.38885 203.31714 273.77686]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L592)>>/F 4/StructParent 87/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L592)>>
 endobj
 4793 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 498.4072 164.71814 512.79517]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 91/Contents(reference/python/#linnet-py)>>
 endobj
 4794 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 498.4072 203.31714 512.79517]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L615)>>/F 4/StructParent 92/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L615)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 498.4072 203.31714 512.79517]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L615)>>/F 4/StructParent 92/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L615)>>
 endobj
 4795 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 740.3247 164.71814 754.7127]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 94/Contents(reference/python/#linnet-py)>>
 endobj
 4796 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 740.3247 203.31714 754.7127]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L637)>>/F 4/StructParent 95/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L637)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 740.3247 203.31714 754.7127]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L637)>>/F 4/StructParent 95/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L637)>>
 endobj
 4797 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 349.47064 164.71814 363.85864]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 96/Contents(reference/python/#linnet-py)>>
 endobj
 4798 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 349.47064 203.31714 363.85864]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L662)>>/F 4/StructParent 97/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L662)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 349.47064 203.31714 363.85864]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L662)>>/F 4/StructParent 97/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L662)>>
 endobj
 4799 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 155.5221 164.71814 169.9101]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 100/Contents(reference/python/#linnet-py)>>
 endobj
 4800 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 155.5221 203.31714 169.9101]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L682)>>/F 4/StructParent 101/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L682)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 155.5221 203.31714 169.9101]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L682)>>/F 4/StructParent 101/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L682)>>
 endobj
 4801 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 316.2967 164.71814 330.6847]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#linnet-py)>>/F 4/StructParent 103/Contents(reference/python/#linnet-py)>>
 endobj
 4802 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 316.2967 203.31714 330.6847]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L739)>>/F 4/StructParent 104/Contents(https://github.com/alphal00p/gammaloop/blob/5d6a537cb4dbce00a2e5ca9d4d9b264c6996dbff/docs/api/python/linnet-py.pyi#L739)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 316.2967 203.31714 330.6847]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L739)>>/F 4/StructParent 104/Contents(https://github.com/alphal00p/gammaloop/blob/39599203fb7b6c3f5af7556a7e0951eea8e5687a/docs/api/python/linnet-py.pyi#L739)>>
 endobj
 4803 0 obj
 <</Type/Annot/Subtype/Link/Rect[375.80814 742.7426 513.5574 755.14856]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/content/changelog.md)>>/F 4/StructParent 106/Contents(reference/content/changelog.md)>>
@@ -17137,20 +17137,19 @@ xœÅVKoÛ0¾ûWhöHÉ¤h½¶¢š[ô0Ô·º‡5€léş?ËXM­‡^DK‘ÄO?’Io~ÿÜ¥×ë«Kçç—ëä
 endstream
 endobj
 5467 0 obj
-<</Length 2203/Filter/FlateDecode>>
+<</Length 2205/Filter/FlateDecode>>
 stream
-xœÕ\İoÜÆ×_A;n“káÑÌì7¤…<ÄhŸıõ!2ª"´ŠşwÇåq?8ä‘ëH~ĞQ:.wv3ó›™İ¥®ßÿ÷×ûo¿½şéíßwøİwo¾{õ¿:ì°{MCğÖ’îœ%À€VwŸ~»ş„İ§ß;ì~ÿtõfßa·¸¾Ãènw~úpÙÿöË77ˆ¨w¿Ü êãõñô›ş[>]Õá÷Ã:]É¦÷ã÷LIû¾7Õ·"×·ì}÷Ïı»«öW?_ığÓÛë1$À Xdk'a h„8…ãõ«€ØS«»äŞCµå	HÄ8Y›BÖ÷4´‹õíîG=?¦ğOŒÇÒ·¡¨˜^*g
-ëŸ}Hg±{íâlİ¨·û„‡L*H2Øç`!ã‡)Ä»*ëqà+!Új]BúíCu6Vš:’:£Äj¤£Úô’võaGıs¢ã¨7•2\ãS¸{Mˆˆ
-MuX™€ôn?Øi?cÁÏ“^éf#e§&2|vƒÕîµ…B°!N=JT¦Zn8‰ÆĞÌt›Ñr1y°şcÍû¿J¬q<³Œ#ŒÌÊL+P	
-$ç.çÉã(ÿ¼Ûÿ§.Q_ÿã×ûó¯û]!Ú#0»%¢Q²ëˆytÅ—‡ı·‘Àuæ2fiÔƒürl)9á×ÈÄÇ.xZ¦@„Q^‰¤›ÇIuØŠLäÉäÎƒŸöáè-®êÈƒsLCâ¦íÓÊûÖöéØç¬èçbŸ7kœ¼ÈÖ3&
-( nV€`’T&±¼Y$T¶ÉWGÙ·aæyEÌXL–RÙsIn³²!;K”òê2g8>"¤¶Bnk=‚}k— ^âs²EŸ€ÒH£é¾L¢0lÔ»>ãºˆÎUŒÊ¨H&€2¸cÉêu)Ô2.*[ıûñÄ?Œñxç]–UpÛ>?&±› V§×S×aÜè}öä±Å~Üy"i†1÷ñah¶Oj4Î£İ¼´lG2¬–<	ø×cbéXQVtéªaßûd2K¬ù|?fEù•ãY€rb“Õ„º¨hÎ&eSH‚SêÆ£<HÈGÉ
-JÑdš|r©Í‰œÉ€Î(‘ùÓğ1‚¬¼ì¯·ç¸±©‹QİkĞ}%àhoI­F½Gàh½ozK˜A™g0 í—Œ`N	?™1Ûÿø(Ô¶eÂŠÀ*¯\Tş&È.ƒ<+ÖÚ%²çğˆn;¸<Õ,§'˜¬¸\>±½S1Rs=Õ‰iU4Ésê# Q®0(­À²[o™Gş>É,ÔÄ–8×<Áb-PĞœÈgNA±âÛÖ ğZÌ€™VÃq¥$&NkæíÚH¹è•ÍşÖÂÈÊHÅš•Ö¦	6#•1‚µ¶¼D¶ŒÊjŞ8zUÊa}Ô—gÂ|Êˆ£È)‡ë±œa%ìÎXR <·fE³Ì‰|ÆÌ"¬h–ƒ<‚ˆj5Êˆª”Aƒ1¼dŸ'™Qe„a&@Íìš "P‡ªP:;@‡KdÿaÔq[®×?ÖrŸ¯kíğù—İíu—.'@ì2¯‹p ½2jO œ5ëıi(…e_<„ ›¥Ÿ&ÊY‘‹ÖÁ/^+œ}@PZeİV $gV#x	êÊ"®epV-Áê,Ê-Ï¦4	4İ#u¤Œ?©è4Í¦²J±Ø`Îi&;Æpjw,şš=iJºÆnkbÓ‡vU_ÉwK„Î7“C]­ßqVGmÏ¹Ë.:ó° *G™?R@Vûmì7M¸Z„ë5Xl¿lÂùD„;s–Q“¬†LXèeü[†Pr¬qğ9‹Xí…¥¾ĞH´[Yf$r‡…Î¨´¤İüPN±Y˜òeu‰îÅ¨–šØà|H±ÈGßåÖ?|92 Añ¦Ì41¤ÀÛHfš×Œ°YjSóíÃ¯Í‰œ]¹í÷ˆDsèÕıê²GÅ))™\‰âEdf´”Ln5e³Ë©Ì”!Œ| 6*ø&ÀTf*&`OKdÿdzÀ­z‚s"Õ&_Y‚Öa›[Lâ&1¼j¾+`‚À$s"ŸIòè•^œSŒßy”­”‘Şy~5îq­•‰¼Á%#Ø°š„1UÊG¶ 4*n‚Š@<¶Œ¬”õKdáÄcË@¤”TÄëŸa+œS1š@ëæ»Ö
-Ì3'ò90Oö~Áh#r\éíE;áHÄZÔ/ã±NÚª„Ù
-NÈmF´ÀF`‡ÂÁˆí¦ùåŒp4}0b+L‘Şö0‡Ó|UŞ)ˆæD~f"²Rûw‚æ*ÅŒÑ Â!q_	ãEÌâ*e‹õ€–`±9³Òr|\$VqÒrü6Hn‡²İ +c‘:‘PŠÌ6×Ø&lC| üæ¯~ À6s"gãnbE`›ÅL+Î“´t³Å‹ÈÆ³´t³T©|’—n¼’–n #°×ÒÒÍ6H²MƒµDJ>´|™„ÑÖaşŞ@¹Q(eJ¾wÊĞdì6"™æ./œb×Á;oUkò±ÏË|ìåöZãeôúÚëzş
-(ğWh$ØVP _z&'­Bå¬»Õà)l°ö¦
-ÂawíÕáØ¤åÆL„Óîó2eë‰§LšJŞãOÿÙÈ«¥u‰Öbw;+±ÓF(7ÔrÁIìÔ‰¼ÄN›Aù‚ÖˆBåŒ;°æÀ½{šQ…SîÚ0ÈÍ)…P8ç>/ôÙp
-!K¤²½ËŞÅC%±ÊF07°
-¡–h¥8­‰W6ÂÒ~çëÒóˆã”&)òÆ/eÿÆœFi‡VŸ:º}ªÔ‹°rÊİ!8Zmd­„*ÿIÖ
+xœÕ\KoäÆ¾ëWpåMì‰±¥ªê7`8Á®}ˆâÕæù`-¬ ,$²ş?‚™asØ9d¯¥=,©átw5¿ªúªª»g¯Şÿ÷ç‡o¾¹úáİß¿ëğÛoß~÷îâuØa÷†:‡à­%İ9K€­î>şvõ»¿wØışñáâíM‡İÍãÕ=vd@w7÷§ŞûÛÍoÿşêõÎãá[D}¸??±éŸòñ®öïÿ©ãlú}|Î”´ïGS}+r}ëÉÑw?İ\_|sñÏ‹ïxw5†´‹lí$ÔM‚_ápÿbç# 6äØê>ùî±Úò$b|Y›BÖ4´‹õíF#?¥ğ=ÆséÛPTL/•3…õ}Ó·Ø½qñmİh´‡„ÇL*™H2Ùç`!ã‡WˆßªlÄA‚[¬„h«u	éÓÇêÛXéÕ‘Ô	%V#Õ^ÿ1iWŸvÔ?':zS) Ã=öÂİB@DThªÓÊ¤ßö“ö3üL0é•n6Rvj"ÓÀg_°Ú½±B6ÄW†•©–N¢±43İæd´\L:Óªyÿ‰5ß,ã#s‡2Ó
+T‚	Á¹óyò0Ë?ïn~­KÔWÿøùá?_ıò°+D{f·D4J¶s1®x¹¿¼êŸF×™Ë˜¥QgòåØRrÂî‘‰Cğ´2L£½I·O“ê°™È-’É?íÃÑ[\Õ	ç˜†ÄMÛ§”÷­íÓ/°ÏYÑ/Å>oŸÖ86x•õÖ3&
+( nV€`’T&±¼Y$T¶É×ÙwaæyEÌXL–RÙÓIn³²!;K”òú<g8tR[!·µ÷Á¾µK/ñ‰9Ù¢O@i¤Ñt/S‡(õ®Ï¸î&¢sÕE£§2*’	 nÅX²z]
+µ„‹„ÊV½¿Üì/ï‡¿—Ğ#£‡VG´wıswúôaê©éû±Y_»½.2ÓÏ2»£ôÓônQåc¼zş8~xğc6ºl2¬–s<‰õ—cN‰€PVoéªMßlúh-Kùô}LüŠÊ+¯Ã³Ø2¤Ã&+uQÌœ’KÊ^!‰K©R !%+(E3iëÉ	|6'r&ù9¡|@æOÃep„¬²ìïw§±iˆQÉkĞ}%ÖhoI­F½Gà`½o{K˜A™b0 í—Ì`N	Gn‰¦}=şğ/¡¬-3VVyåš òWAvßY9°Ö.‘=‡GtÛÁå©f9=ÁduÍàò‰íG¸¬õ‰©bFMò”õ@”‹J+°ìÖ[æ…¿Mòå°eÎ5Ï­X4'ò…SP,6Æ¶u/(¼Vÿ2 g¦ÕğŸÅE\©†É€Óšy»6R.:e9Ãg-Ì¬ŒT¬Ximš`#1R#X{`ËKdË¨¬æƒW¥Ö§A}e&¼Oq9 åp=–3Ì¢„K
+”çÖÌ¢H`–9‘/˜Y„ÅÌ2bGğQ­Fù,Q•Ê1h0†—ÌàÓ$3ªŒ0Ì¨™]TêPJgèp‰ì?Œ:îÊ¥ú§Zîóe- í¯i0Ü®ÑpéJÒ Ä.óº	Ú+Ã¡öÊY³ŞŸæˆRXñ5ÁCº9Qúi¢œ¹h	üìeÂÙ‚Ò*K¶: !9³Á³HPWÖo-ƒ³jÉVgQny6¥I é	”¨Ë Åˆ`ü>HmD§i6•UŠÅŞrN3Ù	†c»C	ğuÖÓ”77ÌİÖÄ¦vU_É7J„N_&çºÚ¸Gâ¬ÎÚr—]"<uf3¿0©ËüÁ²Úoc¿iÂÕZ \¯Ábû-`#îœÈg"ÜÁ˜ûp,è°Œšd5„`Âj@Ïãß2„’ó`[0OYÄj/,õµ€F¢İÊ2#Û/tnD¥%íæçqŠ}Â”/«Kt¯FµÔÄŞæ£DŠE>z[ÿğpd ‚âM™hb0H·‘Ì4¯aŸÔ8¦æÛ	†^›9»rÛï‰æĞ«ûõy]Å))™\‰âYdf´”Ln5e³Ë©Ì”!Œ| 6*ø&ÀTf*&`OKdÿdz¶­zxs"Õ^¾²­Ã6·˜ÄLbxÕ|WÀIæD>#“äÑ'*½8¢Ÿy”­”‘Şy~5îgq­•‰¼Á%3Ø°š„9UÊG¶ 4*n‚Š@<¶Œ¬”õKdæÄcË@¤”TÄëŸa+œS1š@ëæ»Ö
+Ì3'ò%0OöÓ‚ÑFä¸ÒÛ	ŠvÂ‘ˆµ¨ŸÇ;b´U	³œÚ ŒhÀ>…ƒÛMóó9áhú`Ä&V˜&"'üĞÃì7tLóUy§"šù‰‰ÈJí¯ÍUŠ£A…}â¾Æ³˜ÅUÊë--˜À6brg¥åø¸H¬â¤åøm<ße»=@WÆ"µ?"¡™m®/°MØ†xOùÍõÛÌ‰œqŒû‰mw™Vœ'iéf%Šg‘giéf#¨Rù$/İx%-İ4 F`¯¥¥›m4d›k‰”|jù2	£­Ãñ¶YjûK2%_†;åh2v‘Ls—N±ëà·ª5y	ÇØçe¾Löò{­Æñ<ú
+}m†u=ø«	4l+(Ï/½“V¡rÖİjğ6XûSá°»öjlÒrc¦
+Âi÷y™²õÄS&M%?áOÿŸ‘×Kê2;­Åî,v
+Vb§Pn¨å‚“Ø©4;y‰6ƒò­…Êw$`Í7z÷4£
+§Üµ`›S
+¡pÎ}^è‹áB–He-zçı•Ä*ÁÜÀ*„Z¢•à´Bh$^ÙKû¯sÏ#Sš¤Èÿ(cøOh<Èq–vaõ©£»çJ½+§Ü‚ó¨ÕFÖJ¨òÿíj
 endstream
 endobj
 5468 0 obj
@@ -17171,12 +17170,12 @@ F§ëMkŠIˆ¹‘RŸB|êê&Ø¥n‚à¤‹¸º(¸H¹rëTÅ³üË9ğ`ùÕ¨a”&åÊº»ãî:Ùl
 endstream
 endobj
 5470 0 obj
-<</Title(Linnet)/Creator(Typst 0.15.0)/ModDate(D:20260814210942Z)/CreationDate(D:20260814210942Z)>>
+<</Title(Linnet)/Creator(Typst 0.15.0)/ModDate(D:20260815062833Z)/CreationDate(D:20260815062833Z)>>
 endobj
 5471 0 obj
 <</Length 1081/Type/Metadata/Subtype/XML>>
 stream
-<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="xmp-writer"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"  xmlns:xmp="http://ns.adobe.com/xap/1.0/"  xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"  xmlns:xmpTPg="http://ns.adobe.com/xap/1.0/t/pg/"  xmlns:pdf="http://ns.adobe.com/pdf/1.3/" ><dc:title><rdf:Alt><rdf:li xml:lang="x-default">Linnet</rdf:li></rdf:Alt></dc:title><xmp:CreatorTool>Typst 0.15.0</xmp:CreatorTool><dc:language><rdf:Bag><rdf:li>en</rdf:li></rdf:Bag></dc:language><xmp:ModifyDate>2026-08-14T21:09:42+00:00</xmp:ModifyDate><xmp:CreateDate>2026-08-14T21:09:42+00:00</xmp:CreateDate><xmpTPg:NPages>53</xmpTPg:NPages><dc:format>application/pdf</dc:format><xmpMM:InstanceID>ka2sk5DkvbCK5P3or2dDLA==</xmpMM:InstanceID><xmpMM:DocumentID>ka2sk5DkvbCK5P3or2dDLA==</xmpMM:DocumentID><xmpMM:RenditionClass>proof</xmpMM:RenditionClass><pdf:PDFVersion>1.7</pdf:PDFVersion></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="r"?>
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="xmp-writer"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"  xmlns:xmp="http://ns.adobe.com/xap/1.0/"  xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"  xmlns:xmpTPg="http://ns.adobe.com/xap/1.0/t/pg/"  xmlns:pdf="http://ns.adobe.com/pdf/1.3/" ><dc:title><rdf:Alt><rdf:li xml:lang="x-default">Linnet</rdf:li></rdf:Alt></dc:title><xmp:CreatorTool>Typst 0.15.0</xmp:CreatorTool><dc:language><rdf:Bag><rdf:li>en</rdf:li></rdf:Bag></dc:language><xmp:ModifyDate>2026-08-15T06:28:33+00:00</xmp:ModifyDate><xmp:CreateDate>2026-08-15T06:28:33+00:00</xmp:CreateDate><xmpTPg:NPages>53</xmpTPg:NPages><dc:format>application/pdf</dc:format><xmpMM:InstanceID>aBYo8Ui0QFFMHVaLkXd/8w==</xmpMM:InstanceID><xmpMM:DocumentID>aBYo8Ui0QFFMHVaLkXd/8w==</xmpMM:DocumentID><xmpMM:RenditionClass>proof</xmpMM:RenditionClass><pdf:PDFVersion>1.7</pdf:PDFVersion></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="r"?>
 endstream
 endobj
 5472 0 obj
@@ -22652,13 +22651,13 @@ xref
 0000650512 00000 n
 0000652029 00000 n
 0000652653 00000 n
-0000654928 00000 n
-0000655336 00000 n
-0000655680 00000 n
-0000655798 00000 n
-0000656958 00000 n
+0000654930 00000 n
+0000655338 00000 n
+0000655682 00000 n
+0000655800 00000 n
+0000656960 00000 n
 trailer
-<</Size 5473/Root 5472 0 R/Info 5470 0 R/ID[(ka2sk5DkvbCK5P3or2dDLA==)(ka2sk5DkvbCK5P3or2dDLA==)]>>
+<</Size 5473/Root 5472 0 R/Info 5470 0 R/ID[(aBYo8Ui0QFFMHVaLkXd/8w==)(aBYo8Ui0QFFMHVaLkXd/8w==)]>>
 startxref
-657280
+657282
 %%EOF
