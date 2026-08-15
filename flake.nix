@@ -47,6 +47,13 @@
           ) "the documentation build requires Typst 0.15, but nixpkgs provides ${pkgs.typst.version}";
           pkgs.typst;
 
+        docsTypst = typst015.withPackages (
+          typstPackages: with typstPackages; [
+            cetz_0_5_1
+            mitex_0_2_6
+          ]
+        );
+
         nixCiBarrierRevision =
           if self ? dirtyRev then
             self.dirtyRev
@@ -147,7 +154,19 @@
             cargoSources
             nonCargoBuildSources
             ./docs
+            ./scripts/render-docs-portal-graphs.sh
             ./scripts/update-docs-pages.sh
+            ./examples/cli/aa_aa/2L/graphs/GL00.dot
+            ./examples/cli/aa_aa/2L/graphs/GL08.dot
+            ./examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL000.dot
+            ./examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL150.dot
+            ./examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL300.dot
+            ./examples/cli/gg_hhh/3L/3L_graph.dot
+            ./tests/resources/graphs/gghhh.dot
+            ./tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot
+            ./tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot
+            ./tests/resources/graphs/uv_tests/epem_a_bbx.dot
+            ./tests/resources/graphs/epemttbar.dot
             ./README.md
             ./pyproject.toml
             ./crates/linnet/README.md
@@ -1706,7 +1725,7 @@
             gnum4
             nickel
             nls
-            typst015
+            docsTypst
             cargo-nextest
             pkg-config
             cargo-deny
@@ -2870,7 +2889,7 @@
             cargoArtifacts = null;
             pname = "alphal00p-docs";
             src = documentationSrc;
-            nativeBuildInputs = (commonArgs.nativeBuildInputs or [ ]) ++ [ typst015 ];
+            nativeBuildInputs = (commonArgs.nativeBuildInputs or [ ]) ++ [ docsTypst ];
             ALPHAL00P_DOCS_GIT_COMMIT = nixCiBarrierRevision;
             ALPHAL00P_DOCS_GIT_TIMESTAMP = toString self.lastModified;
             ALPHAL00P_DOCS_CARGO_PROFILE = ciCargoProfile;
@@ -2890,6 +2909,15 @@
               cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
               cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-examples
               cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- check
+              portal_graphs="$TMPDIR/alphal00p-portal-graphs"
+              bash scripts/render-docs-portal-graphs.sh "$portal_graphs"
+              checked_graphs=(docs/assets/graphs/portal-*.svg)
+              generated_graphs=("$portal_graphs"/portal-*.svg)
+              test "''${#checked_graphs[@]}" -eq 22
+              test "''${#generated_graphs[@]}" -eq 22
+              for checked_graph in "''${checked_graphs[@]}"; do
+                cmp "$checked_graph" "$portal_graphs/$(basename -- "$checked_graph")"
+              done
               docs_first="$TMPDIR/alphal00p-docs-first"
               docs_second="$TMPDIR/alphal00p-docs-second"
               docs_snapshot="$TMPDIR/alphal00p-docs-snapshot"

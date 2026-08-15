@@ -26,11 +26,32 @@ use tempfile::Builder as TempDirBuilder;
 use walkdir::WalkDir;
 
 const PRODUCT_IDS: [&str; 5] = ["gammaloop", "linnet", "spenso", "idenso", "vakint"];
+const PORTAL_GRAPH_IDS: [&str; 11] = [
+    "aa-2l-gl00",
+    "aa-2l-gl08",
+    "aa-3l-gl000",
+    "aa-3l-gl150",
+    "aa-3l-gl300",
+    "gg-hhh-3l",
+    "gg-hhh-1l",
+    "qq-aaa-pentabox",
+    "ad-ad-gluon",
+    "epem-bbx",
+    "epem-ttbar-cut",
+];
 const PORTAL_SCHEMA_VERSION: u32 = 2;
 const DEVELOPER_SCHEMA_VERSION: u32 = 1;
 const PUBLICATION_SCHEMA_VERSION: u32 = 1;
 const STRICT_RUSTDOC_FLAGS: &str = "-D rustdoc::broken_intra_doc_links \
     -D rustdoc::invalid_html_tags -D rustdoc::bare_urls";
+
+fn portal_graph_assets() -> impl Iterator<Item = String> {
+    PORTAL_GRAPH_IDS.into_iter().flat_map(|graph| {
+        ["light", "dark"]
+            .into_iter()
+            .map(move |theme| format!("portal-graph-{graph}-{theme}.svg"))
+    })
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
@@ -594,15 +615,8 @@ impl SiteBuilder {
         self.require_file(Path::new("docs/assets/site.js"))?;
         self.require_file(Path::new("docs/assets/local-unitarity-light.svg"))?;
         self.require_file(Path::new("docs/assets/local-unitarity-dark.svg"))?;
-        for graph in [
-            "portal-amplitude-light.svg",
-            "portal-amplitude-dark.svg",
-            "portal-cross-section-light.svg",
-            "portal-cross-section-dark.svg",
-            "portal-topology-field-light.svg",
-            "portal-topology-field-dark.svg",
-        ] {
-            self.require_file(&Path::new("docs/assets/graphs").join(graph))?;
+        for graph in portal_graph_assets() {
+            self.require_file(&Path::new("docs/assets/graphs").join(&graph))?;
         }
         self.require_file(Path::new("docs/assets/spensologo.svg"))?;
         self.require_file(Path::new("assets/gammalooplogo-light.svg"))?;
@@ -983,17 +997,10 @@ impl SiteBuilder {
     fn write_portal_assets(&self, destination: &Path) -> Result<()> {
         let graphs = destination.join("assets/graphs");
         fs::create_dir_all(&graphs)?;
-        for graph in [
-            "portal-amplitude-light.svg",
-            "portal-amplitude-dark.svg",
-            "portal-cross-section-light.svg",
-            "portal-cross-section-dark.svg",
-            "portal-topology-field-light.svg",
-            "portal-topology-field-dark.svg",
-        ] {
+        for graph in portal_graph_assets() {
             fs::copy(
-                self.root.join("docs/assets/graphs").join(graph),
-                graphs.join(graph),
+                self.root.join("docs/assets/graphs").join(&graph),
+                graphs.join(&graph),
             )
             .wrap_err_with(|| format!("failed to copy portal graph {graph}"))?;
         }
@@ -2396,6 +2403,14 @@ impl SiteBuilder {
                 )
             })
             .collect::<String>();
+        let process_graphs = PORTAL_GRAPH_IDS
+            .iter()
+            .map(|graph| {
+                format!(
+                    r#"<span class="portal-process-graph"><img class="portal-graph-theme portal-graph-theme-light" src="assets/graphs/portal-graph-{graph}-light.svg" alt=""><img class="portal-graph-theme portal-graph-theme-dark" src="assets/graphs/portal-graph-{graph}-dark.svg" alt=""></span>"#,
+                )
+            })
+            .collect::<String>();
         let funding = format!(
             r#"<aside class="portal-funding" aria-labelledby="funding-title"><span class="portal-funding-mark" aria-hidden="true">α</span><div class="portal-funding-copy"><p class="portal-kicker">Funding</p><h2 id="funding-title">Publicly funded research</h2><p>{}</p></div><a class="portal-text-link" href="{}">Funding record <span aria-hidden="true">↗</span></a></aside>"#,
             escape_html(&self.portal.funding),
@@ -2405,7 +2420,7 @@ impl SiteBuilder {
         fs::write(
             output.join("index.html"),
             format!(
-                r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{}"><meta name="theme-color" content="#f9f6f0">{favicon}<title>αLoop · Research software for collider physics</title><link rel="stylesheet" href="assets/site.css"><script defer src="assets/site.js"></script></head><body class="portal-body"><a class="skip-link" href="#main-content">Skip to content</a><header class="portal-header"><a class="portal-brand" href="#overview" aria-label="αLoop home"><span class="portal-brand-logo" aria-hidden="true"></span><span class="portal-brand-copy"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class="portal-nav" aria-label="Primary"><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="developers/">Developers</a></nav><div class="portal-header-actions"><a class="portal-source-link" href="https://github.com/alphal00p/gammaloop">GitHub <span aria-hidden="true">↗</span></a><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span aria-hidden="true">◐</span></button></div></header><main class="portal-main" id="main-content"><section class="portal-hero portal-section" id="overview"><span class="portal-topology-field" aria-hidden="true"><img class="portal-theme-art portal-theme-art-light" src="assets/graphs/portal-topology-field-light.svg" alt="" width="1440" height="900"><img class="portal-theme-art portal-theme-art-dark" src="assets/graphs/portal-topology-field-dark.svg" alt="" width="1440" height="900"></span><div class="portal-hero-copy"><p class="portal-kicker">{}</p><h1>{}</h1><p class="portal-lede">{}</p><div class="portal-hero-actions"><a class="portal-button portal-button-primary" href="#projects">Explore the projects <span aria-hidden="true">↓</span></a><a class="portal-button" href="products/gammaloop/{}/tutorial/">Start with GammaLoop <span aria-hidden="true">↗</span></a><a class="portal-button" href="citations/">Cite the software <span aria-hidden="true">↗</span></a></div><dl class="portal-facts"><div><dt>5</dt><dd>connected projects</dd></div><div><dt>2</dt><dd>language ecosystems</dd></div><div><dt>∞</dt><dd>open development</dd></div></dl></div><div class="portal-hero-art"><div class="portal-wordmark" aria-label="αLoop collaboration mark" role="img"></div><div class="portal-graph-pair"><figure class="portal-graph-card"><div class="portal-graph-visual"><img class="portal-theme-art portal-theme-art-light" src="assets/graphs/portal-amplitude-light.svg" alt="Three-loop amplitude graph with four fermion propagators between two interaction vertices and photon legs" width="768" height="432"><img class="portal-theme-art portal-theme-art-dark" src="assets/graphs/portal-amplitude-dark.svg" alt="Three-loop amplitude graph with four fermion propagators between two interaction vertices and photon legs" width="768" height="432"></div><figcaption><span>03 loops</span>Amplitude</figcaption></figure><figure class="portal-graph-card"><div class="portal-graph-visual"><img class="portal-theme-art portal-theme-art-light" src="assets/graphs/portal-cross-section-light.svg" alt="Five-loop cross-section graph with mirrored fermion loops, gluon legs, and two cut propagators" width="768" height="432"><img class="portal-theme-art portal-theme-art-dark" src="assets/graphs/portal-cross-section-dark.svg" alt="Five-loop cross-section graph with mirrored fermion loops, gluon legs, and two cut propagators" width="768" height="432"></div><figcaption><span>05 loops</span>Cross section</figcaption></figure></div><p>Local cancellation.<br>Global precision.</p></div></section><section class="portal-section portal-projects" id="projects" aria-labelledby="projects-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research software · 01—05</p><h2 id="projects-title">Projects &amp; crates</h2></div><p>Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.</p></div><div class="portal-project-grid">{projects}</div></section>{funding}</main><footer class="portal-footer"><div><span class="portal-footer-mark" aria-hidden="true"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label="Footer"><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="citations/">Cite</a><a href="developers/">Developers</a><a href="https://github.com/alphal00p/gammaloop">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer></body></html>"##,
+                r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{}"><meta name="theme-color" content="#f9f6f0">{favicon}<title>αLoop · Research software for collider physics</title><link rel="stylesheet" href="assets/site.css"><script defer src="assets/site.js"></script></head><body class="portal-body"><a class="skip-link" href="#main-content">Skip to content</a><header class="portal-header"><a class="portal-brand" href="#overview" aria-label="αLoop home"><span class="portal-brand-logo" aria-hidden="true"></span><span class="portal-brand-copy"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class="portal-nav" aria-label="Primary"><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="developers/">Developers</a></nav><div class="portal-header-actions"><a class="portal-source-link" href="https://github.com/alphal00p/gammaloop">GitHub <span aria-hidden="true">↗</span></a><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span aria-hidden="true">◐</span></button></div></header><main class="portal-main" id="main-content"><section class="portal-hero portal-section" id="overview"><div class="portal-hero-copy"><p class="portal-kicker">{}</p><h1>{}</h1><p class="portal-lede">{}</p><div class="portal-hero-actions"><a class="portal-button portal-button-primary" href="#projects">Explore the projects <span aria-hidden="true">↓</span></a><a class="portal-button" href="products/gammaloop/{}/tutorial/">Start with GammaLoop <span aria-hidden="true">↗</span></a><a class="portal-button" href="citations/">Cite the software <span aria-hidden="true">↗</span></a></div></div><div class="portal-hero-art"><div class="portal-wordmark" aria-label="αLoop collaboration mark" role="img"></div><div class="portal-graph-field" role="img" aria-label="A jumble of Feynman graphs rendered by GammaLoop from real process and test data">{process_graphs}</div><p>Local cancellation.<br>Global precision.</p></div></section><section class="portal-section portal-projects" id="projects" aria-labelledby="projects-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research software · 01—05</p><h2 id="projects-title">Projects &amp; crates</h2></div><p>Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.</p></div><div class="portal-project-grid">{projects}</div></section>{funding}</main><footer class="portal-footer"><div><span class="portal-footer-mark" aria-hidden="true"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label="Footer"><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="citations/">Cite</a><a href="developers/">Developers</a><a href="https://github.com/alphal00p/gammaloop">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer></body></html>"##,
                 escape_html(&self.portal.summary),
                 escape_html(&self.portal.eyebrow),
                 escape_html(&self.portal.title),
@@ -5130,16 +5145,26 @@ mod tests {
         assert!(html.contains("href=\"people/\""));
         assert!(html.contains("href=\"developers/\""));
         assert!(html.contains("href=\"publications/\""));
-        assert!(html.contains("class=\"portal-topology-field\" aria-hidden=\"true\""));
-        assert_eq!(html.matches("class=\"portal-graph-card\"").count(), 2);
+        assert!(html.contains(
+            "class=\"portal-graph-field\" role=\"img\" aria-label=\"A jumble of Feynman graphs rendered by GammaLoop from real process and test data\""
+        ));
+        assert_eq!(
+            html.matches("class=\"portal-process-graph\"").count(),
+            PORTAL_GRAPH_IDS.len()
+        );
+        assert_eq!(
+            html.matches("class=\"portal-graph-theme portal-graph-theme-")
+                .count(),
+            PORTAL_GRAPH_IDS.len() * 2
+        );
         assert!(html.contains(
             "class=\"portal-wordmark\" aria-label=\"αLoop collaboration mark\" role=\"img\""
         ));
         assert!(!html.contains(
             "class=\"portal-hero-art\" aria-label=\"αLoop collaboration mark\" role=\"img\""
         ));
-        assert!(html.contains("03 loops</span>Amplitude"));
-        assert!(html.contains("05 loops</span>Cross section"));
+        assert!(!html.contains("class=\"portal-graph-card\""));
+        assert!(!html.contains("portal-topology-field"));
         assert_eq!(html.matches("class=\"portal-funding\"").count(), 1);
         assert!(html.contains("Publicly funded research"));
         assert!(html.contains(&builder.portal.funding));
@@ -5153,6 +5178,7 @@ mod tests {
         assert_eq!(html.matches("portal-card-cite").count(), 5);
         for removed in [
             "class=\"portal-pillars\"",
+            "class=\"portal-facts\"",
             "id=\"developers\"",
             "id=\"people\"",
             "id=\"affiliations\"",
@@ -5173,24 +5199,11 @@ mod tests {
             "gammalooplogo-dark.svg",
             "spensologo.svg",
             "publications.json",
-            "graphs/portal-amplitude-light.svg",
-            "graphs/portal-amplitude-dark.svg",
-            "graphs/portal-cross-section-light.svg",
-            "graphs/portal-cross-section-dark.svg",
-            "graphs/portal-topology-field-light.svg",
-            "graphs/portal-topology-field-dark.svg",
         ] {
             assert!(output.path().join("assets").join(asset).is_file());
         }
-        for graph in [
-            "portal-amplitude-light.svg",
-            "portal-amplitude-dark.svg",
-            "portal-cross-section-light.svg",
-            "portal-cross-section-dark.svg",
-            "portal-topology-field-light.svg",
-            "portal-topology-field-dark.svg",
-        ] {
-            let svg = fs::read_to_string(output.path().join("assets/graphs").join(graph)).unwrap();
+        for graph in portal_graph_assets() {
+            let svg = fs::read_to_string(output.path().join("assets/graphs").join(&graph)).unwrap();
             assert!(svg.contains("<svg"), "missing SVG root in {graph}");
             assert!(svg.contains("viewBox="), "missing SVG viewBox in {graph}");
             for forbidden in ["<script", "<foreignObject", "<image", "href=\"http"] {
@@ -5233,9 +5246,22 @@ mod tests {
         assert!(css.contains("background-size: 120% auto;"));
         assert!(!css.contains("background-size: 137.2% auto;"));
         assert!(css.contains(".product-logo-spenso { aspect-ratio: 637 / 189;"));
-        assert!(css.contains(".portal-topology-field"));
-        assert!(css.contains(".portal-graph-pair"));
-        assert!(css.contains(":root[data-theme=\"dark\"] .portal-theme-art-light"));
+        assert!(css.contains(".portal-graph-field"));
+        assert!(css.contains(".portal-process-graph:nth-child(11)"));
+        assert!(css.contains(":root[data-theme=\"dark\"] .portal-graph-theme-light"));
+        assert!(css.contains(":root:not([data-theme]) {"));
+        assert!(!css.contains(".portal-process-graph > img { display: block;"));
+        assert!(!css.contains(".portal-graph-card"));
+
+        let renderer =
+            fs::read_to_string(builder.root.join("scripts/render-docs-portal-graphs.sh")).unwrap();
+        assert!(renderer.contains("save dot \\\"$command_export_dir\\\""));
+        for graph in PORTAL_GRAPH_IDS {
+            assert!(
+                renderer.contains(graph),
+                "missing real graph source for {graph}"
+            );
+        }
 
         let publications =
             fs::read_to_string(output.path().join("publications/index.html")).unwrap();

@@ -90,15 +90,23 @@ case "$mode" in
             fail "latest build has no light collaboration mark"
         [ -f "$build_root/assets/local-unitarity-dark.svg" ] ||
             fail "latest build has no dark collaboration mark"
-        for graph in \
-            portal-amplitude-light.svg \
-            portal-amplitude-dark.svg \
-            portal-cross-section-light.svg \
-            portal-cross-section-dark.svg \
-            portal-topology-field-light.svg \
-            portal-topology-field-dark.svg; do
-            [ -f "$build_root/assets/graphs/$graph" ] ||
-                fail "latest build has no Typst graph asset: $graph"
+        for graph_id in \
+            aa-2l-gl00 \
+            aa-2l-gl08 \
+            aa-3l-gl000 \
+            aa-3l-gl150 \
+            aa-3l-gl300 \
+            gg-hhh-3l \
+            gg-hhh-1l \
+            qq-aaa-pentabox \
+            ad-ad-gluon \
+            epem-bbx \
+            epem-ttbar-cut; do
+            for theme in light dark; do
+                graph="portal-graph-$graph_id-$theme.svg"
+                [ -f "$build_root/assets/graphs/$graph" ] ||
+                    fail "latest build has no Typst graph asset: $graph"
+            done
         done
         [ -f "$build_root/assets/gammalooplogo-light.svg" ] ||
             fail "latest build has no light project wordmark"

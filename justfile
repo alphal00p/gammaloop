@@ -264,32 +264,33 @@ check:
 doc:
     cargo doc --workspace --no-deps --locked --profile {{ ci_cargo_profile }}
 
-# Regenerate the light and dark landing-page graph artwork with Typst/Linnest.
+# Regenerate landing-page artwork from real process graphs with the templates
+# and Standard Model edge styles produced by GammaLoop's `save dot` command.
 docs-portal-graphs:
+    scripts/render-docs-portal-graphs.sh
+
+# Fail when checked-in portal artwork is stale relative to GammaLoop's current
+# save-dot templates, model styles, renderer packages, or source graph data.
+docs-portal-graphs-check:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    source=docs/assets/typst/portal-graphs.typ
-    output=docs/assets/graphs
-    mkdir -p "$output"
-
-    render() {
-        variant=$1
-        name=$2
-        theme=$3
-        typst compile \
-            --root . \
-            --creation-timestamp 0 \
-            --input "variant=$variant" \
-            --input "theme=$theme" \
-            "$source" \
-            "$output/$name-$theme.svg"
+    temp_base=${TMPDIR:-/tmp}
+    check_root=$(mktemp -d "$temp_base/alphal00p-docs-graphs.XXXXXX")
+    cleanup() {
+        case "$check_root" in
+            "$temp_base"/alphal00p-docs-graphs.*) rm -rf -- "$check_root" ;;
+        esac
     }
+    trap cleanup EXIT
 
-    for theme in light dark; do
-        render amplitude portal-amplitude "$theme"
-        render cross-section portal-cross-section "$theme"
-        render field portal-topology-field "$theme"
+    scripts/render-docs-portal-graphs.sh "$check_root"
+    checked_assets=(docs/assets/graphs/portal-*.svg)
+    generated_assets=("$check_root"/portal-*.svg)
+    [ "${#checked_assets[@]}" -eq 22 ]
+    [ "${#generated_assets[@]}" -eq 22 ]
+    for checked in "${checked_assets[@]}"; do
+        cmp "$checked" "$check_root/$(basename -- "$checked")"
     done
 
 # Build one product documentation site, or all five sites.
@@ -343,6 +344,7 @@ docs-check:
     cargo test --locked -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
     cargo test --locked -p alphal00p-docs-examples
     cargo run --locked -p alphal00p-docs-builder -- check
+    just docs-portal-graphs-check
     just docs-linnet-python-check
 
 # Build Linnet's extension and compare its real import surface with the checked-in stub.
