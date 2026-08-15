@@ -602,6 +602,11 @@ button, select { color: inherit; }
 .portal-card-links .portal-card-primary { flex-grow: 1; display: flex; justify-content: space-between; border-color: var(--border); background: var(--ink-strong); color: var(--canvas); }
 .portal-text-link { display: inline-flex; gap: 0.4rem; margin-top: 1rem; color: var(--link) !important; font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; text-decoration: none; text-transform: uppercase; }
 .portal-text-link:hover, .portal-text-link:focus-visible { text-decoration: underline; }
+.portal-funding { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1.5rem; align-items: center; padding: clamp(1.5rem, 4vw, 3rem) clamp(1.5rem, 5vw, 5rem); border-bottom: 1px solid var(--border); background: var(--accent-soft); }
+.portal-funding-mark { display: grid; place-items: center; width: 3.5rem; aspect-ratio: 1; border: 1px solid var(--border); border-radius: 50%; background: var(--accent); color: #211526; font-family: var(--font-serif); font-size: 1.8rem; }
+.portal-funding h2 { margin: 0.35rem 0 0; color: var(--ink-strong); font-family: var(--font-serif); font-size: clamp(1.7rem, 3vw, 2.5rem); font-weight: 500; line-height: 1; letter-spacing: -0.025em; }
+.portal-funding-copy > p:last-child { max-width: 50rem; margin: 0.65rem 0 0; color: var(--ink-muted); }
+.portal-funding > .portal-text-link { margin-top: 0; }
 .portal-footer { width: min(92rem, 100%); min-height: 16rem; display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 2rem; align-items: start; margin: 0 auto; padding: clamp(2rem, 5vw, 4.5rem); border-right: 1px solid var(--border); border-left: 1px solid var(--border); }
 .portal-footer > div { display: flex; gap: 1rem; align-items: center; }
 .portal-footer p { margin: 0; color: var(--ink-muted); font-size: 0.82rem; }
@@ -716,6 +721,8 @@ button, select { color: inherit; }
   .portal-project-grid { grid-template-columns: 1fr; }
   .portal-project-card, .portal-project-card:nth-child(2n), .portal-project-card:nth-child(3n), .portal-project-card:nth-last-child(-n + 2) { min-height: 24rem; border-right: 0; border-bottom: 1px solid var(--border); }
   .portal-project-card:last-child { grid-column: auto; border-bottom: 0; }
+  .portal-funding { grid-template-columns: auto minmax(0, 1fr); }
+  .portal-funding > .portal-text-link { grid-column: 2; justify-self: start; }
   .portal-footer { grid-template-columns: 1fr; min-height: auto; }
   .portal-footer > p { text-align: left; }
   .people-page-grid, .publication-list, .citation-grid { grid-template-columns: 1fr; }
