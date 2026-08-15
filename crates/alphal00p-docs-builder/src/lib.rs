@@ -5161,7 +5161,9 @@ mod tests {
         assert!(!css.contains(".publication-card:nth-child(2n) {"));
         assert!(css.contains(".people-card-portrait { object-position: left center; }"));
         assert!(css.contains("#ben-ruijl > .people-card-portrait"));
-        assert!(css.contains(".product-logo-gammaloop { aspect-ratio:"));
+        assert!(css.contains(".product-logo-gammaloop { aspect-ratio: 1.98 / 1;"));
+        assert!(css.contains("background-size: 120% auto;"));
+        assert!(!css.contains("background-size: 137.2% auto;"));
         assert!(css.contains(".product-logo-spenso { aspect-ratio: 637 / 189;"));
 
         let publications =
