@@ -1,13 +1,28 @@
 [project]
 name = "linnet-py"
 version = "0.1.0"
+description = "Python bindings for the Linnet half-edge graph library"
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.10"
+authors = [{ name = "Lucien Huber", email = "mail@lcnbr.ch" }]
+keywords = ["graph", "half-edge", "tensor-network"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Rust",
+]
 dependencies = []
+
+[project.urls]
+repository = "https://github.com/lcnbr/linnet"
 
 [tool.maturin]
 module-name = "linnet_py"
 features = ["extension-module"]
+locked = true
+manifest-path = "Cargo.toml"
 
 [build-system]
-requires = ["maturin>=1.7"]
+requires = ["maturin>=1.7,<2.0"]
 build-backend = "maturin"

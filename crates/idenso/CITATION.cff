@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: >-
+  If you use idenso, cite the version-specific Zenodo DOI for the version you
+  used.
+title: idenso
+type: software
+authors:
+  - family-names: Huber
+    given-names: Lucien
+    affiliation: University of Bern
+    orcid: "https://orcid.org/0009-0003-5074-7313"
+abstract: >-
+  Idenso represents and manipulates tensor identities with Symbolica, including
+  Dirac algebra, color algebra, and tensor simplification routines for
+  high-energy physics.
+keywords:
+  - tensor identities
+  - symbolic computation
+  - high-energy physics
+  - Symbolica
+  - Rust
+license: MIT
+repository-code: "https://github.com/alphal00p/gammaloop"

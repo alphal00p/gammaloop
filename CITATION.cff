@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+message: >-
+  If you use gammaloop, cite the version-specific Zenodo DOI for the version
+  you used.
+title: gammaloop
+type: software
+authors:
+  - family-names: Fraaije
+    given-names: Mathijs
+    affiliation: University of Bern
+    orcid: "https://orcid.org/0000-0003-2968-8112"
+  - family-names: Hirschi
+    given-names: Valentin
+    affiliation: University of Bern
+    orcid: "https://orcid.org/0000-0002-8908-6300"
+  - family-names: Huber
+    given-names: Lucien
+    affiliation: University of Bern
+    orcid: "https://orcid.org/0009-0003-5074-7313"
+abstract: >-
+  GammaLoop computes differential collider cross-sections using Local
+  Unitarity. Each versioned record preserves the source artifacts available for
+  that release. Modern releases comprise gammalooprs, gammaloop-api, and the
+  GammaLoop Python source distribution; historical layouts and artifact sets
+  may differ.
+keywords:
+  - collider physics
+  - differential cross-sections
+  - Local Unitarity
+  - perturbative quantum field theory
+  - Rust
+  - Python
+license: MIT
+repository-code: "https://github.com/alphal00p/gammaloop"

@@ -1,0 +1,36 @@
+[workspace]
+# release-plz prepares the version/changelog PR only. The tag workflow owns all
+# registry publishing, package tags, and GitHub releases.
+publish = false
+git_tag_enable = false
+git_release_enable = false
+release_always = false
+dependencies_update = false
+changelog_update = true
+pr_branch_prefix = "release-plz-"
+# A maintainer makes the PR ready after confirming the grouped product version.
+pr_draft = true
+
+[[package]]
+name = "gammaloop-api"
+version_group = "gammaloop"
+
+[[package]]
+name = "gammalooprs"
+version_group = "gammaloop"
+
+[[package]]
+name = "gammaloop-workspace-hack"
+release = false
+
+[[package]]
+name = "gammaloop-integration-tests"
+release = false
+
+[[package]]
+name = "linnest"
+release = false
+
+[[package]]
+name = "linnet-py"
+release = false

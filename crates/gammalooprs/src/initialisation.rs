@@ -16,6 +16,15 @@ initialize!(|| {
 });
 
 pub fn initialise() -> Result<()> {
+    if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none()
+        && option_env!("SYMBOLICA_OEM_LICENSE") != Some("SYMBOLICA_OEM_GAMMALOOP")
+    {
+        eyre::bail!(
+            "GammaLoop was compiled without its public Symbolica OEM selector; rebuild with \
+             SYMBOLICA_OEM_LICENSE=SYMBOLICA_OEM_GAMMALOOP, or explicitly compile with \
+             NO_SYMBOLICA_OEM_LICENSE=1 and provide a user-owned Symbolica license"
+        );
+    }
     INITIALISED.call_once(|| {
         if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
             activate_oem_license!("SYMBOLICA_OEM_KEY_ba2512eb");

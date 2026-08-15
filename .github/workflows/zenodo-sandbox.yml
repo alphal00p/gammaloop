@@ -1,0 +1,179 @@
+name: Zenodo sandbox
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_HAKARI_VERSION: 0.9.38
+  PUBLISH_CRATES: >-
+    clinnet
+    gammaloop-tracing-filter-macros
+    spenso-macros
+    symbolica-utils
+    vakint
+    linnet
+    spenso
+    idenso
+    gammaloop-tracing-filter
+    spenso-hep-lib
+    spynso3
+    gammalooprs
+    gammaloop-api
+
+jobs:
+  prepare:
+    name: Prepare sandbox deposits
+    if: github.repository == 'alphal00p/gammaloop' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out dispatched main commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Install Rust packaging tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          cargo install cargo-hakari --version "${CARGO_HAKARI_VERSION}" --locked
+          cargo --version
+          cargo hakari --version
+
+      - name: Resolve immutable source
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          version="$(cargo metadata --format-version 1 --no-deps --locked | \
+            jq --raw-output '.packages[] | select(.name == "gammaloop-api") | .version')"
+          test -n "${version}"
+          source_date_epoch="$(git show --no-patch --format=%ct "${GITHUB_SHA}")"
+          {
+            echo "version=${version}"
+            echo "SOURCE_DATE_EPOCH=${source_date_epoch}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "SOURCE_DATE_EPOCH=${source_date_epoch}" >> "${GITHUB_ENV}"
+
+      - name: Generate crate archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo metadata --format-version 1 --no-deps --locked > /tmp/zenodo-metadata.json
+          mkdir -p release-dist target/package
+          find target/package -type f -name '*.crate' -delete
+          find release-dist -maxdepth 1 -type f -name '*.crate' -delete
+
+          for crate in ${PUBLISH_CRATES}; do
+            version="$(jq --raw-output --arg crate "${crate}" \
+              '.packages[] | select(.name == $crate) | .version' /tmp/zenodo-metadata.json)"
+            test -n "${version}"
+            cargo hakari publish -p "${crate}" -- --dry-run --no-verify
+            generated_archive="$(find target/package -type f \
+              -name "${crate}-${version}.crate" -print -quit)"
+            test -n "${generated_archive}"
+            cp "${generated_archive}" "release-dist/${crate}-${version}.crate"
+          done
+
+          test "$(find release-dist -maxdepth 1 -type f -name '*.crate' | wc -l)" -eq 13
+          git diff --exit-code -- Cargo.lock crates/*/Cargo.toml
+
+      - name: Build GammaLoop source distribution
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          command: sdist
+          maturin-version: v1.11.5
+          args: --out release-dist
+
+      - name: Verify and checksum source assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find release-dist -maxdepth 1 -type f -name '*.crate' | wc -l)" -eq 13
+          test "$(find release-dist -maxdepth 1 -type f -name '*.tar.gz' | wc -l)" -eq 1
+          test "$(find release-dist -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 0
+          checksum_file="$(mktemp)"
+          (
+            cd release-dist
+            find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%P\n' | sort | \
+              while IFS= read -r asset; do sha256sum "${asset}"; done > "${checksum_file}"
+          )
+          mv "${checksum_file}" release-dist/SHA256SUMS
+          (cd release-dist && sha256sum --check SHA256SUMS)
+
+      - name: Prepare Zenodo payload
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/zenodo.py prepare \
+            --release-version "${RELEASE_VERSION}" \
+            --release-tag "sandbox-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --release-commit "${GITHUB_SHA}" \
+            --assets-dir release-dist \
+            --output-dir zenodo-payload \
+            --plan zenodo-payload/plan.json \
+            --version-suffix "${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+
+      - name: Upload Zenodo sandbox payload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: zenodo-sandbox-payload-${{ github.run_id }}-${{ github.run_attempt }}
+          path: zenodo-payload/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish sandbox deposits
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: zenodo-sandbox
+      cancel-in-progress: false
+    environment:
+      name: zenodo-sandbox
+      url: https://sandbox.zenodo.org/
+    steps:
+      - name: Check out dispatched main commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Download Zenodo sandbox payload
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: zenodo-sandbox-payload-${{ github.run_id }}-${{ github.run_attempt }}
+          path: zenodo-payload
+
+      - name: Publish Zenodo sandbox deposits
+        shell: bash
+        env:
+          ZENODO_API_URL: https://sandbox.zenodo.org/api
+          ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/zenodo.py publish \
+            --plan zenodo-payload/plan.json
+
+      - name: Audit published Zenodo sandbox deposits
+        shell: bash
+        env:
+          ZENODO_API_URL: https://sandbox.zenodo.org/api
+          ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/zenodo.py audit \
+            --plan zenodo-payload/plan.json

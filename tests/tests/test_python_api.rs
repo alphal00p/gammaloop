@@ -42,7 +42,7 @@ fn python_command() -> Result<Command> {
     // They intentionally do not force a local extension artifact into
     // `PYTHONPATH`, because that can pick up a stale build with a mismatched
     // compile-time Symbolica/OEM configuration.
-    // command.env("NO_SYMBOLICA_OEM_LICENSE", "1");
+    // `SYMBOLICA_OEM_LICENSE` is a compile-time selector and cannot be corrected here.
     Ok(command)
 }
 
@@ -75,7 +75,7 @@ except Exception as exc:
     raise SystemExit(
         "Failed to import gammaloop for GammaLoop Python API tests. "
         "Run `maturin develop` or `just build-api` first in the active Python environment. "
-        "If you build the extension yourself for these tests, make sure it was compiled with NO_SYMBOLICA_OEM_LICENSE=1 so it does not try the gammalooprs OEM path from gammaloop-api. "
+        "If you build the extension yourself for these tests, compile it with SYMBOLICA_OEM_LICENSE=SYMBOLICA_OEM_GAMMALOOP, or explicitly use NO_SYMBOLICA_OEM_LICENSE=1 together with your own Symbolica license. "
         f"Original import error: {{exc}}"
     )
 

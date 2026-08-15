@@ -5,7 +5,9 @@ linker = "cc"
 linker = "rust-lld"
 
 [env]
-# Visible to every rustc and every build script in the workspace build.
+# Public GammaLoop OEM selector, visible throughout builds started in this checkout.
+# Cargo does not inherit dependency-local configuration, so crates.io consumers
+# must set the same compile-time variable in their own build environment.
 SYMBOLICA_OEM_LICENSE = { value = "SYMBOLICA_OEM_GAMMALOOP", force = false }
 
 # [target.aarch64-apple-darwin]

@@ -689,6 +689,7 @@ let
   nonWorkspaceHackPackages = builtins.filter (package: package != workspaceHackPackage) workspacePackages;
   workspaceHackCacheAttr = cratePackageDepsAttr workspaceHackPackage;
   gammaloopApiPackageArtifactsAttr = "packages.${system}.gammaloopApiPackageArtifacts";
+  gammaloopOemApiPackageArtifactsAttr = "packages.${system}.gammaloopOemApiPackageArtifacts";
   workspacePackageGraphAttr = package: cratePackageAttr package;
   mergeDependencySets = sets: let
     attrs = unique (builtins.concatLists (map builtins.attrNames sets));
@@ -846,14 +847,11 @@ let
     workspaceTestBinaryArtifactDependencies
     {
       "packages.${system}.gammaloop" = [
-        gammaloopApiPackageArtifactsAttr
+        gammaloopOemApiPackageArtifactsAttr
         "checks.${system}.gammaloop-fmt"
       ];
       "checks.${system}.gammaloop" = ["packages.${system}.gammaloop"];
       "packages.${system}.default" = ["packages.${system}.gammaloop"];
-      "packages.${system}.gammaloop-python-module" =
-        workspaceCratePackageDependencies.${cratePackageAttr "gammaloop-api"} or [];
-      ${gammaloopApiPackageArtifactsAttr} = [(cratePackageAttr "gammaloop-api")];
       "packages.${system}.cargoArtifacts" = [workspaceHackCacheAttr];
       ${nextestContextualTestDependencyAttr "python-api" "gammaloop-integration-tests"} =
         workspaceTestDependencyArtifactDependencies.${crateTestDependencyAttr (workspaceTestComponentRepresentativeFor "gammaloop-integration-tests")}
@@ -942,6 +940,7 @@ let
       "checks.${system}.gammaloop-nextest-vakint"
       "packages.${system}.default"
       "packages.${system}.crane-ci-prebuild"
+      gammaloopApiPackageArtifactsAttr
       "packages.${system}.workspaceBuildArtifacts"
       "packages.${system}.gammaloop-llvm-coverage"
       "packages.${system}.nix-ci-check-gammaloop-nextest"

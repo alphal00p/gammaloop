@@ -2,7 +2,7 @@ use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
 use eyre::{eyre, Context};
-use gammalooprs::utils::F;
+use gammalooprs::utils::{BUILTIN_MODELS, F};
 
 #[cfg(feature = "ufo_support")]
 use pyo3::sync::PyOnceLock;
@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 
 use gammalooprs::model::{InputParamCard, Model};
-use include_dir::{include_dir, Dir, File};
+use include_dir::File;
 use std::{env, fs, sync::OnceLock};
 use tracing::info;
 
@@ -23,7 +23,6 @@ use pyo3::prelude::*;
 
 use crate::state::State;
 
-static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../assets/models/json");
 static BUILTIN_MODEL_NAMES: OnceLock<Vec<String>> = OnceLock::new();
 static BUILTIN_MODEL_RESTRICTIONS: OnceLock<BTreeMap<String, Vec<String>>> = OnceLock::new();
 

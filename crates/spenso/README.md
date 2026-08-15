@@ -22,3 +22,18 @@ The spenso library provides:
 1. Type-Safe Abstractions: Rich trait system separating structure from data
 
 One of the nicest features of the network, is that it can be parsed from a `symbolica` expression directly, allowing for seamless integration between symbolic manipulation and concrete tensor evaluation.
+
+## License
+
+Spenso is available under the MIT License. Standalone use of its optional
+Symbolica integration requires the user to configure their own Symbolica
+license; GammaLoop's OEM license does not transfer to library consumers.
+
+## Citation
+
+Spenso, `spenso-macros`, `spenso-hep-lib`, and `spynso3` are archived as one
+versioned Zenodo family. Cite the version-specific DOI for the Spenso version
+used; see [`CITATION.cff`](CITATION.cff) and the repository's
+[citation guide](../../docs/citing.md). Earlier combined Spenso and Idenso
+archives remain available under
+[`10.5281/zenodo.15913113`](https://doi.org/10.5281/zenodo.15913113).

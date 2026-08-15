@@ -1,0 +1,34 @@
+{
+  "title": "linnet",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "mit",
+  "language": "eng",
+  "creators": [
+    {
+      "name": "Huber, Lucien",
+      "affiliation": "University of Bern",
+      "orcid": "0009-0003-5074-7313"
+    }
+  ],
+  "description": "The complete linnet software family: linnet, clinnet, linnet-py, and linnest. It provides half-edge graph data structures and algorithms for subgraphs, tensor networks, and Feynman diagrams.",
+  "notes": "Linnet-authored source is available under the MIT License. Its default functionality does not require Symbolica; enabling the optional Symbolica feature requires a user-provided Symbolica license. GammaLoop's OEM license does not transfer to library consumers. Symbolica and other third-party software remain governed by their own terms.",
+  "keywords": [
+    "graph algorithms",
+    "half-edge data structures",
+    "Feynman diagrams",
+    "tensor networks",
+    "Rust"
+  ],
+  "grants": [
+    {
+      "id": "10.13039/501100001711::PCEFP2_203335"
+    }
+  ],
+  "communities": [
+    {
+      "identifier": "alphaloop"
+    }
+  ],
+  "related_identifiers": []
+}

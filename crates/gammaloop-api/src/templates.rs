@@ -7,7 +7,7 @@ const LINNEST_PACKAGE_DIR: &str = "crates/linnest/typst";
 const KURVST_PACKAGE_DIR: &str = "crates/kurvst/typst";
 
 #[derive(RustEmbed)]
-#[folder = "../../assets/embedded"]
+#[folder = "assets/embedded"]
 pub struct Assets;
 
 #[derive(RustEmbed)]

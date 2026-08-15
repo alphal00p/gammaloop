@@ -143,5 +143,13 @@ yielding:
 
 ## Symbolica license
 
-This library uses `Symbolica` for some of its computations.
-`Symbolica` is licensed under a commercial license, *however* its usage is free for Hobbyist and also free under single-core restriction for Academic use.
+Vakint is available under the MIT License. Because it uses Symbolica for some
+computations, library consumers must configure their own Symbolica license;
+GammaLoop's OEM license does not transfer to standalone Vakint use.
+
+## Citation
+
+Vakint versions `0.1.0` and `0.1.2` and subsequent releases are archived in a
+versioned Zenodo record. Cite the version-specific DOI for the version used;
+see [`CITATION.cff`](CITATION.cff) and the repository's
+[citation guide](../../docs/citing.md).

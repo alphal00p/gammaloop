@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: >-
+  If you use spenso, cite the version-specific Zenodo DOI for the version you
+  used.
+title: spenso
+type: software
+authors:
+  - family-names: Huber
+    given-names: Lucien
+    affiliation: University of Bern
+    orcid: "https://orcid.org/0009-0003-5074-7313"
+abstract: >-
+  The complete spenso software family comprises spenso, spenso-macros,
+  spenso-hep-lib, and spynso3. It provides fast and flexible tensor networks,
+  automatic abstract-index matching, and tensor contraction for high-energy
+  physics.
+keywords:
+  - tensor networks
+  - tensor contraction
+  - abstract indices
+  - high-energy physics
+  - Rust
+license: MIT
+repository-code: "https://github.com/alphal00p/gammaloop"

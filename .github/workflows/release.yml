@@ -1,0 +1,1198 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable SemVer to release, without the leading v
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_HAKARI_VERSION: 0.9.38
+  PUBLISH_CRATES: >-
+    clinnet
+    gammaloop-tracing-filter-macros
+    spenso-macros
+    symbolica-utils
+    vakint
+    linnet
+    spenso
+    idenso
+    gammaloop-tracing-filter
+    spenso-hep-lib
+    spynso3
+    gammalooprs
+    gammaloop-api
+
+jobs:
+  resolve:
+    name: Validate release source
+    if: github.repository == 'alphal00p/gammaloop'
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.release.outputs.commit }}
+      source-date-epoch: ${{ steps.release.outputs.source-date-epoch }}
+      tag: ${{ steps.release.outputs.tag }}
+      tag-exists: ${{ steps.release.outputs.tag-exists }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event_name == 'push' && github.ref || 'main' }}
+
+      - name: Resolve and validate source
+        id: release
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          stable_semver='(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
+
+          git fetch --force origin main:refs/remotes/origin/main
+          git fetch --force --tags origin
+
+          if [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
+            if [[ ! "${REQUESTED_VERSION}" =~ ^${stable_semver}$ ]]; then
+              echo "version must be a stable SemVer such as 1.2.3" >&2
+              exit 1
+            fi
+            tag="v${REQUESTED_VERSION}"
+          else
+            tag="${GITHUB_REF_NAME}"
+            if [[ ! "${tag}" =~ ^v${stable_semver}$ ]]; then
+              echo "release tags must be stable SemVer tags such as v1.2.3" >&2
+              exit 1
+            fi
+          fi
+
+          if git show-ref --verify --quiet "refs/tags/${tag}"; then
+            tag_exists=true
+            if [[ "$(git cat-file -t "refs/tags/${tag}")" != tag ]]; then
+              echo "${tag} must be an annotated tag" >&2
+              exit 1
+            fi
+            commit="$(git rev-parse "refs/tags/${tag}^{}")"
+          else
+            tag_exists=false
+            if [[ "${GITHUB_EVENT_NAME}" != workflow_dispatch ]]; then
+              echo "pushed tag ${tag} was not fetched" >&2
+              exit 1
+            fi
+            commit="$(git rev-parse refs/remotes/origin/main)"
+          fi
+
+          git merge-base --is-ancestor "${commit}" refs/remotes/origin/main || {
+            echo "${tag} must point to a commit on main" >&2
+            exit 1
+          }
+          git checkout --detach "${commit}"
+
+          version="${tag#v}"
+          source_date_epoch="$(git show --no-patch --format=%ct "${commit}")"
+          export RELEASE_VERSION="${version}"
+          python3 <<'PY'
+          import json
+          import re
+          import subprocess
+          import tomllib
+          from pathlib import Path
+
+          import os
+
+          publish_order = [
+              "clinnet",
+              "gammaloop-tracing-filter-macros",
+              "spenso-macros",
+              "symbolica-utils",
+              "vakint",
+              "linnet",
+              "spenso",
+              "idenso",
+              "gammaloop-tracing-filter",
+              "spenso-hep-lib",
+              "spynso3",
+              "gammalooprs",
+              "gammaloop-api",
+          ]
+          private = {
+              "gammaloop-integration-tests",
+              "gammaloop-workspace-hack",
+              "linnest",
+              "linnet-py",
+          }
+
+          def load(path: Path):
+              with path.open("rb") as source:
+                  return tomllib.load(source)
+
+          def publishes_to_crates_io(value):
+              if value is False or value == []:
+                  return False
+              return not isinstance(value, list) or "crates-io" in value
+
+          manifest_paths = sorted(Path("crates").glob("*/Cargo.toml")) + [Path("tests/Cargo.toml")]
+          packages = {}
+          for path in manifest_paths:
+              data = load(path)
+              name = data["package"]["name"]
+              if name in packages:
+                  raise SystemExit(f"duplicate workspace package name: {name}")
+              packages[name] = (path, data)
+
+          actual_publish = {
+              name
+              for name, (_, data) in packages.items()
+              if publishes_to_crates_io(data["package"].get("publish", True))
+          }
+          expected_publish = set(publish_order)
+          if actual_publish != expected_publish:
+              raise SystemExit(
+                  "crates.io allowlist mismatch; "
+                  f"missing={sorted(expected_publish - actual_publish)}, "
+                  f"unexpected={sorted(actual_publish - expected_publish)}"
+              )
+          actual_private = set(packages) - actual_publish
+          if actual_private != private:
+              raise SystemExit(
+                  f"private package set changed: expected={sorted(private)}, actual={sorted(actual_private)}"
+              )
+
+          root = load(Path("Cargo.toml"))
+          workspace_dependencies = root["workspace"]["dependencies"]
+          versions = {name: packages[name][1]["package"]["version"] for name in publish_order}
+          stable_semver = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+          for name, version in versions.items():
+              if not stable_semver.fullmatch(version):
+                  raise SystemExit(f"{name} must have a stable Cargo SemVer, found {version!r}")
+              dependency = workspace_dependencies.get(name)
+              if isinstance(dependency, dict) and "path" in dependency:
+                  if dependency.get("version") != version:
+                      raise SystemExit(
+                          f"workspace dependency {name} must carry version = {version!r} beside its path"
+                      )
+
+          for name in publish_order:
+              path, data = packages[name]
+              dependency_tables = [data.get("dependencies", {}), data.get("build-dependencies", {})]
+              dependency_tables.extend(
+                  table.get("dependencies", {})
+                  for table in data.get("target", {}).values()
+                  if isinstance(table, dict)
+              )
+              dependency_tables.extend(
+                  table.get("build-dependencies", {})
+                  for table in data.get("target", {}).values()
+                  if isinstance(table, dict)
+              )
+              for table in dependency_tables:
+                  for dependency_name, dependency in table.items():
+                      if not isinstance(dependency, dict):
+                          continue
+                      actual_name = dependency.get("package", dependency_name)
+                      if actual_name in private and actual_name != "gammaloop-workspace-hack":
+                          raise SystemExit(f"{path}: published crate depends on private crate {actual_name}")
+                      if "path" in dependency and "version" not in dependency:
+                          raise SystemExit(f"{path}: path dependency {dependency_name} needs a registry version")
+
+          release_version = os.environ["RELEASE_VERSION"]
+          python_config = load(Path("pyproject.toml"))
+          python_project = python_config["project"]
+          if python_project["name"] != "gammaloop" or "version" not in python_project.get("dynamic", []):
+              raise SystemExit("pyproject.toml must derive the gammaloop version from Cargo")
+          if versions["gammaloop-api"] != release_version or versions["gammalooprs"] != release_version:
+              raise SystemExit("gammaloop-api and gammalooprs must share the release tag version")
+
+          def semver(value, context):
+              match = stable_semver.fullmatch(value)
+              if not match:
+                  raise SystemExit(f"{context} must be a stable SemVer, found {value!r}")
+              return tuple(map(int, match.groups()))
+
+          def git(*arguments, check=True):
+              result = subprocess.run(
+                  ["git", *arguments],
+                  check=check,
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE,
+                  text=True,
+              )
+              return result
+
+          with Path(".zenodo/records.json").open(encoding="utf-8") as source:
+              zenodo_families = json.load(source)["families"]
+          for family in zenodo_families.values():
+              semver(family["production_baseline_version"], f"{family['title']} production baseline")
+
+          release_order = semver(release_version, "GammaLoop release version")
+          for family_name in ("gammaloop-monorepo", "gammaloop"):
+              baseline = zenodo_families[family_name]["production_baseline_version"]
+              if release_order <= semver(baseline, f"{family_name} production baseline"):
+                  raise SystemExit(
+                      f"first automated GammaLoop version must be newer than {baseline}"
+                  )
+          stable_global_versions = [
+              semver(tag[1:], f"global release tag {tag}")
+              for tag in git("tag", "--list", "v[0-9]*").stdout.splitlines()
+              if stable_semver.fullmatch(tag[1:])
+          ]
+          if stable_global_versions and release_order < max(stable_global_versions):
+              raise SystemExit("GammaLoop release version regresses from an existing global tag")
+
+          release_commit = git("rev-parse", "HEAD").stdout.strip()
+          for family_name in ("spenso", "idenso", "vakint", "linnet"):
+              family = zenodo_families[family_name]
+              manifest = Path(family["version_source"])
+              if family["tag"] != f"{family_name}-v{{version}}":
+                  raise SystemExit(f"{family_name} must use its core package tag as the Zenodo tag")
+              if manifest.parent.as_posix() not in family["archive_paths"]:
+                  raise SystemExit(f"{family_name} archive paths must contain its core package")
+              comparison_paths = [
+                  *family["archive_paths"],
+                  family["metadata_file"],
+                  family["citation_file"],
+                  ".zenodo/records.json",
+              ]
+              for archive_path in comparison_paths:
+                  path = Path(archive_path)
+                  if path.is_absolute() or ".." in path.parts or not path.parts:
+                      raise SystemExit(f"{family_name} has unsafe release path {archive_path!r}")
+
+              core = load(manifest)["package"]
+              if core["name"] != family_name or core["version"] != versions[family_name]:
+                  raise SystemExit(f"{family_name} version source does not identify its core package")
+              current_version = semver(core["version"], f"{family_name} core version")
+              tag_pattern = re.compile(
+                  rf"^{re.escape(family_name)}-v"
+                  rf"{stable_semver.pattern.removeprefix('^').removesuffix('$')}$"
+              )
+              tagged_versions = []
+              for tag in git("tag", "--list", f"{family_name}-v*").stdout.splitlines():
+                  match = tag_pattern.fullmatch(tag)
+                  if not match:
+                      raise SystemExit(f"{family_name} has non-stable package tag {tag!r}")
+                  if git("cat-file", "-t", f"refs/tags/{tag}").stdout.strip() != "tag":
+                      raise SystemExit(f"{tag} must be an annotated tag")
+                  tagged_manifest = tomllib.loads(git("show", f"{tag}:{manifest.as_posix()}").stdout)
+                  tagged_version = tagged_manifest["package"]["version"]
+                  if tagged_version != ".".join(match.groups()):
+                      raise SystemExit(f"{tag} has core manifest version {tagged_version!r}")
+                  tagged_commit = git("rev-parse", f"refs/tags/{tag}^{{}}").stdout.strip()
+                  if git("merge-base", "--is-ancestor", tagged_commit, release_commit, check=False).returncode:
+                      raise SystemExit(f"{tag} is not an ancestor of the release commit")
+                  tagged_versions.append((tuple(map(int, match.groups())), tag, tagged_commit))
+
+              if not tagged_versions:
+                  baseline = semver(
+                      family["production_baseline_version"],
+                      f"{family_name} production baseline",
+                  )
+                  if current_version <= baseline:
+                      raise SystemExit(
+                          f"first automated {family_name} version must be newer than "
+                          f"{family['production_baseline_version']}"
+                      )
+                  continue
+
+              previous_version, previous_tag, previous_commit = max(tagged_versions)
+              if current_version < previous_version:
+                  raise SystemExit(
+                      f"{family_name} {core['version']} regresses from {previous_tag}"
+                  )
+              if current_version == previous_version and previous_commit != release_commit:
+                  family_diff = git(
+                      "diff",
+                      "--quiet",
+                      previous_commit,
+                      release_commit,
+                      "--",
+                      *comparison_paths,
+                      check=False,
+                  )
+                  if family_diff.returncode == 1:
+                      raise SystemExit(
+                          f"{family_name} family content changed since {previous_tag}; "
+                          "advance its core version"
+                      )
+                  if family_diff.returncode:
+                      family_diff.check_returncode()
+          if not Path("Cargo.lock").is_file():
+              raise SystemExit("Cargo.lock is required for a release")
+          license_text = Path("LICENSE.md").read_text(encoding="utf-8")
+          if root["workspace"]["package"].get("license") != "MIT":
+              raise SystemExit("the workspace license must be MIT")
+          for name, (path, data) in packages.items():
+              package_license = data["package"].get("license")
+              if package_license != "MIT" and package_license != {"workspace": True}:
+                  raise SystemExit(f"{path}: {name} must declare or inherit the MIT license")
+          if "Permission is hereby granted, free of charge" not in license_text:
+              raise SystemExit("LICENSE.md must contain the MIT license text")
+
+          maturin = python_config.get("tool", {}).get("maturin", {})
+          sdist_includes = maturin.get("include", [])
+          if {"path": ".cargo/config.toml", "format": "sdist"} not in sdist_includes:
+              raise SystemExit("the PyPI sdist must include GammaLoop's OEM Cargo configuration")
+          PY
+
+          {
+            echo "commit=${commit}"
+            echo "source-date-epoch=${source_date_epoch}"
+            echo "tag=${tag}"
+            echo "tag-exists=${tag_exists}"
+            echo "version=${version}"
+          } >> "${GITHUB_OUTPUT}"
+
+  rust-packages:
+    name: Gate Rust packages
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      NO_SYMBOLICA_OEM_LICENSE: "1"
+      SOURCE_DATE_EPOCH: ${{ needs.resolve.outputs.source-date-epoch }}
+      SYMBOLICA_LICENSE: GAMMALOOP_USER
+    steps:
+      - name: Check out validated commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+          persist-credentials: false
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            form \
+            libgmp-dev \
+            libmpc-dev \
+            libmpfr-dev \
+            libssl-dev \
+            pkg-config \
+            python3-dev
+
+      - name: Install Rust packaging tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          cargo install cargo-hakari --version "${CARGO_HAKARI_VERSION}" --locked
+          cargo --version
+          cargo hakari --version
+
+      - name: Check locked workspace and Hakari state
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo hakari generate --diff
+          cargo hakari manage-deps --dry-run
+          cargo check --workspace --locked
+
+      - name: Smoke-test external Rust OEM contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          consumer_dir="$(mktemp -d)"
+          export CONSUMER_DIR="${consumer_dir}"
+          python3 <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["GITHUB_WORKSPACE"])
+          consumer = Path(os.environ["CONSUMER_DIR"])
+          dependencies = {
+              "gammalooprs": root / "crates/gammalooprs",
+              "gammaloop-api": root / "crates/gammaloop-api",
+          }
+          dependency_lines = "\n".join(
+              f'{name} = {{ path = {json.dumps(str(path))}, default-features = false }}'
+              for name, path in dependencies.items()
+          )
+          (consumer / "src").mkdir()
+          (consumer / "Cargo.toml").write_text(
+              "[package]\n"
+              'name = "gammaloop-oem-consumer"\n'
+              'version = "0.0.0"\n'
+              'edition = "2024"\n\n'
+              "[dependencies]\n"
+              f"{dependency_lines}\n",
+              encoding="utf-8",
+          )
+          (consumer / "src/main.rs").write_text(
+              "fn main() {\n"
+              '    let _state = gammaloop_api::state::State::new(std::env::temp_dir(), None);\n'
+              '    gammalooprs::initialisation::initialise().expect("GammaLoop OEM initialisation");\n'
+              "}\n",
+              encoding="utf-8",
+          )
+          PY
+          (
+            cd "${consumer_dir}"
+            env -u NO_SYMBOLICA_OEM_LICENSE \
+              -u SYMBOLICA_LICENSE \
+              SYMBOLICA_OEM_LICENSE=SYMBOLICA_OEM_GAMMALOOP \
+              CARGO_TARGET_DIR="${RUNNER_TEMP}/gammaloop-oem-consumer-target" \
+              cargo generate-lockfile --offline
+            env -u NO_SYMBOLICA_OEM_LICENSE \
+              -u SYMBOLICA_LICENSE \
+              SYMBOLICA_OEM_LICENSE=SYMBOLICA_OEM_GAMMALOOP \
+              CARGO_TARGET_DIR="${RUNNER_TEMP}/gammaloop-oem-consumer-target" \
+              cargo run --locked --offline
+          )
+
+      - name: Verify every public package file list
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/package-lists
+          for crate in ${PUBLISH_CRATES}; do
+            cargo package -p "${crate}" --locked --offline --allow-dirty --list \
+              > "/tmp/package-lists/${crate}.txt"
+            test -s "/tmp/package-lists/${crate}.txt"
+          done
+          grep --fixed-strings --line-regexp 'assets/models/json/sm/sm.json' \
+            /tmp/package-lists/gammalooprs.txt
+          grep --fixed-strings --line-regexp 'assets/embedded/drawing/justfile' \
+            /tmp/package-lists/gammaloop-api.txt
+          for crate in gammalooprs gammaloop-api; do
+            grep --fixed-strings --line-regexp 'README.md' \
+              "/tmp/package-lists/${crate}.txt"
+            if grep --fixed-strings --line-regexp '.cargo/config.toml' \
+              "/tmp/package-lists/${crate}.txt"; then
+              echo "${crate} must rely on the consumer-provided public OEM selector" >&2
+              exit 1
+            fi
+          done
+          cargo metadata --format-version 1 --no-deps --locked > /dev/null
+          git diff --exit-code -- Cargo.lock crates/*/Cargo.toml
+
+  python-distributions:
+    name: Gate Python (${{ matrix.platform }})
+    needs: resolve
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    env:
+      SOURCE_DATE_EPOCH: ${{ needs.resolve.outputs.source-date-epoch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            os: ubuntu-24.04
+            target: x86_64
+          - platform: macos-arm64
+            os: macos-15
+            target: aarch64
+          - platform: macos-x86_64
+            os: macos-15-intel
+            target: x86_64
+    steps:
+      - name: Check out validated commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+          persist-credentials: false
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew update
+          brew install pkg-config openssl@3 gmp mpfr libmpc form
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          command: build
+          maturin-version: v1.11.5
+          target: ${{ matrix.target }}
+          manylinux: "2_28"
+          docker-options: --env SOURCE_DATE_EPOCH
+          args: --release --locked --out dist --compatibility pypi
+
+      - name: Build source distribution
+        if: matrix.platform == 'linux-x86_64'
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          command: sdist
+          maturin-version: v1.11.5
+          args: --out dist
+
+      - name: Smoke-test wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel="$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          test -n "${wheel}"
+          python3 -m venv .release-venv
+          .release-venv/bin/python -m pip install --no-deps "${wheel}"
+          env -u NO_SYMBOLICA_OEM_LICENSE \
+            -u SYMBOLICA_LICENSE \
+            -u SYMBOLICA_OEM_LICENSE \
+            .release-venv/bin/python -c 'import gammaloop; import gammaloop._gammaloop'
+
+      - name: Verify source distribution policy
+        if: matrix.platform == 'linux-x86_64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdist="$(find dist -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          test -n "${sdist}"
+          tar -tzf "${sdist}" | grep --extended-regexp '/\.cargo/config\.toml$'
+          tar -tzf "${sdist}" | grep --extended-regexp '/LICENSE\.md$'
+          tar -xOf "${sdist}" --wildcards '*/.cargo/config.toml' \
+            | grep --fixed-strings 'SYMBOLICA_OEM_LICENSE = { value = "SYMBOLICA_OEM_GAMMALOOP"'
+          tar -xOf "${sdist}" --wildcards '*/LICENSE.md' \
+            | grep --fixed-strings 'Permission is hereby granted, free of charge'
+
+      - name: Upload Python distributions
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: python-${{ matrix.platform }}
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  create-tag:
+    name: Create annotated release tag
+    if: github.event_name == 'workflow_dispatch' && needs.resolve.outputs.tag-exists != 'true'
+    needs:
+      - resolve
+      - rust-packages
+      - python-distributions
+    runs-on: ubuntu-24.04
+    environment: release-tag
+    permissions:
+      contents: write
+    steps:
+      - name: Check out validated commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.resolve.outputs.commit }}
+
+      - name: Create and push annotated tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ needs.resolve.outputs.commit }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          if git show-ref --verify --quiet "refs/tags/${RELEASE_TAG}"; then
+            echo "${RELEASE_TAG} appeared after validation; rerun to verify it" >&2
+            exit 1
+          fi
+          tag_object="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/git/tags" \
+            --field tag="${RELEASE_TAG}" \
+            --field message="GammaLoop ${RELEASE_TAG#v}" \
+            --field object="${RELEASE_COMMIT}" \
+            --field type=commit \
+            --jq .sha)"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            --field ref="refs/tags/${RELEASE_TAG}" \
+            --field sha="${tag_object}" > /dev/null
+
+  tag-ready:
+    name: Verify release tag
+    if: >-
+      ${{
+        always() &&
+        needs.resolve.result == 'success' &&
+        needs.rust-packages.result == 'success' &&
+        needs.python-distributions.result == 'success' &&
+        (needs.create-tag.result == 'success' || needs.create-tag.result == 'skipped')
+      }}
+    needs:
+      - resolve
+      - rust-packages
+      - python-distributions
+      - create-tag
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.resolve.outputs.tag }}
+
+      - name: Verify immutable source identity
+        shell: bash
+        env:
+          RELEASE_COMMIT: ${{ needs.resolve.outputs.commit }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          test "$(git cat-file -t "refs/tags/${RELEASE_TAG}")" = tag
+          test "$(git rev-parse "refs/tags/${RELEASE_TAG}^{}")" = "${RELEASE_COMMIT}"
+
+  publish-crates:
+    name: Publish crates.io packages
+    needs:
+      - resolve
+      - rust-packages
+      - tag-ready
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    environment:
+      name: crates-io
+      url: https://crates.io
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NO_SYMBOLICA_OEM_LICENSE: "1"
+      SOURCE_DATE_EPOCH: ${{ needs.resolve.outputs.source-date-epoch }}
+      SYMBOLICA_LICENSE: GAMMALOOP_USER
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+          persist-credentials: false
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            form \
+            libgmp-dev \
+            libmpc-dev \
+            libmpfr-dev \
+            libssl-dev \
+            pkg-config \
+            python3-dev
+
+      - name: Install Rust packaging tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          cargo install cargo-hakari --version "${CARGO_HAKARI_VERSION}" --locked
+
+      - name: Read checked-in dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo metadata --format-version 1 --no-deps --locked > /tmp/release-metadata.json
+
+      - name: Preflight every crates.io version
+        id: preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          user_agent="gammaloop-release-ci (${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+          mkdir -p target/package target/release-crates target/published-package
+          find target/package -type f -name '*.crate' -delete
+          find target/release-crates -maxdepth 1 -type f -name '*.crate' -delete
+          find target/published-package -maxdepth 1 -type f -name '*.crate' -delete
+          : > /tmp/missing-crates.tsv
+
+          for crate in ${PUBLISH_CRATES}; do
+            version="$(jq --raw-output --arg crate "${crate}" \
+              '.packages[] | select(.name == $crate) | .version' /tmp/release-metadata.json)"
+            archive="target/release-crates/${crate}-${version}.crate"
+            published_archive="target/published-package/${crate}-${version}.crate"
+            cargo hakari publish -p "${crate}" -- --dry-run --no-verify
+            generated_archive="$(find target/package -type f \
+              -name "${crate}-${version}.crate" -print -quit)"
+            test -n "${generated_archive}"
+            cp "${generated_archive}" "${archive}"
+            local_checksum="$(sha256sum "${archive}" | cut -d ' ' -f 1)"
+            endpoint="https://crates.io/api/v1/crates/${crate}/${version}"
+            status="$(curl --location --silent --show-error \
+              --header "User-Agent: ${user_agent}" \
+              --output /tmp/crates-io-version.json \
+              --write-out '%{http_code}' "${endpoint}" || true)"
+
+            case "${status}" in
+              200)
+                remote_checksum="$(jq --raw-output '.version.checksum' /tmp/crates-io-version.json)"
+                if [[ "${remote_checksum}" != "${local_checksum}" ]]; then
+                  curl --fail --location --silent --show-error \
+                    --header "User-Agent: ${user_agent}" \
+                    --output "${published_archive}" \
+                    "${endpoint}/download"
+                  test "$(sha256sum "${published_archive}" | cut -d ' ' -f 1)" = "${remote_checksum}"
+
+                  # Cargo embeds the source commit and a freshly resolved lock
+                  # file in each archive. Compare the normalized manifest and
+                  # remaining source separately so unchanged crates are retry-safe.
+                  local_tree="$(mktemp -d)"
+                  remote_tree="$(mktemp -d)"
+                  tar -xzf "${archive}" -C "${local_tree}"
+                  tar -xzf "${published_archive}" -C "${remote_tree}"
+                  LOCAL_MANIFEST="${local_tree}/${crate}-${version}/Cargo.toml" \
+                    REMOTE_MANIFEST="${remote_tree}/${crate}-${version}/Cargo.toml" \
+                    python3 <<'PY'
+          import os
+          import tomllib
+
+          def load(name):
+              with open(os.environ[name], "rb") as manifest:
+                  return tomllib.load(manifest)
+
+          if load("LOCAL_MANIFEST") != load("REMOTE_MANIFEST"):
+              raise SystemExit("normalized Cargo manifests differ")
+          PY
+                  rm -f "${local_tree}/${crate}-${version}/.cargo_vcs_info.json" \
+                    "${local_tree}/${crate}-${version}/Cargo.lock" \
+                    "${local_tree}/${crate}-${version}/Cargo.toml" \
+                    "${remote_tree}/${crate}-${version}/.cargo_vcs_info.json" \
+                    "${remote_tree}/${crate}-${version}/Cargo.lock" \
+                    "${remote_tree}/${crate}-${version}/Cargo.toml"
+                  if ! diff --recursive --no-dereference "${local_tree}" "${remote_tree}"; then
+                    echo "${crate} ${version} exists with different package contents" >&2
+                    exit 1
+                  fi
+                else
+                  cp "${archive}" "${published_archive}"
+                fi
+                echo "${crate} ${version} is already published with matching package contents"
+                ;;
+              404)
+                printf '%s\t%s\t%s\n' "${crate}" "${version}" "${local_checksum}" \
+                  >> /tmp/missing-crates.tsv
+                ;;
+              *)
+                echo "crates.io lookup for ${crate} ${version} returned HTTP ${status}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          existing_count="$(find target/published-package -maxdepth 1 -type f \
+            -name '*.crate' | wc -l)"
+          missing_count="$(wc -l < /tmp/missing-crates.tsv)"
+          test "${existing_count}" -eq $((13 - missing_count))
+          test "$(find target/release-crates -maxdepth 1 -type f -name '*.crate' | wc -l)" -eq 13
+          cargo metadata --format-version 1 --no-deps --locked > /dev/null
+          git diff --exit-code -- Cargo.lock crates/*/Cargo.toml
+          if [[ "${missing_count}" -gt 0 ]]; then
+            echo "publish-needed=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "publish-needed=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Obtain short-lived crates.io token
+        if: steps.preflight.outputs.publish-needed == 'true'
+        id: crates-token
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+
+      - name: Publish missing versions in dependency order
+        if: steps.preflight.outputs.publish-needed == 'true'
+        shell: bash
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          crates_token="${CARGO_REGISTRY_TOKEN}"
+          unset CARGO_REGISTRY_TOKEN
+          user_agent="gammaloop-release-ci (${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+
+          while IFS=$'\t' read -r crate version local_checksum; do
+            archive="target/release-crates/${crate}-${version}.crate"
+            published_archive="target/published-package/${crate}-${version}.crate"
+            endpoint="https://crates.io/api/v1/crates/${crate}/${version}"
+            test "$(sha256sum "${archive}" | cut -d ' ' -f 1)" = "${local_checksum}"
+
+            CARGO_REGISTRY_TOKEN="${crates_token}" \
+              cargo hakari publish -p "${crate}" -- --no-verify
+
+            visible=false
+            for _ in $(seq 1 60); do
+              status="$(curl --location --silent --show-error \
+                --header "User-Agent: ${user_agent}" \
+                --output /tmp/crates-io-version.json \
+                --write-out '%{http_code}' "${endpoint}" || true)"
+              if [[ "${status}" == 200 ]] && \
+                 [[ "$(jq --raw-output '.version.checksum' /tmp/crates-io-version.json)" == "${local_checksum}" ]]; then
+                visible=true
+                break
+              fi
+              sleep 10
+            done
+            if [[ "${visible}" != true ]]; then
+              echo "${crate} ${version} did not become visible with the generated checksum" >&2
+              exit 1
+            fi
+            curl --fail --location --silent --show-error \
+              --header "User-Agent: ${user_agent}" \
+              --output "${published_archive}" \
+              "${endpoint}/download"
+            test "$(sha256sum "${published_archive}" | cut -d ' ' -f 1)" = "${local_checksum}"
+            # Allow the sparse index to catch up before publishing dependants.
+            sleep 10
+          done < /tmp/missing-crates.tsv
+
+      - name: Verify canonical crates.io archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find target/release-crates -maxdepth 1 -type f -name '*.crate' | wc -l)" -eq 13
+          test "$(find target/published-package -maxdepth 1 -type f -name '*.crate' | wc -l)" -eq 13
+          cargo metadata --format-version 1 --no-deps --locked > /dev/null
+          git diff --exit-code -- Cargo.lock crates/*/Cargo.toml
+
+      - name: Upload canonical crates.io archives
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: published-rust-crates
+          path: target/published-package/*.crate
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-pypi:
+    name: Publish PyPI distribution
+    needs:
+      - resolve
+      - github-release
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/gammaloop/
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+          persist-credentials: false
+
+      - name: Download canonical Python distributions
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir dist
+          gh release download "${RELEASE_TAG}" --dir dist \
+            --pattern '*.whl' --pattern '*.tar.gz'
+
+      - name: Check PyPI immutability
+        id: pypi
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          from urllib.error import HTTPError
+          from urllib.request import Request, urlopen
+
+          version = os.environ["RELEASE_VERSION"]
+          distributions = sorted(
+              path
+              for path in Path("dist").iterdir()
+              if path.suffix == ".whl" or path.name.endswith(".tar.gz")
+          )
+          wheels = [path for path in distributions if path.suffix == ".whl"]
+          sdists = [path for path in distributions if path.name.endswith(".tar.gz")]
+          if len(wheels) != 3 or len(sdists) != 1:
+              raise SystemExit(f"expected three wheels and one sdist, found {distributions}")
+          for path in distributions:
+              if f"-{version}-" not in path.name and not path.name.endswith(f"-{version}.tar.gz"):
+                  raise SystemExit(f"artifact version does not match v{version}: {path.name}")
+
+          request = Request(
+              f"https://pypi.org/pypi/gammaloop/{version}/json",
+              headers={"User-Agent": "gammaloop-release-ci"},
+          )
+          try:
+              with urlopen(request, timeout=30) as response:
+                  remote_files = {
+                      item["filename"]: item["digests"]["sha256"]
+                      for item in json.load(response)["urls"]
+                  }
+          except HTTPError as error:
+              if error.code != 404:
+                  raise
+              remote_files = {}
+
+          missing = []
+          publish_directory = Path("dist-to-publish")
+          publish_directory.mkdir()
+          unexpected = sorted(set(remote_files) - {path.name for path in distributions})
+          if unexpected:
+              raise SystemExit(f"PyPI already has unexpected files for {version}: {unexpected}")
+          for path in distributions:
+              checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+              remote_checksum = remote_files.get(path.name)
+              if remote_checksum is None:
+                  missing.append(path.name)
+                  (publish_directory / path.name).hardlink_to(path.resolve())
+              elif remote_checksum != checksum:
+                  raise SystemExit(f"PyPI already has {path.name} with a different checksum")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"publish-needed={'true' if missing else 'false'}\n")
+          print("missing PyPI files:", missing)
+          PY
+
+      - name: Publish with PyPI Trusted Publishing
+        if: steps.pypi.outputs.publish-needed == 'true'
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          packages-dir: dist-to-publish
+          print-hash: true
+          verbose: true
+
+  github-release:
+    name: Create package tags and GitHub release
+    needs:
+      - resolve
+      - publish-crates
+      - python-distributions
+    runs-on: ubuntu-24.04
+    environment: github-release
+    permissions:
+      contents: write
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.resolve.outputs.tag }}
+
+      - name: Download crate archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: published-rust-crates
+          path: release-dist
+
+      - name: Download Python distributions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: python-*
+          path: release-dist
+          merge-multiple: true
+
+      - name: Create annotated package tags
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ needs.resolve.outputs.commit }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+
+          python3 <<'PY' > /tmp/release-packages.tsv
+          import tomllib
+          from pathlib import Path
+
+          publish = set("""${{ env.PUBLISH_CRATES }}""".split())
+          for manifest in sorted(Path("crates").glob("*/Cargo.toml")):
+              with manifest.open("rb") as source:
+                  package = tomllib.load(source)["package"]
+              if package["name"] in publish:
+                  print(package["name"], package["version"], manifest, sep="\t")
+          PY
+
+          while IFS=$'\t' read -r crate version manifest; do
+            package_tag="${crate}-v${version}"
+            if git show-ref --verify --quiet "refs/tags/${package_tag}"; then
+              if [[ "$(git cat-file -t "refs/tags/${package_tag}")" != tag ]]; then
+                echo "existing package tag ${package_tag} is not annotated" >&2
+                exit 1
+              fi
+              existing_version="$(git show "${package_tag}:${manifest}" | \
+                python3 -c 'import sys,tomllib; print(tomllib.loads(sys.stdin.read())["package"]["version"])')"
+              if [[ "${existing_version}" != "${version}" ]]; then
+                echo "existing package tag ${package_tag} has inconsistent source" >&2
+                exit 1
+              fi
+              continue
+            fi
+            tag_object="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/git/tags" \
+              --field tag="${package_tag}" \
+              --field message="${crate} ${version}" \
+              --field object="${RELEASE_COMMIT}" \
+              --field type=commit \
+              --jq .sha)"
+            # The release trigger requires a digit immediately after v, so package tags
+            # such as vakint-v1.2.3 cannot start this workflow.
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              --field ref="refs/tags/${package_tag}" \
+              --field sha="${tag_object}" > /dev/null
+          done < /tmp/release-packages.tsv
+
+      - name: Create immutable GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          test "$(find release-dist -maxdepth 1 -type f -name '*.crate' | wc -l)" -eq 13
+          test "$(find release-dist -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 3
+          test "$(find release-dist -maxdepth 1 -type f -name '*.tar.gz' | wc -l)" -eq 1
+
+          checksum_file="$(mktemp)"
+          (
+            cd release-dist
+            find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%P\n' | sort | \
+              while IFS= read -r asset; do sha256sum "${asset}"; done > "${checksum_file}"
+          )
+          mv "${checksum_file}" release-dist/SHA256SUMS
+
+          if gh release view "${RELEASE_TAG}" > /dev/null 2>&1; then
+            state="$(gh release view "${RELEASE_TAG}" \
+              --json isDraft,isPrerelease \
+              --jq '[.isDraft, .isPrerelease] | @tsv')"
+            if [[ "${state}" != $'false\tfalse' ]]; then
+              echo "existing ${RELEASE_TAG} release is not a final stable release" >&2
+              exit 1
+            fi
+            mkdir existing-release
+            gh release download "${RELEASE_TAG}" --dir existing-release
+            diff \
+              <(find release-dist -maxdepth 1 -type f -printf '%f\n' | sort) \
+              <(find existing-release -maxdepth 1 -type f -printf '%f\n' | sort)
+            (cd existing-release && sha256sum --check SHA256SUMS)
+            for archive in release-dist/*.crate; do
+              cmp "${archive}" "existing-release/${archive##*/}"
+            done
+            echo "GitHub release ${RELEASE_TAG} already contains the canonical assets"
+          else
+            gh release create "${RELEASE_TAG}" release-dist/* \
+              --generate-notes \
+              --title "GammaLoop ${RELEASE_VERSION}" \
+              --verify-tag
+          fi
+
+  prepare-zenodo:
+    name: Prepare Zenodo deposits
+    needs:
+      - resolve
+      - github-release
+      - publish-pypi
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.resolve.outputs.tag }}
+
+      - name: Download immutable GitHub release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-dist
+          gh release download "${RELEASE_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --dir release-dist
+          (cd release-dist && sha256sum --check SHA256SUMS)
+
+      - name: Prepare Zenodo payload
+        shell: bash
+        env:
+          RELEASE_COMMIT: ${{ needs.resolve.outputs.commit }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/zenodo.py prepare \
+            --release-version "${RELEASE_VERSION}" \
+            --release-tag "${RELEASE_TAG}" \
+            --release-commit "${RELEASE_COMMIT}" \
+            --assets-dir release-dist \
+            --output-dir zenodo-payload \
+            --plan zenodo-payload/plan.json
+
+      - name: Upload Zenodo payload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: zenodo-payload
+          path: zenodo-payload/
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-zenodo:
+    name: Publish Zenodo deposits
+    needs:
+      - resolve
+      - prepare-zenodo
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: zenodo-production-${{ github.repository }}
+      cancel-in-progress: false
+    environment:
+      name: zenodo
+      url: https://zenodo.org/
+    permissions:
+      contents: read
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ needs.resolve.outputs.tag }}
+
+      - name: Download Zenodo payload
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: zenodo-payload
+          path: zenodo-payload
+
+      - name: Publish Zenodo deposits
+        shell: bash
+        env:
+          ZENODO_API_URL: https://zenodo.org/api
+          ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/zenodo.py publish \
+            --plan zenodo-payload/plan.json
+
+      - name: Audit published Zenodo deposits
+        shell: bash
+        env:
+          ZENODO_API_URL: https://zenodo.org/api
+          ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/zenodo.py audit \
+            --plan zenodo-payload/plan.json

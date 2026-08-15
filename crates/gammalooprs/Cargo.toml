@@ -2,12 +2,16 @@
 name = "gammalooprs"
 version = "0.3.4"
 edition = "2024"
+authors = [
+  "Valentin Hirschi <valentin.hirschi@gmail.com>",
+  "Mathijs Fraaije <mathijsfraaije@gmail.com>",
+  "Lucien Huber <mail@lcnbr.ch>",
+]
 
 description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."
-# license-file = "LICENSE.md"
 readme = "../../README.md"
 repository = "https://github.com/alphal00p/gammaloop"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 keywords = ["cross-section", "loop", "perturbative", "physics"]
 categories = ["science"]
 build = "build.rs"
@@ -30,7 +34,7 @@ delegate = "0.12.0"
 derive_more = "0.99.20"
 dirs = { workspace = true }
 dot-parser = { workspace = true }
-enum_dispatch = "*"
+enum_dispatch = "0.3.13"
 eyre = { workspace = true }
 gammaloop-tracing-filter = { workspace = true, features = ["symbolica"] }
 idenso = { workspace = true, features = ["bincode"] }
@@ -135,6 +139,7 @@ insta = { workspace = true, features = ["json", "ron", "serde", "toml"] }
 # oneloop_bridge = { git = "https://github.com/SecretGmG/OneLOopBridge", version = "0.2.0" }
 
 [build-dependencies]
+walkdir = { workspace = true }
 # pyo3-build-config = "*"
 # pyo3-build-config = "*"
 
@@ -144,7 +149,7 @@ fail-on-warnings = []
 fjcore = []
 higher_loops = []
 pyo3-extension-module = ["pyo3/extension-module"]
-python_abi = ["pyo3/abi3", "pyo3/abi3-py37", "python_api"]
+python_abi = ["pyo3/abi3", "pyo3/abi3-py311", "python_api"]
 python_api = ["pyo3"]
 # insta.opt-level = 3
 python_stubgen = ["python_api"]

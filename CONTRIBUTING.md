@@ -362,6 +362,16 @@ preferences; they protect behavior that has been easy to regress.
 ### Environment And Build Quirks
 
 - `NO_SYMBOLICA_OEM_LICENSE` is read via `option_env!` in `gammalooprs`
-  initialization, so it is a compile-time switch, not a pure runtime one. If you
-  need to disable the OEM-license activation path, that variable must be present
-  when building the relevant binary or Python extension.
+  initialization, so it is a compile-time switch, not a pure runtime one.
+  Normal GammaLoop application builds leave it unset and use the OEM activation
+  configured by the repository. Standalone library tests may set it while
+  building, but must then run with a user-owned Symbolica license.
+- Cargo does not inherit `.cargo/config.toml` from dependencies. External
+  consumers compiling `gammalooprs` or `gammaloop-api` therefore set the public
+  compile-time selector `SYMBOLICA_OEM_LICENSE=SYMBOLICA_OEM_GAMMALOOP` in
+  their own environment; this selector is not a personal license or secret.
+
+### Releases
+
+- Maintainer setup and the release procedure are documented in
+  [`docs/releasing.md`](docs/releasing.md).

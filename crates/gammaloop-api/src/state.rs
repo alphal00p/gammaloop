@@ -3042,7 +3042,7 @@ impl State {
 
     pub fn new(log_dir: impl AsRef<Path>, log_file_name: Option<String>) -> Self {
         super::tracing::init_tracing(log_dir.as_ref().join("logs"), log_file_name);
-        let _ = initialise();
+        initialise().expect("GammaLoop initialization failed");
 
         Self {
             model: Model::default(),

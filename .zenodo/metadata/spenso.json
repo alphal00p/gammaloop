@@ -1,0 +1,40 @@
+{
+  "title": "spenso",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "mit",
+  "language": "eng",
+  "creators": [
+    {
+      "name": "Huber, Lucien",
+      "affiliation": "University of Bern",
+      "orcid": "0009-0003-5074-7313"
+    }
+  ],
+  "description": "The complete spenso software family: spenso, spenso-macros, spenso-hep-lib, and spynso3. It provides fast and flexible tensor networks, automatic abstract-index matching, and tensor contraction for high-energy physics.",
+  "notes": "Spenso-authored source is available under the MIT License. Standalone use of its Symbolica integration requires the user to configure their own Symbolica license; GammaLoop's OEM license does not transfer to library consumers. Symbolica and other third-party software remain governed by their own terms.",
+  "keywords": [
+    "tensor networks",
+    "tensor contraction",
+    "abstract indices",
+    "high-energy physics",
+    "Rust"
+  ],
+  "grants": [
+    {
+      "id": "10.13039/501100001711::PCEFP2_203335"
+    }
+  ],
+  "communities": [
+    {
+      "identifier": "alphaloop"
+    }
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "10.5281/zenodo.15913113",
+      "relation": "isDerivedFrom",
+      "resource_type": "software"
+    }
+  ]
+}

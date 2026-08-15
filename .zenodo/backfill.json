@@ -1,0 +1,674 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/alphal00p/gammaloop",
+  "redirect_host_allowlists": {
+    "crates_io": [
+      "crates.io",
+      "static.crates.io"
+    ],
+    "pypi": [
+      "files.pythonhosted.org"
+    ],
+    "zenodo": [
+      "zenodo.org"
+    ],
+    "github_api": [
+      "api.github.com"
+    ]
+  },
+  "relation_policy": {
+    "umbrella_family": "gammaloop-monorepo",
+    "historical_component_relation": "isPartOf",
+    "historical_component_target": "umbrella-concept",
+    "reason": "Historical records are created in independent lineages. They link to the umbrella concept without rewriting already-published umbrella versions to add exact-version relations."
+  },
+  "families": {
+    "gammaloop-monorepo": {
+      "registry_family": "gammaloop-monorepo",
+      "lineage": "new",
+      "versions": [
+        {
+          "version": "0.2.0",
+          "publication_date": "2024-10-08",
+          "component_versions": {
+            "gammalooprs": "0.2.0",
+            "gammaloop-python": "0.2.0"
+          },
+          "artifacts": [
+            {
+              "kind": "git-archive",
+              "filename": "gammaloop-monorepo-0.2.0.tar.gz",
+              "sha256": "69cef386759e0b0cc9f1a3e4939e9c3769ada3c42cd367223cc0e6206731afb2",
+              "repository": "https://github.com/alphal00p/gammaloop",
+              "ref": "refs/tags/v0.2.0",
+              "tag_object_type": "commit",
+              "commit": "ab7ea7acb34b4e76192094ed96632722d2fb581b",
+              "commit_date": "2024-10-08T23:11:49+02:00",
+              "source_date_epoch": 1728421909,
+              "archive_paths": [
+                "."
+              ],
+              "archive_prefix": "gammaloop-monorepo-0.2.0/"
+            }
+          ],
+          "historical_tag_policy": {
+            "lightweight": true,
+            "reason": "The v0.2.0 tag predates the annotated-tag release policy and is accepted only because this manifest pins its exact commit."
+          }
+        },
+        {
+          "version": "0.2.1",
+          "publication_date": "2024-10-28",
+          "component_versions": {
+            "gammalooprs": "0.2.0",
+            "gammaloop-python": "0.2.0"
+          },
+          "artifacts": [
+            {
+              "kind": "git-archive",
+              "filename": "gammaloop-monorepo-0.2.1.tar.gz",
+              "sha256": "0a44b7f343b10e05f64a0ac7e7fb0563b0ac3586d3b50cdc733f4b7511c7aa5b",
+              "repository": "https://github.com/alphal00p/gammaloop",
+              "ref": "refs/tags/v0.2.1",
+              "tag_object_type": "commit",
+              "commit": "e6518f80d29b741b55cf282dbfa488464244c1d7",
+              "commit_date": "2024-10-28T17:05:12+01:00",
+              "source_date_epoch": 1730131512,
+              "archive_paths": [
+                "."
+              ],
+              "archive_prefix": "gammaloop-monorepo-0.2.1/"
+            }
+          ],
+          "historical_tag_policy": {
+            "lightweight": true,
+            "reason": "The v0.2.1 tag predates the annotated-tag release policy and is accepted only because this manifest pins its exact commit."
+          },
+          "source_version_mismatch": {
+            "record_version": "0.2.1",
+            "embedded_versions": {
+              "Cargo.toml": "0.2.0",
+              "pyproject.toml": "0.2.0"
+            },
+            "reason": "The approved historical release identity is the immutable v0.2.1 tag even though its checked-in package versions were not advanced from 0.2.0."
+          }
+        },
+        {
+          "version": "0.3.0",
+          "publication_date": "2025-02-18",
+          "component_versions": {
+            "gammalooprs": "0.3.0",
+            "gammaloop-python": "0.3.0"
+          },
+          "artifacts": [
+            {
+              "kind": "git-archive",
+              "filename": "gammaloop-monorepo-0.3.0.tar.gz",
+              "sha256": "aac2c4e10d895774f13590f50ccf9445952027ffa9b9450362b89f1b96369b0f",
+              "repository": "https://github.com/alphal00p/gammaloop",
+              "ref": "refs/tags/v0.3.0",
+              "tag_object_type": "commit",
+              "commit": "868b0c6c75887b6f6f5c3ebfd59fd31150f38893",
+              "commit_date": "2025-02-18T09:54:59+01:00",
+              "source_date_epoch": 1739868899,
+              "archive_paths": [
+                "."
+              ],
+              "archive_prefix": "gammaloop-monorepo-0.3.0/"
+            }
+          ],
+          "historical_tag_policy": {
+            "lightweight": true,
+            "reason": "The v0.3.0 tag predates the annotated-tag release policy and is accepted only because this manifest pins its exact commit."
+          }
+        },
+        {
+          "version": "0.3.3",
+          "publication_date": "2025-04-04",
+          "component_versions": {
+            "gammalooprs": "0.3.3",
+            "gammaloop-python": "0.3.3"
+          },
+          "artifacts": [
+            {
+              "kind": "git-archive",
+              "filename": "gammaloop-monorepo-0.3.3.tar.gz",
+              "sha256": "e77922f1bfcbce2ed8f0b49019926991e710e1e464bf2722695584ac3c733a95",
+              "repository": "https://github.com/alphal00p/gammaloop",
+              "ref": "refs/tags/v0.3.3",
+              "tag_object_type": "commit",
+              "commit": "b478e82b4b774204b1053c1a3221fddf6760b962",
+              "commit_date": "2025-04-04T17:25:43+02:00",
+              "source_date_epoch": 1743780343,
+              "archive_paths": [
+                "."
+              ],
+              "archive_prefix": "gammaloop-monorepo-0.3.3/"
+            }
+          ],
+          "historical_tag_policy": {
+            "lightweight": true,
+            "reason": "The v0.3.3 tag predates the annotated-tag release policy and is accepted only because this manifest pins its exact commit."
+          }
+        },
+        {
+          "version": "0.3.4",
+          "publication_date": "2025-07-29",
+          "component_versions": {
+            "gammalooprs": "0.3.3",
+            "gammaloop-python": "0.3.3"
+          },
+          "artifacts": [
+            {
+              "kind": "git-archive",
+              "filename": "gammaloop-monorepo-0.3.4.tar.gz",
+              "sha256": "1c7ce9a88dc49a7843358c02b960a3251284508c3ca13a7325177ac17d070775",
+              "repository": "https://github.com/alphal00p/gammaloop",
+              "ref": "refs/tags/v0.3.4",
+              "tag_object_type": "commit",
+              "commit": "5deff8e857beb79c83425428d26eb4a50aea11f0",
+              "commit_date": "2025-07-29T20:23:31+02:00",
+              "source_date_epoch": 1753813411,
+              "archive_paths": [
+                "."
+              ],
+              "archive_prefix": "gammaloop-monorepo-0.3.4/"
+            }
+          ],
+          "historical_tag_policy": {
+            "lightweight": true,
+            "reason": "The v0.3.4 tag predates the annotated-tag release policy and is accepted only because this manifest pins its exact commit."
+          },
+          "source_version_mismatch": {
+            "record_version": "0.3.4",
+            "embedded_versions": {
+              "Cargo.toml": "0.3.3",
+              "pyproject.toml": "0.3.3"
+            },
+            "reason": "The approved historical release identity is the immutable v0.3.4 tag even though its checked-in package versions were not advanced from 0.3.3."
+          }
+        }
+      ]
+    },
+    "gammaloop": {
+      "registry_family": "gammaloop",
+      "lineage": "new",
+      "historical_layout_reason": "All tagged historical GammaLoop releases predate the workspace split, so their GammaLoop source is the repository root rather than the current crates/gammalooprs and crates/gammaloop-api paths.",
+      "versions": [
+        {
+          "version": "0.0.1",
+          "publication_date": "2023-09-13",
+          "component_versions": {
+            "gammaloop-python": "0.0.1"
+          },
+          "artifacts": [
+            {
+              "kind": "pypi-sdist",
+              "project": "gammaloop",
+              "filename": "gammaloop-0.0.1.tar.gz",
+              "url": "https://files.pythonhosted.org/packages/4a/c3/e5fe7862ce1e03dbd9d85ebfd6e8f53bec910e561718c57d7fc4577c5ad7/gammaloop-0.0.1.tar.gz",
+              "sha256": "9da69745252c353aa6bd0093974cc89f8a376ef7a6c2d2803533ab3f27012678"
+            }
+          ],
+          "no_repository_tag_reason": "No repository tag matching v0.0.1 exists; the immutable PyPI source distribution is the only approved source for this release."
+        },
+        {
+          "version": "0.1.0",
+          "publication_date": "2024-04-02",
+          "component_versions": {
+            "gammaloop-python": "0.1.0"
+          },
+          "artifacts": [
+            {
+              "kind": "pypi-sdist",
+              "project": "gammaloop",
+              "filename": "gammaloop-0.1.0.tar.gz",
+              "url": "https://files.pythonhosted.org/packages/2c/d6/f6b3f8f5402f3993eefb0036ef79c5952d4803db566192b2fd087d7bcfa2/gammaloop-0.1.0.tar.gz",
+              "sha256": "29a7a61bc3bf5c5d9a9901d3acc86e36509ed478f91242d3cd049234f02af316"
+            }
+          ],
+          "no_repository_tag_reason": "No repository tag matching v0.1.0 exists; the immutable PyPI source distribution is the only approved source for this release."
+        },
+        {
+          "version": "0.1.1",
+          "publication_date": "2024-04-05",
+          "component_versions": {
+            "gammaloop-python": "0.1.1"
+          },
+          "artifacts": [
+            {
+              "kind": "pypi-sdist",
+              "project": "gammaloop",
+              "filename": "gammaloop-0.1.1.tar.gz",
+              "url": "https://files.pythonhosted.org/packages/a3/2c/d52b023fbaf35ffbc77fde2b103f9fc709cc0d43fd4ebbb0b652427bcad2/gammaloop-0.1.1.tar.gz",
+              "sha256": "634ed1ae39f7c8bea248f40e6043da052b5c487fadcc1d6a921831072df6ed5b"
+            }
+          ],
+          "no_repository_tag_reason": "No repository tag matching v0.1.1 exists; the immutable PyPI source distribution is the only approved source for this release."
+        },
+        {
+          "version": "0.2.0",
+          "publication_date": "2024-10-08",
+          "component_versions": {
+            "gammalooprs": "0.2.0",
+            "gammaloop-python": "0.2.0"
+          },
+          "artifacts": [
+            {
+              "kind": "git-archive",
+              "filename": "gammaloop-source-0.2.0.tar.gz",
+              "sha256": "86f777885e787b9bdd583d8d91c0577a4719c2e116b021e5560cbeca509c792d",
+              "repository": "https://github.com/alphal00p/gammaloop",
+              "ref": "refs/tags/v0.2.0",
+              "tag_object_type": "commit",
+              "commit": "ab7ea7acb34b4e76192094ed96632722d2fb581b",
+              "commit_date": "2024-10-08T23:11:49+02:00",
+              "source_date_epoch": 1728421909,
+              "archive_paths": [
+                "."
+              ],
+              "archive_prefix": "gammaloop-0.2.0/"
+            },
+            {
+              "kind": "pypi-sdist",
+              "project": "gammaloop",
+              "filename": "gammaloop-0.2.0.tar.gz",
+              "url": "https://files.pythonhosted.org/packages/d5/80/445af1dc0d3c443b4b427fc8e1e83e19b6d4261f3f045f79f36fd27982fb/gammaloop-0.2.0.tar.gz",
+              "sha256": "aaa17dfd443f13893f16c4b811a3c7fb0292e773960692170ec891eaabddb24f"
+            }
+          ],
+          "historical_tag_policy": {
+            "lightweight": true,
+            "reason": "The v0.2.0 tag predates the annotated-tag release policy and is accepted only because this manifest pins its exact commit."
+          }
+        },
+        {
+          "version": "0.2.1",
+          "publication_date": "2024-10-28",
+          "component_versions": {
+            "gammalooprs": "0.2.0",
+            "gammaloop-python": "0.2.0"
+          },
+          "artifacts": [
+            {
+              "kind": "git-archive",
+              "filename": "gammaloop-source-0.2.1.tar.gz",
+              "sha256": "905e4a3d828f2176617750eb2fe46c9ee6ec7adfddf66c52654c2d88c81f4b3e",
+              "repository": "https://github.com/alphal00p/gammaloop",
+              "ref": "refs/tags/v0.2.1",
+              "tag_object_type": "commit",
+              "commit": "e6518f80d29b741b55cf282dbfa488464244c1d7",
+              "commit_date": "2024-10-28T17:05:12+01:00",
+              "source_date_epoch": 1730131512,
+              "archive_paths": [
+                "."
+              ],
+              "archive_prefix": "gammaloop-0.2.1/"
+            }
+          ],
+          "historical_tag_policy": {
+            "lightweight": true,
+            "reason": "The v0.2.1 tag predates the annotated-tag release policy and is accepted only because this manifest pins its exact commit."
+          },
+          "source_version_mismatch": {
+            "record_version": "0.2.1",
+            "embedded_versions": {
+              "Cargo.toml": "0.2.0",
+              "pyproject.toml": "0.2.0"
+            },
+            "reason": "The approved historical release identity is the immutable v0.2.1 tag even though its checked-in package versions were not advanced from 0.2.0. No GammaLoop 0.2.1 source distribution exists on PyPI."
+          }
+        },
+        {
+          "version": "0.3.0",
+          "publication_date": "2025-02-18",
+          "component_versions": {
+            "gammalooprs": "0.3.0",
+            "gammaloop-python": "0.3.0"
+          },
+          "artifacts": [
+            {
+              "kind": "git-archive",
+              "filename": "gammaloop-source-0.3.0.tar.gz",
+              "sha256": "96714ed5425d1237c9e20162592eaaecdbaaf7c6be7f0868e61ae3a7cc0aa0a9",
+              "repository": "https://github.com/alphal00p/gammaloop",
+              "ref": "refs/tags/v0.3.0",
+              "tag_object_type": "commit",
+              "commit": "868b0c6c75887b6f6f5c3ebfd59fd31150f38893",
+              "commit_date": "2025-02-18T09:54:59+01:00",
+              "source_date_epoch": 1739868899,
+              "archive_paths": [
+                "."
+              ],
+              "archive_prefix": "gammaloop-0.3.0/"
+            },
+            {
+              "kind": "pypi-sdist",
+              "project": "gammaloop",
+              "filename": "gammaloop-0.3.0.tar.gz",
+              "url": "https://files.pythonhosted.org/packages/5a/53/e6b19c7285d6c8f4d8e2e2c980538cca6621bf38e0592f1bba8b6d475655/gammaloop-0.3.0.tar.gz",
+              "sha256": "0f5f4f3b01c9cd79bfa2d5c7f7c0200253129df0988bb43bfe180e40cc4d1105"
+            }
+          ],
+          "historical_tag_policy": {
+            "lightweight": true,
+            "reason": "The v0.3.0 tag predates the annotated-tag release policy and is accepted only because this manifest pins its exact commit."
+          }
+        },
+        {
+          "version": "0.3.1",
+          "publication_date": "2025-03-04",
+          "component_versions": {
+            "gammaloop-python": "0.3.1"
+          },
+          "artifacts": [
+            {
+              "kind": "pypi-sdist",
+              "project": "gammaloop",
+              "filename": "gammaloop-0.3.1.tar.gz",
+              "url": "https://files.pythonhosted.org/packages/7a/53/d5d9d3357ba89a3efcd15e93301402efdcdb4173e76a790bb777124f7b2f/gammaloop-0.3.1.tar.gz",
+              "sha256": "6be39e17c526d5237e7c258a1ba5b2ff790a22337148b3370a8d1e2b984620b0"
+            }
+          ],
+          "no_repository_tag_reason": "No repository tag matching v0.3.1 exists; the immutable PyPI source distribution is the only approved source for this release."
+        },
+        {
+          "version": "0.3.2",
+          "publication_date": "2025-03-06",
+          "component_versions": {
+            "gammaloop-python": "0.3.2"
+          },
+          "artifacts": [
+            {
+              "kind": "pypi-sdist",
+              "project": "gammaloop",
+              "filename": "gammaloop-0.3.2.tar.gz",
+              "url": "https://files.pythonhosted.org/packages/4f/6a/f12f7106367df7ed1961a67e7ceb7d99ba14740c8d87974dafdcb2c6fa28/gammaloop-0.3.2.tar.gz",
+              "sha256": "f94b4361e67404cd0b79e8ce1aeeee6f4df64cf3c9153b77289661094fd0c16c"
+            }
+          ],
+          "no_repository_tag_reason": "No repository tag matching v0.3.2 exists; the immutable PyPI source distribution is the only approved source for this release."
+        },
+        {
+          "version": "0.3.3",
+          "publication_date": "2025-04-04",
+          "component_versions": {
+            "gammalooprs": "0.3.3",
+            "gammaloop-python": "0.3.3"
+          },
+          "artifacts": [
+            {
+              "kind": "git-archive",
+              "filename": "gammaloop-source-0.3.3.tar.gz",
+              "sha256": "3bb8baad645c4b10898a395aafe28558eb766ddfc8088df9a7cd3faa44da7145",
+              "repository": "https://github.com/alphal00p/gammaloop",
+              "ref": "refs/tags/v0.3.3",
+              "tag_object_type": "commit",
+              "commit": "b478e82b4b774204b1053c1a3221fddf6760b962",
+              "commit_date": "2025-04-04T17:25:43+02:00",
+              "source_date_epoch": 1743780343,
+              "archive_paths": [
+                "."
+              ],
+              "archive_prefix": "gammaloop-0.3.3/"
+            },
+            {
+              "kind": "pypi-sdist",
+              "project": "gammaloop",
+              "filename": "gammaloop-0.3.3.tar.gz",
+              "url": "https://files.pythonhosted.org/packages/28/d6/d511f58e884a47ba93308244dfd98db9aa53296f72dc190bc436baf47f54/gammaloop-0.3.3.tar.gz",
+              "sha256": "c7f830c6650124c0ebc492c65533a613fcac1bc26445ade560443b31376b0aeb"
+            }
+          ],
+          "historical_tag_policy": {
+            "lightweight": true,
+            "reason": "The v0.3.3 tag predates the annotated-tag release policy and is accepted only because this manifest pins its exact commit."
+          }
+        },
+        {
+          "version": "0.3.4",
+          "publication_date": "2025-07-29",
+          "component_versions": {
+            "gammalooprs": "0.3.3",
+            "gammaloop-python": "0.3.3"
+          },
+          "artifacts": [
+            {
+              "kind": "git-archive",
+              "filename": "gammaloop-source-0.3.4.tar.gz",
+              "sha256": "8ba5d70e4149f9a9fd83428eec02b418bd3dde03b12ff45a50c93005c1c5bbf0",
+              "repository": "https://github.com/alphal00p/gammaloop",
+              "ref": "refs/tags/v0.3.4",
+              "tag_object_type": "commit",
+              "commit": "5deff8e857beb79c83425428d26eb4a50aea11f0",
+              "commit_date": "2025-07-29T20:23:31+02:00",
+              "source_date_epoch": 1753813411,
+              "archive_paths": [
+                "."
+              ],
+              "archive_prefix": "gammaloop-0.3.4/"
+            }
+          ],
+          "historical_tag_policy": {
+            "lightweight": true,
+            "reason": "The v0.3.4 tag predates the annotated-tag release policy and is accepted only because this manifest pins its exact commit."
+          },
+          "source_version_mismatch": {
+            "record_version": "0.3.4",
+            "embedded_versions": {
+              "Cargo.toml": "0.3.3",
+              "pyproject.toml": "0.3.3"
+            },
+            "reason": "The approved historical release identity is the immutable v0.3.4 tag even though its checked-in package versions were not advanced from 0.3.3. No GammaLoop 0.3.4 source distribution exists on PyPI."
+          }
+        }
+      ]
+    },
+    "vakint": {
+      "registry_family": "vakint",
+      "lineage": "new",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publication_date": "2025-12-12",
+          "component_versions": {
+            "vakint": "0.1.0"
+          },
+          "artifacts": [
+            {
+              "kind": "crates-io",
+              "crate": "vakint",
+              "version": "0.1.0",
+              "filename": "vakint-0.1.0.crate",
+              "url": "https://crates.io/api/v1/crates/vakint/0.1.0/download",
+              "published_at": "2025-12-12T11:35:29.200116Z",
+              "sha256": "a498b6a8e460121cd010c3c004f971d660d8d39eedf91e6f4e8e3af46226d6f0",
+              "cargo_vcs_info": {
+                "sha1": "10a35bb881b9084f71e1caaee3494921ff7d5af6",
+                "path_in_vcs": ""
+              }
+            }
+          ],
+          "no_repository_tag_reason": "No matching tag exists in the monorepo; the immutable crates.io source archive is the approved source for this release."
+        },
+        {
+          "version": "0.1.2",
+          "publication_date": "2025-12-18",
+          "component_versions": {
+            "vakint": "0.1.2"
+          },
+          "artifacts": [
+            {
+              "kind": "crates-io",
+              "crate": "vakint",
+              "version": "0.1.2",
+              "filename": "vakint-0.1.2.crate",
+              "url": "https://crates.io/api/v1/crates/vakint/0.1.2/download",
+              "published_at": "2025-12-18T19:22:20.039579Z",
+              "sha256": "26ab38f1be7d97925d4f13f811470cb714be09f08cd68dcf0f2f3c6ff66679ad",
+              "cargo_vcs_info": {
+                "sha1": "f7dc9907abb1786306bfc44fde6c32ba30446422",
+                "path_in_vcs": ""
+              }
+            }
+          ],
+          "no_repository_tag_reason": "No matching tag exists in the monorepo; the immutable crates.io source archive is the approved source for this release."
+        }
+      ]
+    },
+    "spenso": {
+      "registry_family": "spenso",
+      "lineage": "new",
+      "legacy_concept_doi": "10.5281/zenodo.15913113",
+      "legacy_relation": "isDerivedFrom",
+      "versions": [
+        {
+          "version": "0.6.0",
+          "publication_date": "2026-01-14",
+          "component_versions": {
+            "spenso": "0.6.0",
+            "spenso-macros": "0.3.2",
+            "spenso-hep-lib": "0.1.7",
+            "spynso3": "0.1.1"
+          },
+          "artifacts": [
+            {
+              "kind": "crates-io",
+              "crate": "spenso",
+              "version": "0.6.0",
+              "filename": "spenso-0.6.0.crate",
+              "url": "https://crates.io/api/v1/crates/spenso/0.6.0/download",
+              "published_at": "2026-01-14T18:22:17.815621Z",
+              "sha256": "27c2c74edaf1cdcf13912e1e1ee2bea7c6510e17ae7799ecbf9dc4fc002480d0",
+              "cargo_vcs_info": {
+                "sha1": "fe91d6da9fcd37b2c6a33e950251c3b79fa2974e",
+                "path_in_vcs": "spenso"
+              }
+            },
+            {
+              "kind": "crates-io",
+              "crate": "spenso-macros",
+              "version": "0.3.2",
+              "filename": "spenso-macros-0.3.2.crate",
+              "url": "https://crates.io/api/v1/crates/spenso-macros/0.3.2/download",
+              "published_at": "2026-01-08T15:21:39.683419Z",
+              "sha256": "9afcbf0b89d59a87e646cca1601ede3b1d0b09a2b40e553044af85ea55a0fdf9",
+              "cargo_vcs_info": {
+                "sha1": "82141d49f90e2e8ebececf21d0a4d0c0b1a2ece1",
+                "path_in_vcs": "spenso-macros"
+              }
+            },
+            {
+              "kind": "crates-io",
+              "crate": "spenso-hep-lib",
+              "version": "0.1.7",
+              "filename": "spenso-hep-lib-0.1.7.crate",
+              "url": "https://crates.io/api/v1/crates/spenso-hep-lib/0.1.7/download",
+              "published_at": "2026-01-14T19:37:56.433839Z",
+              "sha256": "9cf6421836ea07227353e61b92b971aeaa0f907031c762ffe9079bbfdf5f2c71",
+              "cargo_vcs_info": {
+                "sha1": "28d77782cccf7421e7b8df613367826a4f425d1a",
+                "path_in_vcs": "spenso-hep-lib"
+              }
+            },
+            {
+              "kind": "crates-io",
+              "crate": "spynso3",
+              "version": "0.1.1",
+              "filename": "spynso3-0.1.1.crate",
+              "url": "https://crates.io/api/v1/crates/spynso3/0.1.1/download",
+              "published_at": "2026-01-08T15:27:32.710333Z",
+              "sha256": "5d38698eef630bae2cfeb2d91ef6ef995fb25ae01f2a763f739a8544285ab679",
+              "cargo_vcs_info": {
+                "sha1": "82141d49f90e2e8ebececf21d0a4d0c0b1a2ece1",
+                "path_in_vcs": "spynso3"
+              }
+            }
+          ],
+          "no_repository_tag_reason": "No matching tag exists in the monorepo; the four immutable crates.io source archives are the approved complete Spenso family at core version 0.6.0. spynso3 0.1.1 is used because 0.1.2 has not been published to crates.io."
+        }
+      ]
+    },
+    "idenso": {
+      "registry_family": "idenso",
+      "lineage": "new",
+      "legacy_concept_doi": "10.5281/zenodo.15913113",
+      "legacy_relation": "isDerivedFrom",
+      "versions": [
+        {
+          "version": "0.3.0",
+          "publication_date": "2026-01-14",
+          "component_versions": {
+            "idenso": "0.3.0"
+          },
+          "artifacts": [
+            {
+              "kind": "crates-io",
+              "crate": "idenso",
+              "version": "0.3.0",
+              "filename": "idenso-0.3.0.crate",
+              "url": "https://crates.io/api/v1/crates/idenso/0.3.0/download",
+              "published_at": "2026-01-14T18:25:41.651173Z",
+              "sha256": "6857a788b5829891df51de1ec06cae7ddda0b86f1ac757f5046bb7ecc209d812",
+              "cargo_vcs_info": {
+                "sha1": "fe91d6da9fcd37b2c6a33e950251c3b79fa2974e",
+                "path_in_vcs": "idenso"
+              }
+            }
+          ],
+          "no_repository_tag_reason": "No matching tag exists in the monorepo; the immutable crates.io source archive is the approved source for the first clean Idenso lineage."
+        }
+      ]
+    },
+    "linnet": {
+      "registry_family": "linnet",
+      "lineage": "continue-production",
+      "production_only": true,
+      "versions": [
+        {
+          "version": "0.17.0",
+          "publication_date": "2026-01-30",
+          "mode": "adopt",
+          "component_versions": {
+            "linnet": "0.17.0",
+            "clinnet": "0.1.8",
+            "linnest": "0.1.0"
+          },
+          "absent_components": {
+            "linnet-py": "The existing v0.17.0 upstream source archive predates linnet-py and does not contain that package."
+          },
+          "adoption": {
+            "concept_recid": "15494393",
+            "concept_doi": "10.5281/zenodo.15494393",
+            "record_id": "18429583",
+            "record_doi": "10.5281/zenodo.18429583",
+            "published_at": "2026-01-30T10:38:32.135907+00:00",
+            "title": "alphal00p/linnet: linnet-v0.17.0",
+            "metadata_version": "linnet-v0.17.0",
+            "normalized_version": "0.17.0",
+            "license": "cc-by-4.0",
+            "creators": [
+              "Lucien Huber",
+              "Mathijs Fraaije"
+            ],
+            "related_tag_url": "https://github.com/alphal00p/linnet/tree/linnet-v0.17.0",
+            "tag_ref": "refs/tags/linnet-v0.17.0",
+            "tag_object": "3f2ec935c8db60d7cd627d16130653b62ea62dd3",
+            "tag_object_type": "tag",
+            "commit": "19f525dd16715adf76c7887e052120345720a0f1",
+            "files": [
+              {
+                "filename": "alphal00p/linnet-linnet-v0.17.0.zip",
+                "url": "https://zenodo.org/api/records/18429583/files/alphal00p/linnet-linnet-v0.17.0.zip/content",
+                "size": 810456,
+                "md5": "53ddb29ed588281abe7eceaac45a46fb",
+                "sha256": "c2185948aabe551e44c92ed97ebd9a0ebf3dc08f511f3ec07d4d1c7f2c1d8292"
+              }
+            ],
+            "reason": "Continue the existing production Linnet concept without rewriting or duplicating its pre-automation v0.17.0 record. Future versions use the repository's MIT and creator metadata and add the stable family marker."
+          }
+        }
+      ]
+    }
+  }
+}
