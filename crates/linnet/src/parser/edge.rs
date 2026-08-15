@@ -10,7 +10,13 @@ use crate::half_edge::{
 use super::{strip_quotes, subgraph_free::Edge, DotHedgeData, GlobalData, NodeIdOrDangling};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct DotEdgeData {
+    pub payload: Option<Vec<u8>>,
     pub statements: BTreeMap<String, String>,
     pub local_statements: BTreeMap<String, String>,
     pub edge_id: Option<EdgeIndex>,
@@ -31,6 +37,7 @@ impl FromIterator<(String, String)> for DotEdgeData {
             .collect();
 
         DotEdgeData {
+            payload: None,
             local_statements: BTreeMap::new(),
             statements,
 
@@ -43,6 +50,9 @@ impl Display for DotEdgeData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut first = true;
         for (key, value) in &self.statements {
+            if key.starts_with("__linnest-") {
+                continue;
+            }
             if !first {
                 write!(f, " ")?;
             }
@@ -70,6 +80,7 @@ impl DotEdgeData {
     }
     pub fn empty() -> Self {
         DotEdgeData {
+            payload: None,
             statements: BTreeMap::new(),
             local_statements: BTreeMap::new(),
             edge_id: None,

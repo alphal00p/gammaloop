@@ -1,234 +1,265 @@
-#import "@preview/fletcher:0.5.8" as fletcher: cetz, diagram, edge, hide, node
-#let mom_arr = (
-  stroke: black + 0.3mm,
-  marks: ((inherit: "head", rev: false, pos: 1, scale: 40%),),
-)
-#let p = plugin("./linnest.wasm")
+#import "crates/linnest/typst/src/lib.typ": draw, graph, layout as apply-layout, physics
+#import "edge-style.typ" as edge-style
 
-#let eval-dict(data, name, scope) = {
-  let dict = data.remove(name, default: "(:)")
-  if dict == none {
-    dict = "(:)"
+#let edge-label-style(edge) = {
+  let raw-edge = edge.at("edge", default: (:))
+  let statements = raw-edge.at("statements", default: (:))
+  let anchor = statements.at("label-anchor", default: edge.at("label-anchor", default: none))
+  if type(anchor) == str {
+    (anchor: anchor)
+  } else {
+    (:)
   }
-  eval(dict, scope: scope, mode: "code")
 }
+
+#let _node-index-label(node) = {
+  let index = node.vid
+  [$n_#index$]
+}
+
+#let _particle-label(edge, index, typst-fields, include-index: true) = {
+  let scope = edge.fields + (edge: edge.edge)
+  let entry = physics.edge-entry(scope, map: edge-style.map, default: (label: none))
+  let label = physics.label-content(
+    entry.at("label", default: none),
+    scope,
+    mode: typst-fields,
+    map: edge-style.map,
+    scope: scope,
+  )
+  if label == none {
+    return none
+  }
+  if include-index {
+    label + [$(p_#index)$]
+  } else {
+    label
+  }
+}
+
+#let _momentum-edge-label(edge, typst-fields, edge-style-options) = {
+  let momentum-arrows = edge-style-options.at("momentum-arrows", default: false)
+  let show-momentum-index = momentum-arrows and edge-style-options.at(
+    "show-edge-index",
+    default: true,
+  )
+  let label-options = if show-momentum-index {
+    edge-style-options + (
+      show-edge-index: false,
+    )
+  } else {
+    edge-style-options
+  }
+  let label = edge-style.edge-label(
+    edge,
+    typst-fields: typst-fields,
+    ..label-options,
+  )
+  if not show-momentum-index {
+    return label
+  }
+  let index = edge.at("momentum-index", default: physics.edge-index(edge))
+  if index == none {
+    label
+  } else if label == none {
+    [$p_#index$]
+  } else {
+    label + [$(p_#index)$]
+  }
+}
+
+#let _rank(ids, id) = {
+  for (rank, value) in ids.enumerate() {
+    if value == id {
+      return rank
+    }
+  }
+  none
+}
+
+#let _field(record, name, default: none) = {
+  record
+    .at("fields", default: record.at("statements", default: (:)))
+    .at(name, default: default)
+}
+
+// Match GammaLoop external-edge conventions with outward-facing particle
+// labels. A match field pairs the two sides of a cross section without exposing
+// its internal sewing tag as the momentum index.
+#let autogen-external-edge-fields(
+  g,
+  typst-fields: "plain",
+  match-field: none,
+  place: true,
+  y-scale: 10,
+  include-index: true,
+) = {
+  let left = ()
+  let right = ()
+  for edge in graph.edges(g) {
+    let id = if match-field == none {
+      edge.edge
+    } else {
+      _field(edge, match-field)
+    }
+    if id != none and edge.source == none and edge.sink != none {
+      left.push(id)
+    } else if id != none and edge.source != none and edge.sink == none {
+      right.push(id)
+    }
+  }
+
+  graph.map(g, edge: edge => {
+    let side = if edge.source == none and edge.sink != none {
+      "left"
+    } else if edge.source != none and edge.sink == none {
+      "right"
+    } else {
+      none
+    }
+    if side == none {
+      return none
+    }
+
+    let id = if match-field == none {
+      edge.edge
+    } else {
+      _field(edge, match-field)
+    }
+    if id == none {
+      return none
+    }
+    // Incoming order defines p_i; the sewing tag only maps its partner on the
+    // right back to the same rank.
+    let ids = if match-field != none {
+      left
+    } else if side == "left" {
+      left
+    } else {
+      right
+    }
+    let rank = _rank(ids, id)
+    if rank == none {
+      return none
+    }
+    let index = if match-field == none { edge.edge } else { rank }
+    let patch = (
+      "label-anchor": if side == "left" { "east" } else { "west" },
+      "momentum-index": index,
+    )
+    if place {
+      let x = if side == "left" {
+        graph.group("left", side: "-")
+      } else {
+        graph.group("right", side: "+")
+      }
+      patch.insert(
+        "pos",
+        graph.pos(x: x, y: graph.start(((ids.len() - 1) / 2 - rank) * y-scale)),
+      )
+    }
+    let explicit-label = edge.fields.at(
+      "display-label",
+      default: edge.fields.at("label", default: none),
+    )
+    if explicit-label == none {
+      let label = _particle-label(
+        edge,
+        index,
+        typst-fields,
+        include-index: include-index,
+      )
+      if label != none {
+        patch.insert("label", label)
+      }
+    }
+    patch
+  })
+}
+
 #let layout(
   input,
-  split_edge: true,
+  split-edge: true,
   scope: (:),
   columns: 1fr,
   unit: 1,
-  additional_data: (:),
+  typst-fields: "plain",
+  edge-style-options: (:),
+  show-node-index: false,
+  amplitude-mode: false,
+  cross-section-mode: false,
+  additional-data: (:),
 ) = {
-  let a = p.layout_graph(bytes(input), cbor.encode(
-    (
-      steps: sys.inputs.at("steps", default: "15"),
-      seed: sys.inputs.at("seed", default: "14"),
-      step: ".81",
-      step_shrink: "0.21",
-      temp: ".3",
-      beta: "46.1",
-      k_spring: "11.",
-      g_center: "40.0",
-      epochs:"30",
-      crossing_penalty: "30",
-      gamma_dangling: "40",
-      gamma_ee: ".1",
-      directional_force:"5",
-      label_length_scale:".6",
-      label_spring:"23",
-      label_charge:"3",
-      label_steps:"20",
-      gamma_ev: ".1",
-
-      z_spring:"0.05",
-      z_spring_growth:"1.3",
-      length_scale: "0.1",
-    ) + additional_data,
-  ))
-  let graphs = cbor(a)
+  let graphs = graph.parse(input)
   let diags = ()
-  for (g, parse) in graphs.graphs {
-    let noed = ()
-    let n = (:)
-
-
-    for (i, v) in g.nodes.enumerate() {
-      n.insert(str(i), v)
-      let (x, y) = v.remove("pos")
-      let b = v.remove("shift")
-      let ev = v.remove("eval", default: "(:)")
-      if ev == none {
-        ev = "(:)"
-      }
-      noed.push(node(
-        pos: (x * unit, y * unit),
-        name: label(str(i)),
-        ..eval(ev, scope: scope+(vid:i), mode: "code"),
-        layer: 2,
-      ))
-    }
-
-
-    for (i, e) in g.edges.enumerate() {
-
-
-
-
-      let start = e.data.remove("from")
-      let end = e.data.remove("to")
-
-      let (start,source) = if start==none{
-        (none,none)
-      }else{
-        start
-      }
-      let (end,sink) = if end==none{
-        (none,none)
-      }else{
-        end
-      }
-
-      let ext = start == none or end == none;
-      let data = e.remove("data")
-
-      let o = e.remove("orientation")
-      let ev_sink = eval-dict(data, "eval_sink",scope+(orientation:o)+(eid:i)+(ext:ext))
-      let ev_label = eval-dict(data,"eval_label",scope+(orientation:o)+(eid:i)+(ext:ext)+(sink:sink)+(source:source)+data)
-      // let ev_label =[in]
-
-
-
-      // ev_label
-      let ev_source = eval-dict(data, "eval_source",scope+(orientation:o)+(eid:i))
-
-      let bend-angle = data.remove("bend")
-      let bend = bend-angle.remove("Ok", default: 0.)
-
-      let enmlab = label("em" + str(i))
-      let (end-node, end-node-pos) = if end != none {
-        let nodelab = label(str(end))
-        if start != none and nodelab == label(str(start)){
-          bend = bend + 2
-        }
-
-          noed.push(edge(
-            vertices: ((data.pos.x * unit, data.pos.y * unit), nodelab),
-            bend: bend * 0.5rad,
-            ..ev_sink,
-          ))
-
-
-        (nodelab, n.at(str(end)).pos)
-      } else {
-        let lab = label("exte" + str(i))
-        noed.push(node(
-          (data.pos.x * unit, data.pos.y * unit),
-          name: lab,
-          outset: -5mm,
-          radius: 5mm,
-          fill: none,
-        ))
-        (lab, data.pos)
-      }
-
-      let snmlab = label("sm" + str(i))
-      let (start-node, start-node-pos) = if start != none {
-        let nodelab = label(str(start))
-
-
-
-          noed.push(edge(
-            vertices: (nodelab, (data.pos.x * unit, data.pos.y * unit)),
-            bend: bend * 0.5rad,
-            ..ev_source,
-          ))
-
-
-        (nodelab, n.at(str(start)).pos)
-      } else {
-        let lab = label("exts" + str(i))
-        noed.push(node(
-          (data.pos.x * unit, data.pos.y * unit),
-          name: lab,
-          outset: -5mm,
-          radius: 5mm,
-          fill: none,
-        ))
-        (lab, data.pos)
-      }
-
-
-
-
-      let percentb = 1 + calc.abs(bend / calc.pi)
-
-      let a = (
-        calc.sqrt(
-          calc.pow(start-node-pos.x - end-node-pos.x, 2)
-            + calc.pow(start-node-pos.y - end-node-pos.y, 2),
-        )
-          * 2.5
-          * percentb
-          * unit
+  for graph-bytes in graphs {
+    let momentum-arrows = edge-style-options.at("momentum-arrows", default: false)
+    if amplitude-mode {
+      graph-bytes = autogen-external-edge-fields(
+        graph-bytes,
+        typst-fields: typst-fields,
+        include-index: not momentum-arrows,
       )
-
-      noed.push(node(
-        pos: (start-node-pos.x * unit, start-node-pos.y * unit),
-        name: snmlab,
-        outset: a,
-      ))
-      noed.push(node(
-        pos: (end-node-pos.x * unit, end-node-pos.y * unit),
-        name: enmlab,
-        outset: a,
-      ))
-        noed.push(node(
-          (data.label_pos.x * unit, data.label_pos.y * unit),
-          ev_label,//rotate(data.label_angle*-1rad,ev_label)
-          inset:0mm,
-          snap:false,
-          name: label("e"+str(i)),
-          fill: none,
-        ))
-
-      let shift = (
-        if bend != 0. {
-          bend * 0.15
-        } else { 1 }
-          * 1.5mm
+    } else if cross-section-mode {
+      graph-bytes = autogen-external-edge-fields(
+        graph-bytes,
+        typst-fields: typst-fields,
+        match-field: "is_cut",
+        place: false,
+        include-index: not momentum-arrows,
       )
-
-
-      // noed.push(edge(vertices:(snmlab,enmlab),bend:bend * (percentb -1) * -1rad,shift:shift,..mom_arr,..eval(mev,scope: scope ,mode: "code")))
     }
-    diags.push(grid(
-      align: center + top,
-      gutter: 1em,
-      [#g.name],
-      diagram(
-        debug:0,
-        node-shape: circle,
-        node-fill: black,
-        edge-stroke: 0.1em,
-        spacing: 2em,
-        ..noed,
-      ),
-      if g.global_statements.at("full_num",default:none)!= none{
-        // Decode the DOT-escaped quoted-string body before evaluating it as Typst math.
-        [$#eval(
-          eval("\"" + g.global_statements.full_num + "\"", mode: "code"),
-          mode: "math",
-        )$]
-      }
+    let layout-options = if amplitude-mode {
+      (
+        k-spring: 4.5,
+        eps: 1e-7,
+        step: 0.6,
+        gamma-dangling: 2.3,
+        label-length-scale: 1.2,
+        label-steps: 100,
+        directional-force: 4.5,
+        label-layout: "dangling-tangent",
+      ) + additional-data
+    } else if cross-section-mode {
+      (
+        length-scale: 0.4,
+        z-spring-growth: 1.01,
+        label-length-scale: 1.2,
+        label-steps: 100,
+        label-layout: "dangling-tangent",
+      ) + additional-data
+    } else {
+      additional-data
+    }
+    let node-label = if show-node-index { _node-index-label } else { auto }
+    let edge-label = edge => _momentum-edge-label(
+      edge,
+      typst-fields,
+      edge-style-options,
+    )
+    graph-bytes = graph.style(
+      graph-bytes,
+      scope: scope,
+      unit: unit,
+      node-label: node-label,
+      node-label-style: (padding: 0.08),
+      edge-label: edge-label,
+      edge-label-style: edge-label-style,
+    )
+    graph-bytes = apply-layout(graph-bytes, ..layout-options)
+    diags.push(draw(
+      graph-bytes,
+      scope: scope,
+      unit: unit,
+      title: auto,
+      node-label: node-label,
+      source-style: edge => edge-style.source-style(edge, typst-fields: typst-fields, ..edge-style-options),
+      sink-style: edge => edge-style.sink-style(edge, typst-fields: typst-fields, ..edge-style-options),
+      edge-label: edge-label,
+      edge-label-style: edge-label-style,
     ))
   }
-  for d in diags{
+  for d in diags {
     d
   }
-  // grid(
-  //   align: center + top, gutter: 1em,
-  //   columns: columns,
-  //   ..diags
-  // )
 }

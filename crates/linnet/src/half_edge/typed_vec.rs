@@ -24,6 +24,8 @@ macro_rules! define_indexed_vec {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+        #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+        #[cfg_attr(feature = "rkyv", archive(check_bytes))]
         $idx_vis struct $Idx(pub usize);
 
         impl ::std::convert::From<usize> for $Idx {
@@ -78,7 +80,9 @@ macro_rules! define_indexed_vec {
         #[derive(Clone, Debug, Default, Hash, PartialEq, Eq,PartialOrd,Ord)]
         #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
-        $vec_vis struct $Vec<T>(::std::vec::Vec<T>);
+        #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+        #[cfg_attr(feature = "rkyv", archive(check_bytes))]
+        $vec_vis struct $Vec<T>(pub(crate) ::std::vec::Vec<T>);
 
         /* --- Restricted indexing -------------------------------------------------- */
 

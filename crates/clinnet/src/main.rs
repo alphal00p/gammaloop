@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -21,16 +21,34 @@ use serde_json::{self, Map as JsonMap, Value as JsonValue};
 use walkdir::WalkDir;
 
 const TEMPLATE_SUBDIR: &str = "templates";
+const LINNEST_PACKAGE_DIR: &str = "crates/linnest/typst";
+const KURVST_PACKAGE_DIR: &str = "crates/kurvst/typst";
+const MINIMUM_TYPST_VERSION: (u32, u32, u32) = (0, 15, 0);
 
 #[derive(RustEmbed)]
 #[folder = "templates"]
 struct EmbeddedTemplates;
 
+#[derive(RustEmbed)]
+#[folder = "$CARGO_MANIFEST_DIR/../linnest/typst"]
+#[include = "src/*.typ"]
+#[include = "src/**/*.typ"]
+#[include = "typst.toml"]
+#[include = "linnest.wasm"]
+struct EmbeddedLinnestPackage;
+
+#[derive(RustEmbed)]
+#[folder = "$CARGO_MANIFEST_DIR/../kurvst/typst"]
+#[include = "src/*.typ"]
+#[include = "src/**/*.typ"]
+#[include = "typst.toml"]
+#[include = "kurvst.wasm"]
+struct EmbeddedKurvstPackage;
+
 #[derive(Copy, Clone)]
 enum TemplateKind {
     Figure,
     Grid,
-    Plugin,
     Layout,
 }
 
@@ -40,7 +58,6 @@ impl TemplateKind {
         match self {
             TemplateKind::Figure => "figure.typ",
             TemplateKind::Grid => "grid.typ",
-            TemplateKind::Plugin => "linnest.wasm",
             TemplateKind::Layout => "layout.typ",
         }
     }
@@ -74,27 +91,34 @@ fn check_typst_version() -> Result<()> {
 
     let version_output = String::from_utf8_lossy(&output.stdout);
     let version_line = version_output.lines().next().unwrap_or("unknown");
+    require_typst_version(version_line)?;
+    println!("Using {version_line}");
 
-    println!("Using {}", version_line);
+    Ok(())
+}
 
-    // Check for minimum version (0.11.0 introduced some breaking changes)
-    if let Some(version_part) = version_line.split_whitespace().nth(1) {
-        let version = version_part.split(' ').next().unwrap_or("0.0.0");
-        if version.starts_with("0.") {
-            let parts: Vec<&str> = version.split('.').collect();
-            if parts.len() >= 2
-                && let (Ok(major), Ok(minor)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>())
-                && major == 0
-                && minor < 11
-            {
-                eprintln!(
-                    "Warning: Typst version {} may not be fully supported. Consider upgrading to 0.11.0 or later.",
-                    version
-                );
-            }
-        }
+fn require_typst_version(version_line: &str) -> Result<()> {
+    let version = version_line
+        .split_whitespace()
+        .nth(1)
+        .ok_or_else(|| eyre!("could not parse `typst --version` output: {version_line}"))?;
+    let (numeric, prerelease) = version
+        .split_once('-')
+        .map_or((version, None), |(value, suffix)| (value, Some(suffix)));
+    let mut parts = numeric.split('.');
+    let parsed = (
+        parts.next().and_then(|part| part.parse().ok()),
+        parts.next().and_then(|part| part.parse().ok()),
+        parts.next().and_then(|part| part.parse().ok()),
+    );
+    let (Some(major), Some(minor), Some(patch)) = parsed else {
+        bail!("could not parse Typst version from: {version_line}");
+    };
+    if (major, minor, patch) < MINIMUM_TYPST_VERSION
+        || ((major, minor, patch) == MINIMUM_TYPST_VERSION && prerelease.is_some())
+    {
+        bail!("linnet requires Typst 0.15.0 or newer, found {version}");
     }
-
     Ok(())
 }
 
@@ -312,24 +336,8 @@ fn run() -> Result<()> {
             .with_context(|| format!("failed to create cache directory {}", parent.display()))?;
     }
 
-    let layout_asset = ensure_layout_asset(&build_dir)?;
-
-    let mut style_files = Vec::new();
-    for style in &draw_args.style {
-        let canonical = canonicalize_existing(style)
-            .with_context(|| format!("failed to read style file {}", style.display()))?;
-        style_files.push(canonical);
-    }
-    let layout_style = canonicalize_existing(&layout_asset).with_context(|| {
-        format!(
-            "failed to resolve layout template {}",
-            layout_asset.display()
-        )
-    })?;
-    style_files.push(layout_style);
-    style_files.sort();
-    style_files.dedup();
-
+    ensure_default_template_assets(&build_dir)?;
+    ensure_layout_asset(&build_dir)?;
     let figure_template =
         resolve_template(&requested_figure_template, TemplateKind::Figure, &build_dir)?;
     let grid_template = resolve_template(&requested_grid_template, TemplateKind::Grid, &build_dir)?;
@@ -343,7 +351,20 @@ fn run() -> Result<()> {
                 .unwrap_or(Path::new("."))
                 .join("fig-index.typ")
         });
-    let _plugin_path = ensure_plugin_asset(&build_dir)?;
+
+    let mut style_files = Vec::new();
+    for style in &draw_args.style {
+        let canonical = canonicalize_existing(style)
+            .with_context(|| format!("failed to read style file {}", style.display()))?;
+        style_files.push(canonical);
+    }
+    style_files.extend(collect_template_dependency_files(
+        &build_dir.join(TEMPLATE_SUBDIR),
+        &figure_template,
+        &[grid_template.clone(), fig_index_path.clone()],
+    )?);
+    style_files.sort();
+    style_files.dedup();
 
     let dot_files = collect_dot_files(&root)?;
     if dot_files.is_empty() {
@@ -439,7 +460,7 @@ fn run() -> Result<()> {
 
                 if needs_rebuild {
                     progress.set_message(format!("building {}", plan.relative.display()));
-                    build_figure(plan, &figure_template, &root, &draw_args.input_args.input)?;
+                    build_figure(plan, &figure_template, &draw_args.input_args.input)?;
                     *rebuilt.lock() += 1;
                 } else {
                     progress.set_message(format!("cached {}", plan.relative.display()));
@@ -470,7 +491,7 @@ fn run() -> Result<()> {
 
                 if needs_rebuild {
                     progress.set_message(format!("building {}", plan.relative.display()));
-                    build_figure(plan, &figure_template, &root, &draw_args.input_args.input)?;
+                    build_figure(plan, &figure_template, &draw_args.input_args.input)?;
                     *rebuilt.lock() += 1;
                 } else {
                     progress.set_message(format!("cached {}", plan.relative.display()));
@@ -560,23 +581,22 @@ fn rebuild_single_figure(
     println!("Redrawing figure: {}", plan.relative.display());
     println!("  Input: {}", plan.data_path.display());
     println!("  Output: {}", plan.output_path.display());
-    if !current_inputs.is_empty() {
-        println!("  Using {} current input argument(s)", current_inputs.len());
+    let inputs = merge_inputs(&metadata.input, current_inputs);
+    if !inputs.is_empty() {
+        println!(
+            "  Using {} cached/overridden input argument(s)",
+            inputs.len()
+        );
     }
 
-    build_figure(
-        plan,
-        &metadata.figure_template,
-        &metadata.root,
-        current_inputs,
-    )?;
+    build_figure(plan, &metadata.figure_template, &inputs)?;
     let existing = load_cache(&metadata.cache_file)?;
     let mut cache: BTreeMap<String, String> = existing.into_iter().collect();
     let hash = compute_hash(
         &plan.data_path,
         &metadata.figure_template,
         &metadata.style_files,
-        current_inputs,
+        &inputs,
     )?;
     cache.insert(path_key(&plan.relative), hash);
     save_cache(&metadata.cache_file, &cache)?;
@@ -586,6 +606,17 @@ fn rebuild_single_figure(
         plan.output_path.display()
     );
     Ok(())
+}
+
+fn merge_inputs(
+    cached: &[(String, String)],
+    overrides: &[(String, String)],
+) -> Vec<(String, String)> {
+    let mut merged = BTreeMap::new();
+    for (key, value) in cached.iter().chain(overrides) {
+        merged.insert(key.clone(), value.clone());
+    }
+    merged.into_iter().collect()
 }
 
 /// Redraw grid with CLI overrides for output path and inputs.
@@ -637,10 +668,21 @@ fn run_grid_from_metadata(metadata: &RunMetadata) -> Result<()> {
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("."));
     write_fig_index(&metadata.records, &metadata.fig_index_path, &grid_dir)?;
+    let mut dependencies = vec![
+        metadata.grid_template.as_path(),
+        metadata.fig_index_path.as_path(),
+    ];
+    dependencies.extend(
+        metadata
+            .records
+            .iter()
+            .map(|record| record.output_path.as_path()),
+    );
+    let root = compilation_root(&dependencies)?;
     compile_grid(
         &metadata.grid_template,
         &metadata.grid_output,
-        &metadata.root,
+        &root,
         &metadata.input,
     )
 }
@@ -684,6 +726,32 @@ fn load_run_metadata(path: &Path) -> Result<RunMetadata> {
 /// Canonicalize a path, returning an error if it does not exist.
 fn canonicalize_existing(path: &Path) -> Result<PathBuf> {
     Ok(fs::canonicalize(path)?)
+}
+
+/// Find the narrowest existing directory that contains every compilation input.
+fn compilation_root(paths: &[&Path]) -> Result<PathBuf> {
+    let mut directories = Vec::with_capacity(paths.len());
+    for path in paths {
+        let canonical = canonicalize_existing(path)
+            .with_context(|| format!("failed to resolve Typst input {}", path.display()))?;
+        directories.push(if canonical.is_dir() {
+            canonical
+        } else {
+            canonical
+                .parent()
+                .ok_or_else(|| eyre!("Typst input {} has no parent directory", path.display()))?
+                .to_path_buf()
+        });
+    }
+
+    let first = directories
+        .first()
+        .ok_or_else(|| eyre!("cannot choose a Typst project root without inputs"))?;
+    first
+        .ancestors()
+        .find(|ancestor| directories.iter().all(|path| path.starts_with(ancestor)))
+        .map(Path::to_path_buf)
+        .ok_or_else(|| eyre!("Typst inputs do not share a project root"))
 }
 
 /// Join `path` onto `base` unless `path` is already absolute.
@@ -753,12 +821,7 @@ fn feed_file(hasher: &mut Hasher, path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn build_figure(
-    plan: &FigurePlan,
-    template: &Path,
-    root: &Path,
-    input_args: &[(String, String)],
-) -> Result<()> {
+fn build_figure(plan: &FigurePlan, template: &Path, input_args: &[(String, String)]) -> Result<()> {
     let template_dir = template
         .parent()
         .map(Path::to_path_buf)
@@ -766,6 +829,7 @@ fn build_figure(
     let data_rel =
         diff_paths(&plan.data_path, &template_dir).unwrap_or_else(|| plan.data_path.clone());
     let relative_input = data_rel.to_string_lossy().replace('\\', "/");
+    let root = compilation_root(&[template, &plan.data_path])?;
     let mut command = Command::new("typst");
     let title = derive_title(&plan.relative);
     command
@@ -773,7 +837,9 @@ fn build_figure(
         .arg(template)
         .arg(&plan.output_path)
         .arg("--root")
-        .arg(root)
+        .arg(&root)
+        .arg("--input")
+        .arg(format!("data-path={}", relative_input))
         .arg("--input")
         .arg(format!("data_path={}", relative_input))
         .arg("--input")
@@ -787,7 +853,7 @@ fn build_figure(
     run_typst(
         &mut command,
         &format!("building {}", plan.relative.display()),
-        Some((plan, template, root)),
+        Some((plan, template, &root)),
     )
 }
 
@@ -1025,19 +1091,44 @@ fn resolve_template(requested: &Path, kind: TemplateKind, build_dir: &Path) -> R
     Ok(target)
 }
 
-/// Ensure the embedded linnest plugin is available under `build/templates`.
-fn ensure_plugin_asset(build_dir: &Path) -> Result<PathBuf> {
-    let target = build_dir
-        .join(TEMPLATE_SUBDIR)
-        .join(TemplateKind::Plugin.file_name());
-    if target.exists() {
-        return Ok(target);
+/// Ensure every embedded default template dependency exists under `build/templates`.
+fn ensure_default_template_assets(build_dir: &Path) -> Result<()> {
+    let template_dir = build_dir.join(TEMPLATE_SUBDIR);
+    write_embedded_assets::<EmbeddedTemplates>(&template_dir, "template dependency", false)?;
+    write_embedded_assets::<EmbeddedLinnestPackage>(
+        &template_dir.join(LINNEST_PACKAGE_DIR),
+        "linnest typst package asset",
+        true,
+    )?;
+    write_embedded_assets::<EmbeddedKurvstPackage>(
+        &template_dir.join(KURVST_PACKAGE_DIR),
+        "kurvst typst package asset",
+        true,
+    )?;
+    Ok(())
+}
+
+fn write_embedded_assets<E: RustEmbed>(
+    root: &Path,
+    description: &str,
+    overwrite: bool,
+) -> Result<()> {
+    for path in E::iter() {
+        let target = root.join(path.as_ref());
+        if target.exists() && !overwrite {
+            continue;
+        }
+        ensure_parent_dir(&target)?;
+        let contents = E::get(path.as_ref())
+            .ok_or_else(|| eyre!("embedded {description} {} is missing", path))?;
+        fs::write(&target, contents.data.as_ref()).with_context(|| {
+            format!(
+                "failed to write embedded {description} {}",
+                target.display()
+            )
+        })?;
     }
-    ensure_parent_dir(&target)?;
-    let contents = TemplateKind::Plugin.embedded_bytes()?;
-    fs::write(&target, contents.as_ref())
-        .with_context(|| format!("failed to write embedded plugin {}", target.display()))?;
-    Ok(target)
+    Ok(())
 }
 
 /// Ensure the default layout template exists unless the user already created one.
@@ -1057,6 +1148,66 @@ fn ensure_layout_asset(build_dir: &Path) -> Result<PathBuf> {
         )
     })?;
     Ok(target)
+}
+
+/// Gather figure-render dependencies while excluding the selected grid and index paths.
+fn collect_template_dependency_files(
+    template_dir: &Path,
+    figure_template: &Path,
+    excluded_paths: &[PathBuf],
+) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    let mut seen = HashSet::new();
+
+    if should_hash_template_dependency(figure_template) && figure_template.exists() {
+        push_dependency_file(&mut files, &mut seen, figure_template)?;
+    }
+
+    let mut excluded = HashSet::new();
+    for path in excluded_paths {
+        if path.exists() {
+            excluded.insert(canonicalize_existing(path)?);
+        }
+    }
+
+    if template_dir.exists() {
+        for entry in WalkDir::new(template_dir).into_iter() {
+            let entry = entry?;
+            if entry.file_type().is_file() && should_hash_template_dependency(entry.path()) {
+                let canonical = canonicalize_existing(entry.path()).with_context(|| {
+                    format!(
+                        "failed to resolve template dependency {}",
+                        entry.path().display()
+                    )
+                })?;
+                if !excluded.contains(&canonical) && seen.insert(canonical.clone()) {
+                    files.push(canonical);
+                }
+            }
+        }
+    }
+
+    Ok(files)
+}
+
+fn should_hash_template_dependency(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(OsStr::to_str),
+        Some("typ" | "wasm")
+    )
+}
+
+fn push_dependency_file(
+    files: &mut Vec<PathBuf>,
+    seen: &mut HashSet<PathBuf>,
+    path: &Path,
+) -> Result<()> {
+    let canonical = canonicalize_existing(path)
+        .with_context(|| format!("failed to resolve template dependency {}", path.display()))?;
+    if seen.insert(canonical.clone()) {
+        files.push(canonical);
+    }
+    Ok(())
 }
 
 fn folder_components(path: &Path) -> Vec<String> {
@@ -1210,4 +1361,68 @@ fn parse_input_pair(raw: &str) -> Result<(String, String), String> {
     }
     let val = val.trim().to_owned();
     Ok((key, val))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn requires_typst_0_15_or_newer() {
+        assert!(require_typst_version("typst 0.15.0").is_ok());
+        assert!(require_typst_version("typst 0.15.1").is_ok());
+        assert!(require_typst_version("typst 0.15.1-rc1").is_ok());
+        assert!(require_typst_version("typst 1.0.0").is_ok());
+        assert!(require_typst_version("typst 0.15.0-rc1").is_err());
+        assert!(require_typst_version("typst 0.14.2").is_err());
+    }
+
+    #[test]
+    fn redraw_inputs_keep_cached_values_and_apply_overrides() {
+        let cached = vec![
+            ("theme".to_string(), "dark".to_string()),
+            ("scale".to_string(), "1".to_string()),
+        ];
+        let overrides = vec![("scale".to_string(), "2".to_string())];
+
+        assert_eq!(
+            merge_inputs(&cached, &overrides),
+            vec![
+                ("scale".to_string(), "2".to_string()),
+                ("theme".to_string(), "dark".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn figure_named_grid_is_still_a_hash_dependency() {
+        assert!(should_hash_template_dependency(Path::new("grid.typ")));
+        assert!(should_hash_template_dependency(Path::new("fig-index.typ")));
+        assert!(!should_hash_template_dependency(Path::new("figure.pdf")));
+    }
+
+    #[test]
+    fn embedded_packages_include_nested_sources() {
+        assert!(EmbeddedLinnestPackage::get("src/impl/draw.typ").is_some());
+        assert!(EmbeddedKurvstPackage::get("src/impl.typ").is_some());
+    }
+
+    #[test]
+    fn compilation_root_contains_sibling_graph_and_template_trees() {
+        let base =
+            std::env::temp_dir().join(format!("clinnet-compilation-root-{}", std::process::id()));
+        let graph = base.join("graphs/example.dot");
+        let template = base.join("build/templates/figure.typ");
+        fs::create_dir_all(graph.parent().unwrap()).unwrap();
+        fs::create_dir_all(template.parent().unwrap()).unwrap();
+        fs::write(&graph, "digraph example { a -> b }").unwrap();
+        fs::write(&template, "[figure]").unwrap();
+
+        assert_eq!(
+            compilation_root(&[&graph, &template]).unwrap(),
+            fs::canonicalize(&base).unwrap()
+        );
+
+        fs::remove_dir_all(base).unwrap();
+    }
 }

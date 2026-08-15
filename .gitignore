@@ -41,6 +41,7 @@ integration_workspace_*
 
 gammaloop_state_integration_workspace/
 result/
+/result
 examples/amplitude_computation/GL_*
 gammaloop_state/
 # Keep the modern qq_aaa example while ignoring its legacy cards, backup DOT, and local outputs.

@@ -14,6 +14,11 @@ use super::{
     GlobalData, HedgeParseError,
 };
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct GraphSet<E, V, H, G, S: NodeStorage<NodeData = V>> {
     pub global_data: Vec<G>,
     pub set: Vec<HedgeGraph<E, V, H, S>>,
@@ -83,6 +88,30 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>>
         }
 
         Ok(GraphSet { set, global_data })
+    }
+}
+
+impl<E, V, H, G, S: NodeStorage<NodeData = V>> GraphSet<E, V, H, G, S> {
+    #[cfg(feature = "rkyv")]
+    pub fn to_rkyv_bytes<const N: usize>(&self) -> Result<rkyv::AlignedVec, String>
+    where
+        Self: rkyv::Serialize<rkyv::ser::serializers::AllocSerializer<N>>,
+    {
+        rkyv::to_bytes::<_, N>(self).map_err(|err| err.to_string())
+    }
+
+    #[cfg(feature = "rkyv")]
+    /// Returns the archived graph set root without validating the byte buffer.
+    ///
+    /// # Safety
+    ///
+    /// `bytes` must contain a valid rkyv archive produced for this exact
+    /// `GraphSet` type, and the returned reference must not outlive `bytes`.
+    pub unsafe fn archived_from_bytes(bytes: &[u8]) -> &<Self as rkyv::Archive>::Archived
+    where
+        Self: rkyv::Archive,
+    {
+        unsafe { rkyv::archived_root::<Self>(bytes) }
     }
 }
 

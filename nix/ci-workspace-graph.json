@@ -41,6 +41,7 @@
       "spenso-macros",
       "symbolica-utils"
     ],
+    "kurvst": [],
     "linnest": [
       "linnet"
     ],
@@ -139,9 +140,11 @@
       "spenso-macros": [],
       "symbolica-utils": []
     },
+    "kurvst": {},
     "linnest": {
       "linnet": [
         "drawing",
+        "rkyv",
         "serde"
       ]
     },
@@ -193,6 +196,7 @@
     "gammaloop-workspace-hack": "crates/gammaloop-workspace-hack",
     "gammalooprs": "crates/gammalooprs",
     "idenso": "crates/idenso",
+    "kurvst": "crates/kurvst",
     "linnest": "crates/linnest",
     "linnet": "crates/linnet",
     "linnet-py": "crates/linnet-py",
@@ -212,6 +216,7 @@
     "gammaloop-workspace-hack",
     "gammalooprs",
     "idenso",
+    "kurvst",
     "linnest",
     "linnet",
     "linnet-py",
@@ -280,6 +285,7 @@
       "spenso-macros",
       "symbolica-utils"
     ],
+    "kurvst": [],
     "linnest": [
       "gammaloop-workspace-hack",
       "linnet"
@@ -377,6 +383,7 @@
       "spenso-macros",
       "symbolica-utils"
     ],
+    "kurvst": [],
     "linnest": [
       "gammaloop-workspace-hack",
       "linnet"
@@ -498,6 +505,7 @@
       "spenso-macros",
       "symbolica-utils"
     ],
+    "kurvst": [],
     "linnest": [
       "linnet"
     ],
@@ -600,9 +608,11 @@
       "spenso-macros": [],
       "symbolica-utils": []
     },
+    "kurvst": {},
     "linnest": {
       "linnet": [
         "drawing",
+        "rkyv",
         "serde"
       ]
     },

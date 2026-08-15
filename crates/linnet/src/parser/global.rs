@@ -7,8 +7,14 @@ use super::strip_quotes;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct GlobalData {
     pub name: String,
+    pub payload: Option<Vec<u8>>,
     pub statements: BTreeMap<String, String>,
     pub edge_statements: BTreeMap<String, String>,
     pub node_statements: BTreeMap<String, String>,
@@ -53,15 +59,14 @@ impl GlobalData {
             self.node_statements.extend(node_data);
         }
 
-        // Extract top-level keys (no nested structure)
-        // Only add CLI parameters if they don't already exist in DOT statements
-        // This ensures DOT parameters take precedence over CLI parameters
+        // Extract top-level keys (no nested structure). Runtime parameters
+        // override existing global statements when callers explicitly merge a
+        // Figment into graph metadata.
         if let Ok(all_data) = figment.extract::<BTreeMap<String, figment::value::Value>>() {
             for (key, value) in all_data {
                 if !key.contains('.') {
                     if let Some(value_str) = value.into_string() {
-                        // Only insert if the key doesn't already exist (preserves local parameters)
-                        self.statements.entry(key).or_insert(value_str);
+                        self.statements.insert(key, value_str);
                     }
                 }
             }
@@ -73,6 +78,7 @@ impl From<()> for GlobalData {
     fn from(_: ()) -> Self {
         GlobalData {
             name: String::new(),
+            payload: None,
             statements: BTreeMap::new(),
             edge_statements: BTreeMap::new(),
             node_statements: BTreeMap::new(),
@@ -185,6 +191,7 @@ impl TryFrom<(Vec<AttrStmt<(String, String)>>, Vec<IDEq>)> for GlobalData {
 
         Ok(GlobalData {
             name,
+            payload: None,
             statements,
             edge_statements,
             node_statements,

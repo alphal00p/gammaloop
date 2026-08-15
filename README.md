@@ -74,7 +74,7 @@ Additional requirements for rendering diagrams:
 
 ```bash
 cargo install clinnet
-cargo install typst
+cargo install typst-cli --version 0.15.0 --locked
 ```
 
 If local dependency management is inconvenient, you can instead use the provided Nix flake:
