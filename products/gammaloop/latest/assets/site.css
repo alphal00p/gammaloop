@@ -229,7 +229,7 @@ button, select { color: inherit; }
   box-shadow: 0.45rem 0.45rem 0 var(--accent-soft);
 }
 .product-hero-logo { display: block; width: min(18rem, 70%); height: auto; margin-bottom: 1.25rem; background-position: left center; background-repeat: no-repeat; background-size: contain; }
-.product-logo-gammaloop { aspect-ratio: 1.98 / 1; background-image: url("gammalooplogo-light.svg"); background-position: center; background-size: 120% auto; }
+.product-logo-gammaloop { aspect-ratio: 2.016 / 1; background-image: url("gammalooplogo-light.svg"); background-position: center; background-size: contain; }
 :root[data-theme="dark"] .product-logo-gammaloop { background-image: url("gammalooplogo-dark.svg"); }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) .product-logo-gammaloop { background-image: url("gammalooplogo-dark.svg"); }

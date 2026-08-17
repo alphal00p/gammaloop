@@ -2,5 +2,5 @@ alphal00p documentation
 product=idenso
 channel=latest
 tag=
-commit=82b8b3a78dbeca9710c0e52e5414df65447e8087
+commit=a9a1174f9088a4fa43a5273ea7fde1446fd6de67
 route=/products/idenso/latest/
