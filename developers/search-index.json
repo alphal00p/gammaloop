@@ -216,10 +216,232 @@
     "kind": "developer implemented"
   },
   {
+    "title": "Entry Points",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#entry-points",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Settings",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#settings",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Option Examples",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#option-examples",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Main Dispatch",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#main-dispatch",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Flow Diagrams",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#flow-diagrams",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Top Level",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#top-level",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Function Parsing",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#function-parsing",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Shorthand Materialization",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#shorthand-materialization",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Chain And Trace",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#chain-and-trace",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Function Flow",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#function-flow",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Expand vs Opaque",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#expand-vs-opaque",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Expand",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#expand",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Opaque",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#opaque",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Opaque Leaf Boundary",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#opaque-leaf-boundary",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Structure Inference",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#structure-inference",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Materialization",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#materialization",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Compact Vector Argument",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#compact-vector-argument-2",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Compact Scalar Product",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#compact-scalar-product-2",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Compact Vector Detection",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#compact-vector-detection",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Chain Expansion",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#chain-expansion",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Trace Expansion",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#trace-expansion",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Products, Sums, Powers",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#products-sums-powers",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Edge Cases",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#edge-cases",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Short Algorithm",
+    "summary": "Spenso parsing flow",
+    "href": "architecture/spenso-parsing-flow/#short-algorithm",
+    "kind": "developer heading"
+  },
+  {
     "title": "Schoonschip network architecture",
     "summary": "Entry points, fixed-point execution, opaque parsing, contraction, settings, and comparison with pattern rewriting.",
     "href": "architecture/schoonschip-network/",
     "kind": "developer implemented"
+  },
+  {
+    "title": "Entry Points",
+    "summary": "Schoonschip network architecture",
+    "href": "architecture/schoonschip-network/#entry-points",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Network Algorithm",
+    "summary": "Schoonschip network architecture",
+    "href": "architecture/schoonschip-network/#network-algorithm",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Driver outline",
+    "summary": "Schoonschip network architecture",
+    "href": "architecture/schoonschip-network/#driver-outline",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Settings",
+    "summary": "Schoonschip network architecture",
+    "href": "architecture/schoonschip-network/#settings",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Contraction Step",
+    "summary": "Schoonschip network architecture",
+    "href": "architecture/schoonschip-network/#contraction-step",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Pattern Path",
+    "summary": "Schoonschip network architecture",
+    "href": "architecture/schoonschip-network/#pattern-path",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Why The Network Path Should Be Better",
+    "summary": "Schoonschip network architecture",
+    "href": "architecture/schoonschip-network/#why-the-network-path-should-be-better",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Structure before syntax",
+    "summary": "Schoonschip network architecture",
+    "href": "architecture/schoonschip-network/#structure-before-syntax",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Controlled order",
+    "summary": "Schoonschip network architecture",
+    "href": "architecture/schoonschip-network/#controlled-order",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Generic indices",
+    "summary": "Schoonschip network architecture",
+    "href": "architecture/schoonschip-network/#generic-indices",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Less double meaning",
+    "summary": "Schoonschip network architecture",
+    "href": "architecture/schoonschip-network/#less-double-meaning",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Examples",
+    "summary": "Schoonschip network architecture",
+    "href": "architecture/schoonschip-network/#examples",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Expected Outcome",
+    "summary": "Schoonschip network architecture",
+    "href": "architecture/schoonschip-network/#expected-outcome",
+    "kind": "developer heading"
   },
   {
     "title": "GammaLoop drawing style migration record",

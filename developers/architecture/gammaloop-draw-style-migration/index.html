@@ -1,119 +1,100 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="The implemented Typst callback architecture, canonical source locations, and the superseded design sketch that led to it."><meta name="theme-color" content="#f9f6f0"><link rel="icon" type="image/svg+xml" href="../../assets/local-unitarity-light.svg"><link rel="icon" type="image/svg+xml" href="../../assets/local-unitarity-dark.svg" media="(prefers-color-scheme: dark)"><title>GammaLoop drawing style migration record · Developer architecture</title><link rel="stylesheet" href="../../assets/site.css"><script defer src="../../assets/site.js"></script></head><body class="developer-body" data-docs-root="../../"><a class="skip-link" href="#main-content">Skip to content</a><header class="site-header"><button class="header-button menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-controls="docs-sidebar" aria-expanded="false">☰</button><a class="site-brand" href="../../"><span class="site-brand-mark">α</span><span class="site-brand-name">Developer notes</span></a><div class="site-header-tools"><a class="header-button header-link" href="../../../" aria-label="Research documentation"><span class="header-link-label">Research docs</span><span aria-hidden="true">←</span></a><button class="header-button" type="button" data-search-open aria-label="Search developer documentation"><span class="header-search-label">Search</span> <span class="header-button-label">⌘K</span><span class="header-search-icon" aria-hidden="true">⌕</span></button><button class="header-button" type="button" data-theme-toggle aria-label="Toggle color theme">◐</button></div></header><div class="docs-shell"><aside class="docs-sidebar developer-sidebar" id="docs-sidebar" aria-label="Developer architecture"><section class="sidebar-group"><p class="sidebar-group-title">Developer area</p><a class="sidebar-link" href="../../">Overview</a></section><section class="sidebar-group"><p class="sidebar-group-title">Implemented architecture</p><a class="sidebar-link" href="../../architecture/gammaloop-architecture/">GammaLoop architecture</a><a class="sidebar-link" href="../../architecture/uv-renormalization/">UV renormalization architecture</a><a class="sidebar-link" href="../../architecture/spenso-parsing-flow/">Spenso parsing flow</a><a class="sidebar-link" href="../../architecture/schoonschip-network/">Schoonschip network architecture</a><a class="sidebar-link" href="../../architecture/gammaloop-draw-style-migration/" aria-current="page">GammaLoop drawing style migration record</a></section><section class="sidebar-group"><p class="sidebar-group-title">Design proposals</p><a class="sidebar-link" href="../../architecture/gammaloop-roadmap/">GammaLoop architecture roadmap</a><a class="sidebar-link" href="../../architecture/cff-surface-cache-ownership/">CFF surface-cache ownership</a></section><section class="sidebar-group"><p class="sidebar-group-title">Engineering investigations</p><a class="sidebar-link" href="../../architecture/network-simplification/">Network simplification status</a><a class="sidebar-link" href="../../architecture/spenso-large-expressions/">Spenso large-expression pathology record</a><a class="sidebar-link" href="../../architecture/spenso-improvement-effects/">Spenso large-input improvement effects</a><a class="sidebar-link" href="../../architecture/spenso-test-baseline/">Spenso network execution test baseline</a></section><section class="sidebar-group"><p class="sidebar-group-title">Build system</p><a class="sidebar-link" href="../../architecture/nix-crane-cache-reuse/">Nix and Crane artifact reuse</a></section><section class="sidebar-group"><p class="sidebar-group-title">Documentation system</p><a class="sidebar-link" href="../../architecture/documentation-improvement-plan/">Documentation quality review and improvement plan</a></section><p class="sidebar-meta"><strong>For developers</strong><br>Implementation and engineering notes.<br><a href="../../../#projects">Tutorials &amp; manuals</a></p></aside><main class="docs-main developer-main" id="main-content"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../">αLoop</a> / <a href="../../">Developers</a> / GammaLoop drawing style migration record</nav><details class="developer-inline-toc"><summary>On this page</summary><nav aria-label="On this page"><a data-level="2" href="#historical-generated-edge-style-typ-sketch">Historical generated edge-style.typ sketch</a><a data-level="2" href="#embedded-layout-typ-wiring">Embedded layout.typ Wiring</a></nav></details><article class="docs-article developer-article"><header class="developer-note-hero"><p class="product-eyebrow">For developers</p><div class="developer-note-title"><h1 id="gammaloop-drawing-style-migration-record">GammaLoop drawing style migration record</h1><div class="developer-note-badges"><span class="developer-status developer-status-implemented-record">Implemented record</span><span class="developer-kind">Drawing architecture</span></div></div><p>The implemented Typst callback architecture, canonical source locations, and the superseded design sketch that led to it.</p><p class="developer-source"><a href="https://github.com/alphal00p/gammaloop/blob/57eae59992b4a330c421085838fc1a35a1ad260f/docs/architecture/gammaloop-draw-style-migration-example.md">View the source note <span aria-hidden="true">↗</span></a></p></header><blockquote>
-<p><strong>Status:</strong> Implemented; the design sketch below is superseded</p>
-<p><strong>Implemented by:</strong> <code>395610143576</code> (2026-08-15)</p>
-<p>The current generator imports the reusable
-<a href="https://github.com/alphal00p/gammaloop/blob/57eae59992b4a330c421085838fc1a35a1ad260f/crates/linnest/typst/src/physics-edge-style.typ"><code>physics-edge-style.typ</code></a>
-callbacks and emits only the model-specific particle map plus three wrapper
-functions. The embedded drawing entry points are
-<a href="https://github.com/alphal00p/gammaloop/blob/57eae59992b4a330c421085838fc1a35a1ad260f/assets/embedded/drawing/templates/layout.typ"><code>layout.typ</code></a> and
-<a href="https://github.com/alphal00p/gammaloop/blob/57eae59992b4a330c421085838fc1a35a1ad260f/assets/embedded/drawing/templates/layout-core.typ"><code>layout-core.typ</code></a>.
-They use direct Typst scope and callback values; the placeholder interpolation
-and <code>source-style-eval</code>/<code>sink-style-eval</code> design shown below is not the current
-interface. Preserve the remainder as design history, not copyable guidance.</p>
-</blockquote>
-<p>This document records the proposed shape that led to the GammaLoop migration
-from Fletcher <code>eval_*</code> strings to Typst style callbacks consumed by the
-Linnest/CeTZ <code>draw</code> API.</p>
-<h2 id="historical-generated-edge-style-typ-sketch">Historical generated <code>edge-style.typ</code> sketch</h2>
-<p>GammaLoop can keep generating one model-specific file, but the file should
-export regular Typst callbacks instead of strings that are later evaluated.</p>
-<pre><code class="language-typ">#import "@preview/mitex:0.2.6": *
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="The implemented Typst callback architecture, canonical source locations, and the superseded design sketch that led to it."><meta name="theme-color" content="#f9f6f0"><link rel="icon" type="image/svg+xml" href="../../assets/local-unitarity-light.svg"><link rel="icon" type="image/svg+xml" href="../../assets/local-unitarity-dark.svg" media="(prefers-color-scheme: dark)"><title>GammaLoop drawing style migration record · Developer architecture</title><link rel="stylesheet" href="../../assets/site.css"><script defer src="../../assets/site.js"></script></head><body class="developer-body" data-docs-root="../../"><a class="skip-link" href="#main-content">Skip to content</a><header class="site-header"><button class="header-button menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-controls="docs-sidebar" aria-expanded="false">☰</button><a class="site-brand" href="../../"><span class="site-brand-mark">α</span><span class="site-brand-name">Developer notes</span></a><div class="site-header-tools"><a class="header-button header-link" href="../../../" aria-label="Research documentation"><span class="header-link-label">Research docs</span><span aria-hidden="true">←</span></a><button class="header-button" type="button" data-search-open aria-label="Search developer documentation"><span class="header-search-label">Search</span> <span class="header-button-label">⌘K</span><span class="header-search-icon" aria-hidden="true">⌕</span></button><button class="header-button" type="button" data-theme-toggle aria-label="Toggle color theme">◐</button></div></header><div class="docs-shell"><aside class="docs-sidebar developer-sidebar" id="docs-sidebar" aria-label="Developer architecture"><section class="sidebar-group"><p class="sidebar-group-title">Developer area</p><a class="sidebar-link" href="../../">Overview</a></section><section class="sidebar-group"><p class="sidebar-group-title">Implemented architecture</p><a class="sidebar-link" href="../../architecture/gammaloop-architecture/">GammaLoop architecture</a><a class="sidebar-link" href="../../architecture/uv-renormalization/">UV renormalization architecture</a><a class="sidebar-link" href="../../architecture/spenso-parsing-flow/">Spenso parsing flow</a><a class="sidebar-link" href="../../architecture/schoonschip-network/">Schoonschip network architecture</a><a class="sidebar-link" href="../../architecture/gammaloop-draw-style-migration/" aria-current="page">GammaLoop drawing style migration record</a></section><section class="sidebar-group"><p class="sidebar-group-title">Design proposals</p><a class="sidebar-link" href="../../architecture/gammaloop-roadmap/">GammaLoop architecture roadmap</a><a class="sidebar-link" href="../../architecture/cff-surface-cache-ownership/">CFF surface-cache ownership</a></section><section class="sidebar-group"><p class="sidebar-group-title">Engineering investigations</p><a class="sidebar-link" href="../../architecture/network-simplification/">Network simplification status</a><a class="sidebar-link" href="../../architecture/spenso-large-expressions/">Spenso large-expression pathology record</a><a class="sidebar-link" href="../../architecture/spenso-improvement-effects/">Spenso large-input improvement effects</a><a class="sidebar-link" href="../../architecture/spenso-test-baseline/">Spenso network execution test baseline</a></section><section class="sidebar-group"><p class="sidebar-group-title">Build system</p><a class="sidebar-link" href="../../architecture/nix-crane-cache-reuse/">Nix and Crane artifact reuse</a></section><section class="sidebar-group"><p class="sidebar-group-title">Documentation system</p><a class="sidebar-link" href="../../architecture/documentation-improvement-plan/">Documentation quality review and improvement plan</a></section><p class="sidebar-meta"><strong>For developers</strong><br>Implementation and engineering notes.<br><a href="../../../#projects">Tutorials &amp; manuals</a></p></aside><main class="docs-main developer-main" id="main-content"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../">αLoop</a> / <a href="../../">Developers</a> / GammaLoop drawing style migration record</nav><details class="developer-inline-toc"><summary>On this page</summary><nav aria-label="On this page"><a data-level="2" href="#historical-generated-edge-style-typ-sketch">Historical generated edge-style.typ sketch</a><a data-level="2" href="#embedded-layout-typ-wiring">Embedded layout.typ Wiring</a></nav></details><article class="docs-article developer-article"><header class="developer-note-hero"><p class="product-eyebrow">For developers</p><div class="developer-note-title"><h1 id="gammaloop-drawing-style-migration-record">GammaLoop drawing style migration record</h1><div class="developer-note-badges"><span class="developer-status developer-status-implemented-record">Implemented record</span><span class="developer-kind">Drawing architecture</span></div></div><p>The implemented Typst callback architecture, canonical source locations, and the superseded design sketch that led to it.</p><p class="developer-source"><a href="https://github.com/alphal00p/gammaloop/blob/f46892d216f1dafa21e0fbebbd2c69c328f47fa2/docs/architecture/gammaloop-draw-style-migration-example.typ">View the source note <span aria-hidden="true">↗</span></a></p></header><blockquote><p><strong>Status:</strong> Implemented; the design sketch below is superseded</p><p><strong>Implemented by:</strong> <code>395610143576</code> (2026-08-15)</p><p>The current generator imports the reusable <a href="https://github.com/alphal00p/gammaloop/blob/f46892d216f1dafa21e0fbebbd2c69c328f47fa2/crates/linnest/typst/src/physics-edge-style.typ"><code>physics-edge-style.typ</code></a> callbacks and emits only the model-specific particle map plus three wrapper functions. The embedded drawing entry points are <a href="https://github.com/alphal00p/gammaloop/blob/f46892d216f1dafa21e0fbebbd2c69c328f47fa2/assets/embedded/drawing/templates/layout.typ"><code>layout.typ</code></a> and <a href="https://github.com/alphal00p/gammaloop/blob/f46892d216f1dafa21e0fbebbd2c69c328f47fa2/assets/embedded/drawing/templates/layout-core.typ"><code>layout-core.typ</code></a>. They use direct Typst scope and callback values; the placeholder interpolation and <code>source-style-eval</code>/<code>sink-style-eval</code> design shown below is not the current interface. Preserve the remainder as design history, not copyable guidance.</p></blockquote><p>This document records the proposed shape that led to the GammaLoop migration from Fletcher <code>eval_*</code> strings to Typst style callbacks consumed by the Linnest/CeTZ <code>draw</code> API.</p><h2 id="historical-generated-edge-style-typ-sketch">Historical generated <code>edge-style.typ</code> sketch</h2><p>GammaLoop can keep generating one model-specific file, but the file should export regular Typst callbacks instead of strings that are later evaluated.</p><pre><code data-lang="typ"><span style="color: #d73948">#</span><span style="color: #d73948">import</span> <span style="color: #198810">"@preview/mitex:0.2.6"</span>: <span style="color: #d73948">*</span>
 
-#let massive = 1.0pt
-#let massless = 0.55pt
-#let dashed = (0.1em, 0.45em)
-#let dotted = "dotted"
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> massive <span style="color: #d73948">=</span> <span style="color: #b60157">1.0pt</span>
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> massless <span style="color: #d73948">=</span> <span style="color: #b60157">0.55pt</span>
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> dashed <span style="color: #d73948">=</span> (<span style="color: #b60157">0.1em</span>, <span style="color: #b60157">0.45em</span>)
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> dotted <span style="color: #d73948">=</span> <span style="color: #198810">"dotted"</span>
 
-#let stroke-style(c: black, thickness: massless, dash: none) = {
-  let base = (paint: c, thickness: thickness, cap: "round")
-  if dash == none {
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">stroke-style</span>(c: black, thickness: massless, dash: <span style="color: #d73948">none</span>) <span style="color: #d73948">=</span> {
+  <span style="color: #d73948">let</span> base <span style="color: #d73948">=</span> (paint: c, thickness: thickness, cap: <span style="color: #198810">"round"</span>)
+  <span style="color: #d73948">if</span> dash <span style="color: #d73948">==</span> <span style="color: #d73948">none</span> {
     (stroke: base)
-  } else {
-    (stroke: base + (dash: dash))
+  } <span style="color: #d73948">else</span> {
+    (stroke: base <span style="color: #d73948">+</span> (dash: dash))
   }
 }
 
-#let source-stroke(c: black, thickness: massless, dash: none) = {
-  stroke-style(c: c, thickness: thickness, dash: dash)
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">source-stroke</span>(c: black, thickness: massless, dash: <span style="color: #d73948">none</span>) <span style="color: #d73948">=</span> {
+  <span style="color: #4b69c6">stroke-style</span>(c: c, thickness: thickness, dash: dash)
 }
 
-#let sink-stroke(c: black, thickness: massless, dash: none) = {
-  stroke-style(c: c.lighten(45%), thickness: thickness, dash: dash)
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">sink-stroke</span>(c: black, thickness: massless, dash: <span style="color: #d73948">none</span>) <span style="color: #d73948">=</span> {
+  <span style="color: #4b69c6">stroke-style</span>(c: c.<span style="color: #4b69c6">lighten</span>(<span style="color: #b60157">45%</span>), thickness: thickness, dash: dash)
 }
 
-#let wave = (
-  pattern: "wave",
-  pattern-amplitude: 0.14,
-  pattern-wavelength: 0.55,
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> wave <span style="color: #d73948">=</span> (
+  pattern: <span style="color: #198810">"wave"</span>,
+  pattern-amplitude: <span style="color: #b60157">0.14</span>,
+  pattern-wavelength: <span style="color: #b60157">0.55</span>,
 )
 
-#let coil = (
-  pattern: "coil",
-  pattern-amplitude: 0.14,
-  pattern-wavelength: 0.55,
-  pattern-coil-longitudinal-scale: 1.6,
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> coil <span style="color: #d73948">=</span> (
+  pattern: <span style="color: #198810">"coil"</span>,
+  pattern-amplitude: <span style="color: #b60157">0.14</span>,
+  pattern-wavelength: <span style="color: #b60157">0.55</span>,
+  pattern-coil-longitudinal-scale: <span style="color: #b60157">1.6</span>,
 )
 
-#let zigzag = (
-  pattern: "zigzag",
-  pattern-amplitude: 0.14,
-  pattern-wavelength: 0.55,
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> zigzag <span style="color: #d73948">=</span> (
+  pattern: <span style="color: #198810">"zigzag"</span>,
+  pattern-amplitude: <span style="color: #b60157">0.14</span>,
+  pattern-wavelength: <span style="color: #b60157">0.55</span>,
 )
 
-#let default-edge = (
-  source: source-stroke(),
-  sink: sink-stroke(),
-  label: none,
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> default-edge <span style="color: #d73948">=</span> (
+  source: <span style="color: #4b69c6">source-stroke</span>(),
+  sink: <span style="color: #4b69c6">sink-stroke</span>(),
+  label: <span style="color: #d73948">none</span>,
 )
 
-// This map is still generated from the model in Rust.
-#let map = (
-  "a": (
-    source: source-stroke(c: black) + wave,
-    sink: sink-stroke(c: black) + wave,
-    label: mi(`gamma`),
+<span style="color: #74747c">// This map is still generated from the model in Rust.</span>
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> map <span style="color: #d73948">=</span> (
+  <span style="color: #198810">"a"</span>: (
+    source: <span style="color: #4b69c6">source-stroke</span>(c: black) <span style="color: #d73948">+</span> wave,
+    sink: <span style="color: #4b69c6">sink-stroke</span>(c: black) <span style="color: #d73948">+</span> wave,
+    label: <span style="color: #4b69c6">mi</span>(<span style="color: #6b6b6f">`</span><span style="color: #6b6b6f">gamma</span><span style="color: #6b6b6f">`</span>),
   ),
-  "g": (
-    source: source-stroke(c: black) + coil,
-    sink: sink-stroke(c: black) + coil,
-    label: mi(`g`),
+  <span style="color: #198810">"g"</span>: (
+    source: <span style="color: #4b69c6">source-stroke</span>(c: black) <span style="color: #d73948">+</span> coil,
+    sink: <span style="color: #4b69c6">sink-stroke</span>(c: black) <span style="color: #d73948">+</span> coil,
+    label: <span style="color: #4b69c6">mi</span>(<span style="color: #6b6b6f">`</span><span style="color: #6b6b6f">g</span><span style="color: #6b6b6f">`</span>),
   ),
-  "W+": (
-    source: source-stroke(c: blue, thickness: massive) + zigzag,
-    sink: sink-stroke(c: blue, thickness: massive) + zigzag,
-    label: mi(`W^+`),
+  <span style="color: #198810">"W+"</span>: (
+    source: <span style="color: #4b69c6">source-stroke</span>(c: blue, thickness: massive) <span style="color: #d73948">+</span> zigzag,
+    sink: <span style="color: #4b69c6">sink-stroke</span>(c: blue, thickness: massive) <span style="color: #d73948">+</span> zigzag,
+    label: <span style="color: #4b69c6">mi</span>(<span style="color: #6b6b6f">`</span><span style="color: #6b6b6f">W^+</span><span style="color: #6b6b6f">`</span>),
   ),
-  "phi": (
-    source: source-stroke(c: black, dash: dashed),
-    sink: sink-stroke(c: black, dash: dashed),
-    label: mi(`phi`),
+  <span style="color: #198810">"phi"</span>: (
+    source: <span style="color: #4b69c6">source-stroke</span>(c: black, dash: dashed),
+    sink: <span style="color: #4b69c6">sink-stroke</span>(c: black, dash: dashed),
+    label: <span style="color: #4b69c6">mi</span>(<span style="color: #6b6b6f">`</span><span style="color: #6b6b6f">phi</span><span style="color: #6b6b6f">`</span>),
   ),
-  "ghG": (
-    source: source-stroke(c: black, dash: dotted),
-    sink: sink-stroke(c: black, dash: dotted),
-    label: mi(`c`),
+  <span style="color: #198810">"ghG"</span>: (
+    source: <span style="color: #4b69c6">source-stroke</span>(c: black, dash: dotted),
+    sink: <span style="color: #4b69c6">sink-stroke</span>(c: black, dash: dotted),
+    label: <span style="color: #4b69c6">mi</span>(<span style="color: #6b6b6f">`</span><span style="color: #6b6b6f">c</span><span style="color: #6b6b6f">`</span>),
   ),
 )
 
-#let particle-name(edge) = {
-  let particle = edge.at("particle", default: none)
-  if particle == none {
-    none
-  } else {
-    str(particle).trim("\"")
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">particle-name</span>(edge) <span style="color: #d73948">=</span> {
+  <span style="color: #d73948">let</span> particle <span style="color: #d73948">=</span> edge.<span style="color: #4b69c6">at</span>(<span style="color: #198810">"particle"</span>, default: <span style="color: #d73948">none</span>)
+  <span style="color: #d73948">if</span> particle <span style="color: #d73948">==</span> <span style="color: #d73948">none</span> {
+    <span style="color: #d73948">none</span>
+  } <span style="color: #d73948">else</span> {
+    <span style="color: #4b69c6">str</span>(particle).<span style="color: #4b69c6">trim</span>(<span style="color: #198810">"\""</span>)
   }
 }
 
-#let edge-entry(edge) = {
-  let particle = particle-name(edge)
-  if particle == none {
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">edge-entry</span>(edge) <span style="color: #d73948">=</span> {
+  <span style="color: #d73948">let</span> particle <span style="color: #d73948">=</span> <span style="color: #4b69c6">particle-name</span>(edge)
+  <span style="color: #d73948">if</span> particle <span style="color: #d73948">==</span> <span style="color: #d73948">none</span> {
     default-edge
-  } else {
-    map.at(particle, default: default-edge)
+  } <span style="color: #d73948">else</span> {
+    map.<span style="color: #4b69c6">at</span>(particle, default: default-edge)
   }
 }
 
-#let eval-scope = (
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> eval-scope <span style="color: #d73948">=</span> (
   mi: mi,
   massive: massive,
   massless: massless,
@@ -129,144 +110,116 @@ export regular Typst callbacks instead of strings that are later evaluated.</p>
   map: map,
 )
 
-#let text-value(value) = str(value).trim("\"")
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">text-value</span>(value) <span style="color: #d73948">=</span> <span style="color: #4b69c6">str</span>(value).<span style="color: #4b69c6">trim</span>(<span style="color: #198810">"\""</span>)
 
-#let interpolate-template(template, edge) = {
-  if template == none {
-    none
-  } else {
-    let text = text-value(template)
-    text = text.replace("{{", "\u{e000}").replace("}}", "\u{e001}")
-    for key in edge.keys() {
-      let value = edge.at(key)
-      if value != none {
-        text = text.replace("{" + str(key) + "}", text-value(value))
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">interpolate-template</span>(template, edge) <span style="color: #d73948">=</span> {
+  <span style="color: #d73948">if</span> template <span style="color: #d73948">==</span> <span style="color: #d73948">none</span> {
+    <span style="color: #d73948">none</span>
+  } <span style="color: #d73948">else</span> {
+    <span style="color: #d73948">let</span> text <span style="color: #d73948">=</span> <span style="color: #4b69c6">text-value</span>(template)
+    text <span style="color: #d73948">=</span> text.<span style="color: #4b69c6">replace</span>(<span style="color: #198810">"{{"</span>, <span style="color: #198810">"\u{e000}"</span>).<span style="color: #4b69c6">replace</span>(<span style="color: #198810">"}}"</span>, <span style="color: #198810">"\u{e001}"</span>)
+    <span style="color: #d73948">for</span> key <span style="color: #d73948">in</span> edge.<span style="color: #4b69c6">keys</span>() {
+      <span style="color: #d73948">let</span> value <span style="color: #d73948">=</span> edge.<span style="color: #4b69c6">at</span>(key)
+      <span style="color: #d73948">if</span> value <span style="color: #d73948">!=</span> <span style="color: #d73948">none</span> {
+        text <span style="color: #d73948">=</span> text.<span style="color: #4b69c6">replace</span>(<span style="color: #198810">"{"</span> <span style="color: #d73948">+</span> <span style="color: #4b69c6">str</span>(key) <span style="color: #d73948">+</span> <span style="color: #198810">"}"</span>, <span style="color: #4b69c6">text-value</span>(value))
       }
     }
-    text.replace("\u{e000}", "{").replace("\u{e001}", "}")
+    text.<span style="color: #4b69c6">replace</span>(<span style="color: #198810">"\u{e000}"</span>, <span style="color: #198810">"{"</span>).<span style="color: #4b69c6">replace</span>(<span style="color: #198810">"\u{e001}"</span>, <span style="color: #198810">"}"</span>)
   }
 }
 
-#let eval-template(template, edge) = eval(interpolate-template(template, edge), scope: eval-scope + edge)
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">eval-template</span>(template, edge) <span style="color: #d73948">=</span> <span style="color: #4b69c6">eval</span>(<span style="color: #4b69c6">interpolate-template</span>(template, edge), scope: eval-scope <span style="color: #d73948">+</span> edge)
 
-#let _assert-typst-fields-mode(mode) = {
-  if mode != "plain" and mode != "eval" {
-    panic("typst-fields must be \"plain\" or \"eval\"")
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">_assert-typst-fields-mode</span>(mode) <span style="color: #d73948">=</span> {
+  <span style="color: #d73948">if</span> mode <span style="color: #d73948">!=</span> <span style="color: #198810">"plain"</span> <span style="color: #d73948">and</span> mode <span style="color: #d73948">!=</span> <span style="color: #198810">"eval"</span> {
+    <span style="color: #4b69c6">panic</span>(<span style="color: #198810">"typst-fields must be \"plain\" or \"eval\""</span>)
   }
 }
 
-#let label-content(value, edge, mode: "plain") = {
-  _assert-typst-fields-mode(mode)
-  if value == none {
-    none
-  } else if type(value) == content {
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">label-content</span>(value, edge, mode: <span style="color: #198810">"plain"</span>) <span style="color: #d73948">=</span> {
+  <span style="color: #4b69c6">_assert-typst-fields-mode</span>(mode)
+  <span style="color: #d73948">if</span> value <span style="color: #d73948">==</span> <span style="color: #d73948">none</span> {
+    <span style="color: #d73948">none</span>
+  } <span style="color: #d73948">else</span> <span style="color: #d73948">if</span> <span style="color: #4b69c6">type</span>(value) <span style="color: #d73948">==</span> content {
     value
-  } else {
-    let text = interpolate-template(value, edge)
-    if mode == "eval" {
-      eval(text, scope: eval-scope + edge)
-    } else {
-      [#text]
+  } <span style="color: #d73948">else</span> {
+    <span style="color: #d73948">let</span> text <span style="color: #d73948">=</span> <span style="color: #4b69c6">interpolate-template</span>(value, edge)
+    <span style="color: #d73948">if</span> mode <span style="color: #d73948">==</span> <span style="color: #198810">"eval"</span> {
+      <span style="color: #4b69c6">eval</span>(text, scope: eval-scope <span style="color: #d73948">+</span> edge)
+    } <span style="color: #d73948">else</span> {
+      [<span style="color: #8b41b1">#</span><span style="color: #8b41b1">text</span>]
     }
   }
 }
 
-#let style-dict(value, edge, mode: "plain") = {
-  _assert-typst-fields-mode(mode)
-  if value == none {
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">style-dict</span>(value, edge, mode: <span style="color: #198810">"plain"</span>) <span style="color: #d73948">=</span> {
+  <span style="color: #4b69c6">_assert-typst-fields-mode</span>(mode)
+  <span style="color: #d73948">if</span> value <span style="color: #d73948">==</span> <span style="color: #d73948">none</span> {
     (:)
-  } else if type(value) == dictionary {
+  } <span style="color: #d73948">else</span> <span style="color: #d73948">if</span> <span style="color: #4b69c6">type</span>(value) <span style="color: #d73948">==</span> dictionary {
     value
-  } else if mode == "eval" {
-    eval-template(value, edge)
-  } else {
+  } <span style="color: #d73948">else</span> <span style="color: #d73948">if</span> mode <span style="color: #d73948">==</span> <span style="color: #198810">"eval"</span> {
+    <span style="color: #4b69c6">eval-template</span>(value, edge)
+  } <span style="color: #d73948">else</span> {
     (:)
   }
 }
 
-#let source-style(edge, typst-fields: "plain") = {
-  let style = edge-entry(edge).source
-  style = style + style-dict(edge.at("source-style", default: none), edge, mode: typst-fields)
-  style + style-dict(edge.at("source-style-eval", default: none), edge, mode: "eval")
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">source-style</span>(edge, typst-fields: <span style="color: #198810">"plain"</span>) <span style="color: #d73948">=</span> {
+  <span style="color: #d73948">let</span> style <span style="color: #d73948">=</span> <span style="color: #4b69c6">edge-entry</span>(edge).source
+  style <span style="color: #d73948">=</span> style <span style="color: #d73948">+</span> <span style="color: #4b69c6">style-dict</span>(edge.<span style="color: #4b69c6">at</span>(<span style="color: #198810">"source-style"</span>, default: <span style="color: #d73948">none</span>), edge, mode: typst-fields)
+  style <span style="color: #d73948">+</span> <span style="color: #4b69c6">style-dict</span>(edge.<span style="color: #4b69c6">at</span>(<span style="color: #198810">"source-style-eval"</span>, default: <span style="color: #d73948">none</span>), edge, mode: <span style="color: #198810">"eval"</span>)
 }
 
-#let sink-style(edge, typst-fields: "plain") = {
-  let style = edge-entry(edge).sink
-  style = style + style-dict(edge.at("sink-style", default: none), edge, mode: typst-fields)
-  style + style-dict(edge.at("sink-style-eval", default: none), edge, mode: "eval")
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">sink-style</span>(edge, typst-fields: <span style="color: #198810">"plain"</span>) <span style="color: #d73948">=</span> {
+  <span style="color: #d73948">let</span> style <span style="color: #d73948">=</span> <span style="color: #4b69c6">edge-entry</span>(edge).sink
+  style <span style="color: #d73948">=</span> style <span style="color: #d73948">+</span> <span style="color: #4b69c6">style-dict</span>(edge.<span style="color: #4b69c6">at</span>(<span style="color: #198810">"sink-style"</span>, default: <span style="color: #d73948">none</span>), edge, mode: typst-fields)
+  style <span style="color: #d73948">+</span> <span style="color: #4b69c6">style-dict</span>(edge.<span style="color: #4b69c6">at</span>(<span style="color: #198810">"sink-style-eval"</span>, default: <span style="color: #d73948">none</span>), edge, mode: <span style="color: #198810">"eval"</span>)
 }
 
-#let edge-label(edge, typst-fields: "plain") = {
-  let label-eval = edge.at("label-eval", default: none)
-  if label-eval != none {
-    label-content(label-eval, edge, mode: "eval")
-  } else {
-    let label-template = edge.at(
-      "display-label",
-      default: edge.at("label-template", default: edge.at("label", default: none)),
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">edge-label</span>(edge, typst-fields: <span style="color: #198810">"plain"</span>) <span style="color: #d73948">=</span> {
+  <span style="color: #d73948">let</span> label-eval <span style="color: #d73948">=</span> edge.<span style="color: #4b69c6">at</span>(<span style="color: #198810">"label-eval"</span>, default: <span style="color: #d73948">none</span>)
+  <span style="color: #d73948">if</span> label-eval <span style="color: #d73948">!=</span> <span style="color: #d73948">none</span> {
+    <span style="color: #4b69c6">label-content</span>(label-eval, edge, mode: <span style="color: #198810">"eval"</span>)
+  } <span style="color: #d73948">else</span> {
+    <span style="color: #d73948">let</span> label-template <span style="color: #d73948">=</span> edge.<span style="color: #4b69c6">at</span>(
+      <span style="color: #198810">"display-label"</span>,
+      default: edge.<span style="color: #4b69c6">at</span>(<span style="color: #198810">"label-template"</span>, default: edge.<span style="color: #4b69c6">at</span>(<span style="color: #198810">"label"</span>, default: <span style="color: #d73948">none</span>)),
     )
-    if label-template != none {
-      label-content(label-template, edge, mode: typst-fields)
-    } else {
-      label-content(edge-entry(edge).label, edge)
+    <span style="color: #d73948">if</span> label-template <span style="color: #d73948">!=</span> <span style="color: #d73948">none</span> {
+      <span style="color: #4b69c6">label-content</span>(label-template, edge, mode: typst-fields)
+    } <span style="color: #d73948">else</span> {
+      <span style="color: #4b69c6">label-content</span>(<span style="color: #4b69c6">edge-entry</span>(edge).label, edge)
     }
   }
-}
-</code></pre>
-<p>The important part is that <code>source-style</code>, <code>sink-style</code>, and <code>edge-label</code> are
-ordinary Typst functions. Linnest calls them with the merged edge data:
-DOT statements such as <code>particle</code>, plus fields like <code>eid</code>, <code>orientation</code>,
-<code>source-half-edge</code>, <code>sink-half-edge</code>, and <code>edge</code>.</p>
-<p>Interpolation is still data-driven by default: DOT statements can provide
-<code>display-label</code> or <code>label-template</code> with <code>{field}</code> placeholders, for example
-<code>display-label="{particle} edge {eid}"</code>. The callback replaces placeholders
-from the edge data without evaluating the string as Typst code. Literal braces
-can be written as <code>{{</code> and <code>}}</code>.</p>
-<p>The embedded <code>layout</code> template also accepts <code>typst-fields: "plain" | "eval"</code>.
-In <code>"eval"</code> mode, known render fields are interpolated and then passed to
-Typst’s <code>eval</code>. This applies to <code>label</code>, <code>display-label</code>, <code>label-template</code>,
-<code>source-style</code>, and <code>sink-style</code>. Explicit <code>label-eval</code>,
-<code>source-style-eval</code>, and <code>sink-style-eval</code> fields are always evaluated because
-their names are already an opt-in to executable Typst. Structural fields such as <code>particle</code>, <code>id</code>,
-<code>source</code>, and <code>sink</code> remain raw data for lookup and layout.</p>
-<p>The default embedded figure template forwards <code>sys.inputs.typst-fields</code>, so the
-CLI can opt into executable render fields with <code>--input typst-fields=eval</code>.</p>
-<h2 id="embedded-layout-typ-wiring">Embedded <code>layout.typ</code> Wiring</h2>
-<p>The embedded drawing template can import that generated file and pass the
-callbacks directly to <code>draw</code>.</p>
-<pre><code class="language-typ">#import "crates/linnest/typst/src/lib.typ": draw, graph, layout as apply-layout
-#import "edge-style.typ" as edge-style
+}</code></pre><p>The important part is that <code>source-style</code>, <code>sink-style</code>, and <code>edge-label</code> are ordinary Typst functions. Linnest calls them with the merged edge data: DOT statements such as <code>particle</code>, plus fields like <code>eid</code>, <code>orientation</code>, <code>source-half-edge</code>, <code>sink-half-edge</code>, and <code>edge</code>.</p><p>Interpolation is still data-driven by default: DOT statements can provide <code>display-label</code> or <code>label-template</code> with <code>{field}</code> placeholders, for example <code>display-label="{particle} edge {eid}"</code>. The callback replaces placeholders from the edge data without evaluating the string as Typst code. Literal braces can be written as <code>{{</code> and <code>}}</code>.</p><p>The embedded <code>layout</code> template also accepts <code>typst-fields: "plain" | "eval"</code>. In <code>"eval"</code> mode, known render fields are interpolated and then passed to Typst's <code>eval</code>. This applies to <code>label</code>, <code>display-label</code>, <code>label-template</code>, <code>source-style</code>, and <code>sink-style</code>. Explicit <code>label-eval</code>, <code>source-style-eval</code>, and <code>sink-style-eval</code> fields are always evaluated because their names are already an opt-in to executable Typst. Structural fields such as <code>particle</code>, <code>id</code>, <code>source</code>, and <code>sink</code> remain raw data for lookup and layout.</p><p>The default embedded figure template forwards <code>sys.inputs.typst-fields</code>, so the CLI can opt into executable render fields with <code>--input typst-fields=eval</code>.</p><h2 id="embedded-layout-typ-wiring">Embedded <code>layout.typ</code> Wiring</h2><p>The embedded drawing template can import that generated file and pass the callbacks directly to <code>draw</code>.</p><pre><code data-lang="typ"><span style="color: #d73948">#</span><span style="color: #d73948">import</span> <span style="color: #198810">"crates/linnest/typst/src/lib.typ"</span>: draw, graph, layout <span style="color: #d73948">as</span> apply-layout
+<span style="color: #d73948">#</span><span style="color: #d73948">import</span> <span style="color: #198810">"edge-style.typ"</span> <span style="color: #d73948">as</span> edge-style
 
-#let layout(
+<span style="color: #d73948">#</span><span style="color: #d73948">let</span> <span style="color: #4b69c6">layout</span>(
   input,
   scope: (:),
-  columns: 1fr,
-  unit: 1,
-  typst-fields: "plain",
+  columns: <span style="color: #b60157">1fr</span>,
+  unit: <span style="color: #b60157">1</span>,
+  typst-fields: <span style="color: #198810">"plain"</span>,
   additional-data: (:),
-) = {
-  let graphs = graph.parse(input)
-  let diagrams = ()
+) <span style="color: #d73948">=</span> {
+  <span style="color: #d73948">let</span> graphs <span style="color: #d73948">=</span> graph.<span style="color: #4b69c6">parse</span>(input)
+  <span style="color: #d73948">let</span> diagrams <span style="color: #d73948">=</span> ()
 
-  for graph-bytes in graphs {
-    let graph-bytes = apply-layout(graph-bytes, ..additional-data)
-    diagrams.push(draw(
+  <span style="color: #d73948">for</span> graph-bytes <span style="color: #d73948">in</span> graphs {
+    <span style="color: #d73948">let</span> graph-bytes <span style="color: #d73948">=</span> <span style="color: #4b69c6">apply-layout</span>(graph-bytes, <span style="color: #d73948">..</span>additional-data)
+    diagrams.<span style="color: #4b69c6">push</span>(<span style="color: #4b69c6">draw</span>(
       graph-bytes,
       scope: scope,
       unit: unit,
-      title: auto,
-      source-style: edge =&gt; edge-style.source-style(edge, typst-fields: typst-fields),
-      sink-style: edge =&gt; edge-style.sink-style(edge, typst-fields: typst-fields),
-      edge-label: edge =&gt; edge-style.edge-label(edge, typst-fields: typst-fields),
+      title: <span style="color: #d73948">auto</span>,
+      source-style: edge <span style="color: #d73948">=></span> edge-style.<span style="color: #4b69c6">source-style</span>(edge, typst-fields: typst-fields),
+      sink-style: edge <span style="color: #d73948">=></span> edge-style.<span style="color: #4b69c6">sink-style</span>(edge, typst-fields: typst-fields),
+      edge-label: edge <span style="color: #d73948">=></span> edge-style.<span style="color: #4b69c6">edge-label</span>(edge, typst-fields: typst-fields),
     ))
   }
 
-  for diagram in diagrams {
+  <span style="color: #d73948">for</span> diagram <span style="color: #d73948">in</span> diagrams {
     diagram
   }
-}
-</code></pre>
-<p>With this shape, GammaLoop owns the particle-to-style policy in one generated
-file, while Linnest owns all geometry: edge splitting, node outsets, label
-placement, subgraph underlays, and Kurvst path patterns.</p>
-</article><nav class="page-nav" aria-label="Developer note pagination"><a class="page-nav-link" href="../../architecture/schoonschip-network/"><span class="page-nav-label">← Previous</span>Schoonschip network architecture</a><a class="page-nav-link next" href="../../architecture/gammaloop-roadmap/"><span class="page-nav-label">Next →</span>GammaLoop architecture roadmap</a></nav><footer class="page-footer">Developer architecture · <a href="https://github.com/alphal00p/gammaloop/blob/57eae59992b4a330c421085838fc1a35a1ad260f/docs/architecture/gammaloop-draw-style-migration-example.md">source 57eae59992b4</a></footer></main><aside class="docs-toc" aria-label="On this page"><p class="toc-title">On this page</p><a class="toc-link" data-level="2" href="#historical-generated-edge-style-typ-sketch">Historical generated edge-style.typ sketch</a><a class="toc-link" data-level="2" href="#embedded-layout-typ-wiring">Embedded layout.typ Wiring</a></aside></div><button class="sidebar-backdrop" type="button" data-sidebar-backdrop aria-label="Close navigation"></button><dialog class="search-dialog" data-search-dialog><form class="search-form" method="dialog"><input class="search-input" type="search" data-search-input placeholder="Search developer architecture" aria-label="Search developer architecture"><button class="header-button" value="close">Close</button></form><ul class="search-results" data-search-results aria-live="polite"></ul></dialog></body></html>
+}</code></pre><p>With this shape, GammaLoop owns the particle-to-style policy in one generated file, while Linnest owns all geometry: edge splitting, node outsets, label placement, subgraph underlays, and Kurvst path patterns.</p></article><nav class="page-nav" aria-label="Developer note pagination"><a class="page-nav-link" href="../../architecture/schoonschip-network/"><span class="page-nav-label">← Previous</span>Schoonschip network architecture</a><a class="page-nav-link next" href="../../architecture/gammaloop-roadmap/"><span class="page-nav-label">Next →</span>GammaLoop architecture roadmap</a></nav><footer class="page-footer">Developer architecture · <a href="https://github.com/alphal00p/gammaloop/blob/f46892d216f1dafa21e0fbebbd2c69c328f47fa2/docs/architecture/gammaloop-draw-style-migration-example.typ">source f46892d216f1</a></footer></main><aside class="docs-toc" aria-label="On this page"><p class="toc-title">On this page</p><a class="toc-link" data-level="2" href="#historical-generated-edge-style-typ-sketch">Historical generated edge-style.typ sketch</a><a class="toc-link" data-level="2" href="#embedded-layout-typ-wiring">Embedded layout.typ Wiring</a></aside></div><button class="sidebar-backdrop" type="button" data-sidebar-backdrop aria-label="Close navigation"></button><dialog class="search-dialog" data-search-dialog><form class="search-form" method="dialog"><input class="search-input" type="search" data-search-input placeholder="Search developer architecture" aria-label="Search developer architecture"><button class="header-button" value="close">Close</button></form><ul class="search-results" data-search-results aria-live="polite"></ul></dialog></body></html>
