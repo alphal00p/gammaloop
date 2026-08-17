@@ -719,8 +719,8 @@ mod tests {
                 Err(CanonicalizationError::WholeGraphSizeLimit {
                     requested_vertices: actual_vertices,
                     requested_edges: actual_edges,
-                    vertex_limit: 128,
-                    edge_limit: 160,
+                    vertex_limit: 144,
+                    edge_limit: 192,
                     ..
                 }) if actual_vertices == requested_vertices && actual_edges == requested_edges
             ),
@@ -854,12 +854,24 @@ mod tests {
     }
 
     #[test]
-    fn full_ordered_riemann_projector_preserves_current_graph_limit() {
+    fn full_ordered_riemann_projector_is_stable_and_nonzero() {
         let fixture = young_projector_fixtures()
             .into_iter()
             .find(|fixture| fixture.name == "riemann_2_2")
             .unwrap();
-        assert_current_graph_limit(&fixture.projected, fixture.name, 104, 163);
+        let canonical = fixture
+            .projected
+            .try_canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .unwrap();
+        assert!(!canonical.is_zero(), "fixture {}", fixture.name);
+        assert_eq!(
+            canonical
+                .try_canonize::<AbstractIndex>(AbstractIndex::Dummy)
+                .unwrap(),
+            canonical,
+            "fixture {}",
+            fixture.name
+        );
     }
 
     #[test]

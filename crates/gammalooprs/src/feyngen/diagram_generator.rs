@@ -5049,8 +5049,20 @@ impl ProcessedNumeratorForComparison {
                 debug!(numerator=%numerator.to_ordered_simple(),diagram_id=%diagram_id,debug_dot=%graph.debug_dot(),"Initial Numerator");
 
                 let canonized_numerator = if group_options.test_canonized_numerator {
-                    let mut canonized_numerator_to_consider =
-                        numerator.try_canonize(Aind::Dummy).map_err(|source| {
+                    let collect_common_factors = matches!(
+                        numerator_aware_isomorphism_grouping,
+                        NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(
+                            _
+                        )
+                    );
+                    let canonicalization_input = if collect_common_factors {
+                        numerator.collect_factors()
+                    } else {
+                        numerator.clone()
+                    };
+                    let mut canonized_numerator_to_consider = canonicalization_input
+                        .try_canonize(Aind::Dummy)
+                        .map_err(|source| {
                             FeynGenError::Eyre(eyre!(source).wrap_err(format!(
                                 "failed to canonize numerator for diagram {diagram_id}"
                             )))
@@ -5063,12 +5075,7 @@ impl ProcessedNumeratorForComparison {
                     };
                     // IMPORTANT: we must make sure to collect all common coefficients first
                     // with `collect_factors()` to ensure that common factors get simplified when looking at ratios.
-                    if matches!(
-                        numerator_aware_isomorphism_grouping,
-                        NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(
-                            _
-                        )
-                    ) {
+                    if collect_common_factors {
                         canonized_numerator_to_consider =
                             canonized_numerator_to_consider.collect_factors();
                     }

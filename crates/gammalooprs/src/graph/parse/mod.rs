@@ -54,7 +54,7 @@ use linnet::{
 };
 use spenso::{
     contraction::Contract,
-    network::parsing::ParseSettings,
+    network::parsing::{ParseSettings, StrictTensorFilter},
     structure::{HasStructure, OrderedStructure, representation::Euclidean, slot::IsAbstractSlot},
     tensors::{data::StorageTensor, parametric::ParamTensor},
 };
@@ -830,7 +830,10 @@ impl Graph {
             );
         }
         let net = full_num
-            .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
+            .parse_to_symbolic_net::<Aind>(
+                &ParseSettings::default()
+                    .with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+            )
             .map_err(Report::from)?;
         let dangling = net.graph.dangling_indices();
         if !dangling.is_empty() {

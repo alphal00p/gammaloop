@@ -119,10 +119,10 @@ pub fn validated_corpus() -> ValidatedCorpus {
             fixture.name
         );
 
-        // The full ordered `[2, 2]` oracle is retained for compilation and
-        // expansion timings, but crosses the current whole-graph edge limit.
-        // Its exact six-coset structural reduction supplies canonicalization
-        // coverage without changing the global graph budget.
+        // Keep the full ordered `[2, 2]` oracle in compilation and expansion
+        // timings, but exclude it here so canonicalization results remain
+        // comparable with the established corpus. Its exact six-coset
+        // structural reduction supplies the corresponding coverage.
         if fixture.projector.tableau().shape() != [2, 2] {
             assert!(!validate_canonicalization(&fixture.projected).is_zero());
             canonicalization.push(CanonicalizationCase {

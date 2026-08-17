@@ -327,7 +327,9 @@ fn parse_val() {
         default_namespace = "spenso"
     );
     let net = expr
-        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .parse_to_symbolic_net::<AbstractIndex>(
+            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+        )
         .unwrap();
     assert_snapshot!(net.snapshot_dot(),@r#"
     digraph {
@@ -395,7 +397,9 @@ fn parse_scalar_tensors_step_by() {
     );
 
     let mut net = expr
-        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .parse_to_symbolic_net::<AbstractIndex>(
+            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+        )
         .unwrap();
     let lib = DummyLibrary::<_>::new();
     let fnlib = ErroringLibrary::<Symbol>::new();
@@ -771,7 +775,9 @@ fn gammaloop_six_photon() {
         default_namespace = "spenso"
     );
     let net = expr
-        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .parse_to_symbolic_net::<AbstractIndex>(
+            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+        )
         .unwrap();
     assert_eq!(net.simple_execute::<()>(), expr);
 }
@@ -799,7 +805,9 @@ fn many_sums() {
         default_namespace = "spenso"
     );
     let net = expr
-        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .parse_to_symbolic_net::<AbstractIndex>(
+            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+        )
         .unwrap();
     assert_eq!(net.simple_execute::<()>(), expr);
 }
@@ -821,7 +829,9 @@ fn contract_problem() {
     );
 
     let net = expr
-        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .parse_to_symbolic_net::<AbstractIndex>(
+            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+        )
         .unwrap();
     assert_eq!(net.simple_execute::<()>(), expr);
 }
@@ -923,7 +933,9 @@ fn infinite_execution() {
     let lib = DummyLibrary::<_>::new();
     let fnlib = ErroringLibrary::<Symbol>::new();
     let mut net = expr
-        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .parse_to_symbolic_net::<AbstractIndex>(
+            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+        )
         .unwrap();
 
     let mut net_iter = net.clone();
@@ -1065,7 +1077,9 @@ fn gammaloop_input() {
     );
 
     let net = expr
-        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .parse_to_symbolic_net::<AbstractIndex>(
+            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+        )
         .unwrap();
     assert_eq!(net.simple_execute::<()>(), expr);
 }
@@ -1088,7 +1102,8 @@ fn wrapping() {
 
     let lib = DummyLibrary::<SymbolicTensor>::new();
     let fnlib = ErroringLibrary::<Symbol>::new();
-    let settings = &ParseSettings::default();
+    let settings =
+        &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(settings)
         .unwrap();

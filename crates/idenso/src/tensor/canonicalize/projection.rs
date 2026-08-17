@@ -34,10 +34,11 @@ use crate::tensor::{SymbolicNet, SymbolicTensor};
 
 /// The literal-copy projection is deliberately bounded: Graphica cost is a
 /// property of the complete expanded problem, not just of the input network.
-/// The selected limits are recorded in the architecture plan's Phase 6 table.
+/// The selected limits are recorded in the architecture plan's Phase 6 budget
+/// rationale.
 pub(super) const DEFAULT_GRAPH_BUDGET: GraphBudget = GraphBudget {
-    vertices: 128,
-    edges: 160,
+    vertices: 144,
+    edges: 192,
 };
 const YOUNG_CARRIER_DECORATION_ORBIT_LIMIT: usize = 256;
 

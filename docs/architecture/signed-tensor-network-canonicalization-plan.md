@@ -1763,12 +1763,12 @@ does not waive the original performance requirement. The full-migration matrix
 therefore does not currently meet the existing-feature performance acceptance
 for the small color and direct-canonicalization cases.
 
-The production budgets were measured on 2026-08-05 in jj change `rxtulqsp` on
-an Intel Xeon W-2135 (restricted single-core Symbolica, Rust `test` profile).
-The ignored `phase6_canonicalization_budget_report` uses the same exact
-preflight estimator as production, asserts predicted and allocated graph sizes
-agree, times Graphica directly, and then measures the complete driver. Timings
-are diagnostic rather than test thresholds:
+The original Phase 6 budget report was measured on 2026-08-05 in jj change
+`rxtulqsp` on an Intel Xeon W-2135 (restricted single-core Symbolica, Rust
+`test` profile). The ignored `phase6_canonicalization_budget_report` uses the
+same exact preflight estimator as production, asserts predicted and allocated
+graph sizes agree, times Graphica directly, and then measures the complete
+driver. These older timings are diagnostic rather than test thresholds:
 
 | case | vertices | edges | Graphica ms | iterations | driver ms |
 |---|---:|---:|---:|---:|---:|
@@ -1779,14 +1779,31 @@ are diagnostic rather than test thresholds:
 | `Power(-4)` | 23 | 26 | 1.470 | 1 | 50.165 |
 | `Power(24)` | 123 | 146 | 647.347 | 1 | 1,352.517 |
 
+A later Rust `ci-optim` probe justified widening the production whole-graph
+limits to 144 vertices and 192 edges. Its wall-clock results use a different
+profile and downstream workloads, so they are evidence for the new envelope,
+not a timing comparison with the older table. The raw `GL` numerator measures
+133 vertices and 168 edges and passes in 0.342 s on a warm run. In the feyngen
+scalar-rescaling path, collecting common factors on a temporary post-LMB input
+before canonicalization puts the `cp` numerator at 143 vertices and 185 edges;
+the original numerator remains the sampling input, the per-numerator stage is
+2-8 ms, and the integration snapshot passes. The full ordered Riemann `[2, 2]`
+projector measures 104 vertices and 163 edges, takes about 5.8 ms on its first
+pass and 2.9 ms on the idempotence pass, and reaches the same nonzero fixed
+point.
+
+The new envelope still rejects the next deliberately expensive families:
+`Power(32)` needs 163 vertices and 194 edges, while the fully projected Riemann
+triangles need 138 vertices and 203 edges. The former exceeds both axes and the
+latter exceeds the edge limit. The exact preflight rejects them before
+allocating any Graphica nodes.
+
 The observed maximum is two whole-graph iterations. The production limit of
 eight leaves fourfold iteration headroom, including future cascading-zero
-fixtures, while still giving a deterministic failure bound. The production
-whole-graph limits are 128 vertices and 160 edges. The disconnected K3,3
-product and `Power(24)` deliberately exercise those limits closely with two
-different high-symmetry families; the exact preflight rejects a larger graph
-before allocating any Graphica nodes. A fast non-ignored guard keeps the corpus
-below all three production limits; the ignored report can be rerun with:
+fixtures, while still giving a deterministic failure bound. The disconnected
+K3,3 product and `Power(24)` remain two high-symmetry controls from the original
+budget study. A fast non-ignored guard keeps the corpus below all three
+production limits; the ignored report can be rerun with:
 
 ```text
 nix develop -c cargo nextest run -p idenso --profile test_gammaloop \
@@ -1806,7 +1823,7 @@ the unsigned magnitude is 128, constructs the exact projection under an
 unbounded test budget, and checks rejection on both budget axes before Graphica
 allocation. The ignored
 `minimum_signed_power_projects_with_a_sufficient_injected_budget` test retains
-the full direct probe for future Graphica improvements. The 128/160 limits are
+the full direct probe for future Graphica improvements. The 144/192 limits are
 thus a measured conservative acceptance envelope, not a claim that graph size
 alone predicts canonical-search time.
 
