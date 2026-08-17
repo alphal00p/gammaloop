@@ -1452,14 +1452,11 @@ impl SiteBuilder {
                 .current_dir(&self.root)
                 .env("CARGO_TARGET_DIR", &target)
                 .env("RUSTDOCFLAGS", &rustdoc_flags)
-                .args([
-                    "doc",
-                    "--locked",
-                    "--no-deps",
-                    "--no-default-features",
-                    "-p",
-                    &component.package,
-                ]);
+                .args(["doc", "--locked", "--no-deps", "--no-default-features"]);
+            if let Some(profile) = env::var_os("ALPHAL00P_DOCS_CARGO_PROFILE") {
+                command.arg("--profile").arg(profile);
+            }
+            command.args(["-p", &component.package]);
             if !component.features.is_empty() {
                 command.args(["--features", &component.features.join(",")]);
             }

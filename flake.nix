@@ -175,6 +175,7 @@
             ./crates/linnet/CHANGELOG.md
             ./crates/linnet-py/pyproject.toml
             ./crates/linnet-py/linnet_py.pyi
+            ./crates/linnet-py/tests/test_basic.py
             ./crates/spenso/README.md
             ./crates/spenso/CHANGELOG.md
             ./crates/spenso-macros/README.md
@@ -351,6 +352,24 @@
         workspaceDependencySrc = lib.fileset.toSource {
           root = workspaceRoot;
           fileset = lib.fileset.unions workspaceDependencyManifestFiles;
+        };
+
+        # commonCargoSources includes every TOML file under the workspace. Keep
+        # documentation metadata and test fixtures out of this reusable layer.
+        documentationWorkspaceBuildSrc = lib.fileset.toSource {
+          root = workspaceRoot;
+          fileset = lib.fileset.unions [
+            (craneLib.fileset.cargoTomlAndLock workspaceRoot)
+            (craneLib.fileset.rust workspaceRoot)
+            ./.cargo/config.toml
+            (lib.fileset.difference nonCargoBuildSources (
+              lib.fileset.unions [
+                ./assets/gammalooplogo.svg
+                ./assets/gammalooplogo-dark.svg
+                ./assets/gammalooplogo-light.svg
+              ]
+            ))
+          ];
         };
 
         cargoGraphGenerationSrc = lib.fileset.toSource {
@@ -1947,6 +1966,117 @@
           }
         );
 
+        documentationRegistry = builtins.fromTOML (builtins.readFile ./docs/products/registry.toml);
+        alphal00pDocsCargoTargetRoot = "target/alphal00p-docs-rustdoc";
+        alphal00pDocsCargoTarget = "${alphal00pDocsCargoTargetRoot}/cargo-target-v1";
+        alphal00pDocsCargoArgs = commonArgs // {
+          buildType = ciCargoProfile;
+          CARGO_PROFILE = ciCargoProfile;
+          CARGO_TARGET_DIR = alphal00pDocsCargoTarget;
+          PYO3_PYTHON = "${pkgs.python313}/bin/python3";
+          PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
+          # mkDummySrc omits .cargo/config.toml, so carry its compile-time
+          # Symbolica setting explicitly into both producer and consumer.
+          SYMBOLICA_OEM_LICENSE =
+            (builtins.fromTOML (builtins.readFile ./.cargo/config.toml)).env.SYMBOLICA_OEM_LICENSE.value;
+        };
+        alphal00pDocsRealCargoArgs = alphal00pDocsCargoArgs // {
+          postPatch = normalizeWorkspaceHackBuildScriptTimestampScript;
+        };
+        documentationRustComponents = lib.concatMap (
+          product: product.rust_components or [ ]
+        ) documentationRegistry.product;
+        documentationPythonExporterDependencyCommands = lib.concatMapStringsSep "\n" (product: ''
+          cargoWithProfile build --locked -p alphal00p-docs-python-exporter --features ${lib.escapeShellArg product.id}
+        '') documentationRegistry.product;
+        documentationRustdocDependencyCommands = lib.concatMapStringsSep "\n" (
+          component:
+          let
+            features = component.features or [ ];
+            featureArgs = lib.optionalString (features != [ ]) (
+              " --features ${lib.escapeShellArg (lib.concatStringsSep "," features)}"
+            );
+          in
+          ''
+            cargoWithProfile doc --locked --no-deps --no-default-features -p ${lib.escapeShellArg component.package}${featureArgs}
+          ''
+        ) documentationRustComponents;
+
+        # Prime the exact external Cargo contexts used by documentation builds.
+        # Dummy workspace targets keep this artifact stable across source and prose edits.
+        alphal00pDocsCargoDependencyArtifacts = buildDepsOnlyWithArtifacts (
+          alphal00pDocsCargoArgs
+          // {
+            cargoArtifacts = cargoArtifacts;
+            pname = "alphal00p-docs-cargo";
+            src = workspaceDependencySrc;
+            buildPhaseCargoCommand = ''
+              cargoWithProfile build --locked -p alphal00p-docs-catalogs --bin alphal00p-docs-catalogs
+              cargoWithProfile build --locked -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference
+              cargoWithProfile build --locked -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference
+              ${documentationPythonExporterDependencyCommands}
+              cargoWithProfile test --locked --no-run -p alphal00p-docs-python-exporter
+              cargoWithProfile test --locked --no-run -p alphal00p-docs-python-exporter --features gammaloop
+              cargoWithProfile test --locked --no-run -p alphal00p-docs-examples
+              cargoWithProfile build --locked -p alphal00p-docs-builder
+              cargoWithProfile build --locked -p linnet-py --features extension-module,abi3-py310
+              ${documentationRustdocDependencyCommands}
+            '';
+            checkPhaseCargoCommand = "";
+            doCheck = false;
+            stripWorkspaceArtifacts = true;
+            extraDummyScript = workspaceAllDummyCargoTargetsScript;
+            # Retain compiled doc-mode dependencies, not dummy Rustdoc pages.
+            postBuild = ''
+              rm -rf "$CARGO_TARGET_DIR/doc"
+            '';
+          }
+        );
+
+        # Keep real workspace outputs in a second layer keyed by Rust and build
+        # inputs, so documentation-only edits can reuse complete Cargo work.
+        alphal00pDocsCargoWorkspaceArtifacts = craneLib.mkCargoDerivation (
+          alphal00pDocsRealCargoArgs
+          // {
+            cargoArtifacts = alphal00pDocsCargoDependencyArtifacts;
+            doNotLinkInheritedArtifacts = true;
+            doInstallCargoArtifacts = true;
+            pname = "alphal00p-docs-cargo-workspace";
+            src = documentationWorkspaceBuildSrc;
+            buildPhaseCargoCommand = ''
+              cargoWithProfile build --locked -p alphal00p-docs-catalogs --bin alphal00p-docs-catalogs
+              cargoWithProfile build --locked -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference
+              cargoWithProfile build --locked -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference
+              ${documentationPythonExporterDependencyCommands}
+              cargoWithProfile build --locked -p alphal00p-docs-builder
+              cargoWithProfile build --locked -p linnet-py --features extension-module,abi3-py310
+              ${documentationRustdocDependencyCommands}
+            '';
+            checkPhaseCargoCommand = "";
+            doCheck = false;
+            installPhaseCommand = "";
+          }
+        );
+
+        # Cargo keeps one active feature fingerprint per workspace unit. End on
+        # the first consumer context after the wider exporter/Rustdoc matrix.
+        alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation (
+          alphal00pDocsRealCargoArgs
+          // {
+            cargoArtifacts = alphal00pDocsCargoWorkspaceArtifacts;
+            doNotLinkInheritedArtifacts = true;
+            doInstallCargoArtifacts = true;
+            pname = "alphal00p-docs-cargo-anchor";
+            src = documentationWorkspaceBuildSrc;
+            buildPhaseCargoCommand = ''
+              cargoWithProfile build --locked -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference
+            '';
+            checkPhaseCargoCommand = "";
+            doCheck = false;
+            installPhaseCommand = "";
+          }
+        );
+
         guppyWorkspaceGraphNativeBuildInputs = [
           ciToolchain
           pkgs.cargo-guppy
@@ -2241,8 +2371,12 @@
           [ (targetNameForCargo (libManifest.name or manifest.package.name)) ];
 
         stripSelectedWorkspaceCargoArtifactsScript =
-          packagesToStrip:
+          {
+            cargoTargetDir ? "target",
+            packagesToStrip,
+          }:
           let
+            targetDir = if cargoTargetDir == "target" then "target" else lib.escapeShellArg cargoTargetDir;
             stripPackageScript =
               package:
               let
@@ -2251,19 +2385,19 @@
               in
               ''
                 ${lib.concatMapStringsSep "\n" (name: ''
-                  rm -f target/${ciCargoProfile}/deps/${lib.escapeShellArg name}
-                  rm -f target/${ciCargoProfile}/deps/${lib.escapeShellArg name}.d
-                  rm -f target/${ciCargoProfile}/deps/${lib.escapeShellArg name}-*
-                  rm -f target/${ciCargoProfile}/deps/lib${lib.escapeShellArg name}.*
-                  rm -f target/${ciCargoProfile}/deps/lib${lib.escapeShellArg name}-*
-                  rm -f target/${ciCargoProfile}/${lib.escapeShellArg name}
-                  rm -f target/${ciCargoProfile}/${lib.escapeShellArg name}.d
-                  rm -f target/${ciCargoProfile}/lib${lib.escapeShellArg name}.*
-                  rm -f target/${ciCargoProfile}/lib${lib.escapeShellArg name}-*
+                  rm -f ${targetDir}/${ciCargoProfile}/deps/${lib.escapeShellArg name}
+                  rm -f ${targetDir}/${ciCargoProfile}/deps/${lib.escapeShellArg name}.d
+                  rm -f ${targetDir}/${ciCargoProfile}/deps/${lib.escapeShellArg name}-*
+                  rm -f ${targetDir}/${ciCargoProfile}/deps/lib${lib.escapeShellArg name}.*
+                  rm -f ${targetDir}/${ciCargoProfile}/deps/lib${lib.escapeShellArg name}-*
+                  rm -f ${targetDir}/${ciCargoProfile}/${lib.escapeShellArg name}
+                  rm -f ${targetDir}/${ciCargoProfile}/${lib.escapeShellArg name}.d
+                  rm -f ${targetDir}/${ciCargoProfile}/lib${lib.escapeShellArg name}.*
+                  rm -f ${targetDir}/${ciCargoProfile}/lib${lib.escapeShellArg name}-*
                 '') artifactNames}
                 ${lib.concatMapStringsSep "\n" (name: ''
-                  rm -rf target/${ciCargoProfile}/.fingerprint/${lib.escapeShellArg name}-[0-9a-f]*
-                  rm -rf target/${ciCargoProfile}/build/${lib.escapeShellArg name}-[0-9a-f]*
+                  rm -rf ${targetDir}/${ciCargoProfile}/.fingerprint/${lib.escapeShellArg name}-[0-9a-f]*
+                  rm -rf ${targetDir}/${ciCargoProfile}/build/${lib.escapeShellArg name}-[0-9a-f]*
                 '') fingerprintNames}
               '';
           in
@@ -2275,6 +2409,7 @@
 
         stripWorkspaceCargoArtifactsScript =
           {
+            cargoTargetDir ? "target",
             preserveProcMacros ? false,
             preservedPackages ? [ ],
           }:
@@ -2285,7 +2420,9 @@
               && !(preserveProcMacros && workspacePackageIsProcMacro package)
             ) workspacePackages;
           in
-          stripSelectedWorkspaceCargoArtifactsScript packagesToStrip;
+          stripSelectedWorkspaceCargoArtifactsScript {
+            inherit cargoTargetDir packagesToStrip;
+          };
 
         # Crane's buildDepsOnly deliberately clears cargoArtifacts. This local
         # variant keeps the same dummy-source behavior while allowing per-crate
@@ -2331,6 +2468,13 @@
             stripWorkspaceArtifactsScriptText =
               lib.optionalString (args.stripWorkspaceArtifacts or false)
                 (stripWorkspaceCargoArtifactsScript {
+                  cargoTargetDir = args.CARGO_TARGET_DIR or "target";
+                  preserveProcMacros = args.preserveWorkspaceProcMacroArtifacts or false;
+                  preservedPackages = preservedWorkspaceArtifactPackages;
+                });
+            compactStripWorkspaceArtifactsScriptText =
+              lib.optionalString (args.stripWorkspaceArtifacts or false)
+                (stripWorkspaceCargoArtifactsScript {
                   preserveProcMacros = args.preserveWorkspaceProcMacroArtifacts or false;
                   preservedPackages = preservedWorkspaceArtifactPackages;
                 });
@@ -2367,9 +2511,12 @@
 
               preBuild =
                 (args.preBuild or "")
-                + lib.optionalString (preBuildWorkspaceArtifactStripPackages != [ ]) (
-                  stripSelectedWorkspaceCargoArtifactsScript preBuildWorkspaceArtifactStripPackages
-                );
+                +
+                  lib.optionalString (preBuildWorkspaceArtifactStripPackages != [ ])
+                    (stripSelectedWorkspaceCargoArtifactsScript {
+                      cargoTargetDir = args.CARGO_TARGET_DIR or "target";
+                      packagesToStrip = preBuildWorkspaceArtifactStripPackages;
+                    });
 
               buildPhaseCargoCommand =
                 args.buildPhaseCargoCommand or ''
@@ -2426,7 +2573,7 @@
 
                     (
                       cd "$tmp"
-                      ${stripWorkspaceArtifactsScriptText}
+                      ${compactStripWorkspaceArtifactsScriptText}
                     )
 
                     # Match Crane's artifact and Nix source timestamps so Cargo
@@ -2887,55 +3034,109 @@
           }
         );
 
+        alphal00pDocsDerivationArgs = alphal00pDocsRealCargoArgs // {
+          cargoArtifacts = alphal00pDocsCargoArtifacts;
+          src = documentationSrc;
+          nativeBuildInputs = (alphal00pDocsCargoArgs.nativeBuildInputs or [ ]) ++ [
+            docsTypst
+            pkgs.maturin
+            pkgs.roboto
+            pkgs.uv
+          ];
+          TYPST_FONT_PATHS = docsFontPath;
+          ALPHAL00P_DOCS_CARGO_PROFILE = ciCargoProfile;
+          doNotLinkInheritedArtifacts = true;
+          doInstallCargoArtifacts = false;
+          checkPhaseCargoCommand = "";
+          doCheck = false;
+          installPhaseCommand = "";
+        };
+
+        alphal00pDocsPagesChannel =
+          let
+            requested = builtins.getEnv "ALPHAL00P_DOCS_CHANNEL";
+            channel = if requested == "" then "latest" else requested;
+          in
+          assert lib.assertMsg (builtins.elem channel [
+            "latest"
+            "snapshot"
+          ]) "ALPHAL00P_DOCS_CHANNEL must be latest or snapshot";
+          channel;
+        alphal00pDocsPagesSnapshotTag =
+          let
+            tag = builtins.getEnv "ALPHAL00P_DOCS_SNAPSHOT_TAG";
+          in
+          assert lib.assertMsg (
+            (alphal00pDocsPagesChannel == "latest" && tag == "")
+            || (alphal00pDocsPagesChannel == "snapshot" && tag != "")
+          ) "ALPHAL00P_DOCS_SNAPSHOT_TAG must be set exactly for snapshot builds";
+          tag;
+        alphal00pDocsPagesGitCommit =
+          let
+            commit = builtins.getEnv "ALPHAL00P_DOCS_GIT_COMMIT";
+          in
+          if commit == "" then nixCiBarrierRevision else commit;
+        alphal00pDocsPagesGitTimestamp =
+          let
+            timestamp = builtins.getEnv "ALPHAL00P_DOCS_GIT_TIMESTAMP";
+          in
+          if timestamp == "" then toString self.lastModified else timestamp;
+
+        alphal00pDocsValidationCommands = ''
+          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check
+          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference -- --check
+          cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-examples
+          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
+          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-py docs/api/python/linnet-py.pyi --check
+          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
+          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
+          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
+          cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter
+          cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
+          linnet_python="$TMPDIR/alphal00p-docs-linnet-python"
+          export UV_CACHE_DIR="$TMPDIR/alphal00p-docs-uv-cache"
+          uv venv "$linnet_python" --python "$PYO3_PYTHON"
+          VIRTUAL_ENV="$linnet_python" maturin develop \
+            --uv \
+            --offline \
+            --locked \
+            --profile ${ciCargoProfile} \
+            --manifest-path crates/linnet-py/Cargo.toml \
+            --features extension-module,abi3-py310
+          "$linnet_python/bin/python" -m unittest crates/linnet-py/tests/test_basic.py
+          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- check
+          svg_assets="$TMPDIR/alphal00p-svg-assets"
+          bash scripts/render-docs-svg-assets.sh "$svg_assets"
+          checked_assets=(
+            docs/assets/graphs/portal-*.svg
+            docs/assets/local-unitarity-*.svg
+            docs/assets/spensologo.svg
+            assets/gammalooplogo*.svg
+          )
+          generated_assets=(
+            "$svg_assets"/docs/assets/graphs/portal-*.svg
+            "$svg_assets"/docs/assets/local-unitarity-*.svg
+            "$svg_assets"/docs/assets/spensologo.svg
+            "$svg_assets"/assets/gammalooplogo*.svg
+          )
+          test "''${#checked_assets[@]}" -eq 28
+          test "''${#generated_assets[@]}" -eq 28
+          for checked_asset in "''${checked_assets[@]}"; do
+            cmp "$checked_asset" "$svg_assets/$checked_asset"
+          done
+        '';
+
         alphal00pDocsCheck = craneLib.mkCargoDerivation (
-          commonArgs
+          alphal00pDocsDerivationArgs
           // {
-            cargoArtifacts = null;
             pname = "alphal00p-docs";
-            src = documentationSrc;
-            nativeBuildInputs = (commonArgs.nativeBuildInputs or [ ]) ++ [
-              docsTypst
-              pkgs.roboto
-            ];
-            TYPST_FONT_PATHS = docsFontPath;
             ALPHAL00P_DOCS_GIT_COMMIT = nixCiBarrierRevision;
             ALPHAL00P_DOCS_GIT_TIMESTAMP = toString self.lastModified;
-            ALPHAL00P_DOCS_CARGO_PROFILE = ciCargoProfile;
-            doInstallCargoArtifacts = false;
             buildPhaseCargoCommand = ''
-              docs_rustdoc="$TMPDIR/alphal00p-docs-rustdoc"
-              export CARGO_TARGET_DIR="$docs_rustdoc/cargo-target-v1"
+              docs_rustdoc=${lib.escapeShellArg alphal00pDocsCargoTargetRoot}
 
-              cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check
-              cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference -- --check
-              cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
-              cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-py docs/api/python/linnet-py.pyi --check
-              cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
-              cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
-              cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
-              cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter
-              cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
-              cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-examples
-              cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- check
-              svg_assets="$TMPDIR/alphal00p-svg-assets"
-              bash scripts/render-docs-svg-assets.sh "$svg_assets"
-              checked_assets=(
-                docs/assets/graphs/portal-*.svg
-                docs/assets/local-unitarity-*.svg
-                docs/assets/spensologo.svg
-                assets/gammalooplogo*.svg
-              )
-              generated_assets=(
-                "$svg_assets"/docs/assets/graphs/portal-*.svg
-                "$svg_assets"/docs/assets/local-unitarity-*.svg
-                "$svg_assets"/docs/assets/spensologo.svg
-                "$svg_assets"/assets/gammalooplogo*.svg
-              )
-              test "''${#checked_assets[@]}" -eq 28
-              test "''${#generated_assets[@]}" -eq 28
-              for checked_asset in "''${checked_assets[@]}"; do
-                cmp "$checked_asset" "$svg_assets/$checked_asset"
-              done
+              ${alphal00pDocsValidationCommands}
+
               docs_first="$TMPDIR/alphal00p-docs-first"
               docs_second="$TMPDIR/alphal00p-docs-second"
               docs_snapshot="$TMPDIR/alphal00p-docs-snapshot"
@@ -3041,9 +3242,35 @@
               test -s "$out/products/idenso/latest/reference/rust/idenso/index.html"
               test -s "$out/products/vakint/latest/reference/rust/vakint/index.html"
             '';
-            checkPhaseCargoCommand = "";
-            doCheck = false;
-            installPhaseCommand = "";
+          }
+        );
+
+        alphal00pDocsPages = craneLib.mkCargoDerivation (
+          alphal00pDocsDerivationArgs
+          // {
+            pname = "alphal00p-docs-pages";
+            ALPHAL00P_DOCS_CHANNEL = alphal00pDocsPagesChannel;
+            ALPHAL00P_DOCS_GIT_COMMIT = alphal00pDocsPagesGitCommit;
+            ALPHAL00P_DOCS_GIT_TIMESTAMP = alphal00pDocsPagesGitTimestamp;
+            ALPHAL00P_DOCS_SNAPSHOT_TAG = alphal00pDocsPagesSnapshotTag;
+            buildPhaseCargoCommand = ''
+              ${alphal00pDocsValidationCommands}
+
+              docs_args=(
+                build
+                --product all
+                --channel ${lib.escapeShellArg alphal00pDocsPagesChannel}
+                --output "$out"
+                --rustdoc-target-root ${lib.escapeShellArg alphal00pDocsCargoTargetRoot}
+              )
+              ${lib.optionalString (alphal00pDocsPagesChannel == "snapshot") ''
+                docs_args+=(--snapshot-tag ${lib.escapeShellArg alphal00pDocsPagesSnapshotTag})
+              ''}
+              cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- "''${docs_args[@]}"
+
+              test -s "$out/index.html"
+              test -e "$out/.nojekyll"
+            '';
           }
         );
 
@@ -3708,6 +3935,8 @@
           gammaloop = gammaloop-cli;
           inherit clinnet-cli;
           "gammaloop-python-module" = nixCiArtifactBarrier "gammaloop-python-module" gammaloop-python-module;
+          "alphal00p-docs-cargo-artifacts" = alphal00pDocsCargoArtifacts;
+          "alphal00p-docs-pages" = alphal00pDocsPages;
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
           inherit linnest-wasm;
           linnestWasmCargoArtifacts = nixCiArtifactBarrier "linnest-wasm-cargo-artifacts" linnestWasmCargoArtifacts;

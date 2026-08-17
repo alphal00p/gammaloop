@@ -37,6 +37,11 @@ on:
         description: Existing release tag (required for a manual snapshot)
         required: false
         type: string
+      publish:
+        description: Publish the completed build to GitHub Pages
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -49,16 +54,17 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # Independent workflows replace ref-scoped Hestia roots, so keep the Pages
+  # closure separate from the broader Nix producer set.
+  HESTIA_CACHE_VERSION_SALT: gammaloop-docs-no-closure-v1
+  HESTIA_DRAIN_TIMEOUT: 7200
   SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE || 'GAMMALOOP_USER' }}
 
 jobs:
-  publish:
-    name: Build and publish all product documentation
+  build:
+    name: Build all product documentation
     runs-on: ubuntu-24.04
     timeout-minutes: 360
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -69,6 +75,7 @@ jobs:
       - uses: Mic92/hestia@v3
         with:
           version: v3.0.0
+          drain-timeout: ${{ env.HESTIA_DRAIN_TIMEOUT }}
           no-closure: true
           upstream-cache-filter: true
 
@@ -103,7 +110,8 @@ jobs:
           echo "channel=$channel" >> "$GITHUB_OUTPUT"
           echo "snapshot_tag=$snapshot_tag" >> "$GITHUB_OUTPUT"
 
-      - name: Check out manual snapshot tag
+      - id: snapshot_source
+        name: Check out manual snapshot tag
         if: github.event_name == 'workflow_dispatch' && steps.release.outputs.channel == 'snapshot'
         env:
           SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
@@ -123,6 +131,11 @@ jobs:
             fi
           done
           git checkout --detach "refs/tags/$SNAPSHOT_TAG"
+          if grep -q '"alphal00p-docs-pages"' flake.nix; then
+            echo "cacheable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cacheable=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Refresh publication catalogue
         if: steps.release.outputs.channel == 'latest'
@@ -131,22 +144,50 @@ jobs:
           nix develop --command \
             python3 scripts/update-publications.py --keep-existing-on-error
 
-      - name: Build all five sites
+      - id: docs
+        name: Build all five sites
         env:
+          CACHEABLE_SNAPSHOT: ${{ steps.snapshot_source.outputs.cacheable }}
           CHANNEL: ${{ steps.release.outputs.channel }}
           SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
         run: |
           set -euo pipefail
           ALPHAL00P_DOCS_GIT_COMMIT="$(git rev-parse HEAD)"
           ALPHAL00P_DOCS_GIT_TIMESTAMP="$(git log -1 --format=%ct)"
-          export ALPHAL00P_DOCS_GIT_COMMIT ALPHAL00P_DOCS_GIT_TIMESTAMP
-          nix develop --command \
-            just docs-site all "$CHANNEL" "$SNAPSHOT_TAG" target/alphal00p-docs
+          ALPHAL00P_DOCS_CHANNEL=$CHANNEL
+          ALPHAL00P_DOCS_SNAPSHOT_TAG=$SNAPSHOT_TAG
+          export \
+            ALPHAL00P_DOCS_CHANNEL \
+            ALPHAL00P_DOCS_GIT_COMMIT \
+            ALPHAL00P_DOCS_GIT_TIMESTAMP \
+            ALPHAL00P_DOCS_SNAPSHOT_TAG
+
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] \
+            && [ "$CHANNEL" = snapshot ] \
+            && [ "$CACHEABLE_SNAPSHOT" = false ]; then
+            # Historical five-product tags predate the cacheable Pages output.
+            nix develop --command \
+              just docs-site all "$CHANNEL" "$SNAPSHOT_TAG" target/alphal00p-docs
+            docs_path=$PWD/target/alphal00p-docs
+          else
+            docs_path=$(
+              nix build \
+                --impure \
+                --no-link \
+                --print-build-logs \
+                --print-out-paths \
+                .#packages.x86_64-linux.alphal00p-docs-pages
+            )
+          fi
+          test -d "$docs_path"
+          echo "path=$docs_path" >> "$GITHUB_OUTPUT"
 
       - id: history
         name: Merge into persistent Pages history
+        if: github.event_name != 'workflow_dispatch' || inputs.publish
         env:
           CHANNEL: ${{ steps.release.outputs.channel }}
+          DOCS_PATH: ${{ steps.docs.outputs.path }}
           SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
         run: |
           set -euo pipefail
@@ -161,7 +202,7 @@ jobs:
 
           publish_args=(
             "$CHANNEL"
-            target/alphal00p-docs
+            "$DOCS_PATH"
             "$pages_root"
           )
           if [ "$CHANNEL" = snapshot ]; then
@@ -179,13 +220,27 @@ jobs:
           echo "path=$pages_root" >> "$GITHUB_OUTPUT"
 
       - name: Configure GitHub Pages
+        if: github.event_name != 'workflow_dispatch' || inputs.publish
         uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
+        if: github.event_name != 'workflow_dispatch' || inputs.publish
         uses: actions/upload-pages-artifact@v3
         with:
           path: ${{ steps.history.outputs.path }}
 
+  deploy:
+    name: Deploy documentation Pages
+    needs: build
+    if: github.event_name != 'workflow_dispatch' || inputs.publish
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
       - id: deployment
         name: Deploy GitHub Pages
         uses: actions/deploy-pages@v4

@@ -17,15 +17,21 @@ concurrency:
 permissions:
   contents: read
 
-# Keep GC in the same cache namespace as the Nix workflow.
-env:
-  HESTIA_CACHE_VERSION_SALT: gammaloop-no-closure-v1
-
 jobs:
   gc:
-    name: Garbage collect
+    name: Garbage collect (${{ matrix.cache-salt }})
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    # Keep GC aligned with the separate Nix and Pages cache namespaces.
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        cache-salt:
+          - gammaloop-no-closure-v1
+          - gammaloop-docs-no-closure-v1
+    env:
+      HESTIA_CACHE_VERSION_SALT: ${{ matrix.cache-salt }}
     permissions:
       actions: write
       contents: read
