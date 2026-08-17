@@ -1394,6 +1394,13 @@ in 2 minutes 58 seconds. The complete site step took 18 minutes 53 seconds,
 down from 71 minutes 2 seconds in the three-layer cold seed `32028483780`.
 Hestia then uploaded the ten-path, 1.2 GiB root in 12.1 seconds.
 
+The docs-only successor, run `32042462853` at `9d305a0154c0`, kept that
+producer's derivation and output paths unchanged. Its build plan contained only
+the new Pages derivation and restored the producer from Hestia. The site step
+took 4 minutes 10 seconds, including a 3-minute-4-second Pages build, and the
+complete job took 6 minutes 33 seconds. The drain uploaded only the new 1.3 MiB
+Pages path.
+
 ## Follow-up: cross-job producer barriers
 
 The cold NixCI fan-out exposed a scheduling problem outside Cargo and Crane:
