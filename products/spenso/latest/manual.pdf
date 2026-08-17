@@ -14438,7 +14438,7 @@ endobj
 <</Type/Annot/Subtype/Link/Rect[158.37491 130.14856 213.40541 143.98761]/Border[0 0 0]/A<</Type/Action/S/URI/URI(../../gammaloop/latest/)>>/F 4/StructParent 2/Contents(../../gammaloop/latest/)>>
 endobj
 4813 0 obj
-<</Type/Annot/Subtype/Link/Rect[77.5054 110.63959 153.42189 124.47858]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/README.md)>>/F 4/StructParent 3/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/README.md)>>
+<</Type/Annot/Subtype/Link/Rect[77.5054 110.63959 153.42189 124.47858]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/README.md)>>/F 4/StructParent 3/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/README.md)>>
 endobj
 4814 0 obj
 <</Type/Annot/Subtype/Link/Rect[112.930916 687.6251 141.13391 701.4641]/Border[0 0 0]/A<</Type/Action/S/URI/URI(../../idenso/latest/)>>/F 4/StructParent 7/Contents(../../idenso/latest/)>>
@@ -14459,64 +14459,64 @@ endobj
 <</Type/Annot/Subtype/Link/Rect[123.56865 351.61237 197.50502 365.45135]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/)>>/F 4/StructParent 13/Contents(reference/python/)>>
 endobj
 4820 0 obj
-<</Type/Annot/Subtype/Link/Rect[169.4629 304.42535 227.88492 318.26434]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/src/spenso.rs)>>/F 4/StructParent 14/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/src/spenso.rs)>>
+<</Type/Annot/Subtype/Link/Rect[169.4629 304.42535 227.88492 318.26434]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/src/spenso.rs)>>/F 4/StructParent 14/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/src/spenso.rs)>>
 endobj
 4821 0 obj
-<</Type/Annot/Subtype/Link/Rect[232.81992 304.42535 299.52643 318.26434]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-macros/src/lib.rs)>>/F 4/StructParent 15/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-macros/src/lib.rs)>>
+<</Type/Annot/Subtype/Link/Rect[232.81992 304.42535 299.52643 318.26434]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-macros/src/lib.rs)>>/F 4/StructParent 15/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-macros/src/lib.rs)>>
 endobj
 4822 0 obj
-<</Type/Annot/Subtype/Link/Rect[304.46143 304.42535 371.5354 318.26434]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-hep-lib/src/lib.rs)>>/F 4/StructParent 16/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-hep-lib/src/lib.rs)>>
+<</Type/Annot/Subtype/Link/Rect[304.46143 304.42535 371.5354 318.26434]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-hep-lib/src/lib.rs)>>/F 4/StructParent 16/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-hep-lib/src/lib.rs)>>
 endobj
 4823 0 obj
-<</Type/Annot/Subtype/Link/Rect[394.89792 304.42535 477.1234 318.26434]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spynso3/src/lib.rs)>>/F 4/StructParent 17/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spynso3/src/lib.rs)>>
+<</Type/Annot/Subtype/Link/Rect[394.89792 304.42535 477.1234 318.26434]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spynso3/src/lib.rs)>>/F 4/StructParent 17/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spynso3/src/lib.rs)>>
 endobj
 4824 0 obj
-<</Type/Annot/Subtype/Link/Rect[119.419914 91.83539 149.80692 105.67438]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/CHANGELOG.md)>>/F 4/StructParent 18/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/CHANGELOG.md)>>
+<</Type/Annot/Subtype/Link/Rect[119.419914 91.83539 149.80692 105.67438]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/CHANGELOG.md)>>/F 4/StructParent 18/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/CHANGELOG.md)>>
 endobj
 4825 0 obj
-<</Type/Annot/Subtype/Link/Rect[154.74191 91.83539 185.5384 105.67438]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-macros/CHANGELOG.md)>>/F 4/StructParent 19/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-macros/CHANGELOG.md)>>
+<</Type/Annot/Subtype/Link/Rect[154.74191 91.83539 185.5384 105.67438]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-macros/CHANGELOG.md)>>/F 4/StructParent 19/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-macros/CHANGELOG.md)>>
 endobj
 4826 0 obj
-<</Type/Annot/Subtype/Link/Rect[190.47342 91.83539 241.26192 105.67438]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-hep-lib/CHANGELOG.md)>>/F 4/StructParent 20/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-hep-lib/CHANGELOG.md)>>
+<</Type/Annot/Subtype/Link/Rect[190.47342 91.83539 241.26192 105.67438]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-hep-lib/CHANGELOG.md)>>/F 4/StructParent 20/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-hep-lib/CHANGELOG.md)>>
 endobj
 4827 0 obj
-<</Type/Annot/Subtype/Link/Rect[264.62442 91.83539 330.56442 105.67438]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spynso3/CHANGELOG.md)>>/F 4/StructParent 21/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spynso3/CHANGELOG.md)>>
+<</Type/Annot/Subtype/Link/Rect[264.62442 91.83539 330.56442 105.67438]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spynso3/CHANGELOG.md)>>/F 4/StructParent 21/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spynso3/CHANGELOG.md)>>
 endobj
 4828 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 308.11615 164.71814 322.50415]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/spenso/structure/trait.TensorStructure.html)>>/F 4/StructParent 34/Contents(reference/rust/spenso/structure/trait.TensorStructure.html)>>
 endobj
 4829 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 308.11615 203.31714 322.50415]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/src/structure.rs#L356)>>/F 4/StructParent 35/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/src/structure.rs#L356)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 308.11615 203.31714 322.50415]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/src/structure.rs#L356)>>/F 4/StructParent 35/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/src/structure.rs#L356)>>
 endobj
 4830 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 704.95074 164.71814 719.33875]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/spenso/tensors/data/dense/struct.DenseTensor.html)>>/F 4/StructParent 37/Contents(reference/rust/spenso/tensors/data/dense/struct.DenseTensor.html)>>
 endobj
 4831 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 704.95074 203.31714 719.33875]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/src/tensors/data/dense.rs#L50)>>/F 4/StructParent 38/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/src/tensors/data/dense.rs#L50)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 704.95074 203.31714 719.33875]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/src/tensors/data/dense.rs#L50)>>/F 4/StructParent 38/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/src/tensors/data/dense.rs#L50)>>
 endobj
 4832 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 179.74542 164.71814 194.13342]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/spenso/tensors/data/sparse/struct.SparseTensor.html)>>/F 4/StructParent 39/Contents(reference/rust/spenso/tensors/data/sparse/struct.SparseTensor.html)>>
 endobj
 4833 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 179.74542 203.31714 194.13342]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/src/tensors/data/sparse.rs#L50)>>/F 4/StructParent 40/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/src/tensors/data/sparse.rs#L50)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 179.74542 203.31714 194.13342]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/src/tensors/data/sparse.rs#L50)>>/F 4/StructParent 40/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/src/tensors/data/sparse.rs#L50)>>
 endobj
 4834 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 551.50006 164.71814 565.88806]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/spenso/contraction/trait.Contract.html)>>/F 4/StructParent 42/Contents(reference/rust/spenso/contraction/trait.Contract.html)>>
 endobj
 4835 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 551.50006 203.31714 565.88806]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/src/contraction.rs#L32)>>/F 4/StructParent 43/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/src/contraction.rs#L32)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 551.50006 203.31714 565.88806]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/src/contraction.rs#L32)>>/F 4/StructParent 43/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/src/contraction.rs#L32)>>
 endobj
 4836 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 125.54224 164.71814 139.93024]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/spenso/network/struct.Network.html)>>/F 4/StructParent 44/Contents(reference/rust/spenso/network/struct.Network.html)>>
 endobj
 4837 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 125.54224 203.31714 139.93024]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/src/network/mod.rs#L1660)>>/F 4/StructParent 45/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/src/network/mod.rs#L1660)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 125.54224 203.31714 139.93024]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/src/network/mod.rs#L1660)>>/F 4/StructParent 45/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/src/network/mod.rs#L1660)>>
 endobj
 4838 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 514.2822 164.71814 528.6703]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/spenso/tensors/parametric/struct.ParamTensor.html)>>/F 4/StructParent 47/Contents(reference/rust/spenso/tensors/parametric/struct.ParamTensor.html)>>
 endobj
 4839 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 514.2822 203.31714 528.6703]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/src/tensors/parametric.rs#L353)>>/F 4/StructParent 48/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso/src/tensors/parametric.rs#L353)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 514.2822 203.31714 528.6703]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/src/tensors/parametric.rs#L353)>>/F 4/StructParent 48/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso/src/tensors/parametric.rs#L353)>>
 endobj
 4840 0 obj
 <</Type/Annot/Subtype/Link/Rect[388.24915 474.93112 509.42514 489.31912]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/)>>/F 4/StructParent 49/Contents(reference/rust/)>>
@@ -14525,79 +14525,79 @@ endobj
 <</Type/Annot/Subtype/Link/Rect[70.86614 259.89075 164.71814 274.27875]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/spenso_macros/derive.SimpleRepresentation.html)>>/F 4/StructParent 50/Contents(reference/rust/spenso_macros/derive.SimpleRepresentation.html)>>
 endobj
 4842 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 259.89075 203.31714 274.27875]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-macros/src/lib.rs#L213)>>/F 4/StructParent 51/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-macros/src/lib.rs#L213)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 259.89075 203.31714 274.27875]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-macros/src/lib.rs#L213)>>/F 4/StructParent 51/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-macros/src/lib.rs#L213)>>
 endobj
 4843 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 635.9248 164.71814 650.3128]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/spenso_hep_lib/fn.hep_lib.html)>>/F 4/StructParent 53/Contents(reference/rust/spenso_hep_lib/fn.hep_lib.html)>>
 endobj
 4844 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 635.9248 203.31714 650.3128]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-hep-lib/src/lib.rs#L542)>>/F 4/StructParent 54/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-hep-lib/src/lib.rs#L542)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 635.9248 203.31714 650.3128]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-hep-lib/src/lib.rs#L542)>>/F 4/StructParent 54/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-hep-lib/src/lib.rs#L542)>>
 endobj
 4845 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 377.74945 164.71814 392.13745]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/spenso_hep_lib/fn.gamma_data_dirac.html)>>/F 4/StructParent 55/Contents(reference/rust/spenso_hep_lib/fn.gamma_data_dirac.html)>>
 endobj
 4846 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 377.74945 203.31714 392.13745]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-hep-lib/src/lib.rs#L30)>>/F 4/StructParent 56/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-hep-lib/src/lib.rs#L30)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 377.74945 203.31714 392.13745]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-hep-lib/src/lib.rs#L30)>>/F 4/StructParent 56/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-hep-lib/src/lib.rs#L30)>>
 endobj
 4847 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 140.53998 164.71814 154.92798]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/spenso_hep_lib/fn.su3_generator_data.html)>>/F 4/StructParent 57/Contents(reference/rust/spenso_hep_lib/fn.su3_generator_data.html)>>
 endobj
 4848 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 140.53998 203.31714 154.92798]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-hep-lib/src/lib.rs#L330)>>/F 4/StructParent 58/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/crates/spenso-hep-lib/src/lib.rs#L330)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 140.53998 203.31714 154.92798]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-hep-lib/src/lib.rs#L330)>>/F 4/StructParent 58/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/crates/spenso-hep-lib/src/lib.rs#L330)>>
 endobj
 4849 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 760.21063 164.71814 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#spynso3)>>/F 4/StructParent 66/Contents(reference/python/#spynso3)>>
 endobj
 4850 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 760.21063 203.31714 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L314)>>/F 4/StructParent 67/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L314)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 760.21063 203.31714 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L314)>>/F 4/StructParent 67/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L314)>>
 endobj
 4851 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 760.21063 164.71814 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#spynso3)>>/F 4/StructParent 70/Contents(reference/python/#spynso3)>>
 endobj
 4852 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 760.21063 203.31714 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L525)>>/F 4/StructParent 71/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L525)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 760.21063 203.31714 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L525)>>/F 4/StructParent 71/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L525)>>
 endobj
 4853 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 217.6164 164.71814 232.0044]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#spynso3)>>/F 4/StructParent 79/Contents(reference/python/#spynso3)>>
 endobj
 4854 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 217.6164 203.31714 232.0044]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L594)>>/F 4/StructParent 80/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L594)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 217.6164 203.31714 232.0044]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L594)>>/F 4/StructParent 80/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L594)>>
 endobj
 4855 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 740.3247 164.71814 754.7127]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#spynso3)>>/F 4/StructParent 87/Contents(reference/python/#spynso3)>>
 endobj
 4856 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 740.3247 203.31714 754.7127]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L955)>>/F 4/StructParent 88/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L955)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 740.3247 203.31714 754.7127]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L955)>>/F 4/StructParent 88/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L955)>>
 endobj
 4857 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 541.8297 164.71814 556.21765]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#spynso3)>>/F 4/StructParent 92/Contents(reference/python/#spynso3)>>
 endobj
 4858 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 541.8297 203.31714 556.21765]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L1134)>>/F 4/StructParent 93/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L1134)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 541.8297 203.31714 556.21765]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L1134)>>/F 4/StructParent 93/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L1134)>>
 endobj
 4859 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 231.39459 164.71814 245.7826]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#spynso3)>>/F 4/StructParent 103/Contents(reference/python/#spynso3)>>
 endobj
 4860 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 231.39459 203.31714 245.7826]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L1451)>>/F 4/StructParent 104/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L1451)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 231.39459 203.31714 245.7826]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L1451)>>/F 4/StructParent 104/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L1451)>>
 endobj
 4861 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 361.91782 164.71814 376.30582]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#spynso3)>>/F 4/StructParent 111/Contents(reference/python/#spynso3)>>
 endobj
 4862 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 361.91782 203.31714 376.30582]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L1744)>>/F 4/StructParent 112/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L1744)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 361.91782 203.31714 376.30582]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L1744)>>/F 4/StructParent 112/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L1744)>>
 endobj
 4863 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 97.25366 164.71814 111.64166]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#spynso3)>>/F 4/StructParent 113/Contents(reference/python/#spynso3)>>
 endobj
 4864 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 97.25366 203.31714 111.64166]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L1938)>>/F 4/StructParent 114/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L1938)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 97.25366 203.31714 111.64166]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L1938)>>/F 4/StructParent 114/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L1938)>>
 endobj
 4865 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 617.872 164.71814 632.26]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/#spynso3)>>/F 4/StructParent 116/Contents(reference/python/#spynso3)>>
 endobj
 4866 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 617.872 203.31714 632.26]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L1955)>>/F 4/StructParent 117/Contents(https://github.com/alphal00p/gammaloop/blob/b200a8f5931914d9832f64b190779583454be49f/docs/api/python/spynso3.pyi#L1955)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 617.872 203.31714 632.26]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L1955)>>/F 4/StructParent 117/Contents(https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/api/python/spynso3.pyi#L1955)>>
 endobj
 4867 0 obj
 <</Type/Annot/Subtype/Link/Rect[375.80814 742.7426 513.5574 755.14856]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/content/changelog.md)>>/F 4/StructParent 119/Contents(reference/content/changelog.md)>>
@@ -17130,21 +17130,16 @@ N°±ì_:“»ËİWçÇóü.çkfş¹¥¡$%/$9gOœtâé6+e
 endstream
 endobj
 5392 0 obj
-<</Length 2193/Filter/FlateDecode>>
+<</Length 2192/Filter/FlateDecode>>
 stream
-xœÕ\[oİD~Ï¯pƒ@=İÌe¯*Ô‹‡§†R$¤Fæÿ¯÷â±»vIòRçø²3şfæ›ÙÙu/~ıç›¯¿¾øùõo:øæ›Wo^ŸıÛat/°s ¼µ¨;gQA «»÷.ŞC÷şcİÇ÷7g¯ötûÛ‹kèĞ(İí¯OOûï_€Úy8şq	ÀÇãMÿËÜñş,€íº?o³ëÇóçÉÍıP|8—@ı£„SCï~ßÿxövöËÙÛŸ__Œ1@m”²vì'¸rı±×‡aç#&:S±¿•1¹~W¿› Å²¿~•u×W¼œ4ÙÀ¹:QÍşMˆ2c%"ãè§—Ù½pÏ3•3ç˜Üe"\¢R®8'oŞ«s•¹‡K%d(ÎÙäV’‘½«½Q.§„ €Än2Ÿ®Áp—Ø„úÑãùAULä¸¤ş)´»
- €ÁTUË¤W…§C‘„PdT„º=S® ¿t³{aU!ØĞ¿şà8Ñ°QÊBGJ­u»î9Bú}²…¦¥ü„Ö„âG·İJÌÂ4mE¬ˆ œût>½×n·Ûÿ]©/~úãæ¯çŞì
-Ù‘["$Š$jODÆ:…1Â='ap½Ù$-Ÿc˜F£æÇ$ú.¦c
-pXéeèˆ–9à2e[‘jºER©óÊa=TL°C,ôçûëÌÓ°¸iµÁ*ö~sõüuVö#ó×›ûdEÊÀŠs
-40€BXo
-ÉA±¬‚1òf‘XÙCŸ¥_÷8¸Z¹q>f[NüöYâÄ×‰"!ãxÌgŸÇ‡„ÚX(­§C1°yl -	9ábpŒ`K]õäÃœ—…“ó®¬»\qz#x?–‰MPl`5Ú¢ûëR¬%…°Hì,AßÚfeR¬ƒıÖßyŒ—Ç—ãÌçN§îú¹q¼?¦ÏX¿êÑC÷êŒFŒÊ¼ş¹?ÿ²v?œNÆŠ†Ş'Š;ÁÌFˆ)ã”ÕrÂŠ$¼“·©³©ú÷İÈ¿ï~‰S®Wk•.½X$œãñËşç äéó¬æÉsVÇƒ,#XÄ
-Ñ¤Ğl_ ÈmNæLĞİeE›dğYÂ$ÇëS"Ù` QÖCÁ¾’‚Qio‘›M0p}$„¡7 (R– F¡öK™#Ãÿ"pIc/LŒË…•eÏn#|^
-ÒË*€Ø)kíé3 d›¡Ù“øĞP¥W¯ê~Çˆ\8VR§îyª ÊkV–\»—Qøv’'H˜M[rÊ¹í+0Ò7ÍÉ|ZÜ”fÁş,Ù›j“hRà‰°Ù -LE•y5å´&Zm¥Œ©²N 	Í*óiRÄZ›ğ‘˜ªÌ#¤½"KK¤ÏÖ²m|r8~‘0Ómæ›’¿•	‰Ñ)díxÎpËBY±§Í9‡Qàœ9™O„s„–i™XĞƒò€›!oa®ÌAƒVÆĞE>[ıÃeF"BšÈm„À*\á|r
-,‘ş¿±Êujæ¡f¢²fšH{£ÆáÚ1O”mFÅ
-(½ˆ´ÿr%Ø±L™Ú£bgM{”Íq©Ğ]6Á«ôö\ê§¹tVæâ»•àW©wö}ÅOy@°Z¥+¬ƒB@gš!láF]é[RÎòE*®wËË.oo’@ºL_ Œ?¤¯õ·Aæ{ÒÇŒw³¡ï'¯’“·%ÉãÏ¹šÜì¡”6³¥Øªâ¹ÔØ‹¿óİxà;Aí±º43Õ¸:
-‘¬ËâÂ +´Ú¯ãÂiúÕZ _¯•…Ï°mú“ù@ô;öìSzLY¦R´Z…`B3®Mœ\¦Wt^YãèñÙ&ÁÚ]Ämà‘Ø¸ÒÃDTèÍÔõ¸÷H]pbu³Ú÷6ÀØéuÕSS°J–Õbu41Éb|uØC&l¸(+¤` uô3ÍxFX²5áö‹†Æ›“9çpŸ¼ú½ìÁj,œ¶›ÑRÁ¹×|2>,¥- 8S¦8ôA‘áà7‚H 8SI>Á(ò¸DúÿGpƒ³%Ëİå¢i½4Ş¿ÒcF­ÃºXÅ¬bŒò¼ı2„	«ÌÉ| V™HLÉÆÎb°âd+sNoz¾ø.²µ	fPŞÀEÖ5%µ*3O²Š50m„@D¶ÌÄ¤Øú%ÒŸ>Ù2A1³FjG†‰¬°}ÆhTZo¿8a­ÀDs2EË÷wgËŸÙXø\Æ:a«F«šIœd­µŠ0÷{'è„}Û€#Ğ‘aŸÆZDÒ>‡Óû4VqÄ4-9áÛsX,2Û÷ù´4'ó3ÓRÁ´ÄB\»Ê¬ÇhÅáPÜ7"ÙÂ/®2Ç±^Åz¬ I%+uù7ÁF¢'uù×"òË [,.º2ña{3šu NHéÀüÛºéÌÉœ%ê‰L;™¶œG©ßÓcãx’ú=k±•çXr¿Ç³ÔïÙ"x¼–ú=kqÙnšµzí.—’«–]O¤«“§å¸4–TO¾L|ìŒÒhì:V™&2/ìÀ×Á+rŞòæL&lÁŸú8©ÌTÖd—ËÖ£»†Ìd¶H›Øl=2QG=Šİ]¡²9ßjå1¬pıŞ
-Âî|íù°ÓÒÖ¼„íùóBeÿy5všï*él¼¹`ÉÍ‚½ŒÄU­àµpU°W­D´u®œÄRÛÀ#±”—Xj-&O©™*;ği
-´2È§‰AØƒ¯mPh{fAváÏK}4Ô‚@·´Â×ôA!°D.+1m%-±Ë6 	ì‚`$zYÊöKg­»!OUN6L?9¯ş';Qëã#k7;]?LY†PÙuï@9šWRYÂŸÿŸÌ=~
+xœÕ\İoäDï_‘;º}8×ö|è$Ábyjy 'Š„D¥ÿ¿Ğîf²™8¹I¶O¹Í$cçgûggz—?ÿıÛİ_\şøöİ7~ùå›oŞ^üÓQ‡v¯©sŞZÒ³Ğêîı_—ï±{ÿo‡İ¿ïï.Şì;ìö÷—·Ø‘İíoÏo.û¿®^]#"ì<ÿq¨×»ş—9]étÑöWİß·ÙøñşËäá~*u¸ƒ×Èı«LSSï~İñíşâ§‹o|{9Æ€´‹lí$ÔM"pìúk¯Â˜èLÅşQEÉøCıiÆË~ü&ëôÔg¼*™8Nh²‰su¢šı—0gÆJDÆÙÏ³{í^e*fÎ1yÈD¸D¥\q•|y6y¯ÎMæ.•¡8g“{IFv÷¡öE¹œD5 v—ùt†‡$À&Ô^ïªR"Çe õo‘İ½&DD…¦ªZ& EBQ0éöHL1¸Y`€|èn÷ÚB!ØĞşà8Ñ°QÊBGJ­u»9Bú]²…¦¥ü„ÖÄâGİKÌ¢xÚŠJ°"!8÷á|zÒn·ÛÿY©/øíîW¿ßí
+ÙÙ-‘’Eµg"S:…1Â='ap½Ù$-_Å0FÍ¯Iô]NÆà0*ĞËĞ-sÀeÊ6¶"Õ¹ER¹óà…°*&Ø!úûı¸RÓ°¸iµÁ‚ò~sõüuVöó×»3ûdEÊÀŠs
+4( ®7…ä TVÁ¼Y$VöĞGé·=®Vn¼³­JüöEâÄ·‰"!ÓxÎÇ—„ÚX(­çC1°yl/	9ábpŒ`K]õìÃ*/
+'W»>°2pÅåàıT&N2”ÁÕh‹î¯K±–p‘Ø‚¾SI¬ì¸hÚgä“‡EÄòd•«ÚĞéÅ_ÆV»ËÛgó¯if½.†ö©3j$_02õñzÔüó±nÁ*Ô‘fX-W.
+XJ“®öõ£•Aümª^ÿ0òúS,qõÑxµ‚éÒÁ"¯Ÿö?„c>KŞÍÄF™,îA–,b‹h2Û×äÊ›“9ŠFÑ&üCî0Éõöœ^6˜h”I°€¯$fí-©f VÙCÇ@P¤,LöK™«a‡ÅcÎ.Çß{a¹\.¬¬òÊm„Ïç‚ô²6`åÀZ»Dú(Y;gh%>4KéèMİã‘SÒ³½Lİó\1	@”m¥Xví^zDá«I`amÙsÛ×e¬nš“ù¼¸)Í‚ı]t‚Ô–Öè™©Ù -LÅ•Õ6pZ3¯¶RÆTY…–—y5+­ÍFøHLUæÖØòé³-ˆ6>9\?I˜é>óMÉßÊ„¤È)‡íxÎp6‹,)P7çEçÌÉ|&œ#4RËÄBÁDÕy«¨ÊÊ4h0†—(òÑêUf$fÔÌn#|VQÎgèp‰ôÿUnS35—5ÓDÚµ×Îyn«l3+U@éE¤]™ÁeÊÔ@9kÚ£lK…³	BĞÛs©ŸæÒY™‹ûğnT‚ßd]“S·ñC^¬Véë „äL3„-Ü¨+İcËà¬Z¢HCÅuµ¼ìÒ$ğö6 	©ËôÅˆ`ü!}­÷¸­2?9õúRmùfSŸo’›÷%ÉóïÍÁñıì¥”6³Úªâ¹ÔØ‹¿óİxâAí±º43Õ¸:
+‘¬ËâÂ²Ú¯ãÂiúÕZ _¯ÁâGØ¢6ıÎÉ|$ú{ö9=¦,S)Y!˜ĞŒk'—é•œkÜ=>Ú"X{¡‹¸<Wz˜D@îĞL]ï€[±q?ø.uÁ‰=Ïjßo8c§w[ÏMÁ*YV‹ÕÑÂ$ˆñèp²L8†QVšRàuô3ÍxFØÈ5iûÍÃãÍÉœs¸Ş_ö‚`5%œ¶›ÑRÁ¹×|1>l¥- 8S¦8òØ¨à7‚H 8SI>Á {Z"ıÿ#¸ÁÙ¸¾ï™aMK3áû+=Ö` hÖ…¸À*^`cÀ«í·!LXeNæ#±ÊDbJ{‡ƒ„'[Yszä=úfà[¸ÈÖ˜¼Á%Š¬kJjUVlAiT¼>Ù2S°bPÖ/‘şü‰È–	J)¨ˆÛÑŸa"+Ÿ1š@ëí7'¬˜hNæ“`¢hùşélû3[#¢/Y'Õh5@#‰‹¬µVÖ~W‚NA8§±89Îi¬Eä9Óp4}NcGLÓ’ş¢Å6‹Ìö}~§Zš“ù‘i©à	ZRB\»ÊªÇhPáPÜ7"ÙÂ/®²Æ±ĞÒ=VĞ‹¤’•ºü›`#Ñ‹“ºükyÌmĞ-6]™Ôáx†RdÖ1€@:A âóoÿ-(ÎœÌYÒ©n‘È´³ğ•iËy’ú=0¶0g©ß³[y%÷{¼’ú=›@$×R¿g-.Û-³VïİåRrÕ²ñD@º;yŞKã`IõäËÄ§œMÆ®c•i"óÂ	|<°óVmÎdÂüy¡O“Ê¼@eÍ@6qY¸l=ºkÈ, @f$°Y ÍÖ#óuÔ“8İ*‡ó­Oa…ëÏğVNçk¯8-oÍ[A8?/TöŸ7c§ùº’ÎÆ‡–<,ØËH\Õ
+^W+qÕJD[×zÁI,µ<Ky‰¥ÖbòœšI¡r	Xsà•A>M,„Â|mäí™…P8…?/õÉP!KÜÒ
+_Ó¢’Èe%¦­äB¨%vÙ ]D/«QÙ~ë¬õ4ä¹ÊÉ‚é¼¬ş×;Qëã+k;İ>NYFX9uïœG­VRYÂŸÿ‘óB
 endstream
 endobj
 5393 0 obj
@@ -17165,12 +17160,12 @@ F§ëMkŠIˆ¹‘RŸB|êê&Ø¥n‚à¤‹¸º(¸H¹rëTÅ³üË9ğ`ùÕ¨a”&åÊº»ãî:Ùl
 endstream
 endobj
 5395 0 obj
-<</Title(Spenso)/Creator(Typst 0.15.0)/ModDate(D:20260817180645Z)/CreationDate(D:20260817180645Z)>>
+<</Title(Spenso)/Creator(Typst 0.15.0)/ModDate(D:20260817190219Z)/CreationDate(D:20260817190219Z)>>
 endobj
 5396 0 obj
 <</Length 1081/Type/Metadata/Subtype/XML>>
 stream
-<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="xmp-writer"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"  xmlns:xmp="http://ns.adobe.com/xap/1.0/"  xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"  xmlns:xmpTPg="http://ns.adobe.com/xap/1.0/t/pg/"  xmlns:pdf="http://ns.adobe.com/pdf/1.3/" ><dc:title><rdf:Alt><rdf:li xml:lang="x-default">Spenso</rdf:li></rdf:Alt></dc:title><xmp:CreatorTool>Typst 0.15.0</xmp:CreatorTool><dc:language><rdf:Bag><rdf:li>en</rdf:li></rdf:Bag></dc:language><xmp:ModifyDate>2026-08-17T18:06:45+00:00</xmp:ModifyDate><xmp:CreateDate>2026-08-17T18:06:45+00:00</xmp:CreateDate><xmpTPg:NPages>65</xmpTPg:NPages><dc:format>application/pdf</dc:format><xmpMM:InstanceID>feQ2GCMFKUGcpnyQa8OyMg==</xmpMM:InstanceID><xmpMM:DocumentID>feQ2GCMFKUGcpnyQa8OyMg==</xmpMM:DocumentID><xmpMM:RenditionClass>proof</xmpMM:RenditionClass><pdf:PDFVersion>1.7</pdf:PDFVersion></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="r"?>
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="xmp-writer"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"  xmlns:xmp="http://ns.adobe.com/xap/1.0/"  xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"  xmlns:xmpTPg="http://ns.adobe.com/xap/1.0/t/pg/"  xmlns:pdf="http://ns.adobe.com/pdf/1.3/" ><dc:title><rdf:Alt><rdf:li xml:lang="x-default">Spenso</rdf:li></rdf:Alt></dc:title><xmp:CreatorTool>Typst 0.15.0</xmp:CreatorTool><dc:language><rdf:Bag><rdf:li>en</rdf:li></rdf:Bag></dc:language><xmp:ModifyDate>2026-08-17T19:02:19+00:00</xmp:ModifyDate><xmp:CreateDate>2026-08-17T19:02:19+00:00</xmp:CreateDate><xmpTPg:NPages>65</xmpTPg:NPages><dc:format>application/pdf</dc:format><xmpMM:InstanceID>LVSOp00++Mj8Je9z+tmx+g==</xmpMM:InstanceID><xmpMM:DocumentID>LVSOp00++Mj8Je9z+tmx+g==</xmpMM:DocumentID><xmpMM:RenditionClass>proof</xmpMM:RenditionClass><pdf:PDFVersion>1.7</pdf:PDFVersion></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="r"?>
 endstream
 endobj
 5397 0 obj
@@ -22571,13 +22566,13 @@ xref
 0000676770 00000 n
 0000679118 00000 n
 0000680457 00000 n
-0000682722 00000 n
-0000683130 00000 n
-0000683474 00000 n
-0000683592 00000 n
-0000684752 00000 n
+0000682721 00000 n
+0000683129 00000 n
+0000683473 00000 n
+0000683591 00000 n
+0000684751 00000 n
 trailer
-<</Size 5398/Root 5397 0 R/Info 5395 0 R/ID[(feQ2GCMFKUGcpnyQa8OyMg==)(feQ2GCMFKUGcpnyQa8OyMg==)]>>
+<</Size 5398/Root 5397 0 R/Info 5395 0 R/ID[(LVSOp00++Mj8Je9z+tmx+g==)(LVSOp00++Mj8Je9z+tmx+g==)]>>
 startxref
-685074
+685073
 %%EOF

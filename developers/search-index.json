@@ -769,7 +769,7 @@
   },
   {
     "title": "Documentation quality review and improvement plan",
-    "summary": "A critical baseline review with publication-safety findings, product-content gaps, governance needs, measurable acceptance criteria, and a phased work register.",
+    "summary": "A critical review and phased plan for truthful Python/CLI reference, deeper manuals and examples, an integrated corpus, and measurable quality gates.",
     "href": "architecture/documentation-improvement-plan/",
     "kind": "developer proposal"
   },
@@ -804,9 +804,9 @@
     "kind": "developer heading"
   },
   {
-    "title": "P0. One mutable site has competing publishers",
+    "title": "P0. The generated CLI reference can emit false invocation syntax",
     "summary": "Documentation quality review and improvement plan",
-    "href": "architecture/documentation-improvement-plan/#p0-one-mutable-site-has-competing-publishers",
+    "href": "architecture/documentation-improvement-plan/#p0-the-generated-cli-reference-can-emit-false-invocation-syntax",
     "kind": "developer heading"
   },
   {
@@ -822,9 +822,21 @@
     "kind": "developer heading"
   },
   {
+    "title": "P1. Generated Python and CLI data is not yet a good reference experience",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#p1-generated-python-and-cli-data-is-not-yet-a-good-reference-experience",
+    "kind": "developer heading"
+  },
+  {
     "title": "P1. The manuals cover a template, not each product’s real task surface",
     "summary": "Documentation quality review and improvement plan",
     "href": "architecture/documentation-improvement-plan/#p1-the-manuals-cover-a-template-not-each-product-s-real-task-surface",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P1. Examples are shallow, scattered, and weakly connected to the manuals",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#p1-examples-are-shallow-scattered-and-weakly-connected-to-the-manuals",
     "kind": "developer heading"
   },
   {
@@ -834,9 +846,9 @@
     "kind": "developer heading"
   },
   {
-    "title": "P1. Information architecture and lifecycle metadata stop too early",
+    "title": "P1. The documentation corpus is fragmented instead of integrated",
     "summary": "Documentation quality review and improvement plan",
-    "href": "architecture/documentation-improvement-plan/#p1-information-architecture-and-lifecycle-metadata-stop-too-early",
+    "href": "architecture/documentation-improvement-plan/#p1-the-documentation-corpus-is-fragmented-instead-of-integrated",
     "kind": "developer heading"
   },
   {
@@ -858,6 +870,30 @@
     "kind": "developer heading"
   },
   {
+    "title": "Reference-quality design requirements",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#reference-quality-design-requirements",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Python",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#python",
+    "kind": "developer heading"
+  },
+  {
+    "title": "CLI and settings",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#cli-and-settings",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Shared visual contract",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#shared-visual-contract",
+    "kind": "developer heading"
+  },
+  {
     "title": "Prioritized work register",
     "summary": "Documentation quality review and improvement plan",
     "href": "architecture/documentation-improvement-plan/#prioritized-work-register",
@@ -876,9 +912,9 @@
     "kind": "developer heading"
   },
   {
-    "title": "Phase 1 — establish ownership and review gates",
+    "title": "Phase 1 — productize reference and establish one content graph",
     "summary": "Documentation quality review and improvement plan",
-    "href": "architecture/documentation-improvement-plan/#phase-1-establish-ownership-and-review-gates",
+    "href": "architecture/documentation-improvement-plan/#phase-1-productize-reference-and-establish-one-content-graph",
     "kind": "developer heading"
   },
   {
@@ -888,15 +924,21 @@
     "kind": "developer heading"
   },
   {
-    "title": "Phase 3 — curate the corpus",
+    "title": "Phase 3 — migrate and connect the remaining corpus",
     "summary": "Documentation quality review and improvement plan",
-    "href": "architecture/documentation-improvement-plan/#phase-3-curate-the-corpus",
+    "href": "architecture/documentation-improvement-plan/#phase-3-migrate-and-connect-the-remaining-corpus",
     "kind": "developer heading"
   },
   {
     "title": "Phase 4 — improve reach and continuous quality",
     "summary": "Documentation quality review and improvement plan",
     "href": "architecture/documentation-improvement-plan/#phase-4-improve-reach-and-continuous-quality",
+    "kind": "developer heading"
+  },
+  {
+    "title": "First vertical implementation slice",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#first-vertical-implementation-slice",
     "kind": "developer heading"
   },
   {
