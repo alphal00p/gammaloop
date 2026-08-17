@@ -285,7 +285,7 @@
     }
   </style>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:"><style>.developer-diagram-banner{position:sticky;top:0;z-index:1000;display:flex;flex-wrap:wrap;align-items:center;gap:.65rem 1rem;padding:.7rem 1rem;border-bottom:1px solid #b893c7;background:#3d2645;color:#f9f6f0;font:600 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em}.developer-diagram-banner strong{text-transform:uppercase}.developer-diagram-banner a{color:#eadff0}.developer-diagram-banner a:first-of-type{margin-left:auto}@media(max-width:38rem){.developer-diagram-banner a:first-of-type{margin-left:0}}</style></head>
-<body><aside class="developer-diagram-banner" aria-label="Developer note"><strong>For developers</strong><span>Spenso parsing flow</span><a href="../../">All architecture notes</a><a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/docs/architecture/parsing-flow.html">Source ↗</a></aside>
+<body><aside class="developer-diagram-banner" aria-label="Developer note"><strong>For developers</strong><span>Spenso parsing flow</span><a href="../../">All architecture notes</a><a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/docs/architecture/parsing-flow.html">Source ↗</a></aside>
 <main>
   <h1>Spenso Parsing Flow</h1>
   <p class="lead">
@@ -447,7 +447,7 @@ else -> scalar fallback</code></pre>
     </p>
     <div class="box">
       <p class="source-ref">
-        <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/spenso/src/network/parsing/mod.rs#L343">crates/spenso/src/network/parsing/mod.rs:343</a>
+        <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/spenso/src/network/parsing/mod.rs#L343">crates/spenso/src/network/parsing/mod.rs:343</a>
       </p>
       <pre><code>match value {
     AtomView::Mul(m) =&gt; Self::try_from_mul(...),
@@ -766,7 +766,7 @@ else -> scalar fallback</code></pre>
     <div class="snippet-grid">
       <div class="box">
         <p class="source-ref">
-          <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/spenso/src/network/parsing/mod.rs#L531">crates/spenso/src/network/parsing/mod.rs:531</a>
+          <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/spenso/src/network/parsing/mod.rs#L531">crates/spenso/src/network/parsing/mod.rs:531</a>
         </p>
         <pre><code>if symbol == SPENSO_TAG.dot &amp;&amp; value.get_nargs() != 2 {
     return Err(TensorNetworkError::InvalidDotFunction(...));
@@ -782,7 +782,7 @@ if !value.as_view().is_tensorial() {
       </div>
       <div class="box">
         <p class="source-ref">
-          <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/spenso/src/network/parsing/structure_inference.rs#L44">crates/spenso/src/network/parsing/structure_inference.rs:44</a>
+          <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/spenso/src/network/parsing/structure_inference.rs#L44">crates/spenso/src/network/parsing/structure_inference.rs:44</a>
         </p>
         <pre><code>pub trait AtomStructureExt {
     fn infer_structure&lt;S: StructureFromAtom&gt;(...);
@@ -791,7 +791,7 @@ if !value.as_view().is_tensorial() {
       </div>
       <div class="box">
         <p class="source-ref">
-          <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/spenso/src/network/parsing/mod.rs#L551">crates/spenso/src/network/parsing/mod.rs:551</a>
+          <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/spenso/src/network/parsing/mod.rs#L551">crates/spenso/src/network/parsing/mod.rs:551</a>
         </p>
         <pre><code>if let Some(inference) = settings.shorthand_parsing.opaque_inference() {
     return Self::as_inferred_leaf(...);
@@ -799,7 +799,7 @@ if !value.as_view().is_tensorial() {
       </div>
       <div class="box">
         <p class="source-ref">
-          <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/spenso/src/network/parsing/mod.rs#L604">crates/spenso/src/network/parsing/mod.rs:604</a>
+          <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/spenso/src/network/parsing/mod.rs#L604">crates/spenso/src/network/parsing/mod.rs:604</a>
         </p>
         <pre><code>Self::materialize_shorthand(
     value,
@@ -873,7 +873,7 @@ if !value.as_view().is_tensorial() {
     <div class="snippet-grid">
       <div class="box">
         <p class="source-ref">
-          <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/spenso/src/network/parsing/structure_inference.rs#L77">crates/spenso/src/network/parsing/structure_inference.rs:77</a>
+          <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/spenso/src/network/parsing/structure_inference.rs#L77">crates/spenso/src/network/parsing/structure_inference.rs:77</a>
         </p>
         <pre><code>match mode {
     StructureInferenceMode::Fast =&gt; Self::leaf_structure_from_atom(value),
@@ -883,7 +883,7 @@ if !value.as_view().is_tensorial() {
       </div>
       <div class="box">
         <p class="source-ref">
-          <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/spenso/src/network/parsing/tensor_from_expression.rs#L25">crates/spenso/src/network/parsing/tensor_from_expression.rs:25</a>
+          <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/spenso/src/network/parsing/tensor_from_expression.rs#L25">crates/spenso/src/network/parsing/tensor_from_expression.rs:25</a>
         </p>
         <pre><code>/// Builds a tensor leaf from an opaque expression once its structure is known.
 pub trait TensorFromExpression&lt;S, Sc, K, FK, Aind, Lib, FunLib&gt; {
@@ -892,7 +892,7 @@ pub trait TensorFromExpression&lt;S, Sc, K, FK, Aind, Lib, FunLib&gt; {
       </div>
       <div class="box">
         <p class="source-ref">
-          <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/spenso/src/network/parsing/tensor_from_expression.rs#L120">crates/spenso/src/network/parsing/tensor_from_expression.rs:120</a>
+          <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/spenso/src/network/parsing/tensor_from_expression.rs#L120">crates/spenso/src/network/parsing/tensor_from_expression.rs:120</a>
         </p>
         <pre><code>let mut expanded_settings = settings.clone();
 expanded_settings.shorthand_parsing = ShorthandParsing::Expand;
@@ -907,7 +907,7 @@ network.execute::&lt;Sequential, SmallestDegree, ...&gt;(...)?;</code></pre>
       </div>
       <div class="box">
         <p class="source-ref">
-          <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/idenso/src/tensor/mod.rs#L118">crates/idenso/src/tensor/mod.rs:118</a>
+          <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/idenso/src/tensor/mod.rs#L118">crates/idenso/src/tensor/mod.rs:118</a>
         </p>
         <pre><code>let mut tensor = structure.structure;
 ...
@@ -971,7 +971,7 @@ Ok(tensor)</code></pre>
     <div class="snippet-grid">
       <div class="box">
         <p class="source-ref">
-          <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/spenso/src/network/parsing/materialization.rs#L362">crates/spenso/src/network/parsing/materialization.rs:362</a>
+          <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/spenso/src/network/parsing/materialization.rs#L362">crates/spenso/src/network/parsing/materialization.rs:362</a>
         </p>
         <pre><code>fn materialize_shorthand(...)
     -&gt; Result&lt;Self, TensorNetworkError&lt;K, Symbol&gt;&gt;
@@ -993,7 +993,7 @@ Ok(tensor)</code></pre>
       </div>
       <div class="box">
         <p class="source-ref">
-          <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/spenso/src/network/parsing/materialization.rs#L91">crates/spenso/src/network/parsing/materialization.rs:91</a>
+          <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/spenso/src/network/parsing/materialization.rs#L91">crates/spenso/src/network/parsing/materialization.rs:91</a>
         </p>
         <pre><code>pub(super) fn materialize_shorthand(&self, value: AtomView&lt;'_&gt;) -&gt; Atom {
     self.materialize_shorthand_root(value)
@@ -1003,7 +1003,7 @@ Ok(tensor)</code></pre>
       </div>
       <div class="box">
         <p class="source-ref">
-          <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/spenso/src/network/parsing/materialization.rs#L184">crates/spenso/src/network/parsing/materialization.rs:184</a>
+          <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/spenso/src/network/parsing/materialization.rs#L184">crates/spenso/src/network/parsing/materialization.rs:184</a>
         </p>
         <pre><code>let rep = Self::compact_vector_rep(*lhs)?;
 if rep != Self::compact_vector_rep(*rhs)? || !rep.rep.is_self_dual() {
@@ -1014,7 +1014,7 @@ let slot = self.state.slot(&rep).to_atom();</code></pre>
       </div>
       <div class="box">
         <p class="source-ref">
-          <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/spenso/src/network/parsing/materialization.rs#L20">crates/spenso/src/network/parsing/materialization.rs:20</a>
+          <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/spenso/src/network/parsing/materialization.rs#L20">crates/spenso/src/network/parsing/materialization.rs:20</a>
         </p>
         <pre><code>// Chain and trace materialization chooses the symbolic in/out
 // replacements, then lets this Schoonschip helper expand compact
@@ -1090,7 +1090,7 @@ let slot = self.state.slot(&rep).to_atom();</code></pre>
 -> parse product into the chain network</code></pre>
     <div class="box">
       <p class="source-ref">
-        <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/spenso/src/network/parsing/materialization.rs#L417">crates/spenso/src/network/parsing/materialization.rs:417</a>
+        <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/spenso/src/network/parsing/materialization.rs#L417">crates/spenso/src/network/parsing/materialization.rs:417</a>
       </p>
       <pre><code>let start = Slot::try_from(args[0])?;
 let end = Slot::try_from(args[1])?;
@@ -1127,7 +1127,7 @@ let factor = SchoonschipMaterializer::new(&state)
    g(bridge, left*) * g(right, bridge*)</code></pre>
     <div class="box">
       <p class="source-ref">
-        <a href="https://github.com/alphal00p/gammaloop/blob/a9a1174f9088a4fa43a5273ea7fde1446fd6de67/crates/spenso/src/network/parsing/materialization.rs#L489">crates/spenso/src/network/parsing/materialization.rs:489</a>
+        <a href="https://github.com/alphal00p/gammaloop/blob/c9f4e32acd2c882d9a3aa9e1816cc651caf4b908/crates/spenso/src/network/parsing/materialization.rs#L489">crates/spenso/src/network/parsing/materialization.rs:489</a>
       </p>
       <pre><code>let rep = Representation::try_from(*rep_view)?;
 ...
