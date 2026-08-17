@@ -5,6 +5,9 @@
 This document proposes an ownership change. It describes a target architecture,
 not the current implementation.
 
+Reviewed 2026-08-17 against `c9f4e32acd2c`: the proposal remains open;
+`Graph::generate_cff` still owns and mutates `Graph::surface_cache`.
+
 ## Problem
 
 CFF generation discovers energy and hybrid surfaces while recursively building

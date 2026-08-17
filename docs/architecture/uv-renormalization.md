@@ -1,5 +1,10 @@
 # UV Renormalization Architecture
 
+> **Reviewed:** 2026-08-17 against `c9f4e32acd2c`
+>
+> **Lifecycle:** Current implementation architecture. Unsupported prescription
+> paths are recorded explicitly under [Current Boundaries](#current-boundaries).
+
 ## Scope
 
 This document records the implemented UV-renormalization invariants shared by
@@ -48,9 +53,14 @@ For a connected counterterm, integration stores a Laurent series from which two
 physical projections are obtained:
 
 ```text
-pole projection:               pole(integral(local))
-finite-counterterm projection: -finite(integral(local))
+pole projection:               negative powers of integral(local)
+finite-counterterm projection: -nonnegative powers of integral(local)
 ```
+
+The second projection includes ε⁰ and the retained positive ε powers, not only
+the strictly finite coefficient. Those positive powers are required when
+factorized component series multiply into the finite part of a disconnected
+counterterm.
 
 No extra terminal parity is applied. Adding a sign derived from operation count
 would duplicate signs already supplied by the local operations.
@@ -130,6 +140,11 @@ consumer receives the same symbol metadata and print behavior.
 
 ## Current Boundaries
 
+- Local four-dimensional and integrated counterterm generation currently
+  support only `MUV` and `PolePart`. The local three-dimensional kernel has an
+  `IR` branch, but integrated `IR` generation is not implemented;
+  `VaccuumLimit` and `OS` are also unsupported, while `Unsubtracted` is expected
+  to be filtered out before these operations.
 - Parametric integrand generation currently supports final 3D output only.
   `FourD` is used by integrated renormalization internally but is rejected by
   the parametric orchestrator.

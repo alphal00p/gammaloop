@@ -1,5 +1,13 @@
 # gammaLoop Architecture Ideas
 
+> **Status:** Open/partial proposal backlog
+>
+> **Reviewed:** 2026-08-17 against `c9f4e32acd2c`. The service and cache-session
+> abstractions remain proposals, user-facing `todo!()`/panic paths still exist,
+> and process-level parallelism is partial as described below. Completed work
+> belongs in the current architecture rather than being inferred from this
+> backlog.
+
 This document proposes architecture improvements beyond the current implementation.
 
 ## Proposed Improvements
@@ -30,8 +38,11 @@ This document proposes architecture improvements beyond the current implementati
 - Impact: safer automation and clearer diagnostics in REPL/run cards.
 
 ### P3: Process-level orchestration parallelism
-- Problem: outer loops over processes/integrands are mostly sequential even when independent.
-- Improvement: parallelize process-level preprocessing/build/compile where deterministic ordering is not required.
+- Partial status: graph-level preprocessing and build work already uses Rayon in
+  the amplitude and cross-section pipelines. The remaining opportunity is the
+  outer orchestration across independent processes/integrands.
+- Improvement: parallelize cross-process/integrand orchestration where
+  deterministic ordering and shared state do not require serialization.
 - Impact: better throughput for multi-process workloads.
 
 ### P3: Improve observability for long-running pipelines

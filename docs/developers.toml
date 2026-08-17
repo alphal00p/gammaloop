@@ -39,6 +39,14 @@ source = "docs/architecture/schoonschip-net-parsing.html"
 kind = "Architecture diagram"
 status = "Implemented"
 
+[[section.note]]
+id = "gammaloop-draw-style-migration"
+title = "GammaLoop drawing style migration record"
+summary = "The implemented Typst callback architecture, canonical source locations, and the superseded design sketch that led to it."
+source = "docs/architecture/gammaloop-draw-style-migration-example.md"
+kind = "Drawing architecture"
+status = "Implemented record"
+
 [[section]]
 id = "proposals"
 title = "Design proposals"
@@ -60,14 +68,6 @@ source = "docs/architecture/cff-surface-cache-ownership.md"
 kind = "Design proposal"
 status = "Proposal"
 
-[[section.note]]
-id = "gammaloop-draw-style-migration"
-title = "GammaLoop drawing style migration"
-summary = "Model-specific particle styles expressed as regular Typst callbacks for Linnest and CeTZ graph rendering."
-source = "docs/architecture/gammaloop-draw-style-migration-example.md"
-kind = "Drawing architecture"
-status = "Design example"
-
 [[section]]
 id = "investigations"
 title = "Engineering investigations"
@@ -83,27 +83,27 @@ status = "Investigation record"
 
 [[section.note]]
 id = "spenso-large-expressions"
-title = "Spenso large-expression pathology"
-summary = "Parsing and execution shape, contraction order, scalar aliasing, Hornering, and unresolved materialization pressure."
+title = "Spenso large-expression pathology record"
+summary = "A superseded large-input investigation whose root fixtures and controls are no longer present; retained as historical evidence."
 source = "docs/architecture/spenso-large-expression-pathology.md"
 kind = "Performance investigation"
-status = "Investigation record"
+status = "Superseded investigation"
 
 [[section.note]]
 id = "spenso-improvement-effects"
 title = "Spenso large-input improvement effects"
-summary = "A timing matrix for sparse tensors, selector contraction, lazy terms, distribution caps, and combined optimizations."
+summary = "A historical timing matrix whose branch, fixture, test, and environment controls no longer exist in the current checkout."
 source = "docs/architecture/spenso-large-input-improvement-effects.md"
 kind = "Performance investigation"
-status = "Investigation record"
+status = "Historical experiment"
 
 [[section.note]]
 id = "spenso-test-baseline"
 title = "Spenso network execution test baseline"
-summary = "A preserved test and timeout baseline for comparing later network-execution work."
+summary = "An archived test/timeout record with unresolved revision and removed tests; preserved as non-reproducible evidence only."
 source = "docs/architecture/spenso-network-execution-test-baseline.md"
 kind = "Test baseline · 2026-05-05"
-status = "Archived baseline"
+status = "Archived · non-reproducible"
 
 [[section]]
 id = "build-system"
@@ -113,7 +113,20 @@ summary = "Contributor-facing architecture for reproducible builds and continuou
 [[section.note]]
 id = "nix-crane-cache-reuse"
 title = "Nix and Crane artifact reuse"
-summary = "Cache contracts, package and test artifact ownership, feature contexts, and CI producer barriers."
+summary = "A living cache-architecture contract embedded in a chronological experiment record, with historical sections explicitly separated."
 source = "docs/architecture/nix-crane-cache-reuse.md"
 kind = "Build engineering"
-status = "Engineering record"
+status = "Living engineering record"
+
+[[section]]
+id = "documentation"
+title = "Documentation system"
+summary = "Quality reviews and improvement plans for the manuals, developer notes, validation, navigation, and publishing pipeline."
+
+[[section.note]]
+id = "documentation-improvement-plan"
+title = "Documentation quality review and improvement plan"
+summary = "A critical review and phased plan for truthful Python/CLI reference, deeper manuals/examples, an integrated corpus, verified developer architecture, and measurable quality gates."
+source = "docs/architecture/documentation-improvement-plan.md"
+kind = "Documentation strategy"
+status = "Proposal"

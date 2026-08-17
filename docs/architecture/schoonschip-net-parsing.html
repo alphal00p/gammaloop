@@ -211,24 +211,29 @@
       expressions as opaque tensor leaves. Parser shorthand expansion is
       deliberately not part of this path.
     </p>
+    <p>
+      <strong>Audit status:</strong> reviewed 2026-08-17 against
+      <code>c9f4e32acd2c</code>. Lifecycle: current implementation architecture.
+    </p>
 
     <h2>Entry Points</h2>
     <p>
-      There are two Schoonschip paths in
+      There are two Schoonschip implementations in
       <a href="../../crates/idenso/src/shorthands/schoonschip/api.rs">crates/idenso/src/shorthands/schoonschip/api.rs</a>.
       <code>schoonschip_with_settings</code> calls the older pattern-based
       implementation in
       <a href="../../crates/idenso/src/shorthands/schoonschip/with_settings.rs">with_settings.rs</a>.
       <code>schoonschip_with_net</code> calls the symbolic-network
-      implementation. <code>schoonschip_net</code> is a convenience wrapper: it
-      runs the default network pass and then runs the pattern pass as a final
-      local cleanup.
+      implementation. <code>schoonschip_net</code> is a convenience wrapper for
+      the default network pass only. <code>schoonschip_with_net_full</code> is a
+      separate convenience entry point that enables contracted-sum expansion;
+      neither wrapper subsequently calls <code>schoonschip()</code> on the full
+      result.
     </p>
 
     <div class="box">
       <pre><code>fn schoonschip_net&lt;Aind: AbsInd + DummyAind + ParseableAind + 'static&gt;(&amp;self) -&gt; Atom {
     self.schoonschip_with_net::&lt;false, Aind&gt;(&amp;SchoonschipSettings::default_network())
-        .schoonschip()
 }</code></pre>
     </div>
 
@@ -333,7 +338,14 @@ apply(expr):
         <th><code>simplify_chain_like_functions</code></th>
         <td>
           Controls the optional chain-like metric simplifier in the pattern
-          cleanup path.
+          implementation. The network implementation does not read this field.
+        </td>
+      </tr>
+      <tr>
+        <th><code>schoonschip_rank1_tensors</code></th>
+        <td>
+          Enables rank-one rewrite rules in the pattern implementation. The
+          network implementation does not read this field.
         </td>
       </tr>
     </table>
@@ -343,10 +355,11 @@ apply(expr):
       <tr>
         <th>Scalar pre-pass</th>
         <td>
-          <code>ContractScalars&lt;Schoonschipify&gt;</code> contracts scalar
-          leaves before tensor contractions. If recursive mode is enabled,
-          composite scalar tensors are recursively passed through the same
-          network algorithm.
+          The selected contraction strategy builds a
+          <code>ProductContraction</code>, simplifies composite scalar tensors,
+          and calls <code>product.contract_scalars</code> before, between, and
+          after tensor-pair contractions. Recursive modes pass composite scalar
+          expressions through the same network algorithm.
         </td>
       </tr>
       <tr>
@@ -377,8 +390,11 @@ apply(expr):
         <th>General product</th>
         <td>
           If no shortcut applies, the expressions are multiplied and wrapped as
-          a composite tensor. Optional contracted-sum expansion is handled here,
-          not by the parser.
+          a composite tensor. For genuine contracted sum-by-sum products, the
+          expanded mode first tries a direct contraction of the smaller expanded
+          side with slot-aware residual cleanup. It falls back to distribution
+          followed by a network Schoonschip pass. This is contraction behavior,
+          not parser shorthand expansion.
         </td>
       </tr>
       <tr>
@@ -396,17 +412,23 @@ apply(expr):
       The pattern implementation in
       <a href="../../crates/idenso/src/shorthands/schoonschip/with_settings.rs">with_settings.rs</a>
       is a fixed point over global Symbolica replacements. One pass applies:
-      metric-function contractions, dot-product contractions, self-dual powers,
-      rank-one products, bare rank-one into tensor products, optional
-      chain-like simplification, and <code>normalize_dots</code>.
+      dot normalization, repeated metric-function contractions, optional
+      rank-one vector and vector-dot rules, optional chain/trace rules, and a
+      final dot normalization.
     </p>
 
     <div class="box">
-      <pre><code>metric_simplified
-    .replace_multiple(&amp;*DOT_PRODUCT)
-    .replace_multiple(&amp;*SELF_DUAL_POWER)
-    .replace_multiple(&amp;*RANK_ONE_PRODUCT_REPLACEMENTS)
-    .replace_multiple_repeat(&amp;*BARE_PRODUCT_CONTRACTIONS)</code></pre>
+      <pre><code>let metric_simplified = view
+    .normalize_dots()
+    .replace_multiple_repeat(&amp;*METRIC_FUNCTION_CONTRACTIONS);
+
+let simplified = if settings.schoonschip_rank1_tensors {
+    metric_simplified
+        .replace_multiple(&amp;*VECTOR_DOT_PRODUCTS)
+        .replace_multiple_repeat(&amp;*SCHOONSCHIP_VECTOR)
+} else {
+    metric_simplified
+};</code></pre>
     </div>
 
     <p>
@@ -477,10 +499,11 @@ apply(expr):
       <tr>
         <th>Dot product</th>
         <td>
-          <code>p(mu) * q(mu)</code> first goes through
-          <code>normalize_dots</code>, so the compact scalar form
-          <code>g(p(rep), q(rep))</code> is available before network parsing and
-          again after each pass.
+          In <code>p(mu) * q(mu)</code>, each vector parses as a rank-one leaf and
+          the shared slot creates the contraction edge. The rank-one shortcut
+          inserts one stripped vector into the other; the finishing dot
+          normalization then rewrites that nested form to a compact scalar such
+          as <code>g(p(rep), q(rep))</code>.
         </td>
       </tr>
       <tr>
@@ -488,8 +511,9 @@ apply(expr):
         <td>
           <code>chain(...)</code> and <code>trace(...)</code> are tensorial
           shorthand. In the network path they parse as opaque leaves with
-          inferred external structure. If chain-like simplification is enabled,
-          it is a Schoonschip rule, not parser expansion.
+          inferred external structure. Chain-like pattern rules are available
+          only through the pattern implementation; the corresponding settings
+          field is ignored by the network path.
         </td>
       </tr>
       <tr>
@@ -519,7 +543,9 @@ apply(expr):
       topology matters: many tensors, mixed metrics, rank-one substitutions,
       composite scalar products, and sums where expansion order can dominate the
       cost. The pattern path remains valuable as a simple local rewrite pass and
-      as the final cleanup used by <code>schoonschip_net</code>.
+      can be selected explicitly with <code>schoonschip_with_settings</code>;
+      <code>schoonschip_net</code> does not append it as a whole-expression final
+      pass.
     </p>
   </main>
 </body>

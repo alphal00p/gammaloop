@@ -1,9 +1,19 @@
 # gammaLoop Current Architecture
 
-## Scope
-This document describes the current, implemented architecture of this repository.
+> **Reviewed:** 2026-08-17 against `c9f4e32acd2c`
+>
+> **Lifecycle:** Current implementation architecture. The review checked the
+> state, evaluator, event-processing, integration, and quantity contracts named
+> below against their implementations.
 
-The workspace is organized around two main Rust crates:
+## Scope
+This document describes the current, implemented architecture of the GammaLoop
+application. It is not an architecture overview of the entire multi-product
+repository; Linnet, Spenso, Idenso, and Vakint have their own manuals and
+reference surfaces.
+
+The GammaLoop application is organized around two principal Rust crates while
+using those shared workspace libraries:
 - `gammalooprs` (`crates/gammalooprs`): core physics/domain logic, graph processing, integrand construction, evaluation, and integration.
 - `gammaloop-api` (`crates/gammaloop-api`): CLI, REPL, Python bindings, command parsing, and persisted state orchestration.
 
@@ -122,7 +132,10 @@ and backend-boundary invariants are documented in
 7. Runtime-only evaluator backends are then activated from that frozen metadata:
    - eager uses the saved eager evaluator directly
    - symjit is rebuilt after generation/load from the saved Symbolica evaluator
-   - external compiled backends load their saved shared-library artifacts lazily
+   - complete external compiled artifacts are loaded while the saved state is
+     activated
+   - missing external artifacts leave the frozen backend metadata unchanged but
+     activate the portable eager evaluator for the current session
    - if external loading fails and startup globals explicitly opt into symjit,
      GammaLoop falls back to symjit for that integrand and logs it
 
@@ -221,12 +234,14 @@ such as:
 - `FullMultiplicativeFactor`
 - `Original`
 - `ThresholdCounterterm { subset_index }`
+- `AmplitudeThresholdCounterterm { esurface_id, overlap_group }`
 
-When threshold-counterterm weights are stored, they are stored with the same sign
-with which they contribute to the final event weight. This means the fully
-normalized event weight is reconstructed as:
+Counterterm weights are stored with the sign with which they contribute to the
+final event weight. Cross-section events use `ThresholdCounterterm`; amplitude
+events use `AmplitudeThresholdCounterterm`. The fully normalized event weight is
+therefore reconstructed as:
 
-`(Original + sum(ThresholdCounterterm { subset_index })) * FullMultiplicativeFactor`.
+`(Original + sum(the event's counterterm entries)) * FullMultiplicativeFactor`.
 
 This is populated only when
 `settings.general.store_additional_weights_in_event = true`.
@@ -306,7 +321,11 @@ Current built-in quantities include:
 - `particle` with `computation = scalar | count | pair`
 - `jet` with `computation = scalar | count | pair`
 - `afb`
-- `cross_section`
+- `integral`
+- `graph_id`
+- `graph_group_id`
+- `orientation_id`
+- `lmb_channel_id`
 
 Current pair quantities include `DeltaR`. Current scalar projections include
 `E`, `CosTheta`, `PT`, `y`, `eta`, `Px`, `Py`, `Pz`, and `Mass`.
@@ -352,8 +371,26 @@ The persistence model is file-system based and intentionally human-editable for 
 ### Persistence Compatibility Contract
 - State format is versioned with `state_manifest.toml` (`version = 1` currently).
 - `State::load` validates the manifest version and rejects states from newer binaries.
-- If no manifest is present, load falls back to a legacy compatibility path (`version = 0`) and runs migration checks on required layout entries before loading.
+- Saved-state detection is manifest-only. A non-empty folder without a manifest is
+  classified as `Unmanifested` and startup treats its contents as blank scratch
+  state; it is not loaded as a legacy state.
 - Process settings history now uses `settings_history.toml` consistently; loader still accepts legacy `settings_history.yaml` for backward compatibility and migration.
+
+### Integration workspaces
+
+Integration resume state is persisted in a dedicated integration workspace. In
+a normal writable session its default is
+`<state.folder>/integration_workspace` (therefore normally inside
+`gammaloop_state/`); a read-only session defaults to
+`./integration_workspace[_<state-name>]`, and `--workspace-path` overrides the
+default. `manifest.json` records the selected process/integrand slots, targets,
+effective model parameters, integrand fingerprints, training and settings
+slots, and sampling-correlation mode. Authoritative completed-iteration state
+lives in `state/integration_state.bin`; per-slot settings live under
+`integrands/<process>@<integrand>/settings.toml`, and observable resume
+snapshots live under `state/observables/<process>@<integrand>/`. User-facing
+`integration_result.json` and observable files are derived snapshots, not the
+resume authority.
 
 ## Configuration Architecture
 Configuration is split into:

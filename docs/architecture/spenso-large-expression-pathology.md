@@ -1,7 +1,20 @@
 # Spenso Large Expression Pathology
 
-This note tracks the current status of the large root-level Spenso diagnostic
-inputs:
+> **Status:** Superseded investigation record
+>
+> **Captured in:** `4fdbf430` (2026-07-08)
+>
+> **Reproducibility:** The root inputs `spenso_eval_input_0.txt` and
+> `symbolica_expression.txt`, the scalar-alias environment control, and several
+> diagnostic tests used below are no longer present. Present-tense statements
+> in this record describe that captured checkout, not the current repository.
+> In particular, the current
+> [`min_result_rank_disconnected_tensor_product_mwe`](../../crates/gammalooprs/tests/large_spenso_actual.rs)
+> regression verifies that a disconnected tensor product executes to an
+> order-two tensor; the failure described below is not a current limitation.
+
+This note preserves the captured status of the large root-level Spenso
+diagnostic inputs:
 
 - `spenso_eval_input_0.txt`
 - `symbolica_expression.txt`
@@ -11,7 +24,7 @@ The focus is the actual GammaLoop tensor-network path. The current reruns use
 the sparse-aware contraction order through `MinResultRank` and scalar aliasing
 before execution where execution is attempted.
 
-## Current Status
+## Status at capture
 
 The situation has improved compared to the original investigation.
 
@@ -409,7 +422,7 @@ This remains diagnostic-only. The earlier conclusion still applies: lazy tensor
 sums help when later contractions shrink each summand enough, but can be harmful
 when they postpone dense addition into many expensive products.
 
-## Current Diagnosis
+## Diagnosis at capture
 
 The current pathological ingredients are:
 

@@ -1,5 +1,19 @@
 # Spenso Large Input Improvement Effects
 
+> **Status:** Historical experiment; not currently reproducible
+>
+> **Captured in:** `4fdbf430` (2026-07-08)
+>
+> The branch, root input, test target, environment selectors, and several type
+> names used by this timing matrix no longer exist in the current checkout.
+> The measurements are preserved as evidence of the experiment, not as a
+> current performance claim or runnable benchmark. All present-tense statements
+> below describe the captured checkout. Current disconnected-product
+> behavior is covered by
+> [`large_spenso_actual.rs`](../../crates/gammalooprs/tests/large_spenso_actual.rs);
+> any replacement timing matrix must use checked-in fixtures and record an
+> immutable commit, toolchain, hardware, command, and expected result.
+
 This note summarizes the effects of the local improvements stacked on top of
 `origin/improve-parsing-and-execution` for `spenso_eval_input_0.txt`. The large
 input is still too slow for a broad full-expression matrix, so the measurements
@@ -288,10 +302,10 @@ leaves from `95` to `92` and max product width from `12` to `9`; sparse storage
 effects are unchanged. Full execution is slower for term 18 (`116.344s` versus
 `99.405s` sparse-only).
 
-## Current Conclusion
+## Conclusion at capture
 
-The improvements now make term 18 executable under a five minute cap. The most
-concrete wins are:
+In the captured experiment, the improvements made term 18 executable under a
+five minute cap. The most concrete wins were:
 
 - sparse shadows: `3088 -> 1678` stored param entries for term 18
 - sparse shadows alone: dense timeout `>300s` becomes `99.405s`

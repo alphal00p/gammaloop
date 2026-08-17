@@ -1,10 +1,24 @@
-# GammaLoop Draw Style Migration Example
+# GammaLoop Draw Style Migration Record
 
-This document shows the intended shape of the GammaLoop drawing migration from
-Fletcher `eval_*` strings to pure Typst style callbacks consumed by the
+> **Status:** Implemented; the design sketch below is superseded
+>
+> **Implemented by:** `395610143576` (2026-08-15)
+>
+> The current generator imports the reusable
+> [`physics-edge-style.typ`](../../crates/linnest/typst/src/physics-edge-style.typ)
+> callbacks and emits only the model-specific particle map plus three wrapper
+> functions. The embedded drawing entry points are
+> [`layout.typ`](../../assets/embedded/drawing/templates/layout.typ) and
+> [`layout-core.typ`](../../assets/embedded/drawing/templates/layout-core.typ).
+> They use direct Typst scope and callback values; the placeholder interpolation
+> and `source-style-eval`/`sink-style-eval` design shown below is not the current
+> interface. Preserve the remainder as design history, not copyable guidance.
+
+This document records the proposed shape that led to the GammaLoop migration
+from Fletcher `eval_*` strings to Typst style callbacks consumed by the
 Linnest/CeTZ `draw` API.
 
-## Generated `edge-style.typ`
+## Historical generated `edge-style.typ` sketch
 
 GammaLoop can keep generating one model-specific file, but the file should
 export regular Typst callbacks instead of strings that are later evaluated.

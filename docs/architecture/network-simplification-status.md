@@ -1,5 +1,11 @@
 # Network-Based Symbolic Simplification Status
 
+> **Reviewed:** 2026-08-17 against `c9f4e32acd2c`
+>
+> **Lifecycle:** Investigation record. Measurements remain point-in-time
+> evidence; the settings and tracing controls below were rechecked against the
+> current implementation.
+
 ## Scope
 
 This note summarizes the current state of the `idenso` network-based
@@ -55,7 +61,7 @@ For sum-by-sum contractions, the current path is:
 6. Run compact cleanup with `schoonschip()`.
 7. If removed dummy slots remain, try bounded local residual-boundary cleanup.
 8. If residual slots still remain, fall back to
-   `distribute_smallest_expanded_sum_side(...).schoonschip_with_net::<false, false, ...>(...)`.
+   `distribute_smallest_expanded_sum_side(...).schoonschip_with_net::<false, Aind>(&settings)`.
 
 The fallback is the expensive path. It explicitly distributes the smaller sum
 side, then runs network simplification again on the expanded boundary.
@@ -131,12 +137,14 @@ cargo bench --package idenso --bench vertex_algebra_once --profile dev-optim -- 
   - `single_pass`
   - recursive depth-first
   - recursive breadth-first
-- `parse_inner_products`: internal control; recursion disables this for scalar
-  sub-simplification.
 - `expand_contracted_sums`: forces contracted sums through the expanded
   contraction path.
 - `simplify_chain_like_functions`: enables chain-like metric product
-  simplification.
+  simplification in the pattern implementation; the network implementation
+  ignores it.
+- `schoonschip_rank1_tensors`: controls the dedicated rank-one tensor
+  simplification rules in the pattern implementation; the network
+  implementation ignores it.
 - `contraction_order`: selects the network contraction ordering strategy.
 
 Convenience constructors:
@@ -231,8 +239,6 @@ IDENSO_TRACE_CONTRACTION_ORDERING
 IDENSO_TRACE_DIRECT_SUM_TERMS
 IDENSO_TRACE_DIRECT_SUM_TERM_EXPRESSIONS
 IDENSO_TRACE_FINISH_CONTRACTS
-IDENSO_TRACE_SCHOONSCHIP_PATTERNS
-IDENSO_TRACE_SCHOONSCHIP_PATTERN_MISSES
 ```
 
 Common trace command:

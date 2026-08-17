@@ -1,5 +1,12 @@
 # Spenso Network Execution Test Baseline
 
+> **Status:** Archived, non-reproducible baseline
+>
+> The recorded Jujutsu change does not resolve in the current repository, the
+> two named timeout tests have since been removed, and no immutable artifact,
+> toolchain, or hardware record accompanies the result. Preserve the output as
+> historical evidence, but do not use it as a current comparison baseline.
+
 Baseline captured on 2026-05-05 in jj change `lwvmvnsn`
 (`profile raw full-depth Spenso parsing and isolate execution orchestration`).
 

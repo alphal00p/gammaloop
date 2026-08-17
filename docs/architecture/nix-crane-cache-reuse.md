@@ -1,5 +1,18 @@
 # Nix/Crane Cargo artifact reuse
 
+> **Status:** Living engineering record reviewed 2026-08-17 against
+> `c9f4e32acd2c`
+>
+> This is a chronological investigation, not a uniformly current
+> specification. Sections explicitly labelled “Historical” are superseded;
+> other uses of “now” or “current” describe the experiment surrounding them.
+> The maintained end-state contract begins at
+> [Source and test-artifact ownership split](#source-and-test-artifact-ownership-split)
+> and continues through the later crate-level checks, cross-run documentation
+> producer, cross-job barriers, and remaining caveats. A follow-up tracked in
+> the documentation improvement plan will split that contract from this
+> experiment log.
+
 This note records the cache-reuse audit for the NixCI Rust build graph.
 
 ## Sources checked
