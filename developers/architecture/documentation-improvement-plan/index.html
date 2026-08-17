@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="A critical review and phased plan for truthful Python/CLI reference, deeper manuals and examples, an integrated corpus, and measurable quality gates."><meta name="theme-color" content="#f9f6f0"><link rel="icon" type="image/svg+xml" href="../../assets/local-unitarity-light.svg"><link rel="icon" type="image/svg+xml" href="../../assets/local-unitarity-dark.svg" media="(prefers-color-scheme: dark)"><title>Documentation quality review and improvement plan · Developer architecture</title><link rel="stylesheet" href="../../assets/site.css"><script defer src="../../assets/site.js"></script></head><body class="developer-body" data-docs-root="../../"><a class="skip-link" href="#main-content">Skip to content</a><header class="site-header"><button class="header-button menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-controls="docs-sidebar" aria-expanded="false">☰</button><a class="site-brand" href="../../"><span class="site-brand-mark">α</span><span class="site-brand-name">Developer notes</span></a><div class="site-header-tools"><a class="header-button header-link" href="../../../" aria-label="Research documentation"><span class="header-link-label">Research docs</span><span aria-hidden="true">←</span></a><button class="header-button" type="button" data-search-open aria-label="Search developer documentation"><span class="header-search-label">Search</span> <span class="header-button-label">⌘K</span><span class="header-search-icon" aria-hidden="true">⌕</span></button><button class="header-button" type="button" data-theme-toggle aria-label="Toggle color theme">◐</button></div></header><div class="docs-shell"><aside class="docs-sidebar developer-sidebar" id="docs-sidebar" aria-label="Developer architecture"><section class="sidebar-group"><p class="sidebar-group-title">Developer area</p><a class="sidebar-link" href="../../">Overview</a></section><section class="sidebar-group"><p class="sidebar-group-title">Implemented architecture</p><a class="sidebar-link" href="../../architecture/gammaloop-architecture/">GammaLoop architecture</a><a class="sidebar-link" href="../../architecture/uv-renormalization/">UV renormalization architecture</a><a class="sidebar-link" href="../../architecture/spenso-parsing-flow/">Spenso parsing flow</a><a class="sidebar-link" href="../../architecture/schoonschip-network/">Schoonschip network architecture</a></section><section class="sidebar-group"><p class="sidebar-group-title">Design proposals</p><a class="sidebar-link" href="../../architecture/gammaloop-roadmap/">GammaLoop architecture roadmap</a><a class="sidebar-link" href="../../architecture/cff-surface-cache-ownership/">CFF surface-cache ownership</a><a class="sidebar-link" href="../../architecture/gammaloop-draw-style-migration/">GammaLoop drawing style migration</a></section><section class="sidebar-group"><p class="sidebar-group-title">Engineering investigations</p><a class="sidebar-link" href="../../architecture/network-simplification/">Network simplification status</a><a class="sidebar-link" href="../../architecture/spenso-large-expressions/">Spenso large-expression pathology</a><a class="sidebar-link" href="../../architecture/spenso-improvement-effects/">Spenso large-input improvement effects</a><a class="sidebar-link" href="../../architecture/spenso-test-baseline/">Spenso network execution test baseline</a></section><section class="sidebar-group"><p class="sidebar-group-title">Build system</p><a class="sidebar-link" href="../../architecture/nix-crane-cache-reuse/">Nix and Crane artifact reuse</a></section><section class="sidebar-group"><p class="sidebar-group-title">Documentation system</p><a class="sidebar-link" href="../../architecture/documentation-improvement-plan/" aria-current="page">Documentation quality review and improvement plan</a></section><p class="sidebar-meta"><strong>For developers</strong><br>Implementation and engineering notes.<br><a href="../../../#projects">Tutorials &amp; manuals</a></p></aside><main class="docs-main developer-main" id="main-content"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../">αLoop</a> / <a href="../../">Developers</a> / Documentation quality review and improvement plan</nav><details class="developer-inline-toc"><summary>On this page</summary><nav aria-label="On this page"><a data-level="2" href="#executive-assessment">Executive assessment</a><a data-level="2" href="#what-is-already-strong">What is already strong</a><a data-level="2" href="#review-method-and-limits">Review method and limits</a><a data-level="2" href="#baseline">Baseline</a><a data-level="2" href="#critical-findings">Critical findings</a><a data-level="3" href="#p0-the-generated-cli-reference-can-emit-false-invocation-syntax">P0. The generated CLI reference can emit false invocation syntax</a><a data-level="3" href="#p0-first-user-promises-are-not-consistently-executable">P0. First-user promises are not consistently executable</a><a data-level="3" href="#p0-the-advertised-partial-build-contract-can-emit-broken-navigation">P0. The advertised partial-build contract can emit broken navigation</a><a data-level="3" href="#p1-generated-python-and-cli-data-is-not-yet-a-good-reference-experience">P1. Generated Python and CLI data is not yet a good reference experience</a><a data-level="3" href="#p1-the-manuals-cover-a-template-not-each-product-s-real-task-surface">P1. The manuals cover a template, not each product’s real task surface</a><a data-level="3" href="#p1-examples-are-shallow-scattered-and-weakly-connected-to-the-manuals">P1. Examples are shallow, scattered, and weakly connected to the manuals</a><a data-level="3" href="#p1-release-and-freshness-information-is-visible-but-not-trustworthy">P1. Release and freshness information is visible but not trustworthy</a><a data-level="3" href="#p1-the-documentation-corpus-is-fragmented-instead-of-integrated">P1. The documentation corpus is fragmented instead of integrated</a><a data-level="3" href="#p1-production-is-doing-work-that-belongs-in-a-review-gate">P1. Production is doing work that belongs in a review gate</a><a data-level="3" href="#p2-accessibility-progressive-enhancement-search-and-feedback-are-unmeasured">P2. Accessibility, progressive enhancement, search, and feedback are unmeasured</a><a data-level="2" href="#target-documentation-model">Target documentation model</a><a data-level="2" href="#reference-quality-design-requirements">Reference-quality design requirements</a><a data-level="3" href="#python">Python</a><a data-level="3" href="#cli-and-settings">CLI and settings</a><a data-level="3" href="#shared-visual-contract">Shared visual contract</a><a data-level="2" href="#prioritized-work-register">Prioritized work register</a><a data-level="2" href="#delivery-sequence">Delivery sequence</a><a data-level="3" href="#phase-0-stop-integrity-regressions">Phase 0 — stop integrity regressions</a><a data-level="3" href="#phase-1-productize-reference-and-establish-one-content-graph">Phase 1 — productize reference and establish one content graph</a><a data-level="3" href="#phase-2-make-the-five-product-journeys-valuable">Phase 2 — make the five product journeys valuable</a><a data-level="3" href="#phase-3-migrate-and-connect-the-remaining-corpus">Phase 3 — migrate and connect the remaining corpus</a><a data-level="3" href="#phase-4-improve-reach-and-continuous-quality">Phase 4 — improve reach and continuous quality</a><a data-level="2" href="#first-vertical-implementation-slice">First vertical implementation slice</a><a data-level="2" href="#scorecard">Scorecard</a><a data-level="2" href="#decisions-required-before-implementation">Decisions required before implementation</a></nav></details><article class="docs-article developer-article"><header class="developer-note-hero"><p class="product-eyebrow">For developers</p><div class="developer-note-title"><h1 id="documentation-quality-review-and-improvement-plan">Documentation quality review and improvement plan</h1><div class="developer-note-badges"><span class="developer-status developer-status-proposal">Proposal</span><span class="developer-kind">Documentation strategy</span></div></div><p>A critical review and phased plan for truthful Python/CLI reference, deeper manuals and examples, an integrated corpus, and measurable quality gates.</p><p class="developer-source"><a href="https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/architecture/documentation-improvement-plan.md">View the source note <span aria-hidden="true">↗</span></a></p></header><blockquote>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="A critical review and phased plan for truthful Python/CLI reference, deeper manuals/examples, an integrated corpus, verified developer architecture, and measurable quality gates."><meta name="theme-color" content="#f9f6f0"><link rel="icon" type="image/svg+xml" href="../../assets/local-unitarity-light.svg"><link rel="icon" type="image/svg+xml" href="../../assets/local-unitarity-dark.svg" media="(prefers-color-scheme: dark)"><title>Documentation quality review and improvement plan · Developer architecture</title><link rel="stylesheet" href="../../assets/site.css"><script defer src="../../assets/site.js"></script></head><body class="developer-body" data-docs-root="../../"><a class="skip-link" href="#main-content">Skip to content</a><header class="site-header"><button class="header-button menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-controls="docs-sidebar" aria-expanded="false">☰</button><a class="site-brand" href="../../"><span class="site-brand-mark">α</span><span class="site-brand-name">Developer notes</span></a><div class="site-header-tools"><a class="header-button header-link" href="../../../" aria-label="Research documentation"><span class="header-link-label">Research docs</span><span aria-hidden="true">←</span></a><button class="header-button" type="button" data-search-open aria-label="Search developer documentation"><span class="header-search-label">Search</span> <span class="header-button-label">⌘K</span><span class="header-search-icon" aria-hidden="true">⌕</span></button><button class="header-button" type="button" data-theme-toggle aria-label="Toggle color theme">◐</button></div></header><div class="docs-shell"><aside class="docs-sidebar developer-sidebar" id="docs-sidebar" aria-label="Developer architecture"><section class="sidebar-group"><p class="sidebar-group-title">Developer area</p><a class="sidebar-link" href="../../">Overview</a></section><section class="sidebar-group"><p class="sidebar-group-title">Implemented architecture</p><a class="sidebar-link" href="../../architecture/gammaloop-architecture/">GammaLoop architecture</a><a class="sidebar-link" href="../../architecture/uv-renormalization/">UV renormalization architecture</a><a class="sidebar-link" href="../../architecture/spenso-parsing-flow/">Spenso parsing flow</a><a class="sidebar-link" href="../../architecture/schoonschip-network/">Schoonschip network architecture</a><a class="sidebar-link" href="../../architecture/gammaloop-draw-style-migration/">GammaLoop drawing style migration record</a></section><section class="sidebar-group"><p class="sidebar-group-title">Design proposals</p><a class="sidebar-link" href="../../architecture/gammaloop-roadmap/">GammaLoop architecture roadmap</a><a class="sidebar-link" href="../../architecture/cff-surface-cache-ownership/">CFF surface-cache ownership</a></section><section class="sidebar-group"><p class="sidebar-group-title">Engineering investigations</p><a class="sidebar-link" href="../../architecture/network-simplification/">Network simplification status</a><a class="sidebar-link" href="../../architecture/spenso-large-expressions/">Spenso large-expression pathology record</a><a class="sidebar-link" href="../../architecture/spenso-improvement-effects/">Spenso large-input improvement effects</a><a class="sidebar-link" href="../../architecture/spenso-test-baseline/">Spenso network execution test baseline</a></section><section class="sidebar-group"><p class="sidebar-group-title">Build system</p><a class="sidebar-link" href="../../architecture/nix-crane-cache-reuse/">Nix and Crane artifact reuse</a></section><section class="sidebar-group"><p class="sidebar-group-title">Documentation system</p><a class="sidebar-link" href="../../architecture/documentation-improvement-plan/" aria-current="page">Documentation quality review and improvement plan</a></section><p class="sidebar-meta"><strong>For developers</strong><br>Implementation and engineering notes.<br><a href="../../../#projects">Tutorials &amp; manuals</a></p></aside><main class="docs-main developer-main" id="main-content"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../">αLoop</a> / <a href="../../">Developers</a> / Documentation quality review and improvement plan</nav><details class="developer-inline-toc"><summary>On this page</summary><nav aria-label="On this page"><a data-level="2" href="#executive-assessment">Executive assessment</a><a data-level="2" href="#what-is-already-strong">What is already strong</a><a data-level="2" href="#review-method-and-limits">Review method and limits</a><a data-level="2" href="#baseline">Baseline</a><a data-level="2" href="#developer-architecture-audit-at-this-baseline">Developer architecture audit at this baseline</a><a data-level="2" href="#critical-findings">Critical findings</a><a data-level="3" href="#p0-the-generated-cli-reference-can-emit-false-invocation-syntax">P0. The generated CLI reference can emit false invocation syntax</a><a data-level="3" href="#p0-first-user-promises-are-not-consistently-executable">P0. First-user promises are not consistently executable</a><a data-level="3" href="#p0-the-advertised-partial-build-contract-can-emit-broken-navigation">P0. The advertised partial-build contract can emit broken navigation</a><a data-level="3" href="#p1-generated-python-and-cli-data-is-not-yet-a-good-reference-experience">P1. Generated Python and CLI data is not yet a good reference experience</a><a data-level="3" href="#p1-the-manuals-cover-a-template-not-each-product-s-real-task-surface">P1. The manuals cover a template, not each product’s real task surface</a><a data-level="3" href="#p1-examples-are-shallow-scattered-and-weakly-connected-to-the-manuals">P1. Examples are shallow, scattered, and weakly connected to the manuals</a><a data-level="3" href="#p1-release-and-freshness-information-is-visible-but-not-trustworthy">P1. Release and freshness information is visible but not trustworthy</a><a data-level="3" href="#p1-the-documentation-corpus-is-fragmented-instead-of-integrated">P1. The documentation corpus is fragmented instead of integrated</a><a data-level="3" href="#p1-current-developer-architecture-has-no-freshness-contract">P1. “Current” developer architecture has no freshness contract</a><a data-level="3" href="#p1-production-is-doing-work-that-belongs-in-a-review-gate">P1. Production is doing work that belongs in a review gate</a><a data-level="3" href="#p2-accessibility-progressive-enhancement-search-and-feedback-are-unmeasured">P2. Accessibility, progressive enhancement, search, and feedback are unmeasured</a><a data-level="2" href="#target-documentation-model">Target documentation model</a><a data-level="2" href="#reference-quality-design-requirements">Reference-quality design requirements</a><a data-level="3" href="#python">Python</a><a data-level="3" href="#cli-and-settings">CLI and settings</a><a data-level="3" href="#shared-visual-contract">Shared visual contract</a><a data-level="2" href="#prioritized-work-register">Prioritized work register</a><a data-level="2" href="#delivery-sequence">Delivery sequence</a><a data-level="3" href="#phase-0-stop-integrity-regressions">Phase 0 — stop integrity regressions</a><a data-level="3" href="#phase-1-productize-reference-and-establish-one-content-graph">Phase 1 — productize reference and establish one content graph</a><a data-level="3" href="#phase-2-make-the-five-product-journeys-valuable">Phase 2 — make the five product journeys valuable</a><a data-level="3" href="#phase-3-migrate-and-connect-the-remaining-corpus">Phase 3 — migrate and connect the remaining corpus</a><a data-level="3" href="#phase-4-improve-reach-and-continuous-quality">Phase 4 — improve reach and continuous quality</a><a data-level="2" href="#first-vertical-implementation-slice">First vertical implementation slice</a><a data-level="2" href="#scorecard">Scorecard</a><a data-level="2" href="#decisions-required-before-implementation">Decisions required before implementation</a></nav></details><article class="docs-article developer-article"><header class="developer-note-hero"><p class="product-eyebrow">For developers</p><div class="developer-note-title"><h1 id="documentation-quality-review-and-improvement-plan">Documentation quality review and improvement plan</h1><div class="developer-note-badges"><span class="developer-status developer-status-proposal">Proposal</span><span class="developer-kind">Documentation strategy</span></div></div><p>A critical review and phased plan for truthful Python/CLI reference, deeper manuals/examples, an integrated corpus, verified developer architecture, and measurable quality gates.</p><p class="developer-source"><a href="https://github.com/alphal00p/gammaloop/blob/57eae59992b4a330c421085838fc1a35a1ad260f/docs/architecture/documentation-improvement-plan.md">View the source note <span aria-hidden="true">↗</span></a></p></header><blockquote>
 <p><strong>Status:</strong> Proposal</p>
 <p><strong>Review date:</strong> 2026-08-17</p>
 <p><strong>Reviewed baseline:</strong> <code>c9f4e32acd2c</code></p>
@@ -64,6 +64,14 @@ settings output, the authoring commands, the Nix derivations, the Pages
 workflow, and the persistent-history update script. The Vakint sibling-project
 tutorial was also attempted from a clean temporary project, where its
 documented dependency setup failed before compilation.</p>
+<p>Every published developer note was also checked for lifecycle accuracy,
+resolvable evidence, and agreement with its mapped implementation. That audit
+found false present-tense claims in three pages labelled implemented, obsolete
+fixtures and controls in performance records, an implemented drawing proposal
+still presented as a future design, and a chronological build investigation
+whose historical and current contracts were not clearly separated. This branch
+corrects or explicitly archives the verified cases; the proposed freshness gate
+is intended to prevent their recurrence.</p>
 <p>This revision records the agreed publication model: <code>docs</code> is a temporary
 branch used to prepare and review a pull request; after merge, <code>main</code> is the
 sole authoritative source of mutable <code>latest</code> documentation. That is an
@@ -81,7 +89,7 @@ not, by itself, a claim that every rendered page currently violates a standard.<
 <tr><td>Product manuals</td><td>5 products, 25 registered authored pages: one overview, one tutorial, one subject chapter, one interface chapter, and one release page per product</td><td>Consistent, but too shallow for several headline capabilities</td></tr>
 <tr><td>Python reference</td><td>5 generated module references with 95 exported classes/functions and downloadable stubs</td><td>Inventory parity is strong, but long module pages, raw docstring presentation, implementation-detail noise, and missing member prose make the result hard to use</td></tr>
 <tr><td>GammaLoop CLI/settings reference</td><td>285 commands, 412 arguments, and 166 settings on one generated page</td><td>The data is exhaustive, but 132 commands, 117 arguments, and 163 settings lack explanatory text, and the flat presentation hides hierarchy and task context</td></tr>
-<tr><td>Developer area</td><td>12 classified notes</td><td>Strong classification inside <code>docs/architecture/</code>, but nowhere else</td></tr>
+<tr><td>Developer area</td><td>12 classified notes at the reviewed baseline; entries contain only free-form kind/status metadata</td><td>Classification is strong, but “Implemented” has no owner, review date, verified code scope, expiry, or enforceable meaning</td></tr>
 <tr><td>Unintegrated corpus</td><td>4,203 lines under <code>docs/*.md</code> and <code>docs/idenso/*</code> sit outside the product and developer registries</td><td>Useful current guidance, examples, dated evidence, plans, and raw output are not part of one navigable documentation system</td></tr>
 <tr><td>Manual examples</td><td>Rust compiles; shell uses <code>bash -n</code>; Python uses <code>compile()</code>; only selected catalog Rust examples execute</td><td>Syntax errors are caught, but most promised outcomes are not</td></tr>
 <tr><td>Release guidance</td><td>Every product family records at least one missing or fragmented changelog surface</td><td>Users cannot reliably derive upgrade risk from one canonical place</td></tr>
@@ -90,6 +98,22 @@ not, by itself, a claim that every rendered page currently violates a standard.<
 </tbody></table>
 <p>The baseline is a snapshot, not a permanent score. Counts should be generated
 by the quality job once the proposed inventory exists.</p>
+<h2 id="developer-architecture-audit-at-this-baseline">Developer architecture audit at this baseline</h2>
+<p>Recent file dates did not guarantee correctness. The audit checked present-tense
+claims against code rather than treating the publication commit as proof:</p>
+<table><thead><tr><th>Area</th><th>Verified drift</th><th>Disposition in this branch</th></tr></thead><tbody>
+<tr><td>GammaLoop current architecture</td><td>Repository scope was overstated; unmanifested state loading, external evaluator activation, additional weights, integration-workspace persistence, and the built-in quantity list had drifted</td><td>Corrected the current architecture against the state, evaluator, event, integration, and quantity implementations</td></tr>
+<tr><td>Spenso parsing diagram</td><td>The <code>ShorthandParsing</code> shape, strict tensor filtering, opaque-function boundary, compact-vector chain endpoints, and trace closure no longer matched the parser/materializer</td><td>Updated the diagram and its examples to the current parser contract</td></tr>
+<tr><td>Schoonschip network diagram</td><td><code>schoonschip_net</code> was said to run a final pattern cleanup that the current wrapper no longer performs</td><td>Corrected the entry-point and comparison text</td></tr>
+<tr><td>Drawing migration</td><td>A completed and subsequently evolved migration remained under proposals as a future callback sketch</td><td>Reclassified it as an implemented record and pointed to the canonical generator, style module, and templates; retained the sketch as history</td></tr>
+<tr><td>Spenso performance records</td><td>Two root fixtures, tests, environment controls, and unresolved-failure claims no longer exist or are contradicted by current regression coverage</td><td>Marked the records historical/superseded and non-runnable instead of presenting their measurements as current</td></tr>
+<tr><td>Schoonschip investigation and archived baseline</td><td>One removed setting and two removed trace controls were advertised; the archived baseline has a non-resolving revision and removed tests</td><td>Corrected live controls and labelled the baseline non-reproducible</td></tr>
+<tr><td>Nix/Crane record</td><td>A 1,500-line chronology mixes historical “now” statements with the maintained cache contract</td><td>Added an explicit reading boundary now; splitting the current contract from experiment history remains improvement work</td></tr>
+</tbody></table>
+<p>The UV-renormalization architecture still matched its implementation in the
+scoped audit. The CFF surface-cache proposal also remains genuinely open:
+<code>Graph::generate_cff</code> still owns and mutates the graph cache. These checks are
+point-in-time evidence, not a substitute for the continuous contract below.</p>
 <h2 id="critical-findings">Critical findings</h2>
 <h3 id="p0-the-generated-cli-reference-can-emit-false-invocation-syntax">P0. The generated CLI reference can emit false invocation syntax</h3>
 <p>GammaLoop’s compiled Clap tree is a sound source of truth, but the exported
@@ -414,6 +438,101 @@ guide, and a generated link-graph report has zero orphan current pages;</li>
 <li>a new user can choose “calculations”, “graphs”, “tensors”, “identities”, or
 “integrals” from the portal and reach the correct first task.</li>
 </ul>
+<h3 id="p1-current-developer-architecture-has-no-freshness-contract">P1. “Current” developer architecture has no freshness contract</h3>
+<p><code>docs/developers.toml</code> schema 1 gives a note an ID, title, summary, source,
+kind, and free-form status. The builder checks that those strings are non-empty,
+that the source exists, and that every top-level architecture file is
+classified. It does not know who owns a claim, when it was reviewed, which code
+proves it, whether that code changed, or whether a proposal was implemented or
+superseded. A note can therefore say “Implemented” forever while remaining
+fully green.</p>
+<p>The rendered source link makes this worse by pinning the note and its
+hand-authored code links to the current Pages build SHA. That proves which prose
+was published, not that the architecture was verified at that revision. Fixed
+line anchors in the HTML diagrams can move to unrelated code while their paths
+continue to pass link validation. The concrete drift corrected by this audit
+shows that recent modification dates and working links are insufficient.</p>
+<p><strong>Required change</strong></p>
+<ul>
+<li>
+<p>Introduce a developer-registry schema with a constrained lifecycle separate
+from freshness: <code>current</code>, <code>proposal</code>, <code>investigation</code>, <code>archived</code>, or
+<code>superseded</code>. Drafts remain unpublished. An implemented proposal is not a
+lifecycle of its own: migrate it to <code>current</code> when the page is maintained as
+the active contract, or to <code>archived</code> when it is only a design record, and
+require <code>implemented_by</code> evidence in either case.</p>
+</li>
+<li>
+<p>Migrate the existing free-form values explicitly:</p>
+<table><thead><tr><th>Existing status</th><th>Schema-2 lifecycle</th></tr></thead><tbody>
+<tr><td><code>Implemented</code></td><td><code>current</code></td></tr>
+<tr><td><code>Implemented record</code></td><td><code>current</code> if it retains an active contract; otherwise <code>archived</code>, with <code>implemented_by</code></td></tr>
+<tr><td><code>Proposal</code></td><td><code>proposal</code></td></tr>
+<tr><td><code>Investigation record</code></td><td><code>investigation</code></td></tr>
+<tr><td><code>Superseded investigation</code></td><td><code>superseded</code>, with <code>superseded_by</code></td></tr>
+<tr><td><code>Historical experiment</code> and <code>Archived · non-reproducible</code></td><td><code>archived</code></td></tr>
+<tr><td><code>Living engineering record</code></td><td>split into a <code>current</code> contract and <code>archived</code> evidence before migration</td></tr>
+</tbody></table>
+</li>
+<li>
+<p>Resolve owners through one owner table. Require <code>reviewed_at</code>, a review/PR
+record, applicable products/topics, stable code paths and symbols, and broad
+review-trigger globs for current and proposal notes.</p>
+</li>
+<li>
+<p>Resolve stable Rust symbols to their current declarations and hash the
+canonical verified scopes. A changed or missing digest is a required review,
+not an automatic claim that prose is still correct. Do not use stored line
+numbers or a self-referential HEAD SHA as semantic evidence.</p>
+</li>
+<li>
+<p>Give investigations and archives an immutable evidence revision, capture
+date, command, fixtures, toolchain/environment, and expected artifact or
+result. They remain valid historical records when HEAD changes, but must not
+look current.</p>
+</li>
+<li>
+<p>Require <code>superseded_by</code> for superseded material, validate that lifecycle
+graph for missing targets/cycles, and remove superseded pages from primary
+navigation and search while preserving redirects and provenance.</p>
+</li>
+<li>
+<p>Map changed code through review triggers and the reverse code-reference graph.
+Require the note owner to refresh its scope digest or explicitly attest that
+the change has no documentation impact. Protect the note and registry through
+CODEOWNERS.</p>
+</li>
+<li>
+<p>Render owner, lifecycle, review date, evidence/verified scope, and freshness
+state. Keep the build revision distinct from the review/evidence revision.</p>
+</li>
+<li>
+<p>Start with proposed defaults—warn current architecture at 60 days, block
+publication at 90 days unless reviewed, and require proposal disposition at
+180 days—then ratify or adjust them with the named owners before enforcement.
+Do not age-fail frozen investigation/archive evidence; fail it only for
+invalid provenance or misleading lifecycle presentation.</p>
+</li>
+<li>
+<p>Split living engineering logs into a short canonical current contract and
+dated experiment/incident records.</p>
+</li>
+</ul>
+<p><strong>Complete when</strong></p>
+<ul>
+<li>100% of current developer notes have a resolving owner, review record,
+verified scopes/digests, review triggers, and a contextual inbound link beyond
+the developer index;</li>
+<li>no current code path or symbol reference is missing or ambiguous;</li>
+<li>no changed verified scope can publish until its owner reviews or explicitly
+attests the impact;</li>
+<li>no overdue current note can publish, while historical records remain visibly
+pinned to their evidence revision;</li>
+<li>every investigation’s declared fixture exists and command parses at capture,
+or the page is explicitly marked non-reproducible; and</li>
+<li>every implemented/superseded proposal names the implementing or replacement
+evidence.</li>
+</ul>
 <h3 id="p1-production-is-doing-work-that-belongs-in-a-review-gate">P1. Production is doing work that belongs in a review gate</h3>
 <p>The accepted delivery flow is now clear: <code>docs</code> is temporary PR staging and
 <code>main</code> is authoritative after merge. The automation should encode that flow.
@@ -493,8 +612,9 @@ result.</li>
 linked rather than duplicated across products.</li>
 <li><strong>Reference:</strong> generated, version-specific Rust, Python, CLI, settings, and
 topology facts.</li>
-<li><strong>Developer record:</strong> implemented architecture, proposals, investigations,
-and archives with explicit lifecycle metadata.</li>
+<li><strong>Developer record:</strong> implemented architecture with verified code scopes and
+review triggers, plus proposals, investigations, and archives with explicit
+lifecycle and evidence provenance.</li>
 </ol>
 <p>README files should orient contributors and link to the rendered material, not
 act as a second user manual. Generated reference is a first-class product
@@ -563,13 +683,14 @@ light and dark modes at 375 px, 768 px, and desktop width.</p>
 <tr><td>DOC-007</td><td>P1</td><td>Create a top-task matrix and deepen each product manual</td><td>One beginner and one real-value checked path per headline capability</td></tr>
 <tr><td>DOC-008</td><td>P1</td><td>Register canonical examples and execute them by verification tier</td><td>Every maintained example has one route, owner, expected result, and test command</td></tr>
 <tr><td>DOC-009</td><td>P1</td><td>Integrate the full corpus with lifecycle metadata and a generated link graph</td><td>100% of meaningful sources have canonical routes; zero orphan current pages</td></tr>
-<tr><td>DOC-010</td><td>P1</td><td>Make release/version/tool claims generated and complete</td><td>Manifest-to-release coverage is current for every component</td></tr>
-<tr><td>DOC-011</td><td>P1</td><td>Use ecosystem metadata for task navigation and bidirectional manual/reference links</td><td>Task chooser and contextual cross-link fixtures pass</td></tr>
-<tr><td>DOC-012</td><td>P1</td><td>Add the PR quality gate and enforce docs-preview/main-promotion flow</td><td><code>docs</code> retains a complete preview but cannot mutate <code>latest</code>; merged <code>main</code> deploys</td></tr>
-<tr><td>DOC-013</td><td>P1</td><td>Complete link, source-path, containment, and redirect validation</td><td>Zero internal failures, including Rustdoc; external report is scheduled</td></tr>
-<tr><td>DOC-014</td><td>P2</td><td>Add browser, HTML, accessibility, spelling, and no-JS checks</td><td>Zero HTML errors and serious/critical axe findings on representative pages</td></tr>
-<tr><td>DOC-015</td><td>P2</td><td>Federate search and add edit/report feedback routes</td><td>Task and symbol fixtures rank the correct page in the first five results</td></tr>
-<tr><td>DOC-016</td><td>P2</td><td>Add scientific citations and regression-backed conventions</td><td>Each precision/sign/normalization-sensitive claim has an auditable anchor</td></tr>
+<tr><td>DOC-010</td><td>P1</td><td>Enforce developer-architecture freshness and verified code scopes</td><td>Every current note is owned, recently reviewed, scope-clean, symbol-valid, and contextually linked; changed scopes block publication pending owner review</td></tr>
+<tr><td>DOC-011</td><td>P1</td><td>Make release/version/tool claims generated and complete</td><td>Manifest-to-release coverage is current for every component</td></tr>
+<tr><td>DOC-012</td><td>P1</td><td>Use ecosystem metadata for task navigation and bidirectional manual/reference links</td><td>Task chooser and contextual cross-link fixtures pass</td></tr>
+<tr><td>DOC-013</td><td>P1</td><td>Add the PR quality gate and enforce docs-preview/main-promotion flow</td><td><code>docs</code> retains a complete preview but cannot mutate <code>latest</code>; merged <code>main</code> deploys</td></tr>
+<tr><td>DOC-014</td><td>P1</td><td>Complete link, source-path, containment, and redirect validation</td><td>Zero internal failures, including Rustdoc; external report is scheduled</td></tr>
+<tr><td>DOC-015</td><td>P2</td><td>Add browser, HTML, accessibility, spelling, and no-JS checks</td><td>Zero HTML errors and serious/critical axe findings on representative pages</td></tr>
+<tr><td>DOC-016</td><td>P2</td><td>Federate search and add edit/report feedback routes</td><td>Task and symbol fixtures rank the correct page in the first five results</td></tr>
+<tr><td>DOC-017</td><td>P2</td><td>Add scientific citations and regression-backed conventions</td><td>Each precision/sign/normalization-sensitive claim has an auditable anchor</td></tr>
 </tbody></table>
 <h2 id="delivery-sequence">Delivery sequence</h2>
 <h3 id="phase-0-stop-integrity-regressions">Phase 0 — stop integrity regressions</h3>
@@ -579,33 +700,39 @@ rendered invocation syntax can be false, or a content surface whose documented
 local build can silently emit broken navigation.</p>
 <h3 id="phase-1-productize-reference-and-establish-one-content-graph">Phase 1 — productize reference and establish one content graph</h3>
 <p>Complete DOC-004 through DOC-006, establish the inventory/schema portion of
-DOC-009, and complete DOC-012. Prototype the shared reference design with one
+DOC-009, establish the developer lifecycle/scope schema and initial audit under
+DOC-010, and complete DOC-013. Prototype the shared reference design with one
 large GammaLoop Python class, one command family, and one settings group before
-mechanically applying it to all modules. Publish coverage reports as warnings,
-fill the source-owned documentation gaps, then promote the substantive coverage
-thresholds to required checks.</p>
+mechanically applying it to all modules. Publish coverage and developer-scope
+reports as warnings, fill the source-owned documentation gaps, then promote the
+substantive coverage and freshness thresholds to required checks.</p>
 <h3 id="phase-2-make-the-five-product-journeys-valuable">Phase 2 — make the five product journeys valuable</h3>
-<p>Complete DOC-007, DOC-008, DOC-011, and DOC-016 product by product. Prefer a
+<p>Complete DOC-007, DOC-008, DOC-012, and DOC-017 product by product. Prefer a
 vertical slice—tutorial, canonical example, explanation, exact Python/CLI/Rust
 deep links, troubleshooting, and result interpretation—for one product over
 adding disconnected pages to all five. Keep licensed and expensive scientific
 validation in a provisioned scheduled tier while preserving a hermetic
 pull-request smoke path.</p>
 <h3 id="phase-3-migrate-and-connect-the-remaining-corpus">Phase 3 — migrate and connect the remaining corpus</h3>
-<p>Finish DOC-009 and DOC-010. Publish current guidance in manuals or shared guides
-and move evidence into explicit investigation/archive routes. Split large
-living records into a short current contract plus dated evidence. Add
-supersession links and redirects before moving a source; do not silently delete
-historical investigation material. Require the generated link graph to show how
-every current page is reached.</p>
+<p>Finish DOC-009 through DOC-011. Publish current guidance in manuals or shared
+guides and move evidence into explicit investigation/archive routes. Apply the
+developer freshness contract to every record, and split large living records
+into a short current contract plus dated evidence. Add supersession links and
+redirects before moving a source; do not silently delete historical
+investigation material. Require the generated link graph to show how every
+current page is reached.</p>
 <h3 id="phase-4-improve-reach-and-continuous-quality">Phase 4 — improve reach and continuous quality</h3>
-<p>Complete DOC-013 through DOC-015. Run deterministic checks on pull requests and
+<p>Complete DOC-014 through DOC-016. Run deterministic checks on pull requests and
 network/licensed/full-browser health checks on a schedule. Publish the scorecard
 so degradation is visible without making every transient external failure block
 an author.</p>
 <h2 id="first-vertical-implementation-slice">First vertical implementation slice</h2>
 <p>The first implementation pull requests should prove the model end to end:</p>
 <ol>
+<li>Introduce the developer lifecycle/review schema, register stable code scopes
+for <code>architecture-current.md</code>, and turn the corrected state-loading,
+evaluator, event-weight, integration-workspace, and quantity claims into the
+first scope-digest fixtures.</li>
 <li>Extend the CLI schema with action, arity, and exact usage; correct
 <code>--clean-state</code>; and add compiled-parser parity fixtures.</li>
 <li>Build shared reference index/detail components and apply them to the
@@ -638,6 +765,11 @@ products.</p>
 <tr><td>Meaningful authored sources with rendered canonical routes</td><td style="text-align: right">100%</td></tr>
 <tr><td>Orphan current pages</td><td style="text-align: right">0</td></tr>
 <tr><td>Published pages classified, owned, scoped, and reviewed</td><td style="text-align: right">100%</td></tr>
+<tr><td>Current developer notes meeting the freshness/verified-scope contract</td><td style="text-align: right">100%</td></tr>
+<tr><td>Missing or ambiguous developer code references</td><td style="text-align: right">0</td></tr>
+<tr><td>Changed verified scopes awaiting owner disposition at publication</td><td style="text-align: right">0</td></tr>
+<tr><td>Overdue current developer reviews</td><td style="text-align: right">0</td></tr>
+<tr><td>Current developer notes reachable only from the developer index</td><td style="text-align: right">0</td></tr>
 <tr><td>Current components with release-coverage gaps</td><td style="text-align: right">0</td></tr>
 <tr><td>Runtime-capable Python surfaces with full parity</td><td style="text-align: right">100%</td></tr>
 <tr><td>Serious or critical axe findings on representative pages</td><td style="text-align: right">0</td></tr>
@@ -655,7 +787,9 @@ separately. A content-only edit should never run unrelated workspace tests.</p>
 record two ownership and execution choices:</p>
 <ol>
 <li>Who owns the portal/toolchain, generated Python and CLI reference quality,
-and each of the five product manuals?</li>
+each of the five product manuals, and the GammaLoop runtime/UV,
+Spenso/Idenso parsing, build-system, and documentation-system architecture
+records? Owners must also approve the current/proposal review service levels.</li>
 <li>Which scientific examples are hermetic pull-request checks, and which require
 licensed or scheduled infrastructure?</li>
 </ol>
@@ -664,4 +798,4 @@ pull requests with one acceptance criterion per change. The reference prototype
 and corpus inventory can begin while named owners and expensive-example tiers
 are assigned; publication and product behavior changes still require their
 ordinary review.</p>
-</article><nav class="page-nav" aria-label="Developer note pagination"><a class="page-nav-link" href="../../architecture/nix-crane-cache-reuse/"><span class="page-nav-label">← Previous</span>Nix and Crane artifact reuse</a><span></span></nav><footer class="page-footer">Developer architecture · <a href="https://github.com/alphal00p/gammaloop/blob/961304d6fceb7ce68a7346b269b24be30ea157fd/docs/architecture/documentation-improvement-plan.md">source 961304d6fceb</a></footer></main><aside class="docs-toc" aria-label="On this page"><p class="toc-title">On this page</p><a class="toc-link" data-level="2" href="#executive-assessment">Executive assessment</a><a class="toc-link" data-level="2" href="#what-is-already-strong">What is already strong</a><a class="toc-link" data-level="2" href="#review-method-and-limits">Review method and limits</a><a class="toc-link" data-level="2" href="#baseline">Baseline</a><a class="toc-link" data-level="2" href="#critical-findings">Critical findings</a><a class="toc-link" data-level="3" href="#p0-the-generated-cli-reference-can-emit-false-invocation-syntax">P0. The generated CLI reference can emit false invocation syntax</a><a class="toc-link" data-level="3" href="#p0-first-user-promises-are-not-consistently-executable">P0. First-user promises are not consistently executable</a><a class="toc-link" data-level="3" href="#p0-the-advertised-partial-build-contract-can-emit-broken-navigation">P0. The advertised partial-build contract can emit broken navigation</a><a class="toc-link" data-level="3" href="#p1-generated-python-and-cli-data-is-not-yet-a-good-reference-experience">P1. Generated Python and CLI data is not yet a good reference experience</a><a class="toc-link" data-level="3" href="#p1-the-manuals-cover-a-template-not-each-product-s-real-task-surface">P1. The manuals cover a template, not each product’s real task surface</a><a class="toc-link" data-level="3" href="#p1-examples-are-shallow-scattered-and-weakly-connected-to-the-manuals">P1. Examples are shallow, scattered, and weakly connected to the manuals</a><a class="toc-link" data-level="3" href="#p1-release-and-freshness-information-is-visible-but-not-trustworthy">P1. Release and freshness information is visible but not trustworthy</a><a class="toc-link" data-level="3" href="#p1-the-documentation-corpus-is-fragmented-instead-of-integrated">P1. The documentation corpus is fragmented instead of integrated</a><a class="toc-link" data-level="3" href="#p1-production-is-doing-work-that-belongs-in-a-review-gate">P1. Production is doing work that belongs in a review gate</a><a class="toc-link" data-level="3" href="#p2-accessibility-progressive-enhancement-search-and-feedback-are-unmeasured">P2. Accessibility, progressive enhancement, search, and feedback are unmeasured</a><a class="toc-link" data-level="2" href="#target-documentation-model">Target documentation model</a><a class="toc-link" data-level="2" href="#reference-quality-design-requirements">Reference-quality design requirements</a><a class="toc-link" data-level="3" href="#python">Python</a><a class="toc-link" data-level="3" href="#cli-and-settings">CLI and settings</a><a class="toc-link" data-level="3" href="#shared-visual-contract">Shared visual contract</a><a class="toc-link" data-level="2" href="#prioritized-work-register">Prioritized work register</a><a class="toc-link" data-level="2" href="#delivery-sequence">Delivery sequence</a><a class="toc-link" data-level="3" href="#phase-0-stop-integrity-regressions">Phase 0 — stop integrity regressions</a><a class="toc-link" data-level="3" href="#phase-1-productize-reference-and-establish-one-content-graph">Phase 1 — productize reference and establish one content graph</a><a class="toc-link" data-level="3" href="#phase-2-make-the-five-product-journeys-valuable">Phase 2 — make the five product journeys valuable</a><a class="toc-link" data-level="3" href="#phase-3-migrate-and-connect-the-remaining-corpus">Phase 3 — migrate and connect the remaining corpus</a><a class="toc-link" data-level="3" href="#phase-4-improve-reach-and-continuous-quality">Phase 4 — improve reach and continuous quality</a><a class="toc-link" data-level="2" href="#first-vertical-implementation-slice">First vertical implementation slice</a><a class="toc-link" data-level="2" href="#scorecard">Scorecard</a><a class="toc-link" data-level="2" href="#decisions-required-before-implementation">Decisions required before implementation</a></aside></div><button class="sidebar-backdrop" type="button" data-sidebar-backdrop aria-label="Close navigation"></button><dialog class="search-dialog" data-search-dialog><form class="search-form" method="dialog"><input class="search-input" type="search" data-search-input placeholder="Search developer architecture" aria-label="Search developer architecture"><button class="header-button" value="close">Close</button></form><ul class="search-results" data-search-results aria-live="polite"></ul></dialog></body></html>
+</article><nav class="page-nav" aria-label="Developer note pagination"><a class="page-nav-link" href="../../architecture/nix-crane-cache-reuse/"><span class="page-nav-label">← Previous</span>Nix and Crane artifact reuse</a><span></span></nav><footer class="page-footer">Developer architecture · <a href="https://github.com/alphal00p/gammaloop/blob/57eae59992b4a330c421085838fc1a35a1ad260f/docs/architecture/documentation-improvement-plan.md">source 57eae59992b4</a></footer></main><aside class="docs-toc" aria-label="On this page"><p class="toc-title">On this page</p><a class="toc-link" data-level="2" href="#executive-assessment">Executive assessment</a><a class="toc-link" data-level="2" href="#what-is-already-strong">What is already strong</a><a class="toc-link" data-level="2" href="#review-method-and-limits">Review method and limits</a><a class="toc-link" data-level="2" href="#baseline">Baseline</a><a class="toc-link" data-level="2" href="#developer-architecture-audit-at-this-baseline">Developer architecture audit at this baseline</a><a class="toc-link" data-level="2" href="#critical-findings">Critical findings</a><a class="toc-link" data-level="3" href="#p0-the-generated-cli-reference-can-emit-false-invocation-syntax">P0. The generated CLI reference can emit false invocation syntax</a><a class="toc-link" data-level="3" href="#p0-first-user-promises-are-not-consistently-executable">P0. First-user promises are not consistently executable</a><a class="toc-link" data-level="3" href="#p0-the-advertised-partial-build-contract-can-emit-broken-navigation">P0. The advertised partial-build contract can emit broken navigation</a><a class="toc-link" data-level="3" href="#p1-generated-python-and-cli-data-is-not-yet-a-good-reference-experience">P1. Generated Python and CLI data is not yet a good reference experience</a><a class="toc-link" data-level="3" href="#p1-the-manuals-cover-a-template-not-each-product-s-real-task-surface">P1. The manuals cover a template, not each product’s real task surface</a><a class="toc-link" data-level="3" href="#p1-examples-are-shallow-scattered-and-weakly-connected-to-the-manuals">P1. Examples are shallow, scattered, and weakly connected to the manuals</a><a class="toc-link" data-level="3" href="#p1-release-and-freshness-information-is-visible-but-not-trustworthy">P1. Release and freshness information is visible but not trustworthy</a><a class="toc-link" data-level="3" href="#p1-the-documentation-corpus-is-fragmented-instead-of-integrated">P1. The documentation corpus is fragmented instead of integrated</a><a class="toc-link" data-level="3" href="#p1-current-developer-architecture-has-no-freshness-contract">P1. “Current” developer architecture has no freshness contract</a><a class="toc-link" data-level="3" href="#p1-production-is-doing-work-that-belongs-in-a-review-gate">P1. Production is doing work that belongs in a review gate</a><a class="toc-link" data-level="3" href="#p2-accessibility-progressive-enhancement-search-and-feedback-are-unmeasured">P2. Accessibility, progressive enhancement, search, and feedback are unmeasured</a><a class="toc-link" data-level="2" href="#target-documentation-model">Target documentation model</a><a class="toc-link" data-level="2" href="#reference-quality-design-requirements">Reference-quality design requirements</a><a class="toc-link" data-level="3" href="#python">Python</a><a class="toc-link" data-level="3" href="#cli-and-settings">CLI and settings</a><a class="toc-link" data-level="3" href="#shared-visual-contract">Shared visual contract</a><a class="toc-link" data-level="2" href="#prioritized-work-register">Prioritized work register</a><a class="toc-link" data-level="2" href="#delivery-sequence">Delivery sequence</a><a class="toc-link" data-level="3" href="#phase-0-stop-integrity-regressions">Phase 0 — stop integrity regressions</a><a class="toc-link" data-level="3" href="#phase-1-productize-reference-and-establish-one-content-graph">Phase 1 — productize reference and establish one content graph</a><a class="toc-link" data-level="3" href="#phase-2-make-the-five-product-journeys-valuable">Phase 2 — make the five product journeys valuable</a><a class="toc-link" data-level="3" href="#phase-3-migrate-and-connect-the-remaining-corpus">Phase 3 — migrate and connect the remaining corpus</a><a class="toc-link" data-level="3" href="#phase-4-improve-reach-and-continuous-quality">Phase 4 — improve reach and continuous quality</a><a class="toc-link" data-level="2" href="#first-vertical-implementation-slice">First vertical implementation slice</a><a class="toc-link" data-level="2" href="#scorecard">Scorecard</a><a class="toc-link" data-level="2" href="#decisions-required-before-implementation">Decisions required before implementation</a></aside></div><button class="sidebar-backdrop" type="button" data-sidebar-backdrop aria-label="Close navigation"></button><dialog class="search-dialog" data-search-dialog><form class="search-form" method="dialog"><input class="search-input" type="search" data-search-input placeholder="Search developer architecture" aria-label="Search developer architecture"><button class="header-button" value="close">Close</button></form><ul class="search-results" data-search-results aria-live="polite"></ul></dialog></body></html>

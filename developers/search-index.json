@@ -114,6 +114,12 @@
     "kind": "developer heading"
   },
   {
+    "title": "Integration workspaces",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#integration-workspaces",
+    "kind": "developer heading"
+  },
+  {
     "title": "Configuration Architecture",
     "summary": "GammaLoop architecture",
     "href": "architecture/gammaloop-architecture/#configuration-architecture",
@@ -214,6 +220,24 @@
     "summary": "Entry points, fixed-point execution, opaque parsing, contraction, settings, and comparison with pattern rewriting.",
     "href": "architecture/schoonschip-network/",
     "kind": "developer implemented"
+  },
+  {
+    "title": "GammaLoop drawing style migration record",
+    "summary": "The implemented Typst callback architecture, canonical source locations, and the superseded design sketch that led to it.",
+    "href": "architecture/gammaloop-draw-style-migration/",
+    "kind": "developer implemented record"
+  },
+  {
+    "title": "Historical generated edge-style.typ sketch",
+    "summary": "GammaLoop drawing style migration record",
+    "href": "architecture/gammaloop-draw-style-migration/#historical-generated-edge-style-typ-sketch",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Embedded layout.typ Wiring",
+    "summary": "GammaLoop drawing style migration record",
+    "href": "architecture/gammaloop-draw-style-migration/#embedded-layout-typ-wiring",
+    "kind": "developer heading"
   },
   {
     "title": "GammaLoop architecture roadmap",
@@ -330,24 +354,6 @@
     "kind": "developer heading"
   },
   {
-    "title": "GammaLoop drawing style migration",
-    "summary": "Model-specific particle styles expressed as regular Typst callbacks for Linnest and CeTZ graph rendering.",
-    "href": "architecture/gammaloop-draw-style-migration/",
-    "kind": "developer design example"
-  },
-  {
-    "title": "Generated edge-style.typ",
-    "summary": "GammaLoop drawing style migration",
-    "href": "architecture/gammaloop-draw-style-migration/#generated-edge-style-typ",
-    "kind": "developer heading"
-  },
-  {
-    "title": "Embedded layout.typ Wiring",
-    "summary": "GammaLoop drawing style migration",
-    "href": "architecture/gammaloop-draw-style-migration/#embedded-layout-typ-wiring",
-    "kind": "developer heading"
-  },
-  {
     "title": "Network simplification status",
     "summary": "Direct sum contraction behavior, profiling controls, current bottlenecks, reproduction commands, and open experiments.",
     "href": "architecture/network-simplification/",
@@ -426,76 +432,76 @@
     "kind": "developer heading"
   },
   {
-    "title": "Spenso large-expression pathology",
-    "summary": "Parsing and execution shape, contraction order, scalar aliasing, Hornering, and unresolved materialization pressure.",
+    "title": "Spenso large-expression pathology record",
+    "summary": "A superseded large-input investigation whose root fixtures and controls are no longer present; retained as historical evidence.",
     "href": "architecture/spenso-large-expressions/",
-    "kind": "developer investigation record"
+    "kind": "developer superseded investigation"
   },
   {
-    "title": "Current Status",
-    "summary": "Spenso large-expression pathology",
-    "href": "architecture/spenso-large-expressions/#current-status",
+    "title": "Status at capture",
+    "summary": "Spenso large-expression pathology record",
+    "href": "architecture/spenso-large-expressions/#status-at-capture",
     "kind": "developer heading"
   },
   {
     "title": "Rerun Context",
-    "summary": "Spenso large-expression pathology",
+    "summary": "Spenso large-expression pathology record",
     "href": "architecture/spenso-large-expressions/#rerun-context",
     "kind": "developer heading"
   },
   {
     "title": "spenso_eval_input_0.txt",
-    "summary": "Spenso large-expression pathology",
+    "summary": "Spenso large-expression pathology record",
     "href": "architecture/spenso-large-expressions/#spenso-eval-input-0-txt",
     "kind": "developer heading"
   },
   {
     "title": "symbolica_expression.txt",
-    "summary": "Spenso large-expression pathology",
+    "summary": "Spenso large-expression pathology record",
     "href": "architecture/spenso-large-expressions/#symbolica-expression-txt",
     "kind": "developer heading"
   },
   {
     "title": "BNL Four-Term MWE",
-    "summary": "Spenso large-expression pathology",
+    "summary": "Spenso large-expression pathology record",
     "href": "architecture/spenso-large-expressions/#bnl-four-term-mwe",
     "kind": "developer heading"
   },
   {
     "title": "Contraction Order",
-    "summary": "Spenso large-expression pathology",
+    "summary": "Spenso large-expression pathology record",
     "href": "architecture/spenso-large-expressions/#contraction-order",
     "kind": "developer heading"
   },
   {
     "title": "Component-Level Hornering",
-    "summary": "Spenso large-expression pathology",
+    "summary": "Spenso large-expression pathology record",
     "href": "architecture/spenso-large-expressions/#component-level-hornering",
     "kind": "developer heading"
   },
   {
     "title": "Staged Disconnection",
-    "summary": "Spenso large-expression pathology",
+    "summary": "Spenso large-expression pathology record",
     "href": "architecture/spenso-large-expressions/#staged-disconnection",
     "kind": "developer heading"
   },
   {
     "title": "Lazy Tensor Sums",
-    "summary": "Spenso large-expression pathology",
+    "summary": "Spenso large-expression pathology record",
     "href": "architecture/spenso-large-expressions/#lazy-tensor-sums",
     "kind": "developer heading"
   },
   {
-    "title": "Current Diagnosis",
-    "summary": "Spenso large-expression pathology",
-    "href": "architecture/spenso-large-expressions/#current-diagnosis",
+    "title": "Diagnosis at capture",
+    "summary": "Spenso large-expression pathology record",
+    "href": "architecture/spenso-large-expressions/#diagnosis-at-capture",
     "kind": "developer heading"
   },
   {
     "title": "Spenso large-input improvement effects",
-    "summary": "A timing matrix for sparse tensors, selector contraction, lazy terms, distribution caps, and combined optimizations.",
+    "summary": "A historical timing matrix whose branch, fixture, test, and environment controls no longer exist in the current checkout.",
     "href": "architecture/spenso-improvement-effects/",
-    "kind": "developer investigation record"
+    "kind": "developer historical experiment"
   },
   {
     "title": "Term 18 Baseline Shape",
@@ -600,22 +606,22 @@
     "kind": "developer heading"
   },
   {
-    "title": "Current Conclusion",
+    "title": "Conclusion at capture",
     "summary": "Spenso large-input improvement effects",
-    "href": "architecture/spenso-improvement-effects/#current-conclusion",
+    "href": "architecture/spenso-improvement-effects/#conclusion-at-capture",
     "kind": "developer heading"
   },
   {
     "title": "Spenso network execution test baseline",
-    "summary": "A preserved test and timeout baseline for comparing later network-execution work.",
+    "summary": "An archived test/timeout record with unresolved revision and removed tests; preserved as non-reproducible evidence only.",
     "href": "architecture/spenso-test-baseline/",
-    "kind": "developer archived baseline"
+    "kind": "developer archived · non-reproducible"
   },
   {
     "title": "Nix and Crane artifact reuse",
-    "summary": "Cache contracts, package and test artifact ownership, feature contexts, and CI producer barriers.",
+    "summary": "A living cache-architecture contract embedded in a chronological experiment record, with historical sections explicitly separated.",
     "href": "architecture/nix-crane-cache-reuse/",
-    "kind": "developer engineering record"
+    "kind": "developer living engineering record"
   },
   {
     "title": "Sources checked",
@@ -769,7 +775,7 @@
   },
   {
     "title": "Documentation quality review and improvement plan",
-    "summary": "A critical review and phased plan for truthful Python/CLI reference, deeper manuals and examples, an integrated corpus, and measurable quality gates.",
+    "summary": "A critical review and phased plan for truthful Python/CLI reference, deeper manuals/examples, an integrated corpus, verified developer architecture, and measurable quality gates.",
     "href": "architecture/documentation-improvement-plan/",
     "kind": "developer proposal"
   },
@@ -795,6 +801,12 @@
     "title": "Baseline",
     "summary": "Documentation quality review and improvement plan",
     "href": "architecture/documentation-improvement-plan/#baseline",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Developer architecture audit at this baseline",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#developer-architecture-audit-at-this-baseline",
     "kind": "developer heading"
   },
   {
@@ -849,6 +861,12 @@
     "title": "P1. The documentation corpus is fragmented instead of integrated",
     "summary": "Documentation quality review and improvement plan",
     "href": "architecture/documentation-improvement-plan/#p1-the-documentation-corpus-is-fragmented-instead-of-integrated",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P1. “Current” developer architecture has no freshness contract",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#p1-current-developer-architecture-has-no-freshness-contract",
     "kind": "developer heading"
   },
   {
