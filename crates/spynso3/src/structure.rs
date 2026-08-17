@@ -29,7 +29,7 @@ use spenso::{
         tags::SPENSO_TAG,
     },
     structure::{
-        HasName, IndexLess, OrderedStructure, PermutedStructure, TensorStructure, ToSymbolic,
+        HasName, IndexLess, OrderedStructure, PermutedStructure, TensorStructure,
         abstract_index::AbstractIndex,
         dimension::Dimension,
         permuted::Perm,
@@ -505,6 +505,7 @@ impl ModuleInit for SpensoIndices {}
 pub enum ArithmeticStructure {
     Convertible(ConvertibleToExpression),
     Structure(SpensoIndices),
+    IndexlessStructure(SpensoStructure),
     Expression(PythonExpression),
 }
 
@@ -513,6 +514,7 @@ impl PyStubType for ArithmeticStructure {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
         ConvertibleToExpression::type_output()
             | SpensoIndices::type_output()
+            | SpensoStructure::type_output()
             | PythonExpression::type_output()
     }
 }
@@ -522,6 +524,7 @@ impl ArithmeticStructure {
         match self {
             ArithmeticStructure::Convertible(expr) => Ok(expr.to_expression()),
             ArithmeticStructure::Structure(indices) => indices.to_expression(),
+            ArithmeticStructure::IndexlessStructure(structure) => structure.to_expression(),
             ArithmeticStructure::Expression(expr) => Ok(expr),
         }
     }
@@ -535,9 +538,11 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ArithmeticStructure {
             Ok(ArithmeticStructure::Convertible(ob))
         } else if let Ok(ob) = ob.extract::<SpensoIndices>() {
             Ok(ArithmeticStructure::Structure(ob))
+        } else if let Ok(ob) = ob.extract::<SpensoStructure>() {
+            Ok(ArithmeticStructure::IndexlessStructure(ob))
         } else {
             Err(exceptions::PyTypeError::new_err(
-                "Only convertible expressions and spenso indices can be used",
+                "Only convertible expressions and Spenso tensor structures can be used",
             ))
         }
     }
@@ -1009,11 +1014,7 @@ impl SpensoStructure {
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "{}",
-            self.to_symbolic(Some(self.structure.rep_permutation.clone()))
-                .unwrap()
-        )
+        format!("{}", self.compact_placeholder_atom().unwrap())
     }
 
     fn __str__(&self) -> String {
@@ -1039,6 +1040,51 @@ impl SpensoStructure {
                 format!("[{}]", slot)
             }
         }
+    }
+
+    /// Convert this indexless tensor structure to compact placeholder syntax.
+    ///
+    /// Each representation becomes a stripped-representation argument, ready
+    /// for shorthand operations such as `dot` to materialize into slots.
+    fn to_expression(&self) -> PyResult<PythonExpression> {
+        self.compact_placeholder_atom()
+            .map(Into::into)
+            .ok_or_else(|| PyRuntimeError::new_err("Tensor structure has no name"))
+    }
+
+    /// Add this structure to another symbolic value.
+    pub fn __add__(&self, rhs: ArithmeticStructure) -> PyResult<PythonExpression> {
+        let rhs = rhs.to_expression()?;
+        Ok((self.to_expression()?.expr.as_ref() + rhs.expr.as_ref()).into())
+    }
+
+    /// Add this structure to another symbolic value.
+    pub fn __radd__(&self, rhs: ArithmeticStructure) -> PyResult<PythonExpression> {
+        self.__add__(rhs)
+    }
+
+    /// Subtract another symbolic value from this structure.
+    pub fn __sub__(&self, rhs: ArithmeticStructure) -> PyResult<PythonExpression> {
+        let rhs = rhs.to_expression()?.__neg__()?;
+        self.__add__(ArithmeticStructure::Expression(rhs))
+    }
+
+    /// Subtract this structure from another symbolic value.
+    pub fn __rsub__(&self, rhs: ArithmeticStructure) -> PyResult<PythonExpression> {
+        let lhs = rhs.to_expression()?.expr;
+        let rhs = self.to_expression()?.__neg__()?.expr;
+        Ok((lhs + rhs).into())
+    }
+
+    /// Multiply this structure by another symbolic value.
+    pub fn __mul__(&self, rhs: ArithmeticStructure) -> PyResult<PythonExpression> {
+        let rhs = rhs.to_expression()?;
+        Ok((self.to_expression()?.expr.as_ref() * rhs.expr.as_ref()).into())
+    }
+
+    /// Multiply this structure by another symbolic value.
+    pub fn __rmul__(&self, rhs: ArithmeticStructure) -> PyResult<PythonExpression> {
+        self.__mul__(rhs)
     }
 
     fn __len__(&self) -> usize {
@@ -1300,6 +1346,27 @@ impl SpensoStructure {
 }
 
 impl SpensoStructure {
+    /// Rebuild indexless structure syntax with stripped representation
+    /// placeholders. `TensorStructure::external_structure_iter` is empty by
+    /// design, so the generic `ToSymbolic` implementation cannot be used here.
+    fn compact_placeholder_atom(&self) -> Option<Atom> {
+        let mut reps = self
+            .external_reps_iter()
+            .map(|rep| rep.to_symbolic([]))
+            .collect::<Vec<_>>();
+        self.structure
+            .rep_permutation
+            .apply_slice_in_place_inv(&mut reps);
+
+        let args = self.args().unwrap_or_default();
+        Some(
+            FunctionBuilder::new(self.name()?)
+                .add_args(&args)
+                .add_args(&reps)
+                .finish(),
+        )
+    }
+
     fn parse_args_for_indexing(
         &self,
         args: &Bound<'_, PyTuple>,

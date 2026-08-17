@@ -1,7 +1,7 @@
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     coefficient::CoefficientView,
-    printer::{PrintOptions, PrintState, PrintUserData},
+    printer::{ColorMode, PrintOptions, PrintState, PrintUserData},
     symbol, tag,
 };
 use symbolica_utils::PrintSettingsExt;
@@ -361,59 +361,99 @@ macro_rules! broadcast_symbol {
 
 impl SpensoTags {
     fn print_dot(a: AtomView<'_>, opt: &PrintOptions, _state: &PrintState) -> Option<String> {
-        match opt.custom_print_mode.get("spenso") {
-            Some(PrintUserData::Integer(i)) => {
-                let SpensoPrintSettings {
-                    parens, with_dim, ..
-                } = SpensoPrintSettings::from(*i as usize);
+        fn without_compact_placeholder(value: AtomView<'_>) -> Option<(Atom, Atom)> {
+            let AtomView::Fun(vector) = value else {
+                return None;
+            };
 
-                let AtomView::Fun(f) = a else {
-                    return None;
-                };
+            let mut rebuilt = FunctionBuilder::new(vector.get_symbol());
+            let mut placeholder = None;
+            let mut kept_arguments = 0;
+            for argument in vector.iter() {
+                let is_placeholder = matches!(argument, AtomView::Fun(rep)
+                    if rep.get_nargs() == 1
+                        && rep.get_symbol().has_tag(&SPENSO_TAG.representation)
+                        && rep.get_symbol().has_tag(&SPENSO_TAG.self_dual));
 
-                if f.get_nargs() != 2 {
-                    return None;
-                }
-                let mut argitem = f.iter();
-                let a = argitem.next().unwrap();
-                let b = argitem.next().unwrap();
-
-                let AtomView::Fun(f_a) = a else {
-                    return None;
-                };
-                let AtomView::Fun(f_b) = b else {
-                    return None;
-                };
-
-                let a_sym = f_a.get_symbol();
-                let b_sym = f_b.get_symbol();
-
-                if a_sym.has_tag(&SPENSO_TAG.rank1) && b_sym.has_tag(&SPENSO_TAG.rank1) {
-                    let mut out = String::new();
-                    if parens {
-                        out.push('(');
+                if is_placeholder {
+                    if placeholder.is_some() {
+                        return None;
                     }
-                    f_a.as_view()
-                        .format(&mut out, opt, PrintState::new())
-                        .unwrap();
-                    out.push('.');
-                    if with_dim {
-                        a.format(&mut out, opt, PrintState::new()).unwrap();
-                        out.push('.');
-                    }
-                    f_b.as_view()
-                        .format(&mut out, opt, PrintState::new())
-                        .unwrap();
-                    if parens {
-                        out.push(')');
-                    }
-                    Some(out)
+                    placeholder = Some(argument.to_owned());
                 } else {
-                    None
+                    rebuilt = rebuilt.add_arg(argument);
+                    kept_arguments += 1;
                 }
             }
-            _ => None,
+
+            let vector = if kept_arguments == 0 {
+                Atom::var(vector.get_symbol())
+            } else {
+                rebuilt.finish()
+            };
+            Some((vector, placeholder?))
         }
+
+        let settings = match opt.custom_print_mode.get("spenso") {
+            Some(PrintUserData::Integer(i)) => SpensoPrintSettings::from(*i as usize),
+            Some(_) => return None,
+            None if opt.color_mode == ColorMode::Always
+                || opt.mode.is_latex()
+                || opt.mode.is_typst() =>
+            {
+                if opt.mode.is_typst() {
+                    SpensoPrintSettings::typst()
+                } else {
+                    SpensoPrintSettings::compact()
+                }
+            }
+            None => return None,
+        };
+
+        let AtomView::Fun(f) = a else {
+            return None;
+        };
+        if f.get_nargs() != 2 {
+            return None;
+        }
+
+        let mut args = f.iter();
+        let lhs = args.next()?;
+        let rhs = args.next()?;
+        let compact_operands = if settings.with_dim {
+            None
+        } else {
+            match (
+                without_compact_placeholder(lhs),
+                without_compact_placeholder(rhs),
+            ) {
+                (Some((lhs, lhs_rep)), Some((rhs, rhs_rep))) if lhs_rep == rhs_rep => {
+                    Some((lhs, rhs))
+                }
+                _ => None,
+            }
+        };
+        let (display_lhs, display_rhs) = match &compact_operands {
+            Some((lhs, rhs)) => (lhs.as_view(), rhs.as_view()),
+            None => (lhs, rhs),
+        };
+        let mut out = String::new();
+        if settings.parens {
+            out.push('(');
+        }
+        display_lhs.format(&mut out, opt, PrintState::new()).ok()?;
+        if opt.mode.is_latex() {
+            out.push_str(r"\cdot ");
+        } else if opt.mode.is_typst() {
+            out.push_str(" dot ");
+        } else {
+            out.push('.');
+        }
+        display_rhs.format(&mut out, opt, PrintState::new()).ok()?;
+        if settings.parens {
+            out.push(')');
+        }
+        Some(out)
     }
 
     fn new() -> Self {
@@ -629,7 +669,8 @@ impl SpensoTags {
 #[cfg(test)]
 mod tests {
     use symbolica::{
-        atom::{Atom, AtomCore, AtomView},
+        atom::{Atom, AtomCore, AtomView, FunctionBuilder},
+        printer::{ColorMode, PrintOptions},
         symbol,
     };
 
@@ -723,6 +764,71 @@ mod tests {
                 .printer(SpensoPrintSettings::typst().nice_symbolica())
                 .to_string(),
             "Tr(1)"
+        );
+    }
+
+    #[test]
+    fn dot_uses_infix_display_for_generic_python_tensor_heads_with_placeholders() {
+        let rep = FunctionBuilder::new(crate::self_dual_symbol!("python_dot_rep"))
+            .add_arg(Atom::num(4))
+            .finish();
+        let lhs = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("python_dot_lhs"))
+            .add_arg(Atom::num(1))
+            .add_arg(&rep)
+            .finish();
+        let rhs = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("python_dot_rhs"))
+            .add_arg(Atom::num(2))
+            .add_arg(rep)
+            .finish();
+        let dot = FunctionBuilder::new(SPENSO_TAG.dot)
+            .add_arg(lhs)
+            .add_arg(rhs)
+            .finish();
+
+        let mut spenso = SpensoPrintSettings::compact().nice_symbolica();
+        spenso.color_builtin_symbols = false;
+        spenso.bracket_level_colors = None;
+        assert_eq!(
+            dot.printer(spenso).to_string(),
+            "(python_dot_lhs(1).python_dot_rhs(2))"
+        );
+
+        let mut with_dim = SpensoPrintSettings::compact();
+        with_dim.with_dim = true;
+        let mut spenso_with_dim = with_dim.nice_symbolica();
+        spenso_with_dim.color_builtin_symbols = false;
+        spenso_with_dim.bracket_level_colors = None;
+        assert_eq!(
+            dot.printer(spenso_with_dim).to_string(),
+            "(python_dot_lhs(1,python_dot_rep(4)).python_dot_rhs(2,python_dot_rep(4)))"
+        );
+
+        let mut rich = PrintOptions::new();
+        rich.color_mode = ColorMode::Always;
+        rich.color_builtin_symbols = false;
+        rich.color_namespace = false;
+        rich.bracket_level_colors = None;
+        assert_eq!(
+            dot.printer(rich).to_string(),
+            "(python_dot_lhs(1).python_dot_rhs(2))"
+        );
+
+        let mut portable = PrintOptions::file();
+        portable.hide_all_namespaces = true;
+        assert_eq!(
+            dot.printer(portable).to_string(),
+            "dot(python_dot_lhs(1,python_dot_rep(4)),python_dot_rhs(2,python_dot_rep(4)))"
+        );
+
+        assert!(
+            dot.printer(PrintOptions::latex())
+                .to_string()
+                .contains(r"\cdot ")
+        );
+        assert!(
+            dot.printer(PrintOptions::typst())
+                .to_string()
+                .contains(" dot ")
         );
     }
 }

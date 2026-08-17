@@ -42,7 +42,7 @@ use spenso::{
         parametric::{LinearizedEvalTensor, MixedTensor},
     },
 };
-use structure::{ConvertibleToStructure, SpensoIndices};
+use structure::{ArithmeticStructure, ConvertibleToStructure, SpensoIndices};
 use symbolica::{
     api::python::SymbolicaCommunityModule, domains::float::Complex as SymComplex, prelude::*,
 };
@@ -144,6 +144,30 @@ fn set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> bool {
     spenso::symbolic_parallelism::symbolica_rayon_enabled()
 }
 
+/// Build the compact scalar product of two symbolic vectors.
+///
+/// The returned expression uses Spenso's canonical symmetric, linear `dot`
+/// head. Each operand should carry the same stripped self-dual representation
+/// as its placeholder slot; tensor-network parsing replaces those placeholders
+/// with one shared fresh contracted slot.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community.spenso import Representation, TensorName, dot
+/// >>> p = TensorName("p")
+/// >>> mink = Representation.mink(4)
+/// >>> dot(p(1, mink), p(2, mink))
+#[cfg_attr(
+    feature = "python_stubgen",
+    gen_stub_pyfunction(module = "symbolica.community.spenso")
+)]
+#[pyfunction]
+fn dot(lhs: ArithmeticStructure, rhs: ArithmeticStructure) -> PyResult<PythonExpression> {
+    let lhs = lhs.to_expression()?;
+    let rhs = rhs.to_expression()?;
+    Ok(spenso::dot!(&lhs.expr, &rhs.expr).into())
+}
+
 impl SymbolicaCommunityModule for SpensoModule {
     fn get_name() -> String {
         "spenso".to_string()
@@ -178,6 +202,7 @@ define_spenso_python_surface! {
     ],
     registered_functions: [
         set_symbolica_rayon_enabled => "set_symbolica_rayon_enabled",
+        dot => "dot",
     ],
     returned_opaque_classes: [
         SpensoExpressionEvaluator,
