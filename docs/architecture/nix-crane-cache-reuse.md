@@ -1388,6 +1388,12 @@ merging Pages history or configuring, uploading, or deploying GitHub Pages. A
 docs-only successor run can therefore validate cross-run reuse without changing
 the published site.
 
+The first optimized cold seed, run `32041014452` at `4f955f5a029b`, built the
+single Cargo producer in 15 minutes 16 seconds and the terminal Pages derivation
+in 2 minutes 58 seconds. The complete site step took 18 minutes 53 seconds,
+down from 71 minutes 2 seconds in the three-layer cold seed `32028483780`.
+Hestia then uploaded the ten-path, 1.2 GiB root in 12.1 seconds.
+
 ## Follow-up: cross-job producer barriers
 
 The cold NixCI fan-out exposed a scheduling problem outside Cargo and Crane:
