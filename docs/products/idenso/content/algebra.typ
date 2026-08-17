@@ -52,7 +52,7 @@ is unchanged.
 Concrete syntax and rewrite cases are documented in
 #source-link("docs/idenso/spenso_symbolica_syntax_and_rewrites.md", label: "the Spenso/Symbolica syntax note")
 and #source-link("docs/idenso/form_symbolica_color_and_dirac.typ", label: "the color and Dirac comparison").
-The #source-link("docs/architecture/schoonschip-net-parsing.html", label: "Schoonschip parsing guide")
+The #source-link("docs/architecture/schoonschip-net-parsing.typ", label: "Schoonschip parsing guide")
 shows how normalization, network construction, and contraction fit together.
 
 Tensor storage and execution remain owned by #product-link("spenso", label: "Spenso").

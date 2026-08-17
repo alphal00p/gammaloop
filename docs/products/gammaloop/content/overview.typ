@@ -66,7 +66,7 @@ not imply that these drawing tools are installed.
 
 For a deeper view of how the command layer, state, integrands, and external components fit
 together, see
-#source-link("docs/architecture/architecture-current.md", label: "the architecture overview").
+#source-link("docs/architecture/architecture-current.typ", label: "the architecture overview").
 
 == Where to begin
 

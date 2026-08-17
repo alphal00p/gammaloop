@@ -21,7 +21,9 @@ The maintained user manuals live under [docs/products](docs/products), with the 
 process-generation guide in
 [docs/products/gammaloop/content/process-generation.typ](docs/products/gammaloop/content/process-generation.typ).
 The former wiki describes an older executable layout and is no longer the source of truth.
-Implemented architecture notes live in [docs/architecture/architecture-current.md](docs/architecture/architecture-current.md).
+Implemented architecture notes live in [docs/architecture/architecture-current.typ](docs/architecture/architecture-current.typ).
+Contributor policy lives in [CONTRIBUTING.typ](CONTRIBUTING.typ); Typst is the
+canonical source format for authored documentation.
 
 ## Quick start
 

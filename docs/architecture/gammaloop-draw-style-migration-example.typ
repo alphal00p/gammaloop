@@ -1,27 +1,32 @@
-# GammaLoop Draw Style Migration Record
+= GammaLoop drawing style migration record
+<gammaloop-draw-style-migration-record>
+#quote(block: true)[
+#strong[Status:] Implemented; the design sketch below is superseded
 
-> **Status:** Implemented; the design sketch below is superseded
->
-> **Implemented by:** `395610143576` (2026-08-15)
->
-> The current generator imports the reusable
-> [`physics-edge-style.typ`](../../crates/linnest/typst/src/physics-edge-style.typ)
-> callbacks and emits only the model-specific particle map plus three wrapper
-> functions. The embedded drawing entry points are
-> [`layout.typ`](../../assets/embedded/drawing/templates/layout.typ) and
-> [`layout-core.typ`](../../assets/embedded/drawing/templates/layout-core.typ).
-> They use direct Typst scope and callback values; the placeholder interpolation
-> and `source-style-eval`/`sink-style-eval` design shown below is not the current
-> interface. Preserve the remainder as design history, not copyable guidance.
+#strong[Implemented by:] `395610143576` (2026-08-15)
 
-This document records the proposed shape that led to the GammaLoop migration
-from Fletcher `eval_*` strings to Typst style callbacks consumed by the
-Linnest/CeTZ `draw` API.
+The current generator imports the reusable
+#link("../../crates/linnest/typst/src/physics-edge-style.typ")[`physics-edge-style.typ`]
+callbacks and emits only the model-specific particle map plus three
+wrapper functions. The embedded drawing entry points are
+#link("../../assets/embedded/drawing/templates/layout.typ")[`layout.typ`]
+and
+#link("../../assets/embedded/drawing/templates/layout-core.typ")[`layout-core.typ`];.
+They use direct Typst scope and callback values; the placeholder
+interpolation and `source-style-eval`/`sink-style-eval` design shown
+below is not the current interface. Preserve the remainder as design
+history, not copyable guidance.
+]
 
-## Historical generated `edge-style.typ` sketch
+This document records the proposed shape that led to the GammaLoop
+migration from Fletcher `eval_*` strings to Typst style callbacks
+consumed by the Linnest/CeTZ `draw` API.
 
-GammaLoop can keep generating one model-specific file, but the file should
-export regular Typst callbacks instead of strings that are later evaluated.
+== Historical generated `edge-style.typ` sketch
+<historical-generated-edge-styletyp-sketch>
+GammaLoop can keep generating one model-specific file, but the file
+should export regular Typst callbacks instead of strings that are later
+evaluated.
 
 ```typ
 #import "@preview/mitex:0.2.6": *
@@ -221,32 +226,35 @@ export regular Typst callbacks instead of strings that are later evaluated.
 }
 ```
 
-The important part is that `source-style`, `sink-style`, and `edge-label` are
-ordinary Typst functions. Linnest calls them with the merged edge data:
-DOT statements such as `particle`, plus fields like `eid`, `orientation`,
-`source-half-edge`, `sink-half-edge`, and `edge`.
+The important part is that `source-style`, `sink-style`, and
+`edge-label` are ordinary Typst functions. Linnest calls them with the
+merged edge data: DOT statements such as `particle`, plus fields like
+`eid`, `orientation`, `source-half-edge`, `sink-half-edge`, and `edge`.
 
-Interpolation is still data-driven by default: DOT statements can provide
-`display-label` or `label-template` with `{field}` placeholders, for example
-`display-label="{particle} edge {eid}"`. The callback replaces placeholders
-from the edge data without evaluating the string as Typst code. Literal braces
-can be written as `{{` and `}}`.
+Interpolation is still data-driven by default: DOT statements can
+provide `display-label` or `label-template` with `{field}` placeholders,
+for example `display-label="{particle} edge {eid}"`. The callback
+replaces placeholders from the edge data without evaluating the string
+as Typst code. Literal braces can be written as `{{` and `}}`.
 
-The embedded `layout` template also accepts `typst-fields: "plain" | "eval"`.
-In `"eval"` mode, known render fields are interpolated and then passed to
-Typst's `eval`. This applies to `label`, `display-label`, `label-template`,
-`source-style`, and `sink-style`. Explicit `label-eval`,
-`source-style-eval`, and `sink-style-eval` fields are always evaluated because
-their names are already an opt-in to executable Typst. Structural fields such as `particle`, `id`,
-`source`, and `sink` remain raw data for lookup and layout.
+The embedded `layout` template also accepts
+`typst-fields: "plain" | "eval"`. In `"eval"` mode, known render fields
+are interpolated and then passed to Typst\'s `eval`. This applies to
+`label`, `display-label`, `label-template`, `source-style`, and
+`sink-style`. Explicit `label-eval`, `source-style-eval`, and
+`sink-style-eval` fields are always evaluated because their names are
+already an opt-in to executable Typst. Structural fields such as
+`particle`, `id`, `source`, and `sink` remain raw data for lookup and
+layout.
 
-The default embedded figure template forwards `sys.inputs.typst-fields`, so the
-CLI can opt into executable render fields with `--input typst-fields=eval`.
+The default embedded figure template forwards `sys.inputs.typst-fields`,
+so the CLI can opt into executable render fields with
+`--input typst-fields=eval`.
 
-## Embedded `layout.typ` Wiring
-
-The embedded drawing template can import that generated file and pass the
-callbacks directly to `draw`.
+== Embedded `layout.typ` Wiring
+<embedded-layouttyp-wiring>
+The embedded drawing template can import that generated file and pass
+the callbacks directly to `draw`.
 
 ```typ
 #import "crates/linnest/typst/src/lib.typ": draw, graph, layout as apply-layout
@@ -282,6 +290,6 @@ callbacks directly to `draw`.
 }
 ```
 
-With this shape, GammaLoop owns the particle-to-style policy in one generated
-file, while Linnest owns all geometry: edge splitting, node outsets, label
-placement, subgraph underlays, and Kurvst path patterns.
+With this shape, GammaLoop owns the particle-to-style policy in one
+generated file, while Linnest owns all geometry: edge splitting, node
+outsets, label placement, subgraph underlays, and Kurvst path patterns.

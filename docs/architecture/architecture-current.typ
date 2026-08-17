@@ -1,0 +1,560 @@
+= GammaLoop architecture
+<gammaloop-current-architecture>
+#quote(block: true)[
+#strong[Reviewed:] 2026-08-17 against `c9f4e32acd2c`
+
+#strong[Lifecycle:] Current implementation architecture. The review
+checked the state, evaluator, event-processing, integration, and
+quantity contracts named below against their implementations.
+]
+
+== Scope
+<scope>
+This document describes the current, implemented architecture of the
+GammaLoop application. It is not an architecture overview of the entire
+multi-product repository; Linnet, Spenso, Idenso, and Vakint have their
+own manuals and reference surfaces.
+
+The GammaLoop application is organized around two principal Rust crates
+while using those shared workspace libraries:
+
+- `gammalooprs` (`crates/gammalooprs`): core physics/domain logic, graph
+  processing, integrand construction, evaluation, and integration.
+- `gammaloop-api` (`crates/gammaloop-api`): CLI, REPL, Python bindings,
+  command parsing, and persisted state orchestration.
+
+== High-Level Architecture
+<high-level-architecture>
+At a high level, gammaLoop uses a layered architecture with a stateful
+application shell.
+
+```text
+User / Automation
+  -> CLI binary (`gammaloop`) and REPL
+  -> Python module (`_gammaloop` via pyo3)
+  -> run cards (`run.toml`)
+
+Application Layer (`gammaloop-api`)
+  -> clap command parsing
+  -> command execution against mutable `State`
+  -> state/load/save and logging control
+
+Domain Layer (`gammalooprs`)
+  -> model + parameter cards
+  -> graph and process representations (amplitude/cross-section)
+  -> preprocessing and CFF generation
+  -> GL integrand construction + evaluator stacks
+  -> differential event generation, selectors, and observables
+  -> Monte Carlo integration and stability checks
+
+Infrastructure
+  -> filesystem persistence (`gammaloop_state/`)
+  -> optional local scratch persistence (`.local/scratch/...`)
+  -> Symbolica state import/export
+  -> tracing/logging
+```
+
+== Main Components
+<main-components>
+=== 1. Entry Points and Interfaces
+<1-entry-points-and-interfaces>
+- CLI entry point: `crates/gammaloop-api/src/cli.rs`.
+- Main app orchestration: `crates/gammaloop-api/src/lib.rs`
+  (`OneShot::load`, `OneShot::run`).
+- Python module entry: `crates/gammaloop-api/src/python.rs`
+  (`#[pymodule(name = "_gammaloop")]`).
+- Python package shim:
+  `crates/gammaloop-api/python/gammaloop/__init__.py`.
+
+=== 1.1 CLI architecture
+<11-cli-architecture>
+- The CLI is state-centric: every session operates on one active state
+  folder and one active in-memory `RunHistory`.
+- Startup is orchestrated by `OneShot`:
+  - resolve the state folder from CLI / boot card / defaults
+  - load or create the state
+  - load persisted settings and run history
+  - optionally apply a boot card before entering the REPL or running a
+    one-shot subcommand
+- Command execution is centralized in
+  `crates/gammaloop-api/src/session.rs` (`CliSession`):
+  - top-level commands
+  - boot-card replay
+  - nested `run` execution
+  - command-history recording policy
+  - command-block-definition mode
+- The REPL layer in `crates/gammaloop-api/src/repl.rs` is state-aware:
+  - prompt text reflects the active state settings
+  - tab completion is driven from the active state, active command
+    blocks, and clap argument metadata
+
+=== 2. Application State and Command Model
+<2-application-state-and-command-model>
+- Central mutable app state: `crates/gammaloop-api/src/state.rs`
+  (`State`).
+- Command history and run cards: `CommandHistory`, `RunHistory`.
+- Command dispatch: `crates/gammaloop-api/src/commands/mod.rs` with
+  concrete subcommands in `commands/*`.
+
+The command model is stateful by design: commands mutate a long-lived
+`State` that can be saved and resumed.
+
+=== 3. Domain Core (gammalooprs)
+<3-domain-core-gammalooprs>
+- Root module wiring: `crates/gammalooprs/src/lib.rs`.
+- Model and parameters: `crates/gammalooprs/src/model/mod.rs`.
+- Graph domain: `crates/gammalooprs/src/graph/mod.rs` and submodules.
+- Process orchestration: `crates/gammalooprs/src/processes/mod.rs`,
+  `crates/gammalooprs/src/processes/process.rs`.
+- Amplitude and cross-section pipelines:
+  - `crates/gammalooprs/src/processes/amplitude.rs`
+  - `crates/gammalooprs/src/processes/cross_section.rs`
+- Integrand abstraction and implementations:
+  - `crates/gammalooprs/src/integrands/mod.rs`
+  - `crates/gammalooprs/src/integrands/process/mod.rs`
+  - `crates/gammalooprs/src/integrands/process/amplitude/mod.rs`
+  - `crates/gammalooprs/src/integrands/process/cross_section/mod.rs`
+- Integration engine: `crates/gammalooprs/src/integrate/mod.rs`.
+- Global/runtime settings: `crates/gammalooprs/src/settings/mod.rs`,
+  `crates/gammalooprs/src/settings/global.rs`,
+  `crates/gammalooprs/src/settings/runtime.rs`.
+- Differential event/observable pipeline:
+  - `crates/gammalooprs/src/observables/events.rs`
+  - `crates/gammalooprs/src/observables/mod.rs`
+  - `crates/gammalooprs/src/observables/clustering/*`
+  - `crates/gammalooprs/src/integrands/evaluation.rs`
+
+=== 3.1 UV renormalization
+<31-uv-renormalization>
+UV generation defaults to the disconnected-capable hedge-poset backend
+and also supports a legacy DAG-forest backend and a comparison mode.
+Scheme policy remains on each Spinney while compute nodes store typed
+local, integrated, and cut-dependent results. Four-dimensional
+disconnected counterterms factorize over complete component
+counterterms; three-dimensional disconnected terms replay
+component-local operations from their common root so CFF structure is
+not multiplied as though it were scalar. The maintained sign,
+projection, marker, and backend-boundary invariants are documented in
+#link("uv-renormalization.typ")[`uv-renormalization.typ`];.
+
+== Lifecycle and Data Flow
+<lifecycle-and-data-flow>
+=== 1. Startup
+<1-startup>
++ CLI parses command input (`OneShot::parse_env_with_capture`).
++ Initialization runs (`initialise()`), installs hooks and symbol
+  registries.
++ State is loaded from state folder if available (`State::load`),
+  otherwise default state is created.
++ CLI settings/runtime defaults are loaded and synchronized with tracing
+  filters.
+
+=== 2. Process Generation Flow
+<2-process-generation-flow>
++ `generate` command builds `ProcessDefinition` (from syntax or graph
+  import).
++ `State::generate_integrand(s)` creates a generation thread pool.
++ `ProcessList::preprocess` delegates to amplitude/cross-section
+  preprocessors.
++ `ProcessList::generate_integrands` builds `ProcessIntegrand` instances
+  from preprocessed graphs.
++ Optional compile/export steps persist compiled evaluator artifacts and
+  DOT/standalone outputs.
++ Each generated integrand now embeds its frozen f64 backend choice in
+  `integrand.bin`:
+  - `eager`
+  - `symjit`
+  - external `c++` / `assembly` plus the external compile options used
++ Runtime-only evaluator backends are then activated from that frozen
+  metadata:
+  - eager uses the saved eager evaluator directly
+  - symjit is rebuilt after generation/load from the saved Symbolica
+    evaluator
+  - complete external compiled artifacts are loaded while the saved
+    state is activated
+  - missing external artifacts leave the frozen backend metadata
+    unchanged but activate the portable eager evaluator for the current
+    session
+  - if external loading fails and startup globals explicitly opt into
+    symjit, GammaLoop falls back to symjit for that integrand and logs
+    it
+
+=== 3. Evaluation and Integration Flow
+<3-evaluation-and-integration-flow>
++ Commands (`inspect`, `evaluate`, `integrate`) resolve process +
+  integrand references.
++ Integrand is warmed up (`ProcessIntegrand::warm_up`) to initialize
+  rotations and caches.
++ Sampling path parameterizes points and evaluates graph terms.
++ Stability checks may escalate precision (`f64 -> f128 -> arbitrary`)
+  and rotate kinematics.
++ Process graph evaluation returns a rich `GraphEvaluationResult<T>`
+  rather than only a complex weight. This carries:
+  - the graph contribution
+  - grouped generated events
+  - event-processing timing
+  - generated / accepted event counts
++ A shared process-layer prepared-event helper is used by both
+  cross-section and amplitude graph evaluation:
+  - it decides whether an event must be built for the current rotation
+  - runs selectors immediately on that candidate event
+  - retains only accepted identity-rotation events when buffering is
+    needed
+  - reports generated / accepted event counts and event-processing
+    timing Failed selector events zero the local contribution and do not
+    survive into the final retained result.
++ Stability selection still compares only the complex graph weight, but
+  the retained branch also carries the final grouped event payload.
++ The final `EvaluationResult` contains:
+  - the stable `integrand_result`, before any parameterization Jacobian
+    is applied
+  - the top-level `parameterization_jacobian` when the sample came from
+    x-space parameterization (`None` for direct momentum-space
+    evaluation)
+  - the separate `integrator_weight`, i.e. the Monte Carlo/grid weight
+    only
+  - grouped accepted events
+  - event-processing timing in `evaluation_metadata`
+  - generated / accepted event counts in `evaluation_metadata`
+  - ordered per-level stability results, each with relative-accuracy and
+    total time spent in that stability level
+  - evaluation metadata
++ Observable filling happens only from the final stable
+  `EvaluationResult` payload. Unstable branches do not contribute events
+  or observables.
++ `havana_integrate` runs iterative Monte Carlo updates, merges
+  worker-local observable accumulators, and writes integration
+  artifacts.
+
+=== 3.1 Differential event-processing runtime
+<31-differential-event-processing-runtime>
+The differential pipeline is split into three layers:
+
+- Declarative settings in `RuntimeSettings`:
+  - `quantities`
+  - `selectors`
+  - `observables`
+- A compiled runtime-only cache:
+  - `EventProcessingRuntime`
+  - owned by the process integrand
+  - built in `warm_up()`
+  - invalidated when runtime settings are mutated
+- Per-sample / per-integration results:
+  - `GraphEvaluationResult<T>`
+  - `EvaluationResult`
+  - observable accumulator state / snapshots
+
+The runtime-only cache is intentionally not serialized in binary state
+dumps. It is wrapped in a no-op `Encode` / default-empty `Decode`
+container and is always rebuilt from settings at warm-up time.
+
+The same pattern is now also used for evaluator execution backends:
+
+- per-integrand frozen backend metadata lives inside `integrand.bin`
+- loaded external `.so` evaluators are runtime-only
+- symjit evaluators are runtime-only
+- the saved portable representation remains centered on eager Symbolica
+  evaluators
+
+=== 3.2 Differential event model
+<32-differential-event-model>
+Events are stored in precision-homogeneous containers:
+
+- `GenericEvent<T>`
+- `GenericEventGroup<T>`
+- `GenericEventGroupList<T>`
+
+This avoids enum-based mixed-precision layouts that would otherwise
+force storage to be sized by the largest precision variant.
+
+Each event carries:
+
+- kinematics
+- cut metadata
+- one fully normalized event `weight`
+- `additional_weights`
+
+Observable-specific entry reweighting remains internal to the observable
+runtime; it is not stored on the event.
+
+`additional_weights` is a generic `BTreeMap` keyed by lightweight
+identifiers such as:
+
+- `FullMultiplicativeFactor`
+- `Original`
+- `ThresholdCounterterm { subset_index }`
+- `AmplitudeThresholdCounterterm { esurface_id, overlap_group }`
+
+Counterterm weights are stored with the sign with which they contribute
+to the final event weight. Cross-section events use
+`ThresholdCounterterm`; amplitude events use
+`AmplitudeThresholdCounterterm`. The fully normalized event weight is
+therefore reconstructed as:
+
+`(Original + sum(the event's counterterm entries)) * FullMultiplicativeFactor`.
+
+This is populated only when
+`settings.general.store_additional_weights_in_event = true`.
+
+=== 3.3 Event generation policy
+<33-event-generation-policy>
+Event generation is controlled by three related runtime decisions:
+
+- `should_generate_events()`
+  - true when `general.generate_events = true`
+  - or active selectors exist
+  - or observables exist
+- `should_buffer_generated_events()`
+  - true when `general.generate_events = true`
+  - or observables exist
+- `should_return_generated_events()`
+  - true only when `general.generate_events = true`
+
+This means:
+
+- `general.generate_events = false`
+  - selector-only evaluations still build temporary events for selector
+    checks
+  - selector+observable evaluations still build temporary events and
+    buffer accepted identity-rotation events long enough to fill
+    observables
+  - those temporary events are cleared from returned sample results and
+    integration event outputs afterwards
+- `general.generate_events = true`
+  - events are built, buffered, and returned even when no selector or
+    observable is configured
+
+The standard Rust/Python sample-evaluation helpers may temporarily
+override the returned-event behavior per call, but internal event
+generation still follows this same policy after that override is
+applied.
+
+Accepted LU events are retained as grouped event lists:
+
+- one `EventGroup` per graph-group evaluation
+- all accepted cuts from graphs sharing the same `group_id` are merged
+  into the same retained event group
+- each event stores its concrete `graph_id` and `cut_id`
+- incoming PDGs are sourced from the initial-state cut edges
+
+This preserves the correlation structure needed by downstream
+observables.
+
+=== 3.4 Observable architecture
+<34-observable-architecture>
+Observable definitions are shared between selector and histogram
+use-cases:
+
+- one quantity definition extracts zero or more `ObservableEntry<T>`
+  values from an event
+- selectors consume those entries on a single event
+- histogram observables consume grouped events and fill per-group
+  contributions
+
+Histogram accumulation is based on:
+
+- a histogram-level `sample_count`
+- sparse per-bin sufficient statistics:
+  - `entry_count`
+  - `sum_weights`
+  - `sum_weights_squared`
+  - `mitigated_fill_count`
+- `HistogramAccumulatorState` / `ObservableAccumulatorBundle` for
+  mergeable runtime state
+- `ObservableSnapshotBundle` for JSON / HwU output and API responses
+
+Each Monte Carlo sample contributes exactly one statistical sample to a
+histogram. Contributions from all retained event groups are summed first
+per bin, and untouched bins are handled implicitly through the
+histogram-level `sample_count` rather than explicit zero fills.
+
+Histogram snapshots therefore remain fully mergeable and
+re-constructible into live accumulator state. The Rust-facing histogram
+API exposes `merge(...)`, `merge_in_place(...)`, and `rebin(...)`.
+
+Current built-in quantities include:
+
+- `particle` with `computation = scalar | count | pair`
+- `jet` with `computation = scalar | count | pair`
+- `afb`
+- `integral`
+- `graph_id`
+- `graph_group_id`
+- `orientation_id`
+- `lmb_channel_id`
+
+Current pair quantities include `DeltaR`. Current scalar projections
+include `E`, `CosTheta`, `PT`, `y`, `eta`, `Px`, `Py`, `Pz`, and `Mass`.
+
+Object and pair quantities are ordered before `entry_selection` is
+applied. The ordering contract is configurable per quantity through:
+
+- `ordering = PT | Energy | AbsRapidity | Quantity`
+- `order = Ascending | Descending`
+
+Family defaults are:
+
+- particle scalar quantities: `ordering = Quantity`
+- jet scalar quantities: `ordering = PT`
+- pair quantities: `ordering = Quantity`
+
+`leading_only` and `nth_only` therefore operate on this explicit ordered
+list, not on incidental source/event enumeration order.
+
+Jet clustering is implemented natively in Rust with IRC-safe algorithms:
+
+- `kt`
+- `cambridge_aachen`
+- `anti_kt`
+
+and is validated against `fjcore` in tests.
+
+== Persistence and Runtime Artifacts
+<persistence-and-runtime-artifacts>
+Primary persisted state lives under `gammaloop_state/` (default):
+
+- `state_manifest.toml` (state schema/version marker)
+- `model.json`, `model_parameters.json`
+- `symbolica_state.bin`
+- `processes/` (amplitudes/cross\_sections + integrands)
+- `run.toml`
+- `default_runtime_settings.toml`
+- `global_settings.toml`
+- `logs/`
+
+For local experimentation, prefer an isolated path such as
+`.local/scratch/<run>/gammaloop_state` to keep repository root output
+minimal.
+
+The persistence model is file-system based and intentionally
+human-editable for settings/run cards, mixed with binary artifacts for
+performance-heavy data.
+
+=== Persistence Compatibility Contract
+<persistence-compatibility-contract>
+- State format is versioned with `state_manifest.toml` (`version = 1`
+  currently).
+- `State::load` validates the manifest version and rejects states from
+  newer binaries.
+- Saved-state detection is manifest-only. A non-empty folder without a
+  manifest is classified as `Unmanifested` and startup treats its
+  contents as blank scratch state; it is not loaded as a legacy state.
+- Process settings history now uses `settings_history.toml`
+  consistently; loader still accepts legacy `settings_history.yaml` for
+  backward compatibility and migration.
+
+=== Integration workspaces
+<integration-workspaces>
+Integration resume state is persisted in a dedicated integration
+workspace. In a normal writable session its default is
+`<state.folder>/integration_workspace` (therefore normally inside
+`gammaloop_state/`); a read-only session defaults to
+`./integration_workspace[_<state-name>]`, and `--workspace-path`
+overrides the default. `manifest.json` records the selected
+process/integrand slots, targets, effective model parameters, integrand
+fingerprints, training and settings slots, and sampling-correlation
+mode. Authoritative completed-iteration state lives in
+`state/integration_state.bin`; per-slot settings live under
+`integrands/<process>@<integrand>/settings.toml`, and observable resume
+snapshots live under `state/observables/<process>@<integrand>/`.
+User-facing `integration_result.json` and observable files are derived
+snapshots, not the resume authority.
+
+== Configuration Architecture
+<configuration-architecture>
+Configuration is split into:
+
+- Global settings (`GlobalSettings`): generation, logging directives,
+  parallelism.
+- Runtime settings (`RuntimeSettings`): kinematics, integrator behavior,
+  sampling, stability, subtraction, and differential event-processing
+  configuration.
+
+Differential runtime configuration currently includes:
+
+- `general.generate_events`
+- `general.store_additional_weights_in_event`
+- named `quantities`
+- named `selectors`
+- named `observables`
+- `integrator.observables_output`
+
+This split is good: generation-time and evaluation-time concerns are
+separated and independently serializable.
+
+== Concurrency Model
+<concurrency-model>
+Concurrency is explicit and use-case scoped:
+
+- Generation and compile thread pools use configurable thread counts.
+- Integrator parallelism is controlled via runtime/global settings.
+- Some loops over processes/integrands remain sequential at
+  orchestration level while heavy operations inside are parallelized.
+
+For the differential pipeline:
+
+- each worker/integrand clone owns its own mutable observable
+  accumulator state
+- local worker results are merged back into the master integrand after
+  chunk evaluation
+- distributed batch mode can return either grouped events or
+  serializable observable accumulator bundles
+- observable snapshots are written only from the merged master state
+
+== Testing Architecture
+<testing-architecture>
+Testing is organized into layers:
+
+- Unit tests in modules across `crates/gammalooprs/src/`.
+- Integration test crate: `tests/` with reusable harness
+  (`tests/src/lib.rs`).
+- Additional Rust integration tests in `crates/gammalooprs/tests/`.
+- Snapshot-heavy coverage for symbolic outputs and numerics.
+
+Differential coverage is currently split into:
+
+- `tests/tests/test_clustering.rs`
+  - compares the native jet clustering implementation against `fjcore`
+- `tests/tests/test_differential.rs`
+  - validates grouped event propagation
+  - selector behavior
+  - observable filling and merge semantics
+  - JSON / HwU snapshot output
+  - API-facing result shaping using handcrafted fixtures
+- `tests/tests/test_evaluation_api.rs`
+  - real generated-process end-to-end coverage for Rust
+    `evaluate_sample(s)`
+  - graph/cut grouping and incoming-PDG propagation checks
+  - selectors / observables / event-group retention
+  - batch-global observable snapshots for `evaluate_samples`
+  - per-sample evaluation metadata
+  - x-space vs momentum-space Jacobian behavior
+  - minimal-output mode
+- `tests/tests/test_runs.rs`
+  - real generated-process end-to-end coverage for `integrate`
+  - integration-workspace observable output in JSON / HwU formats
+  - repeated `save dot` overwrite behavior
+- `tests/tests/test_python_api.rs`
+  - subprocess-based end-to-end coverage for the public Python API
+  - returned event grouping / ids / incoming PDGs
+  - selectors / observables / returned metadata
+  - minimal-output mode
+  - x-space batch and momentum-space sample coverage
+  - requires a separately prepared Python environment where
+    `import gammaloop` already works
+
+== Architectural Strengths
+<architectural-strengths>
+- Clear separation between application shell (`gammaloop-api`) and
+  domain core (`gammalooprs`).
+- Rich, serializable settings model with schema generation hooks.
+- Strong process abstraction (`Process`, `ProcessCollection`,
+  `ProcessIntegrand`) that supports amplitude and cross-section
+  workflows.
+- Robust stability pipeline with multi-precision escalation and rotation
+  checks.
+- Differential event-processing is now integrated into the core
+  evaluation path without compromising the stable-weight selection
+  logic.
+- Observable accumulation is mergeable across rayon workers and
+  distributed batch outputs.

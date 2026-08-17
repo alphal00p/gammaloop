@@ -112,6 +112,9 @@
         workspacePrebuildPackageDir = "crates/${workspacePrebuildPackage}";
 
         cargoSources = craneLib.fileset.commonCargoSources workspaceRoot;
+        repositoryProseSources = lib.fileset.fileFilter (
+          file: file.hasExt "md" || file.hasExt "html"
+        ) workspaceRoot;
 
         cargoVendorDir = craneLib.vendorCargoDeps {
           cargoLock = ./Cargo.lock;
@@ -155,6 +158,7 @@
           fileset = lib.fileset.unions [
             cargoSources
             nonCargoBuildSources
+            repositoryProseSources
             ./docs
             ./scripts/render-docs-svg-assets.sh
             ./scripts/update-docs-pages.sh
@@ -169,21 +173,10 @@
             ./tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot
             ./tests/resources/graphs/uv_tests/epem_a_bbx.dot
             ./tests/resources/graphs/epemttbar.dot
-            ./README.md
             ./pyproject.toml
-            ./crates/linnet/README.md
-            ./crates/linnet/CHANGELOG.md
             ./crates/linnet-py/pyproject.toml
             ./crates/linnet-py/linnet_py.pyi
             ./crates/linnet-py/tests/test_basic.py
-            ./crates/spenso/README.md
-            ./crates/spenso/CHANGELOG.md
-            ./crates/spenso-macros/README.md
-            ./crates/spenso-hep-lib/README.md
-            ./crates/spynso3/README.md
-            ./crates/idenso/README.md
-            ./crates/idenso/CHANGELOG.md
-            ./crates/vakint/README.md
           ];
         };
 
@@ -3087,6 +3080,21 @@
           done
         '';
 
+        alphal00pDocsDeveloperAssertions = output: ''
+          test -s "${output}/developers/architecture/documentation-improvement-plan/index.html"
+          plan_page="${output}/developers/architecture/documentation-improvement-plan/index.html"
+          grep -Fq 'DOC-010' "$plan_page"
+          grep -Fq 'id="executive-assessment"' "$plan_page"
+          grep -Fq 'href="#executive-assessment"' "$plan_page"
+          grep -Fq 'documentation-improvement-plan.typ' "$plan_page"
+          test "$(grep -o '<html' "$plan_page" | wc -l)" -eq 1
+          test "$(grep -o '<body' "$plan_page" | wc -l)" -eq 1
+          grep -Fq '"title": "Executive assessment"' "${output}/developers/search-index.json"
+          grep -Fq '"href": "architecture/documentation-improvement-plan/#executive-assessment"' "${output}/developers/search-index.json"
+          test -s "${output}/developers/architecture/spenso-parsing-flow/index.html"
+          test ! -e "${output}/developers/architecture/spenso-parsing-flow/diagram.html"
+        '';
+
         alphal00pDocsCheck = craneLib.mkCargoDerivation (
           alphal00pDocsDerivationArgs
           // {
@@ -3140,6 +3148,7 @@
               test -s "$docs_pages_test/products/gammaloop/snapshots/legacy/.note"
               test ! -e "$docs_pages_test/developers/old.txt"
               test -s "$docs_pages_test/developers/architecture/gammaloop-architecture/index.html"
+              test -s "$docs_pages_test/developers/architecture/documentation-improvement-plan/index.html"
               cp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
               cp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
               cp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
@@ -3168,8 +3177,7 @@
               test -s "$out/developers/assets/site.css"
               test -s "$out/developers/assets/site.js"
               test -s "$out/developers/architecture/gammaloop-architecture/index.html"
-              test -s "$out/developers/architecture/spenso-parsing-flow/index.html"
-              test -s "$out/developers/architecture/spenso-parsing-flow/diagram.html"
+              ${alphal00pDocsDeveloperAssertions "$out"}
               for product in gammaloop linnet spenso idenso vakint; do
                 product_root="$out/products/$product"
                 test -s "$product_root/index.html"
@@ -3231,6 +3239,7 @@
 
               test -s "$out/index.html"
               test -e "$out/.nojekyll"
+              ${alphal00pDocsDeveloperAssertions "$out"}
             '';
           }
         );

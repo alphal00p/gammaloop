@@ -1,11 +1,14 @@
-# Spenso Network Execution Test Baseline
+= Spenso network execution test baseline
+<spenso-network-execution-test-baseline>
+#quote(block: true)[
+#strong[Status:] Archived, non-reproducible baseline
 
-> **Status:** Archived, non-reproducible baseline
->
-> The recorded Jujutsu change does not resolve in the current repository, the
-> two named timeout tests have since been removed, and no immutable artifact,
-> toolchain, or hardware record accompanies the result. Preserve the output as
-> historical evidence, but do not use it as a current comparison baseline.
+The recorded Jujutsu change does not resolve in the current repository,
+the two named timeout tests have since been removed, and no immutable
+artifact, toolchain, or hardware record accompanies the result. Preserve
+the output as historical evidence, but do not use it as a current
+comparison baseline.
+]
 
 Baseline captured on 2026-05-05 in jj change `lwvmvnsn`
 (`profile raw full-depth Spenso parsing and isolate execution orchestration`).
@@ -25,16 +28,16 @@ Exit code: 100
 JUnit artifact: target/nextest/ci_gammaloop/target/nextest/ci/junit.xml
 ```
 
-The two timeouts are the large Spenso execution diagnostics added for the raw
-large input. Both parsed into symbolic networks in seconds before timing out in
-execution:
+The two timeouts are the large Spenso execution diagnostics added for
+the raw large input. Both parsed into symbolic networks in seconds
+before timing out in execution:
 
 - `idenso::large_spenso_inputs::smallest_root_input_symbolic_network_parse_default`
   parsed in `1.554s`, graph nodes `69975`, graph edges `123483`, tensors
   `30184`, scalars `11663`.
 - `idenso::large_spenso_inputs::smallest_root_input_symbolic_network_parse_without_scalar_precontraction`
-  parsed in `2.774s`, graph nodes `200789`, graph edges `254297`, tensors
-  `30184`, scalars `89427`.
+  parsed in `2.774s`, graph nodes `200789`, graph edges `254297`,
+  tensors `30184`, scalars `89427`.
 
 The exact non-passing records from the JUnit artifact are:
 

@@ -1,7 +1,7 @@
 # Agent Guidance
 
 Agents and human contributors follow the same repository guidance. Before making
-changes, read [CONTRIBUTING.md](CONTRIBUTING.md) and treat it as authoritative
+changes, read [CONTRIBUTING.typ](CONTRIBUTING.typ) and treat it as authoritative
 for this repository.
 
 If instructions conflict, prefer the more specific local guidance and preserve

@@ -1,10 +1,10 @@
-# Contributing
+= Contributing
 
 These guidelines are shared by human contributors and coding agents. They cover
 the project workflow, the engineering style we want, and the subsystem-specific
 constraints that are easy to miss during refactors.
 
-## Core Engineering Principles
+== Core Engineering Principles
 
 These rules are intentionally broad and should shape most code changes.
 
@@ -33,7 +33,7 @@ These rules are intentionally broad and should shape most code changes.
   call sites when the API should change.
 
 
-## Investigation Discipline
+== Investigation Discipline
 
 - Before fixing a suspected bug, find the existing code path that should own the
   behavior.
@@ -46,7 +46,7 @@ These rules are intentionally broad and should shape most code changes.
   scratch docs, local example edits, profiling outputs, etc.) unless the task
   clearly requires them.
 
-## Debug Logging Pattern
+== Debug Logging Pattern
 
 - Prefer `debug_tags!` plus the log filter environment variables over ad hoc
   debug files, one-off `println!`, or custom dump env vars. This keeps
@@ -80,9 +80,9 @@ These rules are intentionally broad and should shape most code changes.
   filter. Otherwise prefer `GL_DISPLAY_FILTER` and `GL_LOGFILE_FILTER` so large
   `file.*` payloads can be kept out of terminal output.
 
-## Code Quality Baseline
+== Code Quality Baseline
 
-### Rust
+=== Rust
 
 - Always format and run `cargo check` before compiling to catch easy errors and
   keep formatting consistent.
@@ -110,11 +110,11 @@ These rules are intentionally broad and should shape most code changes.
 - Prefer `pub(crate)` unless fully public exposure is necessary; this keeps
   unused components visible to clippy.
 
-### Python
+=== Python
 
 - Use the ruff formatter.
 
-### Tests
+=== Tests
 
 - Install `cargo-nextest` 0.9.80 or newer. The repository configuration
   enforces this minimum; update an existing installation with
@@ -129,18 +129,41 @@ These rules are intentionally broad and should shape most code changes.
 - Add tests for edge cases that motivated the change, especially when collapsing
   duplicated logic.
 
-### Docs
+=== Docs
 
 - Documentation should explain conventions and algorithmic intent, not restate
   function names. Avoid tautological docs like "apply the convention"; say what
   the convention does.
 - Keep docs synchronized with API refactors; remove references to deleted
   traits, functions, and modes.
-- Architecture docs live in `docs/architecture/`:
-  - `docs/architecture/architecture-current.md` for implemented architecture.
-  - `docs/architecture/architecture-ideas.md` for roadmap/proposals.
 
-#### Typst Graph Debugging
+==== Documentation Source Format
+
+- Typst (`.typ`) is the canonical source format for source-controlled authored
+  repository documentation, including contributor guidance, manuals,
+  architecture notes, investigations, plans, and changelogs. Never add a new
+  Markdown/HTML prose source or a parallel copy.
+- Files named exactly `AGENTS.md` and `README.md` are the only Markdown
+  compatibility exceptions: agent tooling discovers the former, while GitHub,
+  Cargo, and package indexes discover the latter. Keep those files concise and
+  link them to the canonical Typst documentation.
+- Do not add a separately maintained `README.typ`; the compatibility README is
+  its own deliberately small source.
+- Existing Markdown and HTML prose is legacy migration debt, not precedent for
+  new files. Any change to its authored content must migrate the canonical
+  source to Typst and update every registry and link in the same change instead
+  of retaining both formats.
+- Build outputs may use a downstream-required format, but generated output is
+  not a second source and must not be checked in as hand-maintained prose.
+- Architecture docs live in `docs/architecture/` and are classified by
+  `docs/developers.toml`. New entries must point directly to `.typ` sources.
+  Each source begins with exactly one `= Title`, matching its registry title;
+  the builder supplies the page-level heading and verifies that contract.
+- `docs/legacy-prose.toml` is the exact, shrinking inventory of pre-policy
+  Markdown/HTML debt. Update it only while removing or migrating an entry; the
+  documentation check rejects additions and parallel editable copies.
+
+==== Typst Graph Debugging
 
 When debugging Linnest layout output from Typst, expose the graph records through
 Typst metadata and inspect them with `typst query`. The metadata element must be
@@ -162,7 +185,7 @@ This is useful for checking generated `pos`, `label-pos`, `layout-width`,
 `layout-height`, `label-width`, and `label-height` values without inferring them
 from the rendered PDF.
 
-## Repository Map
+== Repository Map
 
 - `crates/gammalooprs/src/` holds the core Rust implementation.
 - `crates/gammaloop-api/` is the workspace member for the Rust API and Python
@@ -175,7 +198,7 @@ from the rendered PDF.
 - `assets/` stores schemas/data and model files (`assets/models/`).
 - Rust benches live under `crates/gammalooprs/benches/`.
 
-## Common Commands
+== Common Commands
 
 - Build Rust CLI in dev-optim:
   ```bash
@@ -202,9 +225,9 @@ from the rendered PDF.
   symbol, try building with `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T`; see `build.rs`
   for the impact of this setting.
 
-## Version Control Workflow
+== Version Control Workflow
 
-### jj
+=== jj
 
 - If the repo is colocated with jj metadata, prefer `jj` over `git`.
 - Start new tasks with `jj new` and immediately
@@ -215,9 +238,9 @@ from the rendered PDF.
 - Update the current change description with `jj describe -m "<description>"`
   as the plan evolves.
 - Use `jj diff` to see changed files.
-- Reference: https://jj-vcs.github.io/jj/prerelease/cli-reference/
+- Reference: #link("https://jj-vcs.github.io/jj/prerelease/cli-reference/")[Jujutsu CLI reference].
 
-### Commits And PRs
+=== Commits And PRs
 
 - Commit messages are short and descriptive, typically lowercase without scopes
   (for example, `remove edge quotes`).
@@ -229,7 +252,7 @@ from the rendered PDF.
 - If changes touch CLI state, mention `gammaloop_state/` impacts or migration
   steps.
 
-## Internal API Policy
+== Internal API Policy
 
 - API stability is currently a non-goal for internal development: prioritize
   maintainability and structure over preserving external-facing module paths.
@@ -244,12 +267,12 @@ from the rendered PDF.
   more concise design than preserving compatibility or leaving old code
   untouched.
 
-## Project-Specific Notes
+== Project-Specific Notes
 
 The following sections are narrower invariants. They are not general style
 preferences; they protect behavior that has been easy to regress.
 
-### Numeric Precision
+=== Numeric Precision
 
 - In generic or arbitrary-precision code, do not introduce constants or
   intermediate values through `from_f64`, `std::f64::consts::*`, or other lossy
@@ -274,7 +297,7 @@ preferences; they protect behavior that has been easy to regress.
   use a helper there instead. If it genuinely looks unavoidable to use
   Symbolica's trait directly, stop and ask first.
 
-### Settings Serialization
+=== Settings Serialization
 
 - The settings serialization model relies on the `SHOWDEFAULTS` escape hatch in
   `gammalooprs::utils::serde_utils` when writing persisted state defaults and
@@ -285,7 +308,7 @@ preferences; they protect behavior that has been easy to regress.
   `IsDefault::is_default`; otherwise the field will disappear from saved
   `global_settings.toml` / `default_runtime_settings.toml` and from completion.
 
-### State And CLI
+=== State And CLI
 
 - Treat saved-state detection as manifest-based only. Empty folders or folders
   containing only transient runtime artifacts such as `logs/` are scratch state,
@@ -308,12 +331,12 @@ preferences; they protect behavior that has been easy to regress.
   commits unless intentionally sharing a reproducible state.
 - Use `./gammaloop -s <state_dir>` for isolated experiments.
 
-### Differential LU / Event Processing
+=== Differential LU / Event Processing
 
-- `differential_lu.md` is the detailed implementation log for the current
-  differential LU stack; `docs/architecture/architecture-current.md` has the
-  corresponding implemented-architecture summary. Keep both in sync when
-  changing selectors, observables, event grouping, or sample-evaluation output.
+- The GammaLoop current-architecture record registered in
+  `docs/developers.toml` is the implemented summary for the differential LU
+  stack. Keep it synchronized when changing selectors, observables, event
+  grouping, or sample-evaluation output.
 - Event grouping semantics are by graph-group, not just by graph: if multiple
   LU graphs share the same `group_id`, all accepted cuts from all of those
   graphs belong in the same retained `EventGroup`.
@@ -338,7 +361,7 @@ preferences; they protect behavior that has been easy to regress.
   lightweight identifiers such as `Original`,
   `ThresholdCounterterm { subset_index }`, and `FullMultiplicativeFactor`.
 
-### API / Python Interop
+=== API / Python Interop
 
 - `python_api`: Basic Python API support, enabled by default for
   `gammaloop-api`.
@@ -359,7 +382,7 @@ preferences; they protect behavior that has been easy to regress.
 - If the extension module environment is an issue when compiling the Python API,
   try `build-api-abi`.
 
-### Environment And Build Quirks
+=== Environment And Build Quirks
 
 - `NO_SYMBOLICA_OEM_LICENSE` is read via `option_env!` in `gammalooprs`
   initialization, so it is a compile-time switch, not a pure runtime one. If you

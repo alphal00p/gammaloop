@@ -18,11 +18,10 @@ use alphal00p_docs_schema::{
 };
 use clap::ValueEnum;
 use eyre::{Context, ContextCompat, Result, bail, ensure};
-use pulldown_cmark::{Event, Options, Parser, html};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tempfile::Builder as TempDirBuilder;
+use tempfile::{Builder as TempDirBuilder, TempDir};
 use walkdir::WalkDir;
 
 const PRODUCT_IDS: [&str; 5] = ["gammaloop", "linnet", "spenso", "idenso", "vakint"];
@@ -40,7 +39,8 @@ const PORTAL_GRAPH_IDS: [&str; 11] = [
     "epem-ttbar-cut",
 ];
 const PORTAL_SCHEMA_VERSION: u32 = 2;
-const DEVELOPER_SCHEMA_VERSION: u32 = 1;
+const DEVELOPER_SCHEMA_VERSION: u32 = 2;
+const LEGACY_PROSE_SCHEMA_VERSION: u32 = 1;
 const PUBLICATION_SCHEMA_VERSION: u32 = 1;
 const STRICT_RUSTDOC_FLAGS: &str = "-D rustdoc::broken_intra_doc_links \
     -D rustdoc::invalid_html_tags -D rustdoc::bare_urls";
@@ -197,6 +197,12 @@ struct DeveloperNote {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+struct LegacyProseConfig {
+    schema: u32,
+    source: Vec<PathBuf>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct PublicationCache {
     schema: u32,
     source: String,
@@ -321,12 +327,18 @@ struct HeadingLink {
     id: String,
 }
 
+struct LeadingDeveloperTitle {
+    title: String,
+    range: std::ops::Range<usize>,
+}
+
 pub struct SiteBuilder {
     root: PathBuf,
     api_root: PathBuf,
     registry: ProductRegistry,
     portal: PortalConfig,
     developers: DeveloperConfig,
+    legacy_prose: LegacyProseConfig,
     publications: PublicationCache,
 }
 
@@ -356,6 +368,11 @@ impl SiteBuilder {
             .wrap_err_with(|| format!("failed to read {}", developers_path.display()))?;
         let developers = toml::from_str(&source)
             .wrap_err_with(|| format!("failed to parse {}", developers_path.display()))?;
+        let legacy_prose_path = root.join("docs/legacy-prose.toml");
+        let source = fs::read_to_string(&legacy_prose_path)
+            .wrap_err_with(|| format!("failed to read {}", legacy_prose_path.display()))?;
+        let legacy_prose = toml::from_str(&source)
+            .wrap_err_with(|| format!("failed to parse {}", legacy_prose_path.display()))?;
         let publications_path = root.join("docs/data/publications.json");
         let publications = serde_json::from_slice(
             &fs::read(&publications_path)
@@ -371,6 +388,7 @@ impl SiteBuilder {
             registry,
             portal,
             developers,
+            legacy_prose,
             publications,
         })
     }
@@ -406,6 +424,7 @@ impl SiteBuilder {
             self.developers.schema,
             DEVELOPER_SCHEMA_VERSION
         );
+        self.check_prose_sources()?;
         ensure!(
             !self.developers.title.trim().is_empty()
                 && !self.developers.summary.trim().is_empty()
@@ -450,13 +469,11 @@ impl SiteBuilder {
                     note.id
                 );
                 ensure!(
-                    matches!(
-                        note.source
-                            .extension()
-                            .and_then(|extension| extension.to_str()),
-                        Some("md" | "html")
-                    ),
-                    "developer note {} must be Markdown or HTML",
+                    note.source
+                        .extension()
+                        .and_then(|extension| extension.to_str())
+                        == Some("typ"),
+                    "developer note {} must use Typst",
                     note.source.display()
                 );
                 self.require_file(&note.source)?;
@@ -466,14 +483,20 @@ impl SiteBuilder {
         let mut architecture_sources = BTreeSet::new();
         for entry in fs::read_dir(&architecture_root)? {
             let path = entry?.path();
-            if path.is_file()
-                && matches!(
-                    path.extension().and_then(|extension| extension.to_str()),
-                    Some("md" | "html")
-                )
-                && path.file_name().and_then(|name| name.to_str()) != Some("architecture.md")
-            {
-                architecture_sources.insert(path.strip_prefix(&self.root)?.to_path_buf());
+            if !path.is_file() {
+                continue;
+            }
+            match path.extension().and_then(|extension| extension.to_str()) {
+                Some("typ")
+                    if path.file_stem().and_then(|name| name.to_str()) != Some("architecture") =>
+                {
+                    architecture_sources.insert(path.strip_prefix(&self.root)?.to_path_buf());
+                }
+                Some("md" | "html") => bail!(
+                    "developer source {} must be migrated to Typst",
+                    path.display()
+                ),
+                _ => {}
             }
         }
         ensure!(
@@ -791,6 +814,94 @@ impl SiteBuilder {
         Ok(())
     }
 
+    fn check_prose_sources(&self) -> Result<()> {
+        ensure!(
+            self.legacy_prose.schema == LEGACY_PROSE_SCHEMA_VERSION,
+            "legacy prose schema {} does not match checker schema {}",
+            self.legacy_prose.schema,
+            LEGACY_PROSE_SCHEMA_VERSION
+        );
+        let declared = self
+            .legacy_prose
+            .source
+            .iter()
+            .map(|source| {
+                ensure!(
+                    !source.is_absolute()
+                        && normalize_repository_path(source).as_ref() == Some(source),
+                    "legacy prose path {} must be a normalized repository-relative path",
+                    source.display()
+                );
+                ensure!(
+                    matches!(
+                        source.extension().and_then(|extension| extension.to_str()),
+                        Some("md" | "html")
+                    ),
+                    "legacy prose path {} must be Markdown or HTML",
+                    source.display()
+                );
+                ensure!(
+                    !matches!(
+                        source.file_name().and_then(|name| name.to_str()),
+                        Some("AGENTS.md" | "README.md")
+                    ),
+                    "{} is a compatibility exception and must not be legacy-listed",
+                    source.display()
+                );
+                self.require_file(source)?;
+                Ok(source.clone())
+            })
+            .collect::<Result<BTreeSet<_>>>()?;
+        ensure!(
+            declared.len() == self.legacy_prose.source.len(),
+            "docs/legacy-prose.toml contains duplicate paths"
+        );
+
+        let mut actual = BTreeSet::new();
+        for entry in WalkDir::new(&self.root).into_iter().filter_entry(|entry| {
+            !entry.file_type().is_dir()
+                || !matches!(
+                    entry.file_name().to_str(),
+                    Some(".git" | ".jj" | ".direnv" | ".venv" | "node_modules" | "target")
+                )
+        }) {
+            let entry = entry?;
+            if !entry.file_type().is_file()
+                || !matches!(
+                    entry
+                        .path()
+                        .extension()
+                        .and_then(|extension| extension.to_str()),
+                    Some("md" | "html")
+                )
+            {
+                continue;
+            }
+            let source = entry.path().strip_prefix(&self.root)?.to_path_buf();
+            let mut typst = source.clone();
+            typst.set_extension("typ");
+            ensure!(
+                !self.root.join(&typst).is_file(),
+                "{} and {} are parallel editable documentation sources",
+                source.display(),
+                typst.display()
+            );
+            if !matches!(
+                source.file_name().and_then(|name| name.to_str()),
+                Some("AGENTS.md" | "README.md")
+            ) {
+                actual.insert(source);
+            }
+        }
+        ensure!(
+            actual == declared,
+            "Markdown/HTML sources differ from the shrinking legacy inventory; new: {:?}; migrated or removed: {:?}",
+            actual.difference(&declared).collect::<Vec<_>>(),
+            declared.difference(&actual).collect::<Vec<_>>()
+        );
+        Ok(())
+    }
+
     pub fn build(&self, request: BuildRequest) -> Result<()> {
         self.check()?;
         let tag = match request.channel {
@@ -842,7 +953,11 @@ impl SiteBuilder {
             self.build_product(product, &options)?;
         }
 
-        self.write_developer_docs(&output)?;
+        self.write_developer_docs(
+            &output,
+            request.include_typst,
+            request.dependency_output.as_deref(),
+        )?;
         self.write_portal(&output, request.channel, tag)?;
         if request.product == "all" {
             self.validate_generated_links(&output, request.include_rustdoc)?;
@@ -2087,7 +2202,79 @@ impl SiteBuilder {
         Ok(())
     }
 
-    fn write_developer_docs(&self, output: &Path) -> Result<()> {
+    fn render_developer_typst(
+        &self,
+        notes: &[&DeveloperNote],
+        dependency_output: Option<&Path>,
+    ) -> Result<Option<TempDir>> {
+        if notes.is_empty() {
+            return Ok(None);
+        }
+
+        let target = self.root.join("target");
+        fs::create_dir_all(&target)?;
+        let work = TempDirBuilder::new()
+            .prefix("alphal00p-developer-typst-")
+            .tempdir_in(target)?;
+        let wrapper = work.path().join("developers.typ");
+        let mut documents = String::new();
+        for (index, note) in notes.iter().enumerate() {
+            documents.push_str(&format!(
+                "#document(\"note-{index}.html\", title: [#raw(\"{}\")])[#include \"/{}\"]\n",
+                typst_string(&note.title),
+                typst_string(&note.source.to_string_lossy().replace('\\', "/")),
+            ));
+        }
+        fs::write(&wrapper, documents)?;
+
+        let bundle = work.path().join("bundle");
+        let timestamp = self.git_timestamp();
+        ensure!(
+            timestamp > 0,
+            "cannot determine the documented commit timestamp; set SOURCE_DATE_EPOCH"
+        );
+        let commit = self.git_commit();
+        let mut command = Command::new("typst");
+        command.current_dir(&self.root).args([
+            "compile",
+            "--root",
+            self.root.to_str().context("workspace root is not UTF-8")?,
+            "--features",
+            "html,bundle",
+            "--format",
+            "bundle",
+            "--creation-timestamp",
+            &timestamp.to_string(),
+            "--input",
+            &format!("git-commit={commit}"),
+        ]);
+        if let Some(directory) = dependency_output {
+            fs::create_dir_all(directory)?;
+            command
+                .args(["--deps-format", "zero", "--deps"])
+                .arg(directory.join("developers.deps"));
+        }
+        let status = command
+            .arg(&wrapper)
+            .arg(&bundle)
+            .status()
+            .wrap_err("failed to launch Typst 0.15; enter the Nix development shell")?;
+        ensure!(status.success(), "Typst failed for developer notes");
+        for (index, _) in notes.iter().enumerate() {
+            ensure!(
+                bundle.join(format!("note-{index}.html")).is_file(),
+                "Typst emitted no developer note {index}"
+            );
+        }
+        Ok(Some(work))
+    }
+
+    fn write_developer_docs(
+        &self,
+        output: &Path,
+        include_typst: bool,
+        dependency_output: Option<&Path>,
+    ) -> Result<()> {
         let staging_root = output.join(".staging");
         fs::create_dir_all(&staging_root)?;
         let staging = TempDirBuilder::new()
@@ -2127,51 +2314,49 @@ impl SiteBuilder {
             })
             .collect::<Vec<_>>();
         let mut search = Vec::new();
+        let typst_work = if include_typst {
+            self.render_developer_typst(&notes, dependency_output)?
+        } else {
+            None
+        };
+        let typst_bundle = typst_work.as_ref().map(|work| work.path().join("bundle"));
 
         for (index, note) in notes.iter().enumerate() {
             let page = &pages[index];
             let docs_root = page_root_prefix(&page.route);
             let destination = developer_root.join(&page.route);
             fs::create_dir_all(&destination)?;
-            let source = fs::read_to_string(self.root.join(&note.source))?;
             let source_url = format!(
                 "https://github.com/alphal00p/gammaloop/blob/{}/{}",
                 commit,
                 note.source.to_string_lossy()
             );
-            let body = match note
-                .source
-                .extension()
-                .and_then(|extension| extension.to_str())
-            {
-                Some("md") => {
-                    let markdown = strip_first_markdown_title(&source)?;
-                    let rendered = render_developer_markdown(markdown);
-                    rewrite_developer_source_links(
-                        &rendered,
-                        &note.source,
-                        &commit,
-                        &note_routes,
-                        &self.root,
-                    )?
-                }
-                Some("html") => {
-                    validate_developer_html_note(&source)?;
-                    let diagram = rewrite_developer_source_links(
-                        &source,
-                        &note.source,
-                        &commit,
-                        &note_routes,
-                        &self.root,
-                    )?;
-                    let diagram = decorate_developer_diagram(&diagram, &note.title, &source_url)?;
-                    fs::write(destination.join("diagram.html"), diagram)?;
-                    format!(
-                        "<div class=\"developer-diagram\"><iframe title=\"{}\" src=\"diagram.html\" loading=\"lazy\" sandbox></iframe><p><a class=\"hero-action\" href=\"diagram.html\">Open the full-page diagram <span aria-hidden=\"true\">↗</span></a></p></div>",
-                        escape_html(&note.title)
-                    )
-                }
-                _ => unreachable!("developer note extensions are validated"),
+            let (body, extra_head) = if let Some(bundle) = &typst_bundle {
+                let rendered = fs::read_to_string(bundle.join(format!("note-{index}.html")))?;
+                let mut body = extract_html_body(&rendered)?.to_owned();
+                validate_developer_typst_body(&body)?;
+                let source_title = leading_developer_title(&body)?;
+                ensure!(
+                    source_title.title == note.title,
+                    "developer Typst title {:?} does not match registry title {:?}",
+                    source_title.title,
+                    note.title
+                );
+                body.replace_range(source_title.range, "");
+                promote_heading_hierarchy(&mut body);
+                let body = rewrite_developer_source_links(
+                    &body,
+                    &note.source,
+                    &commit,
+                    &note_routes,
+                    &self.root,
+                )?;
+                (body, extract_typst_head_styles(&rendered)?)
+            } else {
+                (
+                    "<p>Typst rendering was disabled for this metadata-only build.</p>".to_owned(),
+                    String::new(),
+                )
             };
             let status_class = slug(&note.status);
             let article = format!(
@@ -2207,10 +2392,13 @@ impl SiteBuilder {
             fs::write(
                 destination.join("index.html"),
                 developer_document(
-                    &format!("{} · Developer architecture", note.title),
-                    &note.summary,
+                    (
+                        &format!("{} · Developer architecture", note.title),
+                        &note.summary,
+                    ),
                     &docs_root,
                     &portal_root,
+                    &extra_head,
                     &sidebar,
                     &main,
                     &toc,
@@ -2300,10 +2488,10 @@ impl SiteBuilder {
         fs::write(
             developer_root.join("index.html"),
             developer_document(
-                &self.developers.title,
-                &self.developers.summary,
+                (&self.developers.title, &self.developers.summary),
                 "",
                 "../",
+                "",
                 &sidebar,
                 &main,
                 "",
@@ -2963,36 +3151,6 @@ fn software_bibtex(product: &ProductConfig, version: &str) -> String {
     )
 }
 
-fn strip_first_markdown_title(source: &str) -> Result<&str> {
-    let source = source.strip_prefix('\u{feff}').unwrap_or(source);
-    let title_end = source
-        .find('\n')
-        .map(|index| index + 1)
-        .unwrap_or(source.len());
-    let title = source[..title_end].trim();
-    ensure!(
-        title.starts_with("# ") && !title.starts_with("## "),
-        "developer Markdown note must begin with one H1 title"
-    );
-    Ok(&source[title_end..])
-}
-
-fn render_developer_markdown(source: &str) -> String {
-    let mut options = Options::empty();
-    options.insert(Options::ENABLE_TABLES);
-    options.insert(Options::ENABLE_FOOTNOTES);
-    options.insert(Options::ENABLE_STRIKETHROUGH);
-    options.insert(Options::ENABLE_TASKLISTS);
-    options.insert(Options::ENABLE_SMART_PUNCTUATION);
-    let events = Parser::new_ext(source, options).map(|event| match event {
-        Event::Html(value) | Event::InlineHtml(value) => Event::Text(value),
-        event => event,
-    });
-    let mut rendered = String::new();
-    html::push_html(&mut rendered, events);
-    rendered
-}
-
 fn rewrite_developer_source_links(
     html: &str,
     source: &Path,
@@ -3069,72 +3227,112 @@ fn normalize_repository_path(path: &Path) -> Option<PathBuf> {
     Some(normalized)
 }
 
-fn validate_developer_html_note(source: &str) -> Result<()> {
-    let active_element = Regex::new(r"(?is)<\s*(script|iframe|object|embed|form|base|link)\b")?;
+fn validate_developer_typst_body(source: &str) -> Result<()> {
+    let active_element =
+        Regex::new(r"(?is)<\s*(script|iframe|object|embed|form|base|link|meta|style)\b")?;
     let event_handler = Regex::new(r"(?is)[\s/]on[a-z0-9_-]+\s*=")?;
-    let active_meta = Regex::new(r"(?is)<\s*meta\b[^>]*\bhttp-equiv\s*=")?;
-    let active_css = Regex::new(r"(?is)(?:@import|url\s*\()")?;
+    let tag = Regex::new(r"(?is)<\s*(?P<tag>[a-z][a-z0-9-]*)\b(?P<attrs>[^>]*)>")?;
     let url_assignment = Regex::new(r"(?is)\b(?:href|src)\s*=")?;
-    let quoted_url = Regex::new(r#"(?is)\b(?:href|src)\s*=\s*\"([^\"]*)\""#)?;
+    let quoted_url = Regex::new(r#"(?is)\b(?P<name>href|src)\s*=\s*\"(?P<target>[^\"]*)\""#)?;
+    let style = Regex::new(r#"(?is)\bstyle\s*=\s*\"(?P<value>[^\"]*)\""#)?;
+    let active_css = Regex::new(r"(?is)(?:@import|url\s*\()")?;
     let character_reference = Regex::new(r"(?is)&(?:#[x]?[0-9a-f]+|[a-z][a-z0-9]+);")?;
     ensure!(
-        !active_element.is_match(source)
-            && !event_handler.is_match(source)
-            && !active_meta.is_match(source)
-            && !active_css.is_match(source),
-        "developer HTML notes cannot contain scripts, active embeds, forms, external styles, event handlers, active CSS, or HTTP-equivalent metadata"
+        !active_element.is_match(source) && !event_handler.is_match(source),
+        "compiled developer Typst cannot contain active HTML elements or event handlers"
     );
-    ensure!(
-        url_assignment.find_iter(source).count() == quoted_url.find_iter(source).count(),
-        "developer HTML note href and src attributes must use double-quoted values"
-    );
-    for capture in quoted_url.captures_iter(source) {
-        let target = capture.get(1).expect("URL attribute capture").as_str();
+    for tag_capture in tag.captures_iter(source) {
+        let element = tag_capture.name("tag").expect("HTML tag capture").as_str();
+        let attributes = tag_capture
+            .name("attrs")
+            .expect("HTML attribute capture")
+            .as_str();
         ensure!(
-            !character_reference.is_match(target) && !target.chars().any(char::is_control),
-            "developer HTML note URLs cannot contain character references or control characters"
+            url_assignment.find_iter(attributes).count()
+                == quoted_url.captures_iter(attributes).count(),
+            "compiled developer Typst href and src attributes must use double-quoted values"
         );
-        let browser_normalized_target =
-            target.trim_start_matches(|character: char| character <= ' ');
-        if let Some((scheme, _)) = browser_normalized_target.split_once(':')
-            && !scheme.is_empty()
-            && scheme.chars().all(|character| {
-                character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
-            })
-        {
+        for capture in style.captures_iter(attributes) {
             ensure!(
-                matches!(
-                    scheme.to_ascii_lowercase().as_str(),
-                    "http" | "https" | "mailto"
-                ),
-                "developer HTML note uses a forbidden URL scheme: {scheme}"
+                !active_css.is_match(capture.name("value").expect("style value capture").as_str()),
+                "compiled developer Typst cannot contain active inline CSS"
             );
+        }
+        for capture in quoted_url.captures_iter(attributes) {
+            let name = capture.name("name").expect("URL name capture").as_str();
+            let target = capture.name("target").expect("URL target capture").as_str();
+            ensure!(
+                !target.chars().any(char::is_control),
+                "compiled developer Typst URLs cannot contain control characters"
+            );
+            let target = target.trim_start_matches(|character: char| character <= ' ');
+            let prefix_end = target
+                .find(':')
+                .or_else(|| target.find(['/', '?', '#']))
+                .unwrap_or(target.len());
+            ensure!(
+                !character_reference.is_match(&target[..prefix_end]),
+                "compiled developer Typst URL schemes cannot contain character references"
+            );
+            if let Some(data) = target.strip_prefix("data:") {
+                ensure!(
+                    element.eq_ignore_ascii_case("img")
+                        && name.eq_ignore_ascii_case("src")
+                        && [
+                            "image/png",
+                            "image/jpeg",
+                            "image/gif",
+                            "image/webp",
+                            "image/avif"
+                        ]
+                        .iter()
+                        .any(|kind| {
+                            data.strip_prefix(kind)
+                                .is_some_and(|data| data.starts_with(";base64,"))
+                        }),
+                    "compiled developer Typst permits only base64 raster data images"
+                );
+                continue;
+            }
+            if let Some((scheme, _)) = target.split_once(':')
+                && !scheme.is_empty()
+                && scheme.chars().all(|character| {
+                    character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
+                })
+            {
+                ensure!(
+                    matches!(
+                        scheme.to_ascii_lowercase().as_str(),
+                        "http" | "https" | "mailto"
+                    ),
+                    "compiled developer Typst uses a forbidden URL scheme: {scheme}"
+                );
+            }
         }
     }
     Ok(())
 }
 
-fn decorate_developer_diagram(source: &str, title: &str, source_url: &str) -> Result<String> {
-    ensure!(
-        source.contains("</head>"),
-        "developer HTML note has no head"
-    );
-    let banner_style = r#"<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:"><style>.developer-diagram-banner{position:sticky;top:0;z-index:1000;display:flex;flex-wrap:wrap;align-items:center;gap:.65rem 1rem;padding:.7rem 1rem;border-bottom:1px solid #b893c7;background:#3d2645;color:#f9f6f0;font:600 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em}.developer-diagram-banner strong{text-transform:uppercase}.developer-diagram-banner a{color:#eadff0}.developer-diagram-banner a:first-of-type{margin-left:auto}@media(max-width:38rem){.developer-diagram-banner a:first-of-type{margin-left:0}}</style></head>"#;
-    let mut rendered = source.replacen("</head>", banner_style, 1);
-    let body = rendered
-        .find("<body")
-        .context("developer HTML note has no body")?;
-    let body_start = rendered[body..]
-        .find('>')
-        .map(|offset| body + offset + 1)
-        .context("developer HTML note has an unterminated body")?;
-    let banner = format!(
-        "<aside class=\"developer-diagram-banner\" aria-label=\"Developer note\"><strong>For developers</strong><span>{}</span><a href=\"../../\">All architecture notes</a><a href=\"{}\">Source ↗</a></aside>",
-        escape_html(title),
-        escape_html(source_url),
-    );
-    rendered.insert_str(body_start, &banner);
-    Ok(rendered)
+fn extract_typst_head_styles(source: &str) -> Result<String> {
+    let head_start = source
+        .find("<head>")
+        .map(|start| start + "<head>".len())
+        .context("rendered Typst page has no head")?;
+    let head_end = source
+        .find("</head>")
+        .context("rendered Typst page has no head end")?;
+    ensure!(head_start <= head_end, "rendered Typst head is malformed");
+    let style = Regex::new(r"(?is)<style>(?P<css>.*?)</style>")?;
+    let active_css = Regex::new(r"(?is)(?:@import|url\s*\()")?;
+    let mut styles = String::new();
+    for capture in style.captures_iter(&source[head_start..head_end]) {
+        ensure!(
+            !active_css.is_match(capture.name("css").expect("Typst style capture").as_str()),
+            "compiled developer Typst head contains active CSS"
+        );
+        styles.push_str(capture.get(0).expect("Typst style element").as_str());
+    }
+    Ok(styles)
 }
 
 fn developer_toc(headings: &[HeadingLink]) -> String {
@@ -3182,14 +3380,15 @@ fn developer_inline_toc(headings: &[HeadingLink]) -> String {
 }
 
 fn developer_document(
-    title: &str,
-    description: &str,
+    metadata: (&str, &str),
     docs_root: &str,
     portal_root: &str,
+    extra_head: &str,
     sidebar: &str,
     main: &str,
     toc: &str,
 ) -> String {
+    let (title, description) = metadata;
     let home = if docs_root.is_empty() {
         "./"
     } else {
@@ -3197,7 +3396,7 @@ fn developer_document(
     };
     let favicon = favicon_links(&format!("{docs_root}assets/"));
     format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\"><meta name=\"theme-color\" content=\"#f9f6f0\">{favicon}<title>{}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\"><script defer src=\"{}assets/site.js\"></script></head><body class=\"developer-body\" data-docs-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\"><span class=\"site-brand-mark\">α</span><span class=\"site-brand-name\">Developer notes</span></a><div class=\"site-header-tools\"><a class=\"header-button header-link\" href=\"{}\" aria-label=\"Research documentation\"><span class=\"header-link-label\">Research docs</span><span aria-hidden=\"true\">←</span></a><button class=\"header-button\" type=\"button\" data-search-open aria-label=\"Search developer documentation\"><span class=\"header-search-label\">Search</span> <span class=\"header-button-label\">⌘K</span><span class=\"header-search-icon\" aria-hidden=\"true\">⌕</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main developer-main\" id=\"main-content\">{main}</main>{toc}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search developer architecture\" aria-label=\"Search developer architecture\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\"><meta name=\"theme-color\" content=\"#f9f6f0\">{favicon}<title>{}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\">{extra_head}<script defer src=\"{}assets/site.js\"></script></head><body class=\"developer-body\" data-docs-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\"><span class=\"site-brand-mark\">α</span><span class=\"site-brand-name\">Developer notes</span></a><div class=\"site-header-tools\"><a class=\"header-button header-link\" href=\"{}\" aria-label=\"Research documentation\"><span class=\"header-link-label\">Research docs</span><span aria-hidden=\"true\">←</span></a><button class=\"header-button\" type=\"button\" data-search-open aria-label=\"Search developer documentation\"><span class=\"header-search-label\">Search</span> <span class=\"header-button-label\">⌘K</span><span class=\"header-search-icon\" aria-hidden=\"true\">⌕</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main developer-main\" id=\"main-content\">{main}</main>{toc}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search developer architecture\" aria-label=\"Search developer architecture\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
         escape_html(description),
         escape_html(title),
         escape_html(docs_root),
@@ -3219,6 +3418,33 @@ fn extract_html_body(html: &str) -> Result<&str> {
         .context("rendered page has no body end")?;
     ensure!(start <= end, "rendered page body is malformed");
     Ok(&html[start..end])
+}
+
+fn leading_developer_title(body: &str) -> Result<LeadingDeveloperTitle> {
+    let heading = Regex::new(r"(?s)<h2(?:\s[^>]*)?>(?P<body>.*?)</h2>")?;
+    let captures = heading
+        .captures(body)
+        .context("developer Typst note must begin with one level-one title")?;
+    let whole = captures.get(0).expect("developer title capture");
+    ensure!(
+        body[..whole.start()].trim().is_empty() && !heading.is_match(&body[whole.end()..]),
+        "developer Typst note must contain exactly one leading level-one title"
+    );
+    let tags = Regex::new(r"<[^>]+>")?;
+    let title = decode_html_text(
+        tags.replace_all(
+            captures
+                .name("body")
+                .expect("developer title body capture")
+                .as_str(),
+            "",
+        )
+        .trim(),
+    );
+    Ok(LeadingDeveloperTitle {
+        title,
+        range: whole.start()..whole.end(),
+    })
 }
 
 fn page_root_prefix(route: &str) -> String {
@@ -4790,19 +5016,13 @@ mod tests {
     }
 
     #[test]
-    fn developer_markdown_renders_tables_and_escapes_raw_html() {
-        let rendered = render_developer_markdown(
-            "## Shape\n\n| input | result |\n| --- | --- |\n| tensor | scalar |\n\n<script>alert('no')</script>\n",
-        );
-        assert!(rendered.contains("<table>"));
-        assert!(rendered.contains("<th>input</th>"));
-        assert!(rendered.contains("&lt;script&gt;alert('no')&lt;/script&gt;"));
-        assert!(!rendered.contains("<script>"));
+    fn compiled_developer_typst_allows_safe_urls_images_and_prose() {
+        let source = "<main><a href=\"guide?x=1&amp;y=2\">Guide</a><img src=\"data:image/png;base64,AAAA\"><pre><code>url(example)</code></pre></main>";
+        assert!(validate_developer_typst_body(source).is_ok());
     }
 
     #[test]
-    fn developer_html_diagrams_reject_active_content() {
-        assert!(validate_developer_html_note("<main><a href=\"guide\">Guide</a></main>").is_ok());
+    fn compiled_developer_typst_rejects_active_content() {
         for source in [
             "<script>alert(1)</script>",
             "<main onload=\"alert(1)\"></main>",
@@ -4813,10 +5033,55 @@ mod tests {
             "<a href=\"java&#x73;cript:alert(1)\">Open</a>",
             "<iframe src=\"page.html\"></iframe>",
             "<meta http-equiv=\"refresh\" content=\"0; url=/\">",
-            "<style>main { background: url(javascript:alert(1)); }</style>",
+            "<main style=\"background: url(javascript:alert(1))\"></main>",
+            "<img src=\"data:image/svg+xml;base64,AAAA\">",
         ] {
-            assert!(validate_developer_html_note(source).is_err(), "{source}");
+            assert!(validate_developer_typst_body(source).is_err(), "{source}");
         }
+    }
+
+    #[test]
+    fn developer_typst_requires_one_matching_leading_title() {
+        let source = "<h2>Architecture &amp; design</h2><h3>Scope</h3>";
+        let title = leading_developer_title(source).unwrap();
+        assert_eq!(title.title, "Architecture & design");
+        assert_eq!(&source[title.range], "<h2>Architecture &amp; design</h2>");
+        assert!(leading_developer_title("<p>Before</p><h2>Title</h2>").is_err());
+        assert!(leading_developer_title("<h2>One</h2><h2>Two</h2>").is_err());
+    }
+
+    #[test]
+    fn developer_typst_preserves_safe_compiler_head_styles() {
+        let html = "<html><head><title>Note</title><style>math { display: block; }</style></head><body></body></html>";
+        assert_eq!(
+            extract_typst_head_styles(html).unwrap(),
+            "<style>math { display: block; }</style>"
+        );
+        assert!(
+            extract_typst_head_styles(
+                "<html><head><style>@import url(https://example.test)</style></head><body></body></html>"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn prose_source_gate_rejects_new_and_parallel_markdown() {
+        let temporary = tempfile::tempdir().unwrap();
+        fs::write(temporary.path().join("README.md"), "Compatibility readme").unwrap();
+        fs::write(temporary.path().join("new-note.md"), "New prose").unwrap();
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.root = temporary.path().to_path_buf();
+        builder.legacy_prose = LegacyProseConfig {
+            schema: LEGACY_PROSE_SCHEMA_VERSION,
+            source: Vec::new(),
+        };
+        assert!(builder.check_prose_sources().is_err());
+
+        builder.legacy_prose.source.push("new-note.md".into());
+        assert!(builder.check_prose_sources().is_ok());
+        fs::write(temporary.path().join("new-note.typ"), "= New prose").unwrap();
+        assert!(builder.check_prose_sources().is_err());
     }
 
     #[test]
@@ -5446,7 +5711,9 @@ mod tests {
             .join("developers/architecture/removed-note/index.html");
         fs::create_dir_all(stale.parent().unwrap()).unwrap();
         fs::write(&stale, "stale route").unwrap();
-        builder.write_developer_docs(output.path()).unwrap();
+        builder
+            .write_developer_docs(output.path(), false, None)
+            .unwrap();
 
         let developer_root = output.path().join("developers");
         assert!(!stale.exists());
@@ -5474,27 +5741,22 @@ mod tests {
         )
         .unwrap();
         assert!(current.contains("developer-status-implemented"));
-        assert!(current.contains("href=\"../uv-renormalization/\""));
         assert!(current.contains("View the source note"));
-        assert!(current.contains("class=\"docs-toc\""));
-        assert!(current.contains("class=\"developer-inline-toc\""));
+        assert!(current.contains("architecture-current.typ"));
+        assert!(current.contains("Typst rendering was disabled"));
         assert!(current.contains("aria-label=\"Developer note pagination\""));
 
         let investigation = fs::read_to_string(
             developer_root.join("architecture/spenso-improvement-effects/index.html"),
         )
         .unwrap();
-        assert!(investigation.contains("<table>"));
-        assert!(investigation.contains("developer-status-investigation-record"));
+        assert!(investigation.contains("developer-status-historical-experiment"));
 
-        let diagram = fs::read_to_string(
-            developer_root.join("architecture/schoonschip-network/diagram.html"),
-        )
-        .unwrap();
-        assert!(diagram.contains("developer-diagram-banner"));
-        assert!(diagram.contains("For developers"));
-        assert!(diagram.contains("/blob/"));
-        assert!(!diagram.contains("../../crates/idenso/src/"));
+        let parsing =
+            fs::read_to_string(developer_root.join("architecture/schoonschip-network/index.html"))
+                .unwrap();
+        assert!(parsing.contains("For developers"));
+        assert!(parsing.contains("schoonschip-net-parsing.typ"));
 
         let search = serde_json::from_slice::<Vec<SearchEntry>>(
             &fs::read(developer_root.join("search-index.json")).unwrap(),
@@ -5505,7 +5767,8 @@ mod tests {
                 && entry.kind == "developer implemented"
         }));
         assert!(search.iter().any(|entry| {
-            entry.href == "architecture/gammaloop-architecture/#configuration-architecture"
+            entry.href == "architecture/documentation-improvement-plan/"
+                && entry.kind == "developer proposal"
         }));
     }
 }

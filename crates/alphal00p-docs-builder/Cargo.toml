@@ -10,7 +10,6 @@ clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 notify.workspace = true
 percent-encoding.workspace = true
-pulldown-cmark = "0.13"
 regex.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
