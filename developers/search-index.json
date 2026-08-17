@@ -766,5 +766,149 @@
     "summary": "Nix and Crane artifact reuse",
     "href": "architecture/nix-crane-cache-reuse/#remaining-caveats-2",
     "kind": "developer heading"
+  },
+  {
+    "title": "Documentation quality review and improvement plan",
+    "summary": "A critical baseline review with publication-safety findings, product-content gaps, governance needs, measurable acceptance criteria, and a phased work register.",
+    "href": "architecture/documentation-improvement-plan/",
+    "kind": "developer proposal"
+  },
+  {
+    "title": "Executive assessment",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#executive-assessment",
+    "kind": "developer heading"
+  },
+  {
+    "title": "What is already strong",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#what-is-already-strong",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Review method and limits",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#review-method-and-limits",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Baseline",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#baseline",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Critical findings",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#critical-findings",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P0. One mutable site has competing publishers",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#p0-one-mutable-site-has-competing-publishers",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P0. First-user promises are not consistently executable",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#p0-first-user-promises-are-not-consistently-executable",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P0. The advertised partial-build contract can emit broken navigation",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#p0-the-advertised-partial-build-contract-can-emit-broken-navigation",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P1. The manuals cover a template, not each product’s real task surface",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#p1-the-manuals-cover-a-template-not-each-product-s-real-task-surface",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P1. Release and freshness information is visible but not trustworthy",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#p1-release-and-freshness-information-is-visible-but-not-trustworthy",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P1. Information architecture and lifecycle metadata stop too early",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#p1-information-architecture-and-lifecycle-metadata-stop-too-early",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P1. Production is doing work that belongs in a review gate",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#p1-production-is-doing-work-that-belongs-in-a-review-gate",
+    "kind": "developer heading"
+  },
+  {
+    "title": "P2. Accessibility, progressive enhancement, search, and feedback are unmeasured",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#p2-accessibility-progressive-enhancement-search-and-feedback-are-unmeasured",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Target documentation model",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#target-documentation-model",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Prioritized work register",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#prioritized-work-register",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Delivery sequence",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#delivery-sequence",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Phase 0 — stop integrity regressions",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#phase-0-stop-integrity-regressions",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Phase 1 — establish ownership and review gates",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#phase-1-establish-ownership-and-review-gates",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Phase 2 — make the five product journeys valuable",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#phase-2-make-the-five-product-journeys-valuable",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Phase 3 — curate the corpus",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#phase-3-curate-the-corpus",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Phase 4 — improve reach and continuous quality",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#phase-4-improve-reach-and-continuous-quality",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Scorecard",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#scorecard",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Decisions required before implementation",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#decisions-required-before-implementation",
+    "kind": "developer heading"
   }
 ]
