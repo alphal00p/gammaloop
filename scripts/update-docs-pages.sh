@@ -136,8 +136,10 @@ case "$mode" in
             fail "latest build has no developer script"
         [ -f "$build_root/developers/architecture/gammaloop-architecture/index.html" ] ||
             fail "latest build has no implemented GammaLoop architecture note"
-        [ -f "$build_root/developers/architecture/spenso-parsing-flow/diagram.html" ] ||
-            fail "latest build has no Spenso parsing diagram"
+        [ -f "$build_root/developers/architecture/spenso-parsing-flow/index.html" ] ||
+            fail "latest build has no native Spenso parsing page"
+        [ ! -e "$build_root/developers/architecture/spenso-parsing-flow/diagram.html" ] ||
+            fail "latest build still contains the legacy Spenso parsing diagram"
 
         for product in "${products[@]}"; do
             require_bundle "$build_root/products/$product/latest" "$product"
