@@ -1382,6 +1382,11 @@ independent workflows would let either workflow replace the other's roots. Each
 workflow reuses the chain across its own runs; the Nix workflow realizes the raw
 documentation artifact before its consumer matrix is released.
 
+Manual Pages dispatches with `publish=false` build and seed this cache without
+merging Pages history or configuring, uploading, or deploying GitHub Pages. A
+docs-only successor run can therefore validate cross-run reuse without changing
+the published site.
+
 ## Follow-up: cross-job producer barriers
 
 The cold NixCI fan-out exposed a scheduling problem outside Cargo and Crane:
