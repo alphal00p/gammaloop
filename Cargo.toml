@@ -107,6 +107,12 @@ opt-level = 2
 [profile.dev-optim.package.gammalooprs]
 opt-level = 2
 
+# Documentation binaries validate and generate content, so keep their cold
+# codegen cheap without carrying debug information into reusable artifacts.
+[profile.docs]
+inherits = "dev"
+debug = false
+
 # Keep CI archives small enough for cache upload while preserving dev-optim
 # debuginfo for local diagnostics.
 [profile.ci-optim]

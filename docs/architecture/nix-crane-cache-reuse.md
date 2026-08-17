@@ -1351,30 +1351,31 @@ reusable artifact producers. They consume the base dependency artifact to avoid
 starting completely cold, but they do not publish merged workspace target trees
 back to the cache.
 
-Documentation publishing uses a three-layer Cargo artifact chain. The internal
-`alphal00pDocsCargoDependencyArtifacts` producer compiles the exact build, test,
-and Rustdoc feature contexts against dummy workspace targets, then strips those
-dummy targets. Its source boundary contains the Cargo manifests, while its
-identity includes the registry-derived command matrix, so Rust source and
-documentation edits that do not change that matrix reuse the external
-dependency work. `alphal00pDocsCargoWorkspaceArtifacts` consumes that archive
-and retains real workspace binaries and Rustdoc output, keyed only by Cargo
-manifests, Rust, Cargo configuration, and non-Cargo build inputs. The public
-`alphal00pDocsCargoArtifacts` anchor then replays the consumer's first feature
-context, because Cargo retains only one active feature fingerprint for each
-workspace unit.
+Documentation publishing uses one reusable real-workspace Cargo artifact
+producer. It retains the generic catalogue exporter, each isolated Python
+inventory exporter, the content-test dependency contexts, the documentation
+builder, the Linnet extension, Rustdoc, and a combined GammaLoop/Vakint
+reference-catalogue context. Stable dummy content primes the test dependencies
+without admitting prose into the producer key; the terminal derivation still
+compiles and runs the real content-sensitive test targets. The combined context
+is last because Cargo retains only one active feature fingerprint for each
+workspace unit and it is also the terminal consumer's first context. The Python
+inventories remain separate because PyO3 stub registration uses a process-wide
+inventory.
 
-All three layers and their consumer use the same relative Cargo target,
-compile-time Symbolica setting, and workspace-hack timestamp normalization.
-Documentation assets, Typst, CSS, prose, publication-catalogue, channel, tag,
-and commit metadata do not change the reusable Cargo chain. Checks whose Rust
-source is generated from the manuals remain in the terminal Pages derivation so
-they still validate the content being published.
+The producer is keyed only by Cargo manifests, Rust, Cargo configuration, and
+non-Cargo build inputs. It and its consumer use the same relative Cargo target,
+compile-time Symbolica setting, workspace-hack timestamp normalization, and a
+debug-free profile derived from Cargo's development profile. Documentation
+assets, Typst, CSS, prose, publication-catalogue, channel, tag, and commit
+metadata do not change the reusable Cargo artifact. Checks whose Rust source is
+generated from the manuals remain in the terminal Pages derivation so they
+still validate the content being published.
 
 The final Pages derivation remains terminal. Its identity includes all rendered
 documentation sources, the publication channel and optional snapshot tag, and
 the documented commit and timestamp. An exact rerun can substitute the complete
-site, while a content change rebuilds the site on top of the stable dependency
+site, while a content change rebuilds the site on top of the stable workspace
 archive. The Pages workflow and the Nix producer workflow build the same
 reusable Nix artifact chain in separate Hestia cache namespaces. Hestia v3
 action roots are scoped only by ref and system, so sharing a namespace across

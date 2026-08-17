@@ -1599,6 +1599,7 @@
         };
 
         ciCargoProfile = "ci-optim";
+        docsCargoProfile = "docs";
 
         ciArgs = commonArgs // {
           buildType = ciCargoProfile;
@@ -1970,13 +1971,13 @@
         alphal00pDocsCargoTargetRoot = "target/alphal00p-docs-rustdoc";
         alphal00pDocsCargoTarget = "${alphal00pDocsCargoTargetRoot}/cargo-target-v1";
         alphal00pDocsCargoArgs = commonArgs // {
-          buildType = ciCargoProfile;
-          CARGO_PROFILE = ciCargoProfile;
+          buildType = docsCargoProfile;
+          CARGO_PROFILE = docsCargoProfile;
           CARGO_TARGET_DIR = alphal00pDocsCargoTarget;
           PYO3_PYTHON = "${pkgs.python313}/bin/python3";
           PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
-          # mkDummySrc omits .cargo/config.toml, so carry its compile-time
-          # Symbolica setting explicitly into both producer and consumer.
+          # Keep the compile-time Symbolica setting explicit and identical in
+          # both the reusable producer and the documentation consumer.
           SYMBOLICA_OEM_LICENSE =
             (builtins.fromTOML (builtins.readFile ./.cargo/config.toml)).env.SYMBOLICA_OEM_LICENSE.value;
         };
@@ -1986,10 +1987,11 @@
         documentationRustComponents = lib.concatMap (
           product: product.rust_components or [ ]
         ) documentationRegistry.product;
-        documentationPythonExporterDependencyCommands = lib.concatMapStringsSep "\n" (product: ''
+        documentationCatalogFeatures = "gammaloop-reference,vakint-reference";
+        documentationPythonExporterBuildCommands = lib.concatMapStringsSep "\n" (product: ''
           cargoWithProfile build --locked -p alphal00p-docs-python-exporter --features ${lib.escapeShellArg product.id}
         '') documentationRegistry.product;
-        documentationRustdocDependencyCommands = lib.concatMapStringsSep "\n" (
+        documentationRustdocBuildCommands = lib.concatMapStringsSep "\n" (
           component:
           let
             features = component.features or [ ];
@@ -2002,74 +2004,34 @@
           ''
         ) documentationRustComponents;
 
-        # Prime the exact external Cargo contexts used by documentation builds.
-        # Dummy workspace targets keep this artifact stable across source and prose edits.
-        alphal00pDocsCargoDependencyArtifacts = buildDepsOnlyWithArtifacts (
-          alphal00pDocsCargoArgs
-          // {
-            cargoArtifacts = cargoArtifacts;
-            pname = "alphal00p-docs-cargo";
-            src = workspaceDependencySrc;
-            buildPhaseCargoCommand = ''
-              cargoWithProfile build --locked -p alphal00p-docs-catalogs --bin alphal00p-docs-catalogs
-              cargoWithProfile build --locked -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference
-              cargoWithProfile build --locked -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference
-              ${documentationPythonExporterDependencyCommands}
-              cargoWithProfile test --locked --no-run -p alphal00p-docs-python-exporter
-              cargoWithProfile test --locked --no-run -p alphal00p-docs-python-exporter --features gammaloop
-              cargoWithProfile test --locked --no-run -p alphal00p-docs-examples
-              cargoWithProfile build --locked -p alphal00p-docs-builder
-              cargoWithProfile build --locked -p linnet-py --features extension-module,abi3-py310
-              ${documentationRustdocDependencyCommands}
-            '';
-            checkPhaseCargoCommand = "";
-            doCheck = false;
-            stripWorkspaceArtifacts = true;
-            extraDummyScript = workspaceAllDummyCargoTargetsScript;
-            # Retain compiled doc-mode dependencies, not dummy Rustdoc pages.
-            postBuild = ''
-              rm -rf "$CARGO_TARGET_DIR/doc"
-            '';
-          }
-        );
-
-        # Keep real workspace outputs in a second layer keyed by Rust and build
-        # inputs, so documentation-only edits can reuse complete Cargo work.
-        alphal00pDocsCargoWorkspaceArtifacts = craneLib.mkCargoDerivation (
-          alphal00pDocsRealCargoArgs
-          // {
-            cargoArtifacts = alphal00pDocsCargoDependencyArtifacts;
-            doNotLinkInheritedArtifacts = true;
-            doInstallCargoArtifacts = true;
-            pname = "alphal00p-docs-cargo-workspace";
-            src = documentationWorkspaceBuildSrc;
-            buildPhaseCargoCommand = ''
-              cargoWithProfile build --locked -p alphal00p-docs-catalogs --bin alphal00p-docs-catalogs
-              cargoWithProfile build --locked -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference
-              cargoWithProfile build --locked -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference
-              ${documentationPythonExporterDependencyCommands}
-              cargoWithProfile build --locked -p alphal00p-docs-builder
-              cargoWithProfile build --locked -p linnet-py --features extension-module,abi3-py310
-              ${documentationRustdocDependencyCommands}
-            '';
-            checkPhaseCargoCommand = "";
-            doCheck = false;
-            installPhaseCommand = "";
-          }
-        );
-
-        # Cargo keeps one active feature fingerprint per workspace unit. End on
-        # the first consumer context after the wider exporter/Rustdoc matrix.
+        # Keep real workspace outputs keyed only by Rust and build inputs so
+        # documentation-only edits reuse the complete Cargo build. End on the
+        # first consumer context after the isolated exporter/Rustdoc matrix.
         alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation (
           alphal00pDocsRealCargoArgs
           // {
-            cargoArtifacts = alphal00pDocsCargoWorkspaceArtifacts;
-            doNotLinkInheritedArtifacts = true;
+            cargoArtifacts = null;
             doInstallCargoArtifacts = true;
-            pname = "alphal00p-docs-cargo-anchor";
+            pname = "alphal00p-docs-cargo";
             src = documentationWorkspaceBuildSrc;
+            # Prime content-sensitive test dependency contexts without adding
+            # authored documentation to this reusable source boundary.
+            postPatch = normalizeWorkspaceHackBuildScriptTimestampScript + ''
+              install -D -m 0644 ${dummyCargoTarget} crates/alphal00p-docs-examples/build.rs
+              install -D -m 0644 ${dummyCargoTarget} crates/alphal00p-docs-examples/src/lib.rs
+            '';
             buildPhaseCargoCommand = ''
-              cargoWithProfile build --locked -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference
+              cargoWithProfile build --locked -p alphal00p-docs-catalogs --bin alphal00p-docs-catalogs
+              ${documentationPythonExporterBuildCommands}
+              cargoWithProfile test --locked --no-run -p alphal00p-docs-examples
+              cargo clean --profile ${docsCargoProfile} -p alphal00p-docs-examples
+              cargoWithProfile build --locked -p alphal00p-docs-builder
+              cargoWithProfile build --locked -p linnet-py --features extension-module,abi3-py310
+              ${documentationRustdocBuildCommands}
+              cargoWithProfile build --locked -p alphal00p-docs-catalogs \
+                --features ${lib.escapeShellArg documentationCatalogFeatures} \
+                --bin alphal00p-docs-gammaloop-reference \
+                --bin alphal00p-docs-vakint-reference
             '';
             checkPhaseCargoCommand = "";
             doCheck = false;
@@ -3044,7 +3006,7 @@
             pkgs.uv
           ];
           TYPST_FONT_PATHS = docsFontPath;
-          ALPHAL00P_DOCS_CARGO_PROFILE = ciCargoProfile;
+          ALPHAL00P_DOCS_CARGO_PROFILE = docsCargoProfile;
           doNotLinkInheritedArtifacts = true;
           doInstallCargoArtifacts = false;
           checkPhaseCargoCommand = "";
@@ -3083,16 +3045,15 @@
           if timestamp == "" then toString self.lastModified else timestamp;
 
         alphal00pDocsValidationCommands = ''
-          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check
-          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference -- --check
-          cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-examples
-          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
-          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-py docs/api/python/linnet-py.pyi --check
-          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
-          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
-          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
-          cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter
-          cargo test --locked --profile ${ciCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
+          cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-gammaloop-reference -- --check
+          cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-vakint-reference -- --check
+          cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-examples
+          cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
+          cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-py docs/api/python/linnet-py.pyi --check
+          cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
+          cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
+          cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
+          cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
           linnet_python="$TMPDIR/alphal00p-docs-linnet-python"
           export UV_CACHE_DIR="$TMPDIR/alphal00p-docs-uv-cache"
           uv venv "$linnet_python" --python "$PYO3_PYTHON"
@@ -3100,11 +3061,11 @@
             --uv \
             --offline \
             --locked \
-            --profile ${ciCargoProfile} \
+            --profile ${docsCargoProfile} \
             --manifest-path crates/linnet-py/Cargo.toml \
             --features extension-module,abi3-py310
           "$linnet_python/bin/python" -m unittest crates/linnet-py/tests/test_basic.py
-          cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- check
+          cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- check
           svg_assets="$TMPDIR/alphal00p-svg-assets"
           bash scripts/render-docs-svg-assets.sh "$svg_assets"
           checked_assets=(
@@ -3140,13 +3101,13 @@
               docs_first="$TMPDIR/alphal00p-docs-first"
               docs_second="$TMPDIR/alphal00p-docs-second"
               docs_snapshot="$TMPDIR/alphal00p-docs-snapshot"
-              cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- \
+              cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
                 build \
                 --product all \
                 --channel latest \
                 --output "$docs_first" \
                 --rustdoc-target-root "$docs_rustdoc"
-              cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- \
+              cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
                 build \
                 --product all \
                 --channel latest \
@@ -3154,14 +3115,14 @@
                 --rustdoc-target-root "$docs_rustdoc"
               diff --recursive --brief "$docs_first" "$docs_second"
 
-              cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- \
+              cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
                 build \
                 --product all \
                 --channel snapshot \
                 --snapshot-tag v0.3.4 \
                 --output "$docs_snapshot" \
                 --rustdoc-target-root "$docs_rustdoc"
-              cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- \
+              cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
                 build \
                 --product all \
                 --channel snapshot \
@@ -3266,7 +3227,7 @@
               ${lib.optionalString (alphal00pDocsPagesChannel == "snapshot") ''
                 docs_args+=(--snapshot-tag ${lib.escapeShellArg alphal00pDocsPagesSnapshotTag})
               ''}
-              cargo run --locked --profile ${ciCargoProfile} -p alphal00p-docs-builder -- "''${docs_args[@]}"
+              cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- "''${docs_args[@]}"
 
               test -s "$out/index.html"
               test -e "$out/.nojekyll"
