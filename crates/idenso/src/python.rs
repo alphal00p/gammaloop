@@ -229,7 +229,7 @@ pub fn expand_metrics(self_: &PythonExpression) -> PythonExpression {
 ///
 /// T = TensorName("T")
 /// rep = Representation.euc(3)
-/// # With slots (creates TensorIndices)
+/// # With slots (creates TensorExpression)
 /// mu = rep("mu")
 /// nu = rep("nu")
 /// x = sp.S("x")
@@ -276,7 +276,7 @@ pub fn wrap_indices(self_: &PythonExpression, header: Symbol) -> PythonExpressio
 ///
 /// T = TensorName("T")
 /// rep = Representation.euc(3)
-/// # With slots (creates TensorIndices)
+/// # With slots (creates TensorExpression)
 /// mu = rep("mu")
 /// nu = rep("nu")
 /// x = sp.S("x")
@@ -375,7 +375,7 @@ pub fn cook_function(self_: &PythonExpression) -> PyResult<PythonExpression> {
 ///
 /// T = TensorName("T")
 /// rep = Representation.euc(3)
-/// # With slots (creates TensorIndices)
+/// # With slots (creates TensorExpression)
 /// mu = rep("mu")
 /// nu = rep("nu")
 /// x = sp.S("x")
@@ -421,7 +421,7 @@ pub fn wrap_dummies(self_: &PythonExpression, header: Symbol) -> PythonExpressio
 ///
 /// T = TensorName("T")
 /// rep = Representation.euc(3)
-/// # With slots (creates TensorIndices)
+/// # With slots (creates TensorExpression)
 /// mu = rep("mu")
 /// nu = rep("nu")
 /// x = sp.S("x")
@@ -507,7 +507,7 @@ pub fn simplify_gamma(self_: &PythonExpression) -> PythonExpression {
 /// p = TensorName("p")
 /// q = TensorName("q")
 /// rep = Representation.euc(3)
-/// # With slots (creates TensorIndices)
+/// # With slots (creates TensorExpression)
 /// mu = rep("mu")
 /// nu = rep("nu")
 ///
@@ -549,9 +549,9 @@ pub fn to_dots(self_: &PythonExpression) -> PythonExpression {
 /// from symbolica.community.idenso import simplify_metrics, to_dots
 /// from symbolica.community.spenso import Representation, TensorName
 /// q = TensorName("q")
-/// g = TensorName.g
+/// g = TensorName.g()
 /// rep = Representation.euc(3)
-/// # With slots (creates TensorIndices)
+/// # With slots (creates TensorExpression)
 /// mu = rep("mu")
 /// nu = rep("nu")
 /// print(simplify_metrics(g(mu, nu) * q(mu)))

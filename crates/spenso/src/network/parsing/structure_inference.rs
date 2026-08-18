@@ -133,7 +133,8 @@ impl TensorialSyntax {
             StrictTensorFilter::Tagged => symbol.has_tag(&SPENSO_TAG.tensor),
             StrictTensorFilter::TaggedChecked => {
                 symbol.has_tag(&SPENSO_TAG.tensor)
-                    && fun.iter().any(Self::contains_representation_syntax)
+                    && (fun.get_nargs() == 0
+                        || fun.iter().any(Self::contains_representation_syntax))
             }
             StrictTensorFilter::ContainsReps => {
                 fun.iter().any(Self::contains_representation_syntax)
@@ -421,7 +422,9 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
             AtomView::Fun(fun)
                 if fun.get_symbol() != SPENSO_TAG.chain && fun.get_symbol() != SPENSO_TAG.trace =>
             {
-                OrderedStructure::<LibraryRep, Aind>::from_syntactic_atom(value)?;
+                if !fun.get_symbol().has_tag(&SPENSO_TAG.tensor) {
+                    OrderedStructure::<LibraryRep, Aind>::from_syntactic_atom(value)?;
+                }
                 Self::from_fast_function(fun)
             }
             _ => OrderedStructure::<LibraryRep, Aind>::leaf_structure_from_atom(value)
@@ -480,7 +483,9 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
                     }
                 }
 
-                if let Some(err) = is_structure {
+                if let Some(err) = is_structure
+                    && !name.has_tag(&SPENSO_TAG.tensor)
+                {
                     return Err(err);
                 }
 
@@ -576,6 +581,8 @@ mod tests {
         let scalar = function!(symbol!("f"), Atom::num(1));
         let scalar_with_tensor_arg = function!(symbol!("f"), rep.to_symbolic([]));
         let tagged_scalar = function!(tensor_symbol!(structure_inference_t), Atom::num(1));
+        let tagged_rank_zero =
+            FunctionBuilder::new(tensor_symbol!(structure_inference_scalar)).finish();
         let bracketed = bracket!(compact.clone());
         let nested = scalar.clone() + compact.clone().pow(2);
 
@@ -588,6 +595,7 @@ mod tests {
         assert!(!scalar_with_tensor_arg.is_tensorial(StrictTensorFilter::Tagged));
 
         assert!(!tagged_scalar.is_tensorial(StrictTensorFilter::TaggedChecked));
+        assert!(tagged_rank_zero.is_tensorial(StrictTensorFilter::TaggedChecked));
         assert!(compact.is_tensorial(StrictTensorFilter::TaggedChecked));
 
         assert!(scalar_with_tensor_arg.is_tensorial(StrictTensorFilter::ContainsReps));

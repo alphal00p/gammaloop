@@ -609,10 +609,6 @@ where
             ));
         }
 
-        if !value.as_view().is_tensorial(settings.strict_tensor_filter) {
-            return Self::parse_scalar_function(value);
-        }
-
         if symbol.has_tag(&SPENSO_TAG.broadcast) {
             return Self::parse_broadcast_function::<S, Lib, FunLib>(
                 value,
@@ -621,6 +617,10 @@ where
                 function_library,
                 settings,
             );
+        }
+
+        if !value.as_view().is_tensorial(settings.strict_tensor_filter) {
+            return Self::parse_scalar_function(value);
         }
 
         if let Some(inference) = settings.shorthand_parsing.opaque_inference()
@@ -778,6 +778,9 @@ where
                     index_permutation: structure.index_permutation,
                 },
             )),
+            Err(_) if structure.structure.is_scalar() => {
+                Ok(Self::from_scalar(value.as_view().try_into()?))
+            }
             Err(_) => Ok(Self::from_tensor(
                 structure
                     .structure

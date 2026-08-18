@@ -411,6 +411,29 @@ fn three_argument_dot_is_invalid_parser_syntax() {
 }
 
 #[test]
+fn malformed_broadcast_arities_are_invalid_parser_syntax() {
+    let broadcast = symbol!(
+        "spenso::parse_malformed_broadcast",
+        tag = SPENSO_TAG.broadcast
+    );
+    let expressions = [
+        FunctionBuilder::new(broadcast).finish(),
+        FunctionBuilder::new(broadcast)
+            .add_arg(Atom::num(1))
+            .add_arg(Atom::num(2))
+            .finish(),
+    ];
+
+    for expression in expressions {
+        let err = expression
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap_err();
+
+        assert!(matches!(err, TensorNetworkError::TooManyArgsFunction(_)));
+    }
+}
+
+#[test]
 fn parse_schoonschipped_metric_product() {
     let rep = mink4();
     let expr = function!(
@@ -497,6 +520,21 @@ fn schoonschip_only_expands_compact_vectors() {
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
     assert!(parsed.graph.n_nodes() > 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
+}
+
+#[test]
+fn representation_valued_scalar_metadata_is_not_a_compact_vector() {
+    let rep = mink4();
+    let metadata = function!(symbol!("parser_scalar_rep_metadata"), rep.to_symbolic([]));
+    let expr = tensor!(parser_metadata_tensor, metadata, slot!(rep, i).to_atom());
+
+    let parsed = expr
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+
+    assert_eq!(parsed.state, NetworkState::SelfDualTensor);
+    assert_eq!(parsed.graph.n_nodes(), 1);
+    assert_eq!(parsed.graph.dangling_indices().len(), 1);
 }
 
 #[test]

@@ -46,6 +46,7 @@ pub use named::NamedStructure;
 pub mod permuted;
 pub use permuted::PermutedStructure;
 pub mod ordered;
+pub mod partial;
 pub mod representation;
 pub mod slot;
 pub use ordered::OrderedStructure;

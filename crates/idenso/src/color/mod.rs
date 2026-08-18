@@ -18,7 +18,7 @@ use symbolica::{
     coefficient::CoefficientView,
     domains::rational::Rational,
     function,
-    printer::{PrintOptions, PrintState, PrintUserData},
+    printer::{PrintOptions, PrintState},
     symbol,
 };
 
@@ -244,14 +244,14 @@ fn print_color_invariant(
     opt: &PrintOptions,
     kind: ColorInvariantPrintKind,
 ) -> Option<String> {
-    match opt.custom_print_mode.get("spenso") {
-        Some(PrintUserData::Integer(i)) => {
+    match SpensoPrintSettings::resolve(opt) {
+        Some(resolved) => {
             let SpensoPrintSettings {
                 parens,
                 symbol_scripts,
                 commas,
                 ..
-            } = SpensoPrintSettings::from(*i as usize);
+            } = resolved.presentation;
 
             let AtomView::Fun(f) = atom else {
                 return None;
@@ -387,13 +387,14 @@ pub static CS, CS_INNER: ColorSymbols = || {
     ColorSymbols {
         t: tensor_symbol!("spenso::t"; Real; print = |a, opt, _state| {
 
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(i))=>{
+            match SpensoPrintSettings::resolve(opt) {
+                Some(resolved)=>{
+                    let (script_open, script_close) = resolved.script_delimiters();
                     let SpensoPrintSettings{
                         parens,
                         symbol_scripts,
                         commas,..
-                    } = SpensoPrintSettings::from(*i as usize);
+                    } = resolved.presentation;
 
 
                     let AtomView::Fun(f)=a else {
@@ -416,7 +417,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
                     }
 
                     if parens{
-                        out.push('(');
+                        out.push(script_open);
                     }
                     a.format(&mut out, opt, PrintState::new()).unwrap();
                     if commas{
@@ -426,7 +427,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
                     }
                     b.format(&mut out, opt, PrintState::new()).unwrap();
                     if parens{
-                        out.push(')');
+                        out.push(script_close);
                     }
                     if symbol_scripts{
                         out.push('_');
@@ -434,7 +435,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
 
 
                     if parens{
-                        out.push('(');
+                        out.push(script_open);
                     }else if !symbol_scripts{
                         out.push(' ');
                     }
@@ -451,7 +452,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
                     c = f.iter().next().unwrap();
                     c.format(&mut out, opt, PrintState::new()).unwrap();
                     if parens{
-                        out.push(')');
+                        out.push(script_close);
                     }
                     Some(out)
                 }
@@ -460,13 +461,14 @@ pub static CS, CS_INNER: ColorSymbols = || {
         }),
         f: tensor_symbol!("spenso::f"; Real, Antisymmetric; print = |a, opt, _state| {
 
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(i))=>{
+            match SpensoPrintSettings::resolve(opt) {
+                Some(resolved)=>{
+                    let (script_open, script_close) = resolved.script_delimiters();
                     let SpensoPrintSettings{
                         parens,
                         symbol_scripts,
                         commas,..
-                    } = SpensoPrintSettings::from(*i as usize);
+                    } = resolved.presentation;
 
 
                     let AtomView::Fun(f)=a else {
@@ -489,7 +491,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
                     }
 
                     if parens{
-                        out.push('(');
+                        out.push(script_open);
                     }
                     a.format(&mut out, opt, PrintState::new()).unwrap();
                     if commas{
@@ -505,7 +507,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
                     }
                     c.format(&mut out, opt, PrintState::new()).unwrap();
                     if parens{
-                        out.push(')');
+                        out.push(script_close);
                     }
                     Some(out)
                 }

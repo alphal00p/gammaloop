@@ -2,15 +2,15 @@ use std::{collections::HashMap, ops::Deref};
 
 use eyre::eyre;
 
-use library::SpensorLibrary;
-use library_tensor::AtomsOrFloats;
-use network::SpensoNet;
+use broadcast::SpensoBroadcastFunction;
+use library::{SpensorFunctionLibrary, SpensorLibrary};
+use network::{ConvertibleToSpensoNet, SpensoNet};
 
 use pyo3::{
     PyClass,
     exceptions::{self, PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError},
     prelude::*,
-    types::{PyComplex, PyFloat, PySlice, PyType},
+    types::{PyComplex, PyFloat, PySlice, PyTuple, PyType},
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -33,8 +33,10 @@ use spenso::{
 use spenso::{
     network::parsing::ShadowedStructure,
     structure::{
-        HasStructure, PermutedStructure, ScalarTensor, TensorStructure,
-        abstract_index::AbstractIndex, permuted::Perm,
+        HasStructure, OrderedStructure, PermutedStructure, ScalarTensor, TensorStructure,
+        abstract_index::AbstractIndex,
+        partial::{PartialStructure, PartialStructureExt},
+        slot::IsAbstractSlot,
     },
     tensors::{
         complex::RealOrComplexTensor,
@@ -42,23 +44,29 @@ use spenso::{
         parametric::{LinearizedEvalTensor, MixedTensor},
     },
 };
-use structure::{ConvertibleToStructure, SpensoIndices};
 use symbolica::{
     api::python::SymbolicaCommunityModule, domains::float::Complex as SymComplex, prelude::*,
 };
 
-use symbolica::api::python::PythonExpression;
+use symbolica::api::python::{PythonExpression, PythonFormattedOutput};
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::{PyStubType, TypeInfo, define_stub_info_gatherer, derive::*};
+use pyo3_stub_gen::{PyStubType, TypeInfo, define_stub_info_gatherer, derive::*, impl_stub_type};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass_enum, gen_stub_pyfunction};
 
+pub mod broadcast;
+pub mod composition;
+pub mod display;
+pub mod expression;
 pub mod library;
-pub mod library_tensor;
 pub mod network;
 pub mod structure;
+
+use composition::StructuredAtom;
+use expression::TensorExpression;
+use structure::ConvertibleToSpensoName;
 
 trait ModuleInit: PyClass {
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -127,18 +135,34 @@ impl SymbolicaCommunityModule for SpensoModule {
 }
 
 pub(crate) fn initialize_spenso(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    use library_tensor::LibrarySpensor;
     use network::ExecutionMode;
 
     // m.add_function(?)?;
     SpensoNet::init(m)?;
     ExecutionMode::init(m)?;
     m.add_class::<SymbolicParallelism>()?;
+    m.add_class::<SpensoExpressionEvaluator>()?;
+    m.add_class::<SpensoCompiledExpressionEvaluator>()?;
+    m.add_class::<library::TensorNamespace>()?;
     m.add_function(wrap_pyfunction!(set_symbolica_rayon_enabled, m)?)?;
+    display::register(m)?;
+    expression::register(m)?;
     Spensor::init(m)?;
-    LibrarySpensor::init(m)?;
-    SpensoIndices::init(m)?;
+    m.add_class::<structure::SpensoName>()?;
+    m.add_class::<structure::SpensoSlot>()?;
+    m.add_class::<structure::SpensoRepresentation>()?;
     SpensorLibrary::init(m)?;
+    SpensorFunctionLibrary::init(m)?;
+    SpensoBroadcastFunction::init(m)?;
+    m.add("initialize", m.getattr("initialize_module")?)?;
+    let exports = m
+        .dict()
+        .keys()
+        .iter()
+        .filter_map(|key| key.extract::<String>().ok())
+        .filter(|name| name != "initialize_module" && (name == "_" || !name.starts_with('_')))
+        .collect::<Vec<_>>();
+    m.add("__all__", exports)?;
     Ok(())
 }
 
@@ -149,8 +173,9 @@ pub(crate) fn initialize_spenso(m: &Bound<'_, PyModule>) -> PyResult<()> {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation
-/// >>> structure = TensorIndices(Representation.euc(4)(1))
+/// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+/// >>> rep = Representation.euc(4)
+/// >>> structure = TensorName.vector("v")(rep("mu"))
 /// >>> data = [1.0, 2.0, 3.0, 4.0]
 /// >>> tensor = Tensor.dense(structure, data)
 /// >>> sparse_tensor = Tensor.sparse(structure, float)
@@ -158,7 +183,351 @@ pub(crate) fn initialize_spenso(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pyclass(from_py_object, name = "Tensor", module = "symbolica.community.spenso")]
 #[derive(Clone)]
 pub struct Spensor {
-    tensor: PermutedStructure<MixedTensor<f64, ShadowedStructure<AbstractIndex>>>,
+    pub(crate) tensor: PermutedStructure<MixedTensor<f64, ShadowedStructure<AbstractIndex>>>,
+    pub(crate) descriptor: StructuredAtom,
+    pub(crate) descriptor_name: Option<Symbol>,
+    pub(crate) descriptor_args: Vec<Atom>,
+}
+
+pub struct TensorDataDescriptor {
+    structure: PermutedStructure<ShadowedStructure<AbstractIndex>>,
+    descriptor: StructuredAtom,
+    name: Symbol,
+    args: Vec<Atom>,
+}
+
+pub enum AtomsOrFloats {
+    Atoms(Vec<Atom>),
+    Floats(Vec<f64>),
+    Complex(Vec<Complex<f64>>),
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for AtomsOrFloats {
+    type Error = PyErr;
+
+    fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+        if let Ok(values) = value.extract::<Vec<f64>>() {
+            Ok(Self::Floats(values))
+        } else if let Ok(values) = value.extract::<Vec<Complex<f64>>>() {
+            Ok(Self::Complex(values))
+        } else if let Ok(values) = value.extract::<Vec<PythonExpression>>() {
+            Ok(Self::Atoms(
+                values.into_iter().map(|value| value.expr).collect(),
+            ))
+        } else {
+            Err(PyTypeError::new_err(
+                "data must be a list of floats, complex numbers, or Expressions",
+            ))
+        }
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+impl_stub_type!(AtomsOrFloats = Vec<PythonExpression> | Vec<f64> | Vec<Complex<f64>>);
+
+/// Maps the public row-major layout in logical interface order to Spenso's
+/// canonically ordered storage axes.
+pub(crate) struct LogicalDataLayout {
+    logical_shape: Vec<usize>,
+    logical_strides: Vec<usize>,
+    canonical_axes: Vec<usize>,
+    canonical_strides: Vec<usize>,
+    size: usize,
+}
+
+impl LogicalDataLayout {
+    pub(crate) fn from_interface(interface: &PartialStructure) -> PyResult<Self> {
+        let logical_shape = interface
+            .logical_slots()
+            .into_iter()
+            .map(|slot| {
+                usize::try_from(slot.dim()).map_err(|_| {
+                    exceptions::PyValueError::new_err(
+                        "tensor data requires concrete representation dimensions",
+                    )
+                })
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        let logical_axes = (0..logical_shape.len()).collect::<Vec<_>>();
+        let representation_sorted = interface.rep_permutation.apply_slice(&logical_axes);
+        let canonical_axes = interface
+            .index_permutation
+            .apply_slice(&representation_sorted);
+        let canonical_shape = canonical_axes
+            .iter()
+            .map(|&logical_axis| logical_shape[logical_axis])
+            .collect::<Vec<_>>();
+        let logical_strides = Self::strides(&logical_shape)?;
+        let canonical_strides = Self::strides(&canonical_shape)?;
+        let size = logical_shape.iter().try_fold(1usize, |size, &dimension| {
+            size.checked_mul(dimension).ok_or_else(|| {
+                PyOverflowError::new_err("tensor dimensions overflow addressable storage")
+            })
+        })?;
+
+        Ok(Self {
+            logical_shape,
+            logical_strides,
+            canonical_axes,
+            canonical_strides,
+            size,
+        })
+    }
+
+    fn strides(shape: &[usize]) -> PyResult<Vec<usize>> {
+        let mut strides: Vec<usize> = vec![1; shape.len()];
+        for axis in (0..shape.len().saturating_sub(1)).rev() {
+            strides[axis] = strides[axis + 1]
+                .checked_mul(shape[axis + 1])
+                .ok_or_else(|| {
+                    PyOverflowError::new_err("tensor dimensions overflow addressable storage")
+                })?;
+        }
+        Ok(strides)
+    }
+
+    pub(crate) fn size(&self) -> usize {
+        self.size
+    }
+
+    fn logical_expanded(&self, flat: usize) -> PyResult<Vec<usize>> {
+        if flat >= self.size {
+            return Err(PyIndexError::new_err("flat index out of bounds"));
+        }
+        let mut remainder = flat;
+        Ok(self
+            .logical_strides
+            .iter()
+            .map(|&stride| {
+                let index = remainder / stride;
+                remainder %= stride;
+                index
+            })
+            .collect())
+    }
+
+    pub(crate) fn canonical_expanded(&self, logical: &[usize]) -> PyResult<Vec<usize>> {
+        if logical.len() != self.logical_shape.len() {
+            return Err(PyIndexError::new_err(format!(
+                "expected {} tensor indices, got {}",
+                self.logical_shape.len(),
+                logical.len()
+            )));
+        }
+        for (axis, (&index, &dimension)) in logical.iter().zip(&self.logical_shape).enumerate() {
+            if index >= dimension {
+                return Err(PyIndexError::new_err(format!(
+                    "index {index} out of bounds for axis {axis} of size {dimension}"
+                )));
+            }
+        }
+        Ok(self
+            .canonical_axes
+            .iter()
+            .map(|&logical_axis| logical[logical_axis])
+            .collect())
+    }
+
+    pub(crate) fn canonical_flat(&self, logical_flat: usize) -> PyResult<usize> {
+        let logical = self.logical_expanded(logical_flat)?;
+        self.canonical_flat_from_expanded(&logical)
+    }
+
+    pub(crate) fn canonical_flat_from_expanded(&self, logical: &[usize]) -> PyResult<usize> {
+        let canonical = self.canonical_expanded(logical)?;
+        Ok(canonical
+            .iter()
+            .zip(&self.canonical_strides)
+            .map(|(&index, &stride)| index * stride)
+            .sum())
+    }
+
+    pub(crate) fn reorder_to_canonical<T>(&self, logical: Vec<T>) -> PyResult<Vec<T>> {
+        if logical.len() != self.size {
+            return Err(exceptions::PyValueError::new_err(format!(
+                "tensor data has {} elements, but the logical interface requires {}",
+                logical.len(),
+                self.size
+            )));
+        }
+        let mut canonical = std::iter::repeat_with(|| None)
+            .take(self.size)
+            .collect::<Vec<_>>();
+        for (logical_flat, value) in logical.into_iter().enumerate() {
+            canonical[self.canonical_flat(logical_flat)?] = Some(value);
+        }
+        Ok(canonical
+            .into_iter()
+            .map(|value| value.expect("axis permutations are bijective"))
+            .collect())
+    }
+}
+
+#[cfg(test)]
+mod logical_data_layout_tests {
+    use super::LogicalDataLayout;
+    use spenso::structure::{
+        abstract_index::AbstractIndex,
+        dimension::Dimension,
+        partial::{PartialIndex, PartialStructure, PartialStructureExt},
+        representation::{ExtendibleReps, RepName},
+    };
+
+    #[test]
+    fn mixed_representation_data_stays_in_logical_row_major_order() {
+        let mink = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(2));
+        let euc = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let interface = PartialStructure::from_logical_slots([
+            mink.slot(PartialIndex::Explicit(AbstractIndex::Normal(0))),
+            euc.slot(PartialIndex::Explicit(AbstractIndex::Normal(1))),
+        ]);
+        let layout = LogicalDataLayout::from_interface(&interface).unwrap();
+
+        assert_eq!(layout.logical_shape, vec![2, 3]);
+        assert_eq!(layout.canonical_axes, vec![1, 0]);
+        assert_eq!(
+            layout.reorder_to_canonical(vec![0, 1, 2, 3, 4, 5]).unwrap(),
+            vec![0, 3, 1, 4, 2, 5]
+        );
+        assert_eq!(
+            (0..6)
+                .map(|index| layout.canonical_flat(index).unwrap())
+                .collect::<Vec<_>>(),
+            vec![0, 2, 4, 1, 3, 5]
+        );
+    }
+
+    #[test]
+    fn explicit_index_sorting_is_part_of_the_layout_mapping() {
+        let euc = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+        let interface = PartialStructure::from_logical_slots([
+            euc.slot(PartialIndex::Explicit(AbstractIndex::Normal(8))),
+            euc.slot(PartialIndex::Explicit(AbstractIndex::Normal(3))),
+        ]);
+        let layout = LogicalDataLayout::from_interface(&interface).unwrap();
+
+        assert_eq!(layout.canonical_axes, vec![1, 0]);
+        assert_eq!(
+            layout.reorder_to_canonical(vec![0, 1, 2, 3]).unwrap(),
+            vec![0, 2, 1, 3]
+        );
+    }
+
+    #[test]
+    fn mixed_open_and_explicit_ports_keep_logical_data_order() {
+        let euc = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+        let interface = PartialStructure::from_logical_slots([
+            euc.slot(PartialIndex::open(0)),
+            euc.slot(PartialIndex::Explicit(AbstractIndex::Normal(3))),
+        ]);
+        let layout = LogicalDataLayout::from_interface(&interface).unwrap();
+
+        assert_eq!(layout.canonical_axes, vec![1, 0]);
+        assert_eq!(
+            layout.reorder_to_canonical(vec![0, 1, 2, 3]).unwrap(),
+            vec![0, 2, 1, 3]
+        );
+    }
+
+    #[test]
+    fn rank_zero_layout_contains_one_scalar_element() {
+        let interface = PartialStructure::from_logical_slots([]);
+        let layout = LogicalDataLayout::from_interface(&interface).unwrap();
+
+        assert!(layout.logical_shape.is_empty());
+        assert!(layout.canonical_axes.is_empty());
+        assert_eq!(layout.size(), 1);
+        assert_eq!(layout.canonical_flat(0).unwrap(), 0);
+        assert_eq!(layout.reorder_to_canonical(vec![7]).unwrap(), vec![7]);
+    }
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for TensorDataDescriptor {
+    type Error = PyErr;
+
+    fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+        let expression = value
+            .extract::<PyRef<'_, TensorExpression>>()
+            .map_err(|_| {
+                PyTypeError::new_err("tensor data structure must be a TensorExpression")
+            })?;
+        let descriptor = TensorExpression::structured(&expression);
+        let name = TensorExpression::descriptor_name(&expression).ok_or_else(|| {
+            exceptions::PyValueError::new_err(
+                "tensor data descriptor has no name; use expression.with_name(TensorName(...))",
+            )
+        })?;
+        let args = TensorExpression::descriptor_args(&expression);
+        let layout = LogicalDataLayout::from_interface(&descriptor.interface)?;
+        let mut storage_indices = vec![0; layout.canonical_axes.len()];
+        for (storage_index, &logical_axis) in layout.canonical_axes.iter().enumerate() {
+            storage_indices[logical_axis] = storage_index;
+        }
+        let structure = OrderedStructure::new(
+            descriptor
+                .interface
+                .logical_slots()
+                .into_iter()
+                .zip(storage_indices)
+                .map(|(slot, index)| slot.rep().slot(AbstractIndex::Normal(index)))
+                .collect(),
+        )
+        .map_structure(|structure| ShadowedStructure {
+            structure,
+            global_name: Some(name),
+            additional_args: (!args.is_empty()).then_some(args.clone()),
+        });
+        Ok(Self {
+            structure,
+            descriptor,
+            name,
+            args,
+        })
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+impl PyStubType for TensorDataDescriptor {
+    fn type_output() -> TypeInfo {
+        TensorExpression::type_output()
+    }
+}
+
+impl Spensor {
+    pub(crate) fn from_storage_with_descriptor(
+        tensor: PermutedStructure<MixedTensor<f64, ShadowedStructure<AbstractIndex>>>,
+        descriptor: StructuredAtom,
+        descriptor_name: Option<Symbol>,
+        descriptor_args: Vec<Atom>,
+    ) -> Self {
+        let tensor = PermutedStructure {
+            structure: tensor.structure,
+            rep_permutation: descriptor.interface.rep_permutation.clone(),
+            index_permutation: descriptor.interface.index_permutation.clone(),
+        };
+        Self {
+            tensor,
+            descriptor,
+            descriptor_name,
+            descriptor_args,
+        }
+    }
+
+    pub(crate) fn scalar_with_descriptor(
+        value: f64,
+        descriptor: StructuredAtom,
+        descriptor_name: Option<Symbol>,
+        descriptor_args: Vec<Atom>,
+    ) -> Self {
+        Self::from_storage_with_descriptor(
+            PermutedStructure::identity(ParamOrConcrete::new_scalar(ConcreteOrParam::Concrete(
+                RealOrComplex::Real(value),
+            ))),
+            descriptor,
+            descriptor_name,
+            descriptor_args,
+        )
+    }
 }
 
 impl Deref for Spensor {
@@ -232,14 +601,39 @@ impl From<ConcreteOrParam<RealOrComplex<f64>>> for TensorElements {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl Spensor {
-    pub fn structure(&self) -> SpensoIndices {
-        SpensoIndices {
-            structure: PermutedStructure {
-                structure: self.tensor.structure.structure().clone(),
+    pub fn structure(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
+        TensorExpression::from_atom_interface_descriptor(
+            py,
+            self.descriptor.atom.clone(),
+            self.descriptor.interface.clone(),
+            self.descriptor_name,
+            self.descriptor_args.clone(),
+        )
+    }
+
+    /// Return a copy with a new data identity while preserving its expression and interface.
+    fn with_name(&self, name: ConvertibleToSpensoName) -> Self {
+        let ConvertibleToSpensoName(name, args) = name;
+        let name = name.name;
+        let storage = self
+            .tensor
+            .structure
+            .clone()
+            .map_structure(|structure| ShadowedStructure {
+                structure: structure.structure,
+                global_name: Some(name),
+                additional_args: (!args.is_empty()).then_some(args.clone()),
+            });
+        Self::from_storage_with_descriptor(
+            PermutedStructure {
+                structure: storage,
                 rep_permutation: self.tensor.rep_permutation.clone(),
                 index_permutation: self.tensor.index_permutation.clone(),
             },
-        }
+            self.descriptor.clone(),
+            Some(name),
+            args,
+        )
     }
 
     #[staticmethod]
@@ -247,8 +641,8 @@ impl Spensor {
     ///
     /// Parameters
     /// ----------
-    /// structure : TensorIndices or list of Slots
-    ///     The tensor structure defining shape and index properties
+    /// structure : TensorExpression
+    ///     A named expression with unresolved, explicit, or mixed interface ports
     /// type_info : type
     ///     The data type - either `float` or `Expression` class
     ///
@@ -259,30 +653,40 @@ impl Spensor {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R
-    /// >>> structure = TensorIndices(R.euc(3)(1), R.euc(3)(2))
+    /// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    /// >>> rep = Representation.euc(3)
+    /// >>> structure = TensorName("T")(rep, rep)
     /// >>> sparse_float = Tensor.sparse(structure, float)
     /// >>> sparse_sym = Tensor.sparse(structure, symbolica.Expression)
     pub fn sparse(
-        structure: ConvertibleToStructure,
+        structure: TensorDataDescriptor,
         type_info: Bound<'_, PyType>,
     ) -> PyResult<Spensor> {
+        let TensorDataDescriptor {
+            structure,
+            descriptor,
+            name,
+            args,
+        } = structure;
         if type_info.is_subclass_of::<PyFloat>()? {
-            Ok(Spensor {
-                tensor: structure
-                    .0
-                    .structure
-                    .map_structure(|s| SparseTensor::<f64, _>::empty(s, 0.0).into()),
-            })
+            Ok(Spensor::from_storage_with_descriptor(
+                structure.map_structure(|s| SparseTensor::<f64, _>::empty(s, 0.0).into()),
+                descriptor,
+                Some(name),
+                args,
+            ))
         } else if type_info.is_subclass_of::<PythonExpression>()? {
-            Ok(Spensor {
-                tensor: structure.0.structure.map_structure(|s| {
+            Ok(Spensor::from_storage_with_descriptor(
+                structure.map_structure(|s| {
                     ParamOrConcrete::Param(ParamTensor::from(SparseTensor::<Atom, _>::empty(
                         s,
                         Atom::Zero,
                     )))
                 }),
-            })
+                descriptor,
+                Some(name),
+                args,
+            ))
         } else {
             Err(PyTypeError::new_err("Only float type supported"))
         }
@@ -293,8 +697,8 @@ impl Spensor {
     ///
     /// Parameters
     /// ----------
-    /// structure : TensorIndices or list of Slots
-    ///     The tensor structure defining shape and index properties
+    /// structure : TensorExpression
+    ///     A named expression with unresolved, explicit, or mixed interface ports
     /// data : list of float, complex, or Expression
     ///     The tensor data in row-major order
     ///
@@ -306,82 +710,60 @@ impl Spensor {
     /// Examples
     /// --------
     /// >>> from symbolica import S
-    /// >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R
-    /// >>> structure = TensorIndices(R.euc(2)(1), R.euc(2)(2))
+    /// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    /// >>> rep = Representation.euc(2)
+    /// >>> structure = TensorName("T")(rep("mu"), rep("nu"))
     /// >>> data = [1.0, 2.0, 3.0, 4.0]
     /// >>> tensor = Tensor.dense(structure, data)
     /// >>> x, y = S("x", "y")
     /// >>> sym_data = [x, y, x * y, x + y]
     /// >>> sym_tensor = Tensor.dense(structure, sym_data)
-    pub fn dense(structure: ConvertibleToStructure, data: AtomsOrFloats) -> PyResult<Spensor> {
+    pub fn dense(structure: TensorDataDescriptor, data: AtomsOrFloats) -> PyResult<Spensor> {
+        let TensorDataDescriptor {
+            structure,
+            descriptor,
+            name,
+            args,
+        } = structure;
+        let layout = LogicalDataLayout::from_interface(&descriptor.interface)?;
         let dense = match data {
-            AtomsOrFloats::Floats(f) => {
-                DenseTensor::<f64, _>::from_data(f, structure.0.structure.structure)
-                    .map_err(|e| PyOverflowError::new_err(e.to_string()))?
-                    .into()
-            }
+            AtomsOrFloats::Floats(f) => DenseTensor::<f64, _>::from_data(
+                layout.reorder_to_canonical(f)?,
+                structure.structure,
+            )
+            .map_err(|e| PyOverflowError::new_err(e.to_string()))?
+            .into(),
             AtomsOrFloats::Atoms(a) => ParamOrConcrete::Param(ParamTensor::from(
-                DenseTensor::<Atom, _>::from_data(a, structure.0.structure.structure)
-                    .map_err(|e| PyOverflowError::new_err(e.to_string()))?,
+                DenseTensor::<Atom, _>::from_data(
+                    layout.reorder_to_canonical(a)?,
+                    structure.structure,
+                )
+                .map_err(|e| PyOverflowError::new_err(e.to_string()))?,
             )),
             AtomsOrFloats::Complex(c) => {
                 MixedTensor::Concrete(RealOrComplexTensor::Complex(DataTensor::Dense(
-                    DenseTensor::<Complex<f64>, _>::from_data(c, structure.0.structure.structure)
-                        .map_err(|e| PyOverflowError::new_err(e.to_string()))?,
+                    DenseTensor::<Complex<f64>, _>::from_data(
+                        layout.reorder_to_canonical(c)?,
+                        structure.structure,
+                    )
+                    .map_err(|e| PyOverflowError::new_err(e.to_string()))?,
                 )))
             }
         };
 
         let dense = PermutedStructure {
             structure: dense,
-            rep_permutation: structure.0.structure.rep_permutation,
-            index_permutation: structure.0.structure.index_permutation,
+            rep_permutation: structure.rep_permutation,
+            index_permutation: structure.index_permutation,
         };
 
-        Ok(Spensor {
-            tensor: dense.permute_inds_wrapped(),
-        })
+        Ok(Spensor::from_storage_with_descriptor(
+            dense,
+            descriptor,
+            Some(name),
+            args,
+        ))
     }
-    #[staticmethod]
-    /// Create a scalar tensor with value 1.0.
-    ///
-    /// Returns
-    /// -------
-    /// Tensor
-    ///     A scalar tensor containing the value 1.0
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community.spenso import Tensor
-    /// >>> one = Tensor.one()
-    pub fn one() -> Spensor {
-        Spensor {
-            tensor: PermutedStructure::identity(ParamOrConcrete::new_scalar(
-                ConcreteOrParam::Concrete(RealOrComplex::Real(1.)),
-            )),
-        }
-    }
-
-    #[staticmethod]
-    /// Create a scalar tensor with value 0.0.
-    ///
-    /// Returns
-    /// -------
-    /// Tensor
-    ///     A scalar tensor containing the value 0.0
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community.spenso import Tensor
-    /// >>> zero = Tensor.zero()
-    pub fn zero() -> Spensor {
-        Spensor {
-            tensor: PermutedStructure::identity(ParamOrConcrete::new_scalar(
-                ConcreteOrParam::Concrete(RealOrComplex::Real(2.)),
-            )),
-        }
-    }
-
     #[allow(clippy::wrong_self_convention)]
     /// Convert this tensor to dense storage format.
     ///
@@ -392,8 +774,9 @@ impl Spensor {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R
-    /// >>> structure = TensorIndices(R.euc(4)(2))
+    /// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    /// >>> rep = Representation.euc(4)
+    /// >>> structure = TensorName.vector("v")(rep("mu"))
     /// >>> tensor = Tensor.sparse(structure, float)
     /// >>> tensor[0] = 1.0
     /// >>> tensor.to_dense()
@@ -411,8 +794,9 @@ impl Spensor {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R
-    /// >>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1))
+    /// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    /// >>> rep = Representation.euc(2)
+    /// >>> structure = TensorName("T")(rep("mu"), rep("nu"))
     /// >>> data = [1.0, 0.0, 0.0, 2.0]
     /// >>> tensor = Tensor.dense(structure, data)
     /// >>> tensor.to_sparse()
@@ -421,11 +805,47 @@ impl Spensor {
     }
 
     fn __repr__(&self) -> String {
-        format!("Spensor(\n{})", self.tensor)
+        format!("Tensor({})", display::format_concrete_tensor(self, false))
     }
 
     fn __str__(&self) -> String {
-        format!("{}", self.tensor.structure)
+        display::format_concrete_tensor(self, false)
+    }
+
+    /// Format this concrete tensor using compact Spenso notation.
+    #[pyo3(signature = (show_dimensions = false))]
+    fn format_tensor(&self, show_dimensions: bool) -> String {
+        display::format_concrete_tensor(self, show_dimensions)
+    }
+
+    /// Format this concrete tensor as Typst math source.
+    #[pyo3(signature = (show_dimensions = false))]
+    fn to_typst(&self, show_dimensions: bool) -> String {
+        display::concrete_tensor_to_typst(self, show_dimensions)
+    }
+
+    /// Build Symbolica's rich display wrapper for this concrete tensor.
+    #[pyo3(signature = (show_dimensions = false))]
+    fn formatted(&self, show_dimensions: bool) -> PythonFormattedOutput {
+        display::format_concrete_tensor_output(self, show_dimensions)
+    }
+
+    fn _repr_html_(&self) -> Option<String> {
+        display::format_concrete_tensor_output(self, false).html
+    }
+
+    fn _repr_latex_(&self) -> Option<String> {
+        display::format_concrete_tensor_output(self, false).latex
+    }
+
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        let text = if cycle {
+            "...".to_string()
+        } else {
+            display::format_concrete_tensor(self, false)
+        };
+        pretty.call_method1("text", (text,))?;
+        Ok(())
     }
 
     fn __len__(&self) -> usize {
@@ -433,15 +853,46 @@ impl Spensor {
     }
 
     fn __getitem__(&self, item: SliceOrIntOrExpanded) -> PyResult<Py<PyAny>> {
+        let layout = LogicalDataLayout::from_interface(&self.descriptor.interface)?;
+        let size = layout.size();
+        let get_owned_canonical = |index: usize| {
+            self.get_owned_linear(index.into())
+                .or_else(|| match &self.tensor.structure {
+                    ParamOrConcrete::Concrete(RealOrComplexTensor::Real(DataTensor::Sparse(
+                        tensor,
+                    ))) => Some(ConcreteOrParam::Concrete(RealOrComplex::Real(tensor.zero))),
+                    ParamOrConcrete::Concrete(RealOrComplexTensor::Complex(
+                        DataTensor::Sparse(tensor),
+                    )) => Some(ConcreteOrParam::Concrete(RealOrComplex::Complex(
+                        tensor.zero,
+                    ))),
+                    ParamOrConcrete::Param(tensor) => match &tensor.tensor {
+                        DataTensor::Sparse(tensor) => {
+                            Some(ConcreteOrParam::Param(tensor.zero.clone()))
+                        }
+                        DataTensor::Dense(_) => None,
+                    },
+                    ParamOrConcrete::Concrete(
+                        RealOrComplexTensor::Real(DataTensor::Dense(_))
+                        | RealOrComplexTensor::Complex(DataTensor::Dense(_)),
+                    ) => None,
+                })
+        };
+        let get_owned_linear = |logical_index: usize| -> PyResult<_> {
+            let canonical_index = layout.canonical_flat(logical_index)?;
+            get_owned_canonical(canonical_index)
+                .ok_or_else(|| PyIndexError::new_err("flat index out of bounds"))
+        };
+
         let out = match item {
-            SliceOrIntOrExpanded::Int(i) => self
-                .get_owned_linear(i.into())
-                .ok_or(PyIndexError::new_err("flat index out of bounds"))?,
-            SliceOrIntOrExpanded::Expanded(idxs) => self
-                .get_owned(&idxs)
-                .map_err(|s| PyIndexError::new_err(s.to_string()))?,
+            SliceOrIntOrExpanded::Int(i) => get_owned_linear(i)?,
+            SliceOrIntOrExpanded::Expanded(idxs) => {
+                let index = layout.canonical_flat_from_expanded(&idxs)?;
+                get_owned_canonical(index)
+                    .ok_or_else(|| PyIndexError::new_err("expanded index out of bounds"))?
+            }
             SliceOrIntOrExpanded::Slice(s) => {
-                let r = s.indices(self.size().unwrap() as isize)?;
+                let r = s.indices(size as isize)?;
 
                 let start = if r.start < 0 {
                     (r.slicelength as isize + r.start) as usize
@@ -461,19 +912,14 @@ impl Spensor {
                     (start..end, r.step as usize)
                 };
 
-                let slice: Option<Vec<TensorElements>> = range
+                let slice = range
                     .step_by(step)
-                    .map(|i| self.get_owned_linear(i.into()).map(TensorElements::from))
-                    .collect();
+                    .map(|i| get_owned_linear(i).map(TensorElements::from))
+                    .collect::<PyResult<Vec<_>>>()?;
 
-                if let Some(slice) = slice {
-                    return Ok(
-                        Python::attach(|py| slice.into_pyobject(py).map(|a| a.unbind()))?
-                            .into_any(),
-                    );
-                } else {
-                    return Err(PyIndexError::new_err("slice out of bounds"));
-                }
+                return Ok(
+                    Python::attach(|py| slice.into_pyobject(py).map(|a| a.unbind()))?.into_any(),
+                );
             }
         };
 
@@ -495,8 +941,9 @@ impl Spensor {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R
-    /// >>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1))
+    /// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    /// >>> rep = Representation.euc(2)
+    /// >>> structure = TensorName("T")(rep("mu"), rep("nu"))
     /// >>> tensor = Tensor.sparse(structure, float)
     /// >>> tensor[0] = 4.0
     /// >>> tensor[1, 1] = 1.0
@@ -513,10 +960,13 @@ impl Spensor {
             return Err(eyre!("Value must be a PythonExpression or a float"));
         };
 
+        let layout = LogicalDataLayout::from_interface(&self.descriptor.interface)?;
         if let Ok(flat_index) = item.extract::<usize>() {
-            self.tensor.structure.set_flat(flat_index.into(), value)
+            let canonical = layout.canonical_flat(flat_index)?;
+            self.tensor.structure.set_flat(canonical.into(), value)
         } else if let Ok(expanded_idxs) = item.extract::<Vec<usize>>() {
-            self.tensor.structure.set(&expanded_idxs, value)
+            let canonical = layout.canonical_expanded(&expanded_idxs)?;
+            self.tensor.structure.set(&canonical, value)
         } else {
             Err(eyre!("Index must be an integer"))
         }
@@ -560,9 +1010,10 @@ impl Spensor {
     /// Examples
     /// --------
     /// >>> from symbolica import S
-    /// >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R
+    /// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
     /// >>> x, y = S("x", "y")
-    /// >>> structure = TensorIndices(R.euc(2)(1))
+    /// >>> rep = Representation.euc(2)
+    /// >>> structure = TensorName.vector("v")(rep("mu"))
     /// >>> tensor = Tensor.dense(structure, [x * y, x + y])
     /// >>> evaluator = tensor.evaluator(constants={}, funs={}, params=[x, y], iterations=50)
     /// >>> results = evaluator.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])
@@ -639,6 +1090,9 @@ impl Spensor {
                 .clone()
                 .map_coeff(&|x| Complex::new(x.re.to_f64(), x.im.to_f64())),
             eval_rat: linear,
+            descriptor: self.descriptor.clone(),
+            descriptor_name: self.descriptor_name,
+            descriptor_args: self.descriptor_args.clone(),
         })
     }
 
@@ -656,8 +1110,11 @@ impl Spensor {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import Tensor
-    /// >>> scalar_tensor = Tensor.one()
+    /// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    /// >>> rep = Representation.euc(2)
+    /// >>> p = TensorName.vector("p")
+    /// >>> structure = (p(rep("mu")) * p(rep("mu"))).with_name(TensorName("p2"))
+    /// >>> scalar_tensor = Tensor.dense(structure, [1.0])
     /// >>> value = scalar_tensor.scalar()
     fn scalar(&self) -> PyResult<PythonExpression> {
         self.tensor
@@ -667,32 +1124,99 @@ impl Spensor {
             .map(|r| PythonExpression { expr: r.into() })
             .ok_or_else(|| PyRuntimeError::new_err("No scalar found"))
     }
-}
 
-impl From<DataTensor<f64, ShadowedStructure<AbstractIndex>>> for Spensor {
-    fn from(value: DataTensor<f64, ShadowedStructure<AbstractIndex>>) -> Self {
-        Spensor {
-            tensor: PermutedStructure::identity(MixedTensor::Concrete(RealOrComplexTensor::Real(
-                value,
-            ))),
-        }
+    /// Reference this tensor with new abstract indices and return a lazy network.
+    #[pyo3(signature = (*indices, cook_indices = false))]
+    fn index(
+        &self,
+        py: Python<'_>,
+        indices: &Bound<'_, PyTuple>,
+        cook_indices: bool,
+    ) -> PyResult<SpensoNet> {
+        SpensoNet::from_tensor_reference(self.clone())?.index_network(py, indices, cook_indices)
     }
-}
 
-impl From<DataTensor<Complex<f64>, ShadowedStructure<AbstractIndex>>> for Spensor {
-    fn from(value: DataTensor<Complex<f64>, ShadowedStructure<AbstractIndex>>) -> Self {
-        Spensor {
-            tensor: PermutedStructure::identity(MixedTensor::Concrete(
-                RealOrComplexTensor::Complex(value.map_data(|c| c)),
-            )),
-        }
+    /// Reference this tensor with new abstract indices and return a lazy network.
+    #[pyo3(signature = (*indices, cook_indices = false))]
+    fn __call__(
+        &self,
+        py: Python<'_>,
+        indices: &Bound<'_, PyTuple>,
+        cook_indices: bool,
+    ) -> PyResult<SpensoNet> {
+        self.index(py, indices, cook_indices)
     }
-}
-impl From<MixedTensor<f64, ShadowedStructure<AbstractIndex>>> for Spensor {
-    fn from(value: MixedTensor<f64, ShadowedStructure<AbstractIndex>>) -> Self {
-        Spensor {
-            tensor: PermutedStructure::identity(value),
-        }
+
+    fn __neg__(&self) -> PyResult<SpensoNet> {
+        SpensoNet::from_tensor(self.clone())?.__neg__()
+    }
+
+    fn __add__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
+        SpensoNet::from_tensor(self.clone())?.add_network(rhs.to_net(), false)
+    }
+
+    fn __radd__(&self, lhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
+        lhs.to_net()
+            .add_network(SpensoNet::from_tensor(self.clone())?, false)
+    }
+
+    fn __sub__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
+        SpensoNet::from_tensor(self.clone())?.add_network(rhs.to_net(), true)
+    }
+
+    fn __rsub__(&self, lhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
+        lhs.to_net()
+            .add_network(SpensoNet::from_tensor(self.clone())?, true)
+    }
+
+    fn __mul__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
+        SpensoNet::from_tensor(self.clone())?.multiply_network(rhs.to_net())
+    }
+
+    fn __rmul__(&self, lhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
+        lhs.to_net()
+            .multiply_network(SpensoNet::from_tensor(self.clone())?)
+    }
+
+    fn __truediv__(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
+        SpensoNet::from_tensor(self.clone())?.__truediv__(rhs)
+    }
+
+    fn __rtruediv__(&self, lhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
+        SpensoNet::from_tensor(self.clone())?.__rtruediv__(lhs)
+    }
+
+    fn outer(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
+        SpensoNet::from_tensor(self.clone())?.outer(rhs)
+    }
+
+    #[pyo3(signature = (rhs, *, left, right))]
+    fn contract(
+        &self,
+        rhs: ConvertibleToSpensoNet,
+        left: usize,
+        right: usize,
+    ) -> PyResult<SpensoNet> {
+        SpensoNet::from_tensor(self.clone())?.contract(rhs, left, right)
+    }
+
+    #[pyo3(signature = (rhs, *, left, right))]
+    fn compose(
+        &self,
+        rhs: ConvertibleToSpensoNet,
+        left: (usize, usize),
+        right: (usize, usize),
+    ) -> PyResult<SpensoNet> {
+        SpensoNet::from_tensor(self.clone())?.compose(rhs, left, right)
+    }
+
+    fn dot(&self, rhs: ConvertibleToSpensoNet) -> PyResult<SpensoNet> {
+        SpensoNet::from_tensor(self.clone())?.dot(rhs)
+    }
+
+    #[pyo3(signature = (*, channel = None))]
+    fn trace(&self, channel: Option<(usize, usize)>) -> PyResult<SpensoNet> {
+        SpensoNet::from_tensor(self.clone())?.trace(channel)
     }
 }
 
@@ -720,6 +1244,9 @@ pub struct SpensoExpressionEvaluator {
     pub eval_rat: LinearizedEvalTensor<SymComplex<Rational>, ShadowedStructure<AbstractIndex>>,
     pub eval: Option<LinearizedEvalTensor<f64, ShadowedStructure<AbstractIndex>>>,
     pub eval_complex: LinearizedEvalTensor<Complex<f64>, ShadowedStructure<AbstractIndex>>,
+    descriptor: StructuredAtom,
+    descriptor_name: Option<Symbol>,
+    descriptor_args: Vec<Atom>,
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
@@ -752,14 +1279,38 @@ impl SpensoExpressionEvaluator {
             "Evaluator contains complex coefficients. Use evaluate_complex instead.",
         ))?;
 
-        Ok(inputs.iter().map(|s| eval.evaluate(s).into()).collect())
+        Ok(inputs
+            .iter()
+            .map(|s| {
+                Spensor::from_storage_with_descriptor(
+                    PermutedStructure::identity(MixedTensor::Concrete(RealOrComplexTensor::Real(
+                        eval.evaluate(s),
+                    ))),
+                    self.descriptor.clone(),
+                    self.descriptor_name,
+                    self.descriptor_args.clone(),
+                )
+            })
+            .collect())
     }
 
     /// Evaluate the expression for multiple inputs and return the results.
     fn evaluate_complex(&mut self, inputs: Vec<Vec<Complex<f64>>>) -> Vec<Spensor> {
         let eval = &mut self.eval_complex;
 
-        inputs.iter().map(|s| eval.evaluate(s).into()).collect()
+        inputs
+            .iter()
+            .map(|s| {
+                Spensor::from_storage_with_descriptor(
+                    PermutedStructure::identity(MixedTensor::Concrete(
+                        RealOrComplexTensor::Complex(eval.evaluate(s).map_data(|value| value)),
+                    )),
+                    self.descriptor.clone(),
+                    self.descriptor_name,
+                    self.descriptor_args.clone(),
+                )
+            })
+            .collect()
     }
 
     /// Compile the evaluator to a shared library using C++ for maximum performance.
@@ -866,6 +1417,9 @@ impl SpensoExpressionEvaluator {
                 .map_err(|e| {
                     exceptions::PyValueError::new_err(format!("Library loading error: {}", e))
                 })?,
+            descriptor: self.descriptor.clone(),
+            descriptor_name: self.descriptor_name,
+            descriptor_args: self.descriptor_args.clone(),
         })
     }
 }
@@ -897,6 +1451,9 @@ impl SpensoExpressionEvaluator {
 #[derive(Clone)]
 pub struct SpensoCompiledExpressionEvaluator {
     pub eval: EvalTensor<CompiledComplexEvaluatorSpenso, ShadowedStructure<AbstractIndex>>,
+    descriptor: StructuredAtom,
+    descriptor_name: Option<Symbol>,
+    descriptor_args: Vec<Atom>,
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
@@ -930,7 +1487,16 @@ impl SpensoCompiledExpressionEvaluator {
     fn evaluate_complex(&mut self, inputs: Vec<Vec<Complex<f64>>>) -> Vec<Spensor> {
         inputs
             .iter()
-            .map(|s| self.eval.evaluate(s).into())
+            .map(|s| {
+                Spensor::from_storage_with_descriptor(
+                    PermutedStructure::identity(MixedTensor::Concrete(
+                        RealOrComplexTensor::Complex(self.eval.evaluate(s).map_data(|value| value)),
+                    )),
+                    self.descriptor.clone(),
+                    self.descriptor_name,
+                    self.descriptor_args.clone(),
+                )
+            })
             .collect()
     }
 }
@@ -1140,9 +1706,9 @@ value : float, complex, or Expression
 
 Examples
 --------
->>> from symbolica.community.spenso import Tensor, TensorIndices, Representation
+>>> from symbolica.community.spenso import Tensor, TensorName, Representation
 >>> rep = Representation.euc(2)
->>> structure = TensorIndices(rep(1), rep(2))
+>>> structure = TensorName("T")(rep("mu"), rep("nu"))
 >>> tensor = Tensor.sparse(structure, float)
 >>> tensor[0] = 1.0
 >>> tensor[1, 1] = 2.0

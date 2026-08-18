@@ -1,13 +1,13 @@
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     coefficient::CoefficientView,
-    printer::{PrintOptions, PrintState, PrintUserData},
+    printer::{PrintOptions, PrintState},
     symbol, tag,
 };
-use symbolica_utils::PrintSettingsExt;
 
 use crate::{
-    shadowing::symbolica_utils::SpensoPrintSettings, structure::abstract_index::AIND_SYMBOLS,
+    shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
+    structure::abstract_index::AIND_SYMBOLS,
 };
 
 pub struct SpensoTags {
@@ -18,6 +18,7 @@ pub struct SpensoTags {
     /// arguments; rank-one shorthand rewrites assume that contract.
     pub rank1: String,
     pub rank1_: Symbol,
+    /// Reserved chain wiring markers registered in Spenso's Symbolica namespace.
     pub chain_in: Symbol,
     pub chain_out: Symbol,
     pub chain: Symbol,
@@ -360,60 +361,101 @@ macro_rules! broadcast_symbol {
 }
 
 impl SpensoTags {
-    fn print_dot(a: AtomView<'_>, opt: &PrintOptions, _state: &PrintState) -> Option<String> {
-        match opt.custom_print_mode.get("spenso") {
-            Some(PrintUserData::Integer(i)) => {
-                let SpensoPrintSettings {
-                    parens, with_dim, ..
-                } = SpensoPrintSettings::from(*i as usize);
-
-                let AtomView::Fun(f) = a else {
-                    return None;
-                };
-
-                if f.get_nargs() != 2 {
-                    return None;
-                }
-                let mut argitem = f.iter();
-                let a = argitem.next().unwrap();
-                let b = argitem.next().unwrap();
-
-                let AtomView::Fun(f_a) = a else {
-                    return None;
-                };
-                let AtomView::Fun(f_b) = b else {
-                    return None;
-                };
-
-                let a_sym = f_a.get_symbol();
-                let b_sym = f_b.get_symbol();
-
-                if a_sym.has_tag(&SPENSO_TAG.rank1) && b_sym.has_tag(&SPENSO_TAG.rank1) {
-                    let mut out = String::new();
-                    if parens {
-                        out.push('(');
-                    }
-                    f_a.as_view()
-                        .format(&mut out, opt, PrintState::new())
-                        .unwrap();
-                    out.push('.');
-                    if with_dim {
-                        a.format(&mut out, opt, PrintState::new()).unwrap();
-                        out.push('.');
-                    }
-                    f_b.as_view()
-                        .format(&mut out, opt, PrintState::new())
-                        .unwrap();
-                    if parens {
-                        out.push(')');
-                    }
-                    Some(out)
-                } else {
-                    None
-                }
+    fn print_chain_factor(value: AtomView<'_>, opt: &PrintOptions) -> Option<String> {
+        fn without_visible_placeholders(value: AtomView<'_>, opt: &PrintOptions) -> Option<Atom> {
+            let mut output = String::new();
+            value.format(&mut output, opt, PrintState::new()).ok()?;
+            let leaks_placeholder =
+                [SPENSO_TAG.chain_in, SPENSO_TAG.chain_out]
+                    .into_iter()
+                    .any(|placeholder| {
+                        let mut needle = String::new();
+                        Atom::var(placeholder)
+                            .as_view()
+                            .format(&mut needle, opt, PrintState::new())
+                            .is_ok()
+                            && output.match_indices(&needle).any(|(start, _)| {
+                                let end = start + needle.len();
+                                let boundary = |character: char| {
+                                    !character.is_alphanumeric() && character != '_'
+                                };
+                                output[..start].chars().next_back().is_none_or(boundary)
+                                    && output[end..].chars().next().is_none_or(boundary)
+                            })
+                    });
+            if !leaks_placeholder {
+                return Some(value.to_owned());
             }
-            _ => None,
+
+            match value {
+                AtomView::Add(add) => add.iter().try_fold(Atom::Zero, |sum, term| {
+                    Some(sum + without_visible_placeholders(term, opt)?)
+                }),
+                AtomView::Mul(mul) => mul.iter().try_fold(Atom::num(1), |product, factor| {
+                    Some(product * without_visible_placeholders(factor, opt)?)
+                }),
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    Some(without_visible_placeholders(base, opt)?.pow(exponent.to_owned()))
+                }
+                AtomView::Fun(function) => {
+                    let arguments = function
+                        .iter()
+                        .filter(|argument| {
+                            !matches!(argument, AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_in || var.get_symbol() == SPENSO_TAG.chain_out)
+                        })
+                        .map(|argument| without_visible_placeholders(argument, opt))
+                        .collect::<Option<Vec<_>>>()?;
+                    Some(if arguments.is_empty() {
+                        Atom::var(function.get_symbol())
+                    } else {
+                        FunctionBuilder::new(function.get_symbol())
+                            .add_args(arguments)
+                            .finish()
+                    })
+                }
+                _ => None,
+            }
         }
+
+        let sanitized = without_visible_placeholders(value, opt)?;
+        let mut output = String::new();
+        sanitized
+            .as_view()
+            .format(&mut output, opt, PrintState::new())
+            .ok()?;
+        Some(output)
+    }
+
+    fn print_dot(a: AtomView<'_>, opt: &PrintOptions, _state: &PrintState) -> Option<String> {
+        let resolved = SpensoPrintSettings::resolve(opt)?;
+        let parens = resolved.presentation.parens;
+        let AtomView::Fun(f) = a else {
+            return None;
+        };
+
+        if f.get_nargs() != 2 {
+            return None;
+        }
+        let mut argitem = f.iter();
+        let a = argitem.next()?;
+        let b = argitem.next()?;
+
+        let mut out = String::new();
+        if parens {
+            out.push('(');
+        }
+        a.format(&mut out, opt, PrintState::new()).ok()?;
+        out.push_str(match resolved.backend {
+            SpensoPrintBackend::Plain => ".",
+            SpensoPrintBackend::Typst => " dot ",
+            SpensoPrintBackend::Latex => r"\cdot ",
+        });
+        b.format(&mut out, opt, PrintState::new()).ok()?;
+        if parens {
+            out.push(')');
+        }
+        Some(out)
     }
 
     fn new() -> Self {
@@ -432,87 +474,123 @@ impl SpensoTags {
             chain: symbol!(
                 "chain";Linear;
                 print = |a, opt, _state| {
-                    match opt.custom_print_mode.get("spenso") {
-                        Some(PrintUserData::Integer(i)) => {
-                            let SpensoPrintSettings { parens, .. } =
-                                SpensoPrintSettings::from(*i as usize);
-
-                            let AtomView::Fun(f) = a else {
-                                return None;
-                            };
-
-                            let mut args = f.iter();
-
-                            let in_index = args.next().unwrap();
-                            let out_index = args.next().unwrap();
-
-                            let mut s = String::new();
-                            in_index.format(&mut s, opt, PrintState::new()).unwrap();
-                            if parens {
-                                s.push('[');
-                            }
-                            for a in args {
-                                a.format(&mut s, opt, PrintState::new()).unwrap();
-                            }
-                            if parens {
-                                s.push(']');
-                            }
-                            out_index.format(&mut s, opt, PrintState::new()).unwrap();
-                            Some(s)
-                        }
-                        _ => None,
+                    let resolved = SpensoPrintSettings::resolve(opt)?;
+                    let parens = resolved.presentation.parens;
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+                    if f.get_nargs() < 2 {
+                        return None;
                     }
+
+                    let mut args = f.iter();
+                    let in_index = args.next()?;
+                    let out_index = args.next()?;
+
+                    let mut s = String::new();
+                    if !matches!(in_index, AtomView::Var(v) if v.get_symbol() == SPENSO_TAG.chain_in) {
+                            in_index.format(&mut s, opt, PrintState::new()).unwrap();
+                    }
+                    if parens {
+                        s.push('[');
+                    }
+                    for a in args {
+                        s.push_str(&Self::print_chain_factor(a, opt)?);
+                    }
+                    if parens {
+                        s.push(']');
+                    }
+                    if !matches!(out_index, AtomView::Var(v) if v.get_symbol() == SPENSO_TAG.chain_out) {
+                            out_index.format(&mut s, opt, PrintState::new()).unwrap();
+                    }
+                    Some(s)
                 }
             ),
             trace: symbol!(
                 "trace";Linear;
                 print = |a, opt, _state| {
-                    match opt.custom_print_mode.get("spenso") {
-                        Some(PrintUserData::Integer(i)) => {
-                            let SpensoPrintSettings {
-                                parens, with_dim, ..
-                            } = SpensoPrintSettings::from(*i as usize);
+                    let resolved = SpensoPrintSettings::resolve(opt)?;
+                    let SpensoPrintSettings {
+                        parens, with_dim, ..
+                    } = resolved.presentation;
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+                    if !(1..=2).contains(&f.get_nargs()) {
+                        return None;
+                    }
 
-                            let AtomView::Fun(f) = a else {
-                                return None;
-                            };
-
-                            let mut args = f.iter();
-
-                            let rep = args.next().unwrap();
-
-                            let mut s = if opt.typst_mode().is_some() {
-                                r#"op("Tr")"#
-                            } else {
-                                "Tr"
-                            }
-                            .to_string();
+                    let mut args = f.iter();
+                    let rep = args.next()?;
+                    let mut s = match resolved.backend {
+                        SpensoPrintBackend::Typst => r#"op("Tr")"#,
+                        SpensoPrintBackend::Latex => r#"\operatorname{Tr}"#,
+                        SpensoPrintBackend::Plain => "Tr",
+                    }
+                    .to_string();
                             if with_dim {
                                 rep.format(&mut s, opt, PrintState::new()).unwrap();
                             }
                             if parens {
                                 s.push('(');
                             }
-                            let a = args.next()?;
-                            if let AtomView::Fun(f) = a{//} && f.get_symbol() == *CYCLIC {
-                                for a in f.iter() {
-                                    a.format(&mut s, opt, PrintState::new()).unwrap();
+                            match args.next() {
+                                None => s.push('1'),
+                                // Non-empty traces store factors under the canonical cyclic head.
+                                Some(AtomView::Fun(cyclic))
+                                    if cyclic.get_symbol() == *crate::shadowing::CYCLIC =>
+                                {
+                                    for factor in cyclic.iter() {
+                                        s.push_str(&Self::print_chain_factor(factor, opt)?);
+                                    }
                                 }
-                            }else{
-                                return None;
+                                Some(_) => return None,
                             }
 
                             if parens {
                                 s.push(')');
                             }
                             Some(s)
-                        }
-                        _ => None,
-                    }
                 }
             ),
             rank1_: symbol!("rank1_", tags = [&tensor, &rank1]),
-            bracket: symbol!("bracket"),
+            bracket: symbol!(
+                "bracket",
+                print = |a, opt, state| {
+                    SpensoPrintSettings::resolve(opt)?;
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+                    if f.get_nargs() == 0 {
+                        return None;
+                    }
+
+                    let parenthesize = state.in_exp || state.in_exp_base;
+                    let mut product_state = *state;
+                    product_state.in_product = true;
+                    product_state.in_sum = false;
+                    product_state.level += 1;
+
+                    let mut output = String::new();
+                    if parenthesize {
+                        output.push('(');
+                    }
+                    for (position, factor) in f.iter().enumerate() {
+                        if position > 0 {
+                            if opt.mode.is_latex() {
+                                output.push(' ');
+                            } else {
+                                output.push(opt.multiplication_operator);
+                            }
+                        }
+                        factor.format(&mut output, opt, product_state).ok()?;
+                    }
+                    if parenthesize {
+                        output.push(')');
+                    }
+                    Some(output)
+                }
+            ),
             pure_scalar: symbol!("pure_scalar"),
             scalar: symbol!("scalar"),
             dot: symbol!("dot";Symmetric,Linear; print = Self::print_dot),
@@ -629,7 +707,8 @@ impl SpensoTags {
 #[cfg(test)]
 mod tests {
     use symbolica::{
-        atom::{Atom, AtomCore, AtomView},
+        atom::{Atom, AtomCore, AtomView, FunctionBuilder},
+        printer::PrintOptions,
         symbol,
     };
 
@@ -724,5 +803,60 @@ mod tests {
                 .to_string(),
             "Tr(1)"
         );
+    }
+
+    #[test]
+    fn chain_hides_namespaced_endpoint_placeholders() {
+        assert_eq!(SPENSO_TAG.chain_in.get_namespace(), "spenso");
+        assert_eq!(SPENSO_TAG.chain_out.get_namespace(), "spenso");
+
+        let chain = SPENSO_TAG.chain(
+            Atom::var(SPENSO_TAG.chain_in),
+            Atom::var(SPENSO_TAG.chain_out),
+            [Atom::var(SPENSO_TAG.tensor_symbol("factor"))],
+        );
+
+        let compact = chain
+            .printer(SpensoPrintSettings::compact().nice_symbolica())
+            .to_string();
+        let typst = chain.printer(PrintOptions::typst()).to_string();
+
+        assert_eq!(compact, "[factor]");
+        assert_eq!(typst, "[\"factor\"]");
+        assert!(!compact.contains("in"));
+        assert!(!compact.contains("out"));
+    }
+
+    #[test]
+    fn reverse_flip_swaps_namespaced_endpoint_placeholders() {
+        let factor = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("flip_factor"))
+            .add_arg(Atom::var(SPENSO_TAG.chain_in))
+            .add_arg(Atom::var(SPENSO_TAG.chain_out))
+            .finish();
+        let flipped = SPENSO_TAG.reverse_flip_factor(factor.as_view());
+        let AtomView::Fun(flipped) = flipped.as_view() else {
+            panic!("expected a tensor factor")
+        };
+        let arguments = flipped.iter().collect::<Vec<_>>();
+
+        assert!(
+            matches!(arguments[0], AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_out)
+        );
+        assert!(
+            matches!(arguments[1], AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_in)
+        );
+    }
+
+    #[test]
+    fn bracket_prints_as_an_ordered_product() {
+        let bracket = FunctionBuilder::new(SPENSO_TAG.bracket)
+            .add_arg(Atom::var(symbol!("z")))
+            .add_arg(Atom::var(symbol!("a")))
+            .finish();
+        let mut compact = SpensoPrintSettings::compact().nice_symbolica();
+        compact.color_builtin_symbols = false;
+
+        assert_eq!(bracket.printer(compact).to_string(), "z·a");
+        assert_eq!(bracket.printer(PrintOptions::typst()).to_string(), "z a");
     }
 }

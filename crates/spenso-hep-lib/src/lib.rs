@@ -697,6 +697,13 @@ pub static FUN_LIB: LazyLock<
         RealOrComplexTensor::Complex(c) => RealOrComplexTensor::Complex(c.map_data(|x| x.conj())),
         RealOrComplexTensor::Real(r) => RealOrComplexTensor::Real(r),
     });
+    lib.insert_scalar_fallible(INBUILTS.conj, |scalar| {
+        let Ok(value) = symbolica::domains::float::Complex::<f64>::try_from(scalar.as_view())
+        else {
+            return Ok(INBUILTS.conj(scalar));
+        };
+        Ok(Atom::num(value.re) - Atom::num(value.im) * Atom::i())
+    });
     lib
 });
 

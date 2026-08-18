@@ -27,10 +27,12 @@ use symbolica::coefficient::CoefficientView;
 #[cfg(feature = "shadowing")]
 use crate::network::tags::SPENSO_TAG;
 #[cfg(feature = "shadowing")]
+use crate::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
+#[cfg(feature = "shadowing")]
 use crate::structure::slot::ParseableAind;
 use crate::utils::{to_subscript, to_superscript};
 #[cfg(feature = "shadowing")]
-use symbolica_utils::{PrintSettingsExt, SerializableSymbol};
+use symbolica_utils::SerializableSymbol;
 
 use thiserror::Error;
 
@@ -158,8 +160,8 @@ pub static AIND_SYMBOLS, AIND_SYMBOLS_INNER: AindSymbols = || AindSymbols {
         cind: symbol!(
             super::concrete_index::CONCRETEIND,
             print = |a, opt, _state| {
-                match opt.custom_print_mode.get("spenso") {
-                    Some(PrintUserData::Integer(_)) => {
+                match SpensoPrintSettings::resolve(opt) {
+                    Some(resolved) => {
                         let AtomView::Fun(f) = a else {
                             return None;
                         };
@@ -182,7 +184,7 @@ pub static AIND_SYMBOLS, AIND_SYMBOLS_INNER: AindSymbols = || AindSymbols {
                         }
                         if opt.color_builtin_symbols {
                             out.push_str(&DarkGray.paint("]").to_string());
-                        } else if opt.typst_mode().is_some() {
+                        } else if resolved.backend == SpensoPrintBackend::Typst {
                             out.push(']')
                         } else {
                             out.push('[')
@@ -196,8 +198,8 @@ pub static AIND_SYMBOLS, AIND_SYMBOLS_INNER: AindSymbols = || AindSymbols {
         find: symbol!(
             super::concrete_index::FLATIND,
             print = |a, opt, _state| {
-                match opt.custom_print_mode.get("spenso") {
-                    Some(PrintUserData::Integer(_)) => {
+                match SpensoPrintSettings::resolve(opt) {
+                    Some(_) => {
                         let AtomView::Fun(f) = a else {
                             return None;
                         };
@@ -279,15 +281,13 @@ let args = arg.pos().map(to-eq).join("")
 (content: args,lower:true)
 }"#;
                     Some(body.into())
-                } else if matches!(
-                    opt.custom_print_mode.get("spenso"),
-                    Some(PrintUserData::Integer(_))
-                ) {
+                } else if let Some(resolved) = SpensoPrintSettings::resolve(opt) {
                     let AtomView::Fun(f) = a else {
                         return None;
                     };
 
-                    let is_typst = opt.typst_mode().is_some();
+                    let is_typst = resolved.backend == SpensoPrintBackend::Typst;
+                    let is_latex = resolved.backend == SpensoPrintBackend::Latex;
                     let mut out = if is_typst {
                         "attach(nothing,b:".to_string()
                     } else if opt.color_builtin_symbols {
@@ -299,9 +299,14 @@ let args = arg.pos().map(to-eq).join("")
                         return None;
                     }
                     let arg = f.iter().next().unwrap();
+                    if is_latex {
+                        out.push('{');
+                    }
                     arg.format(&mut out, opt, PrintState::new()).unwrap();
                     if is_typst {
                         out.push(')');
+                    } else if is_latex {
+                        out.push('}');
                     }
                     Some(out)
                 } else {

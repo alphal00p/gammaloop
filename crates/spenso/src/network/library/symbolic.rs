@@ -11,7 +11,7 @@ use symbolica::{
 };
 
 use crate::network::tags::SPENSO_TAG;
-use crate::shadowing::symbolica_utils::SpensoPrintSettings;
+use crate::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
 use crate::tensor_symbol;
 use crate::{
     structure::{
@@ -240,12 +240,12 @@ crate::symbolica_init_lazy_static! {
 pub static ETS, ETS_INNER: ExplicitTensorSymbols = || ExplicitTensorSymbols {
     flat: symbol!("♭";Symmetric;print = |a, opt, _state| {
 
-        match opt.custom_print_mode.get("spenso") {
-            Some(PrintUserData::Integer(i))=>{
+        match SpensoPrintSettings::resolve(opt) {
+            Some(resolved)=>{
                 let SpensoPrintSettings{
                     parens,
                     commas,..
-                } = SpensoPrintSettings::from(*i as usize);
+                } = resolved.presentation;
 
 
                 let AtomView::Fun(f)=a else {
@@ -324,12 +324,14 @@ $g(#to-eq(a),#to-eq(b))$
             return Some(body.into());
         }
 
-        if let Some(PrintUserData::Integer(i)) = opt.custom_print_mode.get("spenso") {
+        if let Some(resolved) = SpensoPrintSettings::resolve(opt) {
+                 let (script_open, script_close) = resolved.script_delimiters();
+                 let backend = resolved.backend;
                  let SpensoPrintSettings{
                      parens,
                      commas,
-                     with_dim,..
-                 } = SpensoPrintSettings::from(*i as usize);
+                     ..
+                 } = resolved.presentation;
                 let AtomView::Fun(f)=a else {
                     return None;
                 };
@@ -356,10 +358,11 @@ $g(#to-eq(a),#to-eq(b))$
                                 out.push('(');
                             }
                             f_a.as_view().format(&mut out, opt,PrintState::new()).unwrap();
-                            out.push('.');
-                            if with_dim {a.format(&mut out, opt, PrintState::new()).unwrap();
-                                out.push('.');
-                            }
+                            out.push_str(match backend {
+                                SpensoPrintBackend::Plain => ".",
+                                SpensoPrintBackend::Typst => " dot ",
+                                SpensoPrintBackend::Latex => r"\cdot ",
+                            });
                             f_b.as_view().format(&mut out, opt,PrintState::new()).unwrap();
                             if parens {
                                 out.push(')');
@@ -407,7 +410,7 @@ $g(#to-eq(a),#to-eq(b))$
                             };
 
                             if parens{
-                                out.push('(');
+                                out.push(script_open);
                             }
                             f_a.as_view().format(&mut out, opt, PrintState::new()).unwrap();
 
@@ -418,7 +421,7 @@ $g(#to-eq(a),#to-eq(b))$
                             }
                             f_b.as_view().format(&mut out, opt, PrintState::new()).unwrap();
                             if parens{
-                                out.push(')');
+                                out.push(script_close);
                             }
                             return Some(out)
 
@@ -430,11 +433,11 @@ $g(#to-eq(a),#to-eq(b))$
                                 "δ_".to_string()
                             };
                             if parens{
-                                out.push('(');
+                                out.push(script_open);
                             }
                             f_a.as_view().format(&mut out, opt, PrintState::new()).unwrap();
                             if parens{
-                                out.push(')');
+                                out.push(script_close);
                             }
                             if opt.color_builtin_symbols {
                                 out.push_str( &nu_ansi_term::Color::Magenta.paint("^").to_string())
@@ -442,11 +445,11 @@ $g(#to-eq(a),#to-eq(b))$
                                 out.push('^');
                             };
                             if parens{
-                                out.push('(');
+                                out.push(script_open);
                             }
                             f_b.as_view().format(&mut out, opt, PrintState::new()).unwrap();
                             if parens{
-                                out.push(')');
+                                out.push(script_close);
                             }
                             return Some(out)
                         }
@@ -457,11 +460,11 @@ $g(#to-eq(a),#to-eq(b))$
                                 "δ_".to_string()
                             };
                             if parens{
-                                out.push('(');
+                                out.push(script_open);
                             }
                             f_b.as_view().format(&mut out, opt, PrintState::new()).unwrap();
                             if parens{
-                                out.push(')');
+                                out.push(script_close);
                             }
                             if opt.color_builtin_symbols {
                                 out.push_str( &nu_ansi_term::Color::Magenta.paint("^").to_string())
@@ -469,11 +472,11 @@ $g(#to-eq(a),#to-eq(b))$
                                 out.push('^');
                             };
                             if parens{
-                                out.push('(');
+                                out.push(script_open);
                             }
                             f_a.as_view().format(&mut out, opt, PrintState::new()).unwrap();
                             if parens{
-                                out.push(')');
+                                out.push(script_close);
                             }
                             return Some(out)
                         }
@@ -484,7 +487,7 @@ $g(#to-eq(a),#to-eq(b))$
                                 "g^".to_string()
                             };
                             if parens{
-                                out.push('(');
+                                out.push(script_open);
                             }
                             f_a.as_view().format(&mut out, opt, PrintState::new()).unwrap();
                             if commas{
@@ -494,7 +497,7 @@ $g(#to-eq(a),#to-eq(b))$
                             }
                             f_b.as_view().format(&mut out, opt, PrintState::new()).unwrap();
                             if parens{
-                                out.push(')');
+                                out.push(script_close);
                             }
                             return Some(out)
                         }
@@ -805,7 +808,7 @@ mod test {
         structure::{
             ToSymbolic,
             abstract_index::{AIND_SYMBOLS, AbstractIndex},
-            representation::{Euclidean, Minkowski},
+            representation::{Euclidean, Minkowski, Representation},
         },
         tensors::data::SparseOrDense,
     };
@@ -814,6 +817,45 @@ mod test {
 
     const LOCAL_GAMMA: &str = "symbolic_lib_test_gamma";
     const LOCAL_P: &str = "symbolic_lib_test_p";
+
+    #[test]
+    fn registered_tagged_scalar_is_resolved_as_a_library_tensor() {
+        let mut lib =
+            TensorLibrary::<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>::new();
+        let name = symbol!("symbolic_lib_test_scalar", tag = SPENSO_TAG.tensor);
+        let key = ExplicitKey::from_iter(Vec::<Representation<LibraryRep>>::new(), name, None);
+        lib.insert_explicit_dense(
+            key,
+            vec![ConcreteOrParam::Concrete(RealOrComplex::Real(7.0))],
+        )
+        .unwrap();
+
+        let expression = FunctionBuilder::new(name).finish();
+        let network =
+            Network::<
+                NetworkStore<
+                    MixedTensor<f64, ShadowedStructure<AbstractIndex>>,
+                    ConcreteOrParam<RealOrComplex<f64>>,
+                >,
+                _,
+                Symbol,
+            >::try_from_view(expression.as_view(), &lib, &ParseSettings::default())
+            .unwrap();
+
+        let ExecutionResult::Val(tensor) = network.result_tensor(&lib).unwrap() else {
+            panic!("registered scalar library reference did not materialize a tensor");
+        };
+        match tensor.into_owned().scalar() {
+            Some(ConcreteOrParam::Concrete(RealOrComplex::Real(value))) => {
+                assert_eq!(value, 7.0)
+            }
+            Some(ConcreteOrParam::Concrete(RealOrComplex::Complex(value))) => {
+                assert_eq!(value.re, 7.0);
+                assert_eq!(value.im, 0.0);
+            }
+            other => panic!("registered scalar library reference returned {other:?}"),
+        }
+    }
 
     #[test]
     fn add_to_lib() {

@@ -1896,6 +1896,31 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             .collect()
     }
 
+    /// Relabel one exact dangling slot without changing its structural order.
+    ///
+    /// Returns `false` when the source slot is not a unique external edge.
+    pub fn relabel_dangling_slot(
+        &mut self,
+        from: LibrarySlot<Aind>,
+        to: LibrarySlot<Aind>,
+    ) -> bool {
+        let external: SuBitGraph = self.graph.external_filter();
+        let matches = external
+            .included_iter()
+            .filter(|hedge| self.graph[[hedge]] == NetworkEdge::Slot(from))
+            .collect::<Vec<_>>();
+        let [hedge] = matches.as_slice() else {
+            return false;
+        };
+        self.graph[[hedge]] = NetworkEdge::Slot(to);
+        true
+    }
+
+    /// Sew any newly equal dangling slots after an intentional relabeling.
+    pub fn sew_dangling_slots(&mut self) {
+        self.sew_internal_tensor_slots();
+    }
+
     pub fn n_dangling(&self) -> usize {
         let _span = profile::span(Timer::DanglingScan);
         profile::bump(Counter::DanglingScan, 1);

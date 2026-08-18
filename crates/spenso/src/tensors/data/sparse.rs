@@ -113,8 +113,8 @@ where
         permuted
     }
 
-    fn permute_reps(self, _rep_perm: &linnet::permutation::Permutation) -> Self::Permuted {
-        todo!()
+    fn permute_reps(self, rep_perm: &linnet::permutation::Permutation) -> Self::Permuted {
+        self.permute_inds(rep_perm)
     }
 }
 
